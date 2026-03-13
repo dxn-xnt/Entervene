@@ -1,8 +1,12 @@
 # Python / FastAPI
 backend/venv/
-backend/__pycache__/
+backend/app/__pycache__/
 backend/*.pyc
 backend/.env
+
+# Python cache
+**/__pycache__/
+*.pyc
 
 # React / Vite
 frontend/node_modules/
