@@ -1,6 +1,7 @@
 import Navbar from "./components/Navbar";
 import StoryBoard from "./pages/Storyboard";
 import ToDo from "./pages/ToDo";
+import Subjects from "./pages/Subjects";
 import { useState } from "react";
 
 const App = () => {
@@ -12,6 +13,7 @@ const App = () => {
       <main className="flex-1 bg-[#FFFDF5]">
         {activeNav === "Study Board" && <StoryBoard />}
         {activeNav === "To Do" && <ToDo />}
+        {activeNav === "Subjects" && <Subjects />}
       </main>
     </div>
   );

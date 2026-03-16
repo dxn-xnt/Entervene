@@ -13,8 +13,8 @@ type CardProps = {
 const Card = ({ title, teacher, badges }: CardProps) => {
   return (
     <div className="border rounded-lg p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-      <h2 className="text-3xl font-bold">{title}</h2>
-      <p className="text-sm font-bold">{teacher}</p>
+      <h2 className="text-3xl font-semibold truncate">{title}</h2>
+      <p className="text-sm">{teacher}</p>
       <div className="flex flex-wrap gap-2 mt-3">
         {badges.map((badge) => (
           <span
