@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import Tabs from "../../components/Tabs";
 import SubjectLessonTab from "./tabs/SubjectLessonTab";
+import SubjectClassworkTab from "./tabs/SubjectClassworkTab";
 
 type SubjectDetailProps = {
   subject: string;
@@ -28,7 +29,7 @@ const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
       <main className="px-5 py-5">
         {activeTab === "lessons" && <SubjectLessonTab subject={subject} />}
-        {activeTab === "classwork" && <div />}
+        {activeTab === "classwork" && <SubjectClassworkTab />}
       </main>
     </div>
   );

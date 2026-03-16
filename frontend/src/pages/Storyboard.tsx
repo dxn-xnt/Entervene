@@ -1,6 +1,10 @@
 import Card from "../components/Card";
 
-const StoryBoard = () => {
+type SubjectsProps = {
+  onSelectSubject: (title: string) => void;
+};
+
+const StoryBoard = ({ onSelectSubject }: SubjectsProps) => {
   return (
     <div>
       <header className="px-5 py-5 border-b border-gray-500">
@@ -10,6 +14,7 @@ const StoryBoard = () => {
         <div className="grid grid-cols-2 gap-4 w-[65%] self-start">
           <Card
             title="Computer Programming"
+            onClick={() => onSelectSubject("Computer Programming")}
             teacher="Juan Dela Cruz"
             badges={[
               { label: "Quizzes", count: 1 },
@@ -19,6 +24,7 @@ const StoryBoard = () => {
           />
           <Card
             title="English"
+            onClick={() => onSelectSubject("English")}
             teacher="Marie Tess"
             badges={[
               { label: "Assignments", count: 1 },
@@ -27,11 +33,13 @@ const StoryBoard = () => {
           />
           <Card
             title="Science & Technology"
+            onClick={() => onSelectSubject("Science & Technology")}
             teacher="Jose Rizal"
             badges={[{ label: "Tasks All Completed", count: 0 }]}
           />
           <Card
             title="Mathematics"
+            onClick={() => onSelectSubject("Mathematics")}
             teacher="Maria Clara"
             badges={[
               { label: "Activities", count: 1 },
@@ -40,6 +48,7 @@ const StoryBoard = () => {
           />
           <Card
             title="Filipino"
+            onClick={() => onSelectSubject("Filipino")}
             teacher="Maripusa"
             badges={[
               { label: "Quizzes", count: 1 },
@@ -48,6 +57,7 @@ const StoryBoard = () => {
           />
           <Card
             title="System Designs"
+            onClick={() => onSelectSubject("System Designs")}
             teacher="Alden Richards"
             badges={[{ label: "Tasks All Completed", count: 0 }]}
           />

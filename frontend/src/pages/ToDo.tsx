@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Tabs from "../components/Tabs";
-import ListItem from "../components/ListItem";
+import ToDoItem from "../components/ListCardItems/ToDoItem";
 
 const todoTabs = [
   { id: "pending", label: "Pending" },
@@ -21,7 +21,7 @@ const ToDo = () => {
         {/* Intervention */}
         <div className="flex flex-col gap-4 mb-5">
           <h3 className="text-3xl font-semibold">Intervention</h3>
-          <ListItem
+          <ToDoItem
             title="Science Quiz"
             subject="Computer Programming"
             deadline="October 30, 2025"
@@ -30,17 +30,17 @@ const ToDo = () => {
         {/* Past Due */}
         <div className="flex flex-col gap-4 mb-5">
           <h3 className="text-3xl font-semibold">Past Due</h3>
-          <ListItem
+          <ToDoItem
             title="Assignment 4"
             subject="Computer Programming"
             deadline="October 30, 2025"
           />
-          <ListItem
+          <ToDoItem
             title="Assignment 3"
             subject="Computer Programming"
             deadline="October 30, 2025"
           />
-          <ListItem
+          <ToDoItem
             title="Assignment 2"
             subject="Computer Programming"
             deadline="October 30, 2025"
@@ -49,7 +49,7 @@ const ToDo = () => {
         {/* Upcoming */}
         <div className="flex flex-col gap-4 mb-5">
           <h3 className="text-3xl font-semibold">Upcoming</h3>
-          <ListItem
+          <ToDoItem
             title="Assignment 6"
             subject="Computer Programming"
             deadline="October 30, 2025"

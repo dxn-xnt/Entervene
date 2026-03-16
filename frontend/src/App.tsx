@@ -19,7 +19,20 @@ const App = () => {
         }}
       />
       <main className="flex-1 bg-[#FFFDF5]">
-        {activeNav === "Study Board" && <StoryBoard />}
+        {activeNav === "Study Board" &&
+          (activeSubject ? (
+            <SubjectDetail
+              subject={activeSubject}
+              onBack={() => setActiveSubject(null)}
+            />
+          ) : (
+            <StoryBoard
+              onSelectSubject={(subject) => {
+                setActiveSubject(subject);
+                setActiveNav("Subjects");
+              }}
+            />
+          ))}
         {activeNav === "To Do" && <ToDo />}
         {activeNav === "Subjects" &&
           (activeSubject ? (
