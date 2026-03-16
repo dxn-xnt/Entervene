@@ -16,10 +16,14 @@ const quarters = [
   "4th Quarter (2025-2026)",
 ];
 
-const Navbar = () => {
+interface NavbarProps {
+  activeNav: string;
+  setActiveNav: (nav: string) => void;
+}
+
+const Navbar = ({ activeNav, setActiveNav }: NavbarProps) => {
   const [selectedQuarter, setSelectedQuarter] = useState(quarters[0]);
   const [isOpen, setIsOpen] = useState(false);
-  const [activeNav, setActiveNav] = useState("Study Board");
 
   return (
     <aside className="w-64 min-h-screen bg-[#FFFDF5] border-r border-gray-500 flex flex-col">
