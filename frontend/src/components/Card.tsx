@@ -8,11 +8,15 @@ type CardProps = {
   title: string;
   teacher: string;
   badges: Badge[];
+  onClick?: () => void;
 };
 
-const Card = ({ title, teacher, badges }: CardProps) => {
+const Card = ({ title, teacher, badges, onClick }: CardProps) => {
   return (
-    <div className="border rounded-lg p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+    <div
+      onClick={onClick}
+      className={`border rounded-lg p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${onClick ? "cursor-pointer" : ""}`}
+    >
       <h2 className="text-3xl font-semibold truncate">{title}</h2>
       <p className="text-sm">{teacher}</p>
       <div className="flex flex-wrap gap-2 mt-3">

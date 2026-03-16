@@ -81,42 +81,42 @@ const Navbar = ({ activeNav, setActiveNav }: NavbarProps) => {
         <div
           onClick={() => setActiveNav("Study Board")}
           className={`flex flex-row py-2 px-6 items-center gap-3 cursor-pointer transition-colors duration-150 text-sm
-            ${activeNav === "Study Board" ? "font-bold text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black hover:bg-gray-100"}`}
+            ${activeNav === "Study Board" ? "text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black"}`}
         >
           <LayoutDashboard size={16} /> Study Board
         </div>
         <div
           onClick={() => setActiveNav("Subjects")}
           className={`flex flex-row py-2 px-6 items-center gap-3 cursor-pointer transition-colors duration-150 text-sm
-            ${activeNav === "Subjects" ? "font-bold text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black hover:bg-gray-100"}`}
+            ${activeNav === "Subjects" ? "text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black"}`}
         >
           <BookOpen size={16} /> Subjects
         </div>
         <div
           onClick={() => setActiveNav("Interventions")}
           className={`flex flex-row py-2 px-6 items-center gap-3 cursor-pointer transition-colors duration-150 text-sm
-            ${activeNav === "Interventions" ? "font-bold text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black hover:bg-gray-100"}`}
+            ${activeNav === "Interventions" ? "text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black"}`}
         >
           <Shield size={16} /> Interventions
         </div>
         <div
           onClick={() => setActiveNav("Grades")}
           className={`flex flex-row py-2 px-6 items-center gap-3 cursor-pointer transition-colors duration-150 text-sm
-            ${activeNav === "Grades" ? "font-bold text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black hover:bg-gray-100"}`}
+            ${activeNav === "Grades" ? "text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black"}`}
         >
           <BarChart2 size={16} /> Grades
         </div>
         <div
           onClick={() => setActiveNav("To Do")}
           className={`flex flex-row py-2 px-6 items-center gap-3 cursor-pointer transition-colors duration-150 text-sm
-            ${activeNav === "To Do" ? "font-bold text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black hover:bg-gray-100"}`}
+            ${activeNav === "To Do" ? "text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black"}`}
         >
           <CheckSquare size={16} /> To Do
         </div>
         <div
           onClick={() => setActiveNav("Notifications")}
           className={`flex flex-row py-2 px-6 items-center gap-3 cursor-pointer transition-colors duration-150 text-sm
-            ${activeNav === "Notifications" ? "font-bold text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black hover:bg-gray-100"}`}
+            ${activeNav === "Notifications" ? "text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black"}`}
         >
           <Bell size={16} /> Notifications
         </div>

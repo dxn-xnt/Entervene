@@ -22,7 +22,7 @@ const Tabs = ({ tabs, activeTab, onChange }: TabsProps) => {
             className={`flex items-center gap-1.5 px-4 py-2 text-sm transition-colors
               ${
                 isActive
-                  ? "border border-b-0 -mb-px bg-[#FFFDF5] font-medium rounded-t-lg"
+                  ? "border border-b-0 -mb-px bg-[#FFFDF5] rounded-t-lg"
                   : "border border-transparent hover:text-gray-700"
               }`}
           >

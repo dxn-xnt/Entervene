@@ -1,19 +1,35 @@
 import Navbar from "./components/Navbar";
 import StoryBoard from "./pages/Storyboard";
 import ToDo from "./pages/ToDo";
-import Subjects from "./pages/Subjects";
+import Subjects from "./pages/Subjects/Subjects";
+import SubjectDetail from "./pages/Subjects/SubjectDetail";
 import { useState } from "react";
 
 const App = () => {
   const [activeNav, setActiveNav] = useState("Study Board");
+  const [activeSubject, setActiveSubject] = useState<string | null>(null);
 
   return (
     <div className="flex min-h-screen">
-      <Navbar activeNav={activeNav} setActiveNav={setActiveNav} />
+      <Navbar
+        activeNav={activeNav}
+        setActiveNav={(nav) => {
+          setActiveNav(nav);
+          setActiveSubject(null);
+        }}
+      />
       <main className="flex-1 bg-[#FFFDF5]">
         {activeNav === "Study Board" && <StoryBoard />}
         {activeNav === "To Do" && <ToDo />}
-        {activeNav === "Subjects" && <Subjects />}
+        {activeNav === "Subjects" &&
+          (activeSubject ? (
+            <SubjectDetail
+              subject={activeSubject}
+              onBack={() => setActiveSubject(null)}
+            />
+          ) : (
+            <Subjects onSelectSubject={setActiveSubject} />
+          ))}
       </main>
     </div>
   );
