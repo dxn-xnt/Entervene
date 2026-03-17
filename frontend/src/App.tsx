@@ -1,6 +1,7 @@
 import Navbar from "./components/Navbar";
 import StoryBoard from "./pages/Storyboard";
 import ToDo from "./pages/ToDo";
+import Grades from "./pages/Grades";
 import Subjects from "./pages/Subjects/Subjects";
 import SubjectDetail from "./pages/Subjects/SubjectDetail";
 import { useState } from "react";
@@ -43,6 +44,7 @@ const App = () => {
           ) : (
             <Subjects onSelectSubject={setActiveSubject} />
           ))}
+        {activeNav === "Grades" && <Grades />}  
       </main>
     </div>
   );
