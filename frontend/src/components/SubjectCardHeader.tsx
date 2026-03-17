@@ -2,17 +2,22 @@ type SubjectHeaderProps = {
   title: string;
   teacher: string;
   gradedCount?: string;
-  label?: string
+  label?: string;
+  onClick?: () => void;
 };
 
 const SubjectCardHeader = ({
   title,
   teacher,
   gradedCount,
-  label
+  label,
+  onClick,
 }: SubjectHeaderProps) => {
   return (
-    <div className="flex flex-row justify-between items-center px-4 py-3 border border-black rounded-lg bg-[#F6E9B2] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+    <div
+      onClick={onClick}
+      className="flex flex-row justify-between items-center px-4 py-3 border border-black rounded-lg bg-[#F6E9B2] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] cursor-pointer"
+    >
       <div className="flex flex-col gap-2">
         <div className="flex flex-row gap-3 items-center">
           <p className="font-semibold text-3xl">{title}</p>

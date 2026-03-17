@@ -1,7 +1,7 @@
 import Navbar from "./components/Navbar";
 import StoryBoard from "./pages/Storyboard";
 import ToDo from "./pages/ToDo";
-import Grades from "./pages/Grades";
+import Grades from "./pages/Grades/Grades";
 import Subjects from "./pages/Subjects/Subjects";
 import SubjectDetail from "./pages/Subjects/SubjectDetail";
 import { useState } from "react";
