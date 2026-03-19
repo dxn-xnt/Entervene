@@ -1,9 +1,12 @@
 import Navbar from "./components/StudentUIComponents/Navbar";
+// IMPORT PAGES 
 import StoryBoard from "./pages/StudentInterfaces/Storyboard";
 import ToDo from "./pages/StudentInterfaces/ToDo";
 import Grades from "./pages/StudentInterfaces/Grades/Grades";
 import Subjects from "./pages/StudentInterfaces/Subjects/Subjects";
 import SubjectDetail from "./pages/StudentInterfaces/Subjects/SubjectDetail";
+import Notifications from "./pages/StudentInterfaces/Notifications";
+
 import { useState } from "react";
 
 const App = () => {
@@ -44,7 +47,8 @@ const App = () => {
           ) : (
             <Subjects onSelectSubject={setActiveSubject} />
           ))}
-        {activeNav === "Grades" && <Grades />}  
+        {activeNav === "Grades" && <Grades />}
+        {activeNav === "Notifications" && <Notifications />}
       </main>
     </div>
   );
