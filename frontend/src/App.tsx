@@ -1,5 +1,5 @@
 import Navbar from "./components/StudentUIComponents/Navbar";
-// IMPORT PAGES 
+// IMPORT PAGES
 import StoryBoard from "./pages/StudentInterfaces/Storyboard";
 import ToDo from "./pages/StudentInterfaces/ToDo";
 import Grades from "./pages/StudentInterfaces/Grades/Grades";
@@ -31,6 +31,7 @@ const App = () => {
             />
           ) : (
             <StoryBoard
+              setActiveNav={setActiveNav}
               onSelectSubject={(subject) => {
                 setActiveSubject(subject);
                 setActiveNav("Subjects");

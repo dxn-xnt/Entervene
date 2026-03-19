@@ -26,7 +26,7 @@ const Navbar = ({ activeNav, setActiveNav }: NavbarProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <aside className="w-64 min-h-screen bg-[#FFFDF5] border-r border-gray-500 flex flex-col">
+    <aside className="w-64 h-screen sticky top-0 bg-[#FFFDF5] border-r border-gray-500 flex flex-col">
       {/* Logo */}
       <div className="px-5 py-5 flex flex-col items-center">
         <div className="inline-block">

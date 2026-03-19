@@ -1,10 +1,12 @@
 import Card from "../../components/StudentUIComponents/Card";
+import { ArrowUpRight } from "lucide-react";
 
 type SubjectsProps = {
+  setActiveNav: (nav: string) => void;
   onSelectSubject: (title: string) => void;
 };
 
-const StoryBoard = ({ onSelectSubject }: SubjectsProps) => {
+const StoryBoard = ({ onSelectSubject, setActiveNav }: SubjectsProps) => {
   return (
     <div>
       <header className="px-5 py-5 border-b border-gray-500">
@@ -63,8 +65,16 @@ const StoryBoard = ({ onSelectSubject }: SubjectsProps) => {
           />
         </div>
 
-        <div className="w-[35%] border rounded px-3 py-3 self-stretch shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-          <h2 className="text-xl font-bold">To Do</h2>
+        <div className="w-[35%] border rounded px-3 py-5 self-stretch shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex flex-row justify-between items-center">
+            <h2 className="text-xl font-bold">To Do</h2>
+            <button
+              onClick={() => setActiveNav("To Do")}
+              className="border border-black rounded-full p-1 cursor-pointer"
+            >
+              <ArrowUpRight size={18} />
+            </button>
+          </div>
         </div>
       </main>
     </div>
