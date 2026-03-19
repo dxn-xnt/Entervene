@@ -1,9 +1,9 @@
-import Navbar from "./components/Navbar";
-import StoryBoard from "./pages/Storyboard";
-import ToDo from "./pages/ToDo";
-import Grades from "./pages/Grades/Grades";
-import Subjects from "./pages/Subjects/Subjects";
-import SubjectDetail from "./pages/Subjects/SubjectDetail";
+import Navbar from "./components/StudentUIComponents/Navbar";
+import StoryBoard from "./pages/StudentInterfaces/Storyboard";
+import ToDo from "./pages/StudentInterfaces/ToDo";
+import Grades from "./pages/StudentInterfaces/Grades/Grades";
+import Subjects from "./pages/StudentInterfaces/Subjects/Subjects";
+import SubjectDetail from "./pages/StudentInterfaces/Subjects/SubjectDetail";
 import { useState } from "react";
 
 const App = () => {

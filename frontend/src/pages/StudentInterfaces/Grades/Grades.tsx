@@ -1,5 +1,5 @@
 import { useState } from "react";
-import SubjectCardHeader from "../../components/SubjectCardHeader";
+import SubjectCardHeader from "../../../components/StudentUIComponents/SubjectCardHeader";
 import SubjectGrade from "./SubjectGrade";
 
 const Grades = () => {

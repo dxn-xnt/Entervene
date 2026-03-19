@@ -1,17 +1,17 @@
-import Card from "../../components/Card";
+import Card from "../../components/StudentUIComponents/Card";
 
 type SubjectsProps = {
   onSelectSubject: (title: string) => void;
 };
 
-const Subjects = ({ onSelectSubject }: SubjectsProps) => {
+const StoryBoard = ({ onSelectSubject }: SubjectsProps) => {
   return (
     <div>
       <header className="px-5 py-5 border-b border-gray-500">
-        <h1 className="text-4xl font-semibold">Subjects</h1>
+        <h1 className="text-4xl font-semibold">Story Board</h1>
       </header>
       <main className="px-5 py-5 flex flex-row gap-4 min-h-screen">
-        <div className="grid grid-cols-3 gap-4 self-start w-full">
+        <div className="grid grid-cols-2 gap-4 w-[65%] self-start">
           <Card
             title="Computer Programming"
             onClick={() => onSelectSubject("Computer Programming")}
@@ -25,47 +25,50 @@ const Subjects = ({ onSelectSubject }: SubjectsProps) => {
           <Card
             title="English"
             onClick={() => onSelectSubject("English")}
-            teacher="Juan Dela Cruz"
+            teacher="Marie Tess"
             badges={[
-              { label: "Quizzes", count: 1 },
-              { label: "Assignments", count: 2 },
-              { label: "Activities", count: 1 },
+              { label: "Assignments", count: 1 },
+              { label: "Readings", count: 1 },
             ]}
           />
           <Card
             title="Science & Technology"
             onClick={() => onSelectSubject("Science & Technology")}
-            teacher="Juan Dela Cruz"
-            badges={[
-              { label: "Quizzes", count: 1 },
-              { label: "Assignments", count: 2 },
-              { label: "Activities", count: 1 },
-            ]}
+            teacher="Jose Rizal"
+            badges={[{ label: "Tasks All Completed", count: 0 }]}
           />
           <Card
             title="Mathematics"
             onClick={() => onSelectSubject("Mathematics")}
-            teacher="Juan Dela Cruz"
+            teacher="Maria Clara"
             badges={[
-              { label: "Quizzes", count: 1 },
-              { label: "Assignments", count: 2 },
               { label: "Activities", count: 1 },
+              { label: "Readings", count: 1 },
             ]}
           />
           <Card
             title="Filipino"
             onClick={() => onSelectSubject("Filipino")}
-            teacher="Juan Dela Cruz"
+            teacher="Maripusa"
             badges={[
               { label: "Quizzes", count: 1 },
-              { label: "Assignments", count: 2 },
-              { label: "Activities", count: 1 },
+              { label: "Readings", count: 1 },
             ]}
           />
+          <Card
+            title="System Designs"
+            onClick={() => onSelectSubject("System Designs")}
+            teacher="Alden Richards"
+            badges={[{ label: "Tasks All Completed", count: 0 }]}
+          />
+        </div>
+
+        <div className="w-[35%] border rounded px-3 py-3 self-stretch shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <h2 className="text-xl font-bold">To Do</h2>
         </div>
       </main>
     </div>
   );
 };
 
-export default Subjects;
+export default StoryBoard;

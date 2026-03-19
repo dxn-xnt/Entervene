@@ -1,6 +1,6 @@
 import { useState } from "react";
-import Tabs from "../components/Tabs";
-import ToDoItem from "../components/ListCardItems/ToDoItem";
+import Tabs from "../../components/StudentUIComponents/Tabs";
+import ToDoItem from "../../components/StudentUIComponents/ListCardItems/ToDoItem";
 
 const todoTabs = [
   { id: "pending", label: "Pending" },
