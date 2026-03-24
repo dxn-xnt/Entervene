@@ -10,9 +10,14 @@ const Login = () => {
   const [error, setError] = useState("");
 
   const handleLogin = () => {
-    const success = login(username, password);
-    if (success) navigate("/");
-    else setError("Invalid username or password.");
+    const matchedRole = login(username, password);
+    if (matchedRole) {
+      if (matchedRole === "teacher") navigate("/teacher");
+      else if (matchedRole === "admin") navigate("/admin");
+      else navigate("/");
+    } else {
+      setError("Invalid username or password.");
+    }
   };
 
   return (

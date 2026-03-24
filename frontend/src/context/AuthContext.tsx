@@ -5,7 +5,7 @@ type Role = "student" | "teacher" | "admin" | null;
 
 interface AuthContextType {
   role: Role;
-  login: (username: string, password: string) => boolean;
+  login: (username: string, password: string) => Role;
   logout: () => void;
 }
 
@@ -20,15 +20,15 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [role, setRole] = useState<Role>(null);
 
-  const login = (username: string, password: string): boolean => {
+  const login = (username: string, password: string): Role => {
     const match = USERS.find(
       (u) => u.username === username && u.password === password,
     );
     if (match) {
       setRole(match.role);
-      return true;
+      return match.role;
     }
-    return false;
+    return null;
   };
 
   const logout = () => setRole(null);

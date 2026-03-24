@@ -3,7 +3,7 @@ import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import StudentApp from "./pages/StudentInterfaces/StudentApp";
-// import TeacherApp from "./pages/TeacherInterfaces/TeacherApp";
+import TeacherApp from "./pages/TeacherInterfaces/TeacherApp";
 // import AdminApp from "./pages/AdminInterfaces/AdminApp";
 
 const App = () => {
@@ -15,9 +15,9 @@ const App = () => {
           <Route element={<ProtectedRoute allowedRoles={["student"]} />}>
             <Route path="/" element={<StudentApp />} />
           </Route>
-          {/* <Route element={<ProtectedRoute allowedRoles={["teacher"]} />}>
+          <Route element={<ProtectedRoute allowedRoles={["teacher"]} />}>
             <Route path="/teacher" element={<TeacherApp />} />
-          </Route> */}
+          </Route>
           {/* <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
             <Route path="/admin" element={<AdminApp />} />
           </Route> */}
