@@ -1,57 +1,30 @@
-import Navbar from "./components/StudentUIComponents/Navbar";
-// IMPORT PAGES
-import StoryBoard from "./pages/StudentInterfaces/Storyboard";
-import ToDo from "./pages/StudentInterfaces/ToDo";
-import Grades from "./pages/StudentInterfaces/Grades/Grades";
-import Subjects from "./pages/StudentInterfaces/Subjects/Subjects";
-import SubjectDetail from "./pages/StudentInterfaces/Subjects/SubjectDetail";
-import Notifications from "./pages/StudentInterfaces/Notifications";
-
-import { useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "./context/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Login from "./pages/Login";
+import StudentApp from "./pages/StudentInterfaces/StudentApp";
+// import TeacherApp from "./pages/TeacherInterfaces/TeacherApp";
+// import AdminApp from "./pages/AdminInterfaces/AdminApp";
 
 const App = () => {
-  const [activeNav, setActiveNav] = useState("Study Board");
-  const [activeSubject, setActiveSubject] = useState<string | null>(null);
-
   return (
-    <div className="flex min-h-screen">
-      <Navbar
-        activeNav={activeNav}
-        setActiveNav={(nav) => {
-          setActiveNav(nav);
-          setActiveSubject(null);
-        }}
-      />
-      <main className="flex-1 bg-[#FFFDF5]">
-        {activeNav === "Study Board" &&
-          (activeSubject ? (
-            <SubjectDetail
-              subject={activeSubject}
-              onBack={() => setActiveSubject(null)}
-            />
-          ) : (
-            <StoryBoard
-              setActiveNav={setActiveNav}
-              onSelectSubject={(subject) => {
-                setActiveSubject(subject);
-                setActiveNav("Subjects");
-              }}
-            />
-          ))}
-        {activeNav === "To Do" && <ToDo />}
-        {activeNav === "Subjects" &&
-          (activeSubject ? (
-            <SubjectDetail
-              subject={activeSubject}
-              onBack={() => setActiveSubject(null)}
-            />
-          ) : (
-            <Subjects onSelectSubject={setActiveSubject} />
-          ))}
-        {activeNav === "Grades" && <Grades />}
-        {activeNav === "Notifications" && <Notifications />}
-      </main>
-    </div>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route element={<ProtectedRoute allowedRoles={["student"]} />}>
+            <Route path="/" element={<StudentApp />} />
+          </Route>
+          {/* <Route element={<ProtectedRoute allowedRoles={["teacher"]} />}>
+            <Route path="/teacher" element={<TeacherApp />} />
+          </Route> */}
+          {/* <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
+            <Route path="/admin" element={<AdminApp />} />
+          </Route> */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 };
 
