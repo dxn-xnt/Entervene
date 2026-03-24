@@ -65,9 +65,9 @@ const StoryBoard = ({ onSelectSubject, setActiveNav }: SubjectsProps) => {
           />
         </div>
 
-        <div className="w-[35%] border rounded px-3 py-5 self-stretch shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <div className="w-[35%] border rounded px-5 py-5 self-stretch shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex flex-row justify-between items-center">
-            <h2 className="text-xl font-bold">To Do</h2>
+            <h2 className="text-3xl font-semibold">To do</h2>
             <button
               onClick={() => setActiveNav("To Do")}
               className="border border-black rounded-full p-1 cursor-pointer"
