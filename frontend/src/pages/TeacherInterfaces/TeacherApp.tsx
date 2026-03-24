@@ -1,4 +1,5 @@
 import Dashboard from "./Dashboard";
+import Classes from "./Classes";
 import Navbar from "../../components/StudentUIComponents/Navbar";
 import { useState } from "react";
 
@@ -14,7 +15,8 @@ const TeacherApp = () => {
         }}
       />
       <main className="flex-1 bg-[#FFFDF5]">
-        <Dashboard />
+        {activeNav === "Dashboard" && <Dashboard />}
+        {activeNav === "Classes" && <Classes />}
       </main>
     </div>
   );

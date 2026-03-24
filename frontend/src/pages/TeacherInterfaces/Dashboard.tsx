@@ -1,5 +1,6 @@
-import Card from "../../components/TeacherUIComponents/Card";
+import Card from "../../components/TeacherUIComponents/DashboardCard";
 import AnnouncementCard from "../../components/TeacherUIComponents/AnnouncementCard";
+import { ArrowUpRight } from "lucide-react";
 const Dashboard = () => {
   return (
     <div>
@@ -9,22 +10,10 @@ const Dashboard = () => {
       </header>
       <main className="px-5 py-5 flex flex-col gap-4 min-h-screen">
         <div className="grid grid-cols-4 gap-4 w-full self-start">
-          <Card
-            title="Subjects"
-            count="3"
-            stat="12+ increase from last month"
-          />
-          <Card title="Classes" count="3" stat="12+ increase from last month" />
-          <Card
-            title="Students"
-            count="67"
-            stat="12+ increase from last month"
-          />
-          <Card
-            title="Ungraded Classwork"
-            count="56"
-            stat="12+ increase from last month"
-          />
+          <Card title="Subjects" count="3" stat="16" />
+          <Card title="Classes" count="3" stat="12" />
+          <Card title="Students" count="67" stat="1" />
+          <Card title="Ungraded Classwork" count="56" stat="2" />
         </div>
         <div className="flex flex-row items-stretch flex-1 gap-5">
           <div className="flex flex-col flex-1 gap-5">
@@ -69,6 +58,10 @@ const Dashboard = () => {
           <div className="w-[35%] border rounded px-5 py-5 self-stretch shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             <div className="flex flex-row justify-between items-center">
               <h2 className="text-3xl font-semibold">Class Activity</h2>
+              <div className="border border-black rounded-full p-1 cursor-pointer">
+                <ArrowUpRight size={18} />
+              </div>
+
               {/* <button
                 onClick={() => setActiveNav("To Do")}
                 className="border border-black rounded-full p-1 cursor-pointer"
