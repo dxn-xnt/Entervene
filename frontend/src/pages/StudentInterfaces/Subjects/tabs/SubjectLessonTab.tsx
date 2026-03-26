@@ -1,4 +1,4 @@
-import SubjectCardHeader from "../../../components/SubjectCardHeader";
+import SubjectCardHeader from "../../../../components/StudentUIComponents/SubjectCardHeader";
 
 type SubjectLessonTabProps = {
   subject: string;

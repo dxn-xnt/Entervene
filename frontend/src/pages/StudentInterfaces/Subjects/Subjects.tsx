@@ -1,4 +1,4 @@
-import Card from "../../components/Card";
+import Card from "../../../components/StudentUIComponents/Card";
 
 type SubjectsProps = {
   onSelectSubject: (title: string) => void;

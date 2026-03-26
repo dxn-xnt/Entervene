@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
-import Tabs from "../../components/Tabs";
+import Tabs from "../../../components/StudentUIComponents/Tabs";
 import SubjectLessonTab from "./tabs/SubjectLessonTab";
 import SubjectClassworkTab from "./tabs/SubjectClassworkTab";
 
@@ -20,7 +20,10 @@ const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
   return (
     <div>
       <header className="px-5 py-5 flex items-center gap-3">
-        <button onClick={onBack} className="text-4xl font-semibold cursor-pointer">
+        <button
+          onClick={onBack}
+          className="text-4xl font-semibold cursor-pointer"
+        >
           Subjects
         </button>
         <ChevronRight size={40} />
@@ -28,8 +31,10 @@ const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
       </header>
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
       <main className="px-5 py-5">
-        {activeTab === "lessons" && <SubjectLessonTab subject={subject} />}
-        {activeTab === "classwork" && <SubjectClassworkTab />}
+        <div>
+          {activeTab === "lessons" && <SubjectLessonTab subject={subject} />}
+          {activeTab === "classwork" && <SubjectClassworkTab />}
+        </div>
       </main>
     </div>
   );

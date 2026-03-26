@@ -1,4 +1,4 @@
-import ClassworkItem from "../../../components/ListCardItems/ClassworkItem";
+import ClassworkItem from "../../../../components/StudentUIComponents/ListCardItems/ClassworkItem";
 
 const SubjectLessonTab = () => {
   return (

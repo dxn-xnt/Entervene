@@ -7,7 +7,10 @@ import {
   BarChart2,
   CheckSquare,
   Bell,
+  School,
+  ClipboardList,
 } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
 
 const quarters = [
   "1st Quarter (2025-2026)",
@@ -16,17 +19,40 @@ const quarters = [
   "4th Quarter (2025-2026)",
 ];
 
+const NAV_ITEMS = {
+  student: [
+    { label: "Study Board", icon: <LayoutDashboard size={16} /> },
+    { label: "Subjects", icon: <BookOpen size={16} /> },
+    { label: "Interventions", icon: <Shield size={16} /> },
+    { label: "Grades", icon: <BarChart2 size={16} /> },
+    { label: "To Do", icon: <CheckSquare size={16} /> },
+    { label: "Notifications", icon: <Bell size={16} /> },
+  ],
+  teacher: [
+    { label: "Dashboard", icon: <LayoutDashboard size={16} /> },
+    { label: "Classes", icon: <School size={16} /> },
+    { label: "Classworks", icon: <ClipboardList size={16} /> },
+    { label: "Interventions", icon: <Shield size={16} /> },
+    { label: "Grades", icon: <BarChart2 size={16} /> },
+    { label: "Notifications", icon: <Bell size={16} /> },
+  ],
+  admin: [],
+};
+
 interface NavbarProps {
   activeNav: string;
   setActiveNav: (nav: string) => void;
 }
 
 const Navbar = ({ activeNav, setActiveNav }: NavbarProps) => {
+  const { role } = useAuth();
   const [selectedQuarter, setSelectedQuarter] = useState(quarters[0]);
   const [isOpen, setIsOpen] = useState(false);
 
+  const items = NAV_ITEMS[role as keyof typeof NAV_ITEMS] ?? [];
+
   return (
-    <aside className="w-64 min-h-screen bg-[#FFFDF5] border-r border-gray-500 flex flex-col">
+    <aside className="w-64 h-screen sticky top-0 bg-[#FFFDF5] border-r border-gray-500 flex flex-col">
       {/* Logo */}
       <div className="px-5 py-5 flex flex-col items-center">
         <div className="inline-block">
@@ -78,48 +104,16 @@ const Navbar = ({ activeNav, setActiveNav }: NavbarProps) => {
       {/* Nav Links */}
       <nav className="flex flex-col flex-1">
         <p className="pl-4 pt-6">Menu</p>
-        <div
-          onClick={() => setActiveNav("Study Board")}
-          className={`flex flex-row py-2 px-6 items-center gap-3 cursor-pointer transition-colors duration-150 text-sm
-            ${activeNav === "Study Board" ? "text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black"}`}
-        >
-          <LayoutDashboard size={16} /> Study Board
-        </div>
-        <div
-          onClick={() => setActiveNav("Subjects")}
-          className={`flex flex-row py-2 px-6 items-center gap-3 cursor-pointer transition-colors duration-150 text-sm
-            ${activeNav === "Subjects" ? "text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black"}`}
-        >
-          <BookOpen size={16} /> Subjects
-        </div>
-        <div
-          onClick={() => setActiveNav("Interventions")}
-          className={`flex flex-row py-2 px-6 items-center gap-3 cursor-pointer transition-colors duration-150 text-sm
-            ${activeNav === "Interventions" ? "text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black"}`}
-        >
-          <Shield size={16} /> Interventions
-        </div>
-        <div
-          onClick={() => setActiveNav("Grades")}
-          className={`flex flex-row py-2 px-6 items-center gap-3 cursor-pointer transition-colors duration-150 text-sm
-            ${activeNav === "Grades" ? "text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black"}`}
-        >
-          <BarChart2 size={16} /> Grades
-        </div>
-        <div
-          onClick={() => setActiveNav("To Do")}
-          className={`flex flex-row py-2 px-6 items-center gap-3 cursor-pointer transition-colors duration-150 text-sm
-            ${activeNav === "To Do" ? "text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black"}`}
-        >
-          <CheckSquare size={16} /> To Do
-        </div>
-        <div
-          onClick={() => setActiveNav("Notifications")}
-          className={`flex flex-row py-2 px-6 items-center gap-3 cursor-pointer transition-colors duration-150 text-sm
-            ${activeNav === "Notifications" ? "text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black"}`}
-        >
-          <Bell size={16} /> Notifications
-        </div>
+        {items.map(({ label, icon }) => (
+          <div
+            key={label}
+            onClick={() => setActiveNav(label)}
+            className={`flex flex-row py-2 px-6 items-center gap-3 cursor-pointer transition-colors duration-150 text-sm
+              ${activeNav === label ? "text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black"}`}
+          >
+            {icon} {label}
+          </div>
+        ))}
       </nav>
 
       {/* Profile */}
