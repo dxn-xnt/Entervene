@@ -1,7 +1,11 @@
-import Card from "../../components/TeacherUIComponents/ClassesCard";
+import Card from "../../../components/TeacherUIComponents/ClassesCard";
 import { ArrowUpRight } from "lucide-react";
 
-const Classes = () => {
+type ClassesPageProps = {
+  setActiveNav: (nav: string) => void;
+};
+
+const ClassesPage = ({ setActiveNav }: ClassesPageProps) => {
   return (
     <div>
       <header className="px-5 py-5 flex flex-col gap-2 border-b border-gray-500">
@@ -11,23 +15,26 @@ const Classes = () => {
         <div className="flex flex-col border rounded px-5 py-5 gap-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex flex-row justify-between">
             <p className="text-3xl font-semibold">Subjects</p>
-            <div className="border border-black rounded-full p-1 cursor-pointer">
+            <button
+              onClick={() => setActiveNav("Subject")}
+              className="border border-black rounded-full p-1 cursor-pointer"
+            >
               <ArrowUpRight size={18} />
-            </div>
+            </button>
           </div>
           <div className="grid grid-cols-4 gap-4 w-full self-start">
             <Card
               title="Computer Programming"
               badges={[
                 { label: "Quizzes", count: 1 },
-                { label: "Assignemnts", count: 2 },
+                { label: "Assignments", count: 2 },
               ]}
             />
             <Card
               title="English"
               badges={[
                 { label: "Quizzes", count: 1 },
-                { label: "Assignemnts", count: 2 },
+                { label: "Assignments", count: 2 },
               ]}
             />
           </div>
@@ -45,7 +52,7 @@ const Classes = () => {
               subtitle="Computer Programming"
               badges={[
                 { label: "Quizzes", count: 1 },
-                { label: "Assignemnts", count: 2 },
+                { label: "Assignments", count: 2 },
               ]}
             />
             <Card
@@ -53,11 +60,7 @@ const Classes = () => {
               subtitle="English"
               badges={[
                 { label: "Quizzes", count: 1 },
-                { label: "Assignemnts", count: 2 },
-                { label: "Assignemnts", count: 2 },
-                { label: "Assignemnts", count: 2 },
-                { label: "Assignemnts", count: 2 },
-                { label: "Assignemnts", count: 2 },
+                { label: "Assignments", count: 2 },
               ]}
             />
           </div>
@@ -67,4 +70,4 @@ const Classes = () => {
   );
 };
 
-export default Classes;
+export default ClassesPage;

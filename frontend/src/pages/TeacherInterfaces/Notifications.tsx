@@ -4,11 +4,29 @@ import NotificationCard from "../../components/StudentUIComponents/NotificationC
 
 const tabs = [
   { id: "all", label: "All" },
-  { id: "classworks", label: "Classworks" },
   { id: "announcements", label: "Announcements" },
+  { id: "submissions", label: "Submissions" },
+  { id: "interventions", label: "Interventions" },
 ];
 
-const classworkCards = [
+const announcementCards = [
+  {
+    title: "No Classes - Nov 30",
+    description:
+      "Classes are suspended on November 30 in observance of Bonifacio Day. Stay safe and enjoy the holiday....",
+    cardInfo: "Nov 25, 2025 - 7:00 AM  Admin Office",
+    badge: "Holiday",
+  },
+  {
+    title: "Card Distribution",
+    description:
+      "Report cards will be distributed on December 5. Parents are required to accompany their students during pick-up....",
+    cardInfo: "Nov 24, 2025 - 3:00 PM  Grade 8 Office",
+    badge: "Reminder",
+  },
+];
+
+const submissionCard = [
   {
     title: "Written Work #5 - Math 8",
     description:
@@ -32,23 +50,6 @@ const classworkCards = [
   },
 ];
 
-const announcementCards = [
-  {
-    title: "No Classes - Nov 30",
-    description:
-      "Classes are suspended on November 30 in observance of Bonifacio Day. Stay safe and enjoy the holiday....",
-    cardInfo: "Nov 25, 2025 - 7:00 AM  Admin Office",
-    badge: "Holiday",
-  },
-  {
-    title: "Card Distribution",
-    description:
-      "Report cards will be distributed on December 5. Parents are required to accompany their students during pick-up....",
-    cardInfo: "Nov 24, 2025 - 3:00 PM  Grade 8 Office",
-    badge: "Reminder",
-  },
-];
-
 const Notifications = () => {
   const [activeTab, setActiveTab] = useState("all");
 
@@ -57,7 +58,7 @@ const Notifications = () => {
       <header className="px-5 py-5 flex flex-row justify-between">
         <h1 className="text-4xl font-semibold">Notifications</h1>
         <button className="bg-[#7ABA78] text-black rounded px-5 py-2 border">
-          + New Classwork
+          Mark All as Read
         </button>
       </header>
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
@@ -66,7 +67,7 @@ const Notifications = () => {
         {(activeTab === "all" || activeTab === "classworks") && (
           <section className="flex flex-col gap-3">
             <h2 className="text-3xl font-semibold">Classwork</h2>
-            {classworkCards.map((card, index) => (
+            {submissionCard.map((card, index) => (
               <NotificationCard key={index} {...card} />
             ))}
           </section>

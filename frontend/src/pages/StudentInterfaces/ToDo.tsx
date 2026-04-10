@@ -1,5 +1,5 @@
 import { useState } from "react";
-import Tabs from "../../components/StudentUIComponents/Tabs";
+import Tabs from "../../components/Tabs";
 import ToDoItem from "../../components/StudentUIComponents/ListCardItems/ToDoItem";
 
 const todoTabs = [
