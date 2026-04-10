@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
 
 const Login = () => {
   const { login } = useAuth();
@@ -58,7 +57,6 @@ const Login = () => {
             />
           </div>
           {error && <p className="text-red-500 text-sm">{error}</p>}
-          <Button>Button</Button>
           <button
             className="bg-[#7ABA78] text-black rounded py-2"
             onClick={handleLogin}
