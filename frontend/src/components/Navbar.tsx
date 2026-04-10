@@ -9,8 +9,9 @@ import {
   Bell,
   School,
   ClipboardList,
+  LogOut,
 } from "lucide-react";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../context/AuthContext";
 
 const quarters = [
   "1st Quarter (2025-2026)",
@@ -45,7 +46,7 @@ interface NavbarProps {
 }
 
 const Navbar = ({ activeNav, setActiveNav }: NavbarProps) => {
-  const { role } = useAuth();
+  const { role, logout } = useAuth();
   const [selectedQuarter, setSelectedQuarter] = useState(quarters[0]);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -116,13 +117,20 @@ const Navbar = ({ activeNav, setActiveNav }: NavbarProps) => {
         ))}
       </nav>
 
-      {/* Profile */}
-      <div className="flex flex-row items-center justify-between px-4 pb-10">
+      {/* Profile + Logout */}
+      <div className="flex flex-col gap-2 px-4 pb-10">
         <div className="flex flex-row items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-gray-300" />
           <p className="text-sm font-bold">John Doe</p>
         </div>
-        <ChevronDown size={16} />
+        {/* 👇 Logout button */}
+        <button
+          onClick={logout}
+          className="flex flex-row items-center gap-2 text-sm text-red-500 hover:text-red-700 cursor-pointer transition-colors duration-150"
+        >
+          <LogOut size={16} />
+          Logout
+        </button>
       </div>
     </aside>
   );

@@ -1,4 +1,4 @@
-import Navbar from "../../components/StudentUIComponents/Navbar";
+import Navbar from "../../components/Navbar";
 import StoryBoard from "./Storyboard";
 import ToDo from "./ToDo";
 import Grades from "./Grades/Grades";

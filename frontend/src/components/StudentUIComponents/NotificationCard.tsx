@@ -1,3 +1,5 @@
+import { Badge } from "../ui/badge";
+
 type NotificationProps = {
   title: string;
   description: string;
@@ -22,9 +24,7 @@ const NotificationCard = ({
           <p className="text-xs text-gray-500">{cardInfo}</p>
         </div>
       </div>
-      <div className="p-2 rounded-2xl bg-[#F6E9B2] border">
-        <p className="text-sm text-right">{badge}</p>
-      </div>
+      <Badge variant={"destructive"} >{badge}</Badge>
     </div>
   );
 };
