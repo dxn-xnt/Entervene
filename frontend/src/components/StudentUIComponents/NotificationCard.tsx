@@ -1,4 +1,4 @@
-import { Badge } from "../ui/badge";
+import { Badge } from "@/components/retroui/Badge";
 
 type NotificationProps = {
   title: string;
@@ -24,7 +24,7 @@ const NotificationCard = ({
           <p className="text-xs text-gray-500">{cardInfo}</p>
         </div>
       </div>
-      <Badge variant={"destructive"} >{badge}</Badge>
+      <Badge variant={"surface"} >{badge}</Badge>
     </div>
   );
 };
