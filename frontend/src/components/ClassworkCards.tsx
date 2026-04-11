@@ -1,4 +1,4 @@
-import { Badge } from "./ui/badge";
+import { Badge } from "@/components/retroui/Badge";
 
 type ListItemProps = {
   title: string;
@@ -21,7 +21,7 @@ const ListItem = ({ title, subject, date, badge }: ListItemProps) => {
           </p>
         </div>
       </div>
-      {badge && <Badge variant="destructive">{badge}</Badge>}
+      {badge && <Badge variant="surface">{badge}</Badge>}
     </div>
   );
 };

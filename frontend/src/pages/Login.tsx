@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { Text } from "@/components/retroui/Text";
+import { Button } from "@/components/retroui/Button";
+import { Card } from "@/components/retroui/Card";
+import { Input } from "@/components/retroui/Input";
+import { Label } from "@/components/retroui/Label";
+import { Checkbox } from "@/components/retroui/Checkbox";
 
 const Login = () => {
   const { login } = useAuth();
@@ -21,54 +27,60 @@ const Login = () => {
   };
 
   return (
-    <div className="px-10 py-10 flex flex-col justify-center items-center min-h-screen gap-5">
-      <div className="flex flex-col gap-3 border rounded p-8 w-120">
-        <div className="flex flex-col justify-center items-center">
-          <header>
-            <h1 className="font-semibold text-2xl">Log in to your account</h1>
-          </header>
-          <p className="text-sm">
-            Enter your email and password below to login
-          </p>
-        </div>
-        <div className="flex flex-col gap-5">
-          <div className="flex flex-col gap-2">
-            <p>Email Address</p>
-            <input
-              className="border rounded px-3 py-2 w-full"
-              placeholder="email@example.com"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-row justify-between">
-              <p>Password</p>
-              <p className="font-semibold">Forget password?</p>
-            </div>
+    <div className="flex flex-col items-center justify-center h-screen">
+    <Card>
+      <Card.Header className="flex flex-col justify-center bg-accent">
+        <Card.Title>
+          Sign In
+        </Card.Title>
+        <Card.Description className="text-black text-sm">
+          Welcome back! Enter your details to access your account.
+        </Card.Description>
+      </Card.Header>
 
-            <input
-              className="border rounded px-3 py-2 w-full"
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-            />
+      <Card.Content>
+        <div className="flex flex-col gap-5">
+          <div className="grid w-full max-w-sm items-center gap-2">
+            <Label htmlFor="email">Email Address</Label>
+            <Input type="email" id="email" placeholder="Email" value={username}
+              onChange={(e) => setUsername(e.target.value)}/>
+          </div> 
+          
+          <div className="grid w-full max-w-sm items-center gap-2">
+            <div className="flex flex-row justify-between items-center">
+              <Label htmlFor="password">Password</Label>
+              <Button variant="link" className="font-regular p-0 text-sm font-normal font-underline" 
+                onClick={() => navigate("/forgot-password")}>
+                Forget password?
+              </Button>
+            </div>
+            <Input type="password" id="password" placeholder="Password" value={password}
+              onChange={(e) => setPassword(e.target.value)}/>
+            {error && <Text as="p" className="text-red-500 text-sm">{error}</Text>}
+          </div>  
+          
+          <div className="flex gap-2 items-center">
+            <Checkbox />
+            <Text>Remember me</Text>
           </div>
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          <button
-            className="bg-[#7ABA78] text-black rounded py-2"
+
+    
+          <Button variant="default" className="mt-4"
             onClick={handleLogin}
           >
-            Login
-          </button>
-          <p className="text-center">
-            <span className="font-semibold">Don't have an account?</span> Sign
-            up
-          </p>
+            Sign In
+          </Button>
+          <div className="flex flex-row items-center gap-1">
+            <Text as="p" className="text-center">Don't have an account?</Text>
+            <Button variant="link" className="font-regular p-0" 
+              onClick={() => navigate("/forgot-password")}>
+              Sign In
+            </Button>
+          </div>
+          
         </div>
-      </div>
+      </Card.Content>
+    </Card>
     </div>
   );
 };
