@@ -10,8 +10,12 @@ import {
   School,
   ClipboardList,
   LogOut,
+  Book,
+  Settings,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { Label } from "./retroui/Label";
+import { Text } from "./retroui/Text";
 
 const quarters = [
   "1st Quarter (2025-2026)",
@@ -37,7 +41,15 @@ const NAV_ITEMS = {
     { label: "Grades", icon: <BarChart2 size={16} /> },
     { label: "Notifications", icon: <Bell size={16} /> },
   ],
-  admin: [],
+  admin: [
+    { label: "Dashboard", icon: <LayoutDashboard size={16} /> },
+    { label: "Subjects", icon: <Book size={16} /> },
+    { label: "Classes", icon: <School size={16} /> },
+    { label: "Users", icon: <School size={16} /> },
+    { label: "Interventions", icon: <Shield size={16} /> },
+    { label: "Notifications", icon: <Bell size={16} /> },
+    { label: "System Settings", icon: <Settings size={16} /> },
+  ],
 };
 
 interface NavbarProps {
@@ -103,8 +115,8 @@ const Navbar = ({ activeNav, setActiveNav }: NavbarProps) => {
       </div>
 
       {/* Nav Links */}
-      <nav className="flex flex-col flex-1">
-        <p className="pl-4 pt-6">Menu</p>
+      <nav className="flex flex-col flex-1 gap-1">
+        <Label className="px-6 pt-6">Menu</Label>
         {items.map(({ label, icon }) => (
           <div
             key={label}
@@ -112,7 +124,7 @@ const Navbar = ({ activeNav, setActiveNav }: NavbarProps) => {
             className={`flex flex-row py-2 px-6 items-center gap-3 cursor-pointer transition-colors duration-150 text-sm
               ${activeNav === label ? "text-black border-t border-b border-black shadow-[0_2px_0px_0px_rgba(0,0,0,1)]" : "text-black"}`}
           >
-            {icon} {label}
+            {icon} <Text as={"p"}>{label}</Text>
           </div>
         ))}
       </nav>
