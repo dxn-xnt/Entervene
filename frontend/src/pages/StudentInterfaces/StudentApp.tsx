@@ -1,11 +1,11 @@
 import Navbar from "../../components/Navbar";
-import StoryBoard from "./Storyboard";
 import ToDo from "./ToDo";
 import Grades from "./Grades/Grades";
 import Subjects from "./Subjects/Subjects";
 import SubjectDetail from "./Subjects/SubjectDetail";
-import Notifications from "./Notifications";
+import Notifications from "./notifications";
 import { useState } from "react";
+import StoryBoard from "./Storyboard";
 
 const StudentApp = () => {
   const [activeNav, setActiveNav] = useState("Study Board");
