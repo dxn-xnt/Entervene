@@ -12,26 +12,32 @@ interface AuthContextType {
 const USERS = [
   { username: "student", password: "student123", role: "student" as Role },
   { username: "teacher", password: "teacher123", role: "teacher" as Role },
-  { username: "admin", password: "admin123", role: "admin" as Role },
+  { username: "admin",   password: "admin123",   role: "admin"   as Role },
 ];
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [role, setRole] = useState<Role>(null);
+  const [role, setRole] = useState<Role>(() => {
+    return (localStorage.getItem("role") as Role) ?? null
+  });
 
   const login = (username: string, password: string): Role => {
     const match = USERS.find(
-      (u) => u.username === username && u.password === password,
+      (u) => u.username === username && u.password === password
     );
     if (match) {
       setRole(match.role);
+      localStorage.setItem("role", match.role as string);
       return match.role;
     }
     return null;
   };
 
-  const logout = () => setRole(null);
+  const logout = () => {
+    setRole(null);
+    localStorage.removeItem("role");
+  };
 
   return (
     <AuthContext.Provider value={{ role, login, logout }}>

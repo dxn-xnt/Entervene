@@ -7,6 +7,7 @@ import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
 import { Label } from "@/components/retroui/Label";
 import { Checkbox } from "@/components/retroui/Checkbox";
+import { routes } from "@/../routes"
 
 const Login = () => {
   const { login } = useAuth();
@@ -18,11 +19,11 @@ const Login = () => {
   const handleLogin = () => {
     const matchedRole = login(username, password);
     if (matchedRole) {
-      if (matchedRole === "teacher") navigate("/teacher");
-      else if (matchedRole === "admin") navigate("/admin");
-      else navigate("/");
+      if (matchedRole === "admin")        navigate(routes.admin.dashboard)
+      else if (matchedRole === "teacher") navigate(routes.teacher.dashboard)
+      else if (matchedRole === "student") navigate(routes.student.board)
     } else {
-      setError("Invalid username or password.");
+      setError("Invalid username or password.")
     }
   };
 

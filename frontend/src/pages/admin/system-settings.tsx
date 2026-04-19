@@ -1,11 +1,9 @@
 import { ChartAreaInteractive } from "@/components/chart-area-interactive"
-import { DataTable } from "@/components/data-table"
-import { SectionCards } from "@/components/section-cards"
+import { SectionCards } from "@/components/overview-cards"
 
-import data from "./data.json"
 import AppLayout from "@/layouts/app-layout"
 
-export default function AdminApp() {
+export default function AdminSystemSettings() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
@@ -15,7 +13,6 @@ export default function AdminApp() {
               <div className="px-4 lg:px-6">
                 <ChartAreaInteractive />
               </div>
-              <DataTable data={data} />
             </div>
           </div>
         </div>

@@ -11,8 +11,17 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { CommandIcon, BarChart2, Bell, Book, BookOpen, CheckSquare, ClipboardList, LayoutDashboard, School, Settings, Shield, Users } from "lucide-react"
+import { CommandIcon } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
+import { Select } from "./retroui/Select"
+import { SidebarConfigs } from "@/context/sidebar-config"
+
+const quarters = [
+  "1st Quarter (2025-2026)",
+  "2nd Quarter (2025-2026)",
+  "3rd Quarter (2025-2026)",
+  "4th Quarter (2025-2026)",
+];
 
 const data = {
   user: {
@@ -20,155 +29,15 @@ const data = {
     email: "m@example.com",
     avatar: "/avatars/shadcn.jpg",
   },
-  navMain:{ 
-    admin: [
-      {
-        title: "Dashboard",
-        url: "#",
-        icon: (
-          <LayoutDashboard />
-        ),
-      },
-      {
-        title: "Subjects",
-        url: "#",
-        icon: (
-          <Book />
-        ),
-      },
-      {
-        title: "Classes",
-        url: "#",
-        icon: (
-          <School />
-        ),
-      },
-      {
-        title: "Users",
-        url: "#",
-        icon: (
-          <Users />
-        ),
-      },
-      {
-        title: "Interventions",
-        url: "#",
-        icon: (
-          <Shield />
-        ),
-      },
-      {
-        title: "Notifications",
-        url: "#",
-        icon: (
-          <Bell />
-        ),
-      },
-      {
-        title: "System Settings",
-        url: "#",
-        icon: (
-          <Settings />
-        ),
-      },
-    ],
-    teacher: [
-      {
-        title: "Dashboard",
-        url: "#",
-        icon: (
-          <LayoutDashboard />
-        ),
-      },
-      {
-        title: "Classes",
-        url: "#",
-        icon: (
-          <School />
-        ),
-      },
-      {
-        title: "Classworks",
-        url: "#",
-        icon: (
-          <ClipboardList />
-        ),
-      },
-      {
-        title: "Interventions",
-        url: "#",
-        icon: (
-          <Shield />
-        ),
-      },
-      {
-        title: "Grades",
-        url: "#",
-        icon: (
-          <BarChart2 />
-        ),
-      },
-      {
-        title: "Notifications",
-        url: "#",
-        icon: (
-          <Bell />
-        ),
-      },
-    ],
-    student: [
-      {
-        title: "Study Board",
-        url: "#",
-        icon: (
-          <LayoutDashboard />
-        ),
-      },
-      {
-        title: "Subjects",
-        url: "#",
-        icon: (
-          <BookOpen />
-        ),
-      },
-      {
-        title: "Interventions",
-        url: "#",
-        icon: (
-          <Shield />
-        ),
-      },
-      {
-        title: "Grades",
-        url: "#",
-        icon: (
-          <BarChart2 />
-        ),
-      },
-      {
-        title: "To Do",
-        url: "#",
-        icon: (
-          <CheckSquare />
-        ),
-      },
-      {
-        title: "Notifications",
-        url: "#",
-        icon: (
-          <Bell />
-        ),
-      },
-    ],
-  }
+  SidebarConfigs
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { role } = useAuth()
-  const navRole = role ?? "student"
+  const navRole = (role ?? "student") as keyof typeof SidebarConfigs
 
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
+    <Sidebar collapsible="offcanvas" className="no-scrollbar" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem className="border-b-2 mb-2">
@@ -185,7 +54,21 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain[navRole]} />
+        <Select defaultValue={quarters[0]}>
+          <Select.Trigger className="w-full border-x-background m-0 shadow-none mb-1">
+            <Select.Value placeholder="Select Academic Year" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Group>
+              {quarters.map((quarter) => (
+                <Select.Item key={quarter} value={quarter}>
+                  {quarter}
+                </Select.Item>
+              ))}
+            </Select.Group>
+          </Select.Content>
+        </Select>
+        <NavMain items={data.SidebarConfigs[navRole]} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={data.user} />
