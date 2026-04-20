@@ -1,12 +1,13 @@
+import AppLayout from "@/layouts/app-layout";
 import Card from "../../../components/StudentUIComponents/Card";
+import { useNavigate } from "react-router-dom";
+import { routes } from "@/../routes";
 
-type SubjectsProps = {
-  onSelectSubject: (title: string) => void;
-};
+const Subjects = () => {
+  const navigate = useNavigate();
 
-const Subjects = ({ onSelectSubject }: SubjectsProps) => {
   return (
-    <div>
+    <AppLayout>
       <header className="px-5 py-5 border-b border-gray-500">
         <h1 className="text-4xl font-semibold">Subjects</h1>
       </header>
@@ -14,7 +15,7 @@ const Subjects = ({ onSelectSubject }: SubjectsProps) => {
         <div className="grid grid-cols-3 gap-4 self-start w-full">
           <Card
             title="Computer Programming"
-            onClick={() => onSelectSubject("Computer Programming")}
+            onClick={() => navigate(routes.student.subjects)}
             teacher="Juan Dela Cruz"
             badges={[
               { label: "Quizzes", count: 1 },
@@ -24,7 +25,7 @@ const Subjects = ({ onSelectSubject }: SubjectsProps) => {
           />
           <Card
             title="English"
-            onClick={() => onSelectSubject("English")}
+            onClick={() => navigate(routes.student.subjects)}
             teacher="Juan Dela Cruz"
             badges={[
               { label: "Quizzes", count: 1 },
@@ -34,7 +35,7 @@ const Subjects = ({ onSelectSubject }: SubjectsProps) => {
           />
           <Card
             title="Science & Technology"
-            onClick={() => onSelectSubject("Science & Technology")}
+            onClick={() => navigate(routes.student.subjects)}
             teacher="Juan Dela Cruz"
             badges={[
               { label: "Quizzes", count: 1 },
@@ -44,7 +45,7 @@ const Subjects = ({ onSelectSubject }: SubjectsProps) => {
           />
           <Card
             title="Mathematics"
-            onClick={() => onSelectSubject("Mathematics")}
+            onClick={() => navigate(routes.student.subjects)}
             teacher="Juan Dela Cruz"
             badges={[
               { label: "Quizzes", count: 1 },
@@ -54,7 +55,7 @@ const Subjects = ({ onSelectSubject }: SubjectsProps) => {
           />
           <Card
             title="Filipino"
-            onClick={() => onSelectSubject("Filipino")}
+            onClick={() => navigate(routes.student.subjects)}
             teacher="Juan Dela Cruz"
             badges={[
               { label: "Quizzes", count: 1 },
@@ -64,7 +65,7 @@ const Subjects = ({ onSelectSubject }: SubjectsProps) => {
           />
         </div>
       </main>
-    </div>
+    </AppLayout>
   );
 };
 

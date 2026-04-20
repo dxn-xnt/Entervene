@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import Tabs from "../../../components/Tabs";
 import SubjectLessonTab from "./tabs/SubjectLessonTab";
 import SubjectClassworkTab from "./tabs/SubjectClassworkTab";
+import AppLayout from "@/layouts/app-layout";
 
 type SubjectDetailProps = {
   subject: string;
@@ -18,7 +19,7 @@ const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
   const [activeTab, setActiveTab] = useState("lessons");
 
   return (
-    <div>
+    <AppLayout>
       <header className="px-5 py-5 flex items-center gap-3">
         <button
           onClick={onBack}
@@ -36,7 +37,7 @@ const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
           {activeTab === "classwork" && <SubjectClassworkTab />}
         </div>
       </main>
-    </div>
+    </AppLayout>
   );
 };
 
