@@ -19,6 +19,9 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { EllipsisVerticalIcon, CircleUserRoundIcon, CreditCardIcon, BellIcon, LogOutIcon } from "lucide-react"
+import { Link } from "react-router"
+import { routes } from "@/../routes";
+
 
 export function NavUser({
   user,
@@ -92,11 +95,14 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
+            <Link to={routes.auth.login}>
+
             <DropdownMenuItem>
               <LogOutIcon
               />
               Log out
             </DropdownMenuItem>
+            </Link>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
