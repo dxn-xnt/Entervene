@@ -1,3 +1,4 @@
+import AppLayout from "@/layouts/app-layout";
 import { ChevronRight } from "lucide-react";
 import { ChevronLeft } from "lucide-react";
 
@@ -8,7 +9,7 @@ type SubjectGradeProps = {
 
 const SubjectGrade = ({ subject, onBack }: SubjectGradeProps) => {
   return (
-    <div>
+    <AppLayout>
       <header className="px-5 py-5 flex items-center gap-3 border-b border-gray-500">
         <button
           onClick={onBack}
@@ -30,7 +31,7 @@ const SubjectGrade = ({ subject, onBack }: SubjectGradeProps) => {
           </button>
         </div>
       </main>
-    </div>
+    </AppLayout>
   );
 };
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Tabs from "../../components/Tabs";
 import NotificationCard from "../../components/StudentUIComponents/NotificationCard";
+import AppLayout from "@/layouts/app-layout";
 
 const tabs = [
   { id: "all", label: "All" },
@@ -53,7 +54,7 @@ const Notifications = () => {
   const [activeTab, setActiveTab] = useState("all");
 
   return (
-    <div>
+    <AppLayout>
       <header className="px-5 py-5 flex flex-row justify-between">
         <h1 className="text-4xl font-semibold">Notifications</h1>
         <button className="bg-[#7ABA78] text-black rounded px-5 py-2 border">
@@ -82,7 +83,7 @@ const Notifications = () => {
           </section>
         )}
       </main>
-    </div>
+    </AppLayout>
   );
 };
 

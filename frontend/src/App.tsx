@@ -4,7 +4,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import { routes } from "@/../routes";
 
-import StudentApp from "./pages/StudentInterfaces/StudentApp";
+// import StudentApp from "./pages/StudentInterfaces/StudentApp";
 import TeacherApp from "./pages/TeacherInterfaces/TeacherApp";
 
 // Admin pages
@@ -26,12 +26,12 @@ import AppLayout from "./layouts/app-layout";
 // import TeacherNotifications from "./pages/teacher/TeacherNotifications";
 
 // // Student pages
-// import StudentBoard from "./pages/student/StudentBoard";
-// import StudentSubjects from "./pages/student/StudentSubjects";
+import StudentBoard from "./pages/student/storyboard";
+import StudentSubjects from "./pages/student/Subjects/subject";
 // import StudentInterventions from "./pages/student/StudentInterventions";
-// import StudentGrades from "./pages/student/StudentGrades";
-// import StudentTodo from "./pages/student/StudentTodo";
-// import StudentNotifications from "./pages/student/StudentNotifications";
+import StudentGrades from "./pages/student/Grades/grades";
+import StudentTodo from "./pages/student/to-do";
+import StudentNotifications from "./pages/student/notification";
 
 // // Layouts
 // import TeacherLayout from "./pages/teacher/TeacherLayout";
@@ -71,15 +71,12 @@ const App = () => {
 
           {/* Student */}
           <Route element={<ProtectedRoute allowedRoles={["student"]} />}>
-            <Route path="/" element={<StudentApp />} />
-            {/* <Route element={<StudentLayout />}>
-              <Route path={routes.student.board}          element={<StudentBoard />}          />
-              <Route path={routes.student.subjects}       element={<StudentSubjects />}       />
-              <Route path={routes.student.interventions}  element={<StudentInterventions />}  />
-              <Route path={routes.student.grades}         element={<StudentGrades />}         />
-              <Route path={routes.student.todo}           element={<StudentTodo />}           />
-              <Route path={routes.student.notifications}  element={<StudentNotifications />}  />
-            </Route> */}
+            <Route index element={<Navigate to={routes.student.board} replace />} />
+            <Route path={routes.student.board}         element={<StudentBoard />}    />
+            <Route path={routes.student.subjects}      element={<StudentSubjects />}      />
+            <Route path={routes.student.grades}        element={<StudentGrades />}        />
+            <Route path={routes.student.todo}          element={<StudentTodo />}          />
+            <Route path={routes.student.notifications} element={<StudentNotifications />} />
           </Route>
 
           <Route path="*" element={<Navigate to={routes.auth.login} replace />} />

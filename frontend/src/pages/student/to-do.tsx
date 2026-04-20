@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Tabs from "../../components/Tabs";
 import ToDoItem from "../../components/StudentUIComponents/ListCardItems/ToDoItem";
+import AppLayout from "@/layouts/app-layout";
 
 const todoTabs = [
   { id: "pending", label: "Pending" },
@@ -69,7 +70,7 @@ const ToDo = () => {
   const [activeTab, setActiveTab] = useState("pending");
 
   return (
-    <div>
+    <AppLayout>
       <header className="px-5 py-5">
         <h1 className="text-4xl font-semibold">To Do</h1>
       </header>
@@ -123,7 +124,7 @@ const ToDo = () => {
         )}
 
       </div>
-    </div>
+    </AppLayout>
   );
 };
 

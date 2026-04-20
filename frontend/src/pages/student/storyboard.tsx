@@ -1,14 +1,14 @@
+import AppLayout from "@/layouts/app-layout";
 import Card from "../../components/StudentUIComponents/Card";
 import { ArrowUpRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { routes } from "@/../routes";
 
-type SubjectsProps = {
-  setActiveNav: (nav: string) => void;
-  onSelectSubject: (title: string) => void;
-};
+const StoryBoard = () => {
+  const navigate = useNavigate();
 
-const StoryBoard = ({ onSelectSubject, setActiveNav }: SubjectsProps) => {
   return (
-    <div>
+    <AppLayout>
       <header className="px-5 py-5 border-b border-gray-500">
         <h1 className="text-4xl font-semibold">Story Board</h1>
       </header>
@@ -16,7 +16,7 @@ const StoryBoard = ({ onSelectSubject, setActiveNav }: SubjectsProps) => {
         <div className="grid grid-cols-2 gap-4 w-[65%] self-start">
           <Card
             title="Computer Programming"
-            onClick={() => onSelectSubject("Computer Programming")}
+            onClick={() => navigate(routes.student.subjects)}
             teacher="Juan Dela Cruz"
             badges={[
               { label: "Quizzes", count: 1 },
@@ -26,7 +26,7 @@ const StoryBoard = ({ onSelectSubject, setActiveNav }: SubjectsProps) => {
           />
           <Card
             title="English"
-            onClick={() => onSelectSubject("English")}
+            onClick={() => navigate(routes.student.subjects)}
             teacher="Marie Tess"
             badges={[
               { label: "Assignments", count: 1 },
@@ -35,13 +35,13 @@ const StoryBoard = ({ onSelectSubject, setActiveNav }: SubjectsProps) => {
           />
           <Card
             title="Science & Technology"
-            onClick={() => onSelectSubject("Science & Technology")}
+            onClick={() => navigate(routes.student.subjects)}
             teacher="Jose Rizal"
             badges={[{ label: "Tasks All Completed", count: 0 }]}
           />
           <Card
             title="Mathematics"
-            onClick={() => onSelectSubject("Mathematics")}
+            onClick={() => navigate(routes.student.subjects)}
             teacher="Maria Clara"
             badges={[
               { label: "Activities", count: 1 },
@@ -50,7 +50,7 @@ const StoryBoard = ({ onSelectSubject, setActiveNav }: SubjectsProps) => {
           />
           <Card
             title="Filipino"
-            onClick={() => onSelectSubject("Filipino")}
+            onClick={() => navigate(routes.student.subjects)}
             teacher="Maripusa"
             badges={[
               { label: "Quizzes", count: 1 },
@@ -59,7 +59,7 @@ const StoryBoard = ({ onSelectSubject, setActiveNav }: SubjectsProps) => {
           />
           <Card
             title="System Designs"
-            onClick={() => onSelectSubject("System Designs")}
+            onClick={() => navigate(routes.student.subjects)}
             teacher="Alden Richards"
             badges={[{ label: "Tasks All Completed", count: 0 }]}
           />
@@ -69,7 +69,7 @@ const StoryBoard = ({ onSelectSubject, setActiveNav }: SubjectsProps) => {
           <div className="flex flex-row justify-between items-center">
             <h2 className="text-3xl font-semibold">To do</h2>
             <button
-              onClick={() => setActiveNav("To Do")}
+              onClick={() => navigate(routes.student.todo)}
               className="border border-black rounded-full p-1 cursor-pointer"
             >
               <ArrowUpRight size={18} />
@@ -77,7 +77,7 @@ const StoryBoard = ({ onSelectSubject, setActiveNav }: SubjectsProps) => {
           </div>
         </div>
       </main>
-    </div>
+    </AppLayout>
   );
 };
 

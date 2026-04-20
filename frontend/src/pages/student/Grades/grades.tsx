@@ -1,6 +1,7 @@
 import { useState } from "react";
 import SubjectCardHeader from "../../../components/StudentUIComponents/SubjectCardHeader";
 import SubjectGrade from "./SubjectGrade";
+import AppLayout from "@/layouts/app-layout";
 
 const subjectPerformanceData = [
   { subject: "Mathematic..", score: 87 },
@@ -24,7 +25,7 @@ const Grades = () => {
   }
 
   return (
-    <div>
+    <AppLayout>
       <header className="px-5 py-5 border-b border-gray-500">
         <h1 className="text-4xl font-semibold">Grades</h1>
       </header>
@@ -157,7 +158,7 @@ const Grades = () => {
           />
         </div>
       </main>
-    </div>
+    </AppLayout>
   );
 };
 
