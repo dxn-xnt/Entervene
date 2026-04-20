@@ -3,6 +3,8 @@ backend/venv/
 backend/app/__pycache__/
 backend/*.pyc
 backend/.env
+backend/data/
+backend/**/*.pkl
 
 # Python cache
 **/__pycache__/
