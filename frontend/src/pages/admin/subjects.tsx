@@ -4,41 +4,43 @@ import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/card";
 import AppLayout from "@/layouts/app-layout";
 import { Button } from "@/components/retroui/Button";
 
+const DESCRIPTION = "Teachers Assigned";
+
 const grades = [
   {
     grade: "Grade 7",
     subjects: [
-      { title: "Math", count: "90%", stat: "3" },
-      { title: "English", count: "92%", stat: "4" },
-      { title: "Science", count: "88%", stat: "2" },
-      { title: "Filipino", count: "95%", stat: "5" },
+      { title: "Math", count: "24" },
+      { title: "English", count: "24" },
+      { title: "Science", count: "24" },
+      { title: "Filipino", count: "24" },
     ],
   },
   {
     grade: "Grade 8",
     subjects: [
-      { title: "Math", count: "90%", stat: "3" },
-      { title: "English", count: "92%", stat: "4" },
-      { title: "Science", count: "88%", stat: "2" },
-      { title: "Filipino", count: "95%", stat: "5" },
+      { title: "Math", count: "24" },
+      { title: "English", count: "24" },
+      { title: "Science", count: "24" },
+      { title: "Filipino", count: "24" },
     ],
   },
   {
     grade: "Grade 9",
     subjects: [
-      { title: "Math", count: "90%", stat: "3" },
-      { title: "English", count: "92%", stat: "4" },
-      { title: "Science", count: "88%", stat: "2" },
-      { title: "Filipino", count: "95%", stat: "5" },
+      { title: "Math", count: "24" },
+      { title: "English", count: "24" },
+      { title: "Science", count: "24" },
+      { title: "Filipino", count: "24" },
     ],
   },
   {
     grade: "Grade 10",
     subjects: [
-      { title: "Math", count: "90%", stat: "3" },
-      { title: "English", count: "92%", stat: "4" },
-      { title: "Science", count: "88%", stat: "2" },
-      { title: "Filipino", count: "95%", stat: "5" },
+      { title: "Math", count: "24" },
+      { title: "English", count: "24" },
+      { title: "Science", count: "24" },
+      { title: "Filipino", count: "24" },
     ],
   },
 ];
@@ -65,8 +67,7 @@ export default function AdminSubjects() {
                       <CardContent>
                         <p className="text-4xl font-bold">{subject.count}</p>
                         <p className="text-sm mt-2">
-                          <span className="font-semibold">+{subject.stat}</span>{" "}
-                          increase from last month
+                          <span className="font-semibold">{DESCRIPTION}</span>
                         </p>
                       </CardContent>
                     </Card>
