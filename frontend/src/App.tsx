@@ -17,7 +17,7 @@ import AdminNotifications from "./pages/admin/notifications";
 import AdminSettings from "./pages/admin/system-settings";
 import AppLayout from "./layouts/app-layout";
 
-// Teacher pages
+//Teacher pages
 // import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 // import TeacherClasses from "./pages/teacher/TeacherClasses";
 // import TeacherClassworks from "./pages/teacher/TeacherClassworks";
@@ -47,24 +47,24 @@ const App = () => {
           {/* Admin */}
           <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
             <Route index element={<Navigate to={routes.admin.dashboard} replace />} />
-            <Route path={routes.admin.dashboard}     element={<AdminDashboard />}     />
-            <Route path={routes.admin.subjects}      element={<AdminSubjects />}      />
-            <Route path={routes.admin.classes}       element={<AdminClasses />}       />
-            <Route path={routes.admin.users}         element={<AdminUsers />}         />
+            <Route path={routes.admin.dashboard} element={<AdminDashboard />} />
+            <Route path={routes.admin.subjects} element={<AdminSubjects />} />
+            <Route path={routes.admin.classes} element={<AdminClasses />} />
+            <Route path={routes.admin.users} element={<AdminUsers />} />
             <Route path={routes.admin.interventions} element={<AdminInterventions />} />
             <Route path={routes.admin.notifications} element={<AdminNotifications />} />
-            <Route path={routes.admin.settings}      element={<AdminSettings />}      />
+            <Route path={routes.admin.settings} element={<AdminSettings />} />
           </Route>
 
           {/* Teacher */}
           <Route element={<ProtectedRoute allowedRoles={["teacher"]} />}>
             <Route path="/teacher" element={<TeacherApp />} />
             {/* <Route element={<TeacherLayout />}>
-              <Route path={routes.teacher.dashboard}     element={<TeacherDashboard />}     />
-              <Route path={routes.teacher.classes}       element={<TeacherClasses />}       />
-              <Route path={routes.teacher.classworks}    element={<TeacherClassworks />}    />
+              <Route path={routes.teacher.dashboard} element={<TeacherDashboard />} />
+              <Route path={routes.teacher.classes} element={<TeacherClasses />} />
+              <Route path={routes.teacher.classworks} element={<TeacherClassworks />} />
               <Route path={routes.teacher.interventions} element={<TeacherInterventions />} />
-              <Route path={routes.teacher.grades}        element={<TeacherGrades />}        />
+              <Route path={routes.teacher.grades} element={<TeacherGrades />} />
               <Route path={routes.teacher.notifications} element={<TeacherNotifications />} />
             </Route> */}
           </Route>
@@ -72,10 +72,11 @@ const App = () => {
           {/* Student */}
           <Route element={<ProtectedRoute allowedRoles={["student"]} />}>
             <Route index element={<Navigate to={routes.student.board} replace />} />
-            <Route path={routes.student.board}         element={<StudentBoard />}    />
-            <Route path={routes.student.subjects}      element={<StudentSubjects />}      />
-            <Route path={routes.student.grades}        element={<StudentGrades />}        />
-            <Route path={routes.student.todo}          element={<StudentTodo />}          />
+            <Route path={routes.student.board} element={<StudentBoard />} />
+            <Route path={routes.student.subjects} element={<StudentSubjects />} />
+            <Route path={routes.student.interventions} element={<div className="p-5"><h1 className="text-3xl font-semibold">Interventions</h1></div>} />
+            <Route path={routes.student.grades} element={<StudentGrades />} />
+            <Route path={routes.student.todo} element={<StudentTodo />} />
             <Route path={routes.student.notifications} element={<StudentNotifications />} />
           </Route>
 
