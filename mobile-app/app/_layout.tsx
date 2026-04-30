@@ -28,13 +28,27 @@ function RootNavigator() {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === 'login';
+    const inStudentGroup = segments[0] === 'student';
+    const inTeacherGroup = segments[0] === 'teacher';
 
     if (!role && !inAuthGroup) {
       // Not logged in and not on login screen → redirect to login
       router.replace('/login');
     } else if (role && inAuthGroup) {
-      // Logged in but still on login screen → redirect to tabs
-      router.replace('/(tabs)');
+      // Logged in but on login screen → redirect based on role
+      if (role === 'student') {
+        router.replace('/student/storyboard' as any);
+      } else if (role === 'teacher') {
+        router.replace('/teacher/dashboard' as any);
+      } else {
+        router.replace('/(tabs)');
+      }
+    } else if (role === 'student' && !inStudentGroup && !inAuthGroup) {
+      // Student logged in but not on student route → redirect to student area
+      router.replace('/student/storyboard' as any);
+    } else if (role === 'teacher' && !inTeacherGroup && !inAuthGroup) {
+      // Teacher logged in but not on teacher route → redirect to teacher area
+      router.replace('/teacher/dashboard' as any);
     }
   }, [role, isLoading, segments]);
 
@@ -51,6 +65,8 @@ function RootNavigator() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="login" options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="student" options={{ headerShown: false }} />
+        <Stack.Screen name="teacher" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>
       <StatusBar style="auto" />
