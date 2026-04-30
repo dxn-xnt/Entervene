@@ -15,6 +15,12 @@ frontend/node_modules/
 frontend/.env
 frontend/dist/
 
+#mobile-app
+mobile-app/node_modules/
+mobile-app/.env
+mobile-app/dist/
+
+
 # OS / IDE
 .DS_Store
 .vscode/

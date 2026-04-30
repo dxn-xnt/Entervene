@@ -6,9 +6,10 @@ class Settings(BaseSettings):
 
     app_name: str = "ENTERVENE"
     debug: bool = False
-    database_url: str = "sqlite:///./entervene.db"
+    database_url: str = "postgresql://postgres:sphinxclub012@localhost:5432/Entervene"
     frontend_url: str = "http://localhost:5173"
-    secret_key: str = "changeme"
+    mobile_app_url: str = "http://localhost:8081"
+    secret_key: str = "sphinxclub012"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
