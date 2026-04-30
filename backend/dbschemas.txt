@@ -1,0 +1,83 @@
+-- 1. Create Roles Table
+CREATE TABLE role (
+    role_id SMALLINT PRIMARY KEY, -- 0: Admin, 1: Teacher, 2: Student
+    role_name VARCHAR(50) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert the predefined roles
+INSERT INTO role (role_id, role_name, description) VALUES
+(0, 'Admin', 'System administrator with full access'),
+(1, 'Teacher', 'Academic staff responsible for instruction'),
+(2, 'Student', 'Learners enrolled in the institution');
+
+-- 2. Create User Account Table
+CREATE TABLE user_account (
+    user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    invitation_token VARCHAR(255),
+    account_status VARCHAR(50) DEFAULT 'active',
+    ref_type VARCHAR(50), -- e.g., 'staff' or 'student'
+    ref_id VARCHAR(50),   -- Stores the LRN or Staff ID
+    last_login TIMESTAMP WITH TIME ZONE,
+    email_verified_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. Create User Roles (Junction Table)
+-- This allows one user to have multiple roles (e.g., Admin + Teacher)
+CREATE TABLE user_roles (
+    user_id UUID REFERENCES user_account(user_id) ON DELETE CASCADE,
+    role_id SMALLINT REFERENCES role(role_id) ON DELETE CASCADE,
+    assigned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, role_id)
+);
+
+-- 4. Create Academic Staff Table
+CREATE TABLE academic_staff (
+    staff_id VARCHAR(20) PRIMARY KEY, -- Format: YYYY-XXXX (e.g., 2026-0001)
+    first_name VARCHAR(100) NOT NULL,
+    middle_name VARCHAR(100),
+    last_name VARCHAR(100) NOT NULL,
+    dob DATE,
+    suffix VARCHAR(10),
+    gender VARCHAR(20),
+    contact_number VARCHAR(20),
+    email VARCHAR(255) UNIQUE,
+    address TEXT,
+    hired_date DATE,
+    employment_status VARCHAR(50),
+    user_id UUID UNIQUE REFERENCES user_account(user_id) ON DELETE SET NULL
+);
+
+-- 5. Create Student Table
+CREATE TABLE student (
+    student_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_lrn CHAR(12) UNIQUE NOT NULL, -- Strict 12-digit LRN
+    first_name VARCHAR(100) NOT NULL,
+    middle_name VARCHAR(100),
+    last_name VARCHAR(100) NOT NULL,
+    suffix VARCHAR(10),
+    gender VARCHAR(20),
+    contact_number VARCHAR(20),
+    email VARCHAR(255) UNIQUE,
+    address TEXT,
+    account_status VARCHAR(50) DEFAULT 'active',
+    guardian_id UUID, -- Foreign Key to a Guardians table (not pictured)
+    academic_level_id INT, -- Foreign Key to Academic Levels table
+    import_log_id INT,
+    user_id UUID UNIQUE REFERENCES user_account(user_id) ON DELETE SET NULL,
+    CONSTRAINT lrn_check CHECK (student_lrn ~ '^[0-9]{12}$') -- Ensures only 12 digits
+);
+
+-- 6. Create User Login Log Table
+CREATE TABLE user_login_log (
+    login_id SERIAL PRIMARY KEY,
+    user_id UUID REFERENCES user_account(user_id) ON DELETE CASCADE,
+    login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    logout_at TIMESTAMP WITH TIME ZONE
+);
+
