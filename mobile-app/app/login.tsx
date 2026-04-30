@@ -80,8 +80,12 @@ export default function LoginScreen() {
     setError('');
 
     try {
-      await login(username.trim(), password);
-      router.replace('/(tabs)');
+      const role = await login(username.trim(), password);
+      if (role === 'student') {
+        router.replace('/student/storyboard' as any);
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (err: any) {
       setError(err.message || 'Invalid email or password.');
       triggerShake();
