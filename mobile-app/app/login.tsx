@@ -80,15 +80,10 @@ export default function LoginScreen() {
     setError('');
 
     try {
-      const matchedRole = await login(username.trim(), password);
-      if (matchedRole) {
-        router.replace('/(tabs)');
-      } else {
-        setError('Invalid username or password.');
-        triggerShake();
-      }
-    } catch {
-      setError('Something went wrong. Please try again.');
+      await login(username.trim(), password);
+      router.replace('/(tabs)');
+    } catch (err: any) {
+      setError(err.message || 'Invalid email or password.');
       triggerShake();
     } finally {
       setLoading(false);

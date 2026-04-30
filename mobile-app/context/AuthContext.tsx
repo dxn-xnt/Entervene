@@ -2,36 +2,39 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type Role = 'student' | 'teacher' | null;
+type Role = 'student' | 'teacher' | 'admin' | null;
+
+interface UserSession {
+  token: string;
+  role: Role;
+  user_id: string;
+  full_name: string;
+}
 
 interface AuthContextType {
   role: Role;
+  session: UserSession | null;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<Role>;
+  login: (email: string, password: string) => Promise<Role>;
   logout: () => Promise<void>;
 }
 
-// Same credentials as the frontend (minus admin — mobile is teachers & students only)
-const USERS = [
-  { username: 'student', password: 'student123', role: 'student' as Role },
-  { username: 'teacher', password: 'teacher123', role: 'teacher' as Role },
-];
-
-const STORAGE_KEY = '@entervene_role';
+const STORAGE_KEY = '@entervene_session';
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [role, setRole] = useState<Role>(null);
+  const [session, setSession] = useState<UserSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Restore persisted session on mount
   useEffect(() => {
     const restore = async () => {
       try {
         const stored = await AsyncStorage.getItem(STORAGE_KEY);
-        if (stored === 'student' || stored === 'teacher') {
-          setRole(stored);
+        if (stored) {
+          const parsed: UserSession = JSON.parse(stored);
+          setSession(parsed);
         }
       } catch {
         // ignore
@@ -42,25 +45,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     restore();
   }, []);
 
-  const login = async (username: string, password: string): Promise<Role> => {
-    const match = USERS.find(
-      (u) => u.username === username && u.password === password,
-    );
-    if (match) {
-      setRole(match.role);
-      await AsyncStorage.setItem(STORAGE_KEY, match.role as string);
-      return match.role;
+  const login = async (email: string, password: string): Promise<Role> => {
+    const response = await fetch(`${API_URL}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || 'Login failed');
     }
-    return null;
+
+    const data = await response.json();
+
+    const newSession: UserSession = {
+      token: data.access_token,
+      role: data.role,
+      user_id: data.user_id,
+      full_name: data.full_name,
+    };
+
+    setSession(newSession);
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newSession));
+    return data.role;
   };
 
   const logout = async () => {
-    setRole(null);
+    setSession(null);
     await AsyncStorage.removeItem(STORAGE_KEY);
   };
 
   return (
-    <AuthContext.Provider value={{ role, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ role: session?.role ?? null, session, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
