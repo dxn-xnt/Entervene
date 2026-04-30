@@ -1,8 +1,11 @@
+# app/schemas/Auth.py
 from pydantic import BaseModel
+
 
 class LoginRequest(BaseModel):
     email: str
     password: str
+
 
 class LoginResponse(BaseModel):
     access_token: str
@@ -10,3 +13,4 @@ class LoginResponse(BaseModel):
     role: str
     user_id: str
     full_name: str
+    login_log_id: int  
