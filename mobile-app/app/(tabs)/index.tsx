@@ -1,21 +1,13 @@
+import React from 'react';
 import { Image } from 'expo-image';
-import { Platform, StyleSheet, TouchableOpacity, Text } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Platform, StyleSheet } from 'react-native';
+
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useAuth } from '@/context/AuthContext';
 
 export default function HomeScreen() {
-  const { logout, session } = useAuth();
-  const router = useRouter();
-
-  const handleLogout = async () => {
-    await logout();
-    router.replace('/login');
-  };
-
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
@@ -26,18 +18,14 @@ export default function HomeScreen() {
         />
       }>
       <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome, {session?.full_name ?? 'User'}!</ThemedText>
+        <ThemedText type="title">Welcome!</ThemedText>
         <HelloWave />
       </ThemedView>
-
       <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Role: {session?.role}</ThemedText>
-      </ThemedView>
-
-      <ThemedView style={styles.stepContainer}>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Log Out</Text>
-        </TouchableOpacity>
+        <ThemedText type="subtitle">Entervene Mobile</ThemedText>
+        <ThemedText>
+          This is the default home screen. Students are redirected to the Study Board.
+        </ThemedText>
       </ThemedView>
     </ParallaxScrollView>
   );
@@ -59,17 +47,5 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     position: 'absolute',
-  },
-  logoutButton: {
-    backgroundColor: '#ef4444',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  logoutText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
   },
 });
