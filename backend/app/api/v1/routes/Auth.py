@@ -1,44 +1,37 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import func
 from app.db.Session import get_db
-from app.core.Config import settings
-from pydantic import BaseModel
-import jwt
-from datetime import datetime, timedelta, timezone
+from app.schemas.Auth import LoginRequest, LoginResponse
+from app.models.auth.UserAccount import UserAccount
+from app.models.auth.UserRoles import UserRoles
+from app.models.auth.Role import Role
+from app.models.people.AcademicStaff import AcademicStaff
+from app.models.people.Student import Student
+from app.core.Security import create_access_token
 
 router = APIRouter()
 
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-class LoginResponse(BaseModel):
-    access_token: str
-    token_type: str
-    role: str
-    user_id: str
-    full_name: str
-
 @router.post("/login", response_model=LoginResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)):
-    result = db.execute(text("""
-        SELECT 
-            ua.user_id,
-            ua.email,
-            ua.password_hash,
-            ua.account_status,
-            r.role_name,
-            COALESCE(s.first_name || ' ' || s.last_name, 
-                     st.first_name || ' ' || st.last_name) AS full_name
-        FROM user_account ua
-        JOIN user_roles ur ON ua.user_id = ur.user_id
-        JOIN role r ON ur.role_id = r.role_id
-        LEFT JOIN academic_staff s ON ua.user_id = s.user_id
-        LEFT JOIN student st ON ua.user_id = st.user_id
-        WHERE ua.email = :email
-        LIMIT 1
-    """), {"email": body.email}).fetchone()
+    result = (
+        db.query(
+            UserAccount.user_id,
+            UserAccount.password_hash,
+            UserAccount.account_status,
+            Role.role_name,
+            func.coalesce(
+                func.concat(AcademicStaff.first_name, " ", AcademicStaff.last_name),
+                func.concat(Student.first_name, " ", Student.last_name),
+            ).label("full_name"),
+        )
+        .join(UserRoles, UserAccount.user_id == UserRoles.user_id)
+        .join(Role, UserRoles.role_id == Role.role_id)
+        .outerjoin(AcademicStaff, UserAccount.user_id == AcademicStaff.user_id)
+        .outerjoin(Student, UserAccount.user_id == Student.user_id)
+        .filter(UserAccount.email == body.email)
+        .first()
+    )
 
     if not result:
         raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -52,12 +45,7 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     role_map = {"Teacher": "teacher", "Student": "student", "Admin": "admin"}
     role = role_map.get(result.role_name, "student")
 
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    token = jwt.encode(
-        {"sub": str(result.user_id), "role": role, "exp": expire},
-        settings.secret_key,
-        algorithm=settings.algorithm,
-    )
+    token = create_access_token(str(result.user_id), role)
 
     return {
         "access_token": token,
