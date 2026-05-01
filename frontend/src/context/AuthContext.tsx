@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 import type { ReactNode } from "react";
 
 type Role = "student" | "teacher" | "admin" | null;
@@ -42,8 +42,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   });
 
+  // Always re-fetch /me on mount to get fresh name from DB
+  useEffect(() => {
+    if (!user?.token) return;
+
+    fetch(`${API_URL}/api/v1/auth/me`, {
+      headers: { Authorization: `Bearer ${user.token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((meData) => {
+        console.log("useEffect /me response:", JSON.stringify(meData));
+        if (!meData) return;
+
+        const freshName = meData.full_name?.trim() || user.email?.split("@")[0] || "User";
+        const updated: AuthUser = {
+          ...user,
+          fullName: freshName,
+          email: meData.email ?? user.email,
+        };
+        setUser(updated);
+        localStorage.setItem("auth", JSON.stringify(updated));
+      })
+      .catch(() => { });
+  }, []);
+
   const login = async (email: string, password: string): Promise<Role> => {
-    console.log("Attempting login to:", `${API_URL}/api/v1/auth/login`);
     const res = await fetch(`${API_URL}/api/v1/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -52,27 +75,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     if (!res.ok) {
       const err = await res.json();
-      console.error("Login failed with response:", err);
       throw new Error(err.detail ?? "Login failed");
     }
 
     const data = await res.json();
-    console.log("Login response:", data);
+    console.log("Login raw response:", JSON.stringify(data));
 
-    // Fetch full profile to get email and confirm latest DB values
     const meRes = await fetch(`${API_URL}/api/v1/auth/me`, {
       headers: { Authorization: `Bearer ${data.access_token}` },
     });
     const meData = meRes.ok ? await meRes.json() : null;
+    console.log("Login /me response:", JSON.stringify(meData));
 
     const authUser: AuthUser = {
       role: data.role as Role,
       userId: data.user_id,
-      fullName: meData?.full_name ?? data.full_name ?? data.email?.split('@')[0] ?? "User",
+      fullName:
+        meData?.full_name?.trim() ||
+        data.full_name?.trim() ||
+        data.email?.split("@")[0] ||
+        "User",
       email: meData?.email ?? data.email ?? "",
       token: data.access_token,
       avatar: meData?.avatar ?? "",
     };
+
+    console.log("authUser being stored:", JSON.stringify(authUser));
 
     setUser(authUser);
     localStorage.setItem("auth", JSON.stringify(authUser));
@@ -81,7 +109,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = async () => {
-    // Stamp logout_at on user_login_log — best-effort, don't block on failure
     if (user?.token) {
       try {
         await fetch(`${API_URL}/api/v1/auth/logout`, {
@@ -89,7 +116,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           headers: { Authorization: `Bearer ${user.token}` },
         });
       } catch {
-        // Network error — still clear client state below
+        // Network error — still clear client state
       }
     }
 
