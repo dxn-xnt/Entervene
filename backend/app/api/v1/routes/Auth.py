@@ -21,12 +21,11 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ):
-    """Decode JWT and return the current user_id and role."""
     token = credentials.credentials
     payload = decode_access_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return payload  # expects {"sub": user_id, "role": role}
+    return payload
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -38,8 +37,8 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
             UserAccount.account_status,
             Role.role_name,
             func.coalesce(
-                func.concat(AcademicStaff.first_name, " ", AcademicStaff.last_name),
-                func.concat(Student.first_name, " ", Student.last_name),
+                func.nullif(func.concat(AcademicStaff.first_name, " ", AcademicStaff.last_name), " "),
+                func.nullif(func.concat(Student.first_name, " ", Student.last_name), " "),
             ).label("full_name"),
         )
         .join(UserRoles, UserAccount.user_id == UserRoles.user_id)
@@ -64,14 +63,12 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
 
     token = create_access_token(str(result.user_id), role)
 
-    # Record login in user_login_log
     log_entry = UserLoginLog(
         user_id=result.user_id,
         login_at=datetime.now(timezone.utc),
     )
     db.add(log_entry)
 
-    # Update last_login on user_account
     db.query(UserAccount).filter(UserAccount.user_id == result.user_id).update(
         {"last_login": datetime.now(timezone.utc)}
     )
@@ -85,7 +82,6 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         "role": role,
         "user_id": str(result.user_id),
         "full_name": result.full_name,
-        # Pass login_id back so frontend can use it for logout
         "login_log_id": log_entry.login_id,
     }
 
@@ -95,7 +91,6 @@ def get_me(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return the authenticated user's profile from the DB."""
     user_id = current_user["sub"]
 
     result = (
@@ -105,8 +100,8 @@ def get_me(
             UserAccount.account_status,
             Role.role_name,
             func.coalesce(
-                func.concat(AcademicStaff.first_name, " ", AcademicStaff.last_name),
-                func.concat(Student.first_name, " ", Student.last_name),
+                func.nullif(func.concat(AcademicStaff.first_name, " ", AcademicStaff.last_name), " "),
+                func.nullif(func.concat(Student.first_name, " ", Student.last_name), " "),
             ).label("full_name"),
         )
         .join(UserRoles, UserAccount.user_id == UserRoles.user_id)
@@ -136,7 +131,6 @@ def logout(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Stamp logout_at on the latest open login log for this user."""
     user_id = current_user["sub"]
     log_entry = (
         db.query(UserLoginLog)
