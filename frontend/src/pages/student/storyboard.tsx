@@ -1,17 +1,19 @@
+import AppLayout from "@/layouts/app-layout";
 import Card from "../../components/StudentUIComponents/Card";
 import { ArrowUpRight } from "lucide-react";
+import type { ReactElement } from "react";
 
 type SubjectsProps = {
   setActiveNav: (nav: string) => void;
   onSelectSubject: (title: string) => void;
 };
 
-const StoryBoard = ({ onSelectSubject, setActiveNav }: SubjectsProps) => {
+export default function StoryBoard({
+  onSelectSubject,
+  setActiveNav,
+}: SubjectsProps): ReactElement {
   return (
-    <div>
-      <header className="px-5 py-5 border-b border-gray-500">
-        <h1 className="text-4xl font-semibold">Story Board</h1>
-      </header>
+    <AppLayout>
       <main className="px-5 py-5 flex flex-row gap-4 min-h-screen">
         <div className="grid grid-cols-2 gap-4 w-[65%] self-start">
           <Card
@@ -77,8 +79,7 @@ const StoryBoard = ({ onSelectSubject, setActiveNav }: SubjectsProps) => {
           </div>
         </div>
       </main>
-    </div>
+    </AppLayout>
   );
 };
 
-export default StoryBoard;

@@ -57,7 +57,7 @@ const Notifications = () => {
       <header className="px-5 py-5 flex flex-row justify-between">
         <h1 className="text-4xl font-semibold">Notifications</h1>
         <button className="bg-[#7ABA78] text-black rounded px-5 py-2 border">
-          + New Classwork
+          Mark all as read
         </button>
       </header>
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />

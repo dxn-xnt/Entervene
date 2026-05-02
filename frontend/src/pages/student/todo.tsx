@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Tabs from "../../components/Tabs";
 import ToDoItem from "../../components/StudentUIComponents/ListCardItems/ToDoItem";
+import AppLayout from "@/layouts/app-layout";
 
 const todoTabs = [
   { id: "pending", label: "Pending" },
@@ -65,14 +66,11 @@ const completedItems = [
   },
 ];
 
-const ToDo = () => {
+export default function ToDo () {
   const [activeTab, setActiveTab] = useState("pending");
 
   return (
-    <div>
-      <header className="px-5 py-5">
-        <h1 className="text-4xl font-semibold">To Do</h1>
-      </header>
+    <AppLayout>
       <Tabs tabs={todoTabs} activeTab={activeTab} onChange={setActiveTab} />
       <div className="px-5 py-5 flex flex-col gap-5">
 
@@ -123,8 +121,6 @@ const ToDo = () => {
         )}
 
       </div>
-    </div>
+    </AppLayout>
   );
 };
-
-export default ToDo;

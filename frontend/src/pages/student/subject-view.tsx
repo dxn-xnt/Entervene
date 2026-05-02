@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
-import Tabs from "../../../components/Tabs";
-import SubjectLessonTab from "./tabs/SubjectLessonTab";
-import SubjectClassworkTab from "./tabs/SubjectClassworkTab";
+import Tabs from "../../components/Tabs";
+import SubjectLessonTab from "../StudentInterfaces/Subjects/tabs/SubjectLessonTab";
+import SubjectClassworkTab from "../StudentInterfaces/Subjects/tabs/SubjectClassworkTab";
 
 type SubjectDetailProps = {
   subject: string;
