@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   Dimensions,
   StyleSheet,
   Pressable,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,13 +36,22 @@ const menuItems: MenuItem[] = [
   { id: 'notifications', label: 'Notifications', icon: 'notifications-outline', route: '/student/notifications' },
 ];
 
+const getInitials = (fullName: string): string => {
+  const parts = fullName.trim().split(' ').filter((p) => p.length > 0);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
 const DrawerMenu = () => {
   const { isOpen, closeDrawer } = useDrawer();
-  const { logout } = useAuth();
+  const { logout, session } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
+  const [userMenuVisible, setUserMenuVisible] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -82,6 +93,8 @@ const DrawerMenu = () => {
   };
 
   const handleLogout = async () => {
+    setLoggingOut(true);
+    setUserMenuVisible(false);
     closeDrawer();
     await logout();
     router.replace('/login');
@@ -91,13 +104,13 @@ const DrawerMenu = () => {
     return pathname === route || pathname.startsWith(route + '/');
   };
 
+  const initials = session?.full_name ? getInitials(session.full_name) : '?';
+
   return (
     <>
       {/* Overlay */}
       {isOpen && (
-        <Animated.View
-          style={[styles.overlay, { opacity: overlayAnim }]}
-        >
+        <Animated.View style={[styles.overlay, { opacity: overlayAnim }]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeDrawer} />
         </Animated.View>
       )}
@@ -156,22 +169,96 @@ const DrawerMenu = () => {
             })}
           </View>
 
-          {/* Spacer */}
           <View style={{ flex: 1 }} />
 
-          {/* User Profile / Logout */}
-          <TouchableOpacity style={styles.userSection} onPress={handleLogout} activeOpacity={0.7}>
+          {/* User Section — tapping opens the popup menu */}
+          <TouchableOpacity
+            style={styles.userSection}
+            onPress={() => setUserMenuVisible(true)}
+            activeOpacity={0.7}
+          >
             <View style={styles.avatar}>
-              <Ionicons name="person" size={20} color={AppColors.foreground} />
+              <Text style={styles.avatarInitials}>{initials}</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.userName}>John Doe</Text>
-              <Text style={styles.userRole}>Student</Text>
+              <Text style={styles.userName} numberOfLines={1}>
+                {session?.full_name ?? 'Unknown'}
+              </Text>
+              <Text style={styles.userEmail} numberOfLines={1}>
+                {session?.email ?? ''}
+              </Text>
             </View>
-            <Ionicons name="log-out-outline" size={20} color={AppColors.mutedForeground} />
+            <Ionicons name="ellipsis-vertical" size={18} color={AppColors.mutedForeground} />
           </TouchableOpacity>
         </SafeAreaView>
       </Animated.View>
+
+      {/* User Popup Menu */}
+      <Modal
+        visible={userMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setUserMenuVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setUserMenuVisible(false)}>
+          <View style={styles.popupMenu}>
+            {/* User info header inside popup */}
+            <View style={styles.popupHeader}>
+              <View style={styles.popupAvatar}>
+                <Text style={styles.avatarInitials}>{initials}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.popupName} numberOfLines={1}>
+                  {session?.full_name ?? 'Unknown'}
+                </Text>
+                <Text style={styles.popupEmail} numberOfLines={1}>
+                  {session?.email ?? ''}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.popupDivider} />
+
+            {/* Account */}
+            <Pressable
+              style={({ pressed }) => [styles.popupItem, pressed && styles.popupItemPressed]}
+              onPress={() => {
+                setUserMenuVisible(false);
+              }}
+            >
+              <Ionicons name="person-circle-outline" size={18} color={AppColors.foreground} />
+              <Text style={styles.popupItemText}>Account</Text>
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [styles.popupItem, pressed && styles.popupItemPressed]}
+              onPress={() => {
+                setUserMenuVisible(false);
+                handleNavigate('/student/notifications');
+              }}
+            >
+              <Ionicons name="notifications-outline" size={18} color={AppColors.foreground} />
+              <Text style={styles.popupItemText}>Notifications</Text>
+            </Pressable>
+
+
+            <Pressable
+              style={({ pressed }) => [styles.popupItem, pressed && styles.popupItemPressed]}
+              onPress={handleLogout}
+              disabled={loggingOut}
+            >
+              {loggingOut ? (
+                <ActivityIndicator size="small" color={AppColors.destructive} />
+              ) : (
+                <Ionicons name="log-out-outline" size={18} color={AppColors.destructive} />
+              )}
+              <Text style={[styles.popupItemText, styles.popupItemDestructive]}>
+                {loggingOut ? 'Logging out…' : 'Log out'}
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </>
   );
 };
@@ -278,7 +365,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   menuItemActive: {
-    backgroundColor: AppColors.accent,
+    backgroundColor: AppColors.muted,
   },
   menuItemText: {
     flex: 1,
@@ -307,34 +394,103 @@ const styles = StyleSheet.create({
     color: AppColors.primaryForeground,
   },
 
-  // User
+  // User section (bottom of drawer)
   userSection: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingVertical: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: AppColors.muted,
+    borderTopWidth: Borders.width,
+    borderTopColor: AppColors.border,
     marginBottom: Spacing.sm,
   },
   avatar: {
     width: 38,
     height: 38,
-    borderRadius: 19,
+    borderRadius: 8,
     borderWidth: Borders.width,
     borderColor: AppColors.border,
-    backgroundColor: AppColors.accent,
+    backgroundColor: AppColors.muted,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  avatarInitials: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: AppColors.foreground,
   },
   userName: {
     fontSize: 14,
     fontWeight: '700',
     color: AppColors.foreground,
   },
-  userRole: {
+  userEmail: {
     fontSize: 11,
     color: AppColors.mutedForeground,
+  },
+  popupItemPressed: {
+    backgroundColor: AppColors.accent,
+  },
+
+  // Popup modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: 40,
+  },
+  popupMenu: {
+    backgroundColor: AppColors.card,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    borderRadius: 10,
+    overflow: 'hidden',
+    ...NeoShadow.sm,
+  },
+  popupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+  },
+  popupAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    backgroundColor: AppColors.muted,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  popupName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: AppColors.foreground,
+  },
+  popupEmail: {
+    fontSize: 11,
+    color: AppColors.mutedForeground,
+  },
+  popupDivider: {
+    height: Borders.width,
+    backgroundColor: AppColors.border,
+  },
+  popupItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  popupItemText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: AppColors.foreground,
+  },
+  popupItemDestructive: {
+    color: AppColors.destructive,
   },
 });
 
