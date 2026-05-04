@@ -1,0 +1,58 @@
+
+-- Step A: Create the User Account
+INSERT INTO user_account (user_id, email, password_hash, ref_type, ref_id)
+VALUES ('660f9511-f30c-52e5-b827-557766551111', 'm.cruz@school.edu.ph', 'hash_poly_02', 'staff', '2026-0002');
+
+-- Step B: Create the Staff Profile
+INSERT INTO academic_staff (staff_id, first_name, last_name, email, hired_date, employment_status, user_id)
+VALUES ('2026-0002', 'Maria', 'Cruz', 'm.cruz@school.edu.ph', '2026-02-10', 'Contractual', '660f9511-f30c-52e5-b827-557766551111');
+
+-- Step C: Assign Role (Teacher = 1)
+INSERT INTO user_roles (user_id, role_id) VALUES ('660f9511-f30c-52e5-b827-557766551111', 1);
+
+-- Step A: Create the User Account
+INSERT INTO user_account (user_id, email, password_hash, ref_type, ref_id)
+VALUES ('770a0622-a41d-63f6-c938-668877662222', 'juan.delacruz@student.ph', 'hash_poly_03', 'student', '123456789012');
+
+-- Step B: Create the Student Profile (Using a 12-digit LRN)
+INSERT INTO student (student_lrn, first_name, last_name, email, account_status, user_id)
+VALUES ('123456789012', 'Juan', 'Dela Cruz', 'juan.delacruz@student.ph', 'active', '770a0622-a41d-63f6-c938-668877662222');
+
+-- Step C: Assign Role (Student = 2)
+INSERT INTO user_roles (user_id, role_id) VALUES ('770a0622-a41d-63f6-c938-668877662222', 2);
+
+INSERT INTO user_account (user_id, email, password_hash, ref_type, ref_id)
+VALUES (
+    '880b1733-b52e-74f7-d049-779988773333', 
+    'admin@mnsts.edu.ph', 
+    'hash_mnsts_admin_01', 
+    'admin', 
+    'ADM-2026-0001'
+);
+
+-- This uses 'staff' as the ref_type to match your academic_staff table
+INSERT INTO user_account (user_id, email, password_hash, ref_type, ref_id)
+VALUES (
+    '990c2844-c63f-85a8-e150-880099884444', 
+    'admin@mnsts.edu.ph', 
+    'hash_mnsts_admin_01', 
+    'staff', 
+    'ADM-2026-0001'
+);
+
+INSERT INTO academic_staff (staff_id, first_name, last_name, email, hired_date, employment_status, user_id)
+VALUES (
+    'ADM-2026-0001', 
+    'MNSTS', 
+    'Administrator', 
+    'admin@mnsts.edu.ph', 
+    '2026-05-03', 
+    'Regular', 
+    '990c2844-c63f-85a8-e150-880099884444'
+);
+
+INSERT INTO user_roles (user_id, role_id) 
+VALUES ('990c2844-c63f-85a8-e150-880099884444', 0);
+
+
+
