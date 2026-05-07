@@ -10,11 +10,12 @@ type Badge = {
 type SubjectCardProps = {
   title: string;
   teacher: string;
-  badges: Badge[];
+  quarter?: string;
+  badges?: Badge[];
   onPress?: () => void;
 };
 
-const SubjectCard = ({ title, teacher, badges, onPress }: SubjectCardProps) => {
+const SubjectCard = ({ title, teacher, quarter, badges = [], onPress }: SubjectCardProps) => {
   const Wrapper = onPress ? TouchableOpacity : View;
 
   return (
@@ -23,17 +24,26 @@ const SubjectCard = ({ title, teacher, badges, onPress }: SubjectCardProps) => {
       activeOpacity={0.7}
       style={styles.card}
     >
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.teacher}>{teacher}</Text>
-      <View style={styles.badgeRow}>
-        {badges.map((badge) => (
-          <View key={badge.label} style={styles.badge}>
-            <Text style={styles.badgeText}>
-              {badge.label} {badge.count}
-            </Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.title} numberOfLines={2}>{title}</Text>
+        {quarter ? (
+          <View style={styles.quarterBadge}>
+            <Text style={styles.quarterText}>{quarter}</Text>
           </View>
-        ))}
+        ) : null}
       </View>
+      <Text style={styles.teacher}>{teacher}</Text>
+      {badges.length > 0 && (
+        <View style={styles.badgeRow}>
+          {badges.map((badge) => (
+            <View key={badge.label} style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {badge.label} {badge.count}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
     </Wrapper>
   );
 };
@@ -48,15 +58,37 @@ const styles = StyleSheet.create({
     shadowColor: AppColors.black,
     ...NeoShadow.lg,
   },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
   title: {
+    flex: 1,
     fontSize: 20,
     fontWeight: '700',
     color: AppColors.foreground,
   },
+  quarterBadge: {
+    backgroundColor: AppColors.muted,
+    borderWidth: 1,
+    borderColor: AppColors.border,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  quarterText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: AppColors.mutedForeground,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   teacher: {
     fontSize: 13,
     color: AppColors.mutedForeground,
-    marginTop: 2,
+    marginTop: 4,
   },
   badgeRow: {
     flexDirection: 'row',

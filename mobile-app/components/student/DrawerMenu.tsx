@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDrawer } from '@/context/DrawerContext';
 import { useAuth } from '@/context/AuthContext';
 import { AppColors, NeoShadow, Spacing, Borders } from '@/constants/theme';
+import { useStudentSubjects } from '@/hooks/useStudentSubjects';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.78;
@@ -52,6 +53,7 @@ const DrawerMenu = () => {
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const [userMenuVisible, setUserMenuVisible] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const { activeQuarter } = useStudentSubjects();
 
   useEffect(() => {
     if (isOpen) {
@@ -133,7 +135,11 @@ const DrawerMenu = () => {
 
           {/* Quarter Selector */}
           <TouchableOpacity style={styles.quarterSelector} activeOpacity={0.7}>
-            <Text style={styles.quarterText}>1st Quarter (2025-2026)</Text>
+            <Text style={styles.quarterText}>
+              {activeQuarter
+                ? `${activeQuarter.period_name} (${activeQuarter.year_label})`
+                : 'Loading quarter…'}
+            </Text>
             <Ionicons name="chevron-down" size={16} color={AppColors.foreground} />
           </TouchableOpacity>
 
