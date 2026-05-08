@@ -5,14 +5,14 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  RefreshControl,
+  // RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useDrawer } from "@/context/DrawerContext";
 import { AppColors, Spacing, Borders, NeoShadow } from "@/constants/theme";
-import { useRouter } from "@/.expo/types/router";
+// import { useRouter } from "@/.expo/types/router";
 
 export default function TeacherDashboard() {
   const { openDrawer } = useDrawer();
