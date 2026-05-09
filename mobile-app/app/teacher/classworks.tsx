@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { router } from "expo-router";
 import {
   View,
   Text,
@@ -45,9 +46,11 @@ export default function TeacherClassworks() {
 
             <Text style={styles.title}>Classworks</Text>
           </View>
-          <TouchableOpacity>
-            <Text style={styles.newClassworkButton}>+ New Classwork</Text>
-          </TouchableOpacity>
+          <TouchableOpacity
+              onPress={() => router.push("/teacher/new-classwork-form")}
+            >
+              <Text style={styles.newClassworkButton}>+ New Classwork</Text>
+            </TouchableOpacity>
         </View>
         <TabBar tabs={todoTabs} activeTab={activeTab} onChange={setActiveTab} />
         <View style={styles.body}>
