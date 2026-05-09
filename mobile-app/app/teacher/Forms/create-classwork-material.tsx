@@ -16,6 +16,7 @@ import { AppColors, Spacing, Borders, NeoShadow } from "@/constants/theme";
 import FormFooter from "@/components/teacher/form-footer";
 import FormDropdown from "@/components/teacher/form-dropdown";
 import AddButton from "@/components/teacher/add-button-form";
+import MaterialCard from "@/components/teacher/material-card";
 // import Card from "@/components/teacher/form-card";
 
 export default function TeacherNewMaterial() {
@@ -29,7 +30,9 @@ export default function TeacherNewMaterial() {
           {/* header */}
           <View style={styles.header}>
             <Text style={{ fontSize: 24 }}>Create new classwork</Text>
-            <TouchableOpacity><Ionicons name="close" size={24} color={AppColors.black} /></TouchableOpacity>
+            <TouchableOpacity>
+              <Ionicons name="close" size={24} color={AppColors.black} />
+            </TouchableOpacity>
           </View>
           <View style={styles.containerContent}>
             <View>
@@ -51,12 +54,32 @@ export default function TeacherNewMaterial() {
               />
             </View>
             <Text>Upload Material</Text>
-            <View>
-                {/* this will handle the uploading of file, iprompt lang nya <3  */}
-                <AddButton />
+            <View style={styles.addMaterialContainer}>
+              <MaterialCard
+                filename="Basic English Notes"
+                fileType="Docx"
+                onRemove={() => {}}
+              />
+
+              <MaterialCard
+                filename="Basic English Prese..."
+                fileType="Pptx"
+                onRemove={() => {}}
+              />
+              
+              {/* this will handle the uploading of file, iprompt lang nya <3  */}
+              <AddButton />
             </View>
           </View>
-          <FormFooter actions={[{ label: "Next", onPress: () => router.push("/teacher/Forms/assign-classwork-form") }]} />
+          <FormFooter
+            actions={[
+              {
+                label: "Next",
+                onPress: () =>
+                  router.push("/teacher/Forms/assign-classwork-form"),
+              },
+            ]}
+          />
         </View>
       </View>
     </SafeAreaView>
@@ -95,5 +118,11 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
+  },
+  addMaterialContainer: {
+    flexDirection: "row",
+    gap: 16,
+    alignItems: "center",
+    flexWrap: "wrap",
   },
 });
