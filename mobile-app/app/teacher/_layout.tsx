@@ -13,6 +13,7 @@ export default function TeacherLayout() {
           <Stack.Screen name="classes" />
           <Stack.Screen name="classworks" />
           <Stack.Screen name="new-classwork-form" />
+          <Stack.Screen name="create-classwork-material" />
           <Stack.Screen name="interventions" />
           <Stack.Screen name="grades" />
           <Stack.Screen name="notifications" />

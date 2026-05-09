@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { router } from "expo-router";
 import {
   View,
   Text,
@@ -10,12 +11,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
-import { useDrawer } from "@/context/DrawerContext";
 import { AppColors, Spacing, Borders, NeoShadow } from "@/constants/theme";
 
-export default function TeacherNewClassworks() {
-  const { openDrawer } = useDrawer();
+import FormFooter from "@/components/teacher/form-footer";
+import Card from "@/components/teacher/form-card";
 
+export default function TeacherNewClassworks() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.body}>
@@ -34,22 +35,16 @@ export default function TeacherNewClassworks() {
               { id: 3, label: "Material", icon: "book-outline" },
               { id: 4, label: "Question", icon: "chatbubble-outline" },
             ].map((item) => (
-              <TouchableOpacity key={item.id} style={styles.card}>
-                <Ionicons
-                  name={item.icon as any}
-                  size={28}
-                  color={AppColors.black}
-                />
-                <Text style={styles.cardLabel}>{item.label}</Text>
-              </TouchableOpacity>
+              <Card
+                key={item.id}
+                label={item.label}
+                icon={item.icon as keyof typeof Ionicons.glyphMap}
+                onPress={() => router.push("/teacher/Forms/create-classwork-material")}
+              />
             ))}
           </View>
           {/* cancel */}
-          <View style={styles.bottomContainer}>
-            <TouchableOpacity style={styles.cancelBtn}>
-              <Text>Cancel</Text>
-            </TouchableOpacity>
-          </View>
+          <FormFooter actions={[{ label: "Cancel", onPress: () => router.back() }]} />
         </View>
       </View>
     </SafeAreaView>
@@ -67,9 +62,8 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   container: {
-    padding: 20,
     borderWidth: 2,
-    borderRadius: 12,
+    borderRadius: 16,
     shadowColor: AppColors.black,
     ...NeoShadow.lg,
     width: "100%",
@@ -80,7 +74,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     borderBottomWidth: 2,
-    paddingBottom: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   cardGrid: {
     flexDirection: "row",
@@ -88,6 +83,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 16,
+    paddingHorizontal: 12,
   },
   card: {
     width: "47%",

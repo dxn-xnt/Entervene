@@ -47,10 +47,10 @@ export default function TeacherClassworks() {
             <Text style={styles.title}>Classworks</Text>
           </View>
           <TouchableOpacity
-              onPress={() => router.push("/teacher/new-classwork-form")}
-            >
-              <Text style={styles.newClassworkButton}>+ New Classwork</Text>
-            </TouchableOpacity>
+            onPress={() => router.push("/teacher/Forms/new-classwork-form")}
+          >
+            <Text style={styles.newClassworkButton}>+ New Classwork</Text>
+          </TouchableOpacity>
         </View>
         <TabBar tabs={todoTabs} activeTab={activeTab} onChange={setActiveTab} />
         <View style={styles.body}>
@@ -151,5 +151,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     backgroundColor: "#7ABA78",
     borderRadius: 24,
-  }
+  },
 });
