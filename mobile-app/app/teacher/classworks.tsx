@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { router } from "expo-router";
 import {
   View,
   Text,
@@ -45,7 +46,9 @@ export default function TeacherClassworks() {
 
             <Text style={styles.title}>Classworks</Text>
           </View>
-          <TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push("/teacher/Forms/new-classwork-form")}
+          >
             <Text style={styles.newClassworkButton}>+ New Classwork</Text>
           </TouchableOpacity>
         </View>
@@ -148,5 +151,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     backgroundColor: "#7ABA78",
     borderRadius: 24,
-  }
+  },
 });
