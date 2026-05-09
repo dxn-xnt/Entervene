@@ -125,26 +125,6 @@ function SidebarProvider({
     }),
     [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
   )
-
-  // #region agent log
-  React.useEffect(() => {
-    fetch("http://127.0.0.1:7485/ingest/3a9a3448-1bd9-405f-8357-a95cb0abb46c", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "a2a5e6",
-      },
-      body: JSON.stringify({
-        sessionId: "a2a5e6",
-        runId: "pre-fix",
-        hypothesisId: "H1",
-        location: "sidebar.tsx:SidebarProvider",
-        message: "SidebarProvider mounted",
-        data: {},
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-  }, [])
   // #endregion
 
   return (
@@ -548,25 +528,6 @@ function SidebarMenuButton({
     }
   }
 
-  // #region agent log
-  fetch("http://127.0.0.1:7485/ingest/3a9a3448-1bd9-405f-8357-a95cb0abb46c", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "a2a5e6",
-    },
-    body: JSON.stringify({
-      sessionId: "a2a5e6",
-      runId: "pre-fix",
-      hypothesisId: "H3",
-      location: "sidebar.tsx:SidebarMenuButton",
-      message: "Rendering tooltip branch",
-      data: { state, isMobile },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {})
-  // #endregion
-
   return (
     <Tooltip>
       <TooltipTrigger asChild>{button}</TooltipTrigger>
@@ -598,7 +559,7 @@ function SidebarMenuAction({
       className={cn(
         "absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring outline-hidden transition-transform group-data-[collapsible=icon]:hidden peer-hover/menu-button:text-sidebar-accent-foreground peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1 after:absolute after:-inset-2 hover:bg-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0",
         showOnHover &&
-          "group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 peer-data-active/menu-button:text-sidebar-accent-foreground aria-expanded:opacity-100 md:opacity-0",
+        "group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 peer-data-active/menu-button:text-sidebar-accent-foreground aria-expanded:opacity-100 md:opacity-0",
         className
       )}
       {...props}

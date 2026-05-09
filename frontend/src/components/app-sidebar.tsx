@@ -21,16 +21,7 @@ const quarters = [
   "2nd Quarter (2025-2026)",
   "3rd Quarter (2025-2026)",
   "4th Quarter (2025-2026)",
-];
-
-const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
-  SidebarConfigs
-}
+]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { role } = useAuth()
@@ -53,6 +44,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
+
       <SidebarContent>
         <Select defaultValue={quarters[0]}>
           <Select.Trigger className="w-full border-x-background m-0 shadow-none mb-1">
@@ -68,10 +60,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </Select.Group>
           </Select.Content>
         </Select>
-        <NavMain items={data.SidebarConfigs[navRole]} />
+        <NavMain items={SidebarConfigs[navRole]} />
       </SidebarContent>
+
       <SidebarFooter>
-        <NavUser user={data.user} />
+        {/* NavUser now reads from AuthContext directly — no props needed */}
+        <NavUser />
       </SidebarFooter>
     </Sidebar>
   )
