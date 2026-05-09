@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { router } from "expo-router";
 import {
   View,
   Text,
@@ -28,7 +29,7 @@ export default function TeacherNewMaterial() {
           {/* header */}
           <View style={styles.header}>
             <Text style={{ fontSize: 24 }}>Create new classwork</Text>
-            <TouchableOpacity>X</TouchableOpacity>
+            <TouchableOpacity><Ionicons name="close" size={24} color={AppColors.black} /></TouchableOpacity>
           </View>
           <View style={styles.containerContent}>
             <View>
@@ -55,7 +56,7 @@ export default function TeacherNewMaterial() {
                 <AddButton />
             </View>
           </View>
-          <FormFooter actions={[{ label: "Next", onPress: () => {} }]} />
+          <FormFooter actions={[{ label: "Next", onPress: () => router.push("/teacher/Forms/assign-classwork-form") }]} />
         </View>
       </View>
     </SafeAreaView>

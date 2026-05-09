@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useDrawer } from "@/context/DrawerContext";
 import { AppColors, Spacing, Borders, NeoShadow } from "@/constants/theme";
 import TabBar from "@/components/TabBar";
+import Badge from "@/components/badge";
 import ToDoItem from "@/components/To-Do";
 // import { useRouter } from "@/.expo/types/router";
 
@@ -60,12 +61,8 @@ export default function TeacherClassworks() {
               <Text>Created October 30, 2025</Text>
             </View>
             <View style={styles.cardBadge}>
-              <View style={styles.badge}>
-                <Text>Badge 1</Text>
-              </View>
-              <View style={styles.badge}>
-                <Text>Badge 2</Text>
-              </View>
+              <Badge label="Badge 1" />
+              <Badge label="Badge 2" />
             </View>
           </View>
         </View>
