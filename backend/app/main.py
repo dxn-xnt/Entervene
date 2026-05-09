@@ -7,6 +7,7 @@ from app.core.Config import settings
 from app.db.Session import get_db
 from app.api.v1.routes.Predictions import router as predictions_router
 from app.api.v1.routes.Auth import router as auth_router
+from app.api.v1.routes.Students import router as students_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -23,8 +24,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
+app.include_router(auth_router,     prefix="/api/v1/auth",     tags=["Auth"])
 app.include_router(predictions_router, prefix="/api/v1/predictions", tags=["Predictions"])
+app.include_router(students_router, prefix="/api/v1/students", tags=["Students"])
 
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):

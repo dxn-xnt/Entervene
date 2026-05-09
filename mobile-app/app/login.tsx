@@ -227,14 +227,6 @@ export default function LoginScreen() {
                   )}
                 </Animated.View>
               </TouchableOpacity>
-
-              {/* Sign Up prompt */}
-              <View style={styles.signupRow}>
-                <Text style={styles.signupText}>Don't have an account?</Text>
-                <TouchableOpacity activeOpacity={0.7}>
-                  <Text style={styles.signupLink}>Sign Up</Text>
-                </TouchableOpacity>
-              </View>
             </View>
           </Animated.View>
         </ScrollView>

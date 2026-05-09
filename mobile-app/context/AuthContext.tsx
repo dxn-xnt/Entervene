@@ -9,6 +9,7 @@ interface UserSession {
   role: Role;
   user_id: string;
   full_name: string;
+  email: string;
 }
 
 interface AuthContextType {
@@ -64,6 +65,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       role: data.role,
       user_id: data.user_id,
       full_name: data.full_name,
+      email: email,
     };
 
     setSession(newSession);

@@ -21,6 +21,10 @@ import { useStudentSubjects } from '@/hooks/useStudentSubjects';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.78;
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type AppRole = 'student' | 'teacher';
+
 type MenuItem = {
   id: string;
   label: string;
@@ -29,13 +33,45 @@ type MenuItem = {
   badge?: number;
 };
 
-const menuItems: MenuItem[] = [
-  { id: 'storyboard', label: 'Study Board', icon: 'grid-outline', route: '/student/storyboard' },
-  { id: 'subjects', label: 'Subjects', icon: 'book-outline', route: '/student/subjects' },
-  { id: 'grades', label: 'Grades', icon: 'stats-chart-outline', route: '/student/grades' },
-  { id: 'todo', label: 'To Do', icon: 'list-outline', route: '/student/todo', badge: 12 },
-  { id: 'notifications', label: 'Notifications', icon: 'notifications-outline', route: '/student/notifications' },
-];
+// ─── Per-role config ──────────────────────────────────────────────────────────
+
+const ROLE_CONFIG: Record<
+  AppRole,
+  {
+    tagline: string;
+    notificationsRoute: string;
+    menuItems: MenuItem[];
+    showQuarterSelector: boolean;
+  }
+> = {
+  student: {
+    tagline: 'MSTS EDUHUB · STUDENT',
+    notificationsRoute: '/student/notifications',
+    showQuarterSelector: true,
+    menuItems: [
+      { id: 'storyboard',    label: 'Study Board',   icon: 'grid-outline',          route: '/student/storyboard' },
+      { id: 'subjects',      label: 'Subjects',       icon: 'book-outline',          route: '/student/subjects' },
+      { id: 'grades',        label: 'Grades',         icon: 'stats-chart-outline',   route: '/student/grades' },
+      { id: 'todo',          label: 'To Do',          icon: 'list-outline',          route: '/student/todo', badge: 12 },
+      { id: 'notifications', label: 'Notifications',  icon: 'notifications-outline', route: '/student/notifications' },
+    ],
+  },
+  teacher: {
+    tagline: 'MSTS EDUHUB · TEACHER',
+    notificationsRoute: '/teacher/notifications',
+    showQuarterSelector: false,
+    menuItems: [
+      { id: 'dashboard',     label: 'Dashboard',     icon: 'grid-outline',          route: '/teacher/dashboard' },
+      { id: 'classes',       label: 'Classes',        icon: 'people-outline',        route: '/teacher/classes' },
+      { id: 'classworks',    label: 'Classworks',     icon: 'document-text-outline', route: '/teacher/classworks' },
+      { id: 'grades',        label: 'Grades',         icon: 'stats-chart-outline',   route: '/teacher/grades' },
+      { id: 'interventions', label: 'Interventions',  icon: 'medkit-outline',        route: '/teacher/interventions' },
+      { id: 'notifications', label: 'Notifications',  icon: 'notifications-outline', route: '/teacher/notifications' },
+    ],
+  },
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const getInitials = (fullName: string): string => {
   const parts = fullName.trim().split(' ').filter((p) => p.length > 0);
@@ -44,7 +80,15 @@ const getInitials = (fullName: string): string => {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
 
-const DrawerMenu = () => {
+// ─── Component ────────────────────────────────────────────────────────────────
+
+type DrawerMenuProps = {
+  role: AppRole;
+};
+
+const DrawerMenu = ({ role }: DrawerMenuProps) => {
+  const config = ROLE_CONFIG[role];
+
   const { isOpen, closeDrawer } = useDrawer();
   const { logout, session } = useAuth();
   const router = useRouter();
@@ -53,45 +97,27 @@ const DrawerMenu = () => {
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const [userMenuVisible, setUserMenuVisible] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  // Only relevant for student role; safe to call unconditionally (hook rules)
   const { activeQuarter } = useStudentSubjects();
 
   useEffect(() => {
     if (isOpen) {
       Animated.parallel([
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          tension: 65,
-          friction: 11,
-          useNativeDriver: true,
-        }),
-        Animated.timing(overlayAnim, {
-          toValue: 1,
-          duration: 250,
-          useNativeDriver: true,
-        }),
+        Animated.spring(slideAnim, { toValue: 0, tension: 65, friction: 11, useNativeDriver: true }),
+        Animated.timing(overlayAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
       ]).start();
     } else {
       Animated.parallel([
-        Animated.spring(slideAnim, {
-          toValue: -DRAWER_WIDTH,
-          tension: 65,
-          friction: 11,
-          useNativeDriver: true,
-        }),
-        Animated.timing(overlayAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
+        Animated.spring(slideAnim, { toValue: -DRAWER_WIDTH, tension: 65, friction: 11, useNativeDriver: true }),
+        Animated.timing(overlayAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
       ]).start();
     }
   }, [isOpen]);
 
   const handleNavigate = (route: string) => {
     closeDrawer();
-    setTimeout(() => {
-      router.push(route as any);
-    }, 100);
+    setTimeout(() => router.push(route as any), 100);
   };
 
   const handleLogout = async () => {
@@ -102,9 +128,8 @@ const DrawerMenu = () => {
     router.replace('/login');
   };
 
-  const isActiveRoute = (route: string) => {
-    return pathname === route || pathname.startsWith(route + '/');
-  };
+  const isActiveRoute = (route: string) =>
+    pathname === route || pathname.startsWith(route + '/');
 
   const initials = session?.full_name ? getInitials(session.full_name) : '?';
 
@@ -118,37 +143,38 @@ const DrawerMenu = () => {
       )}
 
       {/* Drawer */}
-      <Animated.View
-        style={[styles.drawer, { transform: [{ translateX: slideAnim }] }]}
-      >
+      <Animated.View style={[styles.drawer, { transform: [{ translateX: slideAnim }] }]}>
         <SafeAreaView style={styles.drawerInner} edges={['top', 'bottom']}>
-          {/* Logo / Brand */}
+
+          {/* Brand */}
           <View style={styles.brandSection}>
             <View style={styles.logoBox}>
               <Text style={styles.logoText}>E</Text>
             </View>
             <View>
               <Text style={styles.brandName}>ENTERVENE</Text>
-              <Text style={styles.brandTagline}>MSTS EDUHUB</Text>
+              <Text style={styles.brandTagline}>{config.tagline}</Text>
             </View>
           </View>
 
-          {/* Quarter Selector */}
-          <TouchableOpacity style={styles.quarterSelector} activeOpacity={0.7}>
-            <Text style={styles.quarterText}>
-              {activeQuarter
-                ? `${activeQuarter.period_name} (${activeQuarter.year_label})`
-                : 'Loading quarter…'}
-            </Text>
-            <Ionicons name="chevron-down" size={16} color={AppColors.foreground} />
-          </TouchableOpacity>
+          {/* Quarter Selector — student only */}
+          {config.showQuarterSelector && (
+            <TouchableOpacity style={styles.quarterSelector} activeOpacity={0.7}>
+              <Text style={styles.quarterText}>
+                {activeQuarter
+                  ? `${activeQuarter.period_name} (${activeQuarter.year_label})`
+                  : 'Loading quarter…'}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color={AppColors.foreground} />
+            </TouchableOpacity>
+          )}
 
           {/* Menu Label */}
           <Text style={styles.menuLabel}>Menu</Text>
 
           {/* Menu Items */}
           <View style={styles.menuList}>
-            {menuItems.map((item) => {
+            {config.menuItems.map((item) => {
               const active = isActiveRoute(item.route);
               return (
                 <TouchableOpacity
@@ -177,7 +203,7 @@ const DrawerMenu = () => {
 
           <View style={{ flex: 1 }} />
 
-          {/* User Section — tapping opens the popup menu */}
+          {/* User Section */}
           <TouchableOpacity
             style={styles.userSection}
             onPress={() => setUserMenuVisible(true)}
@@ -208,7 +234,7 @@ const DrawerMenu = () => {
       >
         <Pressable style={styles.modalOverlay} onPress={() => setUserMenuVisible(false)}>
           <View style={styles.popupMenu}>
-            {/* User info header inside popup */}
+
             <View style={styles.popupHeader}>
               <View style={styles.popupAvatar}>
                 <Text style={styles.avatarInitials}>{initials}</Text>
@@ -225,12 +251,9 @@ const DrawerMenu = () => {
 
             <View style={styles.popupDivider} />
 
-            {/* Account */}
             <Pressable
               style={({ pressed }) => [styles.popupItem, pressed && styles.popupItemPressed]}
-              onPress={() => {
-                setUserMenuVisible(false);
-              }}
+              onPress={() => setUserMenuVisible(false)}
             >
               <Ionicons name="person-circle-outline" size={18} color={AppColors.foreground} />
               <Text style={styles.popupItemText}>Account</Text>
@@ -240,13 +263,12 @@ const DrawerMenu = () => {
               style={({ pressed }) => [styles.popupItem, pressed && styles.popupItemPressed]}
               onPress={() => {
                 setUserMenuVisible(false);
-                handleNavigate('/student/notifications');
+                handleNavigate(config.notificationsRoute);
               }}
             >
               <Ionicons name="notifications-outline" size={18} color={AppColors.foreground} />
               <Text style={styles.popupItemText}>Notifications</Text>
             </Pressable>
-
 
             <Pressable
               style={({ pressed }) => [styles.popupItem, pressed && styles.popupItemPressed]}
@@ -262,12 +284,15 @@ const DrawerMenu = () => {
                 {loggingOut ? 'Logging out…' : 'Log out'}
               </Text>
             </Pressable>
+
           </View>
         </Pressable>
       </Modal>
     </>
   );
 };
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   overlay: {
@@ -277,9 +302,7 @@ const styles = StyleSheet.create({
   },
   drawer: {
     position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
+    top: 0, bottom: 0, left: 0,
     width: DRAWER_WIDTH,
     backgroundColor: AppColors.background,
     borderRightWidth: Borders.width,
@@ -292,8 +315,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
   },
-
-  // Brand
   brandSection: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -301,8 +322,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   logoBox: {
-    width: 44,
-    height: 44,
+    width: 44, height: 44,
     backgroundColor: AppColors.primary,
     borderWidth: Borders.width,
     borderColor: AppColors.border,
@@ -328,8 +348,6 @@ const styles = StyleSheet.create({
     color: AppColors.mutedForeground,
     letterSpacing: 0.5,
   },
-
-  // Quarter Selector
   quarterSelector: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -349,8 +367,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: AppColors.foreground,
   },
-
-  // Menu
   menuLabel: {
     fontSize: 11,
     fontWeight: '700',
@@ -359,9 +375,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 8,
   },
-  menuList: {
-    gap: 4,
-  },
+  menuList: { gap: 4 },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -370,9 +384,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
   },
-  menuItemActive: {
-    backgroundColor: AppColors.muted,
-  },
+  menuItemActive: { backgroundColor: AppColors.muted },
   menuItemText: {
     flex: 1,
     fontSize: 15,
@@ -388,8 +400,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: AppColors.border,
     borderRadius: 10,
-    minWidth: 24,
-    height: 24,
+    minWidth: 24, height: 24,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 6,
@@ -399,8 +410,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: AppColors.primaryForeground,
   },
-
-  // User section (bottom of drawer)
   userSection: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -411,8 +420,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   avatar: {
-    width: 38,
-    height: 38,
+    width: 38, height: 38,
     borderRadius: 8,
     borderWidth: Borders.width,
     borderColor: AppColors.border,
@@ -434,11 +442,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: AppColors.mutedForeground,
   },
-  popupItemPressed: {
-    backgroundColor: AppColors.accent,
-  },
-
-  // Popup modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',
@@ -461,8 +464,7 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   popupAvatar: {
-    width: 36,
-    height: 36,
+    width: 36, height: 36,
     borderRadius: 8,
     borderWidth: Borders.width,
     borderColor: AppColors.border,
@@ -490,14 +492,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 13,
   },
+  popupItemPressed: { backgroundColor: AppColors.accent },
   popupItemText: {
     fontSize: 14,
     fontWeight: '500',
     color: AppColors.foreground,
   },
-  popupItemDestructive: {
-    color: AppColors.destructive,
-  },
+  popupItemDestructive: { color: AppColors.destructive },
 });
 
 export default DrawerMenu;

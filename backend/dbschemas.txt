@@ -81,3 +81,164 @@ CREATE TABLE user_login_log (
     logout_at TIMESTAMP WITH TIME ZONE
 );
 
+-- ============================================================
+-- STEP 1: Academic scaffolding
+-- ============================================================
+
+CREATE TABLE academic_year (
+    academic_year_id SERIAL PRIMARY KEY,
+    year_label       VARCHAR(20) NOT NULL,         -- e.g. '2025-2026'
+    start_date       DATE NOT NULL,
+    end_date         DATE NOT NULL,
+    is_active        BOOLEAN DEFAULT FALSE,
+    created_at       TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE academic_level (
+    academic_level_id SERIAL PRIMARY KEY,
+    level_name        VARCHAR(100) NOT NULL,        -- e.g. 'Grade 7'
+    grade_level       INT NOT NULL,
+    created_at        TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE academic_period (
+    academic_period_id SERIAL PRIMARY KEY,
+    period_name        VARCHAR(100) NOT NULL,       -- e.g. 'Quarter 1'
+    period_type        VARCHAR(20) NOT NULL         -- 'QUARTER' or 'SEMESTER'
+                         CHECK (period_type IN ('QUARTER', 'SEMESTER')),
+    start_date         DATE NOT NULL,
+    end_date           DATE NOT NULL,
+    is_active          BOOLEAN DEFAULT FALSE,
+    academic_year_id   INT NOT NULL REFERENCES academic_year(academic_year_id)
+                         ON DELETE CASCADE,
+    created_at         TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================================
+-- STEP 2: Subject and Class
+-- ============================================================
+
+CREATE TABLE subject (
+    subject_id        SERIAL PRIMARY KEY,
+    subject_name      VARCHAR(150) NOT NULL,
+    subject_codename  VARCHAR(50),
+    description       TEXT,
+    status            VARCHAR(20) DEFAULT 'active',
+    academic_level_id INT NOT NULL REFERENCES academic_level(academic_level_id),
+    created_at        TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE class (
+    class_id           SERIAL PRIMARY KEY,
+    section_name       VARCHAR(100) NOT NULL,
+    class_status       VARCHAR(20) DEFAULT 'active',
+    adviser_staff_id   VARCHAR(20) REFERENCES academic_staff(staff_id)
+                         ON DELETE SET NULL,
+    academic_year_id   INT NOT NULL REFERENCES academic_year(academic_year_id),
+    academic_level_id  INT NOT NULL REFERENCES academic_level(academic_level_id),
+    academic_period_id INT REFERENCES academic_period(academic_period_id),
+    created_at         TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at         TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================================
+-- STEP 3: Subject Load
+-- Teacher is assigned to teach a subject in a specific class/period
+-- This is the bridge that gives a teacher authority to create classworks
+-- ============================================================
+
+CREATE TABLE subject_load (
+    subject_load_id        SERIAL PRIMARY KEY,
+    staff_id               VARCHAR(20) NOT NULL REFERENCES academic_staff(staff_id),
+    subject_id             INT NOT NULL REFERENCES subject(subject_id),
+    class_id               INT NOT NULL REFERENCES class(class_id),
+    academic_period_id     INT NOT NULL REFERENCES academic_period(academic_period_id),
+    status                 VARCHAR(20) DEFAULT 'active',
+    is_locked              BOOLEAN DEFAULT FALSE,
+    locked_at              TIMESTAMP WITH TIME ZONE,
+    continued_from_load_id INT REFERENCES subject_load(subject_load_id),
+    created_at             TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at             TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (staff_id, subject_id, class_id, academic_period_id)
+);
+
+-- ============================================================
+-- STEP 4: Student enrollment into a class
+-- ============================================================
+
+CREATE TABLE student_class (
+    student_class_id  SERIAL PRIMARY KEY,
+    student_id        UUID NOT NULL REFERENCES student(student_id),
+    class_id          INT NOT NULL REFERENCES class(class_id),
+    enrollment_status VARCHAR(20) DEFAULT 'enrolled',
+    enrolled_at       TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (student_id, class_id)
+);
+
+-- ============================================================
+-- STEP 5: Classwork (the teacher's content)
+-- Belongs to a subject, created by a staff member
+-- ============================================================
+
+CREATE TABLE classwork (
+    classwork_id         SERIAL PRIMARY KEY,
+    title                VARCHAR(255) NOT NULL,
+    description          TEXT,
+    instructions         TEXT,
+    classwork_type       VARCHAR(50) NOT NULL         -- 'QUIZ', 'ASSIGNMENT', 'ACTIVITY'
+                           CHECK (classwork_type IN ('QUIZ', 'ASSIGNMENT', 'ACTIVITY')),
+    classwork_category   VARCHAR(50)                  -- 'WRITTEN_WORK', 'PERFORMANCE_TASK', 'PERIODICAL_EXAM'
+                           CHECK (classwork_category IN ('WRITTEN_WORK', 'PERFORMANCE_TASK', 'PERIODICAL_EXAM')),
+    total_points         DECIMAL(8,2) DEFAULT 100,
+    is_locked            BOOLEAN DEFAULT FALSE,
+    is_published         BOOLEAN DEFAULT FALSE,
+    subject_id           INT NOT NULL REFERENCES subject(subject_id),
+    created_by_staff_id  VARCHAR(20) NOT NULL REFERENCES academic_staff(staff_id),
+    rubric_id            INT,                         -- FK to rubric table (add later)
+    cloned_from_classwork_id INT REFERENCES classwork(classwork_id),
+    created_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================================
+-- STEP 6: Classwork Assignment
+-- Classwork is then pushed to a specific class with due dates
+-- ============================================================
+
+CREATE TABLE classwork_assignment (
+    classwork_assignment_id SERIAL PRIMARY KEY,
+    classwork_id            INT NOT NULL REFERENCES classwork(classwork_id),
+    class_id                INT NOT NULL REFERENCES class(class_id),
+    assigned_by_staff_id    VARCHAR(20) NOT NULL REFERENCES academic_staff(staff_id),
+    publish_date            TIMESTAMP WITH TIME ZONE,
+    due_date                TIMESTAMP WITH TIME ZONE,
+    lock_date               TIMESTAMP WITH TIME ZONE,
+    is_published            BOOLEAN DEFAULT FALSE,
+    is_locked               BOOLEAN DEFAULT FALSE,
+    max_attempts            INT DEFAULT 1,
+    assigned_at             TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (classwork_id, class_id)
+);
+
+-- ============================================================
+-- STEP 7: Student Submission
+-- ============================================================
+
+CREATE TABLE student_submission (
+    submission_id           SERIAL PRIMARY KEY,
+    student_id              UUID NOT NULL REFERENCES student(student_id),
+    classwork_assignment_id INT NOT NULL REFERENCES classwork_assignment(classwork_assignment_id),
+    submitted_at            TIMESTAMP WITH TIME ZONE,
+    status                  VARCHAR(30) DEFAULT 'pending'
+                              CHECK (status IN ('pending', 'submitted', 'graded', 'late', 'missed')),
+    grade                   DECIMAL(8,2),
+    feedback                TEXT,
+    attempt_count           INT DEFAULT 0,
+    graded_at               TIMESTAMP WITH TIME ZONE,
+    graded_by_staff_id      VARCHAR(20) REFERENCES academic_staff(staff_id),
+    created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

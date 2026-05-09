@@ -1,0 +1,135 @@
+
+-- Step A: Create the User Account
+INSERT INTO user_account (user_id, email, password_hash, ref_type, ref_id)
+VALUES ('660f9511-f30c-52e5-b827-557766551111', 'm.cruz@school.edu.ph', 'hash_poly_02', 'staff', '2026-0002');
+
+-- Step B: Create the Staff Profile
+INSERT INTO academic_staff (staff_id, first_name, last_name, email, hired_date, employment_status, user_id)
+VALUES ('2026-0002', 'Maria', 'Cruz', 'm.cruz@school.edu.ph', '2026-02-10', 'Contractual', '660f9511-f30c-52e5-b827-557766551111');
+
+-- Step C: Assign Role (Teacher = 1)
+INSERT INTO user_roles (user_id, role_id) VALUES ('660f9511-f30c-52e5-b827-557766551111', 1);
+
+-- Step A: Create the User Account
+INSERT INTO user_account (user_id, email, password_hash, ref_type, ref_id)
+VALUES ('770a0622-a41d-63f6-c938-668877662222', 'juan.delacruz@student.ph', 'hash_poly_03', 'student', '123456789012');
+
+-- Step B: Create the Student Profile (Using a 12-digit LRN)
+INSERT INTO student (student_lrn, first_name, last_name, email, account_status, user_id)
+VALUES ('123456789012', 'Juan', 'Dela Cruz', 'juan.delacruz@student.ph', 'active', '770a0622-a41d-63f6-c938-668877662222');
+
+-- Step C: Assign Role (Student = 2)
+INSERT INTO user_roles (user_id, role_id) VALUES ('770a0622-a41d-63f6-c938-668877662222', 2);
+
+INSERT INTO user_account (user_id, email, password_hash, ref_type, ref_id)
+VALUES (
+    '880b1733-b52e-74f7-d049-779988773333', 
+    'admin@mnsts.edu.ph', 
+    'hash_mnsts_admin_01', 
+    'admin', 
+    'ADM-2026-0001'
+);
+
+-- This uses 'staff' as the ref_type to match your academic_staff table
+INSERT INTO user_account (user_id, email, password_hash, ref_type, ref_id)
+VALUES (
+    '990c2844-c63f-85a8-e150-880099884444', 
+    'admin@mnsts.edu.ph', 
+    'hash_mnsts_admin_01', 
+    'staff', 
+    'ADM-2026-0001'
+);
+
+INSERT INTO academic_staff (staff_id, first_name, last_name, email, hired_date, employment_status, user_id)
+VALUES (
+    'ADM-2026-0001', 
+    'MNSTS', 
+    'Administrator', 
+    'admin@mnsts.edu.ph', 
+    '2026-05-03', 
+    'Regular', 
+    '990c2844-c63f-85a8-e150-880099884444'
+);
+
+INSERT INTO user_roles (user_id, role_id) 
+VALUES ('990c2844-c63f-85a8-e150-880099884444', 0);
+
+
+
+-- ============================================================
+-- STEP 1: Academic Year
+-- ============================================================
+INSERT INTO academic_year (year_label, start_date, end_date, is_active)
+VALUES ('2025-2026', '2025-06-02', '2026-03-31', TRUE);
+-- academic_year_id = 1
+
+
+-- ============================================================
+-- STEP 2: Academic Periods (4 quarters under that year)
+-- ============================================================
+INSERT INTO academic_period (period_name, period_type, start_date, end_date, is_active, academic_year_id)
+VALUES
+  ('Quarter 1', 'QUARTER', '2025-06-02', '2025-08-22', FALSE, 1),
+  ('Quarter 2', 'QUARTER', '2025-09-01', '2025-11-14', FALSE, 1),
+  ('Quarter 3', 'QUARTER', '2025-11-24', '2026-01-30', FALSE, 1),
+  ('Quarter 4', 'QUARTER', '2026-02-09', '2026-03-27', FALSE, 1);
+-- academic_period_id: Q1=1, Q2=2, Q3=3, Q4=4
+
+-- Set Q1 as currently active
+UPDATE academic_period SET is_active = TRUE WHERE academic_period_id = 1;
+
+
+-- ============================================================
+-- STEP 3: Academic Level
+-- ============================================================
+INSERT INTO academic_level (level_name, grade_level)
+VALUES ('Grade 7', 7);
+-- academic_level_id = 1
+
+
+-- ============================================================
+-- STEP 4: Subject (Filipino 7, tied to Grade 7)
+-- ============================================================
+INSERT INTO subject (subject_name, subject_codename, description, status, academic_level_id)
+VALUES ('Filipino 7', 'FIL7', 'Filipino language subject for Grade 7', 'active', 1);
+-- subject_id = 1
+
+
+-- ============================================================
+-- STEP 5: Class / Section
+-- Maria Cruz (2026-0002) is the adviser of 7-Sampaguita
+-- ============================================================
+INSERT INTO class (section_name, class_status, adviser_staff_id, academic_year_id, academic_level_id, academic_period_id)
+VALUES ('7-Sampaguita', 'active', '2026-0002', 1, 1, 1);
+-- class_id = 1
+
+
+-- ============================================================
+-- STEP 6: Subject Load
+-- Maria Cruz is assigned to teach Filipino 7 in 7-Sampaguita for Q1
+-- This is the record that gives her authority to create classworks
+-- ============================================================
+INSERT INTO subject_load (staff_id, subject_id, class_id, academic_period_id, status)
+VALUES ('2026-0002', 1, 1, 1, 'active');
+-- subject_load_id = 1
+
+
+-- ============================================================
+-- STEP 7: Update the student's academic level
+-- Juan Dela Cruz is a Grade 7 student
+-- ============================================================
+UPDATE student
+SET academic_level_id = 1
+WHERE student_lrn = '123456789012';
+
+
+-- ============================================================
+-- STEP 8: Enroll Juan Dela Cruz into 7-Sampaguita
+-- Need his student_id first, so we query it inline
+-- ============================================================
+INSERT INTO student_class (student_id, class_id, enrollment_status)
+VALUES (
+  (SELECT student_id FROM student WHERE student_lrn = '123456789012'),
+  1,
+  'enrolled'
+);
