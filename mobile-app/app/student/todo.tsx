@@ -44,28 +44,17 @@ const ToDo = () => {
         {activeTab === 'pending' && (
           <>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Intervention</Text>
-              {interventionItems.map((item, i) => <ToDoItem key={i} {...item} />)}
-            </View>
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Past Due</Text>
-              {pastDueItems.map((item, i) => <ToDoItem key={i} {...item} />)}
-            </View>
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Upcoming</Text>
               {upcomingItems.map((item, i) => <ToDoItem key={i} {...item} />)}
             </View>
           </>
         )}
         {activeTab === 'pastdue' && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Past Due</Text>
             {pastDueItems.map((item, i) => <ToDoItem key={i} {...item} />)}
           </View>
         )}
         {activeTab === 'completed' && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Completed</Text>
             {completedItems.map((item, i) => <ToDoItem key={i} {...item} />)}
           </View>
         )}
@@ -75,9 +64,9 @@ const ToDo = () => {
 };
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: AppColors.background },
+  safe: { flex: 1, backgroundColor: AppColors.background, gap: 12 },
   scroll: { flex: 1 },
-  content: { padding: Spacing.lg, gap: 24, paddingBottom: 32 },
+  content: { padding: Spacing.md, paddingTop: 6, gap: 24, paddingBottom: 32 },
   section: { gap: 12 },
   sectionTitle: { fontSize: 22, fontWeight: '700', color: AppColors.foreground },
 });

@@ -68,9 +68,9 @@ const Subjects = () => {
 };
 
 const styles = StyleSheet.create({
-  safe:      { flex: 1, backgroundColor: AppColors.background },
-  content:   { padding: Spacing.lg, gap: 16, paddingBottom: 32 },
-  centered:  { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.lg },
+  safe: { flex: 1, backgroundColor: AppColors.background },
+  content: { padding: Spacing.md, gap: 16, paddingBottom: 32 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.md },
   errorText: { fontSize: 14, color: AppColors.destructive, textAlign: 'center' },
   emptyText: { fontSize: 14, color: AppColors.mutedForeground, textAlign: 'center' },
 });

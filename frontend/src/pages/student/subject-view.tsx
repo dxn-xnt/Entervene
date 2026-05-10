@@ -21,12 +21,7 @@ const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
   return (
     <AppLayout>
       <header className="px-5 py-5 flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="text-4xl font-semibold cursor-pointer"
-        >
-          Subjects
-        </button>
+
         <ChevronRight size={40} />
         <h1 className="text-3xl">{subject}</h1>
       </header>

@@ -8,32 +8,23 @@ import SubjectCardHeader from '@/components/student/SubjectCardHeader';
 import ClassworkItem from '@/components/student/ClassworkItem';
 import { AppColors, NeoShadow, Spacing } from '@/constants/theme';
 import ScreenHeader from '@/components/student/ScreenHeader';
-import LessonCard from '@/components/student/LessonCard';
 
-type SubjectDetailParams = {
+type LessonParams = {
   subject_load_id?: string;
   subject?: string;
-  teacher?: string;
-  period?: string;
-  section?: string;
+  lessonTitle: string,
+  scheduledDate: string,
+  description: string,
 };
 
-const tabs = [
-  { id: 'lessons', label: 'Lessons' },
-  { id: 'classwork', label: 'Classwork' },
-];
-
-const SubjectDetail = () => {
+const LessonView = () => {
   const router = useRouter();
-  const params = useLocalSearchParams<SubjectDetailParams>();
-  const [activeTab, setActiveTab] = useState('lessons');
+  const params = useLocalSearchParams<LessonParams>();
 
   const subjectName = params.subject ?? '';
-  const teacherName = params.teacher ?? '';
-  const lessonTitle = 'Introduction to Python';
-  const lessonScheduledDate = 'October 24, 2025';
-  const periodName = params.period ?? '';
-  const sectionName = params.section ?? '';
+  const lessonTitle = params.lessonTitle ?? '';
+  const scheduledDate = params.scheduledDate ?? '';
+  const description = params.description ?? '';
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -41,67 +32,35 @@ const SubjectDetail = () => {
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7} style={styles.backRow}>
           <Ionicons name="chevron-back" size={28} color={AppColors.foreground} />
-          <Text style={styles.backText}>Subjects</Text>
+          <Text style={styles.backText}>{subjectName}</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.subjectHeader}>
         <View style={styles.left}>
-          <Text style={styles.title}>{subjectName}</Text>
-          <Text style={styles.teacher}>{teacherName}</Text>
+          <Text style={styles.title}>{lessonTitle}</Text>
+          <Text style={styles.teacher}>{description}</Text>
         </View>
 
         {/* Period / Section info strip */}
-        {(periodName || sectionName) ? (
+        {(scheduledDate) ? (
           <View style={styles.infoStrip}>
-            {periodName ? (
+            {scheduledDate ? (
               <View style={styles.infoChip}>
                 <Ionicons name="calendar-outline" size={12} color={AppColors.mutedForeground} />
-                <Text style={styles.infoChipText}>{periodName}</Text>
+                <Text style={styles.infoChipText}>{scheduledDate}</Text>
               </View>
             ) : null}
-            {sectionName ? (
-              <View style={styles.infoChip}>
-                <Ionicons name="people-outline" size={12} color={AppColors.mutedForeground} />
-                <Text style={styles.infoChipText}>{sectionName}</Text>
-              </View>
-            ) : null}
+
           </View>
         ) : null}
       </View>
-
-      <TabBar tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-
-      <ScrollView contentContainerStyle={styles.content}>
-        {activeTab === 'lessons' && (
-          <View style={styles.section}>
-            <LessonCard
-              onPress={() =>
-                router.push({
-                  pathname: "/student/lesson-view" as any,
-                  params: {
-                    // lessonId: lesson_id,
-                    subject: subjectName,
-                    lessonTitle: lessonTitle,
-                    scheduledDate: lessonScheduledDate,
-                    description: lessonTitle,
-                  },
-                })
-              }
-              lessonTitle={lessonTitle} scheduledDate={lessonScheduledDate} />
-            <LessonCard lessonTitle={lessonTitle} scheduledDate={lessonScheduledDate} />
-            <LessonCard lessonTitle={lessonTitle} scheduledDate={lessonScheduledDate} />
-          </View>
-        )}
-        {activeTab === 'classwork' && (
-          <View style={styles.section}>
-            <ClassworkItem title="Assignment 2" submittedDate="October 24, 2025" status="Missing" />
-            <ClassworkItem title="Assignment 2" submittedDate="October 24, 2025" status="Missing" />
-            <ClassworkItem title="Assignment 2" submittedDate="October 24, 2025" status="Missing" />
-            <ClassworkItem title="Assignment 2" submittedDate="October 24, 2025" status="Missing" />
-          </View>
-        )}
-      </ScrollView>
+      <View style={styles.section}>
+        <ClassworkItem title="Assignment 2" submittedDate="October 24, 2025" status="Missing" />
+        <ClassworkItem title="Assignment 2" submittedDate="October 24, 2025" status="Missing" />
+        <ClassworkItem title="Assignment 2" submittedDate="October 24, 2025" status="Missing" />
+        <ClassworkItem title="Assignment 2" submittedDate="October 24, 2025" status="Missing" />
+      </View>
     </SafeAreaView>
   );
 };
@@ -136,7 +95,7 @@ const styles = StyleSheet.create({
     color: AppColors.mutedForeground,
   },
   content: { padding: Spacing.md, gap: 16, paddingBottom: 32 },
-  section: { gap: 16 },
+  section: { gap: 16, paddingHorizontal: Spacing.md },
   sectionTitle: { fontSize: 22, fontWeight: '700', color: AppColors.foreground },
   subjectHeader: {
     flexDirection: 'column',
@@ -167,4 +126,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default SubjectDetail;
+export default LessonView;
