@@ -21,8 +21,6 @@ export default function TeacherDashboard() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.contentContainer}
         // refreshControl={
         //   <RefreshControl refreshing={isLoading} onRefresh={refresh} />
         // }
