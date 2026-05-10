@@ -17,3 +17,7 @@ hash_poly_02
 #student
 juan.delacruz@student.ph
 hash_poly_03
+mobile app
+npx expo start
+npx expo start --offline (if ever mag bug inig run)
+
