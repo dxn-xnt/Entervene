@@ -66,11 +66,17 @@ const completedItems = [
   },
 ];
 
-export default function ToDo() {
+export default function ToDo () {
   const [activeTab, setActiveTab] = useState("pending");
 
   return (
     <AppLayout>
+<<<<<<<< HEAD:frontend/src/pages/student/todo.tsx
+========
+      <header className="px-5 py-5">
+        <h1 className="text-4xl font-semibold">To Do</h1>
+      </header>
+>>>>>>>> 9c5e4e84b21793047b3bdafa6bccde4f1fa77064:frontend/src/pages/student/to-do.tsx
       <Tabs tabs={todoTabs} activeTab={activeTab} onChange={setActiveTab} />
       <div className="px-5 py-5 flex flex-col gap-5">
 

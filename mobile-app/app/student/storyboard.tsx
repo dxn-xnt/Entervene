@@ -30,6 +30,26 @@ const StoryBoard = () => {
           <RefreshControl refreshing={isLoading} onRefresh={refresh} />
         }
       >
+
+        {/* To Do Section */}
+        <View style={styles.todoSection}>
+          <View style={styles.todoHeader}>
+            <Text style={styles.todoTitle}>To do</Text>
+            <TouchableOpacity
+              onPress={() => router.push("/student/todo" as any)}
+              style={styles.todoButton}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="arrow-forward"
+                size={18}
+                color={AppColors.foreground}
+              />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.todoEmpty}>No urgent tasks right now 🎉</Text>
+        </View>
+
         {/* Subject Cards */}
         <View style={styles.grid}>
           {isLoading && subjects.length === 0 ? (
@@ -66,25 +86,6 @@ const StoryBoard = () => {
             ))
           )}
         </View>
-
-        {/* To Do Section */}
-        <View style={styles.todoSection}>
-          <View style={styles.todoHeader}>
-            <Text style={styles.todoTitle}>To do</Text>
-            <TouchableOpacity
-              onPress={() => router.push("/student/todo" as any)}
-              style={styles.todoButton}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name="arrow-forward"
-                size={18}
-                color={AppColors.foreground}
-              />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.todoEmpty}>No urgent tasks right now 🎉</Text>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -93,8 +94,8 @@ const StoryBoard = () => {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: AppColors.background },
   container: { flex: 1 },
-  contentContainer: { paddingBottom: 32 },
-  grid: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg, gap: 16 },
+  contentContainer: { paddingBottom: 32, gap: 16 },
+  grid: { paddingHorizontal: Spacing.md, gap: 16 },
   errorText: {
     fontSize: 14,
     color: AppColors.destructive,
@@ -108,12 +109,12 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   todoSection: {
-    marginHorizontal: Spacing.lg,
-    marginTop: Spacing.lg,
+    marginHorizontal: Spacing.md,
+    marginTop: Spacing.md,
     borderWidth: 2,
     borderColor: AppColors.border,
     borderRadius: 8,
-    padding: Spacing.lg,
+    padding: Spacing.md,
     backgroundColor: AppColors.card,
     shadowColor: AppColors.black,
     ...NeoShadow.lg,

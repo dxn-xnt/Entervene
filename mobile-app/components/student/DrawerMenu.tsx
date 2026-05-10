@@ -289,7 +289,6 @@ const styles = StyleSheet.create({
   },
   drawerInner: {
     flex: 1,
-    paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
   },
 
@@ -298,6 +297,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    paddingHorizontal: Spacing.md,
     marginBottom: Spacing.lg,
   },
   logoBox: {
@@ -340,6 +340,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: Spacing.lg,
+    marginHorizontal: Spacing.md,
     backgroundColor: AppColors.card,
     shadowColor: AppColors.border,
     ...NeoShadow.xs,
@@ -358,6 +359,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 8,
+    marginHorizontal: Spacing.md,
   },
   menuList: {
     gap: 4,
@@ -368,10 +370,13 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    borderRadius: 8,
   },
   menuItemActive: {
-    backgroundColor: AppColors.muted,
+    backgroundColor: AppColors.primary,
+    borderBottomWidth: 2,
+    borderTopWidth: 2,
+    borderBottomColor: AppColors.border,
+
   },
   menuItemText: {
     flex: 1,
@@ -405,10 +410,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: Spacing.md,
+    padding: Spacing.md,
     borderTopWidth: Borders.width,
     borderTopColor: AppColors.border,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   avatar: {
     width: 38,

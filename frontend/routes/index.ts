@@ -24,7 +24,7 @@ export const routes = {
     },
   
     student: {
-      board: "/student/board",
+      board: "/student/studyboard",
       subjects: "/student/subjects",
       interventions: "/student/interventions",
       grades: "/student/grades",
