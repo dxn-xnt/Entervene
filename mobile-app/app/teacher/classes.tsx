@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   container: {
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: AppColors.border,
     borderRadius: 8,
 
