@@ -16,7 +16,8 @@ type TabBarProps = {
 const TabBar = ({ tabs, activeTab, onChange }: TabBarProps) => {
   return (
     <View style={styles.container}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <View style={styles.backgroundHolder}></View>
+      <ScrollView style={styles.foregroundHolder} horizontal showsHorizontalScrollIndicator={false}>
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -39,24 +40,36 @@ const TabBar = ({ tabs, activeTab, onChange }: TabBarProps) => {
 
 const styles = StyleSheet.create({
   container: {
-    borderBottomWidth: 1,
-    borderBottomColor: AppColors.muted,
+
+  },
+  backgroundHolder: {
+    height: 36,
+    borderBottomColor: AppColors.border,
+    borderBottomWidth: 2,
+  },
+  foregroundHolder: {
+    zIndex: 10,
+    height: 36,
+    position: 'absolute',
     paddingHorizontal: Spacing.md,
   },
   tab: {
     paddingHorizontal: Spacing.md,
-    paddingVertical: 10,
+    paddingVertical: 8,
     marginRight: 4,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: 'transparent',
-    borderBottomWidth: 0,
+    borderRightWidth: 6,
     borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
   },
   activeTab: {
     borderColor: AppColors.border,
+    borderBottomWidth: 4,
+    borderRightWidth: 6,
+    borderBottomColor: AppColors.background,
     backgroundColor: AppColors.background,
-    marginBottom: -1,
+    marginBottom: -4,
   },
   tabText: {
     fontSize: 14,

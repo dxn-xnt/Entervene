@@ -15,7 +15,7 @@ INSERT INTO role (role_id, role_name, description) VALUES
 -- 2. Create User Account Table
 CREATE TABLE user_account (
     user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE NOT NULL,
+    email VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     invitation_token VARCHAR(255),
     account_status VARCHAR(50) DEFAULT 'active',

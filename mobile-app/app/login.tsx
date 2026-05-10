@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '@/context/AuthContext';
 import { AppColors, NeoShadow, Spacing, Borders } from '@/constants/theme';
+import { Eye, EyeClosed } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -188,7 +189,11 @@ export default function LoginScreen() {
                     onPress={() => setSecureText(!secureText)}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.eyeIcon}>{secureText ? '👁' : '👁‍🗨'}</Text>
+                    {secureText ? (
+                      <Eye size={20} color={AppColors.placeholder} />
+                    ) : (
+                      <EyeClosed size={20} color={AppColors.placeholder} />
+                    )}
                   </TouchableOpacity>
                 </View>
               </View>
