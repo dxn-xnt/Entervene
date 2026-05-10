@@ -7,23 +7,27 @@ import {
   FlatList,
   StyleSheet,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { AppColors, NeoShadow } from "@/constants/theme";
+import { AppColors } from "@/constants/theme";
 
-interface FormDropdownProps {
+interface TextDropdownProps {
+  label: string;
   options: string[];
   value: string;
   onChange: (value: string) => void;
 }
 
-export default function FormDropdown({ options, value, onChange }: FormDropdownProps) {
+export default function TextDropdown({
+  label,
+  options,
+  value,
+  onChange,
+}: TextDropdownProps) {
   const [open, setOpen] = useState(false);
 
   return (
-    <View style={styles.wrapper}>
-      <TouchableOpacity style={styles.dropdown} onPress={() => setOpen(true)}>
-        <Text style={styles.selectedText}>{value || "Select an option"}</Text>
-        <Ionicons name="chevron-down" size={18} color={AppColors.black} />
+    <View>
+      <TouchableOpacity onPress={() => setOpen(true)}>
+        <Text>{value || label}</Text>
       </TouchableOpacity>
 
       <Modal visible={open} transparent animationType="fade">
@@ -52,23 +56,6 @@ export default function FormDropdown({ options, value, onChange }: FormDropdownP
 }
 
 const styles = StyleSheet.create({
-  // wrapper: {
-  //   gap: 6,
-  // },
-  dropdown: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: AppColors.black,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  selectedText: {
-    fontSize: 14,
-    color: AppColors.black,
-  },
   overlay: {
     flex: 1,
     justifyContent: "center",

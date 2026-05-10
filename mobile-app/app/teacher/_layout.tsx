@@ -10,10 +10,16 @@ export default function TeacherLayout() {
       <View style={styles.container}>
         <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
           <Stack.Screen name="dashboard" />
+
+          {/* Classes and related screens (Navigation)  */}
           <Stack.Screen name="classes" />
+          
+
+          {/* Classworks and related screens (Navigation)  */}
           <Stack.Screen name="classworks" />
           <Stack.Screen name="new-classwork-form" />
           <Stack.Screen name="create-classwork-material" />
+
           <Stack.Screen name="interventions" />
           <Stack.Screen name="grades" />
           <Stack.Screen name="notifications" />
