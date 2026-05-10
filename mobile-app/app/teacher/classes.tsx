@@ -16,7 +16,7 @@ import { AppColors, Spacing, Borders, NeoShadow } from "@/constants/theme";
 import InfoCard from "@/components/teacher/info-card";
 import Badge from "@/components/badge";
 
-export default function TeacherClassworks() {
+export default function TeacherClasses() {
   const { openDrawer } = useDrawer();
 
   return (
@@ -41,6 +41,7 @@ export default function TeacherClassworks() {
                   name="arrow-forward"
                   size={24}
                   color={AppColors.foreground}
+                  onPress={() => router.push("/teacher/classes-subject")}
                 />
               </TouchableOpacity>
             </View>
