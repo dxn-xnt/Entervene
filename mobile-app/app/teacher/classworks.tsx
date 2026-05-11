@@ -38,7 +38,7 @@ export default function TeacherClassworks() {
             <Text style={styles.title}>Classworks</Text>
           </View>
           <TouchableOpacity
-            onPress={() => router.push("/teacher/Forms/new-classwork-form")}
+            onPress={() => router.push("/teacher/Create_Classwork_Forms/new-classwork-form")}
           >
             <Text style={styles.newClassworkButton}>+ New Classwork</Text>
           </TouchableOpacity>
