@@ -13,7 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useDrawer } from "@/context/DrawerContext";
 import { AppColors, Spacing, Borders, NeoShadow } from "@/constants/theme";
-import TabBar from "@/components/TabBar";   
+import TabBar from "@/components/TabBar";
 import StatCard from "@/components/overview-card";
 
 export default function TeacherSubjectDetail() {
@@ -22,10 +22,9 @@ export default function TeacherSubjectDetail() {
   const [activeTab, setActiveTab] = useState("lesson");
 
   const todoTabs = [
-  { id: "lesson", label: "Lesson" },
-  { id: "classwork", label: "Classwork" },
-
-];
+    { id: "lesson", label: "Lesson" },
+    { id: "classwork", label: "Classwork" },
+  ];
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -40,16 +39,21 @@ export default function TeacherSubjectDetail() {
               Subject &gt; {title}
             </Text>
           </View>
+          <TouchableOpacity
+            onPress={() => router.push("/teacher/Create_Lesson_Forms/add-lesson")}
+          >
+            <Text style={styles.newLessonButton}>+ Add Lesson</Text>
+          </TouchableOpacity>
         </View>
         <TabBar tabs={todoTabs} activeTab={activeTab} onChange={setActiveTab} />
         <View style={styles.body}>
-            <Text style={styles.title}>Subject Overview</Text>
-            {/* overview card container */}
-            <View style={styles.overviewCardContainer}>
-                <StatCard label="Lesson Mastery" value={25} change="12"/>
-                <StatCard label="Classwork Assigned" value={25} change="12"/>
-                <StatCard label="Completion Percentage" value={25} change="12"/>
-            </View>
+          <Text style={styles.title}>Subject Overview</Text>
+          {/* overview card container */}
+          <View style={styles.overviewCardContainer}>
+            <StatCard label="Lesson Mastery" value={25} change="12" />
+            <StatCard label="Classwork Assigned" value={25} change="12" />
+            <StatCard label="Completion Percentage" value={25} change="12" />
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -98,7 +102,16 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   overviewCardContainer: {
-  flexDirection: "column",
-  gap: 12,
-},
+    flexDirection: "column",
+    gap: 12,
+  },
+  newLessonButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: "#7ABA78",
+    borderWidth: 1,
+    borderRadius: 8,
+    shadowColor: AppColors.black,
+    ...NeoShadow.lg,
+  }
 });

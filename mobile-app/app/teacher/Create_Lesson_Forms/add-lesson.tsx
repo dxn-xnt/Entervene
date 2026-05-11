@@ -8,39 +8,27 @@ import { AppColors, NeoShadow } from "@/constants/theme";
 import FormFooter from "@/components/teacher/form-footer";
 import Card from "@/components/teacher/form-card";
 
-const CLASSWORK_TYPES = [
+const ADDING_TYPES = [
   {
-    id: "reading",
-    label: "Reading",
+    id: "import",
+    label: "Import from file",
     icon: "book-outline",
-    description: "Create and publish class topics or resources for learners",
+    description: "Upload a CSV or Excel file to add multiple lessons at once",
   },
   {
-    id: "quiz",
-    label: "Quiz",
+    id: "manual",
+    label: "Create manually",
     icon: "help-circle-outline",
-    description: "Build and assign quizzes to assess learner understanding",
-  },
-  {
-    id: "assignment",
-    label: "Assignment",
-    icon: "desktop-outline",
-    description: "Post tasks or projects for students to complete and submit",
-  },
-  {
-    id: "activity",
-    label: "Activity",
-    icon: "hourglass-outline",
-    description: "Design interactive tasks to enhance learner engagement",
+    description: "Add individual lessons one at a time",
   },
 ] as const;
-
-export default function TeacherNewClassworks() {
+export default function TeacherAddLesson() {
   const handleCardPress = (type: string) => {
-    router.push({
-      pathname: "/teacher/Forms/create-classwork-material",
-      params: { type },
-    });
+    if (type === "manual") {
+      router.push("/teacher/Create_Lesson_Forms/manual-creation");
+    } else {
+      router.push("/teacher/Create_Lesson_Forms/upload-file");
+    }
   };
 
   return (
@@ -49,13 +37,13 @@ export default function TeacherNewClassworks() {
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
-            <Text style={{ fontSize: 24 }}>Create new classwork</Text>
+            <Text style={{ fontSize: 24 }}>Add new lessons</Text>
             <TouchableOpacity onPress={() => router.back()}>
               <Ionicons name="close" size={24} color={AppColors.black} />
             </TouchableOpacity>
           </View>
           <View style={styles.cardGrid}>
-            {CLASSWORK_TYPES.map((item) => (
+            {ADDING_TYPES.map((item) => (
               <Card
                 key={item.id}
                 label={item.label}
@@ -65,8 +53,6 @@ export default function TeacherNewClassworks() {
               />
             ))}
           </View>
-
-          {/* Footer */}
           <FormFooter
             actions={[{ label: "Cancel", onPress: () => router.back() }]}
           />
@@ -104,7 +90,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   cardGrid: {
-    flexDirection: "row",
+    flex: 1,
+    flexDirection: "column",
     flexWrap: "wrap",
     justifyContent: "center",
     alignItems: "center",

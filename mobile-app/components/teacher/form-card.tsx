@@ -29,7 +29,7 @@ export default function ClassworkTypeCard({
 
 const styles = StyleSheet.create({
   card: {
-    width: "47%",
+    width: "100%",
     paddingVertical: 14,
     paddingHorizontal: 10,
     borderWidth: 1,

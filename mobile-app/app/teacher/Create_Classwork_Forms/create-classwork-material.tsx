@@ -323,7 +323,7 @@ export default function CreateClassworkForm() {
               {
                 label: "Next",
                 onPress: () =>
-                  router.push("/teacher/Forms/assign-classwork-form"),
+                  router.push("/teacher/Create_Classwork_Forms/assign-classwork-form"),
               },
             ]}
           />
