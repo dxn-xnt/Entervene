@@ -1,0 +1,78 @@
+// hooks/useSubmissions.ts
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/context/AuthContext';
+import { apiFetch } from './api';
+
+export type Submission = {
+  submission_id: number;
+  student_id: string;
+  student_name: string | null;
+  classwork_assignment_id: number;
+  classwork_title: string | null;
+  submitted_at: string | null;
+  status: string;
+  grade: number | null;
+  feedback: string | null;
+  attempt_count: number;
+  graded_at: string | null;
+  attachments: { submission_attachment_id: number; file_name: string; file_type: string | null; file_size: number }[];
+  created_at: string | null;
+};
+
+export function useStudentSubmissions() {
+  const { session } = useAuth();
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [trigger, setTrigger] = useState(0);
+  const refresh = useCallback(() => setTrigger((t) => t + 1), []);
+
+  useEffect(() => {
+    if (!session?.token) { setIsLoading(false); return; }
+    let cancelled = false;
+    const go = async () => {
+      setIsLoading(true); setError(null);
+      try {
+        const data = await apiFetch<Submission[]>('/api/v1/submissions/my-submissions', { token: session.token });
+        if (!cancelled) setSubmissions(data);
+      } catch (e: any) {
+        if (!cancelled) setError(e.message);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    go();
+    return () => { cancelled = true; };
+  }, [session?.token, trigger]);
+
+  return { submissions, isLoading, error, refresh };
+}
+
+export function useAssignmentSubmissions(assignmentId: number) {
+  const { session } = useAuth();
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [trigger, setTrigger] = useState(0);
+  const refresh = useCallback(() => setTrigger((t) => t + 1), []);
+
+  useEffect(() => {
+    if (!session?.token || !assignmentId) { setIsLoading(false); return; }
+    let cancelled = false;
+    const go = async () => {
+      setIsLoading(true); setError(null);
+      try {
+        const data = await apiFetch<Submission[]>(`/api/v1/submissions/assignment/${assignmentId}/all`, { token: session.token });
+        if (!cancelled) setSubmissions(data);
+      } catch (e: any) {
+        if (!cancelled) setError(e.message);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    go();
+    return () => { cancelled = true; };
+  }, [session?.token, assignmentId, trigger]);
+
+  return { submissions, isLoading, error, refresh };
+}
