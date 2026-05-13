@@ -43,6 +43,8 @@ def get_my_subjects(
     rows = (
         db.query(
             SubjectLoad.subject_load_id,
+            SubjectLoad.class_id,
+            Subject.subject_id,
             Subject.subject_name,
             Subject.subject_codename,
             func.concat(AcademicStaff.first_name, " ", AcademicStaff.last_name).label("teacher_name"),
@@ -71,6 +73,8 @@ def get_my_subjects(
     return [
         {
             "subject_load_id":    row.subject_load_id,
+            "class_id":           row.class_id,
+            "subject_id":         row.subject_id,
             "subject_name":       row.subject_name,
             "subject_codename":   row.subject_codename,
             "teacher_name":       row.teacher_name,

@@ -81,7 +81,8 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "role": role,
         "user_id": str(result.user_id),
-        "full_name": result.full_name,
+        # coalesce can yield NULL if names are missing — empty string keeps response_model valid
+        "full_name": (result.full_name or "").strip() or "User",
         "login_log_id": log_entry.login_id,
     }
 
