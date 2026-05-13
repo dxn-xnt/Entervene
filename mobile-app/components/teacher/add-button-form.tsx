@@ -1,15 +1,23 @@
 import React from "react";
-import { TouchableOpacity, Text, StyleSheet } from "react-native";
-import { AppColors, NeoShadow } from "@/constants/theme";
+import { TouchableOpacity, StyleSheet } from "react-native";
+import { AppColors } from "@/constants/theme";
 import { Ionicons } from "@expo/vector-icons";
 
 interface AddButtonProps {
   onPress: () => void;
+  /** Match material card height when used beside file previews */
+  size?: "default" | "large";
 }
 
-export default function AddButton({ onPress }: AddButtonProps) {
+export default function AddButton({ onPress, size = "default" }: AddButtonProps) {
+  const dim = size === "large" ? 120 : 50;
+  const h = size === "large" ? 120 : 45;
   return (
-    <TouchableOpacity style={styles.button} onPress={onPress}>
+    <TouchableOpacity
+      style={[styles.button, { width: dim, height: h }]}
+      onPress={onPress}
+      activeOpacity={0.85}
+    >
       <Ionicons name="add" size={24} color={AppColors.black} />
     </TouchableOpacity>
   );
@@ -17,18 +25,11 @@ export default function AddButton({ onPress }: AddButtonProps) {
 
 const styles = StyleSheet.create({
   button: {
-    width: 50,
-    height: 45,
     borderWidth: 1,
     borderRadius: 12,
     borderColor: AppColors.black,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: AppColors.background,
-  },
-  icon: {
-    fontSize: 24,
-    fontWeight: "300",
-    color: AppColors.black,
   },
 });

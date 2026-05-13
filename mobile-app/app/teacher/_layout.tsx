@@ -9,20 +9,27 @@ export default function TeacherLayout() {
     <DrawerProvider>
       <View style={styles.container}>
         <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+          {/* Main nav screens */}
           <Stack.Screen name="dashboard" />
-
-          {/* Classes and related screens (Navigation)  */}
           <Stack.Screen name="classes" />
-          
-
-          {/* Classworks and related screens (Navigation)  */}
           <Stack.Screen name="classworks" />
-          <Stack.Screen name="new-classwork-form" />
-          <Stack.Screen name="create-classwork-material" />
-
-          <Stack.Screen name="interventions" />
+          <Stack.Screen name="lessons" />
           <Stack.Screen name="grades" />
           <Stack.Screen name="notifications" />
+
+          {/* Classwork creation flow */}
+          <Stack.Screen name="create-classwork" />
+          <Stack.Screen name="classwork-detail" />
+          <Stack.Screen name="grade-submission" />
+          <Stack.Screen name="submissions" />
+
+          {/* Lesson screens */}
+          <Stack.Screen name="lesson-detail" />
+          <Stack.Screen name="create-lesson" />
+
+          {/* Subject / class drill-downs */}
+          <Stack.Screen name="classes-subject" />
+          <Stack.Screen name="subject-detail" />
         </Stack>
         <DrawerMenu role="teacher" />
       </View>

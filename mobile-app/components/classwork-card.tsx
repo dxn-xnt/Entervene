@@ -1,6 +1,6 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
-import { AppColors, NeoShadow } from "@/constants/theme";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { AppColors, NeoShadow, Borders } from "@/constants/theme";
 import Badge from "@/components/badge";
 
 interface BadgeItem {
@@ -11,54 +11,65 @@ interface ClassworkCardProps {
   title: string;
   createdAt: string;
   badges?: BadgeItem[];
+  onPress?: () => void;
 }
 
-export default function ClassworkCard({ title, createdAt, badges = [] }: ClassworkCardProps) {
+export default function ClassworkCard({
+  title,
+  createdAt,
+  badges = [],
+  onPress,
+}: ClassworkCardProps) {
+  const Wrapper = onPress ? TouchableOpacity : View;
+
   return (
-    <View style={styles.card}>
-      <View style={styles.cardContent}>
-        <Text style={styles.cardText}>{title}</Text>
-        <Text>{createdAt}</Text>
-      </View>
+    <Wrapper onPress={onPress} activeOpacity={0.8} style={styles.card}>
+      {/* Title row */}
+      <Text style={styles.title} numberOfLines={2}>
+        {title}
+      </Text>
+
+      {/* Date */}
+      <Text style={styles.date}>{createdAt}</Text>
+
+      {/* Badges */}
       {badges.length > 0 && (
-        <View style={styles.cardBadge}>
+        <View style={styles.badgeRow}>
           {badges.map((b, i) => (
             <Badge key={i} label={b.label} />
           ))}
         </View>
       )}
-    </View>
+    </Wrapper>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
+    padding: 14,
     borderWidth: 1,
     borderColor: AppColors.border,
-    borderRadius: 8,
-    backgroundColor: AppColors.background,
+    borderRadius: 10,
+    backgroundColor: AppColors.card,
     shadowColor: AppColors.black,
-    ...NeoShadow.lg,
-  },
-  cardContent: {
-    flex: 1,
-    flexDirection: "column",
+    ...NeoShadow.sm,
     gap: 6,
   },
-  cardBadge: {
-    flexDirection: "row",
-    justifyContent: "flex-start",
-    alignItems: "flex-end",
-    gap: 8,
-    marginTop: "auto",
-  },
-  cardText: {
-    fontSize: 24,
-    fontWeight: "bold",
+  title: {
+    fontSize: 15,
+    fontWeight: "700",
     color: AppColors.foreground,
+    flexShrink: 1,
+    lineHeight: 22,
+  },
+  date: {
+    fontSize: 12,
+    color: AppColors.mutedForeground,
+  },
+  badgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
   },
 });
