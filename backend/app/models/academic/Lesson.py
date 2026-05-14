@@ -13,6 +13,7 @@ class Lesson(Base):
     content            = Column(Text)
     order_index        = Column(Integer, default=1)
     is_published       = Column(Boolean, default=False)
+    is_draft           = Column(Boolean, default=True)
     is_locked          = Column(Boolean, default=False)
     created_by_staff_id = Column(String(20), ForeignKey("academic_staff.staff_id", ondelete="SET NULL"), nullable=True)
     subject_id         = Column(Integer, ForeignKey("subject.subject_id", ondelete="CASCADE"), nullable=False)

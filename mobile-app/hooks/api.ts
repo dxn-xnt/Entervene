@@ -44,6 +44,29 @@
     webFile?: Blob;
   };
 
+  const appendUploadableFile = async (
+    form: FormData,
+    fieldName: string,
+    file: UploadableFile,
+  ) => {
+    if (file.webFile) {
+      form.append(fieldName, file.webFile, file.name);
+      return;
+    }
+
+    if (typeof window !== 'undefined' && /^(blob:|data:|https?:)/.test(file.uri)) {
+      const blob = await fetch(file.uri).then((res) => res.blob());
+      form.append(fieldName, blob, file.name);
+      return;
+    }
+
+    form.append(fieldName, {
+      uri: file.uri,
+      name: file.name,
+      type: file.type,
+    } as any);
+  };
+
   const resolveApiError = (err: any, fallback: string): string => {
     if (typeof err?.detail === 'string') return err.detail;
     if (Array.isArray(err?.detail)) {
@@ -66,16 +89,7 @@
     const form = new FormData();
 
     for (const file of files) {
-      // Web requires a Blob/File instance; native accepts { uri, name, type }.
-      if (file.webFile) {
-        form.append('files', file.webFile, file.name);
-      } else {
-        form.append('files', {
-          uri: file.uri,
-          name: file.name,
-          type: file.type,
-        } as any);
-      }
+      await appendUploadableFile(form, 'files', file);
     }
 
     if (additionalFields) {
@@ -109,15 +123,7 @@
     token: string,
   ): Promise<T> {
     const form = new FormData();
-    if (file.webFile) {
-      form.append('file', file.webFile, file.name);
-    } else {
-      form.append('file', {
-        uri: file.uri,
-        name: file.name,
-        type: file.type,
-      } as any);
-    }
+    await appendUploadableFile(form, 'file', file);
 
     const res = await fetch(`${API_URL}${path}`, {
       method: 'POST',

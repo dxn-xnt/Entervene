@@ -19,6 +19,32 @@ export type Submission = {
   created_at: string | null;
 };
 
+export type SubmissionTrackingStudent = {
+  student_id: string;
+  student_name: string;
+  student_lrn: string | null;
+  email: string | null;
+  status: string;
+  submitted_at: string | null;
+  submission_id: number | null;
+  attempt_count: number;
+  grade: number | null;
+  attachment_count: number;
+};
+
+export type AssignmentSubmissionTracking = {
+  classwork_assignment_id: number;
+  classwork_id: number;
+  classwork_title: string | null;
+  class_id: number;
+  due_date: string | null;
+  total_students: number;
+  submitted_count: number;
+  missing_count: number;
+  submitted: SubmissionTrackingStudent[];
+  missing: SubmissionTrackingStudent[];
+};
+
 export function useStudentSubmissions() {
   const { session } = useAuth();
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -75,4 +101,36 @@ export function useAssignmentSubmissions(assignmentId: number) {
   }, [session?.token, assignmentId, trigger]);
 
   return { submissions, isLoading, error, refresh };
+}
+
+export function useAssignmentSubmissionTracking(assignmentId: number) {
+  const { session } = useAuth();
+  const [tracking, setTracking] = useState<AssignmentSubmissionTracking | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [trigger, setTrigger] = useState(0);
+  const refresh = useCallback(() => setTrigger((t) => t + 1), []);
+
+  useEffect(() => {
+    if (!session?.token || !assignmentId) { setIsLoading(false); return; }
+    let cancelled = false;
+    const go = async () => {
+      setIsLoading(true); setError(null);
+      try {
+        const data = await apiFetch<AssignmentSubmissionTracking>(
+          `/api/v1/submissions/assignment/${assignmentId}/tracking`,
+          { token: session.token },
+        );
+        if (!cancelled) setTracking(data);
+      } catch (e: any) {
+        if (!cancelled) setError(e.message);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    go();
+    return () => { cancelled = true; };
+  }, [session?.token, assignmentId, trigger]);
+
+  return { tracking, isLoading, error, refresh };
 }

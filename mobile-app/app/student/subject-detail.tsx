@@ -202,17 +202,19 @@ export default function SubjectDetail() {
                   })}
                   onPress={() =>
                     router.push({
-                      pathname: '/student/lesson-view' as any,
-                      params: {
-                        lesson_id:    l.lesson_id,
-                        subject:      params.subject,
-                        lessonTitle:  l.title,
-                        description:  l.description ?? '',
-                        scheduledDate: new Date(l.created_at).toLocaleDateString('en-US', {
-                          month: 'long', day: 'numeric', year: 'numeric',
-                        }),
-                      },
-                    })
+                    pathname: '/student/lesson-view' as any,
+                    params: {
+                      lesson_id:     l.lesson_id,
+                      class_id:      classId,        // ← add this
+                      subject_id:    subjectId,      // ← add this too (good to have)
+                      subject:       params.subject,
+                      lessonTitle:   l.title,
+                      description:   l.description ?? '',
+                      scheduledDate: new Date(l.created_at).toLocaleDateString('en-US', {
+                        month: 'long', day: 'numeric', year: 'numeric',
+                      }),
+                    },
+                  })
                   }
                 />
               ))

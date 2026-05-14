@@ -13,6 +13,7 @@ class ClassworkCreate(BaseModel):
     total_points: Optional[float] = 100
     subject_id: int
     is_published: Optional[bool] = False
+    lesson_ids: Optional[list[int]] = None
 
 
 class ClassworkUpdate(BaseModel):

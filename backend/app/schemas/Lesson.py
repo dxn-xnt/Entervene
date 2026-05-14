@@ -11,6 +11,7 @@ class LessonCreate(BaseModel):
     subject_id: int
     order_index: Optional[int] = 1
     is_published: Optional[bool] = False
+    is_draft: Optional[bool] = True
 
 
 class LessonUpdate(BaseModel):
@@ -19,6 +20,7 @@ class LessonUpdate(BaseModel):
     content: Optional[str] = None
     order_index: Optional[int] = None
     is_published: Optional[bool] = None
+    is_draft: Optional[bool] = None
 
 
 class LessonAttachmentResponse(BaseModel):
@@ -36,6 +38,7 @@ class LessonResponse(BaseModel):
     content: Optional[str]
     order_index: int
     is_published: bool
+    is_draft: bool
     is_locked: bool
     subject_id: int
     subject_name: Optional[str] = None
