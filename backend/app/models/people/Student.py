@@ -18,9 +18,9 @@ class Student(Base):
     email             = Column(String(255), unique=True)
     address           = Column(Text)
     account_status    = Column(String(50), default="active")
-    guardian_id       = Column(UUID(as_uuid=True))
+    # guardian_id       = Column(UUID(as_uuid=True))   # not in DB yet
     academic_level_id = Column(Integer)
-    import_log_id     = Column(Integer)
+    # import_log_id     = Column(Integer)              # not in DB yet
     user_id           = Column(UUID(as_uuid=True), unique=True)
 
     __table_args__ = (

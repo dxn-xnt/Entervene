@@ -8,39 +8,70 @@ import {
   StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { AppColors, NeoShadow } from "@/constants/theme";
+import { AppColors } from "@/constants/theme";
 
-interface FormDropdownProps {
-  options: string[];
+interface DropdownOption {
+  label: string;
   value: string;
-  onChange: (value: string) => void;
 }
 
-export default function FormDropdown({ options, value, onChange }: FormDropdownProps) {
+interface FormDropdownProps {
+  options: DropdownOption[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}
+
+export default function FormDropdown({
+  options,
+  value,
+  onChange,
+  placeholder = "Select an option",
+}: FormDropdownProps) {
   const [open, setOpen] = useState(false);
+
+  const selectedOption = options.find(
+    (option) => option.value === value
+  );
 
   return (
     <View style={styles.wrapper}>
-      <TouchableOpacity style={styles.dropdown} onPress={() => setOpen(true)}>
-        <Text style={styles.selectedText}>{value || "Select an option"}</Text>
-        <Ionicons name="chevron-down" size={18} color={AppColors.black} />
+      <TouchableOpacity
+        style={styles.dropdown}
+        onPress={() => setOpen(true)}
+      >
+        <Text style={styles.selectedText}>
+          {selectedOption?.label || placeholder}
+        </Text>
+
+        <Ionicons
+          name="chevron-down"
+          size={18}
+          color={AppColors.black}
+        />
       </TouchableOpacity>
 
       <Modal visible={open} transparent animationType="fade">
-        <TouchableOpacity style={styles.overlay} onPress={() => setOpen(false)}>
+        <TouchableOpacity
+          style={styles.overlay}
+          onPress={() => setOpen(false)}
+          activeOpacity={1}
+        >
           <View style={styles.optionList}>
             <FlatList
               data={options}
-              keyExtractor={(item) => item}
+              keyExtractor={(item) => item.value}
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.option}
                   onPress={() => {
-                    onChange(item);
+                    onChange(item.value);
                     setOpen(false);
                   }}
                 >
-                  <Text style={styles.optionText}>{item}</Text>
+                  <Text style={styles.optionText}>
+                    {item.label}
+                  </Text>
                 </TouchableOpacity>
               )}
             />
@@ -52,9 +83,10 @@ export default function FormDropdown({ options, value, onChange }: FormDropdownP
 }
 
 const styles = StyleSheet.create({
-  // wrapper: {
-  //   gap: 6,
-  // },
+  wrapper: {
+    gap: 6,
+  },
+
   dropdown: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -65,16 +97,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
+
   selectedText: {
     fontSize: 14,
     color: AppColors.black,
   },
+
   overlay: {
     flex: 1,
     justifyContent: "center",
     padding: 24,
     backgroundColor: "rgba(0,0,0,0.3)",
   },
+
   optionList: {
     backgroundColor: AppColors.background,
     borderRadius: 10,
@@ -82,12 +117,14 @@ const styles = StyleSheet.create({
     borderColor: AppColors.black,
     overflow: "hidden",
   },
+
   option: {
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: AppColors.border,
   },
+
   optionText: {
     fontSize: 14,
   },

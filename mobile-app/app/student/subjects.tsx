@@ -52,10 +52,12 @@ const Subjects = () => {
                   pathname: '/student/subject-detail' as any,
                   params: {
                     subject_load_id: s.subject_load_id,
-                    subject: s.subject_name,
-                    teacher: s.teacher_name,
-                    period: s.period_name,
-                    section: s.section_name,
+                    class_id:        s.class_id,
+                    subject_id:      s.subject_id,
+                    subject:         s.subject_name,
+                    teacher:         s.teacher_name,
+                    period:          s.period_name,
+                    section:         s.section_name,
                   },
                 })
               }

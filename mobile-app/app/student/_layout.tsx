@@ -14,14 +14,23 @@ export default function StudentLayout() {
             animation: 'slide_from_right',
           }}
         >
+          {/* Main nav screens */}
           <Stack.Screen name="storyboard" />
+          <Stack.Screen name="subjects" />
+          <Stack.Screen name="grades" />
           <Stack.Screen name="todo" />
           <Stack.Screen name="notifications" />
-          <Stack.Screen name="grades" />
-          <Stack.Screen name="subject-grade" />
-          <Stack.Screen name="subjects" />
+
+          {/* Subject drill-down */}
           <Stack.Screen name="subject-detail" />
+          <Stack.Screen name="subject-grade" />
+
+          {/* Lesson viewer */}
           <Stack.Screen name="lesson-view" />
+
+          {/* Classwork viewer & submission */}
+          <Stack.Screen name="classwork-view" />
+          <Stack.Screen name="classwork-submit" />
         </Stack>
         <DrawerMenu />
       </View>
@@ -30,7 +39,5 @@ export default function StudentLayout() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
 });

@@ -2,6 +2,7 @@ import React from "react";
 import { TouchableOpacity, Text, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AppColors } from "@/constants/theme";
+import { ClassworkUi } from "@/constants/classwork-ui";
 
 interface ClassworkTypeCardProps {
   label: string;
@@ -29,14 +30,16 @@ export default function ClassworkTypeCard({
 
 const styles = StyleSheet.create({
   card: {
-    width: "100%",
+    width: "48%",
+    minWidth: 140,
+    flexGrow: 1,
     paddingVertical: 14,
     paddingHorizontal: 10,
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: 12,
     borderColor: AppColors.black,
     gap: 6,
-    backgroundColor: "#7ABA78",
+    backgroundColor: ClassworkUi.cardGreen,
   },
   row: {
     flexDirection: "row",

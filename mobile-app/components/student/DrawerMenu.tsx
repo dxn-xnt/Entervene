@@ -3,12 +3,13 @@ import {
   View,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   Animated,
   Dimensions,
   StyleSheet,
-  Pressable,
   Modal,
   ActivityIndicator,
+  Pressable,
 } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,11 +31,11 @@ type MenuItem = {
 };
 
 const menuItems: MenuItem[] = [
-  { id: 'storyboard', label: 'Study Board', icon: 'grid-outline', route: '/student/storyboard' },
-  { id: 'subjects', label: 'Subjects', icon: 'book-outline', route: '/student/subjects' },
-  { id: 'grades', label: 'Grades', icon: 'stats-chart-outline', route: '/student/grades' },
-  { id: 'todo', label: 'To Do', icon: 'list-outline', route: '/student/todo', badge: 12 },
-  { id: 'notifications', label: 'Notifications', icon: 'notifications-outline', route: '/student/notifications' },
+  { id: 'storyboard',    label: 'Study Board',   icon: 'grid-outline',          route: '/student/storyboard' },
+  { id: 'subjects',      label: 'Subjects',       icon: 'book-outline',          route: '/student/subjects' },
+  { id: 'grades',        label: 'Grades',         icon: 'stats-chart-outline',   route: '/student/grades' },
+  { id: 'todo',          label: 'To Do',          icon: 'list-outline',          route: '/student/todo' },
+  { id: 'notifications', label: 'Notifications',  icon: 'notifications-outline', route: '/student/notifications' },
 ];
 
 const getInitials = (fullName: string): string => {
@@ -49,87 +50,79 @@ const DrawerMenu = () => {
   const { logout, session } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
+
+  const slideAnim   = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
-  const [userMenuVisible, setUserMenuVisible] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
+
+  const [modalVisible,    setModalVisible]    = useState(false);
+  const [userPanelVisible, setUserPanelVisible] = useState(false);
+  const [loggingOut,       setLoggingOut]       = useState(false);
+
   const { activeQuarter } = useStudentSubjects();
 
   useEffect(() => {
     if (isOpen) {
-      Animated.parallel([
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          tension: 65,
-          friction: 11,
-          useNativeDriver: true,
-        }),
-        Animated.timing(overlayAnim, {
-          toValue: 1,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-      ]).start();
+      setModalVisible(true);
+      requestAnimationFrame(() => {
+        Animated.parallel([
+          Animated.spring(slideAnim,   { toValue: 0,             tension: 65, friction: 11, useNativeDriver: true }),
+          Animated.timing(overlayAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+        ]).start();
+      });
     } else {
+      setUserPanelVisible(false);
       Animated.parallel([
-        Animated.spring(slideAnim, {
-          toValue: -DRAWER_WIDTH,
-          tension: 65,
-          friction: 11,
-          useNativeDriver: true,
-        }),
-        Animated.timing(overlayAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
+        Animated.spring(slideAnim,   { toValue: -DRAWER_WIDTH, tension: 65, friction: 11, useNativeDriver: true }),
+        Animated.timing(overlayAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+      ]).start(({ finished }) => {
+        if (finished) setModalVisible(false);
+      });
     }
   }, [isOpen]);
 
   const handleNavigate = (route: string) => {
     closeDrawer();
-    setTimeout(() => {
-      router.push(route as any);
-    }, 100);
+    setTimeout(() => router.push(route as any), 280);
   };
 
   const handleLogout = async () => {
     setLoggingOut(true);
-    setUserMenuVisible(false);
+    setUserPanelVisible(false);
     closeDrawer();
     await logout();
     router.replace('/login');
   };
 
-  const isActiveRoute = (route: string) => {
-    return pathname === route || pathname.startsWith(route + '/');
-  };
+  const isActiveRoute = (route: string) =>
+    pathname === route || pathname.startsWith(route + '/');
 
   const initials = session?.full_name ? getInitials(session.full_name) : '?';
 
   return (
-    <>
-      {/* Overlay */}
-      {isOpen && (
-        <Animated.View style={[styles.overlay, { opacity: overlayAnim }]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={closeDrawer} />
-        </Animated.View>
-      )}
+    <Modal
+      visible={modalVisible}
+      transparent
+      animationType="none"
+      onRequestClose={closeDrawer}
+      statusBarTranslucent
+    >
+      {/* Dim overlay — tap to close */}
+      <TouchableWithoutFeedback onPress={closeDrawer}>
+        <Animated.View style={[styles.overlay, { opacity: overlayAnim }]} />
+      </TouchableWithoutFeedback>
 
-      {/* Drawer */}
-      <Animated.View
-        style={[styles.drawer, { transform: [{ translateX: slideAnim }] }]}
-      >
+      {/* Sliding drawer panel */}
+      <Animated.View style={[styles.drawer, { transform: [{ translateX: slideAnim }] }]}>
         <SafeAreaView style={styles.drawerInner} edges={['top', 'bottom']}>
-          {/* Logo / Brand */}
+
+          {/* Brand */}
           <View style={styles.brandSection}>
             <View style={styles.logoBox}>
               <Text style={styles.logoText}>E</Text>
             </View>
             <View>
               <Text style={styles.brandName}>ENTERVENE</Text>
-              <Text style={styles.brandTagline}>MSTS EDUHUB</Text>
+              <Text style={styles.brandTagline}>MSTS EDUHUB · STUDENT</Text>
             </View>
           </View>
 
@@ -143,7 +136,6 @@ const DrawerMenu = () => {
             <Ionicons name="chevron-down" size={16} color={AppColors.foreground} />
           </TouchableOpacity>
 
-          {/* Menu Label */}
           <Text style={styles.menuLabel}>Menu</Text>
 
           {/* Menu Items */}
@@ -177,10 +169,10 @@ const DrawerMenu = () => {
 
           <View style={{ flex: 1 }} />
 
-          {/* User Section — tapping opens the popup menu */}
+          {/* User Section */}
           <TouchableOpacity
             style={styles.userSection}
-            onPress={() => setUserMenuVisible(true)}
+            onPress={() => setUserPanelVisible((v) => !v)}
             activeOpacity={0.7}
           >
             <View style={styles.avatar}>
@@ -194,78 +186,50 @@ const DrawerMenu = () => {
                 {session?.email ?? ''}
               </Text>
             </View>
-            <Ionicons name="ellipsis-vertical" size={18} color={AppColors.mutedForeground} />
+            <Ionicons
+              name={userPanelVisible ? 'chevron-up' : 'ellipsis-vertical'}
+              size={18}
+              color={AppColors.mutedForeground}
+            />
           </TouchableOpacity>
+
+          {/* Inline user action panel */}
+          {userPanelVisible && (
+            <View style={styles.userPanel}>
+              <Pressable
+                style={({ pressed }) => [styles.panelItem, pressed && styles.panelItemPressed]}
+                onPress={() => setUserPanelVisible(false)}
+              >
+                <Ionicons name="person-circle-outline" size={18} color={AppColors.foreground} />
+                <Text style={styles.panelItemText}>Account</Text>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [styles.panelItem, pressed && styles.panelItemPressed]}
+                onPress={() => { setUserPanelVisible(false); handleNavigate('/student/notifications'); }}
+              >
+                <Ionicons name="notifications-outline" size={18} color={AppColors.foreground} />
+                <Text style={styles.panelItemText}>Notifications</Text>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [styles.panelItem, pressed && styles.panelItemPressed]}
+                onPress={handleLogout}
+                disabled={loggingOut}
+              >
+                {loggingOut
+                  ? <ActivityIndicator size="small" color={AppColors.destructive} />
+                  : <Ionicons name="log-out-outline" size={18} color={AppColors.destructive} />
+                }
+                <Text style={[styles.panelItemText, styles.panelItemDestructive]}>
+                  {loggingOut ? 'Logging out…' : 'Log out'}
+                </Text>
+              </Pressable>
+            </View>
+          )}
         </SafeAreaView>
       </Animated.View>
-
-      {/* User Popup Menu */}
-      <Modal
-        visible={userMenuVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setUserMenuVisible(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setUserMenuVisible(false)}>
-          <View style={styles.popupMenu}>
-            {/* User info header inside popup */}
-            <View style={styles.popupHeader}>
-              <View style={styles.popupAvatar}>
-                <Text style={styles.avatarInitials}>{initials}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.popupName} numberOfLines={1}>
-                  {session?.full_name ?? 'Unknown'}
-                </Text>
-                <Text style={styles.popupEmail} numberOfLines={1}>
-                  {session?.email ?? ''}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.popupDivider} />
-
-            {/* Account */}
-            <Pressable
-              style={({ pressed }) => [styles.popupItem, pressed && styles.popupItemPressed]}
-              onPress={() => {
-                setUserMenuVisible(false);
-              }}
-            >
-              <Ionicons name="person-circle-outline" size={18} color={AppColors.foreground} />
-              <Text style={styles.popupItemText}>Account</Text>
-            </Pressable>
-
-            <Pressable
-              style={({ pressed }) => [styles.popupItem, pressed && styles.popupItemPressed]}
-              onPress={() => {
-                setUserMenuVisible(false);
-                handleNavigate('/student/notifications');
-              }}
-            >
-              <Ionicons name="notifications-outline" size={18} color={AppColors.foreground} />
-              <Text style={styles.popupItemText}>Notifications</Text>
-            </Pressable>
-
-
-            <Pressable
-              style={({ pressed }) => [styles.popupItem, pressed && styles.popupItemPressed]}
-              onPress={handleLogout}
-              disabled={loggingOut}
-            >
-              {loggingOut ? (
-                <ActivityIndicator size="small" color={AppColors.destructive} />
-              ) : (
-                <Ionicons name="log-out-outline" size={18} color={AppColors.destructive} />
-              )}
-              <Text style={[styles.popupItemText, styles.popupItemDestructive]}>
-                {loggingOut ? 'Logging out…' : 'Log out'}
-              </Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
-    </>
+    </Modal>
   );
 };
 
@@ -273,26 +237,20 @@ const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    zIndex: 90,
   },
   drawer: {
     position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
+    top: 0, bottom: 0, left: 0,
     width: DRAWER_WIDTH,
     backgroundColor: AppColors.background,
     borderRightWidth: Borders.width,
     borderRightColor: AppColors.border,
-    zIndex: 100,
     elevation: 20,
   },
   drawerInner: {
     flex: 1,
     paddingTop: Spacing.md,
   },
-
-  // Brand
   brandSection: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -301,35 +259,17 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   logoBox: {
-    width: 44,
-    height: 44,
+    width: 44, height: 44,
     backgroundColor: AppColors.primary,
     borderWidth: Borders.width,
     borderColor: AppColors.border,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: AppColors.border,
     ...NeoShadow.sm,
   },
-  logoText: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: AppColors.primaryForeground,
-  },
-  brandName: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: AppColors.foreground,
-    letterSpacing: 1,
-  },
-  brandTagline: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: AppColors.mutedForeground,
-    letterSpacing: 0.5,
-  },
-
-  // Quarter Selector
+  logoText: { fontSize: 22, fontWeight: '900', color: AppColors.primaryForeground },
+  brandName: { fontSize: 16, fontWeight: '900', color: AppColors.foreground, letterSpacing: 1 },
+  brandTagline: { fontSize: 10, fontWeight: '600', color: AppColors.mutedForeground, letterSpacing: 0.5 },
   quarterSelector: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -342,167 +282,55 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
     marginHorizontal: Spacing.md,
     backgroundColor: AppColors.card,
-    shadowColor: AppColors.border,
     ...NeoShadow.xs,
   },
-  quarterText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: AppColors.foreground,
-  },
-
-  // Menu
+  quarterText: { fontSize: 13, fontWeight: '600', color: AppColors.foreground },
   menuLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: AppColors.mutedForeground,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 8,
-    marginHorizontal: Spacing.md,
+    fontSize: 11, fontWeight: '700', color: AppColors.mutedForeground,
+    textTransform: 'uppercase', letterSpacing: 1,
+    marginBottom: 8, marginHorizontal: Spacing.md,
   },
-  menuList: {
-    gap: 4,
-  },
+  menuList: { gap: 4 },
   menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 12, paddingVertical: 12,
   },
-  menuItemActive: {
-    backgroundColor: AppColors.primary,
-    borderBottomWidth: 2,
-    borderTopWidth: 2,
-    borderBottomColor: AppColors.border,
-
-  },
-  menuItemText: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-    color: AppColors.mutedForeground,
-  },
-  menuItemTextActive: {
-    fontWeight: '700',
-    color: AppColors.foreground,
-  },
+  menuItemActive: { backgroundColor: AppColors.muted },
+  menuItemText: { flex: 1, fontSize: 15, fontWeight: '500', color: AppColors.mutedForeground },
+  menuItemTextActive: { fontWeight: '700', color: AppColors.foreground },
   badge: {
-    backgroundColor: AppColors.primary,
-    borderWidth: 1.5,
-    borderColor: AppColors.border,
-    borderRadius: 10,
-    minWidth: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 6,
+    backgroundColor: AppColors.primary, borderWidth: 1.5, borderColor: AppColors.border,
+    borderRadius: 10, minWidth: 24, height: 24,
+    justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6,
   },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: AppColors.primaryForeground,
-  },
-
-  // User section (bottom of drawer)
+  badgeText: { fontSize: 11, fontWeight: '800', color: AppColors.primaryForeground },
   userSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
     padding: Spacing.md,
-    borderTopWidth: Borders.width,
-    borderTopColor: AppColors.border,
-    marginBottom: Spacing.md,
+    borderTopWidth: Borders.width, borderTopColor: AppColors.border,
+    marginBottom: Spacing.sm,
   },
   avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
-    borderWidth: Borders.width,
-    borderColor: AppColors.border,
-    backgroundColor: AppColors.muted,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 38, height: 38, borderRadius: 8,
+    borderWidth: Borders.width, borderColor: AppColors.border,
+    backgroundColor: AppColors.muted, justifyContent: 'center', alignItems: 'center',
   },
-  avatarInitials: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: AppColors.foreground,
+  avatarInitials: { fontSize: 13, fontWeight: '700', color: AppColors.foreground },
+  userName: { fontSize: 14, fontWeight: '700', color: AppColors.foreground },
+  userEmail: { fontSize: 11, color: AppColors.mutedForeground },
+  userPanel: {
+    borderTopWidth: Borders.width, borderTopColor: AppColors.border,
+    marginBottom: Spacing.sm,
+    backgroundColor: AppColors.card, borderRadius: 8, overflow: 'hidden',
+    marginHorizontal: Spacing.md,
   },
-  userName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: AppColors.foreground,
+  panelItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 14, paddingVertical: 13,
   },
-  userEmail: {
-    fontSize: 11,
-    color: AppColors.mutedForeground,
-  },
-  popupItemPressed: {
-    backgroundColor: AppColors.accent,
-  },
-
-  // Popup modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    justifyContent: 'flex-end',
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 40,
-  },
-  popupMenu: {
-    backgroundColor: AppColors.card,
-    borderWidth: Borders.width,
-    borderColor: AppColors.border,
-    borderRadius: 10,
-    overflow: 'hidden',
-    ...NeoShadow.sm,
-  },
-  popupHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-  },
-  popupAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    borderWidth: Borders.width,
-    borderColor: AppColors.border,
-    backgroundColor: AppColors.muted,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  popupName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: AppColors.foreground,
-  },
-  popupEmail: {
-    fontSize: 11,
-    color: AppColors.mutedForeground,
-  },
-  popupDivider: {
-    height: Borders.width,
-    backgroundColor: AppColors.border,
-  },
-  popupItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-  },
-  popupItemText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: AppColors.foreground,
-  },
-  popupItemDestructive: {
-    color: AppColors.destructive,
-  },
+  panelItemPressed: { backgroundColor: AppColors.accent },
+  panelItemText: { fontSize: 14, fontWeight: '500', color: AppColors.foreground },
+  panelItemDestructive: { color: AppColors.destructive },
 });
 
 export default DrawerMenu;
