@@ -785,6 +785,54 @@ INSERT INTO user_account (user_id, email, password_hash, invitation_token, accou
 ('990c2844-c63f-85a8-e150-880099884444', 'admin@mnsts.edu.ph', 'hash_mnsts_admin_01', NULL, 'active', 'staff', 'ADM-2026-0001', '2026-05-03 00:15:51.099202+08', NULL, '2026-05-03 00:11:59.219496+08', '2026-05-03 00:11:59.219496+08')
 ON CONFLICT (user_id) DO NOTHING;
 
+-- Insert User Accounts for new students
+INSERT INTO user_account (user_id, email, password_hash, invitation_token, account_status, ref_type, ref_id, last_login, email_verified_at, created_at, updated_at) VALUES
+(gen_random_uuid(), 'maria.santos@student.ph', 'hash_poly_04', NULL, 'active', 'student', '234567890123', NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(gen_random_uuid(), 'jose.reyes@student.ph', 'hash_poly_05', NULL, 'active', 'student', '345678901234', NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(gen_random_uuid(), 'ana.gonzales@student.ph', 'hash_poly_06', NULL, 'active', 'student', '456789012345', NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(gen_random_uuid(), 'carlos.mendoza@student.ph', 'hash_poly_07', NULL, 'active', 'student', '567890123456', NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(gen_random_uuid(), 'luz.fernandez@student.ph', 'hash_poly_08', NULL, 'active', 'student', '678901234567', NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (email) DO NOTHING;
+
+-- Insert Student records
+INSERT INTO student (student_id, student_lrn, first_name, middle_name, last_name, suffix, gender, contact_number, email, address, account_status, guardian_id, academic_level_id, import_log_id, user_id) VALUES
+(gen_random_uuid(), '234567890123', 'Maria', 'Reyes', 'Santos', NULL, 'Female', '09123456789', 'maria.santos@student.ph', '123 Mabini St., Manila', 'active', NULL, 1, NULL, (SELECT user_id FROM user_account WHERE email = 'maria.santos@student.ph')),
+(gen_random_uuid(), '345678901234', 'Jose', 'Dela Cruz', 'Reyes', 'Jr.', 'Male', '09234567890', 'jose.reyes@student.ph', '456 Rizal Ave., Quezon City', 'active', NULL, 1, NULL, (SELECT user_id FROM user_account WHERE email = 'jose.reyes@student.ph')),
+(gen_random_uuid(), '456789012345', 'Ana', 'Mendoza', 'Gonzales', NULL, 'Female', '09345678901', 'ana.gonzales@student.ph', '789 Bonifacio St., Caloocan', 'active', NULL, 1, NULL, (SELECT user_id FROM user_account WHERE email = 'ana.gonzales@student.ph')),
+(gen_random_uuid(), '567890123456', 'Carlos', 'Aquino', 'Mendoza', NULL, 'Male', '09456789012', 'carlos.mendoza@student.ph', '321 Luna St., Pasay', 'active', NULL, 1, NULL, (SELECT user_id FROM user_account WHERE email = 'carlos.mendoza@student.ph')),
+(gen_random_uuid(), '678901234567', 'Luz', 'Villar', 'Fernandez', NULL, 'Female', '09567890123', 'luz.fernandez@student.ph', '654 Gomez St., Mandaluyong', 'active', NULL, 1, NULL, (SELECT user_id FROM user_account WHERE email = 'luz.fernandez@student.ph'))
+ON CONFLICT (student_lrn) DO NOTHING;
+
+-- Insert User Roles for new students
+INSERT INTO user_roles (user_id, role_id, assigned_at)
+SELECT user_id, 2, CURRENT_TIMESTAMP
+FROM user_account
+WHERE email IN (
+    'maria.santos@student.ph',
+    'jose.reyes@student.ph',
+    'ana.gonzales@student.ph',
+    'carlos.mendoza@student.ph',
+    'luz.fernandez@student.ph'
+)
+ON CONFLICT (user_id, role_id) DO NOTHING;
+
+-- Enroll new students in Class 1 (7-Sampaguita)
+INSERT INTO student_class (student_id, class_id, enrollment_status, enrolled_at)
+SELECT s.student_id, 1, 'enrolled', CURRENT_TIMESTAMP
+FROM student s
+WHERE s.email IN (
+    'maria.santos@student.ph',
+    'jose.reyes@student.ph',
+    'ana.gonzales@student.ph',
+    'carlos.mendoza@student.ph',
+    'luz.fernandez@student.ph'
+)
+AND NOT EXISTS (
+    SELECT 1 FROM student_class sc 
+    WHERE sc.student_id = s.student_id AND sc.class_id = 1
+);
+
+
 -- Insert User Roles
 INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES
 ('660f9511-f30c-52e5-b827-557766551111', 1, '2026-04-30 14:36:05.037726+08'),
