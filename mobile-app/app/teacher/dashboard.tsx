@@ -34,27 +34,6 @@ export default function TeacherDashboard() {
         </View>
 
         <View style={styles.body}>
-          <View style={styles.overviewCardsContainer}>
-            <View style={styles.overviewCard}>
-              <Text style={styles.cardTitle}>Subjects</Text>
-              <Text style={styles.cardValue}>3</Text>
-            </View>
-
-            <View style={styles.overviewCard}>
-              <Text style={styles.cardTitle}>Classes</Text>
-              <Text style={styles.cardValue}>7</Text>
-            </View>
-
-            <View style={styles.overviewCard}>
-              <Text style={styles.cardTitle}>Students</Text>
-              <Text style={styles.cardValue}>122</Text>
-            </View>
-
-            <View style={styles.overviewCard}>
-              <Text style={styles.cardTitle}>Ungraded</Text>
-              <Text style={styles.cardValue}>12</Text>
-            </View>
-          </View>
 
           {/* Class Activity  */}
           <View style={styles.container}>
@@ -166,39 +145,6 @@ const styles = StyleSheet.create({
     gap: 20,
   },
 
-  overviewCardsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-
-  overviewCard: {
-    flexGrow: 1,
-    flexBasis: "45%",
-
-    minWidth: 140,
-
-    borderWidth: 2,
-    borderColor: AppColors.border,
-    borderRadius: 8,
-
-    padding: 16,
-    backgroundColor: AppColors.background,
-    shadowColor: AppColors.black,
-    ...NeoShadow.lg,
-  },
-
-  cardTitle: {
-    fontSize: 14,
-    color: AppColors.foreground,
-    marginBottom: 8,
-  },
-
-  cardValue: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: AppColors.foreground,
-  },
   classActivityHeader: {
     alignItems: "center",
     flexDirection: "row",

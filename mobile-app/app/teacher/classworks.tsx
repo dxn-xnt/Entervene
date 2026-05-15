@@ -13,7 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useDrawer } from "@/context/DrawerContext";
 import { AppColors, Spacing, Borders, NeoShadow } from "@/constants/theme";
-import TabBar from "@/components/TabBar";
+import TabBar from "@/components/student/TabBar";
 import ClassworkCard from "@/components/classwork-card";
 import { useTeacherClassworks } from "@/hooks/useTeacherData";
 
@@ -129,8 +129,8 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: Spacing.lg,
     paddingVertical: 14,
-    borderBottomWidth: Borders.width,
-    borderBottomColor: AppColors.border,
+    borderBottomWidth: 1,
+    borderBottomColor: AppColors.muted,
   },
   title: {
     fontSize: 18,
