@@ -172,16 +172,16 @@ export default function TeacherSubjectDetail() {
     lessons.length === 0
       ? 0
       : Math.round(
-          (lessons.filter((l) => l.is_published).length / lessons.length) * 100,
-        );
+        (lessons.filter((l) => l.is_published).length / lessons.length) * 100,
+      );
 
   const cwPublishedPct =
     assignments.length === 0
       ? 0
       : Math.round(
-          (assignments.filter((a) => a.is_published).length / assignments.length) *
-            100,
-        );
+        (assignments.filter((a) => a.is_published).length / assignments.length) *
+        100,
+      );
 
   const sectionSinceLabel = useMemo(() => {
     const dates = lessons
@@ -215,10 +215,10 @@ export default function TeacherSubjectDetail() {
     const q = cwSearch.trim().toLowerCase();
     let list = q
       ? assignments.filter(
-          (a) =>
-            a.title.toLowerCase().includes(q) ||
-            a.classwork_type.toLowerCase().includes(q),
-        )
+        (a) =>
+          a.title.toLowerCase().includes(q) ||
+          a.classwork_type.toLowerCase().includes(q),
+      )
       : [...assignments];
     list.sort((a, b) => {
       const da = a.due_date ? new Date(a.due_date).getTime() : 0;
@@ -271,7 +271,7 @@ export default function TeacherSubjectDetail() {
       <View style={styles.topBar}>
         <View style={styles.topBarRow}>
           <TouchableOpacity onPress={openDrawer} activeOpacity={0.7} hitSlop={8}>
-            <Ionicons name="menu" size={24} color={AppColors.foreground} />
+            <Ionicons name="chevron-back" size={24} color={AppColors.foreground} />
           </TouchableOpacity>
           <View style={{ flex: 1, marginHorizontal: 8 }}>
             <TouchableOpacity
@@ -279,11 +279,7 @@ export default function TeacherSubjectDetail() {
               activeOpacity={0.7}
               style={styles.breadcrumbWrap}
             >
-              <Text style={styles.breadcrumbMuted}>Subjects</Text>
-              <Text style={styles.breadcrumbChevron}> › </Text>
-              <Text style={styles.breadcrumbActive} numberOfLines={1}>
-                {subjectName}
-              </Text>
+              <Text style={styles.backText}>Subjects</Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity
@@ -315,7 +311,7 @@ export default function TeacherSubjectDetail() {
           </View>
           <TouchableOpacity
             style={[styles.tabItem, styles.hiddenTab]}
-            onPress={() => {}}
+            onPress={() => { }}
             activeOpacity={0.8}
           >
             <Ionicons
@@ -439,7 +435,7 @@ export default function TeacherSubjectDetail() {
                           onPress={() =>
                             router.push({
                               pathname: "/teacher/lesson-detail" as any,
-                              params: { 
+                              params: {
                                 lesson_id: String(l.lesson_id),
                                 subject_load_id: params.subject_load_id,
                                 class_id: String(classId),
@@ -593,10 +589,9 @@ export default function TeacherSubjectDetail() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: AppColors.background },
   topBar: {
-    borderBottomWidth: Borders.width,
-    borderBottomColor: AppColors.border,
     paddingBottom: Spacing.sm,
   },
+  backText: { fontSize: 22, fontWeight: '700', color: AppColors.foreground },
   topBarRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -13,6 +13,19 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 const statusColors: Record<string, string> = { pending: '#f59e0b', submitted: '#3b82f6', graded: '#22c55e', late: '#ef4444' };
 
+const BANNER_BG = '#F6E9B2';
+const POINTS_BG = '#fef08a';
+const PUBLISHED_BG = '#dcfce7';
+const LOCKED_BG = '#fecaca';
+
+function cwTypeIcon(t: string): keyof typeof Ionicons.glyphMap {
+  const u = (t || '').toUpperCase();
+  if (u.includes('QUIZ') || u.includes('EXAM')) return 'help-circle-outline';
+  if (u.includes('ACTIVITY')) return 'code-slash-outline';
+  if (u.includes('ASSIGNMENT')) return 'laptop-outline';
+  return 'document-text-outline';
+}
+
 export default function ClassworkView() {
   const router = useRouter();
   const { session } = useAuth();
@@ -84,10 +97,51 @@ export default function ClassworkView() {
           <Text style={s.headerTitle}>Classwork</Text>
         </TouchableOpacity>
       </View>
+
       <ScrollView contentContainerStyle={s.content}>
-        <View style={s.typeBadge}><Text style={s.typeBadgeText}>{data.classwork_type}</Text></View>
-        <Text style={s.title}>{data.title}</Text>
-        <Text style={s.meta}>{data.teacher_name} · {data.total_points} pts</Text>
+        {/* ── Hero card ── */}
+        <View style={s.hero}>
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+            <View style={s.heroIconWrap}>
+              <Ionicons name={cwTypeIcon(data.classwork_type)} size={20} color={AppColors.foreground} />
+            </View>
+            <Text style={[s.heroTitle, { marginBottom: 8 }]}>{data.title}</Text>
+          </View>
+
+
+          <View style={s.typeRow}>
+            <View style={s.typeBadge}>
+              <Text style={s.typeBadgeText}>{data.classwork_type}</Text>
+            </View>
+            {data.classwork_category ? (
+              <View style={s.catBadge}>
+                <Text style={s.catBadgeText} numberOfLines={1}>
+                  {data.classwork_category.replace(/_/g, ' ')}
+                </Text>
+              </View>
+            ) : null}
+            <View style={s.pointsBadge}>
+              <Text style={s.pointsBadgeText}>{data.total_points} pts</Text>
+            </View>
+          </View>
+          <View style={s.metaRow}>
+            {data.subject_name ? (
+              <View style={s.metaChip}>
+                <Ionicons name="book-outline" size={14} color={AppColors.foreground} />
+                <Text style={s.metaChipText} numberOfLines={1}>
+                  {data.subject_name}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          <Text style={s.meta}>{data.teacher_name}</Text>
+          <View style={s.dateRow}>
+            <Text style={s.dateText}>
+              <Text style={s.dateLabel}>Assigned on </Text>
+              {new Date(data.due_date).toLocaleString()}
+            </Text>
+          </View>
+        </View>
         {data.due_date && <View style={s.dueRow}><Ionicons name="time-outline" size={16} color={AppColors.destructive} /><Text style={s.dueText}>Due: {new Date(data.due_date).toLocaleString()}</Text></View>}
         {data.instructions && <View style={s.section}><Text style={s.sectionLabel}>Instructions</Text><Text style={s.bodyText}>{data.instructions}</Text></View>}
         {data.attachments?.length > 0 && (
@@ -168,9 +222,7 @@ const s = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingVertical: 14, borderBottomWidth: Borders.width, borderBottomColor: AppColors.border },
   backRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: AppColors.foreground },
-  content: { padding: Spacing.lg, gap: 16, paddingBottom: 40 },
-  typeBadge: { backgroundColor: AppColors.primary, paddingHorizontal: 12, paddingVertical: 4, alignSelf: 'flex-start', borderWidth: 1, borderColor: AppColors.border },
-  typeBadgeText: { fontSize: 12, fontWeight: '800', color: AppColors.primaryForeground },
+  content: { padding: Spacing.md, gap: 16, paddingBottom: 40 },
   title: { fontSize: 22, fontWeight: '900', color: AppColors.foreground },
   meta: { fontSize: 13, color: AppColors.mutedForeground },
   dueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -191,4 +243,72 @@ const s = StyleSheet.create({
   submitButton: { backgroundColor: AppColors.primary, borderWidth: Borders.width, borderColor: AppColors.border, paddingVertical: 14, alignItems: 'center', ...NeoShadow.md },
   submitText: { fontSize: 16, fontWeight: '900', color: AppColors.primaryForeground },
   errorText: { fontSize: 14, color: AppColors.destructive, textAlign: 'center', marginTop: 24 },
+
+  hero: {
+    backgroundColor: BANNER_BG,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    borderRadius: 10,
+    padding: Spacing.md,
+    ...NeoShadow.md,
+  },
+  heroIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    backgroundColor: AppColors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    ...NeoShadow.sm,
+  },
+  heroTitle: { fontSize: 24, fontWeight: '700', color: AppColors.foreground, lineHeight: 28 },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  metaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: '100%',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: AppColors.white,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    borderRadius: 6,
+  },
+  metaChipText: { fontSize: 12, fontWeight: '700', color: AppColors.foreground, flexShrink: 1 },
+  metaPerson: { fontSize: 13, fontWeight: '600', color: AppColors.mutedForeground, flex: 1 },
+  dateRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
+  dateText: { fontSize: 12, color: AppColors.mutedForeground },
+  dateLabel: { fontWeight: '700', color: AppColors.foreground, marginRight: 4 },
+  typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10 },
+  catBadgeText: { fontSize: 11, fontWeight: '800', color: AppColors.foreground, textTransform: 'capitalize' },
+  typeBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: AppColors.primary,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    borderRadius: 6,
+  },
+  typeBadgeText: { fontSize: 12, fontWeight: '900', color: AppColors.primaryForeground },
+  pointsBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: AppColors.primary,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    borderRadius: 6,
+  },
+  pointsBadgeText: { fontSize: 12, fontWeight: '900', color: AppColors.foreground },
+  catBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: AppColors.primary,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    borderRadius: 6,
+  },
 });
