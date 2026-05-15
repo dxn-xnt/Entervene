@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   Text,
@@ -7,11 +7,14 @@ import {
   Platform,
   Modal,
 } from "react-native";
-import DateTimePicker, {
-  DateTimePickerEvent,
-} from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
 import { ClassworkUi } from "@/constants/classwork-ui";
+
+// Only import the native picker on native platforms
+let DateTimePicker: any = null;
+if (Platform.OS !== "web") {
+  DateTimePicker = require("@react-native-community/datetimepicker").default;
+}
 
 type Props = {
   label: string;
@@ -29,7 +32,95 @@ function formatDate(d: Date) {
   });
 }
 
-export default function DatePickerField({
+/** Format a Date as "YYYY-MM-DD" for the HTML date input value */
+function toInputValue(d: Date | null): string {
+  if (!d) return "";
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/** Format a Date as "YYYY-MM-DD" for the HTML date input min attribute */
+function toMinValue(d: Date | undefined): string {
+  return d ? toInputValue(d) : "";
+}
+
+function stripToLocalNoon(d: Date) {
+  const x = new Date(d);
+  x.setHours(12, 0, 0, 0);
+  return x;
+}
+
+// ─── Web picker ──────────────────────────────────────────────────────────────
+
+function WebDatePicker({
+  label,
+  value,
+  onChange,
+  minimumDate,
+  placeholder = "Tap to choose a date",
+}: Props) {
+  const inputRef = useRef<any>(null);
+
+  const handleChange = (e: any) => {
+    const v: string = e?.target?.value ?? e?.nativeEvent?.text ?? "";
+    if (!v) {
+      onChange(null);
+      return;
+    }
+    const [year, month, day] = v.split("-").map(Number);
+    const d = new Date(year, month - 1, day, 12, 0, 0, 0);
+    onChange(d);
+  };
+
+  return (
+    <View style={styles.wrap}>
+      <Text style={styles.label}>{label}</Text>
+      {/* Invisible but fully functional native HTML date input layered under the styled row */}
+      <View style={styles.webFieldWrap}>
+        <View style={styles.field} pointerEvents="none">
+          <Text style={[styles.valueText, !value && styles.placeholder]}>
+            {value ? formatDate(value) : placeholder}
+          </Text>
+          <Ionicons name="calendar-outline" size={20} color={ClassworkUi.title} />
+        </View>
+        {/* The real <input type="date"> sits on top, fully transparent */}
+        <input
+          ref={inputRef}
+          type="date"
+          value={toInputValue(value)}
+          min={toMinValue(minimumDate)}
+          onChange={handleChange}
+          style={{
+            position: "absolute",
+            inset: 0,
+            opacity: 0,
+            cursor: "pointer",
+            width: "100%",
+            height: "100%",
+            border: "none",
+            background: "transparent",
+          }}
+        />
+        {/* Clear button — rendered separately so it stays clickable above the input */}
+        {value && (
+          <TouchableOpacity
+            style={styles.clearBtn}
+            onPress={() => onChange(null)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="close-circle" size={18} color="#999" />
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+}
+
+// ─── Native picker ────────────────────────────────────────────────────────────
+
+function NativeDatePicker({
   label,
   value,
   onChange,
@@ -39,7 +130,7 @@ export default function DatePickerField({
   const [open, setOpen] = useState(false);
   const [iosDraft, setIosDraft] = useState<Date>(value ?? new Date());
 
-  const onPick = (event: DateTimePickerEvent, date?: Date) => {
+  const onPick = (event: any, date?: Date) => {
     if (Platform.OS === "android") {
       setOpen(false);
       if (event.type === "dismissed") return;
@@ -70,7 +161,7 @@ export default function DatePickerField({
         }}
         activeOpacity={0.85}
       >
-        <Text style={styles.valueText}>
+        <Text style={[styles.valueText, !value && styles.placeholder]}>
           {value ? formatDate(value) : placeholder}
         </Text>
         <Ionicons name="calendar-outline" size={20} color={ClassworkUi.title} />
@@ -118,15 +209,22 @@ export default function DatePickerField({
   );
 }
 
-function stripToLocalNoon(d: Date) {
-  const x = new Date(d);
-  x.setHours(12, 0, 0, 0);
-  return x;
+// ─── Exported component ───────────────────────────────────────────────────────
+
+export default function DatePickerField(props: Props) {
+  if (Platform.OS === "web") return <WebDatePicker {...props} />;
+  return <NativeDatePicker {...props} />;
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   wrap: { gap: 6 },
   label: { fontSize: 13, color: ClassworkUi.title, fontWeight: "500" },
+  // Web wrapper needs `position: relative` for the overlay input
+  webFieldWrap: {
+    position: "relative",
+  } as any,
   field: {
     flexDirection: "row",
     alignItems: "center",
@@ -139,6 +237,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   valueText: { fontSize: 14, color: ClassworkUi.title, flex: 1 },
+  placeholder: { color: "#aaa" },
+  clearBtn: {
+    position: "absolute",
+    right: 40,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+    zIndex: 10,
+  },
   modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",

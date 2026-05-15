@@ -1,10 +1,13 @@
 # app/api/v1/routes/Classworks.py
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
+from pathlib import Path
 
 from app.db.Session import get_db
 from app.core.Dependencies import require_role, get_staff_id, get_student_record
+from app.core.Security import decode_access_token
 from app.core.FileUpload import save_file, delete_file
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
@@ -24,6 +27,42 @@ from app.schemas.Classwork import (
 )
 
 router = APIRouter()
+
+# Project root = 4 levels up from this file (app/api/v1/routes/Classworks.py)
+BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+UPLOADS_DIR = BASE_DIR / "uploads"
+
+
+def _resolve_file_path(stored_path: str) -> Path:
+    """
+    Resolve a stored file_path to an actual Path on disk.
+    Handles both legacy Windows absolute paths and clean relative paths.
+    """
+    # First try the stored path as-is (works if already relative/correct)
+    p = Path(stored_path)
+    if p.exists():
+        return p
+
+    # Legacy: stored as Windows absolute path — extract just the filename
+    # and rebuild from the known uploads directory structure.
+    # e.g. C:\Users\...\backend\uploads\classworks\abc123.pdf
+    normalized = stored_path.replace("\\", "/")
+    parts = Path(normalized).parts
+
+    # Walk backwards to find "uploads" in the stored path, then rebuild from there
+    try:
+        uploads_idx = next(i for i, part in enumerate(parts) if part == "uploads")
+        relative = Path(*parts[uploads_idx:])  # e.g. uploads/classworks/abc123.pdf
+        p = BASE_DIR / relative
+        if p.exists():
+            return p
+    except StopIteration:
+        pass
+
+    # Last resort: assume filename lives in uploads/classworks/
+    filename = Path(normalized).name
+    p = UPLOADS_DIR / "classworks" / filename
+    return p  # Caller checks .exists()
 
 
 def _att_resp(a):
@@ -109,13 +148,77 @@ def delete_classwork(classwork_id: int, staff_id: str = Depends(get_staff_id), d
 
 
 @router.post("/classwork/{classwork_id}/attachments", response_model=ClassworkAttachmentResponse)
-async def upload_cw_attachment(classwork_id: int, file: UploadFile = File(...), staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db)):
+async def upload_cw_attachment(
+    classwork_id: int,
+    file: UploadFile = File(...),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
     cw = db.query(Classwork).filter(Classwork.classwork_id == classwork_id, Classwork.created_by_staff_id == staff_id).first()
     if not cw: raise HTTPException(status_code=404, detail="Classwork not found or not yours")
     info = await save_file(file, "classworks")
+
+    # Normalize file_path to always store relative (e.g. uploads/classworks/abc123.pdf)
+    # so downloads work regardless of machine or OS.
+    raw_path = info.get("file_path", "")
+    normalized = raw_path.replace("\\", "/")
+    try:
+        uploads_idx = next(i for i, part in enumerate(Path(normalized).parts) if part == "uploads")
+        info["file_path"] = str(Path(*Path(normalized).parts[uploads_idx:]))
+    except StopIteration:
+        pass  # Already relative or unexpected format — keep as-is
+
     att = ClassworkAttachment(classwork_id=classwork_id, **info)
     db.add(att); db.commit(); db.refresh(att)
     return _att_resp(att)
+
+
+@router.get("/classwork/{classwork_id}/attachments/{attachment_id}/download")
+def download_classwork_attachment(
+    classwork_id: int,
+    attachment_id: int,
+    token: Optional[str] = Query(None, description="JWT token as fallback for browser-based access"),
+    request: Request = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Download a classwork attachment.
+    Auth: Bearer header OR ?token= query param (for direct browser/Linking access).
+    Both teachers and students can download classwork attachments.
+    """
+    payload = None
+    auth_header = request.headers.get("Authorization", "") if request else ""
+    if auth_header.startswith("Bearer "):
+        payload = decode_access_token(auth_header[7:])
+    elif token:
+        payload = decode_access_token(token)
+
+    if not payload:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    role = payload.get("role", "")
+    if role not in ("teacher", "admin", "student"):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    att = db.query(ClassworkAttachment).filter(
+        ClassworkAttachment.classwork_attachment_id == attachment_id,
+        ClassworkAttachment.classwork_id == classwork_id,
+    ).first()
+    if not att:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    p = _resolve_file_path(att.file_path)
+    if not p.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"File not found on server (resolved: {p})",
+        )
+
+    return FileResponse(
+        path=str(p),
+        filename=att.file_name,
+        media_type=att.file_type or "application/octet-stream",
+    )
 
 
 @router.post("/classwork/{classwork_id}/assign")
@@ -192,7 +295,6 @@ def get_teacher_assignments_for_class_subject(
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    """Classwork assignments you created for this subject in this class section."""
     load = (
         db.query(SubjectLoad)
         .filter(
@@ -247,21 +349,18 @@ def get_teacher_assignments_for_class_subject(
 
 @router.get("/my-assignments")
 def get_student_assignments(student=Depends(get_student_record), db: Session = Depends(get_db)):
-    """Get all classwork assignments for the logged-in student, categorized by status."""
     from sqlalchemy import and_
-    
-    # Get all enrolled classes
+
     enrolled_classes = db.query(StudentClass).filter(
         StudentClass.student_id == student.student_id,
         StudentClass.enrollment_status == "enrolled"
     ).all()
-    
+
     class_ids = [sc.class_id for sc in enrolled_classes]
-    
+
     if not class_ids:
         return {"pending": [], "submitted": [], "graded": []}
-    
-    # Get all published classwork assignments for enrolled classes
+
     assignments = db.query(ClassworkAssignment, Classwork, Subject, AcademicStaff).join(
         Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id
     ).outerjoin(
@@ -272,18 +371,17 @@ def get_student_assignments(student=Depends(get_student_record), db: Session = D
         ClassworkAssignment.class_id.in_(class_ids),
         ClassworkAssignment.is_published == True
     ).order_by(ClassworkAssignment.due_date.asc()).all()
-    
+
     pending = []
     submitted = []
     graded = []
-    
+
     for ca, cw, subj, staff in assignments:
-        # Get submission status
         submission = db.query(StudentSubmission).filter(
             StudentSubmission.classwork_assignment_id == ca.classwork_assignment_id,
             StudentSubmission.student_id == student.student_id
         ).first()
-        
+
         assignment_item = {
             "classwork_assignment_id": ca.classwork_assignment_id,
             "classwork_id": cw.classwork_id,
@@ -305,7 +403,7 @@ def get_student_assignments(student=Depends(get_student_record), db: Session = D
             "submitted_at": submission.submitted_at.isoformat() if submission and submission.submitted_at else None,
             "attempt_count": submission.attempt_count if submission else 0,
         }
-        
+
         if submission:
             if submission.status == "graded":
                 graded.append(assignment_item)
@@ -313,7 +411,7 @@ def get_student_assignments(student=Depends(get_student_record), db: Session = D
                 submitted.append(assignment_item)
         else:
             pending.append(assignment_item)
-    
+
     return {
         "pending": pending,
         "submitted": submitted,

@@ -147,8 +147,11 @@ export default function TeacherSubjectDetail() {
     router.push({
       pathname: "/teacher/create-lesson" as any,
       params: {
-        subject_id: String(subjectId),
+        subject_load_id: params.subject_load_id,
         class_id: String(classId),
+        subject_id: String(subjectId),
+        subject: params.subject,
+        section: params.section,
       },
     });
   };
@@ -361,7 +364,7 @@ export default function TeacherSubjectDetail() {
             </View>
 
             {/* Original overview metric cards (StatCard + trend line) */}
-            <Text style={styles.sectionHeading}>Subject Overview</Text>
+            {/* <Text style={styles.sectionHeading}>Subject Overview</Text>
             <View style={styles.overviewGrid}>
               <StatCard
                 label="Lesson Mastery"
@@ -382,6 +385,7 @@ export default function TeacherSubjectDetail() {
                 change="12"
               />
             </View>
+            */}
 
             {true && (
               <View style={styles.panel}>
@@ -435,7 +439,14 @@ export default function TeacherSubjectDetail() {
                           onPress={() =>
                             router.push({
                               pathname: "/teacher/lesson-detail" as any,
-                              params: { lesson_id: String(l.lesson_id) },
+                              params: { 
+                                lesson_id: String(l.lesson_id),
+                                subject_load_id: params.subject_load_id,
+                                class_id: String(classId),
+                                subject_id: String(subjectId),
+                                subject: params.subject,
+                                section: params.section
+                              },
                             })
                           }
                         >

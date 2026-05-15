@@ -45,6 +45,17 @@ export type AssignmentSubmissionTracking = {
   missing: SubmissionTrackingStudent[];
 };
 
+// Shape returned by /submissions/classwork/{id}/tracking
+export type ClassworkSubmissionTracking = {
+  classwork_id: number;
+  classwork_title: string | null;
+  total_students: number;
+  submitted_count: number;
+  missing_count: number;
+  submitted: SubmissionTrackingStudent[];
+  missing: SubmissionTrackingStudent[];
+};
+
 export function useStudentSubmissions() {
   const { session } = useAuth();
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -81,7 +92,7 @@ export function useAssignmentSubmissions(assignmentId: number) {
   const [error, setError] = useState<string | null>(null);
   const [trigger, setTrigger] = useState(0);
   const refresh = useCallback(() => setTrigger((t) => t + 1), []);
-
+ 
   useEffect(() => {
     if (!session?.token || !assignmentId) { setIsLoading(false); return; }
     let cancelled = false;
@@ -99,7 +110,7 @@ export function useAssignmentSubmissions(assignmentId: number) {
     go();
     return () => { cancelled = true; };
   }, [session?.token, assignmentId, trigger]);
-
+ 
   return { submissions, isLoading, error, refresh };
 }
 
@@ -112,18 +123,27 @@ export function useAssignmentSubmissionTracking(assignmentId: number) {
   const refresh = useCallback(() => setTrigger((t) => t + 1), []);
 
   useEffect(() => {
-    if (!session?.token || !assignmentId) { setIsLoading(false); return; }
+    if (!session?.token || !assignmentId) { 
+      setIsLoading(false); 
+      setTracking(null);
+      return; 
+    }
     let cancelled = false;
     const go = async () => {
-      setIsLoading(true); setError(null);
+      setIsLoading(true); 
+      setError(null);
       try {
+        // Try classwork endpoint first (for viewing by classwork)
         const data = await apiFetch<AssignmentSubmissionTracking>(
-          `/api/v1/submissions/assignment/${assignmentId}/tracking`,
+          `/api/v1/submissions/classwork/${assignmentId}/tracking`,
           { token: session.token },
         );
         if (!cancelled) setTracking(data);
       } catch (e: any) {
-        if (!cancelled) setError(e.message);
+        if (!cancelled) {
+          setError(e.message);
+          setTracking(null);
+        }
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -131,6 +151,46 @@ export function useAssignmentSubmissionTracking(assignmentId: number) {
     go();
     return () => { cancelled = true; };
   }, [session?.token, assignmentId, trigger]);
+
+  return { tracking, isLoading, error, refresh };
+}
+
+export function useClassworkSubmissionTracking(classworkId: number) {
+  const { session } = useAuth();
+  const [tracking, setTracking] = useState<ClassworkSubmissionTracking | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [trigger, setTrigger] = useState(0);
+  const refresh = useCallback(() => setTrigger((t) => t + 1), []);
+
+  useEffect(() => {
+    if (!session?.token || !classworkId) {
+      setIsLoading(false);
+      setTracking(null);
+      return;
+    }
+    let cancelled = false;
+    const go = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const data = await apiFetch<ClassworkSubmissionTracking>(
+          `/api/v1/submissions/classwork/${classworkId}/tracking`,
+          { token: session.token },
+        );
+        if (!cancelled) setTracking(data);
+      } catch (e: any) {
+        if (!cancelled) {
+          setError(e.message);
+          setTracking(null);
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    go();
+    return () => { cancelled = true; };
+  }, [session?.token, classworkId, trigger]);
 
   return { tracking, isLoading, error, refresh };
 }

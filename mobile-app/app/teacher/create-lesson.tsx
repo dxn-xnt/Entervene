@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  Alert, ActivityIndicator, Switch, StyleSheet,
+  Alert, ActivityIndicator, Switch, StyleSheet, Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,7 +16,30 @@ export default function CreateLesson() {
   const router = useRouter();
   const { session } = useAuth();
   const { classes } = useTeacherClasses();
-  const prefill = useLocalSearchParams<{ subject_id?: string; class_id?: string }>();
+  const prefill = useLocalSearchParams<{ 
+    subject_load_id?: string;
+    class_id?: string;
+    subject_id?: string;
+    subject?: string;
+    section?: string;
+  }>();
+
+  const goBackToSubject = () => {
+    if (prefill.class_id && prefill.subject_id) {
+      router.replace({
+        pathname: '/teacher/subject-detail' as any,
+        params: {
+          subject_load_id: prefill.subject_load_id,
+          class_id: prefill.class_id,
+          subject_id: prefill.subject_id,
+          subject: prefill.subject,
+          section: prefill.section,
+        }
+      });
+    } else {
+      router.replace('/teacher/lessons' as any);
+    }
+  };
 
   const [title, setTitle]               = useState('');
   const [description, setDescription]   = useState('');
@@ -117,11 +140,23 @@ export default function CreateLesson() {
         );
       }
 
-      Alert.alert(
+      if (Platform.OS === 'web') {
+        setTimeout(() => {
+          window.alert(`✅ Lesson Created\n"${title}" has been ${isPublished ? 'published' : 'saved as draft'} successfully.`);
+          goBackToSubject();
+        }, 50);
+        return;
+      }
+      setTimeout(() => {
+        Alert.alert(
         '✅ Lesson Created',
         `"${title}" has been ${isPublished ? 'published' : 'saved as draft'} successfully.`,
-        [{ text: 'OK', onPress: () => router.back() }],
+        [{ 
+          text: 'OK', 
+          onPress: () => goBackToSubject()
+        }],
       );
+      }, 50);
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to create lesson. Please try again.');
     } finally {
@@ -137,16 +172,16 @@ export default function CreateLesson() {
           <Ionicons name="chevron-back" size={24} color={AppColors.foreground} />
           <Text style={styles.headerTitle}>Create Lesson</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.saveBtn, saving && { opacity: 0.6 }]}
-          onPress={handleSave}
-          disabled={saving}
-          activeOpacity={0.8}
-        >
-          {saving
-            ? <ActivityIndicator color={AppColors.primaryForeground} size="small" />
-            : <Text style={styles.saveBtnText}>Save</Text>}
-        </TouchableOpacity>
+        <View style={[styles.draftPill, isPublished ? styles.draftPillPublish : styles.draftPillDraft]}>
+          <Ionicons
+            name={isPublished ? 'radio-button-on' : 'save-outline'}
+            size={12}
+            color={isPublished ? '#166534' : AppColors.mutedForeground}
+          />
+          <Text style={[styles.draftPillText, isPublished ? styles.draftPillPublishText : styles.draftPillDraftText]}>
+            {isPublished ? 'Will Publish' : 'Draft'}
+          </Text>
+        </View>
       </View>
 
       <ScrollView
@@ -288,9 +323,13 @@ export default function CreateLesson() {
             ? <ActivityIndicator color={AppColors.primaryForeground} />
             : (
               <>
-                <Ionicons name="add-circle-outline" size={20} color={AppColors.primaryForeground} />
+                <Ionicons
+                  name={isPublished ? 'cloud-upload-outline' : 'save-outline'}
+                  size={20}
+                  color={AppColors.primaryForeground}
+                />
                 <Text style={styles.createButtonText}>
-                  {isPublished ? 'Publish Lesson' : 'Save as Draft'}
+                  {isPublished ? 'Publish Lesson' : 'Save Draft'}
                 </Text>
               </>
             )
@@ -310,12 +349,16 @@ const styles = StyleSheet.create({
   },
   backRow:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
   headerTitle: { fontSize: 18, fontWeight: '700', color: AppColors.foreground },
-  saveBtn: {
-    paddingHorizontal: 16, paddingVertical: 8,
-    backgroundColor: AppColors.primary, borderRadius: 8,
-    minWidth: 60, alignItems: 'center',
+  draftPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderWidth: Borders.width, borderRadius: 999,
   },
-  saveBtnText: { fontSize: 14, fontWeight: '700', color: AppColors.primaryForeground },
+  draftPillPublish: { backgroundColor: '#dcfce7', borderColor: '#166534' },
+  draftPillDraft:   { backgroundColor: AppColors.muted, borderColor: AppColors.border },
+  draftPillText: { fontSize: 11, fontWeight: '800' },
+  draftPillPublishText: { color: '#166534' },
+  draftPillDraftText:   { color: AppColors.mutedForeground },
   form: { padding: Spacing.lg, gap: 20, paddingBottom: 48 },
   field:    { gap: 8 },
   label:    { fontSize: 14, fontWeight: '700', color: AppColors.foreground },

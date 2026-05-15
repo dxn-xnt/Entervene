@@ -273,7 +273,7 @@ def delete_lesson(
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    """Delete a lesson and its attachments."""
+    """Delete a lesson and its attachments. Also deletes associated classworks."""
     lesson = db.query(Lesson).filter(
         Lesson.lesson_id == lesson_id,
         Lesson.created_by_staff_id == staff_id,
@@ -281,12 +281,26 @@ def delete_lesson(
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found or not yours")
 
+    # 1. Find all classworks linked to this lesson and delete them (and their files)
+    linked_classworks = (
+        db.query(Classwork)
+        .join(ClassworkLesson, ClassworkLesson.classwork_id == Classwork.classwork_id)
+        .filter(ClassworkLesson.lesson_id == lesson_id)
+        .all()
+    )
+    for cw in linked_classworks:
+        for cw_att in cw.attachments:
+            delete_file(cw_att.file_path)
+        db.delete(cw)
+
+    # 2. Delete lesson attachment physical files
     for att in lesson.attachments:
         delete_file(att.file_path)
 
+    # 3. Delete lesson (DB constraints handles the rest)
     db.delete(lesson)
     db.commit()
-    return {"message": "Lesson deleted"}
+    return {"message": "Lesson and associated classworks deleted"}
 
 
 @router.put("/{lesson_id}/publish")
