@@ -314,8 +314,6 @@ export default function TeacherSubjectDetail() {
             color={AppColors.mutedForeground}
           />
         </View>
-
-
         <View style={styles.tabRow}>
           <Text
             style={[

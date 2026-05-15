@@ -106,19 +106,7 @@ const ROLE_CONFIG: Record<
         label: "Classworks",
         icon: "document-text-outline",
         route: "/teacher/classworks",
-      },
-      {
-        id: "grades",
-        label: "Grades",
-        icon: "stats-chart-outline",
-        route: "/teacher/grades",
-      },
-      {
-        id: "notifications",
-        label: "Notifications",
-        icon: "notifications-outline",
-        route: "/teacher/notifications",
-      },
+      }
     ],
   },
 };
@@ -350,39 +338,6 @@ const DrawerMenu = ({ role }: DrawerMenuProps) => {
                   styles.panelItem,
                   pressed && styles.panelItemPressed,
                 ]}
-                onPress={() => setUserPanelVisible(false)}
-              >
-                <Ionicons
-                  name="person-circle-outline"
-                  size={18}
-                  color={AppColors.foreground}
-                />
-                <Text style={styles.panelItemText}>Account</Text>
-              </Pressable>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.panelItem,
-                  pressed && styles.panelItemPressed,
-                ]}
-                onPress={() => {
-                  setUserPanelVisible(false);
-                  handleNavigate(config.notificationsRoute);
-                }}
-              >
-                <Ionicons
-                  name="notifications-outline"
-                  size={18}
-                  color={AppColors.foreground}
-                />
-                <Text style={styles.panelItemText}>Notifications</Text>
-              </Pressable>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.panelItem,
-                  pressed && styles.panelItemPressed,
-                ]}
                 onPress={handleLogout}
                 disabled={loggingOut}
               >
@@ -551,13 +506,15 @@ const styles = StyleSheet.create({
   userName: { fontSize: 14, fontWeight: "700", color: AppColors.foreground },
   userEmail: { fontSize: 11, color: AppColors.mutedForeground },
   userPanel: {
-    borderTopWidth: Borders.width,
-    borderTopColor: AppColors.border,
+    position: 'absolute',
+    bottom: 80,
+    left: 50,
+    width: 230,
+    borderWidth: Borders.width, borderColor: AppColors.border,
     marginBottom: Spacing.sm,
-    backgroundColor: AppColors.card,
-    borderRadius: 8,
-    overflow: "hidden",
+    backgroundColor: AppColors.card, borderRadius: 8, overflow: 'hidden',
     marginHorizontal: Spacing.md,
+    ...NeoShadow.md,
   },
   panelItem: {
     flexDirection: "row",
