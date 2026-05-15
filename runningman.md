@@ -2,6 +2,9 @@
 .venv\Scripts\activate
 
 uvicorn app.main:app
+uvicorn app.main:app --host 0.0.0.0 --reload
+
+
 
 #frontend
 npm run dev
