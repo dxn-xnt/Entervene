@@ -1,0 +1,964 @@
+-- ============================================================
+-- REQUIRED EXTENSION
+-- ============================================================
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+
+
+-- ============================================================
+-- ROLE
+-- ============================================================
+
+CREATE TABLE role (
+    role_id SMALLINT PRIMARY KEY,
+    role_name VARCHAR(50) NOT NULL UNIQUE,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+
+
+-- ============================================================
+-- USER ACCOUNT
+-- ============================================================
+
+CREATE TABLE user_account (
+    user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+
+    invitation_token VARCHAR(255),
+
+    account_status VARCHAR(50) DEFAULT 'active'
+        CHECK (account_status IN ('active', 'inactive', 'suspended')),
+
+    ref_type VARCHAR(50)
+        CHECK (ref_type IN ('staff', 'student')),
+
+    ref_id VARCHAR(50),
+
+    last_login TIMESTAMP WITH TIME ZONE,
+    email_verified_at TIMESTAMP WITH TIME ZONE,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_user_account_ref ON user_account(ref_type, ref_id);
+CREATE INDEX idx_user_account_email ON user_account(email);
+CREATE INDEX idx_user_account_status ON user_account(account_status);
+
+
+
+-- ============================================================
+-- USER ROLES
+-- ============================================================
+
+CREATE TABLE user_roles (
+    user_id UUID NOT NULL
+        REFERENCES user_account(user_id)
+        ON DELETE CASCADE,
+
+    role_id SMALLINT NOT NULL
+        REFERENCES role(role_id)
+        ON DELETE CASCADE,
+
+    assigned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (user_id, role_id)
+);
+
+CREATE INDEX idx_user_roles_role_id ON user_roles(role_id);
+
+
+
+-- ============================================================
+-- ACADEMIC YEAR
+-- ============================================================
+
+CREATE TABLE academic_year (
+    academic_year_id SERIAL PRIMARY KEY,
+
+    year_label VARCHAR(20) NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+
+    is_active BOOLEAN DEFAULT FALSE,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_academic_year_active ON academic_year(is_active) WHERE is_active = true;
+
+
+
+-- ============================================================
+-- ACADEMIC LEVEL
+-- ============================================================
+
+CREATE TABLE academic_level (
+    academic_level_id SERIAL PRIMARY KEY,
+
+    level_name VARCHAR(100) NOT NULL,
+    grade_level INT NOT NULL,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX idx_academic_level_grade ON academic_level(grade_level);
+CREATE INDEX idx_academic_level_name ON academic_level(level_name);
+
+
+
+-- ============================================================
+-- ACADEMIC PERIOD
+-- ============================================================
+
+CREATE TABLE academic_period (
+    academic_period_id SERIAL PRIMARY KEY,
+
+    period_name VARCHAR(100) NOT NULL,
+
+    period_type VARCHAR(20) NOT NULL
+        CHECK (period_type IN ('QUARTER', 'SEMESTER')),
+
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+
+    is_active BOOLEAN DEFAULT FALSE,
+
+    academic_year_id INT NOT NULL
+        REFERENCES academic_year(academic_year_id)
+        ON DELETE CASCADE,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_academic_period_year_active ON academic_period(academic_year_id, is_active);
+CREATE INDEX idx_academic_period_dates ON academic_period(start_date, end_date);
+
+
+
+-- ============================================================
+-- ACADEMIC STAFF
+-- ============================================================
+
+CREATE TABLE academic_staff (
+    staff_id VARCHAR(20) PRIMARY KEY,
+
+    first_name VARCHAR(100) NOT NULL,
+    middle_name VARCHAR(100),
+    last_name VARCHAR(100) NOT NULL,
+
+    dob DATE,
+    suffix VARCHAR(10),
+
+    gender VARCHAR(20),
+
+    contact_number VARCHAR(20),
+
+    email VARCHAR(255) UNIQUE,
+
+    address TEXT,
+
+    hired_date DATE,
+
+    employment_status VARCHAR(50),
+
+    user_id UUID UNIQUE
+        REFERENCES user_account(user_id)
+        ON DELETE SET NULL
+);
+
+CREATE INDEX idx_academic_staff_email ON academic_staff(email);
+CREATE INDEX idx_academic_staff_names ON academic_staff(last_name, first_name);
+CREATE INDEX idx_academic_staff_user_id ON academic_staff(user_id);
+
+
+
+-- ============================================================
+-- STUDENT
+-- ============================================================
+
+CREATE TABLE student (
+    student_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    student_lrn CHAR(12) UNIQUE NOT NULL,
+
+    first_name VARCHAR(100) NOT NULL,
+    middle_name VARCHAR(100),
+    last_name VARCHAR(100) NOT NULL,
+
+    suffix VARCHAR(10),
+
+    gender VARCHAR(20),
+
+    contact_number VARCHAR(20),
+
+    email VARCHAR(255) UNIQUE,
+
+    address TEXT,
+
+    account_status VARCHAR(50) DEFAULT 'active',
+
+    guardian_id UUID,
+    academic_level_id INT
+        REFERENCES academic_level(academic_level_id),
+
+    import_log_id INTEGER,
+    user_id UUID UNIQUE
+        REFERENCES user_account(user_id)
+        ON DELETE SET NULL,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT lrn_check
+    CHECK (student_lrn ~ '^[0-9]{12}$')
+);
+
+CREATE INDEX idx_student_lrn ON student(student_lrn);
+CREATE INDEX idx_student_email ON student(email);
+CREATE INDEX idx_student_user_id ON student(user_id);
+CREATE INDEX idx_student_academic_level ON student(academic_level_id);
+CREATE INDEX idx_student_account_status ON student(account_status);
+CREATE INDEX idx_student_names ON student(last_name, first_name, middle_name);
+
+
+
+-- ============================================================
+-- SUBJECT
+-- ============================================================
+
+CREATE TABLE subject (
+    subject_id SERIAL PRIMARY KEY,
+
+    subject_name VARCHAR(150) NOT NULL,
+
+    subject_codename VARCHAR(50),
+
+    description TEXT,
+
+    status VARCHAR(20) DEFAULT 'active',
+
+    academic_level_id INT NOT NULL
+        REFERENCES academic_level(academic_level_id),
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_subject_academic_level ON subject(academic_level_id);
+CREATE INDEX idx_subject_status ON subject(status);
+CREATE INDEX idx_subject_codename ON subject(subject_codename);
+
+
+
+-- ============================================================
+-- CLASS
+-- ============================================================
+
+CREATE TABLE class (
+    class_id SERIAL PRIMARY KEY,
+
+    section_name VARCHAR(100) NOT NULL,
+
+    class_status VARCHAR(20) DEFAULT 'active',
+
+    adviser_staff_id VARCHAR(20)
+        REFERENCES academic_staff(staff_id)
+        ON DELETE SET NULL,
+
+    academic_year_id INT NOT NULL
+        REFERENCES academic_year(academic_year_id),
+
+    academic_level_id INT NOT NULL
+        REFERENCES academic_level(academic_level_id),
+
+    academic_period_id INT
+        REFERENCES academic_period(academic_period_id),
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_class_adviser ON class(adviser_staff_id);
+CREATE INDEX idx_class_academic_year ON class(academic_year_id);
+CREATE INDEX idx_class_academic_level ON class(academic_level_id);
+CREATE INDEX idx_class_academic_period ON class(academic_period_id);
+CREATE INDEX idx_class_status ON class(class_status);
+CREATE INDEX idx_class_year_level ON class(academic_year_id, academic_level_id);
+
+
+
+-- ============================================================
+-- SUBJECT LOAD
+-- ============================================================
+
+CREATE TABLE subject_load (
+    subject_load_id SERIAL PRIMARY KEY,
+
+    staff_id VARCHAR(20) NOT NULL
+        REFERENCES academic_staff(staff_id),
+
+    subject_id INT NOT NULL
+        REFERENCES subject(subject_id),
+
+    class_id INT NOT NULL
+        REFERENCES class(class_id),
+
+    academic_period_id INT NOT NULL
+        REFERENCES academic_period(academic_period_id),
+
+    status VARCHAR(20) DEFAULT 'active',
+
+    is_locked BOOLEAN DEFAULT FALSE,
+
+    locked_at TIMESTAMP WITH TIME ZONE,
+
+    continued_from_load_id INT
+        REFERENCES subject_load(subject_load_id),
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE (
+        staff_id,
+        subject_id,
+        class_id,
+        academic_period_id
+    )
+);
+
+CREATE INDEX idx_subject_load_staff ON subject_load(staff_id);
+CREATE INDEX idx_subject_load_subject ON subject_load(subject_id);
+CREATE INDEX idx_subject_load_class ON subject_load(class_id);
+CREATE INDEX idx_subject_load_period ON subject_load(academic_period_id);
+CREATE INDEX idx_subject_load_status ON subject_load(status);
+CREATE INDEX idx_subject_load_continued ON subject_load(continued_from_load_id);
+
+
+
+-- ============================================================
+-- STUDENT CLASS
+-- ============================================================
+
+CREATE TABLE student_class (
+    student_class_id SERIAL PRIMARY KEY,
+
+    student_id UUID NOT NULL
+        REFERENCES student(student_id)
+        ON DELETE CASCADE,
+
+    class_id INT NOT NULL
+        REFERENCES class(class_id)
+        ON DELETE CASCADE,
+
+    enrollment_status VARCHAR(20) DEFAULT 'enrolled'
+        CHECK (
+            enrollment_status IN (
+                'enrolled',
+                'dropped',
+                'completed'
+            )
+        ),
+
+    enrolled_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE (student_id, class_id)
+);
+
+CREATE INDEX idx_student_class_student ON student_class(student_id);
+CREATE INDEX idx_student_class_class ON student_class(class_id);
+CREATE INDEX idx_student_class_status ON student_class(enrollment_status);
+CREATE INDEX idx_student_class_enrolled ON student_class(enrolled_at);
+
+
+
+-- ============================================================
+-- LESSON
+-- ============================================================
+
+CREATE TABLE lesson (
+    lesson_id SERIAL PRIMARY KEY,
+
+    title VARCHAR(255) NOT NULL,
+
+    description TEXT,
+
+    content TEXT,
+
+    order_index INT DEFAULT 1,
+
+    is_published BOOLEAN DEFAULT FALSE,
+
+    is_locked BOOLEAN DEFAULT FALSE,
+
+    created_by_staff_id VARCHAR(20)
+        REFERENCES academic_staff(staff_id)
+        ON DELETE SET NULL,
+
+    subject_id INT NOT NULL
+        REFERENCES subject(subject_id)
+        ON DELETE CASCADE,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    is_draft BOOLEAN DEFAULT TRUE
+);
+
+CREATE INDEX idx_lesson_subject ON lesson(subject_id);
+CREATE INDEX idx_lesson_created_by ON lesson(created_by_staff_id);
+CREATE INDEX idx_lesson_published ON lesson(is_published) WHERE is_published = true;
+CREATE INDEX idx_lesson_draft ON lesson(is_draft) WHERE is_draft = true;
+CREATE INDEX idx_lesson_order ON lesson(subject_id, order_index);
+
+
+
+-- ============================================================
+-- LESSON ATTACHMENT
+-- ============================================================
+
+CREATE TABLE lesson_attachment (
+    lesson_attachment_id SERIAL PRIMARY KEY,
+
+    lesson_id INT NOT NULL
+        REFERENCES lesson(lesson_id)
+        ON DELETE CASCADE,
+
+    file_name VARCHAR(255) NOT NULL,
+
+    file_path TEXT NOT NULL,
+
+    file_type VARCHAR(100),
+
+    file_size BIGINT NOT NULL,
+
+    uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT lesson_attachment_size_check
+    CHECK (file_size <= 4194304)
+);
+
+CREATE INDEX idx_lesson_attachment_lesson ON lesson_attachment(lesson_id);
+CREATE INDEX idx_lesson_attachment_uploaded ON lesson_attachment(uploaded_at);
+
+
+
+-- ============================================================
+-- LESSON ASSIGNMENT
+-- ============================================================
+
+CREATE TABLE lesson_assignment (
+    lesson_assignment_id SERIAL PRIMARY KEY,
+
+    lesson_id INT NOT NULL
+        REFERENCES lesson(lesson_id)
+        ON DELETE CASCADE,
+
+    class_id INT NOT NULL
+        REFERENCES class(class_id)
+        ON DELETE CASCADE,
+
+    assigned_by_staff_id VARCHAR(20)
+        REFERENCES academic_staff(staff_id)
+        ON DELETE SET NULL,
+
+    publish_date TIMESTAMP WITH TIME ZONE,
+
+    is_published BOOLEAN DEFAULT FALSE,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE (lesson_id, class_id)
+);
+
+CREATE INDEX idx_lesson_assignment_lesson ON lesson_assignment(lesson_id);
+CREATE INDEX idx_lesson_assignment_class ON lesson_assignment(class_id);
+CREATE INDEX idx_lesson_assignment_assigned_by ON lesson_assignment(assigned_by_staff_id);
+CREATE INDEX idx_lesson_assignment_published ON lesson_assignment(is_published, publish_date);
+
+
+
+-- ============================================================
+-- CLASSWORK
+-- ============================================================
+
+CREATE TABLE classwork (
+    classwork_id SERIAL PRIMARY KEY,
+
+    title VARCHAR(255) NOT NULL,
+
+    description TEXT,
+
+    instructions TEXT,
+
+    classwork_type VARCHAR(50) NOT NULL
+        CHECK (
+            classwork_type IN (
+                'QUIZ',
+                'ASSIGNMENT',
+                'ACTIVITY'
+            )
+        ),
+
+    classwork_category VARCHAR(50)
+        CHECK (
+            classwork_category IN (
+                'WRITTEN_WORK',
+                'PERFORMANCE_TASK',
+                'PERIODICAL_EXAM'
+            )
+        ),
+
+    total_points DECIMAL(8,2) DEFAULT 100,
+
+    is_locked BOOLEAN DEFAULT FALSE,
+
+    is_published BOOLEAN DEFAULT FALSE,
+
+    subject_id INT NOT NULL
+        REFERENCES subject(subject_id),
+
+    created_by_staff_id VARCHAR(20) NOT NULL
+        REFERENCES academic_staff(staff_id),
+
+    rubric_id INTEGER,
+    cloned_from_classwork_id INTEGER
+        REFERENCES classwork(classwork_id),
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_classwork_subject ON classwork(subject_id);
+CREATE INDEX idx_classwork_created_by ON classwork(created_by_staff_id);
+CREATE INDEX idx_classwork_cloned_from ON classwork(cloned_from_classwork_id);
+CREATE INDEX idx_classwork_published ON classwork(is_published) WHERE is_published = true;
+CREATE INDEX idx_classwork_type_category ON classwork(classwork_type, classwork_category);
+
+
+
+-- ============================================================
+-- CLASSWORK ASSIGNMENT
+-- ============================================================
+
+CREATE TABLE classwork_assignment (
+    classwork_assignment_id SERIAL PRIMARY KEY,
+
+    classwork_id INT NOT NULL
+        REFERENCES classwork(classwork_id)
+        ON DELETE CASCADE,
+
+    class_id INT NOT NULL
+        REFERENCES class(class_id)
+        ON DELETE CASCADE,
+
+    assigned_by_staff_id VARCHAR(20) NOT NULL
+        REFERENCES academic_staff(staff_id),
+
+    publish_date TIMESTAMP WITH TIME ZONE,
+
+    due_date TIMESTAMP WITH TIME ZONE,
+
+    lock_date TIMESTAMP WITH TIME ZONE,
+
+    is_published BOOLEAN DEFAULT FALSE,
+
+    is_locked BOOLEAN DEFAULT FALSE,
+
+    max_attempts INT DEFAULT 1,
+
+    assigned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE (classwork_id, class_id)
+);
+
+CREATE INDEX idx_classwork_assignment_classwork ON classwork_assignment(classwork_id);
+CREATE INDEX idx_classwork_assignment_class ON classwork_assignment(class_id);
+CREATE INDEX idx_classwork_assignment_assigned_by ON classwork_assignment(assigned_by_staff_id);
+CREATE INDEX idx_classwork_assignment_dates ON classwork_assignment(publish_date, due_date, lock_date);
+CREATE INDEX idx_classwork_assignment_published ON classwork_assignment(is_published, publish_date);
+
+
+
+-- ============================================================
+-- CLASSWORK ATTACHMENT
+-- ============================================================
+
+CREATE TABLE classwork_attachment (
+    classwork_attachment_id SERIAL PRIMARY KEY,
+
+    classwork_id INT NOT NULL
+        REFERENCES classwork(classwork_id)
+        ON DELETE CASCADE,
+
+    file_name VARCHAR(255) NOT NULL,
+
+    file_path TEXT NOT NULL,
+
+    file_type VARCHAR(100),
+
+    file_size BIGINT NOT NULL,
+
+    uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT classwork_attachment_size_check
+    CHECK (file_size <= 4194304)
+);
+
+CREATE INDEX idx_classwork_attachment_classwork ON classwork_attachment(classwork_id);
+CREATE INDEX idx_classwork_attachment_uploaded ON classwork_attachment(uploaded_at);
+
+
+
+-- ============================================================
+-- CLASSWORK ALLOWED FILE TYPES
+-- ============================================================
+
+CREATE TABLE classwork_allowed_file_type (
+    allowed_type_id SERIAL PRIMARY KEY,
+
+    classwork_id INT NOT NULL
+        REFERENCES classwork(classwork_id)
+        ON DELETE CASCADE,
+
+    file_type_label VARCHAR(100),
+
+    extensions VARCHAR(255)
+);
+
+CREATE INDEX idx_classwork_allowed_types_classwork ON classwork_allowed_file_type(classwork_id);
+
+
+
+-- ============================================================
+-- CLASSWORK LESSON (Junction Table)
+-- ============================================================
+
+CREATE TABLE classwork_lesson (
+    classwork_id INTEGER NOT NULL
+        REFERENCES classwork(classwork_id)
+        ON DELETE CASCADE,
+    
+    lesson_id INTEGER NOT NULL
+        REFERENCES lesson(lesson_id)
+        ON DELETE CASCADE,
+    
+    PRIMARY KEY (classwork_id, lesson_id)
+);
+
+CREATE INDEX idx_classwork_lesson_lesson ON classwork_lesson(lesson_id);
+CREATE INDEX idx_classwork_lesson_classwork ON classwork_lesson(classwork_id);
+
+
+
+-- ============================================================
+-- STUDENT SUBMISSION
+-- ============================================================
+
+CREATE TABLE student_submission (
+    submission_id SERIAL PRIMARY KEY,
+
+    student_id UUID NOT NULL
+        REFERENCES student(student_id)
+        ON DELETE CASCADE,
+
+    classwork_assignment_id INT NOT NULL
+        REFERENCES classwork_assignment(classwork_assignment_id)
+        ON DELETE CASCADE,
+
+    submitted_at TIMESTAMP WITH TIME ZONE,
+
+    status VARCHAR(30) DEFAULT 'pending'
+        CHECK (
+            status IN (
+                'pending',
+                'submitted',
+                'graded',
+                'late',
+                'missed'
+            )
+        ),
+
+    grade DECIMAL(8,2),
+
+    feedback TEXT,
+
+    attempt_count INT DEFAULT 0,
+
+    graded_at TIMESTAMP WITH TIME ZONE,
+
+    graded_by_staff_id VARCHAR(20)
+        REFERENCES academic_staff(staff_id),
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_student_submission_student ON student_submission(student_id);
+CREATE INDEX idx_student_submission_assignment ON student_submission(classwork_assignment_id);
+CREATE INDEX idx_student_submission_status ON student_submission(status);
+CREATE INDEX idx_student_submission_graded_by ON student_submission(graded_by_staff_id);
+CREATE INDEX idx_student_submission_submitted ON student_submission(submitted_at);
+CREATE INDEX idx_student_submission_student_assignment ON student_submission(student_id, classwork_assignment_id);
+
+
+
+-- ============================================================
+-- SUBMISSION ATTACHMENT
+-- ============================================================
+
+CREATE TABLE submission_attachment (
+    submission_attachment_id SERIAL PRIMARY KEY,
+
+    submission_id INT NOT NULL
+        REFERENCES student_submission(submission_id)
+        ON DELETE CASCADE,
+
+    file_name VARCHAR(255) NOT NULL,
+
+    file_path TEXT NOT NULL,
+
+    file_type VARCHAR(100),
+
+    file_size BIGINT NOT NULL,
+
+    uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT submission_attachment_size_check
+    CHECK (file_size <= 4194304)
+);
+
+CREATE INDEX idx_submission_attachment_submission ON submission_attachment(submission_id);
+CREATE INDEX idx_submission_attachment_uploaded ON submission_attachment(uploaded_at);
+
+
+
+-- ============================================================
+-- USER LOGIN LOG
+-- ============================================================
+
+CREATE TABLE user_login_log (
+    login_id SERIAL PRIMARY KEY,
+
+    user_id UUID
+        REFERENCES user_account(user_id)
+        ON DELETE CASCADE,
+
+    login_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    logout_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX idx_user_login_log_user ON user_login_log(user_id);
+CREATE INDEX idx_user_login_log_login_at ON user_login_log(login_at);
+CREATE INDEX idx_user_login_log_logout ON user_login_log(logout_at) WHERE logout_at IS NOT NULL;
+
+
+
+-- ============================================================
+-- SAMPLE DATA (Based on Schema 1)
+-- ============================================================
+
+-- Insert Roles
+INSERT INTO role (role_id, role_name, description) VALUES
+(0, 'Admin', 'System administrator with full access'),
+(1, 'Teacher', 'Academic staff responsible for instruction'),
+(2, 'Student', 'Learners enrolled in the institution')
+ON CONFLICT (role_id) DO NOTHING;
+
+-- Insert User Accounts
+INSERT INTO user_account (user_id, email, password_hash, invitation_token, account_status, ref_type, ref_id, last_login, email_verified_at, created_at, updated_at) VALUES
+('770a0622-a41d-63f6-c938-668877662222', 'juan.delacruz@student.ph', 'hash_poly_03', NULL, 'active', 'student', '123456789012', '2026-05-15 10:49:30.251071+08', NULL, '2026-04-30 14:36:11.045518+08', '2026-04-30 14:36:11.045518+08'),
+('660f9511-f30c-52e5-b827-557766551111', 'm.cruz@school.edu.ph', 'hash_poly_02', NULL, 'active', 'staff', '2026-0002', '2026-05-15 10:53:53.499362+08', NULL, '2026-04-30 14:36:05.037726+08', '2026-04-30 14:36:05.037726+08'),
+('990c2844-c63f-85a8-e150-880099884444', 'admin@mnsts.edu.ph', 'hash_mnsts_admin_01', NULL, 'active', 'staff', 'ADM-2026-0001', '2026-05-03 00:15:51.099202+08', NULL, '2026-05-03 00:11:59.219496+08', '2026-05-03 00:11:59.219496+08')
+ON CONFLICT (user_id) DO NOTHING;
+
+-- Insert User Roles
+INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES
+('660f9511-f30c-52e5-b827-557766551111', 1, '2026-04-30 14:36:05.037726+08'),
+('770a0622-a41d-63f6-c938-668877662222', 2, '2026-04-30 14:36:11.045518+08'),
+('990c2844-c63f-85a8-e150-880099884444', 0, '2026-05-03 00:11:59.219496+08')
+ON CONFLICT (user_id, role_id) DO NOTHING;
+
+-- Insert Academic Staff
+INSERT INTO academic_staff (staff_id, first_name, middle_name, last_name, dob, suffix, gender, contact_number, email, address, hired_date, employment_status, user_id) VALUES
+('2026-0002', 'Maria', NULL, 'Cruz', NULL, NULL, NULL, NULL, 'm.cruz@school.edu.ph', NULL, '2026-02-10', 'Contractual', '660f9511-f30c-52e5-b827-557766551111'),
+('ADM-2026-0001', 'MNSTS', NULL, 'Administrator', NULL, NULL, NULL, NULL, 'admin@mnsts.edu.ph', NULL, '2026-05-03', 'Regular', '990c2844-c63f-85a8-e150-880099884444')
+ON CONFLICT (staff_id) DO NOTHING;
+
+-- Insert Academic Year
+INSERT INTO academic_year (academic_year_id, year_label, start_date, end_date, is_active, created_at) VALUES
+(1, '2025-2026', '2025-06-02', '2026-03-31', true, '2026-05-07 23:52:51.280471+08')
+ON CONFLICT (academic_year_id) DO NOTHING;
+
+-- Insert Academic Periods
+INSERT INTO academic_period (academic_period_id, period_name, period_type, start_date, end_date, is_active, academic_year_id, created_at) VALUES
+(1, 'Quarter 1', 'QUARTER', '2025-06-02', '2025-08-22', true, 1, '2026-05-07 23:52:51.280471+08'),
+(2, 'Quarter 2', 'QUARTER', '2025-09-01', '2025-11-14', false, 1, '2026-05-07 23:52:51.280471+08'),
+(3, 'Quarter 3', 'QUARTER', '2025-11-24', '2026-01-30', false, 1, '2026-05-07 23:52:51.280471+08'),
+(4, 'Quarter 4', 'QUARTER', '2026-02-09', '2026-03-27', false, 1, '2026-05-07 23:52:51.280471+08')
+ON CONFLICT (academic_period_id) DO NOTHING;
+
+-- Insert Academic Level
+INSERT INTO academic_level (academic_level_id, level_name, grade_level, created_at, updated_at) VALUES
+(1, 'Grade 7', 7, '2026-05-07 23:52:51.280471+08', '2026-05-07 23:52:51.280471+08')
+ON CONFLICT (academic_level_id) DO NOTHING;
+
+-- Insert Student
+INSERT INTO student (student_id, student_lrn, first_name, middle_name, last_name, suffix, gender, contact_number, email, address, account_status, guardian_id, academic_level_id, import_log_id, user_id) VALUES
+('e06f9e10-e7d3-4d8f-a26b-4e53058043dd', '123456789012', 'Juan', NULL, 'Dela Cruz', NULL, NULL, NULL, 'juan.delacruz@student.ph', NULL, 'active', NULL, 1, NULL, '770a0622-a41d-63f6-c938-668877662222')
+ON CONFLICT (student_id) DO NOTHING;
+
+-- Insert Subject
+INSERT INTO subject (subject_id, subject_name, subject_codename, description, status, academic_level_id, created_at, updated_at) VALUES
+(1, 'Filipino 7', 'FIL7', 'Filipino language subject for Grade 7', 'active', 1, '2026-05-07 23:52:51.280471+08', '2026-05-07 23:52:51.280471+08')
+ON CONFLICT (subject_id) DO NOTHING;
+
+-- Insert Class
+INSERT INTO class (class_id, section_name, class_status, adviser_staff_id, academic_year_id, academic_level_id, academic_period_id, created_at, updated_at) VALUES
+(1, '7-Sampaguita', 'active', '2026-0002', 1, 1, 1, '2026-05-07 23:52:51.280471+08', '2026-05-07 23:52:51.280471+08')
+ON CONFLICT (class_id) DO NOTHING;
+
+-- Insert Subject Load
+INSERT INTO subject_load (subject_load_id, staff_id, subject_id, class_id, academic_period_id, status, is_locked, locked_at, continued_from_load_id, created_at, updated_at) VALUES
+(1, '2026-0002', 1, 1, 1, 'active', false, NULL, NULL, '2026-05-07 23:52:51.280471+08', '2026-05-07 23:52:51.280471+08')
+ON CONFLICT (subject_load_id) DO NOTHING;
+
+-- Insert Student Class Enrollment
+INSERT INTO student_class (student_class_id, student_id, class_id, enrollment_status, enrolled_at) VALUES
+(1, 'e06f9e10-e7d3-4d8f-a26b-4e53058043dd', 1, 'enrolled', '2026-05-07 23:52:51.280471+08')
+ON CONFLICT (student_class_id) DO NOTHING;
+
+-- Insert Lessons (with is_draft flag)
+INSERT INTO lesson (lesson_id, title, description, content, order_index, is_published, is_locked, created_by_staff_id, subject_id, created_at, updated_at, is_draft) VALUES
+(17, 'Database', 'SQL INJECTION', 'Will be learning SQL injection', 1, true, false, '2026-0002', 1, '2026-05-15 01:17:09.979637+08', '2026-05-15 12:01:31.312186+08', false),
+(18, 'pass', 'sdad', 'sdad', 1, true, false, '2026-0002', 1, '2026-05-15 11:38:16.303605+08', '2026-05-15 11:39:05.837729+08', false)
+ON CONFLICT (lesson_id) DO NOTHING;
+
+-- Insert Lesson Attachments
+INSERT INTO lesson_attachment (lesson_attachment_id, lesson_id, file_name, file_path, file_type, file_size, uploaded_at) VALUES
+(5, 17, 'PDF SAMPLE.pdf', 'uploads\\lessons\\51550cd304f84db4a3945f4dff07a651.pdf', 'application/pdf', 32058, '2026-05-15 12:01:31.379896+08'),
+(4, 18, 'PDF SAMPLE.pdf', 'uploads\\lessons\\dc4854f891cb4e09adb3b8d0f8a90eaf.pdf', 'application/pdf', 32058, '2026-05-15 11:38:16.421472+08')
+ON CONFLICT (lesson_attachment_id) DO NOTHING;
+
+-- Insert Lesson Assignments
+INSERT INTO lesson_assignment (lesson_assignment_id, lesson_id, class_id, assigned_by_staff_id, publish_date, is_published, created_at) VALUES
+(4, 17, 1, '2026-0002', NULL, true, '2026-05-15 01:17:10.023231+08'),
+(5, 18, 1, '2026-0002', NULL, false, '2026-05-15 11:38:16.385495+08')
+ON CONFLICT (lesson_assignment_id) DO NOTHING;
+
+-- Insert Classwork
+INSERT INTO classwork (classwork_id, title, description, instructions, classwork_type, classwork_category, total_points, is_locked, is_published, subject_id, created_by_staff_id, rubric_id, cloned_from_classwork_id, created_at, updated_at) VALUES
+(1, 'Activty 1', 'CORAL REEF', 'Make sure to answer in your own words', 'ACTIVITY', 'WRITTEN_WORK', 50.00, false, true, 1, '2026-0002', NULL, NULL, '2026-05-15 00:36:58.797904+08', '2026-05-15 00:36:58.797904+08'),
+(2, 'answer', 'follow the instructions', 'Activity rubric (reference):\nExcellent (10 pts): Displays all required components clearly and accurately.\nGood (8 pts): Most components are present with minor errors.\nFair (6 pts): Some required parts are missing or unclear.\nNeeds Improvement (4 pts): Many required elements are missing.\nPoor (2 pts): Work is incomplete or not submitted.', 'ASSIGNMENT', 'WRITTEN_WORK', 100.00, false, false, 1, '2026-0002', NULL, NULL, '2026-05-15 01:02:29.125015+08', '2026-05-15 01:02:29.125015+08'),
+(3, 'Verb', 'Action Word', 'Answer the following', 'ACTIVITY', 'WRITTEN_WORK', 60.00, false, true, 1, '2026-0002', NULL, NULL, '2026-05-15 01:38:57.542988+08', '2026-05-15 01:38:57.542988+08'),
+(5, 'asa', 'sdad', 'dads', 'ASSIGNMENT', 'WRITTEN_WORK', 100.00, false, true, 1, '2026-0002', NULL, NULL, '2026-05-15 02:39:44.8914+08', '2026-05-15 02:39:44.8914+08'),
+(6, 'Activity 5', 'Answer it carfully', 'read the instructions and follow it', 'ACTIVITY', 'WRITTEN_WORK', 50.00, false, false, 1, '2026-0002', NULL, NULL, '2026-05-15 10:14:15.315308+08', '2026-05-15 10:14:15.315308+08'),
+(7, 'Modern world', 'Java', 'read and answer the following questions', 'ACTIVITY', 'WRITTEN_WORK', 20.00, false, true, 1, '2026-0002', NULL, NULL, '2026-05-15 12:33:33.773565+08', '2026-05-15 12:33:33.773565+08')
+ON CONFLICT (classwork_id) DO NOTHING;
+
+-- Insert Classwork Attachments
+INSERT INTO classwork_attachment (classwork_attachment_id, classwork_id, file_name, file_path, file_type, file_size, uploaded_at) VALUES
+(1, 2, 'PDF SAMPLE.pdf', 'uploads\\classworks\\e635b0cf29064620b6aef7221d23cb7d.pdf', 'application/pdf', 32058, '2026-05-15 01:02:29.169972+08'),
+(2, 3, 'Lesson_ Present Simple.pdf', 'uploads\\classworks\\781b2276485e4898ac98ee6d5c1f73a1.pdf', 'application/pdf', 80065, '2026-05-15 01:38:57.594849+08'),
+(3, 6, 'PDF SAMPLE.pdf', 'uploads\\classworks\\5fdb9a19c72146bb977f4264f9220ae4.pdf', 'application/pdf', 32058, '2026-05-15 10:14:15.450015+08'),
+(4, 5, 'PDF SAMPLE.pdf', 'uploads\\classworks\\8807586eab53454cbf71b7953583bb84.pdf', 'application/pdf', 32058, '2026-05-15 10:29:26.843575+08'),
+(5, 7, 'PDF SAMPLE.pdf', 'uploads\\classworks\\6e8cc08cd76d4ffb99152f5c95d76310.pdf', 'application/pdf', 32058, '2026-05-15 12:39:26.584082+08')
+ON CONFLICT (classwork_attachment_id) DO NOTHING;
+
+-- Insert Classwork Assignments (CORRECTED)
+INSERT INTO classwork_assignment (classwork_assignment_id, classwork_id, class_id, assigned_by_staff_id, publish_date, due_date, lock_date, is_published, is_locked, max_attempts, assigned_at, created_at, updated_at) VALUES
+(1, 1, 1, '2026-0002', '2026-05-15 00:36:58.836+08', NULL, NULL, true, false, 1, '2026-05-15 00:36:58.845033+08', '2026-05-15 00:36:58.845033+08', '2026-05-15 00:36:58.845033+08'),
+(2, 3, 1, '2026-0002', '2026-05-15 01:38:57.617+08', NULL, NULL, true, false, 1, '2026-05-15 01:38:57.625021+08', '2026-05-15 01:38:57.625021+08', '2026-05-15 01:38:57.625021+08'),
+(3, 5, 1, '2026-0002', '2026-05-15 02:39:44.92+08', NULL, NULL, true, false, 1, '2026-05-15 02:39:44.931897+08', '2026-05-15 02:39:44.931897+08', '2026-05-15 02:39:44.931897+08'),
+(4, 6, 1, '2026-0002', '2026-05-15 12:00:00+08', '2026-05-19 12:00:00+08', NULL, false, false, 1, '2026-05-15 10:14:15.504942+08', '2026-05-15 10:14:15.504942+08', '2026-05-15 10:14:15.504942+08'),
+(5, 7, 1, '2026-0002', '2026-05-15 12:00:00+08', '2026-05-18 12:00:00+08', NULL, true, false, 1, '2026-05-15 12:33:33.810793+08', '2026-05-15 12:33:33.810793+08', '2026-05-15 12:33:33.810793+08')
+ON CONFLICT (classwork_assignment_id) DO NOTHING;
+
+-- Insert Classwork Assignments (CORRECTED - Full)
+INSERT INTO classwork_assignment (classwork_assignment_id, classwork_id, class_id, assigned_by_staff_id, publish_date, due_date, lock_date, is_published, is_locked, max_attempts, assigned_at, created_at, updated_at) VALUES
+(1, 1, 1, '2026-0002', '2026-05-15 00:36:58.836+08', NULL, NULL, true, false, 1, '2026-05-15 00:36:58.845033+08', '2026-05-15 00:36:58.845033+08', '2026-05-15 00:36:58.845033+08'),
+(2, 3, 1, '2026-0002', '2026-05-15 01:38:57.617+08', NULL, NULL, true, false, 1, '2026-05-15 01:38:57.625021+08', '2026-05-15 01:38:57.625021+08', '2026-05-15 01:38:57.625021+08'),
+(3, 5, 1, '2026-0002', '2026-05-15 02:39:44.92+08', NULL, NULL, true, false, 1, '2026-05-15 02:39:44.931897+08', '2026-05-15 02:39:44.931897+08', '2026-05-15 02:39:44.931897+08'),
+(4, 6, 1, '2026-0002', '2026-05-15 12:00:00+08', '2026-05-19 12:00:00+08', NULL, false, false, 1, '2026-05-15 10:14:15.504942+08', '2026-05-15 10:14:15.504942+08', '2026-05-15 10:14:15.504942+08'),
+(5, 7, 1, '2026-0002', '2026-05-15 12:00:00+08', '2026-05-18 12:00:00+08', NULL, true, false, 1, '2026-05-15 12:33:33.810793+08', '2026-05-15 12:33:33.810793+08', '2026-05-15 12:33:33.810793+08')
+ON CONFLICT (classwork_assignment_id) DO NOTHING;
+
+-- Insert Classwork-Lesson Relationships
+INSERT INTO classwork_lesson (classwork_id, lesson_id) VALUES
+(5, 17),
+(6, 17),
+(7, 18)
+ON CONFLICT (classwork_id, lesson_id) DO NOTHING;
+
+-- Insert Student Submissions
+INSERT INTO student_submission (submission_id, student_id, classwork_assignment_id, submitted_at, status, grade, feedback, attempt_count, graded_at, graded_by_staff_id, created_at) VALUES
+(1, 'e06f9e10-e7d3-4d8f-a26b-4e53058043dd', 2, '2026-05-15 01:43:30.964699+08', 'submitted', NULL, NULL, 1, NULL, NULL, '2026-05-15 01:43:30.959935+08'),
+(2, 'e06f9e10-e7d3-4d8f-a26b-4e53058043dd', 3, '2026-05-15 02:49:21.361285+08', 'submitted', NULL, NULL, 1, NULL, NULL, '2026-05-15 02:49:21.356574+08'),
+(3, 'e06f9e10-e7d3-4d8f-a26b-4e53058043dd', 1, '2026-05-15 10:44:36.651284+08', 'submitted', NULL, NULL, 1, NULL, NULL, '2026-05-15 10:44:36.640817+08')
+ON CONFLICT (submission_id) DO NOTHING;
+
+-- Insert Submission Attachments
+INSERT INTO submission_attachment (submission_attachment_id, submission_id, file_name, file_path, file_type, file_size, uploaded_at) VALUES
+(1, 1, 'PDF SAMPLE.pdf', 'uploads\\submissions\\ee368e9e1e0944dba2ec91574af6bf24.pdf', 'application/pdf', 32058, '2026-05-15 01:43:30.959935+08'),
+(2, 2, 'PDF SAMPLE.pdf', 'uploads\\submissions\\d8db63647bd9445ea5d352faf0f2d6b9.pdf', 'application/pdf', 32058, '2026-05-15 02:49:21.356574+08'),
+(3, 3, 'PDF SAMPLE.pdf', 'uploads\\submissions\\556fe27ec67940d7b15747ee013d9352.pdf', 'application/pdf', 32058, '2026-05-15 10:44:36.640817+08')
+ON CONFLICT (submission_attachment_id) DO NOTHING;
+
+-- Insert User Login Logs (Sample of recent logs)
+INSERT INTO user_login_log (login_id, user_id, login_at, logout_at) VALUES
+(25, '660f9511-f30c-52e5-b827-557766551111', '2026-05-15 00:22:08.798095+08', NULL),
+(26, '770a0622-a41d-63f6-c938-668877662222', '2026-05-15 00:37:42.338398+08', NULL),
+(27, '660f9511-f30c-52e5-b827-557766551111', '2026-05-15 00:40:15.889362+08', NULL),
+(28, '770a0622-a41d-63f6-c938-668877662222', '2026-05-15 00:41:17.557897+08', NULL),
+(29, '660f9511-f30c-52e5-b827-557766551111', '2026-05-15 00:42:22.298998+08', NULL),
+(30, '770a0622-a41d-63f6-c938-668877662222', '2026-05-15 00:43:39.077485+08', NULL),
+(31, '660f9511-f30c-52e5-b827-557766551111', '2026-05-15 00:57:11.72187+08', NULL),
+(32, '770a0622-a41d-63f6-c938-668877662222', '2026-05-15 01:40:25.663286+08', NULL),
+(33, '660f9511-f30c-52e5-b827-557766551111', '2026-05-15 01:51:47.472984+08', NULL),
+(34, '770a0622-a41d-63f6-c938-668877662222', '2026-05-15 01:53:05.272595+08', NULL),
+(35, '660f9511-f30c-52e5-b827-557766551111', '2026-05-15 02:10:22.060213+08', NULL),
+(36, '770a0622-a41d-63f6-c938-668877662222', '2026-05-15 02:20:45.810161+08', NULL),
+(37, '660f9511-f30c-52e5-b827-557766551111', '2026-05-15 02:32:12.040451+08', NULL),
+(38, '770a0622-a41d-63f6-c938-668877662222', '2026-05-15 02:40:11.915202+08', NULL),
+(39, '660f9511-f30c-52e5-b827-557766551111', '2026-05-15 02:41:29.446651+08', NULL),
+(40, '770a0622-a41d-63f6-c938-668877662222', '2026-05-15 02:48:55.168098+08', NULL),
+(41, '660f9511-f30c-52e5-b827-557766551111', '2026-05-15 02:53:42.136651+08', NULL),
+(42, '770a0622-a41d-63f6-c938-668877662222', '2026-05-15 10:07:01.212562+08', NULL),
+(43, '660f9511-f30c-52e5-b827-557766551111', '2026-05-15 10:07:36.24715+08', NULL),
+(44, '770a0622-a41d-63f6-c938-668877662222', '2026-05-15 10:44:15.612883+08', NULL),
+(45, '660f9511-f30c-52e5-b827-557766551111', '2026-05-15 10:48:10.099403+08', NULL),
+(46, '770a0622-a41d-63f6-c938-668877662222', '2026-05-15 10:49:30.250871+08', NULL),
+(47, '660f9511-f30c-52e5-b827-557766551111', '2026-05-15 10:53:53.499236+08', NULL)
+ON CONFLICT (login_id) DO NOTHING;
+
+-- Reset Sequences to match the data
+SELECT setval('public.academic_level_academic_level_id_seq', COALESCE((SELECT MAX(academic_level_id) FROM academic_level), 1), true);
+SELECT setval('public.academic_period_academic_period_id_seq', COALESCE((SELECT MAX(academic_period_id) FROM academic_period), 4), true);
+SELECT setval('public.academic_year_academic_year_id_seq', COALESCE((SELECT MAX(academic_year_id) FROM academic_year), 1), true);
+SELECT setval('public.class_class_id_seq', COALESCE((SELECT MAX(class_id) FROM class), 1), true);
+SELECT setval('public.classwork_allowed_file_type_allowed_type_id_seq', COALESCE((SELECT MAX(allowed_type_id) FROM classwork_allowed_file_type), 1), false);
+SELECT setval('public.classwork_assignment_classwork_assignment_id_seq', COALESCE((SELECT MAX(classwork_assignment_id) FROM classwork_assignment), 5), true);
+SELECT setval('public.classwork_attachment_classwork_attachment_id_seq', COALESCE((SELECT MAX(classwork_attachment_id) FROM classwork_attachment), 5), true);
+SELECT setval('public.classwork_classwork_id_seq', COALESCE((SELECT MAX(classwork_id) FROM classwork), 7), true);
+SELECT setval('public.lesson_assignment_lesson_assignment_id_seq', COALESCE((SELECT MAX(lesson_assignment_id) FROM lesson_assignment), 5), true);
+SELECT setval('public.lesson_attachment_lesson_attachment_id_seq', COALESCE((SELECT MAX(lesson_attachment_id) FROM lesson_attachment), 5), true);
+SELECT setval('public.lesson_lesson_id_seq', COALESCE((SELECT MAX(lesson_id) FROM lesson), 18), true);
+SELECT setval('public.student_class_student_class_id_seq', COALESCE((SELECT MAX(student_class_id) FROM student_class), 1), true);
+SELECT setval('public.student_submission_submission_id_seq', COALESCE((SELECT MAX(submission_id) FROM student_submission), 3), true);
+SELECT setval('public.subject_load_subject_load_id_seq', COALESCE((SELECT MAX(subject_load_id) FROM subject_load), 1), true);
+SELECT setval('public.subject_subject_id_seq', COALESCE((SELECT MAX(subject_id) FROM subject), 1), true);
+SELECT setval('public.submission_attachment_submission_attachment_id_seq', COALESCE((SELECT MAX(submission_attachment_id) FROM submission_attachment), 3), true);
+SELECT setval('public.user_login_log_login_id_seq', COALESCE((SELECT MAX(login_id) FROM user_login_log), 47), true);

@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { API_BASE_URL } from '@/constants/api';
 
 export type StudentSubject = {
   subject_load_id: number;
@@ -68,8 +67,8 @@ export function useStudentSubjects(): UseStudentSubjectsReturn {
         };
 
         const [subjectsRes, quarterRes] = await Promise.all([
-          fetch(`${API_URL}/api/v1/students/me/subjects`, { headers }),
-          fetch(`${API_URL}/api/v1/students/me/active-quarter`, { headers }),
+          fetch(`${API_BASE_URL}/api/v1/students/me/subjects`, { headers }),
+          fetch(`${API_BASE_URL}/api/v1/students/me/active-quarter`, { headers }),
         ]);
 
         if (!subjectsRes.ok) {

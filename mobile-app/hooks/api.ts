@@ -1,8 +1,7 @@
   // hooks/api.ts
   // Centralized API helper for the mobile app
   import { notifyUnauthorized } from '@/auth/session-expired';
-
-  const API_URL = process.env.EXPO_PUBLIC_API_URL;
+  import { API_BASE_URL } from '@/constants/api';
 
   type FetchOptions = RequestInit & {
     token?: string;
@@ -26,7 +25,7 @@
       headers['Content-Type'] = 'application/json';
     }
 
-    const res = await fetch(`${API_URL}${path}`, { ...fetchOpts, headers });
+    const res = await fetch(`${API_BASE_URL}${path}`, { ...fetchOpts, headers });
     if (!res.ok) {
       if (res.status === 401 && token) {
         notifyUnauthorized();
@@ -98,7 +97,7 @@
       }
     }
 
-    const res = await fetch(`${API_URL}${path}`, {
+    const res = await fetch(`${API_BASE_URL}${path}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -125,7 +124,7 @@
     const form = new FormData();
     await appendUploadableFile(form, 'file', file);
 
-    const res = await fetch(`${API_URL}${path}`, {
+    const res = await fetch(`${API_BASE_URL}${path}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,

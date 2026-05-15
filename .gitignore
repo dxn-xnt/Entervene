@@ -6,6 +6,7 @@ backend/*.pyc
 backend/.env
 backend/data/
 backend/**/*.pkl
+backend\app\core\Config.py
 
 # Python cache
 **/__pycache__/

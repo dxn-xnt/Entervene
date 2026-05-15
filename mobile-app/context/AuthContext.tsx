@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import type { ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { registerUnauthorizedHandler } from '@/auth/session-expired';
+import { API_BASE_URL } from '@/constants/api';
 
 type Role = 'student' | 'teacher' | 'admin' | null;
 
@@ -22,7 +23,6 @@ interface AuthContextType {
 }
 
 const STORAGE_KEY = '@entervene_session';
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
@@ -48,7 +48,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const login = async (email: string, password: string): Promise<Role> => {
-    const response = await fetch(`${API_URL}/api/v1/auth/login`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
