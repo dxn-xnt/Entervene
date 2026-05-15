@@ -15,6 +15,7 @@
     options: FetchOptions = {},
   ): Promise<T> {
     const { token, ...fetchOpts } = options;
+    const debugUnsubmit = path.includes('/unsubmit');
     const headers: Record<string, string> = {
       ...(fetchOpts.headers as Record<string, string>),
     };
@@ -25,12 +26,29 @@
       headers['Content-Type'] = 'application/json';
     }
 
+    if (debugUnsubmit) {
+      console.log('[UnsubmitDebug][apiFetch] request', {
+        url: `${API_BASE_URL}${path}`,
+        method: fetchOpts.method ?? 'GET',
+        hasToken: Boolean(token),
+      });
+    }
+
     const res = await fetch(`${API_BASE_URL}${path}`, { ...fetchOpts, headers });
+    if (debugUnsubmit) {
+      console.log('[UnsubmitDebug][apiFetch] response', {
+        status: res.status,
+        ok: res.ok,
+      });
+    }
     if (!res.ok) {
       if (res.status === 401 && token) {
         notifyUnauthorized();
       }
       const err = await res.json().catch(() => ({}));
+      if (debugUnsubmit) {
+        console.log('[UnsubmitDebug][apiFetch] error body', err);
+      }
       throw new Error(err.detail || `Request failed (${res.status})`);
     }
     return res.json();
