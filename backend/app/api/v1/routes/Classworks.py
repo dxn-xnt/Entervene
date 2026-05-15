@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pathlib import Path
+from datetime import datetime
 
 from app.db.Session import get_db
 from app.core.Dependencies import require_role, get_staff_id, get_student_record
@@ -245,9 +246,25 @@ def get_cw_for_class(class_id: int, subject_id: int, student=Depends(get_student
     if not enr: raise HTTPException(status_code=403, detail="Not enrolled in this class")
     rows = db.query(ClassworkAssignment, Classwork, Class).join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id).join(Class, Class.class_id == ClassworkAssignment.class_id).filter(ClassworkAssignment.class_id == class_id, Classwork.subject_id == subject_id, ClassworkAssignment.is_published == True).order_by(ClassworkAssignment.created_at.desc()).all()
     results = []
+    now = datetime.utcnow()
+    
     for ca, cw, cls in rows:
         sub = db.query(StudentSubmission).filter(StudentSubmission.classwork_assignment_id == ca.classwork_assignment_id, StudentSubmission.student_id == student.student_id).first()
         staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == cw.created_by_staff_id).first()
+        
+        # Calculate display status based on submission status and due date
+        display_status = None
+        if sub:
+            display_status = sub.status
+        else:
+            if ca.due_date:
+                if now >= ca.due_date:
+                    display_status = "missing"
+                else:
+                    display_status = "not_submitted_yet"
+            else:
+                display_status = "not_submitted_yet"
+        
         results.append(ClassworkAssignmentResponse(
             classwork_assignment_id=ca.classwork_assignment_id, classwork_id=cw.classwork_id,
             class_id=ca.class_id, section_name=cls.section_name, title=cw.title,
@@ -256,7 +273,7 @@ def get_cw_for_class(class_id: int, subject_id: int, student=Depends(get_student
             due_date=ca.due_date, is_published=ca.is_published,
             teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
             attachments=[_att_resp(a) for a in cw.attachments],
-            submission_status=sub.status if sub else None,
+            submission_status=display_status,
         ))
     return results
 

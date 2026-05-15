@@ -5,11 +5,12 @@ import { AppColors, NeoShadow, Spacing, Borders } from '@/constants/theme';
 
 // Status colour map
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  submitted: { bg: '#bfdbfe', text: '#1d4ed8', label: 'Submitted' },
-  graded:    { bg: '#bbf7d0', text: '#15803d', label: 'Graded' },
-  late:      { bg: '#fecaca', text: '#b91c1c', label: 'Late' },
-  pending:   { bg: '#fef08a', text: '#854d0e', label: 'Pending' },
-  missing:   { bg: '#fee2e2', text: '#b91c1c', label: 'Missing' },
+  submitted:         { bg: '#bfdbfe', text: '#1d4ed8', label: 'Submitted' },
+  graded:            { bg: '#bbf7d0', text: '#15803d', label: 'Graded' },
+  late:              { bg: '#fecaca', text: '#b91c1c', label: 'Late' },
+  pending:           { bg: '#fef08a', text: '#854d0e', label: 'Pending' },
+  missing:           { bg: '#fee2e2', text: '#b91c1c', label: 'Missing' },
+  not_submitted_yet: { bg: '#dbeafe', text: '#1e40af', label: 'Not Submitted' },
 };
 
 type ClassworkItemProps = {
@@ -20,8 +21,8 @@ type ClassworkItemProps = {
 };
 
 const ClassworkItem = ({ title, submittedDate, status, onPress }: ClassworkItemProps) => {
-  const key    = (status ?? 'missing').toLowerCase();
-  const badge  = STATUS_STYLES[key] ?? STATUS_STYLES['missing'];
+  const key    = (status ?? 'not_submitted_yet').toLowerCase();
+  const badge  = STATUS_STYLES[key] ?? STATUS_STYLES['not_submitted_yet'];
   const Wrapper = onPress ? TouchableOpacity : View;
 
   return (

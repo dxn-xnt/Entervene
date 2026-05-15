@@ -249,7 +249,7 @@ export default function SubjectDetail() {
                   submittedDate={cw.due_date
                     ? `Due ${new Date(cw.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
                     : 'No due date'}
-                  status={cw.submission_status ?? 'missing'}
+                  status={cw.submission_status ?? 'not_submitted_yet'}
                   onPress={() =>
                     router.push({
                       pathname: '/student/classwork-view' as any,
