@@ -18,6 +18,7 @@ import { useDrawer } from '@/context/DrawerContext';
 import { useAuth } from '@/context/AuthContext';
 import { AppColors, NeoShadow, Spacing, Borders } from '@/constants/theme';
 import { useStudentSubjects } from '@/hooks/useStudentSubjects';
+import { useTeacherAcademicYear } from '@/hooks/useTeacherAcademicYear';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.78;
@@ -60,7 +61,7 @@ const ROLE_CONFIG: Record<
   teacher: {
     tagline: 'MSTS EDUHUB · TEACHER',
     notificationsRoute: '/teacher/notifications',
-    showQuarterSelector: false,
+    showQuarterSelector: true,
     menuItems: [
       { id: 'dashboard',     label: 'Dashboard',     icon: 'grid-outline',          route: '/teacher/dashboard' },
       { id: 'classes',       label: 'Classes',        icon: 'people-outline',        route: '/teacher/classes' },
@@ -100,10 +101,15 @@ const DrawerMenu = ({ role }: DrawerMenuProps) => {
   const [userPanelVisible, setUserPanelVisible] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // Only relevant for student role — but hooks can't be called conditionally,
-  // so we call it always but the hook must be guarded inside to skip fetches for non-students.
+  // Fetch academic year/quarter for both students and teachers
   const studentSubjects = useStudentSubjects();
-  const activeQuarter = role === 'student' ? studentSubjects.activeQuarter : null;
+  const teacherAcademicYear = useTeacherAcademicYear();
+  
+  const activeQuarter = role === 'student' 
+    ? studentSubjects.activeQuarter 
+    : role === 'teacher'
+    ? teacherAcademicYear.activeQuarter
+    : null;
 
   useEffect(() => {
     if (isOpen) {
@@ -178,7 +184,7 @@ const DrawerMenu = ({ role }: DrawerMenuProps) => {
             </View>
           </View>
 
-          {/* Quarter Selector — student only */}
+          {/* Quarter Selector — shown for both students and teachers */}
           {config.showQuarterSelector && (
             <TouchableOpacity style={styles.quarterSelector} activeOpacity={0.7}>
               <Text style={styles.quarterText}>

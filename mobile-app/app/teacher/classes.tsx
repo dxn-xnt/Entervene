@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useDrawer } from '@/context/DrawerContext';
 import { useTeacherClasses, useTeacherClassworks } from '@/hooks/useTeacherData';
 import { AppColors, Spacing, Borders, NeoShadow } from '@/constants/theme';
+import { useTeacherAcademicYear } from '@/hooks/useTeacherAcademicYear';
 
 const CARD_BG  = '#F6E9B2';
 const SCREEN_W = Dimensions.get('window').width;
@@ -27,6 +28,7 @@ export default function TeacherClasses() {
   const router = useRouter();
   const { classes, isLoading: classesLoading } = useTeacherClasses();
   const { classworks, isLoading: cwLoading }   = useTeacherClassworks();
+  const { activeQuarter } = useTeacherAcademicYear();
 
   const isLoading = classesLoading || cwLoading;
 
@@ -69,7 +71,11 @@ export default function TeacherClasses() {
           <>
             {/* ── Year group header ── */}
             <View style={styles.yearHeader}>
-              <Text style={styles.yearLabel}>Current Academic Year</Text>
+             <Text style={styles.yearLabel}>
+              {activeQuarter
+                ? `${activeQuarter.period_name} · ${activeQuarter.year_label}`
+                : 'Current Academic Year'}
+            </Text>
               <View style={styles.yearInfo}>
                 <Ionicons name="information-circle-outline" size={18} color={AppColors.mutedForeground} />
               </View>
