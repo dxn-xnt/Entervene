@@ -87,6 +87,22 @@ export default function ClassworkDetail() {
     grade: s.grade ?? null,
   });
 
+  const handleStudentPress = (student: any) => {
+    if (!student?.submission_id) {
+      Alert.alert('No submission', 'This student has not submitted anything yet.');
+      return;
+    }
+    router.push({
+      pathname: '/teacher/grade-submission' as any,
+      params: {
+        submission_id: String(student.submission_id),
+        student_name: student.student_name ?? undefined,
+        classwork_title: cw?.title ?? undefined,
+        total_points: String(cw?.total_points ?? 100),
+      },
+    });
+  };
+
   const { tracking, isLoading: submissionsLoading, error: submissionError, refresh: refreshTracking } = useClassworkSubmissionTracking(classworkId || 0);
 
   const loadClasswork = useCallback(async () => {
@@ -324,13 +340,14 @@ export default function ClassworkDetail() {
             </View>
           ) : (
             <SubmissionMonitor
-            submitted={(tracking?.submitted ?? []).map(normalizeStudent)}
-            missing={missingList.map(normalizeStudent)}
-            isLoading={submissionsLoading}
-            classworkTitle={cw.title}
-            totalPoints={cw.total_points ?? 100}
-            dueDate={dueDate}
-          />
+              submitted={(tracking?.submitted ?? []).map(normalizeStudent)}
+              missing={missingList.map(normalizeStudent)}
+              isLoading={submissionsLoading}
+              classworkTitle={cw.title}
+              totalPoints={cw.total_points ?? 100}
+              dueDate={dueDate}
+              onStudentPress={handleStudentPress}
+            />
           )}
         </View>
 

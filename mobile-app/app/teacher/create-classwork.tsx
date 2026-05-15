@@ -119,7 +119,7 @@ export default function CreateClasswork() {
           classwork_category: backendCategory,
           total_points: parseFloat(totalPoints) || 100,
           subject_id: subjectId,
-          is_published: publishDate ? new Date() >= publishDate : true,
+          is_published: true,
           lesson_ids: linkedLessonId ? [linkedLessonId] : [],
         }),
       });
@@ -136,7 +136,7 @@ export default function CreateClasswork() {
           token: session!.token,
           body: JSON.stringify({
             class_ids: selectedClasses,
-            is_published: publishDate ? new Date() >= publishDate : true,
+            is_published: true,
             publish_date: (publishDate ?? new Date()).toISOString(),
             due_date: dueDate ? dueDate.toISOString() : null,
             max_attempts: parseInt(maxAttempts) || 1,

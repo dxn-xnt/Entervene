@@ -190,7 +190,7 @@ export default function EditLesson() {
     if (Platform.OS === 'web') {
       setTimeout(() => {
         const confirmed = window.confirm(
-          'Are you sure you want to delete this lesson? All associated classworks and attachments will also be permanently deleted.'
+          'Are you sure you want to delete this lesson?'
         );
         if (confirmed) confirmAndDelete();
       }, 50);
@@ -200,7 +200,7 @@ export default function EditLesson() {
     setTimeout(() => {
       Alert.alert(
         'Delete Lesson',
-        'Are you sure you want to delete this lesson? All associated classworks and attachments will also be permanently deleted.',
+        'Are you sure you want to delete this lesson?',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Delete', style: 'destructive', onPress: confirmAndDelete },
