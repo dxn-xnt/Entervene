@@ -330,7 +330,7 @@ const s = StyleSheet.create({
   fileRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderWidth: 1, borderColor: AppColors.border, backgroundColor: AppColors.card },
   fileName: { flex: 1, fontSize: 13, color: AppColors.foreground },
   removeFileButton: { padding: 4 },
-  statusCard: { gap: 8, padding: 16, borderWidth: Borders.width, borderColor: AppColors.border, backgroundColor: AppColors.accent },
+  statusCard: { gap: 8, padding: 16, borderWidth: Borders.width, borderColor: AppColors.border, backgroundColor: BANNER_BG, borderRadius: 12, ...NeoShadow.sm },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', borderRadius: 4 },
   statusBadgeText: { fontSize: 11, fontWeight: '800', color: '#fff' },
   gradeBox: { gap: 4, marginTop: 8, padding: 12, backgroundColor: '#dcfce7', borderWidth: 1, borderColor: '#86efac' },
