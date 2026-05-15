@@ -11,14 +11,16 @@ npm run dev
 
 #mobile
 npx expo start
-npx expo start --offline (for offline debugging)
 
-#sample accounts
--teacher
+#sample accounts (login)
+#teacher
 m.cruz@school.edu.ph
 hash_poly_02
 
--student
+#student
 juan.delacruz@student.ph
 hash_poly_03
+mobile app
+npx expo start
+npx expo start --offline (if ever mag bug inig run)
 
