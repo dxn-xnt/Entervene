@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Linking, Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +21,14 @@ type LessonParams = {
   description?: string;
 };
 
+type LessonAttachment = {
+  lesson_attachment_id: number;
+  file_name: string;
+  file_type: string;
+  file_size: number;
+  uploaded_at: string;
+};
+
 type LessonClasswork = {
   classwork_assignment_id: number;
   classwork_id: number;
@@ -29,6 +37,14 @@ type LessonClasswork = {
   total_points: number;
   due_date: string | null;
   submission_status: string | null;
+};
+
+type LessonDetail = {
+  lesson_id: number;
+  title: string;
+  description: string | null;
+  content: string | null;
+  attachments: LessonAttachment[];
 };
 
 const LessonView = () => {
@@ -43,19 +59,34 @@ const LessonView = () => {
   const lessonId = params.lesson_id ? parseInt(params.lesson_id) : null;
   const classId = params.class_id ? parseInt(params.class_id) : null;
 
+  const [lessonDetail, setLessonDetail] = useState<LessonDetail | null>(null);
   const [classworks, setClassworks] = useState<LessonClasswork[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchClassworks = useCallback(async () => {
-    if (!session?.token || !lessonId || !classId) { setLoading(false); return; }
-    setLoading(true); setError(null);
+  const fetchData = useCallback(async () => {
+    if (!session?.token || !lessonId || !classId) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
     try {
-      const data = await apiFetch<LessonClasswork[]>(
+      // Fetch lesson details (including attachments)
+      const lesson = await apiFetch<LessonDetail>(
+        `/api/v1/lessons/${lessonId}`,
+        { token: session.token },
+      );
+      setLessonDetail(lesson);
+
+      // Fetch classwork assignments
+      const classworkData = await apiFetch<LessonClasswork[]>(
         `/api/v1/lessons/${lessonId}/classwork-assignments?class_id=${classId}`,
         { token: session.token },
       );
-      setClassworks(data ?? []);
+      setClassworks(classworkData ?? []);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -63,7 +94,40 @@ const LessonView = () => {
     }
   }, [session?.token, lessonId, classId]);
 
-  useEffect(() => { fetchClassworks(); }, [fetchClassworks]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const getFileIcon = (fileType: string): React.ReactNode => {
+    if (fileType.includes('pdf')) return <Ionicons name="document" size={16} color={AppColors.destructive} />;
+    if (fileType.includes('word') || fileType.includes('document')) return <Ionicons name="document-text" size={16} color={AppColors.primary} />;
+    if (fileType.includes('sheet') || fileType.includes('excel')) return <Ionicons name="grid" size={16} color={AppColors.primary} />;
+    if (fileType.includes('image')) return <Ionicons name="image" size={16} color={AppColors.primary} />;
+    return <Ionicons name="document-outline" size={16} color={AppColors.mutedForeground} />;
+  };
+
+  const handleDownloadAttachment = (attachmentId: number, fileName: string) => {
+    if (!lessonId) return;
+
+    const downloadUrl = `${process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/api/v1/lessons/${lessonId}/attachments/${attachmentId}/download`;
+
+    Alert.alert(
+      'Download File',
+      `Opening: ${fileName}`,
+      [
+        { text: 'Cancel', onPress: () => { } },
+        { text: 'Open', onPress: () => Linking.openURL(downloadUrl) },
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -77,7 +141,7 @@ const LessonView = () => {
 
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchClassworks} />}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchData} />}
       >
         {/* ── Lesson info card ── */}
         <View style={styles.lessonCard}>
@@ -93,6 +157,32 @@ const LessonView = () => {
             </View>
           ) : null}
         </View>
+
+        {/* ── Lesson Attachments ── */}
+        {lessonDetail && lessonDetail.attachments && lessonDetail.attachments.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>Attachments</Text>
+            <View style={styles.attachmentsList}>
+              {lessonDetail.attachments.map((att) => (
+                <TouchableOpacity
+                  key={att.lesson_attachment_id}
+                  style={styles.attachmentCard}
+                  onPress={() => handleDownloadAttachment(att.lesson_attachment_id, att.file_name)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.attachmentIcon}>
+                    {getFileIcon(att.file_type)}
+                  </View>
+                  <View style={styles.attachmentInfo}>
+                    <Text style={styles.attachmentName} numberOfLines={2}>{att.file_name}</Text>
+                    <Text style={styles.attachmentSize}>{formatFileSize(att.file_size)}</Text>
+                  </View>
+                  <Ionicons name="download-outline" size={20} color={AppColors.primary} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
 
         {/* ── Classworks for this lesson ── */}
         <Text style={styles.sectionLabel}>Classworks</Text>
@@ -117,7 +207,7 @@ const LessonView = () => {
                     ? `Due ${new Date(cw.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
                     : 'No due date'
                 }
-                status={cw.submission_status ?? 'missing'}
+                status={cw.submission_status ?? 'not_submitted_yet'}
                 onPress={() =>
                   router.push({
                     pathname: '/student/classwork-view' as any,
@@ -163,6 +253,41 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 11, fontWeight: '700', color: AppColors.mutedForeground,
     textTransform: 'uppercase', letterSpacing: 1,
+  },
+  attachmentsList: {
+    gap: 8,
+  },
+  attachmentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: AppColors.card,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    borderRadius: 8,
+    padding: Spacing.md,
+    gap: 12,
+    ...NeoShadow.sm,
+  },
+  attachmentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 6,
+    backgroundColor: AppColors.muted,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachmentInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  attachmentName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: AppColors.foreground,
+  },
+  attachmentSize: {
+    fontSize: 12,
+    color: AppColors.mutedForeground,
   },
   cwList: { gap: 10 },
   emptyBox: { alignItems: 'center', gap: 8, paddingVertical: 24 },

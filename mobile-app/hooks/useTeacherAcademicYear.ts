@@ -1,20 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { API_BASE_URL } from '@/constants/api';
 
-export type StudentSubject = {
-  subject_load_id: number;
-  class_id: number;
-  subject_id: number;
-  subject_name: string;
-  subject_codename: string;
-  teacher_name: string;
-  period_id: number;
-  period_name: string;
-  is_current_quarter: boolean;
-  section_name: string;
-  year_label: string;
-};
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export type ActiveQuarter = {
   period_id: number | null;
@@ -22,17 +9,19 @@ export type ActiveQuarter = {
   year_label: string;
 };
 
-type UseStudentSubjectsReturn = {
-  subjects: StudentSubject[];
+type UseTeacherAcademicYearReturn = {
   activeQuarter: ActiveQuarter | null;
   isLoading: boolean;
   error: string | null;
   refresh: () => void;
 };
 
-export function useStudentSubjects(): UseStudentSubjectsReturn {
+/**
+ * Fetch the current active academic quarter/year for the teacher.
+ * Uses the same endpoint as students which falls back to global active period.
+ */
+export function useTeacherAcademicYear(): UseTeacherAcademicYearReturn {
   const { session } = useAuth();
-  const [subjects, setSubjects] = useState<StudentSubject[]>([]);
   const [activeQuarter, setActiveQuarter] = useState<ActiveQuarter | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,9 +30,8 @@ export function useStudentSubjects(): UseStudentSubjectsReturn {
   const refresh = useCallback(() => setTrigger((t) => t + 1), []);
 
   useEffect(() => {
-    // Only students may call these routes; missing/unknown role must not hit student APIs.
-    if (session?.role !== 'student') {
-      setSubjects([]);
+    // Only teachers may call this
+    if (session?.role !== 'teacher') {
       setActiveQuarter(null);
       setIsLoading(false);
       setError(null);
@@ -56,7 +44,7 @@ export function useStudentSubjects(): UseStudentSubjectsReturn {
 
     let cancelled = false;
 
-    const fetchAll = async () => {
+    const fetchQuarter = async () => {
       setIsLoading(true);
       setError(null);
 
@@ -66,30 +54,30 @@ export function useStudentSubjects(): UseStudentSubjectsReturn {
           'Content-Type': 'application/json',
         };
 
-        const [subjectsRes, quarterRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/v1/students/me/subjects`, { headers }),
-          fetch(`${API_BASE_URL}/api/v1/students/me/active-quarter`, { headers }),
-        ]);
+        // Use the same endpoint as students - it has a fallback to global active period
+        const quarterRes = await fetch(`${API_URL}/api/v1/students/me/active-quarter`, { 
+          headers 
+        });
 
-        if (!subjectsRes.ok) {
-          const err = await subjectsRes.json().catch(() => ({}));
-          throw new Error(err.detail ?? `Failed to fetch subjects (${subjectsRes.status})`);
-        }
         if (!quarterRes.ok) {
           const err = await quarterRes.json().catch(() => ({}));
-          throw new Error(err.detail ?? `Failed to fetch quarter (${quarterRes.status})`);
+          throw new Error(err.detail ?? `Failed to fetch academic year (${quarterRes.status})`);
         }
 
-        const subjectsData: StudentSubject[] = await subjectsRes.json();
         const quarterData: ActiveQuarter = await quarterRes.json();
 
         if (!cancelled) {
-          setSubjects(subjectsData);
           setActiveQuarter(quarterData);
         }
       } catch (err: any) {
         if (!cancelled) {
           setError(err.message ?? 'Unknown error');
+          // Still set a default so UI doesn't break
+          setActiveQuarter({
+            period_id: null,
+            period_name: 'Current Quarter',
+            year_label: '2025-2026'
+          });
         }
       } finally {
         if (!cancelled) {
@@ -98,12 +86,12 @@ export function useStudentSubjects(): UseStudentSubjectsReturn {
       }
     };
 
-    fetchAll();
+    fetchQuarter();
 
     return () => {
       cancelled = true;
     };
   }, [session?.token, session?.role, trigger]);
 
-  return { subjects, activeQuarter, isLoading, error, refresh };
+  return { activeQuarter, isLoading, error, refresh };
 }

@@ -93,12 +93,6 @@ def get_active_quarter(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Returns the currently active academic period for the authenticated student's class.
-    Falls back to the globally active period if no class-specific one is found.
-
-    Reusable for both mobile and web clients.
-    """
     user_id = current_user["sub"]
 
     student = (
@@ -106,32 +100,33 @@ def get_active_quarter(
         .filter(Student.user_id == user_id)
         .first()
     )
-    if not student:
-        raise HTTPException(status_code=404, detail="Student profile not found")
 
-    # Try to find the active period tied to the student's class's subject loads
-    row = (
-        db.query(
-            AcademicPeriod.academic_period_id,
-            AcademicPeriod.period_name,
-            AcademicYear.year_label,
-        )
-        .select_from(Student)
-        .join(StudentClass, StudentClass.student_id == Student.student_id)
-        .join(Class, Class.class_id == StudentClass.class_id)
-        .join(SubjectLoad, SubjectLoad.class_id == Class.class_id)
-        .join(AcademicPeriod, AcademicPeriod.academic_period_id == SubjectLoad.academic_period_id)
-        .join(AcademicYear, AcademicYear.academic_year_id == AcademicPeriod.academic_year_id)
-        .filter(
-            Student.student_id == student.student_id,
-            StudentClass.enrollment_status == "enrolled",
-            AcademicPeriod.is_active == True,
-        )
-        .first()
-    )
+    row = None
 
+    # Only attempt the class-specific lookup for students
+    if student:
+        row = (
+            db.query(
+                AcademicPeriod.academic_period_id,
+                AcademicPeriod.period_name,
+                AcademicYear.year_label,
+            )
+            .select_from(Student)
+            .join(StudentClass, StudentClass.student_id == Student.student_id)
+            .join(Class, Class.class_id == StudentClass.class_id)
+            .join(SubjectLoad, SubjectLoad.class_id == Class.class_id)
+            .join(AcademicPeriod, AcademicPeriod.academic_period_id == SubjectLoad.academic_period_id)
+            .join(AcademicYear, AcademicYear.academic_year_id == AcademicPeriod.academic_year_id)
+            .filter(
+                Student.student_id == student.student_id,
+                StudentClass.enrollment_status == "enrolled",
+                AcademicPeriod.is_active == True,
+            )
+            .first()
+        )
+
+    # Global fallback — used for teachers, or students with no active class period
     if not row:
-        # Global fallback: any period marked active
         row = (
             db.query(
                 AcademicPeriod.academic_period_id,

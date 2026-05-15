@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
 from typing import List, Optional
 from pathlib import Path
+from datetime import datetime, timezone
 
 from app.db.Session import get_db
 from app.core.Dependencies import require_role, get_staff_id, get_student_record
@@ -309,7 +310,7 @@ def publish_lesson(
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    """Publish a lesson (mark as published and not draft)."""
+    """Publish a lesson (mark as published and not draft). Also auto-publishes all LessonAssignments."""
     lesson = db.query(Lesson).filter(
         Lesson.lesson_id == lesson_id,
         Lesson.created_by_staff_id == staff_id,
@@ -319,6 +320,14 @@ def publish_lesson(
 
     lesson.is_published = True
     lesson.is_draft = False
+    
+    # Auto-publish all LessonAssignments for this lesson so students can see it
+    assignments = db.query(LessonAssignment).filter(
+        LessonAssignment.lesson_id == lesson_id
+    ).all()
+    for assignment in assignments:
+        assignment.is_published = True
+    
     db.commit()
     db.refresh(lesson)
 
@@ -326,6 +335,7 @@ def publish_lesson(
         "message": "Lesson published",
         "is_published": lesson.is_published,
         "is_draft": lesson.is_draft,
+        "assignments_published": len(assignments),
     }
 
 
@@ -336,7 +346,7 @@ def assign_lesson(
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    """Assign a lesson to one or more classes."""
+    """Assign a lesson to one or more classes. If lesson is already published, assignment will be published too."""
     lesson = db.query(Lesson).filter(
         Lesson.lesson_id == lesson_id,
         Lesson.created_by_staff_id == staff_id,
@@ -353,11 +363,16 @@ def assign_lesson(
         if existing:
             continue
 
+        # Auto-publish assignment if the lesson is already published
+        is_published = body.is_published if body.is_published is not None else True
+        if lesson.is_published:
+            is_published = True
+        
         assignment = LessonAssignment(
             lesson_id=lesson_id,
             class_id=class_id,
             assigned_by_staff_id=staff_id,
-            is_published=body.is_published,
+            is_published=is_published,
         )
         db.add(assignment)
         created.append(class_id)
@@ -476,12 +491,38 @@ def get_lesson_classwork_assignments(
     )
 
     results = []
+    # Use timezone-aware current time
+    now = datetime.now(timezone.utc)
+    
     for ca in rows:
         cw = db.query(Classwork).filter(Classwork.classwork_id == ca.classwork_id).first()
         sub = db.query(StudentSubmission).filter(
             StudentSubmission.classwork_assignment_id == ca.classwork_assignment_id,
             StudentSubmission.student_id == student.student_id,
         ).first()
+        
+        # Calculate display status based on submission status and due date
+        display_status = None
+        if sub:
+            # If there's a submission record, use its status
+            display_status = sub.status
+        else:
+            # No submission yet - check if due date has passed
+            if ca.due_date:
+                # If due_date is naive, make it aware (or convert to naive)
+                if ca.due_date.tzinfo is None:
+                    # If due_date is naive, assume it's UTC
+                    due_date_aware = ca.due_date.replace(tzinfo=timezone.utc)
+                else:
+                    due_date_aware = ca.due_date
+                
+                if now >= due_date_aware:
+                    display_status = "missing"  # Past due date, no submission = Missing
+                else:
+                    display_status = "not_submitted_yet"  # Before due date = Not submitted yet
+            else:
+                display_status = "not_submitted_yet"  # No due date, so not missing
+        
         results.append({
             "classwork_assignment_id": ca.classwork_assignment_id,
             "classwork_id":           ca.classwork_id,
@@ -489,7 +530,7 @@ def get_lesson_classwork_assignments(
             "classwork_type":         cw.classwork_type if cw else None,
             "total_points":           float(cw.total_points) if cw and cw.total_points else None,
             "due_date":               ca.due_date.isoformat() if ca.due_date else None,
-            "submission_status":      sub.status if sub else None,
+            "submission_status":      display_status,
         })
 
     return results

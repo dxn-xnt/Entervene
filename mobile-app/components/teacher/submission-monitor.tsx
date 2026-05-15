@@ -1,352 +1,397 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
-  StyleSheet,
   ActivityIndicator,
+  StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { SubmissionTrackingStudent } from '@/hooks/useSubmissions';
 import { AppColors, Spacing, Borders, NeoShadow } from '@/constants/theme';
 
-interface SubmissionMonitorProps {
-  submitted: SubmissionTrackingStudent[];
-  missing: SubmissionTrackingStudent[];
-  isLoading?: boolean;
-  onStudentPress?: (student: SubmissionTrackingStudent, isSubmitted: boolean) => void;
-  classworkTitle?: string;
-  totalPoints?: number;
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type StudentEntry = {
+  student_id: number | string;
+  student_name: string;
+  email?: string;
+  submitted_at?: string | null;
+  grade?: number | null;
+};
+
+type Props = {
+  submitted: StudentEntry[];
+  missing: StudentEntry[];
+  isLoading: boolean;
+  classworkTitle: string;
+  totalPoints: number;
+  dueDate: string | null;
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatDateTime(iso: string | null | undefined) {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    return null;
+  }
 }
 
-const statusColors: Record<string, string> = {
-  pending: '#f59e0b',
-  submitted: '#3b82f6',
-  graded: '#22c55e',
-  late: '#ef4444',
-  missed: '#6b7280',
-  not_submitted: '#6b7280',
-};
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
-const formatDate = (iso: string | null): string => {
-  if (!iso) return 'Not submitted';
-  return new Date(iso).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-};
+function SummaryCard({
+  count,
+  label,
+  bg,
+  borderColor,
+  textColor,
+}: {
+  count: number;
+  label: string;
+  bg: string;
+  borderColor: string;
+  textColor: string;
+}) {
+  return (
+    <View style={[sc.card, { backgroundColor: bg, borderColor }]}>
+      <Text style={[sc.cardCount, { color: textColor }]}>{count}</Text>
+      <Text style={[sc.cardLabel, { color: textColor }]}>{label}</Text>
+    </View>
+  );
+}
 
-const SubmissionCard: React.FC<{
-  student: SubmissionTrackingStudent;
-  isSubmitted: boolean;
-  onPress: () => void;
+const sc = StyleSheet.create({
+  card: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderWidth: Borders.width,
+    borderRadius: 8,
+    gap: 2,
+    ...NeoShadow.xs,
+  },
+  cardCount: { fontSize: 22, fontWeight: '900' },
+  cardLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+});
+
+// ─── Section header ───────────────────────────────────────────────────────────
+
+function SectionHeader({
+  icon,
+  label,
+  count,
+  color,
+  expanded,
+  onToggle,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  count: number;
+  color: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <TouchableOpacity style={[sh.row, { borderColor: color + '55' }]} onPress={onToggle} activeOpacity={0.7}>
+      <Ionicons name={icon} size={16} color={color} />
+      <Text style={[sh.label, { color }]}>{label}</Text>
+      <View style={[sh.badge, { backgroundColor: color + '22', borderColor: color + '55' }]}>
+        <Text style={[sh.badgeText, { color }]}>{count}</Text>
+      </View>
+      <Ionicons
+        name={expanded ? 'chevron-up' : 'chevron-down'}
+        size={16}
+        color={color}
+        style={{ marginLeft: 'auto' }}
+      />
+    </TouchableOpacity>
+  );
+}
+
+const sh = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: Borders.width,
+    borderRadius: 8,
+    backgroundColor: AppColors.inputBackground,
+  },
+  label: { fontSize: 13, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
+  badge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: Borders.width,
+  },
+  badgeText: { fontSize: 11, fontWeight: '900' },
+});
+
+// ─── Student row ──────────────────────────────────────────────────────────────
+
+type RowStatus = 'submitted' | 'missing';
+
+function StudentRow({
+  student,
+  status,
+  totalPoints,
+}: {
+  student: StudentEntry;
+  status: RowStatus;
   totalPoints: number;
-}> = ({ student, isSubmitted, onPress, totalPoints }) => (
-  <TouchableOpacity
-    style={[s.card, !isSubmitted && s.missingCard]}
-    activeOpacity={isSubmitted ? 0.8 : 1}
-    disabled={!isSubmitted}
-    onPress={onPress}
-  >
-    <View style={s.cardContent}>
-      <Text style={s.cardName} numberOfLines={1}>
-        {student.student_name || 'Unknown'}
-      </Text>
-      <Text style={s.cardDate} numberOfLines={1}>
-        {isSubmitted ? formatDate(student.submitted_at) : student.email || 'No submission'}
-      </Text>
-      {isSubmitted && (
-        <View style={s.submissionMeta}>
-          <Text style={s.fileText}>
-            📎 {student.attachment_count || 0} file(s)
-          </Text>
-          <Text style={s.fileText}>
-            Attempt {student.attempt_count || 1}
-          </Text>
-          {student.grade !== null ? (
-            <Text style={s.gradeText}>
-              Grade: {student.grade}/{totalPoints}
-            </Text>
-          ) : null}
+}) {
+  const statusConfig: Record<
+    RowStatus,
+    { label: string; bg: string; textColor: string; borderColor: string }
+  > = {
+    submitted: { label: 'Submitted', bg: '#dcfce7', textColor: '#166534', borderColor: '#166534' },
+    missing:   { label: 'Missing',   bg: '#fee2e2', textColor: '#991b1b', borderColor: '#991b1b' },
+  };
+
+  const cfg = statusConfig[status];
+  const submittedAt = formatDateTime(student.submitted_at);
+  const hasGrade = student.grade != null;
+
+  return (
+    <View style={sr.row}>
+      <View style={sr.avatar}>
+        <Text style={sr.avatarText}>
+          {(student.student_name ?? '?').charAt(0).toUpperCase()}
+        </Text>
+      </View>
+      <View style={sr.info}>
+        <Text style={sr.name} numberOfLines={1}>{student.student_name}</Text>
+        {status === 'submitted' && submittedAt ? (
+          <Text style={sr.meta}>{submittedAt}</Text>
+        ) : null}
+      </View>
+      <View style={sr.right}>
+        <View style={[sr.statusBadge, { backgroundColor: cfg.bg, borderColor: cfg.borderColor }]}>
+          <Text style={[sr.statusText, { color: cfg.textColor }]}>{cfg.label}</Text>
         </View>
-      )}
+        {status === 'submitted' && hasGrade ? (
+          <Text style={sr.grade}>
+            {student.grade}/{totalPoints}
+          </Text>
+        ) : null}
+      </View>
     </View>
-    <View
-      style={[
-        s.statusBadge,
-        { backgroundColor: statusColors[student.status] || '#6b7280' },
-      ]}
-    >
-      <Text style={s.statusText}>
-        {isSubmitted ? student.status.toUpperCase() : 'MISSING'}
-      </Text>
-    </View>
-  </TouchableOpacity>
-);
+  );
+}
+
+const sr = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: AppColors.white,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    borderRadius: 8,
+    ...NeoShadow.xs,
+  },
+  avatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 999,
+    backgroundColor: AppColors.primary,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { fontSize: 16, fontWeight: '900', color: AppColors.primaryForeground },
+  info: { flex: 1, gap: 2 },
+  name: { fontSize: 14, fontWeight: '700', color: AppColors.foreground },
+  meta: { fontSize: 11, color: AppColors.mutedForeground, marginTop: 2 },
+  right: { alignItems: 'flex-end', gap: 4 },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: Borders.width,
+  },
+  statusText: { fontSize: 11, fontWeight: '900' },
+  grade: { fontSize: 12, fontWeight: '700', color: AppColors.mutedForeground },
+});
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export default function SubmissionMonitor({
   submitted,
   missing,
-  isLoading = false,
-  onStudentPress,
-  classworkTitle,
-  totalPoints = 100,
-}: SubmissionMonitorProps) {
-  const router = useRouter();
+  isLoading,
+  totalPoints,
+  dueDate,
+}: Props) {
+  const [showSubmitted, setShowSubmitted] = useState(true);
+  const [showMissing, setShowMissing]     = useState(true);
 
-  const handleStudentPress = (student: SubmissionTrackingStudent, isSubmitted: boolean) => {
-    if (onStudentPress) {
-      onStudentPress(student, isSubmitted);
-      return;
-    }
+  const isPastDue = dueDate ? new Date() > new Date(dueDate) : false;
 
-    if (isSubmitted && student.submission_id) {
-      router.push({
-        pathname: '/teacher/grade-submission' as any,
-        params: {
-          submission_id: student.submission_id,
-          student_name: student.student_name,
-          classwork_title: classworkTitle,
-          total_points: totalPoints,
-        },
-      });
-    }
-  };
+  const total = submitted.length + missing.length;
 
   if (isLoading) {
     return (
-      <View style={s.loadingContainer}>
-        <ActivityIndicator size="large" color={AppColors.primary} />
-        <Text style={s.loadingText}>Loading submissions...</Text>
+      <View style={m.loadingWrap}>
+        <ActivityIndicator size="small" color={AppColors.primary} />
+        <Text style={m.loadingText}>Loading submissions…</Text>
       </View>
     );
   }
 
-  const totalStudents = submitted.length + missing.length;
-
   return (
-    <View style={s.container}>
-      {/* Summary Stats */}
-      <View style={s.summaryRow}>
-        <View style={s.summaryBox}>
-          <Text style={s.summaryValue}>{submitted.length}</Text>
-          <Text style={s.summaryLabel}>Submitted</Text>
-        </View>
-        <View style={s.summaryBox}>
-          <Text style={s.summaryValue}>{missing.length}</Text>
-          <Text style={s.summaryLabel}>Missing</Text>
-        </View>
-        <View style={s.summaryBox}>
-          <Text style={s.summaryValue}>{totalStudents}</Text>
-          <Text style={s.summaryLabel}>Total</Text>
-        </View>
+    <View style={m.root}>
+      {/* ── Summary cards ── */}
+      <View style={m.summaryRow}>
+        <SummaryCard
+          count={submitted.length}
+          label="Submitted"
+          bg="#dcfce7"
+          borderColor="#166534"
+          textColor="#166534"
+        />
+        <SummaryCard
+          count={missing.length}
+          label="Missing"
+          bg="#fee2e2"
+          borderColor="#991b1b"
+          textColor="#991b1b"
+        />
+        <SummaryCard
+          count={total}
+          label="Total"
+          bg={AppColors.inputBackground}
+          borderColor={AppColors.border}
+          textColor={AppColors.foreground}
+        />
       </View>
 
-      {/* Submitted Section */}
-      {submitted.length > 0 && (
-        <View style={s.section}>
-          <View style={s.sectionHeader}>
-            <View style={s.sectionHeaderLeft}>
-              <Ionicons name="checkmark-circle-outline" size={18} color="#166534" />
-              <Text style={s.sectionTitle}>Submitted</Text>
-            </View>
-            <Text style={s.sectionCount}>{submitted.length}</Text>
-          </View>
-          <View style={s.studentsList}>
-            {submitted.map((student) => (
-              <SubmissionCard
-                key={student.student_id}
-                student={student}
-                isSubmitted={true}
-                totalPoints={totalPoints}
-                onPress={() => handleStudentPress(student, true)}
-              />
-            ))}
-          </View>
-        </View>
-      )}
-
-      {/* Missing Section */}
-      {missing.length > 0 && (
-        <View style={s.section}>
-          <View style={s.sectionHeader}>
-            <View style={s.sectionHeaderLeft}>
-              <Ionicons name="close-circle-outline" size={18} color="#991b1b" />
-              <Text style={[s.sectionTitle, s.missingSectionTitle]}>Not Submitted</Text>
-            </View>
-            <Text style={s.sectionCount}>{missing.length}</Text>
-          </View>
-          <View style={s.studentsList}>
-            {missing.map((student) => (
-              <SubmissionCard
-                key={student.student_id}
-                student={student}
-                isSubmitted={false}
-                totalPoints={totalPoints}
-                onPress={() => handleStudentPress(student, false)}
-              />
-            ))}
-          </View>
-        </View>
-      )}
-
-      {/* Empty State */}
-      {submitted.length === 0 && missing.length === 0 && (
-        <View style={s.emptyState}>
+      {/* ── Due date note ── */}
+      {dueDate ? (
+        <View style={[m.dueNote, isPastDue ? m.dueNotePast : m.dueNoteFuture]}>
           <Ionicons
-            name="people-outline"
-            size={48}
-            color={AppColors.muted}
+            name={isPastDue ? 'alert-circle-outline' : 'time-outline'}
+            size={14}
+            color={isPastDue ? '#991b1b' : '#166534'}
           />
-          <Text style={s.emptyText}>No students assigned</Text>
+          <Text style={[m.dueNoteText, isPastDue ? m.dueNoteTextPast : m.dueNoteTextFuture]}>
+            {isPastDue
+              ? `Due date passed — students who haven't submitted are marked Missing.`
+              : `Due date hasn't passed yet — unsubmitted students are marked Missing.`}
+          </Text>
+        </View>
+      ) : (
+        <View style={m.dueNote}>
+          <Ionicons name="information-circle-outline" size={14} color={AppColors.mutedForeground} />
+          <Text style={m.dueNoteTextNeutral}>No due date set — students won't be marked Missing.</Text>
+        </View>
+      )}
+
+      {/* ── Submitted section ── */}
+      {submitted.length > 0 ? (
+        <View style={m.section}>
+          <SectionHeader
+            icon="checkmark-circle-outline"
+            label="Submitted"
+            count={submitted.length}
+            color="#166534"
+            expanded={showSubmitted}
+            onToggle={() => setShowSubmitted((v) => !v)}
+          />
+          {showSubmitted && (
+            <View style={m.list}>
+              {submitted.map((s) => (
+                <StudentRow
+                  key={s.student_id}
+                  student={s}
+                  status="submitted"
+                  totalPoints={totalPoints}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+      ) : null}
+
+      {/* ── Missing section ── */}
+      {missing.length > 0 ? (
+        <View style={m.section}>
+          <SectionHeader
+            icon="close-circle-outline"
+            label="Missing"
+            count={missing.length}
+            color="#991b1b"
+            expanded={showMissing}
+            onToggle={() => setShowMissing((v) => !v)}
+          />
+          {showMissing && (
+            <View style={m.list}>
+              {missing.map((s) => (
+                <StudentRow
+                  key={s.student_id}
+                  student={s}
+                  status="missing"
+                  totalPoints={totalPoints}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+      ) : null}
+
+      {/* ── All caught up ── */}
+      {total === 0 && (
+        <View style={m.emptyWrap}>
+          <Ionicons name="people-outline" size={32} color={AppColors.mutedForeground} />
+          <Text style={m.emptyText}>No students enrolled yet.</Text>
         </View>
       )}
     </View>
   );
 }
 
-const s = StyleSheet.create({
-  container: {
-    gap: 16,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: AppColors.mutedForeground,
-    fontWeight: '600',
-  },
-  summaryRow: {
+const m = StyleSheet.create({
+  root: { gap: Spacing.sm },
+  loadingWrap: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
-  },
-  summaryBox: {
-    flex: 1,
-    padding: 12,
-    borderWidth: Borders.width,
-    borderColor: AppColors.border,
-    borderRadius: 8,
-    backgroundColor: AppColors.card,
-    alignItems: 'center',
-    ...NeoShadow.xs,
-  },
-  summaryValue: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: AppColors.foreground,
-  },
-  summaryLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: AppColors.mutedForeground,
-    marginTop: 2,
-  },
-  section: {
-    gap: 10,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 8,
-  },
-  sectionHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: AppColors.foreground,
-  },
-  missingSectionTitle: {
-    color: '#991b1b',
-  },
-  sectionCount: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: AppColors.mutedForeground,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: AppColors.muted,
-    borderRadius: 4,
-  },
-  studentsList: {
-    gap: 8,
-  },
-  card: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    borderWidth: Borders.width,
-    borderColor: AppColors.border,
-    backgroundColor: AppColors.card,
-    borderRadius: 8,
-    ...NeoShadow.sm,
-  },
-  missingCard: {
-    backgroundColor: AppColors.inputBackground,
-    opacity: 0.88,
-  },
-  cardContent: {
-    flex: 1,
-    gap: 2,
-  },
-  cardName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: AppColors.foreground,
-  },
-  cardDate: {
-    fontSize: 12,
-    color: AppColors.mutedForeground,
-  },
-  submissionMeta: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 4,
-    flexWrap: 'wrap',
-  },
-  fileText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: AppColors.foreground,
-  },
-  gradeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#166534',
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingVertical: 20,
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#fff',
+  loadingText: { fontSize: 13, color: AppColors.mutedForeground, fontWeight: '600' },
+  summaryRow: { flexDirection: 'row', gap: 8 },
+  dueNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 7,
+    padding: 10,
+    borderWidth: Borders.width,
+    borderRadius: 8,
+    borderColor: AppColors.border,
+    backgroundColor: AppColors.inputBackground,
   },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    gap: 8,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: AppColors.foreground,
-  },
+  dueNoteFuture: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  dueNotePast:   { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
+  dueNoteText: { flex: 1, fontSize: 12, fontWeight: '600', lineHeight: 17 },
+  dueNoteTextFuture: { color: '#166534' },
+  dueNoteTextPast:   { color: '#991b1b' },
+  dueNoteTextNeutral: { flex: 1, fontSize: 12, fontWeight: '600', lineHeight: 17, color: AppColors.mutedForeground },
+  section: { gap: 8 },
+  list: { gap: 8 },
+  emptyWrap: { alignItems: 'center', paddingVertical: 24, gap: 8 },
+  emptyText: { fontSize: 14, color: AppColors.mutedForeground, fontWeight: '600' },
 });

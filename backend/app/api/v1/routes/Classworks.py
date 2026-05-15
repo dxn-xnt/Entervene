@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pathlib import Path
+from datetime import datetime
 
 from app.db.Session import get_db
 from app.core.Dependencies import require_role, get_staff_id, get_student_record
@@ -76,6 +77,20 @@ def _att_resp(a):
 def _build_cw(cw, db):
     subj = db.query(Subject).filter(Subject.subject_id == cw.subject_id).first()
     staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == cw.created_by_staff_id).first()
+    
+    assignments_data = []
+    assignments = db.query(ClassworkAssignment).filter(ClassworkAssignment.classwork_id == cw.classwork_id).all()
+    for a in assignments:
+        cls = db.query(Class).filter(Class.class_id == a.class_id).first()
+        assignments_data.append({
+            "classwork_assignment_id": a.classwork_assignment_id,
+            "classwork_id": a.classwork_id,
+            "title": cls.section_name if cls else "Unknown Section",
+            "classwork_type": cw.classwork_type,
+            "due_date": a.due_date,
+            "is_published": a.is_published
+        })
+
     return ClassworkResponse(
         classwork_id=cw.classwork_id, title=cw.title, description=cw.description,
         instructions=cw.instructions, classwork_type=cw.classwork_type,
@@ -86,6 +101,7 @@ def _build_cw(cw, db):
         created_by_staff_id=cw.created_by_staff_id,
         teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
         attachments=[_att_resp(a) for a in cw.attachments],
+        assignments=assignments_data,
         created_at=cw.created_at, updated_at=cw.updated_at,
     )
 
@@ -245,9 +261,34 @@ def get_cw_for_class(class_id: int, subject_id: int, student=Depends(get_student
     if not enr: raise HTTPException(status_code=403, detail="Not enrolled in this class")
     rows = db.query(ClassworkAssignment, Classwork, Class).join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id).join(Class, Class.class_id == ClassworkAssignment.class_id).filter(ClassworkAssignment.class_id == class_id, Classwork.subject_id == subject_id, ClassworkAssignment.is_published == True).order_by(ClassworkAssignment.created_at.desc()).all()
     results = []
+    
+    # ✅ FIX: Use timezone-aware datetime
+    from datetime import timezone
+    now = datetime.now(timezone.utc)
+    
     for ca, cw, cls in rows:
         sub = db.query(StudentSubmission).filter(StudentSubmission.classwork_assignment_id == ca.classwork_assignment_id, StudentSubmission.student_id == student.student_id).first()
         staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == cw.created_by_staff_id).first()
+        
+        # Calculate display status based on submission status and due date
+        display_status = None
+        if sub:
+            display_status = sub.status
+        else:
+            if ca.due_date:
+                # ✅ FIX: Make due_date timezone-aware if it's naive
+                if ca.due_date.tzinfo is None:
+                    due_date_aware = ca.due_date.replace(tzinfo=timezone.utc)
+                else:
+                    due_date_aware = ca.due_date
+                
+                if now >= due_date_aware:
+                    display_status = "missing"
+                else:
+                    display_status = "not_submitted_yet"
+            else:
+                display_status = "not_submitted_yet"
+        
         results.append(ClassworkAssignmentResponse(
             classwork_assignment_id=ca.classwork_assignment_id, classwork_id=cw.classwork_id,
             class_id=ca.class_id, section_name=cls.section_name, title=cw.title,
@@ -256,7 +297,7 @@ def get_cw_for_class(class_id: int, subject_id: int, student=Depends(get_student
             due_date=ca.due_date, is_published=ca.is_published,
             teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
             attachments=[_att_resp(a) for a in cw.attachments],
-            submission_status=sub.status if sub else None,
+            submission_status=display_status,
         ))
     return results
 

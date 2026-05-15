@@ -34,6 +34,15 @@ class ClassworkAttachmentResponse(BaseModel):
     uploaded_at: Optional[datetime]
 
 
+class CwAssignmentRow(BaseModel):
+    classwork_assignment_id: int
+    classwork_id: int
+    title: Optional[str] = None
+    classwork_type: Optional[str] = None
+    due_date: Optional[datetime] = None
+    is_published: bool
+
+
 class ClassworkResponse(BaseModel):
     classwork_id: int
     title: str
@@ -49,6 +58,7 @@ class ClassworkResponse(BaseModel):
     created_by_staff_id: str
     teacher_name: Optional[str] = None
     attachments: list[ClassworkAttachmentResponse] = []
+    assignments: Optional[list[CwAssignmentRow]] = None
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
 
@@ -77,4 +87,5 @@ class ClassworkAssignmentResponse(BaseModel):
     is_published: bool
     teacher_name: Optional[str] = None
     attachments: list[ClassworkAttachmentResponse] = []
+    assignments: Optional[list[CwAssignmentRow]] = None
     submission_status: Optional[str] = None  # for student view
