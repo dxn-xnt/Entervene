@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
 from typing import List, Optional
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.db.Session import get_db
 from app.core.Dependencies import require_role, get_staff_id, get_student_record
@@ -491,7 +491,8 @@ def get_lesson_classwork_assignments(
     )
 
     results = []
-    now = datetime.utcnow()
+    # Use timezone-aware current time
+    now = datetime.now(timezone.utc)
     
     for ca in rows:
         cw = db.query(Classwork).filter(Classwork.classwork_id == ca.classwork_id).first()
@@ -508,7 +509,14 @@ def get_lesson_classwork_assignments(
         else:
             # No submission yet - check if due date has passed
             if ca.due_date:
-                if now >= ca.due_date:
+                # If due_date is naive, make it aware (or convert to naive)
+                if ca.due_date.tzinfo is None:
+                    # If due_date is naive, assume it's UTC
+                    due_date_aware = ca.due_date.replace(tzinfo=timezone.utc)
+                else:
+                    due_date_aware = ca.due_date
+                
+                if now >= due_date_aware:
                     display_status = "missing"  # Past due date, no submission = Missing
                 else:
                     display_status = "not_submitted_yet"  # Before due date = Not submitted yet

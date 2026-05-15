@@ -36,6 +36,7 @@ type ClassworkDetailData = {
   subject_id: number;
   subject_name: string | null;
   teacher_name: string | null;
+  due_date?: string | null;
   attachments: {
     classwork_attachment_id: number;
     file_name: string;
@@ -44,6 +45,7 @@ type ClassworkDetailData = {
   created_at?: string | null;
   updated_at?: string | null;
 };
+
 
 function cwTypeIcon(t: string): keyof typeof Ionicons.glyphMap {
   const u = (t || '').toUpperCase();
@@ -69,12 +71,11 @@ function formatDate(iso: string | null | undefined) {
 export default function ClassworkDetail() {
   const router = useRouter();
   const { session } = useAuth();
-  const params = useLocalSearchParams<{ classwork_id?: string }>();
+  const params = useLocalSearchParams<{ classwork_id?: string; due_date?: string }>();
   const [cw, setCw] = useState<ClassworkDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const classworkId = params.classwork_id ? Number(params.classwork_id) : null;
 
-  // Use classwork-level tracking endpoint
   const { tracking, isLoading: submissionsLoading, error: submissionError } = useClassworkSubmissionTracking(classworkId || 0);
 
   useEffect(() => {
@@ -123,9 +124,15 @@ export default function ClassworkDetail() {
     );
   }
 
+  const paramDueDate = Array.isArray(params.due_date) ? params.due_date[0] : params.due_date;
+  const dueDate = cw?.due_date || paramDueDate || null;
+  const isPastDue = dueDate ? new Date() > new Date(dueDate) : false;
+  const missingList = isPastDue ? (tracking?.missing ?? []) : [];
+
   const pts = cw.total_points != null ? `${cw.total_points} pts` : '—';
   const updated = formatDate(cw.updated_at);
   const created = formatDate(cw.created_at);
+  const dueDateFormatted = formatDate(dueDate);
   const atts = cw.attachments ?? [];
 
   return (
@@ -198,6 +205,19 @@ export default function ClassworkDetail() {
               </Text>
             ) : null}
           </View>
+
+          {/* ── Due date chip ── */}
+          <View style={[s.dueChip, dueDate ? s.dueChipSet : s.dueChipNone]}>
+            <Ionicons
+              name="time-outline"
+              size={14}
+              color={dueDate ? '#166534' : AppColors.mutedForeground}
+            />
+            <Text style={[s.dueChipText, dueDate ? s.dueChipTextSet : s.dueChipTextNone]}>
+              {dueDate ? `Due ${dueDateFormatted}` : 'No due date'}
+            </Text>
+          </View>
+
           {(created || updated) && (
             <View style={s.dateRow}>
               {created ? (
@@ -259,7 +279,7 @@ export default function ClassworkDetail() {
           </View>
         ) : null}
 
-        {/* ── Student Submissions — ALWAYS shown ── */}
+        {/* ── Student Submissions ── */}
         <View style={s.block}>
           <View style={s.blockHead}>
             <Ionicons name="people-outline" size={18} color={AppColors.foreground} />
@@ -275,20 +295,21 @@ export default function ClassworkDetail() {
           {submissionError ? (
             <View style={s.errorBox}>
               <Ionicons name="alert-circle-outline" size={20} color={AppColors.destructive} />
-              <Text style={s.errorText}>Error: {submissionError}</Text>
+              <Text style={s.errorBoxText}>Error: {submissionError}</Text>
             </View>
           ) : (
             <SubmissionMonitor
               submitted={tracking?.submitted ?? []}
-              missing={tracking?.missing ?? []}
+              missing={missingList}
               isLoading={submissionsLoading}
               classworkTitle={cw.title}
               totalPoints={cw.total_points ?? 100}
+              dueDate={dueDate}
             />
           )}
         </View>
 
-        {/* ── Empty state (only when no content AND no attachments) ── */}
+        {/* ── Empty state ── */}
         {!cw.description && !cw.instructions && atts.length === 0 ? (
           <View style={s.emptyCard}>
             <Ionicons name="clipboard-outline" size={40} color={AppColors.mutedForeground} />
@@ -335,10 +356,10 @@ const s = StyleSheet.create({
     borderRadius: 999,
     ...NeoShadow.xs,
   },
-  miniPillLive: { backgroundColor: PUBLISHED_BG, borderColor: '#166534' },
-  miniPillDraft: { backgroundColor: AppColors.muted, borderColor: AppColors.border },
+  miniPillLive:   { backgroundColor: PUBLISHED_BG, borderColor: '#166534' },
+  miniPillDraft:  { backgroundColor: AppColors.muted, borderColor: AppColors.border },
   miniPillLocked: { backgroundColor: LOCKED_BG, borderColor: '#991b1b' },
-  miniPillText: { fontSize: 11, fontWeight: '800', color: AppColors.foreground },
+  miniPillText:       { fontSize: 11, fontWeight: '800', color: AppColors.foreground },
   miniPillLockedText: { fontSize: 11, fontWeight: '800', color: '#991b1b' },
   editButton: {
     width: 32,
@@ -420,6 +441,22 @@ const s = StyleSheet.create({
   },
   metaChipText: { fontSize: 12, fontWeight: '700', color: AppColors.foreground, flexShrink: 1 },
   metaPerson: { fontSize: 13, fontWeight: '600', color: AppColors.mutedForeground, flex: 1 },
+  dueChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: Borders.width,
+    borderRadius: 6,
+  },
+  dueChipSet:  { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  dueChipNone: { backgroundColor: AppColors.inputBackground, borderColor: AppColors.border },
+  dueChipText: { fontSize: 12, fontWeight: '700' },
+  dueChipTextSet:  { color: '#166534' },
+  dueChipTextNone: { color: AppColors.mutedForeground },
   dateRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
   dateText: { fontSize: 12, color: AppColors.mutedForeground },
   dateLabel: { fontWeight: '700', color: AppColors.foreground },
@@ -487,27 +524,10 @@ const s = StyleSheet.create({
     borderColor: AppColors.destructive,
     borderRadius: 8,
   },
-  attachList: { gap: 10 },
-  attachRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 12,
-    backgroundColor: AppColors.inputBackground,
-    borderWidth: Borders.width,
-    borderColor: AppColors.border,
-    borderRadius: 8,
+  errorBoxText: {
+    fontSize: 14,
+    color: AppColors.destructive,
+    fontWeight: '600',
+    flex: 1,
   },
-  attachIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-    borderWidth: Borders.width,
-    borderColor: AppColors.border,
-    backgroundColor: BANNER_BG,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  attachName: { fontSize: 14, fontWeight: '700', color: AppColors.foreground },
-  attachSize: { fontSize: 12, color: AppColors.mutedForeground, marginTop: 2 },
 });
