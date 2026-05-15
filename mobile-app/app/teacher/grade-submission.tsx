@@ -174,18 +174,30 @@ export default function GradeSubmission() {
               <Text style={s.infoValue}>{params.student_name || submission?.student_name || 'Unknown'}</Text>
             </View>
           </View>
+          <View style={s.divider} />
+          <View style={s.infoRow}>
+            <Ionicons name="document-text-outline" size={16} color={AppColors.mutedForeground} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.infoLabel}>Classwork</Text>
+              <Text style={s.infoValue}>{params.classwork_title || submission?.classwork_title || '—'}</Text>
+            </View>
+          </View>
           {submission && (
             <>
+              <View style={s.divider} />
               <View style={s.metaRow}>
                 <View style={s.metaChip}>
                   <Ionicons name="time-outline" size={12} color={AppColors.mutedForeground} />
                   <Text style={s.metaChipText}>
                     {submission.submitted_at
                       ? new Date(submission.submitted_at).toLocaleString(undefined, {
-                        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-                      })
+                          month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                        })
                       : 'No date'}
                   </Text>
+                </View>
+                <View style={[s.metaChip, s.statusChip]}>
+                  <Text style={s.statusText}>{submission.status.toUpperCase()}</Text>
                 </View>
                 <View style={s.metaChip}>
                   <Ionicons name="refresh-outline" size={12} color={AppColors.mutedForeground} />
@@ -198,18 +210,12 @@ export default function GradeSubmission() {
 
         {/* Submitted Files */}
         <View style={s.section}>
-          <View style={s.infoRow}>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-              <View style={s.heroIconWrap}>
-                <Ionicons name={'code-slash-outline'} size={20} color={AppColors.foreground} />
-              </View>
-              <Text style={s.infoValue}>{params.classwork_title || submission?.classwork_title || '—'}</Text>
-            </View>
-          </View>
-
           <View style={s.sectionHeader}>
             <Ionicons name="attach-outline" size={18} color={AppColors.foreground} />
             <Text style={s.sectionTitle}>Submitted Files</Text>
+            <View style={s.countBadge}>
+              <Text style={s.countBadgeText}>{attachments.length}</Text>
+            </View>
           </View>
 
           {attachments.length === 0 ? (
@@ -299,17 +305,6 @@ export default function GradeSubmission() {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: AppColors.background },
-  heroIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    borderWidth: Borders.width,
-    borderColor: AppColors.border,
-    backgroundColor: AppColors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -347,7 +342,8 @@ const s = StyleSheet.create({
   },
   infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   infoLabel: { fontSize: 11, fontWeight: '600', color: AppColors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.5 },
-  infoValue: { fontSize: 20, fontWeight: '600', color: AppColors.foreground, marginTop: 2 },
+  infoValue: { fontSize: 15, fontWeight: '700', color: AppColors.foreground, marginTop: 2 },
+  divider: { height: Borders.width, backgroundColor: AppColors.border },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   metaChip: {
     flexDirection: 'row',
@@ -377,11 +373,14 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     paddingBottom: 8,
+    borderBottomWidth: Borders.width,
+    borderBottomColor: AppColors.border,
   },
   sectionTitle: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '900',
     color: AppColors.foreground,
+    textTransform: 'uppercase',
     letterSpacing: 0.6,
     flex: 1,
   },
@@ -409,6 +408,7 @@ const s = StyleSheet.create({
     borderWidth: Borders.width,
     borderColor: AppColors.border,
     borderRadius: 8,
+    ...NeoShadow.xs,
   },
   fileIcon: {
     width: 44,
@@ -419,6 +419,7 @@ const s = StyleSheet.create({
     backgroundColor: AppColors.white,
     alignItems: 'center',
     justifyContent: 'center',
+    ...NeoShadow.xs,
   },
   fileName: { fontSize: 14, fontWeight: '700', color: AppColors.foreground },
   fileSize: { fontSize: 12, color: AppColors.mutedForeground, marginTop: 2 },

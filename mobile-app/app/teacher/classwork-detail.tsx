@@ -78,13 +78,12 @@ export default function ClassworkDetail() {
   const classworkId = params.classwork_id ? Number(params.classwork_id) : null;
   const classId = params.class_id ? Number(params.class_id) : null;
   const normalizeStudent = (s: any) => ({
-    student_id: s.student_id,
-    submission_id: s.submission_id ?? null,
-    student_name: s.student_name,
-    email: s.email ?? undefined,
-    submitted_at: s.submitted_at ?? null,
-    grade: s.grade ?? null,
-  });
+  student_id: s.student_id,
+  student_name: s.student_name,
+  email: s.email ?? undefined,
+  submitted_at: s.submitted_at ?? null,
+  grade: s.grade ?? null,
+});
 
   // Use classwork-level tracking endpoint
   const { tracking, isLoading: submissionsLoading, error: submissionError, refresh: refreshTracking } = useClassworkSubmissionTracking(classworkId || 0);
@@ -148,10 +147,10 @@ export default function ClassworkDetail() {
   }
 
   const dueDate =
-    cw?.due_date ??
-    (cw as any)?.dueDate ??
-    cw?.assignments?.[0]?.due_date ??   // 🔥 IMPORTANT fallback based on your API
-    null;
+  cw?.due_date ??
+  (cw as any)?.dueDate ??
+  cw?.assignments?.[0]?.due_date ??   // 🔥 IMPORTANT fallback based on your API
+  null;
   const dueDateFormatted = formatDate(dueDate);
   const isPastDue = dueDate ? new Date() > new Date(dueDate) : false;
   const missingList = isPastDue ? (tracking?.missing ?? []) : [];
@@ -199,13 +198,9 @@ export default function ClassworkDetail() {
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* ── Hero card ── */}
         <View style={s.hero}>
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-            <View style={s.heroIconWrap}>
-              <Ionicons name={cwTypeIcon(cw.classwork_type)} size={20} color={AppColors.foreground} />
-            </View>
-            <Text style={[s.heroTitle, { marginBottom: 8 }]}>{cw.title}</Text>
+          <View style={s.heroIconWrap}>
+            <Ionicons name={cwTypeIcon(cw.classwork_type)} size={28} color={AppColors.foreground} />
           </View>
-
           <View style={s.typeRow}>
             <View style={s.typeBadge}>
               <Text style={s.typeBadgeText}>{cw.classwork_type}</Text>
@@ -218,9 +213,11 @@ export default function ClassworkDetail() {
               </View>
             ) : null}
             <View style={s.pointsBadge}>
+              <Ionicons name="ribbon-outline" size={14} color={AppColors.foreground} />
               <Text style={s.pointsBadgeText}>{pts}</Text>
             </View>
           </View>
+          <Text style={s.heroTitle}>{cw.title}</Text>
           <View style={s.metaRow}>
             {cw.subject_name ? (
               <View style={s.metaChip}>
@@ -229,6 +226,11 @@ export default function ClassworkDetail() {
                   {cw.subject_name}
                 </Text>
               </View>
+            ) : null}
+            {cw.teacher_name ? (
+              <Text style={s.metaPerson} numberOfLines={1}>
+                {cw.teacher_name}
+              </Text>
             ) : null}
           </View>
 
@@ -321,6 +323,13 @@ export default function ClassworkDetail() {
             </View>
           ) : (
             <SubmissionMonitor
+            submitted={(tracking?.submitted ?? []).map(normalizeStudent)}
+            missing={missingList.map(normalizeStudent)}
+            isLoading={submissionsLoading}
+            classworkTitle={cw.title}
+            totalPoints={cw.total_points ?? 100}
+            dueDate={dueDate}
+          />
               submitted={(tracking?.submitted ?? []).map(normalizeStudent)}
               missing={missingList.map(normalizeStudent)}
               isLoading={submissionsLoading}
@@ -389,10 +398,10 @@ const s = StyleSheet.create({
     borderRadius: 999,
     ...NeoShadow.xs,
   },
-  miniPillLive: { backgroundColor: PUBLISHED_BG, borderColor: '#166534' },
-  miniPillDraft: { backgroundColor: AppColors.muted, borderColor: AppColors.border },
+  miniPillLive:   { backgroundColor: PUBLISHED_BG, borderColor: '#166534' },
+  miniPillDraft:  { backgroundColor: AppColors.muted, borderColor: AppColors.border },
   miniPillLocked: { backgroundColor: LOCKED_BG, borderColor: '#991b1b' },
-  miniPillText: { fontSize: 11, fontWeight: '800', color: AppColors.foreground },
+  miniPillText:       { fontSize: 11, fontWeight: '800', color: AppColors.foreground },
   miniPillLockedText: { fontSize: 11, fontWeight: '800', color: '#991b1b' },
   editButton: {
     width: 32,
@@ -413,8 +422,8 @@ const s = StyleSheet.create({
     ...NeoShadow.md,
   },
   heroIconWrap: {
-    width: 32,
-    height: 32,
+    width: 52,
+    height: 52,
     borderRadius: 10,
     borderWidth: Borders.width,
     borderColor: AppColors.border,
@@ -432,28 +441,34 @@ const s = StyleSheet.create({
     borderWidth: Borders.width,
     borderColor: AppColors.border,
     borderRadius: 6,
+    ...NeoShadow.xs,
   },
   typeBadgeText: { fontSize: 12, fontWeight: '900', color: AppColors.primaryForeground },
   catBadge: {
+    maxWidth: '48%',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    backgroundColor: AppColors.primary,
+    backgroundColor: AppColors.white,
     borderWidth: Borders.width,
     borderColor: AppColors.border,
     borderRadius: 6,
   },
   catBadgeText: { fontSize: 11, fontWeight: '800', color: AppColors.foreground, textTransform: 'capitalize' },
   pointsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    backgroundColor: AppColors.primary,
+    backgroundColor: POINTS_BG,
     borderWidth: Borders.width,
     borderColor: AppColors.border,
     borderRadius: 6,
+    ...NeoShadow.xs,
   },
   pointsBadgeText: { fontSize: 12, fontWeight: '900', color: AppColors.foreground },
-  heroTitle: { fontSize: 24, fontWeight: '700', color: AppColors.foreground, lineHeight: 28 },
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  heroTitle: { fontSize: 22, fontWeight: '900', color: AppColors.foreground, lineHeight: 28 },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 10 },
   metaChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -479,10 +494,10 @@ const s = StyleSheet.create({
     borderWidth: Borders.width,
     borderRadius: 6,
   },
-  dueChipSet: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  dueChipSet:  { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
   dueChipNone: { backgroundColor: AppColors.inputBackground, borderColor: AppColors.border },
   dueChipText: { fontSize: 12, fontWeight: '700' },
-  dueChipTextSet: { color: '#166534' },
+  dueChipTextSet:  { color: '#166534' },
   dueChipTextNone: { color: AppColors.mutedForeground },
   dateRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
   dateText: { fontSize: 12, color: AppColors.mutedForeground },
@@ -499,17 +514,20 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
+    marginBottom: 10,
     paddingBottom: 8,
+    borderBottomWidth: Borders.width,
+    borderBottomColor: AppColors.border,
   },
   blockTitle: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '900',
     color: AppColors.foreground,
+    textTransform: 'uppercase',
     letterSpacing: 0.6,
     flex: 1,
   },
-  blockBody: { fontSize: 15, color: AppColors.foreground, lineHeight: 24, },
+  blockBody: { fontSize: 15, color: AppColors.foreground, lineHeight: 24 },
   submissionPill: {
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -554,5 +572,4 @@ const s = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
   },
-
 });

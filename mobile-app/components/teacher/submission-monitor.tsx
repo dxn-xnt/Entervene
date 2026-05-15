@@ -15,7 +15,7 @@ type StudentEntry = {
   student_id: number | string;
   submission_id?: number | null;
   student_name: string;
-  email?: string | null;
+  email?: string;
   submitted_at?: string | null;
   grade?: number | null;
 };

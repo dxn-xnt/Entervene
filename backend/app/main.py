@@ -28,8 +28,8 @@ _CORS_DEV_ORIGINS = [
     "http://localhost:8082",
     "http://127.0.0.1:19006",
     "http://localhost:5173",
-    "http://192.168.1.6:8081",
-    "http://192.168.1.6:8000",
+    "http://192.168.1.119:8081",
+    "http://192.168.1.119:8000",
 ]
 app.add_middleware(
     CORSMiddleware,

@@ -24,9 +24,9 @@ import {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const SCREEN_W = Dimensions.get("window").width;
-const H_PAD = Spacing.md * 2;
-const GAP = 12;
-const CARD_W = (SCREEN_W - H_PAD - GAP) / 2;
+const H_PAD    = Spacing.md * 2;
+const GAP      = 12;
+const CARD_W   = (SCREEN_W - H_PAD - GAP) / 2;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -38,16 +38,16 @@ function getDueDateInfo(dueDateStr: string | null): {
   if (!dueDateStr) {
     return { label: "No due date", textColor: AppColors.mutedForeground, bgColor: AppColors.muted };
   }
-  const now = new Date();
-  const due = new Date(dueDateStr);
-  const diffMs = due.getTime() - now.getTime();
+  const now     = new Date();
+  const due     = new Date(dueDateStr);
+  const diffMs  = due.getTime() - now.getTime();
   const diffDays = Math.ceil(diffMs / 86400000);
 
-  if (diffDays < 0) return { label: `${Math.abs(diffDays)}d late`, textColor: "#fff", bgColor: "#ef4444" };
-  if (diffDays === 0) return { label: "due today", textColor: "#fff", bgColor: "#f97316" };
-  if (diffDays === 1) return { label: "due tomorrow", textColor: "#fff", bgColor: "#f97316" };
-  if (diffDays <= 3) return { label: `due in ${diffDays} days`, textColor: "#92400e", bgColor: "#fef08a" };
-  return { label: `due in ${diffDays} days`, textColor: "#166534", bgColor: "#bbf7d0" };
+  if (diffDays < 0)  return { label: `${Math.abs(diffDays)}d late`,   textColor: "#fff", bgColor: "#ef4444" };
+  if (diffDays === 0) return { label: "due today",                     textColor: "#fff", bgColor: "#f97316" };
+  if (diffDays === 1) return { label: "due tomorrow",                  textColor: "#fff", bgColor: "#f97316" };
+  if (diffDays <= 3)  return { label: `due in ${diffDays} days`,       textColor: "#92400e", bgColor: "#fef08a" };
+  return               { label: `due in ${diffDays} days`,             textColor: "#166534", bgColor: "#bbf7d0" };
 }
 
 function capitalize(str: string) {
@@ -64,7 +64,7 @@ const StoryBoard = () => {
     useClassworkAssignments();
 
   const isLoading = subjectsLoading || assignmentsLoading;
-  const refresh = () => { refreshSubjects(); refreshAssignments(); };
+  const refresh   = () => { refreshSubjects(); refreshAssignments(); };
 
   // Badge counts per subject from ALL assignment statuses
   const subjectBadges = useMemo(() => {
@@ -103,6 +103,7 @@ const StoryBoard = () => {
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
       >
         {/* ── Subject Grid ─────────────────────────────────────────── */}
+        <Text style={styles.sectionLabel}>My Subjects</Text>
 
         {subjectsLoading && subjects.length === 0 ? (
           <ActivityIndicator size="large" color={AppColors.primary} style={{ marginTop: 20 }} />
@@ -113,17 +114,17 @@ const StoryBoard = () => {
         ) : (
           <View style={styles.grid}>
             {subjects.map((s) => {
-              const counts = subjectBadges[s.subject_id] ?? {};
-              const pending = assignments.pending.filter((a) => a.subject_id === s.subject_id).length;
+              const counts   = subjectBadges[s.subject_id] ?? {};
+              const pending  = assignments.pending.filter((a) => a.subject_id === s.subject_id).length;
               const hasItems = Object.keys(counts).length > 0;
 
               const badges =
                 hasItems && pending === 0
                   ? [{ label: "✓ Tasks All Completed", count: 0 }]
                   : Object.entries(counts).map(([type, count]) => ({
-                    label: `${capitalize(type)} ${count}`,
-                    count,
-                  }));
+                      label: `${capitalize(type)} ${count}`,
+                      count,
+                    }));
 
               return (
                 <View key={s.subject_load_id} style={styles.gridItem}>
@@ -136,12 +137,12 @@ const StoryBoard = () => {
                         pathname: "/student/subject-detail" as any,
                         params: {
                           subject_load_id: s.subject_load_id,
-                          class_id: s.class_id,
-                          subject_id: s.subject_id,
-                          subject: s.subject_name,
-                          teacher: s.teacher_name,
-                          period: s.period_name,
-                          section: s.section_name,
+                          class_id:        s.class_id,
+                          subject_id:      s.subject_id,
+                          subject:         s.subject_name,
+                          teacher:         s.teacher_name,
+                          period:          s.period_name,
+                          section:         s.section_name,
                         },
                       })
                     }
@@ -205,7 +206,7 @@ const StoryBoard = () => {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: AppColors.background },
+  safe:    { flex: 1, backgroundColor: AppColors.background },
   content: { paddingHorizontal: Spacing.md, paddingBottom: 40, gap: 16 },
 
   sectionLabel: {
@@ -214,8 +215,8 @@ const styles = StyleSheet.create({
   },
 
   // 2-column grid
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: GAP },
-  gridItem: { width: "100%" },
+  grid:     { flexDirection: "row", flexWrap: "wrap", gap: GAP },
+  gridItem: { width: CARD_W },
 
   errorText: { fontSize: 14, color: AppColors.destructive, textAlign: "center", marginTop: 16 },
   emptyText: { fontSize: 14, color: AppColors.mutedForeground, textAlign: "center", marginTop: 16 },
@@ -227,13 +228,13 @@ const styles = StyleSheet.create({
     ...NeoShadow.lg,
   },
   todoHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  todoTitle: { fontSize: 18, fontWeight: "700", color: AppColors.foreground },
+  todoTitle:  { fontSize: 18, fontWeight: "700", color: AppColors.foreground },
   todoArrowBtn: {
     borderWidth: 2, borderColor: AppColors.border,
     borderRadius: 999, padding: 6,
   },
-  todoEmpty: { marginTop: 10, fontSize: 13, color: AppColors.mutedForeground },
-  todoList: { marginTop: 12, gap: 8 },
+  todoEmpty:  { marginTop: 10, fontSize: 13, color: AppColors.mutedForeground },
+  todoList:   { marginTop: 12, gap: 8 },
   todoItem: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingVertical: 10, paddingHorizontal: 12,
@@ -244,8 +245,8 @@ const styles = StyleSheet.create({
     flex: 1, fontSize: 13, fontWeight: "600",
     color: AppColors.foreground, marginRight: 8,
   },
-  dueBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  dueText: { fontSize: 11, fontWeight: "700" },
+  dueBadge:  { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  dueText:   { fontSize: 11, fontWeight: "700" },
 });
 
 export default StoryBoard;

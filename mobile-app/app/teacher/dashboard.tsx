@@ -24,21 +24,7 @@ function badgeColor(type: string) {
 
 export default function TeacherDashboard() {
   const { openDrawer } = useDrawer();
-  const router = useRouter();
-  const { classes, isLoading: classesLoading } = useTeacherClasses();
-  const { classworks, isLoading: cwLoading } = useTeacherClassworks();
-
-  const isLoading = classesLoading || cwLoading;
-
-  // Count classworks per class per type
-  // classwork → classwork_assignment already has class_id in it,
-  // but useTeacherClassworks() returns the classwork list without class_id.
-  // We group badge counts by subject_id (closest proxy available).
-  const cwBySubject = classworks.reduce<Record<number, Record<string, number>>>((acc, cw) => {
-    if (!acc[cw.subject_id]) acc[cw.subject_id] = {};
-    acc[cw.subject_id][cw.classwork_type] = (acc[cw.subject_id][cw.classwork_type] ?? 0) + 1;
-    return acc;
-  }, {});
+  //   const router = useRouter();
 
   // Group classes under a single year header (the API doesn't return year_label yet,
   // so we show one group labelled "Current Academic Year")
@@ -125,7 +111,11 @@ export default function TeacherDashboard() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: AppColors.background },
+  safe: {
+    flex: 1,
+    backgroundColor: AppColors.background,
+  },
+
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: Spacing.lg, paddingVertical: 14,

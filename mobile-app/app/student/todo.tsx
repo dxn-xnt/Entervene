@@ -23,18 +23,18 @@ function formatDate(dateStr: string | null) {
 function getDueChip(dueDateStr: string | null): { label: string; bg: string; text: string } {
   if (!dueDateStr) return { label: 'No due date', bg: AppColors.muted, text: AppColors.mutedForeground };
   const diff = Math.ceil((new Date(dueDateStr).getTime() - Date.now()) / 86400000);
-  if (diff < 0) return { label: `${Math.abs(diff)}d late`, bg: '#fecaca', text: '#991b1b' };
-  if (diff === 0) return { label: 'Due today', bg: '#fed7aa', text: '#9a3412' };
-  if (diff === 1) return { label: 'Due tomorrow', bg: '#fed7aa', text: '#9a3412' };
-  if (diff <= 3) return { label: `Due in ${diff} days`, bg: '#fef08a', text: '#854d0e' };
-  return { label: `Due in ${diff} days`, bg: '#bbf7d0', text: '#166534' };
+  if (diff < 0)   return { label: `${Math.abs(diff)}d late`,  bg: '#fecaca', text: '#991b1b' };
+  if (diff === 0) return { label: 'Due today',                bg: '#fed7aa', text: '#9a3412' };
+  if (diff === 1) return { label: 'Due tomorrow',             bg: '#fed7aa', text: '#9a3412' };
+  if (diff <= 3)  return { label: `Due in ${diff} days`,      bg: '#fef08a', text: '#854d0e' };
+  return           { label: `Due in ${diff} days`,            bg: '#bbf7d0', text: '#166534' };
 }
 
 const TABS = [
-  { id: 'pending', label: 'Pending' },
-  { id: 'pastdue', label: 'Past Due' },
+  { id: 'pending',   label: 'Pending' },
+  { id: 'pastdue',   label: 'Past Due' },
   { id: 'submitted', label: 'Submitted' },
-  { id: 'graded', label: 'Graded' },
+  { id: 'graded',    label: 'Graded' },
 ];
 
 // ── Row component ─────────────────────────────────────────────────────────────
@@ -87,10 +87,10 @@ const ToDo = () => {
   );
 
   const tabItems: ClassworkAssignmentItem[] =
-    activeTab === 'pending' ? upcoming :
-      activeTab === 'pastdue' ? pastDue :
-        activeTab === 'submitted' ? assignments.submitted :
-          assignments.graded;
+    activeTab === 'pending'   ? upcoming :
+    activeTab === 'pastdue'   ? pastDue :
+    activeTab === 'submitted' ? assignments.submitted :
+    assignments.graded;
 
   const navigateToView = (id: number) =>
     router.push({ pathname: '/student/classwork-view' as any, params: { assignment_id: id } });
@@ -118,10 +118,10 @@ const ToDo = () => {
           <View style={styles.center}>
             <Ionicons name="checkmark-circle-outline" size={44} color={AppColors.mutedForeground} />
             <Text style={styles.emptyText}>
-              {activeTab === 'pending' ? 'No upcoming tasks 🎉' :
-                activeTab === 'pastdue' ? 'Nothing overdue 🎉' :
-                  activeTab === 'submitted' ? 'No submitted work yet' :
-                    'No graded work yet'}
+              {activeTab === 'pending'   ? 'No upcoming tasks 🎉' :
+               activeTab === 'pastdue'   ? 'Nothing overdue 🎉' :
+               activeTab === 'submitted' ? 'No submitted work yet' :
+               'No graded work yet'}
             </Text>
           </View>
         ) : (
@@ -143,10 +143,10 @@ const ToDo = () => {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: AppColors.background, gap: Spacing.md },
-  scroll: { flex: 1, marginTop: -6 },
+  safe:   { flex: 1, backgroundColor: AppColors.background },
+  scroll: { flex: 1 },
   content: { padding: Spacing.md, paddingBottom: 40, gap: 12 },
-  list: { gap: 10 },
+  list:   { gap: 10 },
   center: { alignItems: 'center', paddingTop: 60, gap: 10 },
   emptyText: { fontSize: 15, fontWeight: '600', color: AppColors.mutedForeground },
   errorText: { fontSize: 14, color: AppColors.destructive, textAlign: 'center' },
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
   },
   rowText: { flex: 1, gap: 2 },
   rowTitle: { fontSize: 14, fontWeight: '700', color: AppColors.foreground },
-  rowSub: { fontSize: 11, color: AppColors.mutedForeground },
+  rowSub:   { fontSize: 11, color: AppColors.mutedForeground },
   chip: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
   chipText: { fontSize: 11, fontWeight: '700' },
 });
