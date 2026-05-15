@@ -6,6 +6,7 @@ from sqlalchemy import func as sqlfunc
 from typing import List, Optional
 from pathlib import Path
 from datetime import datetime, timezone
+import logging
 
 from app.db.Session import get_db
 from app.core.Dependencies import require_role, get_staff_id, get_student_record
@@ -23,6 +24,7 @@ from app.schemas.Submission import (
 )
 
 router = APIRouter()
+logger = logging.getLogger("app.submissions")
 
 
 async def _files_from_form(request: Request, field_names: set[str]) -> list[UploadFile]:
@@ -40,6 +42,10 @@ async def _files_from_form(request: Request, field_names: set[str]) -> list[Uplo
 def _student_name(student: Student) -> str:
     parts = [student.first_name, student.middle_name, student.last_name, student.suffix]
     return " ".join([p for p in parts if p])
+
+
+def _is_turned_in(status: Optional[str]) -> bool:
+    return status in ("submitted", "late", "graded")
 
 
 def _teacher_owns_assignment(assignment_id: int, staff_id: str, db: Session) -> ClassworkAssignment:
@@ -129,8 +135,6 @@ async def submit_work(
     upload_files = [f for f in (files or []) if f and f.filename]
     if not upload_files:
         upload_files = await _files_from_form(request, {"files", "file", "attachments", "attachment"})
-    if not upload_files:
-        raise HTTPException(status_code=400, detail="Attach at least one file using the 'files' form field.")
 
     now = datetime.now(timezone.utc)
     due_date = ca.due_date
@@ -139,13 +143,33 @@ async def submit_work(
     is_late = bool(due_date and now > due_date)
 
     if existing:
-        if existing.attempt_count >= (ca.max_attempts or 1):
-            raise HTTPException(status_code=403, detail="Maximum attempts reached")
-        existing.attempt_count += 1
+        if existing.status == "graded":
+            raise HTTPException(status_code=403, detail="Cannot modify a graded submission")
+        is_draft = existing.status == "pending"
+        if is_draft:
+            if not upload_files and not existing.attachments:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Attach at least one file using the 'files' form field.",
+                )
+        else:
+            if not upload_files:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Use Unsubmit first, then upload changes and submit again.",
+                )
+            if existing.attempt_count >= (ca.max_attempts or 1):
+                raise HTTPException(status_code=403, detail="Maximum attempts reached")
+            existing.attempt_count += 1
         existing.submitted_at = now
         existing.status = "late" if is_late else "submitted"
         submission = existing
     else:
+        if not upload_files:
+            raise HTTPException(
+                status_code=400,
+                detail="Attach at least one file using the 'files' form field.",
+            )
         submission = StudentSubmission(
             student_id=student.student_id,
             classwork_assignment_id=assignment_id,
@@ -165,8 +189,9 @@ async def submit_work(
     return _build_sub(submission, db)
 
 
-@router.delete("/assignment/{assignment_id}/submit")
-def delete_submission(assignment_id: int, student=Depends(get_student_record), db: Session = Depends(get_db)):
+def _assert_student_can_modify_submission(
+    assignment_id: int, student, db: Session
+) -> tuple[ClassworkAssignment, StudentSubmission]:
     ca = db.query(ClassworkAssignment).filter(
         ClassworkAssignment.classwork_assignment_id == assignment_id
     ).first()
@@ -179,20 +204,100 @@ def delete_submission(assignment_id: int, student=Depends(get_student_record), d
     ).first()
     if not enr:
         raise HTTPException(status_code=403, detail="Not enrolled in this class")
-    sub = db.query(StudentSubmission).filter(
-        StudentSubmission.classwork_assignment_id == assignment_id,
-        StudentSubmission.student_id == student.student_id,
-    ).first()
-    if not sub:
-        raise HTTPException(status_code=404, detail="No submission to delete")
     if ca.is_locked:
-        raise HTTPException(status_code=403, detail="This assignment is locked for resubmission")
+        raise HTTPException(status_code=403, detail="This assignment is locked")
     now = datetime.now(timezone.utc)
     due_date = ca.due_date
     if due_date and due_date.tzinfo is None:
         due_date = due_date.replace(tzinfo=timezone.utc)
     if due_date and now > due_date:
-        raise HTTPException(status_code=403, detail="Cannot resubmit after due date")
+        raise HTTPException(status_code=403, detail="Cannot modify submission after due date")
+    sub = db.query(StudentSubmission).filter(
+        StudentSubmission.classwork_assignment_id == assignment_id,
+        StudentSubmission.student_id == student.student_id,
+    ).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="No submission found")
+    return ca, sub
+
+
+@router.post("/assignment/{assignment_id}/unsubmit", response_model=SubmissionResponse)
+def unsubmit_work(
+    assignment_id: int,
+    student=Depends(get_student_record),
+    db: Session = Depends(get_db),
+):
+    """Revert a submitted assignment to draft; keeps uploaded files."""
+    logger.info(
+        "[UnsubmitDebug] request received assignment_id=%s student_id=%s",
+        assignment_id,
+        getattr(student, "student_id", None),
+    )
+    _, sub = _assert_student_can_modify_submission(assignment_id, student, db)
+    logger.info(
+        "[UnsubmitDebug] submission found submission_id=%s status=%s attachment_count=%s",
+        sub.submission_id,
+        sub.status,
+        len(sub.attachments),
+    )
+    if sub.status == "graded":
+        logger.warning("[UnsubmitDebug] rejected: graded submission_id=%s", sub.submission_id)
+        raise HTTPException(status_code=403, detail="Cannot unsubmit a graded submission")
+    if sub.status == "pending":
+        logger.warning("[UnsubmitDebug] rejected: already pending submission_id=%s", sub.submission_id)
+        raise HTTPException(status_code=400, detail="Submission is not submitted yet")
+    if sub.status not in ("submitted", "late"):
+        logger.warning(
+            "[UnsubmitDebug] rejected: invalid status submission_id=%s status=%s",
+            sub.submission_id,
+            sub.status,
+        )
+        raise HTTPException(status_code=400, detail="Submission cannot be unsubmitted")
+    if not sub.attachments:
+        logger.warning("[UnsubmitDebug] rejected: no attachments submission_id=%s", sub.submission_id)
+        raise HTTPException(status_code=400, detail="No files to keep; upload work first")
+
+    sub.status = "pending"
+    sub.submitted_at = None
+    db.commit()
+    db.refresh(sub)
+    logger.info(
+        "[UnsubmitDebug] success submission_id=%s status=%s attachment_count=%s",
+        sub.submission_id,
+        sub.status,
+        len(sub.attachments),
+    )
+    return _build_sub(sub, db)
+
+
+@router.delete("/assignment/{assignment_id}/attachments/{attachment_id}", response_model=SubmissionResponse)
+def delete_submission_attachment(
+    assignment_id: int,
+    attachment_id: int,
+    student=Depends(get_student_record),
+    db: Session = Depends(get_db),
+):
+    _, sub = _assert_student_can_modify_submission(assignment_id, student, db)
+    if sub.status != "pending":
+        raise HTTPException(status_code=400, detail="Unsubmit before removing files")
+
+    attachment = db.query(SubmissionAttachment).filter(
+        SubmissionAttachment.submission_attachment_id == attachment_id,
+        SubmissionAttachment.submission_id == sub.submission_id,
+    ).first()
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    delete_file(attachment.file_path)
+    db.delete(attachment)
+    db.commit()
+    db.refresh(sub)
+    return _build_sub(sub, db)
+
+
+@router.delete("/assignment/{assignment_id}/submit")
+def delete_submission(assignment_id: int, student=Depends(get_student_record), db: Session = Depends(get_db)):
+    _, sub = _assert_student_can_modify_submission(assignment_id, student, db)
     for att in sub.attachments:
         delete_file(att.file_path)
     db.delete(sub)
@@ -245,15 +350,18 @@ def get_assignment_submission_tracking(
         sub = subs_by_student.get(sid)
         base = {"student_id": sid, "student_name": _student_name(student),
                 "student_lrn": student.student_lrn, "email": student.email}
-        if sub:
+        if sub and _is_turned_in(sub.status):
             submitted.append({**base, "status": sub.status,
                 "submitted_at": sub.submitted_at.isoformat() if sub.submitted_at else None,
                 "submission_id": sub.submission_id, "attempt_count": sub.attempt_count,
                 "grade": float(sub.grade) if sub.grade is not None else None,
                 "attachment_count": len(sub.attachments)})
         else:
-            missing.append({**base, "status": "not_submitted", "submitted_at": None,
-                "submission_id": None, "attempt_count": 0, "grade": None, "attachment_count": 0})
+            draft_status = sub.status if sub else "not_submitted"
+            missing.append({**base, "status": draft_status, "submitted_at": None,
+                "submission_id": sub.submission_id if sub else None, "attempt_count": sub.attempt_count if sub else 0,
+                "grade": float(sub.grade) if sub and sub.grade is not None else None,
+                "attachment_count": len(sub.attachments) if sub else 0})
     return {
         "classwork_assignment_id": ca.classwork_assignment_id, "classwork_id": ca.classwork_id,
         "classwork_title": cw.title if cw else None, "class_id": ca.class_id,
@@ -393,7 +501,7 @@ def get_tracking_by_classwork(
             "student_lrn": st.student_lrn,
             "email": st.email,
         }
-        if sub:
+        if sub and _is_turned_in(sub.status):
             submitted.append({
                 **base,
                 "status": sub.status,
@@ -406,9 +514,12 @@ def get_tracking_by_classwork(
         else:
             missing.append({
                 **base,
-                "status": "not_submitted",
-                "submitted_at": None, "submission_id": None,
-                "attempt_count": 0, "grade": None, "attachment_count": 0,
+                "status": sub.status if sub else "not_submitted",
+                "submitted_at": None,
+                "submission_id": sub.submission_id if sub else None,
+                "attempt_count": sub.attempt_count if sub else 0,
+                "grade": float(sub.grade) if sub and sub.grade is not None else None,
+                "attachment_count": len(sub.attachments) if sub else 0,
             })
 
     return {
