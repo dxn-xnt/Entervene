@@ -5,6 +5,12 @@
  */
 
 import { Platform } from 'react-native';
+import { useFonts } from 'expo-font';
+import {
+  TitilliumWeb_400Regular,
+  TitilliumWeb_600SemiBold,
+  TitilliumWeb_700Bold,
+} from '@expo-google-fonts/titillium-web';
 
 // ─── Color Tokens (synced with frontend :root) ──────────────────────────────
 export const AppColors = {
@@ -108,9 +114,12 @@ export const Colors = {
 };
 
 // ─── Fonts ───────────────────────────────────────────────────────────────────
+
 export const Fonts = Platform.select({
   ios: {
-    sans: 'system-ui',
+    sans: 'TitilliumWeb_400Regular',
+    TitilliumWeb_600SemiBold,
+    TitilliumWeb_700Bold,
     serif: 'ui-serif',
     rounded: 'ui-rounded',
     mono: 'ui-monospace',
@@ -122,7 +131,7 @@ export const Fonts = Platform.select({
     mono: 'monospace',
   },
   web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    sans: "system-ui, TitilliumWeb_400Regular, TitilliumWeb_600SemiBold, TitilliumWeb_700Bold, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
     serif: "Georgia, 'Times New Roman', serif",
     rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",

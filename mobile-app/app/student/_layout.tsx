@@ -22,6 +22,7 @@ export default function StudentLayout() {
           <Stack.Screen name="subjects" />
           <Stack.Screen name="subject-detail" />
           <Stack.Screen name="lesson-view" />
+          <Stack.Screen name="classwork-view" />
         </Stack>
         <DrawerMenu />
       </View>

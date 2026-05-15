@@ -9,29 +9,26 @@ import ClassworkItem from '@/components/student/ClassworkItem';
 import { AppColors, NeoShadow, Spacing } from '@/constants/theme';
 import ScreenHeader from '@/components/student/ScreenHeader';
 
-type LessonParams = {
-  subject_load_id?: string;
-  subject?: string;
-  lessonTitle: string,
+type ClassworkParams = {
+  classworkId: string;
+  lessonName?: string;
+  description?: string;
+  title: string,
   scheduledDate: string,
-  description: string,
+  dueDate: string,
+  attachments?: string[],
 };
 
-const LessonView = () => {
+const ClassworkView = () => {
   const router = useRouter();
-  const params = useLocalSearchParams<LessonParams>();
+  const params = useLocalSearchParams<ClassworkParams>();
 
-  const subjectName = params.subject ?? '';
-  const lessonTitle = params.lessonTitle ?? '';
+  const classworkTitle = params.title ?? '';
+  const lessonName = params.lessonName ?? '';
   const scheduledDate = params.scheduledDate ?? '';
+  const dueDate = params.dueDate ?? '';
   const description = params.description ?? '';
-  const classworkId = '1';
-  const lessonName = 'Lesson 1';
-  const instructions = 'Description 1';
-  const title = 'Classwork 1';
-  const classworkScheduledDate = '2022-01-01';
-  const dueDate = '2022-01-01';
-  const attachments = [''] as unknown as string[];
+  const attachments = params.attachments ?? [];
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -39,48 +36,14 @@ const LessonView = () => {
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7} style={styles.backRow}>
           <Ionicons name="chevron-back" size={28} color={AppColors.foreground} />
-          <Text style={styles.backText}>{subjectName}</Text>
+          <Text style={styles.backText}>{lessonName}</Text>
         </TouchableOpacity>
       </View>
-
-      <View style={styles.subjectHeader}>
+      <View style={styles.content}>
         <View style={styles.left}>
-          <Text style={styles.title}>{lessonTitle}</Text>
+          <Text style={styles.title}>{classworkTitle}</Text>
           <Text style={styles.teacher}>{description}</Text>
         </View>
-
-        {/* Period / Section info strip */}
-        {(scheduledDate) ? (
-          <View style={styles.infoStrip}>
-            {scheduledDate ? (
-              <View style={styles.infoChip}>
-                <Ionicons name="calendar-outline" size={12} color={AppColors.mutedForeground} />
-                <Text style={styles.infoChipText}>{scheduledDate}</Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
-      <View style={styles.section}>
-        <ClassworkItem
-          onPress={() =>
-            router.push({
-              pathname: "/student/classwork-view" as any,
-              params: {
-                classworkId: classworkId,
-                lessonName: lessonName,
-                description: instructions,
-                title: title,
-                scheduledDate: classworkScheduledDate,
-                dueDate: dueDate,
-                attachments: attachments,
-              },
-            })
-          }
-
-          title="Assignment 2" submittedDate="October 24, 2025" status="Missing" />
-        <ClassworkItem title="Assignment 2" submittedDate="October 24, 2025" status="Missing" />
-        <ClassworkItem title="Assignment 2" submittedDate="October 24, 2025" status="Missing" />
       </View>
     </SafeAreaView>
   );
@@ -115,7 +78,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: AppColors.mutedForeground,
   },
-  content: { padding: Spacing.md, gap: 16, paddingBottom: 32 },
+  content: { paddingHorizontal: Spacing.md, gap: 16, paddingBottom: 32 },
   section: { gap: 16, paddingHorizontal: Spacing.md },
   sectionTitle: { fontSize: 22, fontWeight: '700', color: AppColors.foreground },
   subjectHeader: {
@@ -147,4 +110,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default LessonView;
+export default ClassworkView;

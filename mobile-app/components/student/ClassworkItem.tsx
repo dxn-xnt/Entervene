@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppColors, NeoShadow, Spacing } from '@/constants/theme';
 
@@ -7,15 +7,17 @@ type ClassworkItemProps = {
   title: string;
   submittedDate: string;
   status?: string;
+  onPress?: () => void;
 };
 
 const ClassworkItem = ({
   title,
   submittedDate,
   status,
+  onPress
 }: ClassworkItemProps) => {
   return (
-    <View style={styles.card}>
+    <TouchableOpacity style={styles.card} onPress={onPress}>
       <View style={styles.content}>
         <View style={styles.titleRow}>
           <Ionicons name="desktop-outline" size={22} color={AppColors.foreground} />
@@ -25,7 +27,7 @@ const ClassworkItem = ({
           Submitted {submittedDate} | {status}
         </Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
