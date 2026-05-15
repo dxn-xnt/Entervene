@@ -20,12 +20,14 @@ export default function TeacherLayout() {
           {/* Classwork creation flow */}
           <Stack.Screen name="create-classwork" />
           <Stack.Screen name="classwork-detail" />
+          <Stack.Screen name="edit-classwork" />
           <Stack.Screen name="grade-submission" />
           <Stack.Screen name="submissions" />
 
           {/* Lesson screens */}
           <Stack.Screen name="lesson-detail" />
           <Stack.Screen name="create-lesson" />
+          <Stack.Screen name="edit-lesson" />
 
           {/* Subject / class drill-downs */}
           <Stack.Screen name="classes-subject" />

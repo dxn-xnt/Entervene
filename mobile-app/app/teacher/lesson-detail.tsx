@@ -36,20 +36,56 @@ function formatDate(iso: string | null | undefined) {
 export default function LessonDetail() {
   const router = useRouter();
   const { session } = useAuth();
-  const params = useLocalSearchParams<{ lesson_id?: string }>();
+  const params = useLocalSearchParams<{ 
+    lesson_id?: string;
+    subject_load_id?: string;
+    class_id?: string;
+    subject_id?: string;
+    subject?: string;
+    section?: string;
+  }>();
   const [lesson, setLesson] = useState<TeacherLesson | null>(null);
   const [loading, setLoading] = useState(true);
+  const [publishing, setPublishing] = useState(false);
 
-  useEffect(() => {
-    if (!session?.token || !params.lesson_id) {
-      setLoading(false);
-      return;
-    }
+  const fetchLesson = () => {
+    if (!session?.token || !params.lesson_id) { setLoading(false); return; }
     apiFetch<TeacherLesson>(`/api/v1/lessons/${params.lesson_id}`, { token: session.token })
       .then(setLesson)
       .catch((e) => Alert.alert('Error', e.message))
       .finally(() => setLoading(false));
-  }, [params.lesson_id, session?.token]);
+  };
+
+  useEffect(() => { fetchLesson(); }, [params.lesson_id, session?.token]);
+
+  const handlePublish = async () => {
+    if (!lesson) return;
+    Alert.alert(
+      'Publish Lesson',
+      `Publish "${lesson.title}" now? Students will be able to see it immediately.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Publish',
+          onPress: async () => {
+            setPublishing(true);
+            try {
+              const updated = await apiFetch<TeacherLesson>(`/api/v1/lessons/${lesson.lesson_id}`, {
+                method: 'PUT',
+                token: session!.token,
+                body: JSON.stringify({ is_published: true }),
+              });
+              setLesson(updated);
+            } catch (e: any) {
+              Alert.alert('Error', e.message || 'Failed to publish');
+            } finally {
+              setPublishing(false);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   if (loading) {
     return (
@@ -86,20 +122,55 @@ export default function LessonDetail() {
           <Ionicons name="chevron-back" size={24} color={AppColors.foreground} />
           <Text style={s.headerTitle}>Lesson</Text>
         </TouchableOpacity>
-        <View style={[s.statusPill, lesson.is_published ? s.statusPublished : s.statusDraft]}>
-          <Ionicons
-            name={lesson.is_published ? 'eye-outline' : 'eye-off-outline'}
-            size={14}
-            color={lesson.is_published ? PUBLISHED_BORDER : AppColors.foreground}
-          />
-          <Text
-            style={[
-              s.statusPillText,
-              lesson.is_published ? s.statusPublishedText : s.statusDraftText,
-            ]}
+        <View style={s.headerRight}>
+          {/* Edit button */}
+          <TouchableOpacity
+            style={s.editBtn}
+            activeOpacity={0.8}
+            onPress={() => router.push({ 
+              pathname: '/teacher/edit-lesson' as any, 
+              params: { 
+                lesson_id: lesson.lesson_id,
+                subject_load_id: params.subject_load_id,
+                class_id: params.class_id,
+                subject_id: params.subject_id,
+                subject: params.subject,
+                section: params.section
+              } 
+            })}
           >
-            {lesson.is_published ? 'Published' : 'Draft'}
-          </Text>
+            <Ionicons name="pencil-outline" size={14} color={AppColors.foreground} />
+            <Text style={s.editBtnText}>Edit</Text>
+          </TouchableOpacity>
+
+          {/* Publish button — only for drafts */}
+          {!lesson.is_published && (
+            <TouchableOpacity
+              style={[s.publishBtn, publishing && { opacity: 0.6 }]}
+              activeOpacity={0.8}
+              disabled={publishing}
+              onPress={handlePublish}
+            >
+              {publishing ? (
+                <ActivityIndicator size="small" color={AppColors.primaryForeground} />
+              ) : (
+                <>
+                  <Ionicons name="cloud-upload-outline" size={14} color={AppColors.primaryForeground} />
+                  <Text style={s.publishBtnText}>Publish</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+          <View style={[s.statusPill, lesson.is_published ? s.statusPublished : s.statusDraft]}>
+            <Ionicons
+              name={lesson.is_published ? 'eye-outline' : 'eye-off-outline'}
+              size={14}
+              color={lesson.is_published ? PUBLISHED_BORDER : AppColors.foreground}
+            />
+            <Text style={[s.statusPillText, lesson.is_published ? s.statusPublishedText : s.statusDraftText]}>
+              {lesson.is_published ? 'Published' : 'Draft'}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -226,6 +297,23 @@ const s = StyleSheet.create({
     borderBottomColor: AppColors.border,
     backgroundColor: AppColors.background,
   },
+  headerRight: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
+  editBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 12, paddingVertical: 6,
+    backgroundColor: AppColors.white, borderWidth: Borders.width,
+    borderColor: AppColors.border, borderRadius: 8,
+  },
+  editBtnText: { fontSize: 12, fontWeight: '800', color: AppColors.foreground },
+  publishBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 12, paddingVertical: 6,
+    backgroundColor: AppColors.primary, borderWidth: Borders.width,
+    borderColor: AppColors.border, borderRadius: 8,
+  },
+  publishBtnText: { fontSize: 12, fontWeight: '800', color: AppColors.primaryForeground },
   backRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   headerTitle: { fontSize: 18, fontWeight: '800', color: AppColors.foreground },
   statusPill: {

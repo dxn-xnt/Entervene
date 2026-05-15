@@ -14,6 +14,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
 import { apiFetch } from '@/hooks/api';
 import { AppColors, Spacing, Borders, NeoShadow } from '@/constants/theme';
+import FileViewer from '@/components/teacher/file-viewer';
+import SubmissionMonitor from '@/components/teacher/submission-monitor';
+import { useClassworkSubmissionTracking } from '@/hooks/useSubmissions';
 
 const BANNER_BG = '#F6E9B2';
 const POINTS_BG = '#fef08a';
@@ -69,6 +72,10 @@ export default function ClassworkDetail() {
   const params = useLocalSearchParams<{ classwork_id?: string }>();
   const [cw, setCw] = useState<ClassworkDetailData | null>(null);
   const [loading, setLoading] = useState(true);
+  const classworkId = params.classwork_id ? Number(params.classwork_id) : null;
+
+  // Use classwork-level tracking endpoint
+  const { tracking, isLoading: submissionsLoading, error: submissionError } = useClassworkSubmissionTracking(classworkId || 0);
 
   useEffect(() => {
     if (!session?.token || !params.classwork_id) {
@@ -138,10 +145,23 @@ export default function ClassworkDetail() {
           <View style={[s.miniPill, cw.is_published ? s.miniPillLive : s.miniPillDraft]}>
             <Text style={s.miniPillText}>{cw.is_published ? 'Published' : 'Draft'}</Text>
           </View>
+          <TouchableOpacity
+            style={s.editButton}
+            onPress={() =>
+              router.push({
+                pathname: '/teacher/edit-classwork' as any,
+                params: { classwork_id: cw.classwork_id },
+              })
+            }
+            hitSlop={10}
+          >
+            <Ionicons name="pencil-outline" size={16} color={AppColors.primaryForeground} />
+          </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        {/* ── Hero card ── */}
         <View style={s.hero}>
           <View style={s.heroIconWrap}>
             <Ionicons name={cwTypeIcon(cw.classwork_type)} size={28} color={AppColors.foreground} />
@@ -196,6 +216,7 @@ export default function ClassworkDetail() {
           )}
         </View>
 
+        {/* ── Description ── */}
         {cw.description ? (
           <View style={s.block}>
             <View style={s.blockHead}>
@@ -206,6 +227,7 @@ export default function ClassworkDetail() {
           </View>
         ) : null}
 
+        {/* ── Instructions ── */}
         {cw.instructions ? (
           <View style={s.block}>
             <View style={s.blockHead}>
@@ -216,34 +238,57 @@ export default function ClassworkDetail() {
           </View>
         ) : null}
 
+        {/* ── Attachments ── */}
         {atts.length > 0 ? (
           <View style={s.block}>
             <View style={s.blockHead}>
               <Ionicons name="attach-outline" size={18} color={AppColors.foreground} />
               <Text style={s.blockTitle}>Attachments ({atts.length})</Text>
             </View>
-            <View style={s.attachList}>
-              {atts.map((a) => (
-                <View key={a.classwork_attachment_id} style={s.attachRow}>
-                  <View style={s.attachIcon}>
-                    <Ionicons name="document-text-outline" size={22} color={AppColors.foreground} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.attachName} numberOfLines={2}>
-                      {a.file_name}
-                    </Text>
-                    {typeof a.file_size === 'number' ? (
-                      <Text style={s.attachSize}>
-                        {(a.file_size / 1024).toFixed(0)} KB
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-              ))}
-            </View>
+            <FileViewer
+              files={atts.map((a) => ({
+                file_name: a.file_name,
+                file_size: a.file_size,
+                classwork_attachment_id: a.classwork_attachment_id,
+              }))}
+              canDownload={true}
+              canView={true}
+              token={session?.token}
+              classworkId={cw.classwork_id}
+            />
           </View>
         ) : null}
 
+        {/* ── Student Submissions — ALWAYS shown ── */}
+        <View style={s.block}>
+          <View style={s.blockHead}>
+            <Ionicons name="people-outline" size={18} color={AppColors.foreground} />
+            <Text style={s.blockTitle}>Student Submissions</Text>
+            {tracking && !submissionsLoading && (
+              <View style={s.submissionPill}>
+                <Text style={s.submissionPillText}>
+                  {tracking.submitted_count}/{tracking.total_students}
+                </Text>
+              </View>
+            )}
+          </View>
+          {submissionError ? (
+            <View style={s.errorBox}>
+              <Ionicons name="alert-circle-outline" size={20} color={AppColors.destructive} />
+              <Text style={s.errorText}>Error: {submissionError}</Text>
+            </View>
+          ) : (
+            <SubmissionMonitor
+              submitted={tracking?.submitted ?? []}
+              missing={tracking?.missing ?? []}
+              isLoading={submissionsLoading}
+              classworkTitle={cw.title}
+              totalPoints={cw.total_points ?? 100}
+            />
+          )}
+        </View>
+
+        {/* ── Empty state (only when no content AND no attachments) ── */}
         {!cw.description && !cw.instructions && atts.length === 0 ? (
           <View style={s.emptyCard}>
             <Ionicons name="clipboard-outline" size={40} color={AppColors.mutedForeground} />
@@ -295,6 +340,15 @@ const s = StyleSheet.create({
   miniPillLocked: { backgroundColor: LOCKED_BG, borderColor: '#991b1b' },
   miniPillText: { fontSize: 11, fontWeight: '800', color: AppColors.foreground },
   miniPillLockedText: { fontSize: 11, fontWeight: '800', color: '#991b1b' },
+  editButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: AppColors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...NeoShadow.xs,
+  },
   scroll: { padding: Spacing.md, paddingBottom: 48, gap: Spacing.md },
   hero: {
     backgroundColor: BANNER_BG,
@@ -350,12 +404,7 @@ const s = StyleSheet.create({
     ...NeoShadow.xs,
   },
   pointsBadgeText: { fontSize: 12, fontWeight: '900', color: AppColors.foreground },
-  heroTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: AppColors.foreground,
-    lineHeight: 28,
-  },
+  heroTitle: { fontSize: 22, fontWeight: '900', color: AppColors.foreground, lineHeight: 28 },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 10 },
   metaChip: {
     flexDirection: 'row',
@@ -397,8 +446,47 @@ const s = StyleSheet.create({
     color: AppColors.foreground,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
+    flex: 1,
   },
   blockBody: { fontSize: 15, color: AppColors.foreground, lineHeight: 24 },
+  submissionPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: AppColors.primary,
+    borderRadius: 999,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+  },
+  submissionPillText: { fontSize: 11, fontWeight: '900', color: AppColors.primaryForeground },
+  emptyCard: {
+    alignItems: 'center',
+    padding: Spacing.xl,
+    borderWidth: Borders.width,
+    borderStyle: 'dashed',
+    borderColor: AppColors.border,
+    borderRadius: 10,
+    gap: 8,
+    backgroundColor: AppColors.inputBackground,
+  },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: AppColors.foreground },
+  emptySub: { fontSize: 13, color: AppColors.mutedForeground, textAlign: 'center', lineHeight: 20 },
+  errorText: {
+    fontSize: 14,
+    color: AppColors.destructive,
+    textAlign: 'center',
+    marginTop: 32,
+    fontWeight: '600',
+  },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    backgroundColor: '#FEE2E2',
+    borderWidth: Borders.width,
+    borderColor: AppColors.destructive,
+    borderRadius: 8,
+  },
   attachList: { gap: 10 },
   attachRow: {
     flexDirection: 'row',
@@ -422,23 +510,4 @@ const s = StyleSheet.create({
   },
   attachName: { fontSize: 14, fontWeight: '700', color: AppColors.foreground },
   attachSize: { fontSize: 12, color: AppColors.mutedForeground, marginTop: 2 },
-  emptyCard: {
-    alignItems: 'center',
-    padding: Spacing.xl,
-    borderWidth: Borders.width,
-    borderStyle: 'dashed',
-    borderColor: AppColors.border,
-    borderRadius: 10,
-    gap: 8,
-    backgroundColor: AppColors.inputBackground,
-  },
-  emptyTitle: { fontSize: 16, fontWeight: '800', color: AppColors.foreground },
-  emptySub: { fontSize: 13, color: AppColors.mutedForeground, textAlign: 'center', lineHeight: 20 },
-  errorText: {
-    fontSize: 14,
-    color: AppColors.destructive,
-    textAlign: 'center',
-    marginTop: 32,
-    fontWeight: '600',
-  },
 });
