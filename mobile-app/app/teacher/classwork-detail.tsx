@@ -23,6 +23,7 @@ const POINTS_BG = '#fef08a';
 const PUBLISHED_BG = '#dcfce7';
 const LOCKED_BG = '#fecaca';
 
+
 type ClassworkDetailData = {
   assignments: any;
   classwork_id: number;
