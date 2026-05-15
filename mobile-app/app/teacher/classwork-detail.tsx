@@ -78,14 +78,14 @@ export default function ClassworkDetail() {
   const classworkId = params.classwork_id ? Number(params.classwork_id) : null;
   const classId = params.class_id ? Number(params.class_id) : null;
   const normalizeStudent = (s: any) => ({
-  student_id: s.student_id,
-  student_name: s.student_name,
-  email: s.email ?? undefined,
-  submitted_at: s.submitted_at ?? null,
-  grade: s.grade ?? null,
-});
+    student_id: s.student_id,
+    submission_id: s.submission_id ?? null,
+    student_name: s.student_name,
+    email: s.email ?? undefined,
+    submitted_at: s.submitted_at ?? null,
+    grade: s.grade ?? null,
+  });
 
-  // Use classwork-level tracking endpoint
   const { tracking, isLoading: submissionsLoading, error: submissionError, refresh: refreshTracking } = useClassworkSubmissionTracking(classworkId || 0);
 
   const loadClasswork = useCallback(async () => {
@@ -330,25 +330,6 @@ export default function ClassworkDetail() {
             totalPoints={cw.total_points ?? 100}
             dueDate={dueDate}
           />
-              submitted={(tracking?.submitted ?? []).map(normalizeStudent)}
-              missing={missingList.map(normalizeStudent)}
-              isLoading={submissionsLoading}
-              classworkTitle={cw.title}
-              totalPoints={cw.total_points ?? 100}
-              dueDate={dueDate}
-              onStudentPress={(student) => {
-                if (!student.submission_id) return;
-                router.push({
-                  pathname: '/teacher/grade-submission' as any,
-                  params: {
-                    submission_id: String(student.submission_id),
-                    student_name: student.student_name,
-                    classwork_title: cw.title,
-                    total_points: String(cw.total_points ?? 100),
-                  },
-                });
-              }}
-            />
           )}
         </View>
 
