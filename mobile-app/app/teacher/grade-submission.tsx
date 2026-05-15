@@ -88,8 +88,22 @@ export default function GradeSubmission() {
   };
 
   const handleGrade = async () => {
-    if (!grade.trim()) {
+    const value = grade.trim();
+    if (!value) {
       Alert.alert('Error', 'Enter a grade');
+      return;
+    }
+    const numericGrade = Number(value);
+    if (Number.isNaN(numericGrade)) {
+      Alert.alert('Error', 'Grade must be a number');
+      return;
+    }
+    if (numericGrade < 0) {
+      Alert.alert('Error', 'Grade cannot be negative');
+      return;
+    }
+    if (numericGrade > totalPoints) {
+      Alert.alert('Error', `Grade cannot be greater than ${totalPoints}`);
       return;
     }
     setSaving(true);
@@ -97,7 +111,7 @@ export default function GradeSubmission() {
       await apiFetch(`/api/v1/submissions/${params.submission_id}/grade`, {
         method: 'PUT',
         token: session!.token,
-        body: JSON.stringify({ grade: parseFloat(grade), feedback }),
+        body: JSON.stringify({ grade: numericGrade, feedback }),
       });
       Alert.alert('Success', 'Grade submitted!');
       router.back();
@@ -126,7 +140,13 @@ export default function GradeSubmission() {
   }
 
   const attachments = submission?.attachments ?? [];
-  const totalPoints = params.total_points || '100';
+  const resolvedTotalPoints =
+    submission?.total_points != null
+      ? submission.total_points
+      : Number(params.total_points ?? '100');
+  const totalPoints = Number.isFinite(resolvedTotalPoints) && resolvedTotalPoints > 0
+    ? resolvedTotalPoints
+    : 100;
   const isAlreadyGraded = submission?.status === 'graded';
 
   return (

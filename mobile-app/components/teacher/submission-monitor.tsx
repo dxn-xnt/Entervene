@@ -13,6 +13,7 @@ import { AppColors, Spacing, Borders, NeoShadow } from '@/constants/theme';
 
 type StudentEntry = {
   student_id: number | string;
+  submission_id?: number | null;
   student_name: string;
   email?: string | null;
   submitted_at?: string | null;
@@ -26,6 +27,7 @@ type Props = {
   classworkTitle: string;
   totalPoints: number;
   dueDate: string | null;
+  onStudentPress?: (student: StudentEntry) => void;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -158,10 +160,12 @@ function StudentRow({
   student,
   status,
   totalPoints,
+  onPress,
 }: {
   student: StudentEntry;
   status: RowStatus;
   totalPoints: number;
+  onPress?: () => void;
 }) {
   const statusConfig: Record<
     RowStatus,
@@ -175,7 +179,7 @@ function StudentRow({
   const submittedAt = formatDateTime(student.submitted_at);
   const hasGrade = student.grade != null;
 
-  return (
+  const content = (
     <View style={sr.row}>
       <View style={sr.avatar}>
         <Text style={sr.avatarText}>
@@ -200,6 +204,16 @@ function StudentRow({
       </View>
     </View>
   );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity onPress={onPress} activeOpacity={0.75}>
+        {content}
+      </TouchableOpacity>
+    );
+  }
+
+  return content;
 }
 
 const sr = StyleSheet.create({
@@ -248,6 +262,7 @@ export default function SubmissionMonitor({
   isLoading,
   totalPoints,
   dueDate,
+  onStudentPress,
 }: Props) {
   const [showSubmitted, setShowSubmitted] = useState(true);
   const [showMissing, setShowMissing]     = useState(true);
@@ -331,6 +346,7 @@ export default function SubmissionMonitor({
                   student={s}
                   status="submitted"
                   totalPoints={totalPoints}
+                  onPress={s.submission_id ? () => onStudentPress?.(s) : undefined}
                 />
               ))}
             </View>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   Alert,
   StyleSheet,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
@@ -79,6 +79,7 @@ export default function ClassworkDetail() {
   const classId = params.class_id ? Number(params.class_id) : null;
   const normalizeStudent = (s: any) => ({
     student_id: s.student_id,
+    submission_id: s.submission_id ?? null,
     student_name: s.student_name,
     email: s.email ?? undefined,
     submitted_at: s.submitted_at ?? null,
@@ -86,31 +87,40 @@ export default function ClassworkDetail() {
   });
 
   // Use classwork-level tracking endpoint
-  const { tracking, isLoading: submissionsLoading, error: submissionError } = useClassworkSubmissionTracking(classworkId || 0);
+  const { tracking, isLoading: submissionsLoading, error: submissionError, refresh: refreshTracking } = useClassworkSubmissionTracking(classworkId || 0);
 
-  useEffect(() => {
+  const loadClasswork = useCallback(async () => {
     if (!session?.token || !params.classwork_id) {
       setLoading(false);
       return;
     }
-    const go = async () => {
-      try {
-        let url = `/api/v1/classwork-assignments/classwork/${params.classwork_id}`;
-        if (params.class_id) {
-          url += `?class_id=${encodeURIComponent(params.class_id)}`;
-        }
-
-        const data = await apiFetch<ClassworkDetailData>(url, { token: session.token });
-        console.log('API Response:', data); // Debug log
-        setCw(data);
-      } catch (e: any) {
-        Alert.alert('Error', e.message);
-      } finally {
-        setLoading(false);
+    try {
+      let url = `/api/v1/classwork-assignments/classwork/${params.classwork_id}`;
+      if (params.class_id) {
+        url += `?class_id=${encodeURIComponent(params.class_id)}`;
       }
-    };
-    void go();
+
+      const data = await apiFetch<ClassworkDetailData>(url, { token: session.token });
+      console.log('API Response:', data); // Debug log
+      setCw(data);
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setLoading(false);
+    }
   }, [params.classwork_id, params.class_id, session?.token]);
+
+  useEffect(() => {
+    void loadClasswork();
+  }, [loadClasswork]);
+
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      void loadClasswork();
+      refreshTracking();
+    }, [loadClasswork, refreshTracking]),
+  );
 
   if (loading) {
     return (
@@ -317,6 +327,18 @@ export default function ClassworkDetail() {
               classworkTitle={cw.title}
               totalPoints={cw.total_points ?? 100}
               dueDate={dueDate}
+              onStudentPress={(student) => {
+                if (!student.submission_id) return;
+                router.push({
+                  pathname: '/teacher/grade-submission' as any,
+                  params: {
+                    submission_id: String(student.submission_id),
+                    student_name: student.student_name,
+                    classwork_title: cw.title,
+                    total_points: String(cw.total_points ?? 100),
+                  },
+                });
+              }}
             />
           )}
         </View>

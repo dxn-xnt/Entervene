@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, StyleSheet } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { SubmissionTrackingStudent, useAssignmentSubmissionTracking } from '@/hooks/useSubmissions';
@@ -23,6 +23,12 @@ export default function Submissions() {
   const params = useLocalSearchParams<{ assignment_id?: string; classwork_title?: string; total_points?: string }>();
   const assignmentId = parseInt(params.assignment_id || '0');
   const { tracking, isLoading, error, refresh } = useAssignmentSubmissionTracking(assignmentId);
+
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh]),
+  );
 
   const submitted = tracking?.submitted ?? [];
   const missing = tracking?.missing ?? [];

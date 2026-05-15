@@ -85,6 +85,7 @@ def _build_sub(sub, db):
         feedback=sub.feedback, attempt_count=sub.attempt_count,
         graded_at=sub.graded_at, graded_by_staff_id=sub.graded_by_staff_id,
         attachments=[_att_resp(a) for a in sub.attachments],
+        total_points=float(cw.total_points) if cw and cw.total_points is not None else None,
         created_at=sub.created_at,
     )
 
@@ -617,6 +618,17 @@ def grade_submission(
     sub = db.query(StudentSubmission).filter(StudentSubmission.submission_id == submission_id).first()
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
+    ca = db.query(ClassworkAssignment).filter(
+        ClassworkAssignment.classwork_assignment_id == sub.classwork_assignment_id
+    ).first()
+    cw = db.query(Classwork).filter(Classwork.classwork_id == ca.classwork_id).first() if ca else None
+    if body.grade < 0:
+        raise HTTPException(status_code=400, detail="Grade cannot be negative")
+    if cw and cw.total_points is not None and body.grade > float(cw.total_points):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Grade cannot be greater than {float(cw.total_points)}",
+        )
     sub.grade = body.grade
     sub.feedback = body.feedback
     sub.status = "graded"
