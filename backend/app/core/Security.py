@@ -8,7 +8,8 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8
 
 def create_access_token(user_id: str, role: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {"sub": user_id, "role": role, "exp": expire}
+    # Numeric exp is required for reliable HS256 verification across python-jose versions.
+    payload = {"sub": user_id, "role": role, "exp": int(expire.timestamp())}
     return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
 
 

@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AppColors } from "@/constants/theme";
+import { ClassworkUi } from "@/constants/classwork-ui";
 
 interface MaterialCardProps {
   filename: string;
@@ -59,7 +60,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "#7ABA78",
+    backgroundColor: ClassworkUi.cardGreen,
     paddingVertical: 6,
     paddingHorizontal: 8,
   },

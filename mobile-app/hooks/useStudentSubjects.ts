@@ -5,6 +5,8 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export type StudentSubject = {
   subject_load_id: number;
+  class_id: number;
+  subject_id: number;
   subject_name: string;
   subject_codename: string;
   teacher_name: string;
@@ -33,13 +35,21 @@ export function useStudentSubjects(): UseStudentSubjectsReturn {
   const { session } = useAuth();
   const [subjects, setSubjects] = useState<StudentSubject[]>([]);
   const [activeQuarter, setActiveQuarter] = useState<ActiveQuarter | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [trigger, setTrigger] = useState(0);
 
   const refresh = useCallback(() => setTrigger((t) => t + 1), []);
 
   useEffect(() => {
+    // Only students may call these routes; missing/unknown role must not hit student APIs.
+    if (session?.role !== 'student') {
+      setSubjects([]);
+      setActiveQuarter(null);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
     if (!session?.token) {
       setIsLoading(false);
       return;
@@ -94,7 +104,7 @@ export function useStudentSubjects(): UseStudentSubjectsReturn {
     return () => {
       cancelled = true;
     };
-  }, [session?.token, trigger]);
+  }, [session?.token, session?.role, trigger]);
 
   return { subjects, activeQuarter, isLoading, error, refresh };
 }

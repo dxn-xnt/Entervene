@@ -39,7 +39,8 @@
           }
         }
       ],
-      "expo-font"
+      "@react-native-community/datetimepicker",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

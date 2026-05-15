@@ -1,33 +1,45 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { AppColors, NeoShadow, Spacing } from '@/constants/theme';
+import { AppColors, NeoShadow, Spacing, Borders } from '@/constants/theme';
+
+// Status colour map
+const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  submitted: { bg: '#bfdbfe', text: '#1d4ed8', label: 'Submitted' },
+  graded: { bg: '#bbf7d0', text: '#15803d', label: 'Graded' },
+  late: { bg: '#fecaca', text: '#b91c1c', label: 'Late' },
+  pending: { bg: '#fef08a', text: '#854d0e', label: 'Pending' },
+  missing: { bg: '#fee2e2', text: '#b91c1c', label: 'Missing' },
+};
 
 type ClassworkItemProps = {
   title: string;
   submittedDate: string;
-  status?: string;
+  status?: string | null;
   onPress?: () => void;
 };
 
-const ClassworkItem = ({
-  title,
-  submittedDate,
-  status,
-  onPress
-}: ClassworkItemProps) => {
+const ClassworkItem = ({ title, submittedDate, status, onPress }: ClassworkItemProps) => {
+  const key = (status ?? 'missing').toLowerCase();
+  const badge = STATUS_STYLES[key] ?? STATUS_STYLES['missing'];
+  const Wrapper = onPress ? TouchableOpacity : View;
+
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress}>
-      <View style={styles.content}>
-        <View style={styles.titleRow}>
-          <Ionicons name="desktop-outline" size={22} color={AppColors.foreground} />
-          <Text style={styles.title}>{title}</Text>
+    <Wrapper onPress={onPress} activeOpacity={0.8} style={styles.card}>
+      <View style={styles.left}>
+        <View style={styles.iconWrap}>
+          <Ionicons name="document-text-outline" size={18} color={AppColors.foreground} />
         </View>
-        <Text style={styles.subtitle}>
-          Submitted {submittedDate} | {status}
-        </Text>
+        <View style={styles.textCol}>
+          <Text style={styles.title} numberOfLines={2}>{title}</Text>
+          <Text style={styles.sub}>{submittedDate}</Text>
+        </View>
       </View>
-    </TouchableOpacity>
+
+      <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
+        <Text style={[styles.statusText, { color: badge.text }]}>{badge.label}</Text>
+      </View>
+    </Wrapper>
   );
 };
 
@@ -38,30 +50,46 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.md,
     paddingVertical: 12,
-    borderWidth: 2,
+    borderWidth: Borders.width,
     borderColor: AppColors.border,
-    borderRadius: 8,
-    backgroundColor: '#FFFDF5',
-    shadowColor: AppColors.black,
-    ...NeoShadow.lg,
+    borderRadius: 10,
+    backgroundColor: AppColors.card,
+    gap: 10,
+    ...NeoShadow.sm,
   },
-  content: {
+  left: {
     flex: 1,
-    gap: 6,
-  },
-  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
+  iconWrap: {
+    width: 34, height: 34,
+    borderRadius: 8,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    backgroundColor: AppColors.muted,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  textCol: { flex: 1, gap: 3 },
   title: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '700',
     color: AppColors.foreground,
+    flexShrink: 1,
   },
-  subtitle: {
-    fontSize: 13,
+  sub: {
+    fontSize: 11,
     color: AppColors.mutedForeground,
+  },
+  statusBadge: {
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 6,
+    flexShrink: 0,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });
 

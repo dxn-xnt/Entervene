@@ -49,8 +49,9 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 8,
     alignSelf: "flex-start", 
-    minWidth: 160,
-    maxWidth: 220,
+    // minWidth: 160,
+    // maxWidth: 220,
+    width: "100%",
   },
   title: {
     fontSize: 18,

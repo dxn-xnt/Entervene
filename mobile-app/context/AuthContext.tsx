@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { registerUnauthorizedHandler } from '@/auth/session-expired';
 
 type Role = 'student' | 'teacher' | 'admin' | null;
 
@@ -21,7 +22,7 @@ interface AuthContextType {
 }
 
 const STORAGE_KEY = '@entervene_session';
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
@@ -73,10 +74,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return data.role;
   };
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     setSession(null);
     await AsyncStorage.removeItem(STORAGE_KEY);
-  };
+  }, []);
+
+  useEffect(() => {
+    registerUnauthorizedHandler(() => {
+      void logout();
+    });
+    return () => registerUnauthorizedHandler(null);
+  }, [logout]);
 
   return (
     <AuthContext.Provider value={{ role: session?.role ?? null, session, isLoading, login, logout }}>
