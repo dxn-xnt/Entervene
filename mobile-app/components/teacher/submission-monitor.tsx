@@ -14,7 +14,7 @@ import { AppColors, Spacing, Borders, NeoShadow } from '@/constants/theme';
 type StudentEntry = {
   student_id: number | string;
   student_name: string;
-  email?: string;
+  email?: string | null;
   submitted_at?: string | null;
   grade?: number | null;
 };
