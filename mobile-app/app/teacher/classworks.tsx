@@ -80,7 +80,7 @@ export default function TeacherClassworks() {
               />
               <Text style={styles.emptyText}>No classworks yet.</Text>
               <Text style={styles.emptyHint}>
-                Tap "+ New Classwork" to create one.
+                Tap New Classwork to create one.
               </Text>
             </View>
           ) : (

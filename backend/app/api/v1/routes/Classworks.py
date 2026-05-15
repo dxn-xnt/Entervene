@@ -9,7 +9,9 @@ from app.core.FileUpload import save_file, delete_file
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.models.academic.Lesson import Lesson
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.StudentCLass import StudentClass
@@ -54,11 +56,24 @@ def create_classwork(body: ClassworkCreate, staff_id: str = Depends(get_staff_id
     load = db.query(SubjectLoad).filter(SubjectLoad.staff_id == staff_id, SubjectLoad.subject_id == body.subject_id, SubjectLoad.status == "active").first()
     if not load:
         raise HTTPException(status_code=403, detail="You are not assigned to this subject")
+    lesson_ids = list(dict.fromkeys(body.lesson_ids or []))
+    if lesson_ids:
+        lessons = db.query(Lesson).filter(
+            Lesson.lesson_id.in_(lesson_ids),
+            Lesson.subject_id == body.subject_id,
+            Lesson.created_by_staff_id == staff_id,
+        ).all()
+        if len(lessons) != len(lesson_ids):
+            raise HTTPException(status_code=400, detail="One or more lessons cannot be linked to this classwork")
+
     cw = Classwork(title=body.title, description=body.description, instructions=body.instructions,
                    classwork_type=body.classwork_type, classwork_category=body.classwork_category,
                    total_points=body.total_points, subject_id=body.subject_id,
                    is_published=body.is_published, created_by_staff_id=staff_id)
-    db.add(cw); db.commit(); db.refresh(cw)
+    db.add(cw); db.flush()
+    for lesson_id in lesson_ids:
+        db.add(ClassworkLesson(classwork_id=cw.classwork_id, lesson_id=lesson_id))
+    db.commit(); db.refresh(cw)
     return _build_cw(cw, db)
 
 
@@ -249,9 +264,9 @@ def get_student_assignments(student=Depends(get_student_record), db: Session = D
     # Get all published classwork assignments for enrolled classes
     assignments = db.query(ClassworkAssignment, Classwork, Subject, AcademicStaff).join(
         Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id
-    ).join(
+    ).outerjoin(
         Subject, Subject.subject_id == Classwork.subject_id
-    ).join(
+    ).outerjoin(
         AcademicStaff, AcademicStaff.staff_id == Classwork.created_by_staff_id
     ).filter(
         ClassworkAssignment.class_id.in_(class_ids),

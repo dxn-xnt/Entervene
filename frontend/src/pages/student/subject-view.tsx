@@ -7,6 +7,8 @@ import SubjectClassworkTab from "./Subjects/tabs/SubjectClassworkTab";
 
 type SubjectDetailProps = {
   subject: string;
+  classId?: number;
+  subjectId?: number;
   onBack: () => void;
 };
 
@@ -15,21 +17,28 @@ const tabs = [
   { id: "classwork", label: "Classwork" },
 ];
 
-const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
+const SubjectDetail = ({ subject, classId, subjectId, onBack }: SubjectDetailProps) => {
   const [activeTab, setActiveTab] = useState("lessons");
 
   return (
     <AppLayout>
       <header className="px-5 py-5 flex items-center gap-3">
-
         <ChevronRight size={40} />
         <h1 className="text-3xl">{subject}</h1>
       </header>
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
       <main className="px-5 py-5">
         <div>
-          {activeTab === "lessons" && <SubjectLessonTab subject={subject} />}
-          {activeTab === "classwork" && <SubjectClassworkTab />}
+          {activeTab === "lessons" && (
+            <SubjectLessonTab
+              subject={subject}
+              classId={classId}
+              subjectId={subjectId}
+            />
+          )}
+          {activeTab === "classwork" && (
+            <SubjectClassworkTab classId={classId} subjectId={subjectId} />
+          )}
         </div>
       </main>
     </AppLayout>

@@ -1,9 +1,9 @@
 # app/api/v1/routes/Submissions.py
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
-from typing import List
+from typing import List, Optional
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -22,6 +22,39 @@ from app.schemas.Submission import (
 )
 
 router = APIRouter()
+
+
+async def _files_from_form(request: Request, field_names: set[str]) -> list[UploadFile]:
+    """Read upload files from common multipart field names without causing 422s."""
+    try:
+        form = await request.form()
+    except Exception:
+        return []
+
+    uploads: list[UploadFile] = []
+    for key, value in form.multi_items():
+        if key in field_names and hasattr(value, "filename") and value.filename:
+            uploads.append(value)
+    return uploads
+
+
+def _student_name(student: Student) -> str:
+    parts = [student.first_name, student.middle_name, student.last_name, student.suffix]
+    return " ".join([p for p in parts if p])
+
+
+def _teacher_owns_assignment(assignment_id: int, staff_id: str, db: Session) -> ClassworkAssignment:
+    ca = db.query(ClassworkAssignment).filter(
+        ClassworkAssignment.classwork_assignment_id == assignment_id
+    ).first()
+    if not ca:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    cw = db.query(Classwork).filter(Classwork.classwork_id == ca.classwork_id).first()
+    if not cw or cw.created_by_staff_id != staff_id:
+        raise HTTPException(status_code=403, detail="You do not own this assignment")
+
+    return ca
 
 
 def _att_resp(a):
@@ -56,7 +89,8 @@ def _build_sub(sub, db):
 @router.post("/assignment/{assignment_id}/submit", response_model=SubmissionResponse)
 async def submit_work(
     assignment_id: int,
-    files: List[UploadFile] = File(...),
+    request: Request,
+    files: Optional[List[UploadFile]] = File(None),
     student=Depends(get_student_record),
     db: Session = Depends(get_db),
 ):
@@ -86,8 +120,17 @@ async def submit_work(
         StudentSubmission.student_id == student.student_id,
     ).first()
 
+    upload_files = [f for f in (files or []) if f and f.filename]
+    if not upload_files:
+        upload_files = await _files_from_form(request, {"files", "file", "attachments", "attachment"})
+    if not upload_files:
+        raise HTTPException(status_code=400, detail="Attach at least one file using the 'files' form field.")
+
     now = datetime.now(timezone.utc)
-    is_late = ca.due_date and now > ca.due_date
+    due_date = ca.due_date
+    if due_date and due_date.tzinfo is None:
+        due_date = due_date.replace(tzinfo=timezone.utc)
+    is_late = bool(due_date and now > due_date)
 
     if existing:
         if existing.attempt_count >= (ca.max_attempts or 1):
@@ -109,7 +152,7 @@ async def submit_work(
     db.flush()
 
     # Save uploaded files
-    for f in files:
+    for f in upload_files:
         info = await save_file(f, "submissions")
         att = SubmissionAttachment(submission_id=submission.submission_id, **info)
         db.add(att)
@@ -132,6 +175,60 @@ def get_my_submissions(
         .all()
     )
     return [_build_sub(s, db) for s in subs]
+
+
+@router.delete("/assignment/{assignment_id}/submit")
+def delete_submission(
+    assignment_id: int,
+    student=Depends(get_student_record),
+    db: Session = Depends(get_db),
+):
+    """Delete a student's submission to resubmit before due date."""
+    ca = db.query(ClassworkAssignment).filter(
+        ClassworkAssignment.classwork_assignment_id == assignment_id
+    ).first()
+    if not ca:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    # Verify enrollment
+    enr = db.query(StudentClass).filter(
+        StudentClass.student_id == student.student_id,
+        StudentClass.class_id == ca.class_id,
+        StudentClass.enrollment_status == "enrolled",
+    ).first()
+    if not enr:
+        raise HTTPException(status_code=403, detail="Not enrolled in this class")
+
+    # Get existing submission
+    sub = db.query(StudentSubmission).filter(
+        StudentSubmission.classwork_assignment_id == assignment_id,
+        StudentSubmission.student_id == student.student_id,
+    ).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="No submission to delete")
+
+    # Check if assignment is locked (resubmission not allowed)
+    if ca.is_locked:
+        raise HTTPException(status_code=403, detail="This assignment is locked for resubmission")
+
+    # Check if due date has passed
+    now = datetime.now(timezone.utc)
+    due_date = ca.due_date
+    if due_date and due_date.tzinfo is None:
+        due_date = due_date.replace(tzinfo=timezone.utc)
+    
+    if due_date and now > due_date:
+        raise HTTPException(status_code=403, detail="Cannot resubmit after due date")
+
+    # Delete submission files
+    for att in sub.attachments:
+        delete_file(att.file_path)
+
+    db.delete(sub)
+    db.commit()
+    
+    return {"message": "Submission deleted successfully. You can now resubmit."}
+
 
 
 @router.get("/{submission_id}", response_model=SubmissionResponse)
@@ -158,6 +255,7 @@ def get_all_submissions_for_assignment(
     db: Session = Depends(get_db),
 ):
     """List all student submissions for a given assignment."""
+    _teacher_owns_assignment(assignment_id, staff_id, db)
     subs = (
         db.query(StudentSubmission)
         .filter(StudentSubmission.classwork_assignment_id == assignment_id)
@@ -165,6 +263,80 @@ def get_all_submissions_for_assignment(
         .all()
     )
     return [_build_sub(s, db) for s in subs]
+
+
+@router.get("/assignment/{assignment_id}/tracking")
+def get_assignment_submission_tracking(
+    assignment_id: int,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    """Teacher view of submitted and missing students for an assignment."""
+    ca = _teacher_owns_assignment(assignment_id, staff_id, db)
+    cw = db.query(Classwork).filter(Classwork.classwork_id == ca.classwork_id).first()
+
+    roster_rows = (
+        db.query(Student)
+        .join(StudentClass, StudentClass.student_id == Student.student_id)
+        .filter(
+            StudentClass.class_id == ca.class_id,
+            StudentClass.enrollment_status == "enrolled",
+        )
+        .order_by(Student.last_name.asc(), Student.first_name.asc())
+        .all()
+    )
+
+    submissions = (
+        db.query(StudentSubmission)
+        .filter(StudentSubmission.classwork_assignment_id == assignment_id)
+        .all()
+    )
+    submissions_by_student = {str(s.student_id): s for s in submissions}
+
+    submitted = []
+    missing = []
+    for student in roster_rows:
+        student_id = str(student.student_id)
+        sub = submissions_by_student.get(student_id)
+        base = {
+            "student_id": student_id,
+            "student_name": _student_name(student),
+            "student_lrn": student.student_lrn,
+            "email": student.email,
+        }
+        if sub:
+            submitted.append({
+                **base,
+                "status": sub.status,
+                "submitted_at": sub.submitted_at.isoformat() if sub.submitted_at else None,
+                "submission_id": sub.submission_id,
+                "attempt_count": sub.attempt_count,
+                "grade": float(sub.grade) if sub.grade is not None else None,
+                "attachment_count": len(sub.attachments),
+            })
+        else:
+            missing.append({
+                **base,
+                "status": "not_submitted",
+                "submitted_at": None,
+                "submission_id": None,
+                "attempt_count": 0,
+                "grade": None,
+                "attachment_count": 0,
+            })
+
+    return {
+        "classwork_assignment_id": ca.classwork_assignment_id,
+        "classwork_id": ca.classwork_id,
+        "classwork_title": cw.title if cw else None,
+        "class_id": ca.class_id,
+        "due_date": ca.due_date.isoformat() if ca.due_date else None,
+        "total_students": len(roster_rows),
+        "submitted_count": len(submitted),
+        "missing_count": len(missing),
+        "submitted": submitted,
+        "missing": missing,
+    }
 
 
 @router.get("/{submission_id}/detail", response_model=SubmissionResponse)

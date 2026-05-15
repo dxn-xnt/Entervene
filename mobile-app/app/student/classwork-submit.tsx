@@ -89,8 +89,9 @@ export default function ClassworkSubmit() {
         files.map(({ uri, name, type, webFile }) => ({ uri, name, type, webFile })),
         session!.token
       );
-      Alert.alert('Success', `Submitted ${files.length} file(s)`);
-      router.back();
+      Alert.alert('Success', `Submitted ${files.length} file(s)`, [
+        { text: 'OK', onPress: () => router.back() }  // ← back happens AFTER OK is tapped
+      ]);
     } catch (err: any) {
       Alert.alert('Submission Error', err.message || 'Failed to submit classwork');
     } finally {

@@ -16,7 +16,7 @@ const CATEGORIES = ['WRITTEN_WORK', 'PERFORMANCE_TASK', 'PERIODICAL_EXAM'];
 
 export default function CreateClasswork() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ type?: string; subject_id?: string; class_id?: string }>();
+  const params = useLocalSearchParams<{ type?: string; subject_id?: string; class_id?: string; lesson_id?: string; lesson_title?: string }>();
   const { session } = useAuth();
   const { classes } = useTeacherClasses();
   const [title, setTitle] = useState('');
@@ -45,6 +45,11 @@ export default function CreateClasswork() {
     if (Number.isFinite(sid) && sid > 0) setSubjectId(sid);
     if (Number.isFinite(cid) && cid > 0) setSelectedClasses([cid]);
   }, [params.subject_id, params.class_id]);
+
+  const linkedLessonId = (() => {
+    const id = params.lesson_id != null ? Number(params.lesson_id) : NaN;
+    return Number.isFinite(id) && id > 0 ? id : null;
+  })();
 
   const uniqueSubjects = classes.reduce((acc, c) => {
     if (!acc.find((s) => s.subject_id === c.subject_id)) acc.push(c);
@@ -115,6 +120,7 @@ export default function CreateClasswork() {
           total_points: parseFloat(totalPoints) || 100,
           subject_id: subjectId,
           is_published: publishDate ? new Date() >= publishDate : true,
+          lesson_ids: linkedLessonId ? [linkedLessonId] : [],
         }),
       });
 
@@ -138,7 +144,7 @@ export default function CreateClasswork() {
         });
       }
 
-      Alert.alert('Success', 'Classwork created and assigned!');
+      Alert.alert('Success', linkedLessonId ? 'Classwork created under this lesson!' : 'Classwork created and assigned!');
       router.back();
     } catch (e: any) {
       Alert.alert('Error', e.message);
@@ -154,10 +160,18 @@ export default function CreateClasswork() {
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={s.backRow}>
           <Ionicons name="chevron-back" size={24} color={AppColors.foreground} />
-          <Text style={s.headerTitle}>Create Classwork</Text>
+          <Text style={s.headerTitle}>{linkedLessonId ? 'Add Classwork to Lesson' : 'Create Classwork'}</Text>
         </TouchableOpacity>
       </View>
       <ScrollView contentContainerStyle={s.form} keyboardShouldPersistTaps="handled">
+        {linkedLessonId && params.lesson_title ? (
+          <View style={s.lessonBanner}>
+            <Ionicons name="book-outline" size={18} color={AppColors.foreground} />
+            <Text style={s.lessonBannerText} numberOfLines={2}>
+              {params.lesson_title}
+            </Text>
+          </View>
+        ) : null}
         <View style={s.field}>
           <Text style={s.label}>Title *</Text>
           <TextInput style={s.input} value={title} onChangeText={setTitle} placeholder="Classwork title" placeholderTextColor={AppColors.placeholder} />
@@ -287,4 +301,6 @@ const s = StyleSheet.create({
   fileName: { flex: 1, fontSize: 13, color: AppColors.foreground },
   saveButton: { backgroundColor: AppColors.primary, borderWidth: Borders.width, borderColor: AppColors.border, paddingVertical: 14, alignItems: 'center', ...NeoShadow.md },
   saveButtonText: { fontSize: 16, fontWeight: '900', color: AppColors.primaryForeground },
+  lessonBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderWidth: Borders.width, borderColor: AppColors.border, borderRadius: 8, backgroundColor: AppColors.muted },
+  lessonBannerText: { flex: 1, fontSize: 13, fontWeight: '800', color: AppColors.foreground },
 });

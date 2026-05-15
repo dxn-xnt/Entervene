@@ -24,7 +24,7 @@ export default function CreateLesson() {
   const [subjectId, setSubjectId]       = useState<number | null>(null);
   const [selectedClasses, setSelectedClasses] = useState<number[]>([]);
   const [isPublished, setIsPublished]   = useState(true);
-  const [files, setFiles]               = useState<{ uri: string; name: string; type: string }[]>([]);
+  const [files, setFiles]               = useState<{ uri: string; name: string; type: string; webFile?: Blob }[]>([]);
   const [saving, setSaving]             = useState(false);
 
   useEffect(() => {
@@ -60,6 +60,7 @@ export default function CreateLesson() {
         uri:  a.uri,
         name: a.name,
         type: a.mimeType || 'application/octet-stream',
+        webFile: (a as any).file as Blob | undefined,
       }));
       setFiles((prev) => [...prev, ...newFiles]);
     }
@@ -97,16 +98,7 @@ export default function CreateLesson() {
         },
       );
 
-      // 2. Upload attachments
-      for (const f of files) {
-        await apiUploadSingle(
-          `/api/v1/lessons/${lesson.lesson_id}/attachments`,
-          f,
-          session!.token,
-        );
-      }
-
-      // 3. Assign to selected classes
+      // 2. Assign to selected classes so the lesson is retrievable even if an attachment fails.
       await apiFetch(
         `/api/v1/lessons/${lesson.lesson_id}/assign`,
         {
@@ -115,6 +107,15 @@ export default function CreateLesson() {
           body:   JSON.stringify({ class_ids: selectedClasses, is_published: isPublished }),
         },
       );
+
+      // 3. Upload attachments
+      for (const f of files) {
+        await apiUploadSingle(
+          `/api/v1/lessons/${lesson.lesson_id}/attachments`,
+          f,
+          session!.token,
+        );
+      }
 
       Alert.alert(
         '✅ Lesson Created',
@@ -246,7 +247,7 @@ export default function CreateLesson() {
         <View style={styles.toggleRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>Publish immediately</Text>
-            <Text style={styles.hint}>Off = saved as draft; students won't see it.</Text>
+            <Text style={styles.hint}>Off = saved as draft; students will not see it.</Text>
           </View>
           <Switch
             value={isPublished}

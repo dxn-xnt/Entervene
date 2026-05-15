@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { router, useLocalSearchParams } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
   View,
   Text,
@@ -83,7 +83,6 @@ export default function TeacherSubjectDetail() {
   const classId = Number(params.class_id);
   const subjectId = Number(params.subject_id);
 
-  const [activeTab, setActiveTab] = useState<"lesson" | "classwork">("lesson");
   const [lessons, setLessons] = useState<TeacherLesson[]>([]);
   const [assignments, setAssignments] = useState<CwAssignmentRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,10 +133,10 @@ export default function TeacherSubjectDetail() {
     }
   }, [session?.token, classId, subjectId, validIds]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     setLoading(true);
     void load();
-  }, [load]);
+  }, [load]));
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -154,12 +153,14 @@ export default function TeacherSubjectDetail() {
     });
   };
 
-  const openCreateClasswork = () => {
+  const openCreateClasswork = (lesson: TeacherLesson) => {
     router.push({
       pathname: "/teacher/create-classwork" as any,
       params: {
         subject_id: String(subjectId),
         class_id: String(classId),
+        lesson_id: String(lesson.lesson_id),
+        lesson_title: lesson.title,
       },
     });
   };
@@ -282,62 +283,46 @@ export default function TeacherSubjectDetail() {
               </Text>
             </TouchableOpacity>
           </View>
-          {activeTab === "lesson" ? (
-            <TouchableOpacity
-              style={styles.addLessonBtn}
-              onPress={openCreateLesson}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="add" size={20} color={AppColors.foreground} />
-              <Text style={styles.addLessonBtnText}>Add Lesson</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={styles.addLessonBtn}
-              onPress={openCreateClasswork}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="create-outline" size={18} color={AppColors.foreground} />
-              <Text style={styles.addLessonBtnText}>Assign</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={styles.addLessonBtn}
+            onPress={openCreateLesson}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="add" size={20} color={AppColors.foreground} />
+            <Text style={styles.addLessonBtnText}>Add Lesson</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Tabs — web-style with icons */}
         <View style={styles.tabRow}>
-          <TouchableOpacity
-            style={[styles.tabItem, activeTab === "lesson" && styles.tabItemActive]}
-            onPress={() => setActiveTab("lesson")}
-            activeOpacity={0.8}
-          >
+          <View style={[styles.tabItem, styles.tabItemActive]}>
             <Ionicons
               name="book-outline"
               size={18}
-              color={activeTab === "lesson" ? AppColors.foreground : AppColors.mutedForeground}
+              color={AppColors.foreground}
             />
             <Text
               style={[
                 styles.tabLabel,
-                activeTab === "lesson" && styles.tabLabelActive,
+                styles.tabLabelActive,
               ]}
             >
               Lessons
             </Text>
-          </TouchableOpacity>
+          </View>
           <TouchableOpacity
-            style={[styles.tabItem, activeTab === "classwork" && styles.tabItemActive]}
-            onPress={() => setActiveTab("classwork")}
+            style={[styles.tabItem, styles.hiddenTab]}
+            onPress={() => {}}
             activeOpacity={0.8}
           >
             <Ionicons
               name="clipboard-outline"
               size={18}
-              color={activeTab === "classwork" ? AppColors.foreground : AppColors.mutedForeground}
+              color={AppColors.mutedForeground}
             />
             <Text
               style={[
                 styles.tabLabel,
-                activeTab === "classwork" && styles.tabLabelActive,
               ]}
             >
               Classwork
@@ -398,7 +383,7 @@ export default function TeacherSubjectDetail() {
               />
             </View>
 
-            {activeTab === "lesson" && (
+            {true && (
               <View style={styles.panel}>
                 <View style={styles.searchRow}>
                   <View style={styles.searchField}>
@@ -460,6 +445,14 @@ export default function TeacherSubjectDetail() {
 
                         {expanded && (
                           <View style={styles.nestedBlock}>
+                            <TouchableOpacity
+                              style={styles.addClassworkInsideLesson}
+                              onPress={() => openCreateClasswork(l)}
+                              activeOpacity={0.85}
+                            >
+                              <Ionicons name="add-circle-outline" size={18} color={AppColors.foreground} />
+                              <Text style={styles.addClassworkInsideLessonText}>Add classwork to this lesson</Text>
+                            </TouchableOpacity>
                             {linked === "loading" ? (
                               <ActivityIndicator size="small" color={AppColors.primary} />
                             ) : linked && linked.length > 0 ? (
@@ -512,7 +505,7 @@ export default function TeacherSubjectDetail() {
               </View>
             )}
 
-            {activeTab === "classwork" && (
+            {false && (
               <View style={styles.panel}>
                 <View style={styles.searchRow}>
                   <View style={styles.searchField}>
@@ -558,7 +551,22 @@ export default function TeacherSubjectDetail() {
                           {a.due_date ? ` · Due ${formatShortDate(a.due_date)}` : ""}
                         </Text>
                       </View>
-                      <Ionicons name="chevron-forward" size={18} color={AppColors.mutedForeground} />
+                      <TouchableOpacity
+                        style={styles.submissionsBtn}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/teacher/submissions" as any,
+                            params: {
+                              assignment_id: String(a.classwork_assignment_id),
+                              classwork_title: a.title,
+                            },
+                          })
+                        }
+                        activeOpacity={0.85}
+                      >
+                        <Ionicons name="people-outline" size={16} color={AppColors.foreground} />
+                        <Text style={styles.submissionsBtnText}>Status</Text>
+                      </TouchableOpacity>
                     </TouchableOpacity>
                   ))
                 )}
@@ -620,6 +628,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "transparent",
   },
   tabItemActive: { borderBottomColor: AppColors.foreground },
+  hiddenTab: { display: "none" },
   tabLabel: { fontSize: 14, fontWeight: "600", color: AppColors.mutedForeground },
   tabLabelActive: { color: AppColors.foreground, fontWeight: "800" },
   scrollContent: { padding: Spacing.md, paddingBottom: 48, gap: Spacing.md },
@@ -705,6 +714,20 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: "rgba(255,255,255,0.25)",
   },
+  addClassworkInsideLesson: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: ACTION_GREEN,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    ...NeoShadow.xs,
+  },
+  addClassworkInsideLessonText: { fontSize: 13, fontWeight: "900", color: AppColors.foreground },
   nestedCwCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -751,6 +774,18 @@ const styles = StyleSheet.create({
   },
   cwTitle: { fontSize: 15, fontWeight: "800", color: AppColors.foreground },
   cwMeta: { fontSize: 12, color: AppColors.mutedForeground, marginTop: 4 },
+  submissionsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    borderRadius: 8,
+    backgroundColor: ACTION_GREEN,
+  },
+  submissionsBtnText: { fontSize: 11, fontWeight: "900", color: AppColors.foreground },
   empty: { fontSize: 14, color: AppColors.mutedForeground, paddingVertical: 12 },
   errorText: { fontSize: 14, color: AppColors.destructive, paddingVertical: 12 },
 });
