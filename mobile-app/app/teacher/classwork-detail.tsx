@@ -24,6 +24,7 @@ const PUBLISHED_BG = '#dcfce7';
 const LOCKED_BG = '#fecaca';
 
 type ClassworkDetailData = {
+  assignments: any;
   classwork_id: number;
   title: string;
   description: string | null;
@@ -36,7 +37,7 @@ type ClassworkDetailData = {
   subject_id: number;
   subject_name: string | null;
   teacher_name: string | null;
-  due_date?: string | null;
+  due_date: string | null;
   attachments: {
     classwork_attachment_id: number;
     file_name: string;
@@ -71,10 +72,18 @@ function formatDate(iso: string | null | undefined) {
 export default function ClassworkDetail() {
   const router = useRouter();
   const { session } = useAuth();
-  const params = useLocalSearchParams<{ classwork_id?: string; due_date?: string }>();
+  const params = useLocalSearchParams<{ classwork_id?: string; class_id?: string }>();
   const [cw, setCw] = useState<ClassworkDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const classworkId = params.classwork_id ? Number(params.classwork_id) : null;
+  const classId = params.class_id ? Number(params.class_id) : null;
+  const normalizeStudent = (s: any) => ({
+  student_id: s.student_id,
+  student_name: s.student_name,
+  email: s.email ?? undefined,
+  submitted_at: s.submitted_at ?? null,
+  grade: s.grade ?? null,
+});
 
   const { tracking, isLoading: submissionsLoading, error: submissionError } = useClassworkSubmissionTracking(classworkId || 0);
 
@@ -85,10 +94,13 @@ export default function ClassworkDetail() {
     }
     const go = async () => {
       try {
-        const data = await apiFetch<ClassworkDetailData>(
-          `/api/v1/classwork-assignments/classwork/${params.classwork_id}`,
-          { token: session.token },
-        );
+        let url = `/api/v1/classwork-assignments/classwork/${params.classwork_id}`;
+        if (params.class_id) {
+          url += `?class_id=${encodeURIComponent(params.class_id)}`;
+        }
+
+        const data = await apiFetch<ClassworkDetailData>(url, { token: session.token });
+        console.log('API Response:', data); // Debug log
         setCw(data);
       } catch (e: any) {
         Alert.alert('Error', e.message);
@@ -97,7 +109,7 @@ export default function ClassworkDetail() {
       }
     };
     void go();
-  }, [params.classwork_id, session?.token]);
+  }, [params.classwork_id, params.class_id, session?.token]);
 
   if (loading) {
     return (
@@ -124,16 +136,22 @@ export default function ClassworkDetail() {
     );
   }
 
-  const paramDueDate = Array.isArray(params.due_date) ? params.due_date[0] : params.due_date;
-  const dueDate = cw?.due_date || paramDueDate || null;
+  const dueDate =
+  cw?.due_date ??
+  (cw as any)?.dueDate ??
+  cw?.assignments?.[0]?.due_date ??   // 🔥 IMPORTANT fallback based on your API
+  null;
+  const dueDateFormatted = formatDate(dueDate);
   const isPastDue = dueDate ? new Date() > new Date(dueDate) : false;
   const missingList = isPastDue ? (tracking?.missing ?? []) : [];
 
   const pts = cw.total_points != null ? `${cw.total_points} pts` : '—';
   const updated = formatDate(cw.updated_at);
   const created = formatDate(cw.created_at);
-  const dueDateFormatted = formatDate(dueDate);
   const atts = cw.attachments ?? [];
+
+  console.log("DUE DATE RAW:", cw?.due_date);
+  console.log("FULL CW:", cw);
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -214,10 +232,9 @@ export default function ClassworkDetail() {
               color={dueDate ? '#166534' : AppColors.mutedForeground}
             />
             <Text style={[s.dueChipText, dueDate ? s.dueChipTextSet : s.dueChipTextNone]}>
-              {dueDate ? `Due ${dueDateFormatted}` : 'No due date'}
+              {dueDate ? `Due ${formatDate(dueDate)}` : 'No due date'}
             </Text>
           </View>
-
           {(created || updated) && (
             <View style={s.dateRow}>
               {created ? (
@@ -236,7 +253,7 @@ export default function ClassworkDetail() {
           )}
         </View>
 
-        {/* ── Description ── */}
+        {/* Rest of your component remains the same... */}
         {cw.description ? (
           <View style={s.block}>
             <View style={s.blockHead}>
@@ -247,7 +264,6 @@ export default function ClassworkDetail() {
           </View>
         ) : null}
 
-        {/* ── Instructions ── */}
         {cw.instructions ? (
           <View style={s.block}>
             <View style={s.blockHead}>
@@ -258,7 +274,6 @@ export default function ClassworkDetail() {
           </View>
         ) : null}
 
-        {/* ── Attachments ── */}
         {atts.length > 0 ? (
           <View style={s.block}>
             <View style={s.blockHead}>
@@ -279,7 +294,6 @@ export default function ClassworkDetail() {
           </View>
         ) : null}
 
-        {/* ── Student Submissions ── */}
         <View style={s.block}>
           <View style={s.blockHead}>
             <Ionicons name="people-outline" size={18} color={AppColors.foreground} />
@@ -299,17 +313,16 @@ export default function ClassworkDetail() {
             </View>
           ) : (
             <SubmissionMonitor
-              submitted={tracking?.submitted ?? []}
-              missing={missingList}
-              isLoading={submissionsLoading}
-              classworkTitle={cw.title}
-              totalPoints={cw.total_points ?? 100}
-              dueDate={dueDate}
-            />
+            submitted={(tracking?.submitted ?? []).map(normalizeStudent)}
+            missing={missingList.map(normalizeStudent)}
+            isLoading={submissionsLoading}
+            classworkTitle={cw.title}
+            totalPoints={cw.total_points ?? 100}
+            dueDate={dueDate}
+          />
           )}
         </View>
 
-        {/* ── Empty state ── */}
         {!cw.description && !cw.instructions && atts.length === 0 ? (
           <View style={s.emptyCard}>
             <Ionicons name="clipboard-outline" size={40} color={AppColors.mutedForeground} />
