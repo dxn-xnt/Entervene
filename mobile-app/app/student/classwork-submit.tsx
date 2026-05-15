@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAuth } from '@/context/AuthContext';
-import { apiUpload } from '@/hooks/api';
+import { apiFetch, apiUpload } from '@/hooks/api';
 import { AppColors, Spacing, Borders, NeoShadow } from '@/constants/theme';
 
 interface FileInfo {
@@ -25,6 +25,8 @@ export default function ClassworkSubmit() {
   
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [cancelRequested, setCancelRequested] = useState(false);
+  const cancelRequestedRef = useRef(false);
 
   const pickFiles = async () => {
     try {
@@ -83,20 +85,37 @@ export default function ClassworkSubmit() {
     }
 
     setSubmitting(true);
+    setCancelRequested(false);
+    cancelRequestedRef.current = false;
     try {
       await apiUpload(
         `/api/v1/submissions/assignment/${assignmentId}/submit`,
         files.map(({ uri, name, type, webFile }) => ({ uri, name, type, webFile })),
         session!.token
       );
-      Alert.alert('Success', `Submitted ${files.length} file(s)`, [
-        { text: 'OK', onPress: () => router.back() }  // ← back happens AFTER OK is tapped
-      ]);
+      if (cancelRequestedRef.current) {
+        await apiFetch(
+          `/api/v1/submissions/assignment/${assignmentId}/unsubmit`,
+          { method: 'POST', token: session!.token },
+        );
+        return;
+      }
     } catch (err: any) {
+      if (cancelRequestedRef.current) {
+        Alert.alert('Submission cancelled', 'Your selected files were kept.');
+        return;
+      }
       Alert.alert('Submission Error', err.message || 'Failed to submit classwork');
     } finally {
+      setCancelRequested(false);
+      cancelRequestedRef.current = false;
       setSubmitting(false);
     }
+  };
+
+  const handleCancelSubmit = () => {
+    setCancelRequested(true);
+    cancelRequestedRef.current = true;
   };
 
   return (
@@ -176,6 +195,19 @@ export default function ClassworkSubmit() {
             </>
           )}
         </TouchableOpacity>
+
+        {submitting && (
+          <TouchableOpacity
+            style={[styles.cancelSubmitButton, cancelRequested && { opacity: 0.7 }]}
+            onPress={handleCancelSubmit}
+            disabled={cancelRequested}
+          >
+            <Ionicons name="arrow-undo-outline" size={20} color={AppColors.destructive} />
+            <Text style={styles.cancelSubmitButtonText}>
+              {cancelRequested ? 'Cancelling...' : 'Unsubmit'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -275,5 +307,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: AppColors.primaryForeground,
+  },
+  cancelSubmitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 8,
+    borderWidth: Borders.width,
+    borderColor: AppColors.destructive,
+    backgroundColor: AppColors.card,
+  },
+  cancelSubmitButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: AppColors.destructive,
   },
 });

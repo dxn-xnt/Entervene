@@ -473,8 +473,10 @@ def get_student_assignments(student=Depends(get_student_record), db: Session = D
         if submission:
             if submission.status == "graded":
                 graded.append(assignment_item)
-            else:
+            elif submission.status in ("submitted", "late"):
                 submitted.append(assignment_item)
+            else:
+                pending.append(assignment_item)
         else:
             pending.append(assignment_item)
 

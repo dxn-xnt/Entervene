@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -34,6 +34,10 @@ export default function ClassworkView() {
   const [loading, setLoading] = useState(true);
   const [files, setFiles] = useState<{ uri: string; name: string; type: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [unsubmitting, setUnsubmitting] = useState(false);
+  const [removingAttachmentId, setRemovingAttachmentId] = useState<number | null>(null);
+  const [cancelRequested, setCancelRequested] = useState(false);
+  const cancelRequestedRef = useRef(false);
 
   const fetchData = async () => {
     if (!session?.token || !params.assignment_id) return;
@@ -59,14 +63,89 @@ export default function ClassworkView() {
     if (!result.canceled && result.assets) setFiles((p) => [...p, ...result.assets.map((a) => ({ uri: a.uri, name: a.name, type: a.mimeType || 'application/octet-stream' }))]);
   };
 
+  const hasSavedDraftFiles =
+    submission?.status === 'pending' && (submission.attachments?.length ?? 0) > 0;
+
   const handleSubmit = async () => {
-    if (files.length === 0) { Alert.alert('Error', 'Pick at least one file'); return; }
+    if (files.length === 0 && !hasSavedDraftFiles) {
+      Alert.alert('Error', 'Pick at least one file');
+      return;
+    }
     setSubmitting(true);
+    setCancelRequested(false);
+    cancelRequestedRef.current = false;
     try {
-      const result = await apiUpload(`/api/v1/submissions/assignment/${params.assignment_id}/submit`, files, session!.token);
-      setSubmission(result); setFiles([]);
-      Alert.alert('Success', 'Submission uploaded!');
-    } catch (e: any) { Alert.alert('Error', e.message); } finally { setSubmitting(false); }
+      const result =
+        files.length > 0
+          ? await apiUpload(
+              `/api/v1/submissions/assignment/${params.assignment_id}/submit`,
+              files,
+              session!.token,
+            )
+          : await apiFetch(
+              `/api/v1/submissions/assignment/${params.assignment_id}/submit`,
+              { method: 'POST', token: session!.token },
+            );
+      if (cancelRequestedRef.current) {
+        const draft = await apiFetch(
+          `/api/v1/submissions/assignment/${params.assignment_id}/unsubmit`,
+          { method: 'POST', token: session!.token },
+        );
+        setSubmission(draft);
+        Alert.alert('Submission cancelled', 'Your uploaded files were kept as a draft.');
+        return;
+      }
+      setSubmission(result);
+      setFiles([]);
+      Alert.alert('Success', 'Assignment submitted!');
+    } catch (e: any) {
+      if (cancelRequestedRef.current) {
+        Alert.alert('Submission cancelled', 'Your selected files were kept.');
+        return;
+      }
+      Alert.alert('Error', e.message);
+    } finally {
+      setCancelRequested(false);
+      cancelRequestedRef.current = false;
+      setSubmitting(false);
+    }
+  };
+
+  const handleCancelSubmit = () => {
+    setCancelRequested(true);
+    cancelRequestedRef.current = true;
+  };
+
+  const handleUnsubmit = () => {
+    setUnsubmitting(true);
+    apiFetch(
+      `/api/v1/submissions/assignment/${params.assignment_id}/unsubmit`,
+      { method: 'POST', token: session!.token },
+    )
+      .then((result) => {
+        setSubmission(result);
+        setFiles([]);
+      })
+      .catch((e: any) => { Alert.alert('Error', e.message); })
+      .finally(() => {
+        setUnsubmitting(false);
+      });
+  };
+
+  const handleRemoveSavedAttachment = async (attachmentId: number) => {
+    if (!params.assignment_id || submission?.status !== 'pending') return;
+    setRemovingAttachmentId(attachmentId);
+    try {
+      const result = await apiFetch(
+        `/api/v1/submissions/assignment/${params.assignment_id}/attachments/${attachmentId}`,
+        { method: 'DELETE', token: session!.token },
+      );
+      setSubmission(result);
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setRemovingAttachmentId(null);
+    }
   };
 
   const openClassworkAttachment = async (classworkId: number, attachmentId: number) => {
@@ -87,6 +166,11 @@ export default function ClassworkView() {
   if (!data) return <SafeAreaView style={s.safe}><Text style={s.errorText}>Not found</Text></SafeAreaView>;
 
   const isGraded = submission?.status === 'graded';
+  const isSubmitted = submission?.status === 'submitted' || submission?.status === 'late';
+  const isDraft = !isGraded && (!submission || submission.status === 'pending');
+  const isPastDue = Boolean(data.due_date && new Date() > new Date(data.due_date));
+  const canUnsubmit = isSubmitted && !data.is_locked && !isPastDue;
+  const canSubmitDraft = isDraft && !data.is_locked && !isPastDue;
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -195,6 +279,7 @@ export default function ClassworkView() {
                 style={s.fileCard}
                 activeOpacity={0.75}
                 onPress={() => openSubmissionAttachment(submission.submission_id, a.submission_attachment_id)}
+                disabled={isDraft || removingAttachmentId === a.submission_attachment_id}
               >
                 <View style={s.fileIconWrap}>
                   <Ionicons
@@ -204,7 +289,20 @@ export default function ClassworkView() {
                   />
                 </View>
                 <Text style={s.fileName} numberOfLines={1}>{a.file_name}</Text>
-                <Ionicons name="open-outline" size={16} color={AppColors.mutedForeground} />
+                {isDraft ? (
+                  removingAttachmentId === a.submission_attachment_id ? (
+                    <ActivityIndicator size="small" color={AppColors.destructive} />
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => handleRemoveSavedAttachment(a.submission_attachment_id)}
+                      style={s.removeFileButton}
+                    >
+                      <Ionicons name="close-circle" size={18} color={AppColors.destructive} />
+                    </TouchableOpacity>
+                  )
+                ) : (
+                  <Ionicons name="open-outline" size={16} color={AppColors.mutedForeground} />
+                )}
               </TouchableOpacity>
             ))}
             {isGraded && (
@@ -216,27 +314,79 @@ export default function ClassworkView() {
           </View>
         )}
 
-        {/* Submit section */}
-        {!isGraded && (
+        {canUnsubmit && (
           <View style={s.section}>
-            <Text style={s.sectionLabel}>{submission ? 'Resubmit' : 'Submit Your Work'}</Text>
+            <TouchableOpacity
+              style={[s.unsubmitButton, unsubmitting && { opacity: 0.7 }]}
+              onPress={handleUnsubmit}
+              disabled={unsubmitting}
+            >
+              {unsubmitting ? (
+                <ActivityIndicator color={AppColors.destructive} />
+              ) : (
+                <>
+                  <Ionicons name="arrow-undo-outline" size={20} color={AppColors.destructive} />
+                  <Text style={s.unsubmitText}>Unsubmit</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <Text style={s.hintText}>
+              Withdraw your submission to edit files before submitting again.
+            </Text>
+          </View>
+        )}
+
+        {canSubmitDraft && (
+          <View style={s.section}>
+            <Text style={s.sectionLabel}>
+              {hasSavedDraftFiles ? 'Your Draft' : 'Submit Your Work'}
+            </Text>
+            {hasSavedDraftFiles && (
+              <Text style={s.hintText}>
+                Files below are saved on the server. Add more or tap Submit when ready.
+              </Text>
+            )}
             <TouchableOpacity style={s.fileButton} onPress={pickFile}>
               <Ionicons name="cloud-upload-outline" size={20} color={AppColors.foreground} />
-              <Text style={s.fileButtonText}>Pick Files (4MB max)</Text>
+              <Text style={s.fileButtonText}>Add Files (4MB max)</Text>
             </TouchableOpacity>
             {files.map((f, i) => (
               <View key={i} style={s.fileRow}>
                 <Ionicons name="document-outline" size={16} color={AppColors.mutedForeground} />
                 <Text style={s.fileName} numberOfLines={1}>{f.name}</Text>
-                <TouchableOpacity onPress={() => setFiles((p) => p.filter((_, idx) => idx !== i))}><Ionicons name="close-circle" size={18} color={AppColors.destructive} /></TouchableOpacity>
+                <TouchableOpacity onPress={() => setFiles((p) => p.filter((_, idx) => idx !== i))}>
+                  <Ionicons name="close-circle" size={18} color={AppColors.destructive} />
+                </TouchableOpacity>
               </View>
             ))}
-            {files.length > 0 && (
-              <TouchableOpacity style={[s.submitButton, submitting && { opacity: 0.7 }]} onPress={handleSubmit} disabled={submitting}>
-                {submitting ? <ActivityIndicator color={AppColors.primaryForeground} /> : <Text style={s.submitText}>Submit</Text>}
+            {(files.length > 0 || hasSavedDraftFiles) && (
+              <TouchableOpacity
+                style={[s.submitButton, submitting && { opacity: 0.7 }]}
+                onPress={handleSubmit}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator color={AppColors.primaryForeground} />
+                ) : (
+                  <Text style={s.submitText}>Submit</Text>
+                )}
+              </TouchableOpacity>
+            )}
+            {submitting && (
+              <TouchableOpacity
+                style={[s.cancelSubmitButton, cancelRequested && { opacity: 0.7 }]}
+                onPress={handleCancelSubmit}
+                disabled={cancelRequested}
+              >
+                <Ionicons name="arrow-undo-outline" size={20} color={AppColors.destructive} />
+                <Text style={s.cancelSubmitText}>{cancelRequested ? 'Cancelling...' : 'Unsubmit'}</Text>
               </TouchableOpacity>
             )}
           </View>
+        )}
+
+        {!isGraded && !canUnsubmit && !canSubmitDraft && isPastDue && (
+          <Text style={s.hintText}>The due date has passed. You can no longer change this submission.</Text>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -258,6 +408,7 @@ const s = StyleSheet.create({
   bodyText: { fontSize: 15, color: AppColors.foreground, lineHeight: 22 },
   fileRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderWidth: 1, borderColor: AppColors.border, backgroundColor: AppColors.card },
   fileName: { flex: 1, fontSize: 13, color: AppColors.foreground },
+  removeFileButton: { padding: 4 },
   statusCard: { gap: 8, padding: 16, borderWidth: Borders.width, borderColor: AppColors.border, backgroundColor: BANNER_BG, borderRadius: 12, ...NeoShadow.sm },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', borderRadius: 4 },
   statusBadgeText: { fontSize: 11, fontWeight: '800', color: '#fff' },
@@ -268,6 +419,29 @@ const s = StyleSheet.create({
   fileButtonText: { fontSize: 13, color: AppColors.mutedForeground, flex: 1 },
   submitButton: { backgroundColor: AppColors.primary, borderWidth: Borders.width, borderColor: AppColors.border, paddingVertical: 14, alignItems: 'center', ...NeoShadow.md },
   submitText: { fontSize: 16, fontWeight: '900', color: AppColors.primaryForeground },
+  unsubmitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderWidth: Borders.width,
+    borderColor: AppColors.destructive,
+    backgroundColor: AppColors.card,
+  },
+  unsubmitText: { fontSize: 16, fontWeight: '800', color: AppColors.destructive },
+  cancelSubmitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderWidth: Borders.width,
+    borderColor: AppColors.destructive,
+    backgroundColor: AppColors.card,
+  },
+  cancelSubmitText: { fontSize: 16, fontWeight: '800', color: AppColors.destructive },
+  hintText: { fontSize: 13, color: AppColors.mutedForeground, lineHeight: 18 },
   errorText: { fontSize: 14, color: AppColors.destructive, textAlign: 'center', marginTop: 24 },
 
   hero: {
