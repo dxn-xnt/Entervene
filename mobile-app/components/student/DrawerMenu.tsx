@@ -31,11 +31,11 @@ type MenuItem = {
 };
 
 const menuItems: MenuItem[] = [
-  { id: 'storyboard',    label: 'Study Board',   icon: 'grid-outline',          route: '/student/storyboard' },
-  { id: 'subjects',      label: 'Subjects',       icon: 'book-outline',          route: '/student/subjects' },
-  { id: 'grades',        label: 'Grades',         icon: 'stats-chart-outline',   route: '/student/grades' },
-  { id: 'todo',          label: 'To Do',          icon: 'list-outline',          route: '/student/todo' },
-  { id: 'notifications', label: 'Notifications',  icon: 'notifications-outline', route: '/student/notifications' },
+  { id: 'storyboard', label: 'Study Board', icon: 'grid-outline', route: '/student/storyboard' },
+  { id: 'subjects', label: 'Subjects', icon: 'book-outline', route: '/student/subjects' },
+  // { id: 'grades', label: 'Grades', icon: 'stats-chart-outline', route: '/student/grades' },
+  { id: 'todo', label: 'To Do', icon: 'list-outline', route: '/student/todo' },
+  // { id: 'notifications', label: 'Notifications', icon: 'notifications-outline', route: '/student/notifications' },
 ];
 
 const getInitials = (fullName: string): string => {
@@ -51,12 +51,12 @@ const DrawerMenu = () => {
   const router = useRouter();
   const pathname = usePathname();
 
-  const slideAnim   = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
+  const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
 
-  const [modalVisible,    setModalVisible]    = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
   const [userPanelVisible, setUserPanelVisible] = useState(false);
-  const [loggingOut,       setLoggingOut]       = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const { activeQuarter } = useStudentSubjects();
 
@@ -65,14 +65,14 @@ const DrawerMenu = () => {
       setModalVisible(true);
       requestAnimationFrame(() => {
         Animated.parallel([
-          Animated.spring(slideAnim,   { toValue: 0,             tension: 65, friction: 11, useNativeDriver: true }),
+          Animated.spring(slideAnim, { toValue: 0, tension: 65, friction: 11, useNativeDriver: true }),
           Animated.timing(overlayAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
         ]).start();
       });
     } else {
       setUserPanelVisible(false);
       Animated.parallel([
-        Animated.spring(slideAnim,   { toValue: -DRAWER_WIDTH, tension: 65, friction: 11, useNativeDriver: true }),
+        Animated.spring(slideAnim, { toValue: -DRAWER_WIDTH, tension: 65, friction: 11, useNativeDriver: true }),
         Animated.timing(overlayAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
       ]).start(({ finished }) => {
         if (finished) setModalVisible(false);
@@ -198,22 +198,6 @@ const DrawerMenu = () => {
             <View style={styles.userPanel}>
               <Pressable
                 style={({ pressed }) => [styles.panelItem, pressed && styles.panelItemPressed]}
-                onPress={() => setUserPanelVisible(false)}
-              >
-                <Ionicons name="person-circle-outline" size={18} color={AppColors.foreground} />
-                <Text style={styles.panelItemText}>Account</Text>
-              </Pressable>
-
-              <Pressable
-                style={({ pressed }) => [styles.panelItem, pressed && styles.panelItemPressed]}
-                onPress={() => { setUserPanelVisible(false); handleNavigate('/student/notifications'); }}
-              >
-                <Ionicons name="notifications-outline" size={18} color={AppColors.foreground} />
-                <Text style={styles.panelItemText}>Notifications</Text>
-              </Pressable>
-
-              <Pressable
-                style={({ pressed }) => [styles.panelItem, pressed && styles.panelItemPressed]}
                 onPress={handleLogout}
                 disabled={loggingOut}
               >
@@ -319,10 +303,15 @@ const styles = StyleSheet.create({
   userName: { fontSize: 14, fontWeight: '700', color: AppColors.foreground },
   userEmail: { fontSize: 11, color: AppColors.mutedForeground },
   userPanel: {
-    borderTopWidth: Borders.width, borderTopColor: AppColors.border,
+    position: 'absolute',
+    bottom: 80,
+    left: 50,
+    width: 230,
+    borderWidth: Borders.width, borderColor: AppColors.border,
     marginBottom: Spacing.sm,
     backgroundColor: AppColors.card, borderRadius: 8, overflow: 'hidden',
     marginHorizontal: Spacing.md,
+    ...NeoShadow.md,
   },
   panelItem: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
