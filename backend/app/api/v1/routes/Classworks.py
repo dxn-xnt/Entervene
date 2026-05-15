@@ -137,12 +137,37 @@ def get_my_classworks(staff_id: str = Depends(get_staff_id), db: Session = Depen
     cws = db.query(Classwork).filter(Classwork.created_by_staff_id == staff_id).order_by(Classwork.created_at.desc()).all()
     return [_build_cw(c, db) for c in cws]
 
-
 @router.get("/classwork/{classwork_id}", response_model=ClassworkResponse)
-def get_classwork(classwork_id: int, current_user: dict = Depends(require_role("teacher", "admin", "student")), db: Session = Depends(get_db)):
+def get_classwork(
+    classwork_id: int, 
+    class_id: int = Query(None, description="Optional class ID to get assignment-specific details"),
+    current_user: dict = Depends(require_role("teacher", "admin", "student")), 
+    db: Session = Depends(get_db)
+):
     cw = db.query(Classwork).filter(Classwork.classwork_id == classwork_id).first()
-    if not cw: raise HTTPException(status_code=404, detail="Classwork not found")
-    return _build_cw(cw, db)
+    if not cw: 
+        raise HTTPException(status_code=404, detail="Classwork not found")
+    
+    # Get assignment details if class_id is provided
+    assignment = None
+    due_date = None
+    if class_id:
+        assignment = db.query(ClassworkAssignment).filter(
+            ClassworkAssignment.classwork_id == classwork_id,
+            ClassworkAssignment.class_id == class_id
+        ).first()
+        if assignment:
+            due_date = assignment.due_date
+    
+    # Build response with due_date from assignment
+    result = _build_cw(cw, db)
+    
+    # Add due_date to the response (since ClassworkResponse might not have it)
+    # You might need to create a custom response or modify ClassworkResponse schema
+    result_dict = result.dict()
+    result_dict["due_date"] = due_date
+    
+    return result_dict
 
 
 @router.put("/classwork/{classwork_id}", response_model=ClassworkResponse)

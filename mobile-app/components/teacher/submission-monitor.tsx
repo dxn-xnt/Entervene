@@ -44,6 +44,19 @@ function formatDateTime(iso: string | null | undefined) {
   }
 }
 
+function formatDate(iso: string | null | undefined) {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  } catch {
+    return null;
+  }
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SummaryCard({
@@ -240,7 +253,6 @@ export default function SubmissionMonitor({
   const [showMissing, setShowMissing]     = useState(true);
 
   const isPastDue = dueDate ? new Date() > new Date(dueDate) : false;
-
   const total = submitted.length + missing.length;
 
   if (isLoading) {
@@ -289,8 +301,8 @@ export default function SubmissionMonitor({
           />
           <Text style={[m.dueNoteText, isPastDue ? m.dueNoteTextPast : m.dueNoteTextFuture]}>
             {isPastDue
-              ? `Due date passed — students who haven't submitted are marked Missing.`
-              : `Due date hasn't passed yet — unsubmitted students are marked Missing.`}
+              ? `Due date passed (${formatDate(dueDate)}) — students who haven't submitted are marked Missing.`
+              : `Due date: ${formatDate(dueDate)} — students won't be marked Missing until after the due date.`}
           </Text>
         </View>
       ) : (
@@ -356,7 +368,7 @@ export default function SubmissionMonitor({
       {total === 0 && (
         <View style={m.emptyWrap}>
           <Ionicons name="people-outline" size={32} color={AppColors.mutedForeground} />
-          <Text style={m.emptyText}>No students enrolled yet.</Text>
+          <Text style={m.emptyText}>No students submitting yet.</Text>
         </View>
       )}
     </View>
