@@ -133,49 +133,76 @@ export default function ClassworkView() {
               </View>
             ) : null}
           </View>
-          <Text style={s.meta}>{data.teacher_name}</Text>
           <View style={s.dateRow}>
             <Text style={s.dateText}>
-              <Text style={s.dateLabel}>Assigned on </Text>
-              {new Date(data.due_date).toLocaleString()}
+              {data.due_date && <View style={s.dueRow}><Ionicons name="time-outline" size={16} color={AppColors.destructive} /><Text style={s.dueText}>Due: {new Date(data.due_date).toLocaleString()}</Text></View>}
             </Text>
           </View>
         </View>
-        {data.due_date && <View style={s.dueRow}><Ionicons name="time-outline" size={16} color={AppColors.destructive} /><Text style={s.dueText}>Due: {new Date(data.due_date).toLocaleString()}</Text></View>}
-        {data.instructions && <View style={s.section}><Text style={s.sectionLabel}>Instructions</Text><Text style={s.bodyText}>{data.instructions}</Text></View>}
-        {data.attachments?.length > 0 && (
-          <View style={s.section}>
-            <Text style={s.sectionLabel}>Reference Files</Text>
+        {data.instructions &&
+          <View style={s.block}>
+            <View style={s.blockHead}>
+              <Ionicons name="list-outline" size={18} color={AppColors.foreground} />
+              <Text style={s.blockTitle}>Instructions</Text>
+            </View>
+            <Text style={s.blockBody}>{data.instructions}</Text>
+          </View>
+        }
+
+        {data.attachments?.length > 0 ? (
+          <View style={s.block}>
+            <View style={s.blockHead}>
+              <Ionicons name="attach-outline" size={18} color={AppColors.foreground} />
+              <Text style={s.blockTitle}>Attachments ({data.attachments.length})</Text>
+            </View>
             {data.attachments.map((a: any) => (
               <TouchableOpacity
                 key={a.classwork_attachment_id}
-                style={s.fileRow}
+                style={s.fileCard}
                 activeOpacity={0.75}
                 onPress={() => openClassworkAttachment(data.classwork_id, a.classwork_attachment_id)}
               >
-                <Ionicons name="document-outline" size={16} color={AppColors.primary} />
-                <Text style={s.fileName} numberOfLines={1}>{a.file_name}</Text>
+                <View style={s.fileIconWrap}>
+                  <Ionicons
+                    name="document-outline"
+                    size={24}
+                    color={AppColors.foreground}
+                  />
+                </View>
+                <Text style={s.fileName2} numberOfLines={1}>{a.file_name}</Text>
                 <Ionicons name="open-outline" size={16} color={AppColors.mutedForeground} />
               </TouchableOpacity>
             ))}
           </View>
-        )}
+        ) : null}
 
         {/* Submission status */}
         {submission && (
           <View style={s.statusCard}>
-            <Text style={s.sectionLabel}>Your Submission</Text>
-            <View style={[s.statusBadge, { backgroundColor: statusColors[submission.status] || '#6b7280' }]}>
-              <Text style={s.statusBadgeText}>{submission.status.toUpperCase()}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <View style={s.blockHead}>
+                <Ionicons name="document-text-outline" size={18} color={AppColors.foreground} />
+                <Text style={s.blockTitle}>Your Submission</Text>
+              </View>
+              <View style={[s.statusBadge, { backgroundColor: statusColors[submission.status] || '#6b7280' }]}>
+                <Text style={s.statusBadgeText}>{submission.status.toUpperCase()}</Text>
+              </View>
             </View>
+
             {submission.attachments?.map((a: any) => (
               <TouchableOpacity
                 key={a.submission_attachment_id}
-                style={s.fileRow}
+                style={s.fileCard}
                 activeOpacity={0.75}
                 onPress={() => openSubmissionAttachment(submission.submission_id, a.submission_attachment_id)}
               >
-                <Ionicons name="document-outline" size={16} color={AppColors.primary} />
+                <View style={s.fileIconWrap}>
+                  <Ionicons
+                    name="document-outline"
+                    size={24}
+                    color={AppColors.foreground}
+                  />
+                </View>
                 <Text style={s.fileName} numberOfLines={1}>{a.file_name}</Text>
                 <Ionicons name="open-outline" size={16} color={AppColors.mutedForeground} />
               </TouchableOpacity>
@@ -231,11 +258,11 @@ const s = StyleSheet.create({
   bodyText: { fontSize: 15, color: AppColors.foreground, lineHeight: 22 },
   fileRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderWidth: 1, borderColor: AppColors.border, backgroundColor: AppColors.card },
   fileName: { flex: 1, fontSize: 13, color: AppColors.foreground },
-  statusCard: { gap: 8, padding: 16, borderWidth: Borders.width, borderColor: AppColors.border, backgroundColor: AppColors.accent },
+  statusCard: { gap: 8, padding: 16, borderWidth: Borders.width, borderColor: AppColors.border, backgroundColor: BANNER_BG, borderRadius: 12, ...NeoShadow.sm },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', borderRadius: 4 },
   statusBadgeText: { fontSize: 11, fontWeight: '800', color: '#fff' },
-  gradeBox: { gap: 4, marginTop: 8, padding: 12, backgroundColor: '#dcfce7', borderWidth: 1, borderColor: '#86efac' },
-  gradeTitle: { fontSize: 18, fontWeight: '900', color: '#16a34a' },
+  gradeBox: { gap: 4, marginTop: 8, padding: 12, backgroundColor: AppColors.background, borderWidth: 2, borderColor: AppColors.border, borderRadius: 6 },
+  gradeTitle: { fontSize: 16, fontWeight: '600' },
   feedbackText: { fontSize: 14, color: AppColors.foreground, lineHeight: 20 },
   fileButton: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, borderWidth: Borders.width, borderColor: AppColors.border, borderStyle: 'dashed' },
   fileButtonText: { fontSize: 13, color: AppColors.mutedForeground, flex: 1 },
@@ -279,7 +306,7 @@ const s = StyleSheet.create({
   },
   metaChipText: { fontSize: 12, fontWeight: '700', color: AppColors.foreground, flexShrink: 1 },
   metaPerson: { fontSize: 13, fontWeight: '600', color: AppColors.mutedForeground, flex: 1 },
-  dateRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
+  dateRow: { flexDirection: 'row', flexWrap: 'wrap' },
   dateText: { fontSize: 12, color: AppColors.mutedForeground },
   dateLabel: { fontWeight: '700', color: AppColors.foreground, marginRight: 4 },
   typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10 },
@@ -309,5 +336,61 @@ const s = StyleSheet.create({
     borderWidth: Borders.width,
     borderColor: AppColors.border,
     borderRadius: 6,
+  },
+  block: {
+    backgroundColor: AppColors.white,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    borderRadius: 10,
+    padding: Spacing.md,
+    ...NeoShadow.sm,
+  },
+  blockHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+    paddingBottom: 8,
+  },
+  blockTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: AppColors.foreground,
+    letterSpacing: 0.6,
+    flex: 1,
+  },
+  blockBody: { fontSize: 15, color: AppColors.foreground, lineHeight: 24, },
+  fileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    backgroundColor: AppColors.white,
+    borderRadius: 6,
+  },
+  fileIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    backgroundColor: '#F6E9B2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fileInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  fileName2: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: AppColors.foreground,
+  },
+  fileSize: {
+    fontSize: 12,
+    color: AppColors.mutedForeground,
   },
 });

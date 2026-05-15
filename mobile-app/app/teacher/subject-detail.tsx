@@ -19,6 +19,7 @@ import { apiFetch } from "@/hooks/api";
 import { AppColors, Spacing, Borders, NeoShadow } from "@/constants/theme";
 import StatCard from "@/components/overview-card";
 import type { TeacherLesson } from "@/hooks/useTeacherData";
+import TabBar from '@/components/student/TabBar';
 
 const BANNER_BG = "#F6E9B2";
 const ACTION_GREEN = "#7ABA78";
@@ -88,12 +89,18 @@ export default function TeacherSubjectDetail() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('lessons');
 
   const [lessonSearch, setLessonSearch] = useState("");
   const [cwSearch, setCwSearch] = useState("");
   const [lessonSort, setLessonSort] = useState<"newest" | "title" | "order">("newest");
   const [expandedLessonId, setExpandedLessonId] = useState<number | null>(null);
   const [linkedCwByLesson, setLinkedCwByLesson] = useState<LinkedCwCache>({});
+
+  const TABS = [
+    { id: 'lessons', label: 'Lessons' },
+    { id: 'classwork', label: 'Classwork' },
+  ];
 
   const validIds =
     Number.isFinite(classId) &&
@@ -271,7 +278,7 @@ export default function TeacherSubjectDetail() {
       <View style={styles.topBar}>
         <View style={styles.topBarRow}>
           <TouchableOpacity onPress={openDrawer} activeOpacity={0.7} hitSlop={8}>
-            <Ionicons name="chevron-back" size={24} color={AppColors.foreground} />
+            <Ionicons name="menu" size={24} color={AppColors.foreground} />
           </TouchableOpacity>
           <View style={{ flex: 1, marginHorizontal: 8 }}>
             <TouchableOpacity
@@ -292,41 +299,31 @@ export default function TeacherSubjectDetail() {
           </TouchableOpacity>
         </View>
 
-        {/* Tabs — web-style with icons */}
-        <View style={styles.tabRow}>
-          <View style={[styles.tabItem, styles.tabItemActive]}>
-            <Ionicons
-              name="book-outline"
-              size={18}
-              color={AppColors.foreground}
-            />
-            <Text
-              style={[
-                styles.tabLabel,
-                styles.tabLabelActive,
-              ]}
-            >
-              Lessons
+        {/* Subject banner (web reference) */}
+        <View style={styles.subjectBanner}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.bannerTitle}>{subjectName}</Text>
+            <Text style={styles.bannerSub}>
+              {sectionName ? `${sectionName} · ` : ""}
+              {sectionSinceLabel}
             </Text>
           </View>
-          <TouchableOpacity
-            style={[styles.tabItem, styles.hiddenTab]}
-            onPress={() => { }}
-            activeOpacity={0.8}
+          <Ionicons
+            name="information-circle-outline"
+            size={22}
+            color={AppColors.mutedForeground}
+          />
+        </View>
+
+
+        <View style={styles.tabRow}>
+          <Text
+            style={[
+              styles.tabLabel,
+            ]}
           >
-            <Ionicons
-              name="clipboard-outline"
-              size={18}
-              color={AppColors.mutedForeground}
-            />
-            <Text
-              style={[
-                styles.tabLabel,
-              ]}
-            >
-              Classwork
-            </Text>
-          </TouchableOpacity>
+            Lessons
+          </Text>
         </View>
       </View>
 
@@ -343,22 +340,6 @@ export default function TeacherSubjectDetail() {
           <Text style={styles.errorText}>{error}</Text>
         ) : (
           <>
-            {/* Subject banner (web reference) */}
-            <View style={styles.subjectBanner}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.bannerTitle}>{subjectName}</Text>
-                <Text style={styles.bannerSub}>
-                  {sectionName ? `${sectionName} · ` : ""}
-                  {sectionSinceLabel}
-                </Text>
-              </View>
-              <Ionicons
-                name="information-circle-outline"
-                size={22}
-                color={AppColors.mutedForeground}
-              />
-            </View>
-
             {/* Original overview metric cards (StatCard + trend line) */}
             {/* <Text style={styles.sectionHeading}>Subject Overview</Text>
             <View style={styles.overviewGrid}>
@@ -385,7 +366,7 @@ export default function TeacherSubjectDetail() {
 
             {true && (
               <View style={styles.panel}>
-                <View style={styles.searchRow}>
+                {/* <View style={styles.searchRow}>
                   <View style={styles.searchField}>
                     <Ionicons name="search-outline" size={18} color={AppColors.mutedForeground} />
                     <TextInput
@@ -400,8 +381,7 @@ export default function TeacherSubjectDetail() {
                     <Text style={styles.sortChipText}>Sort: {lessonSortLabel}</Text>
                     <Ionicons name="chevron-down" size={14} color={AppColors.foreground} />
                   </TouchableOpacity>
-                </View>
-
+                </View> */}
                 {filteredSortedLessons.length === 0 ? (
                   <Text style={styles.empty}>No lessons yet. Tap Add Lesson to create one.</Text>
                 ) : (
@@ -589,7 +569,7 @@ export default function TeacherSubjectDetail() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: AppColors.background },
   topBar: {
-    paddingBottom: Spacing.sm,
+    gap: 12
   },
   backText: { fontSize: 22, fontWeight: '700', color: AppColors.foreground },
   topBarRow: {
@@ -621,8 +601,6 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     paddingHorizontal: Spacing.md,
     gap: Spacing.md,
-    borderBottomWidth: Borders.width,
-    borderBottomColor: AppColors.border,
   },
   tabItem: {
     flexDirection: "row",
@@ -635,10 +613,12 @@ const styles = StyleSheet.create({
   },
   tabItemActive: { borderBottomColor: AppColors.foreground },
   hiddenTab: { display: "none" },
-  tabLabel: { fontSize: 14, fontWeight: "600", color: AppColors.mutedForeground },
+  tabLabel: { fontSize: 18, fontWeight: "700", color: AppColors.foreground },
   tabLabelActive: { color: AppColors.foreground, fontWeight: "800" },
-  scrollContent: { padding: Spacing.md, paddingBottom: 48, gap: Spacing.md },
+  scrollContent: { padding: Spacing.md, paddingBottom: 48, gap: Spacing.md, marginTop: -8 },
   subjectBanner: {
+    marginTop: 12,
+    marginHorizontal: 16,
     flexDirection: "row",
     alignItems: "flex-start",
     backgroundColor: BANNER_BG,
@@ -658,7 +638,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   overviewGrid: { gap: 12 },
-  panel: { gap: 12 },
+  panel: { gap: 16 },
   searchRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   searchField: {
     flex: 1,
@@ -687,7 +667,7 @@ const styles = StyleSheet.create({
   },
   sortChipText: { fontSize: 12, fontWeight: "700", color: AppColors.foreground },
   lessonCard: {
-    backgroundColor: BANNER_BG,
+    backgroundColor: AppColors.background,
     borderWidth: Borders.width,
     borderColor: AppColors.border,
     borderRadius: 10,
@@ -710,7 +690,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderTopWidth: Borders.width,
     borderTopColor: AppColors.border,
-    backgroundColor: "rgba(255,255,255,0.35)",
+    backgroundColor: BANNER_BG,
   },
   lessonOpenDetailText: { fontSize: 12, fontWeight: "700", color: AppColors.mutedForeground },
   nestedBlock: {
@@ -794,4 +774,46 @@ const styles = StyleSheet.create({
   submissionsBtnText: { fontSize: 11, fontWeight: "900", color: AppColors.foreground },
   empty: { fontSize: 14, color: AppColors.mutedForeground, paddingVertical: 12 },
   errorText: { fontSize: 14, color: AppColors.destructive, paddingVertical: 12 },
+
+
+  container: {
+
+  },
+  backgroundHolder: {
+    height: 36,
+    borderBottomColor: AppColors.border,
+    borderBottomWidth: 2,
+  },
+  foregroundHolder: {
+    zIndex: 10,
+    height: 36,
+    position: 'absolute',
+    paddingHorizontal: Spacing.md,
+  },
+  tab: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
+    marginRight: 4,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    borderRightWidth: 6,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+  },
+  activeTab: {
+    borderColor: AppColors.border,
+    borderBottomWidth: 4,
+    borderRightWidth: 6,
+    borderBottomColor: AppColors.background,
+    backgroundColor: AppColors.background,
+    marginBottom: -4,
+  },
+  tabText: {
+    fontSize: 14,
+    color: AppColors.mutedForeground,
+  },
+  activeTabText: {
+    color: AppColors.foreground,
+    fontWeight: '600',
+  },
 });

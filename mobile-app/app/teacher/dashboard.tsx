@@ -16,99 +16,13 @@ import { AppColors, Spacing, Borders, NeoShadow } from "@/constants/theme";
 
 export default function TeacherDashboard() {
   const { openDrawer } = useDrawer();
+
   //   const router = useRouter();
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <ScrollView
-        // refreshControl={
-        //   <RefreshControl refreshing={isLoading} onRefresh={refresh} />
-        // }
-      >
-        <View style={styles.header}>
-          <TouchableOpacity onPress={openDrawer} activeOpacity={0.7}>
-            <Ionicons name="menu" size={24} color={AppColors.foreground} />
-          </TouchableOpacity>
+      <ScrollView>
 
-          <Text style={styles.title}>Dashboard</Text>
-        </View>
-
-        <View style={styles.body}>
-
-          {/* Class Activity  */}
-          <View style={styles.container}>
-            <View style={styles.classActivityHeader}>
-              <Text style={styles.textHeader}>Class Activity</Text>
-              {/* // Placeholder lang sa */}
-              <TouchableOpacity>
-                <Ionicons
-                  name="chevron-forward"
-                  size={24}
-                  color={AppColors.foreground}
-                />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.activityCardContainer}>
-              <View style={styles.activityCard}>
-                {/* Data Test */}
-                <Text style={{ fontSize: 24 }}>Upcoming Science Quiz</Text>
-                <Text>February 2, 2026</Text>
-              </View>
-              <View style={styles.activityCard}>
-                <Text style={{ fontSize: 24 }}>Upcoming Science Quiz</Text>
-                <Text>February 2, 2026</Text>
-              </View>
-              <View style={styles.activityCard}>
-                <Text style={{ fontSize: 24 }}>Upcoming Science Quiz</Text>
-                <Text>February 2, 2026</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Performance Rate  */}
-          <View style={styles.container}>
-            <View style={styles.performanceRateHeader}>
-              <Text style={styles.textHeader}>Performance Rate</Text>
-              <View style={styles.filterRow}>
-                <TouchableOpacity
-                  style={styles.filterButton}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.filterText}>Science</Text>
-                  <Ionicons
-                    name="chevron-down"
-                    size={20}
-                    color={AppColors.foreground}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.filterButton}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.filterText}>All Section</Text>
-                  <Ionicons
-                    name="chevron-down"
-                    size={20}
-                    color={AppColors.foreground}
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.container}>
-            <View>
-              <Text style={styles.textHeader}>Student Passing Rates</Text>
-              <Text>Overall students average</Text>
-            </View>
-          </View>
-          <View style={styles.container}>
-            <View>
-              <Text style={styles.textHeader}>Class Mastery Rates</Text>
-              <Text>Average mastery per subject</Text>
-            </View>
-          </View>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -119,6 +33,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: AppColors.background,
   },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 16 },
+  gridItem: { width: "100%" },
 
   header: {
     flexDirection: "row",

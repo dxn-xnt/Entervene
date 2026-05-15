@@ -519,4 +519,5 @@ const s = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
   },
+
 });
