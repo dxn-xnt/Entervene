@@ -11,7 +11,7 @@ import { API_BASE_URL } from '@/constants/api';
 import { AppColors, Spacing, Borders, NeoShadow } from '@/constants/theme';
 
 const statusColors: Record<string, string> = { pending: '#f59e0b', submitted: '#3b82f6', graded: '#22c55e', late: '#ef4444' };
-
+const BANNER_BG = '#F6E9B2';
 export default function ClassworkView() {
   const router = useRouter();
   const { session } = useAuth();

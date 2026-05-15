@@ -313,27 +313,14 @@ export default function TeacherSubjectDetail() {
               Lessons
             </Text>
           </View>
-          <Ionicons
-            name="information-circle-outline"
-            size={22}
-            color={AppColors.mutedForeground}
-          />
-        </View>
-        <View style={styles.tabRow}>
-          <Text
-            style={[
-              styles.tabLabel,
-            ]}
-          >
+          <TouchableOpacity style={styles.tabItem} activeOpacity={0.75}>
             <Ionicons
               name="clipboard-outline"
               size={18}
               color={AppColors.mutedForeground}
             />
             <Text
-              style={[
-                styles.tabLabel,
-              ]}
+              style={styles.tabLabel}
             >
               Classwork
             </Text>
@@ -653,7 +640,7 @@ const styles = StyleSheet.create({
   subjectBanner: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: BANNER_BG,
+    backgroundColor: "#F6E9B2",
     borderWidth: Borders.width,
     borderColor: AppColors.border,
     borderRadius: 10,
@@ -699,7 +686,7 @@ const styles = StyleSheet.create({
   },
   sortChipText: { fontSize: 12, fontWeight: "700", color: AppColors.foreground },
   lessonCard: {
-    backgroundColor: BANNER_BG,
+    backgroundColor: "#F6E9B2",
     borderWidth: Borders.width,
     borderColor: AppColors.border,
     borderRadius: 10,

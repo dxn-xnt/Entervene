@@ -24,7 +24,27 @@ function badgeColor(type: string) {
 
 export default function TeacherDashboard() {
   const { openDrawer } = useDrawer();
-  //   const router = useRouter();
+  const router = useRouter();
+  const { classes, isLoading: isClassesLoading, error: classesError } = useTeacherClasses();
+  const { classworks, isLoading: isClassworksLoading, error: classworksError } = useTeacherClassworks();
+
+  const loading = isClassesLoading || isClassworksLoading;
+  const error = classesError || classworksError;
+
+  const cwBySubject = React.useMemo(() => {
+    const counts: Record<string, Record<string, number>> = {};
+    classworks.forEach((cw) => {
+      const subjectId = String(cw.subject_id);
+      const type = cw.classwork_type?.toUpperCase() ?? 'OTHER';
+      counts[subjectId] = counts[subjectId] || {};
+      counts[subjectId][type] = (counts[subjectId][type] ?? 0) + 1;
+    });
+    return counts;
+  }, [classworks]);
+
+  const onRefresh = () => {
+    // refresh is not available for classes hook, so just rely on classworks reload for now
+  };
 
   // Group classes under a single year header (the API doesn't return year_label yet,
   // so we show one group labelled "Current Academic Year")
@@ -42,9 +62,9 @@ export default function TeacherDashboard() {
 
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={() => { }} />}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={onRefresh} />}
       >
-        {isLoading ? (
+        {loading ? (
           <ActivityIndicator size="large" color={AppColors.primary} style={{ marginTop: 40 }} />
         ) : classes.length === 0 ? (
           <View style={styles.emptyBox}>
