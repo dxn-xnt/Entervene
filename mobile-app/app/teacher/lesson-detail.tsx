@@ -36,7 +36,7 @@ function formatDate(iso: string | null | undefined) {
 export default function LessonDetail() {
   const router = useRouter();
   const { session } = useAuth();
-  const params = useLocalSearchParams<{ 
+  const params = useLocalSearchParams<{
     lesson_id?: string;
     subject_load_id?: string;
     class_id?: string;
@@ -127,16 +127,16 @@ export default function LessonDetail() {
           <TouchableOpacity
             style={s.editBtn}
             activeOpacity={0.8}
-            onPress={() => router.push({ 
-              pathname: '/teacher/edit-lesson' as any, 
-              params: { 
+            onPress={() => router.push({
+              pathname: '/teacher/edit-lesson' as any,
+              params: {
                 lesson_id: lesson.lesson_id,
                 subject_load_id: params.subject_load_id,
                 class_id: params.class_id,
                 subject_id: params.subject_id,
                 subject: params.subject,
                 section: params.section
-              } 
+              }
             })}
           >
             <Ionicons name="pencil-outline" size={14} color={AppColors.foreground} />
@@ -224,16 +224,6 @@ export default function LessonDetail() {
               <Text style={s.blockTitle}>Description</Text>
             </View>
             <Text style={s.blockBody}>{lesson.description}</Text>
-          </View>
-        ) : null}
-
-        {lesson.content ? (
-          <View style={s.block}>
-            <View style={s.blockHead}>
-              <Ionicons name="reader-outline" size={18} color={AppColors.foreground} />
-              <Text style={s.blockTitle}>Content</Text>
-            </View>
-            <Text style={s.blockBody}>{lesson.content}</Text>
           </View>
         ) : null}
 
@@ -399,10 +389,8 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 4,
     paddingBottom: 8,
-    borderBottomWidth: Borders.width,
-    borderBottomColor: AppColors.border,
   },
   blockTitle: {
     fontSize: 13,
