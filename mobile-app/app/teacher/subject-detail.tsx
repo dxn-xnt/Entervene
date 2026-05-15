@@ -313,10 +313,17 @@ export default function TeacherSubjectDetail() {
               Lessons
             </Text>
           </View>
-          <TouchableOpacity
-            style={[styles.tabItem, styles.hiddenTab]}
-            onPress={() => {}}
-            activeOpacity={0.8}
+          <Ionicons
+            name="information-circle-outline"
+            size={22}
+            color={AppColors.mutedForeground}
+          />
+        </View>
+        <View style={styles.tabRow}>
+          <Text
+            style={[
+              styles.tabLabel,
+            ]}
           >
             <Ionicons
               name="clipboard-outline"

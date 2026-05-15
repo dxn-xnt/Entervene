@@ -66,9 +66,14 @@ type Params = {
 };
 
 const TABS = [
-  { id: 'lessons',   label: 'Lessons' },
+  { id: 'lessons', label: 'Lessons' },
   { id: 'classwork', label: 'Classwork' },
 ];
+
+const BANNER_BG = "#F6E9B2";
+const ACTION_GREEN = "#7ABA78";
+const TAG_GREEN_BG = "#dcfce7";
+const TAG_GREEN_TEXT = "#166534";
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -78,18 +83,18 @@ export default function SubjectDetail() {
   const { session } = useAuth();
   const [activeTab, setActiveTab] = useState('lessons');
 
-  const classId   = params.class_id   ? Number(params.class_id)   : null;
+  const classId = params.class_id ? Number(params.class_id) : null;
   const subjectId = params.subject_id ? Number(params.subject_id) : null;
 
   // ── Lessons state ──
-  const [lessons,         setLessons]         = useState<Lesson[]>([]);
-  const [lessonsLoading,  setLessonsLoading]  = useState(false);
-  const [lessonsError,    setLessonsError]    = useState<string | null>(null);
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [lessonsLoading, setLessonsLoading] = useState(false);
+  const [lessonsError, setLessonsError] = useState<string | null>(null);
 
   // ── Classwork state ──
-  const [classworks,       setClassworks]       = useState<ClassworkAssignment[]>([]);
+  const [classworks, setClassworks] = useState<ClassworkAssignment[]>([]);
   const [classworkLoading, setClassworkLoading] = useState(false);
-  const [classworkError,   setClassworkError]   = useState<string | null>(null);
+  const [classworkError, setClassworkError] = useState<string | null>(null);
 
   // ── Fetch lessons ──
   const fetchLessons = useCallback(async () => {
@@ -127,7 +132,7 @@ export default function SubjectDetail() {
     }
   }, [session?.token, classId, subjectId]);
 
-  useEffect(() => { fetchLessons(); },   [fetchLessons]);
+  useEffect(() => { fetchLessons(); }, [fetchLessons]);
   useEffect(() => { fetchClassworks(); }, [fetchClassworks]);
 
   const onRefresh = () => {
@@ -148,23 +153,18 @@ export default function SubjectDetail() {
       </View>
 
       {/* Subject info card */}
-      <View style={styles.subjectCard}>
-        <Text style={styles.subjectTitle}>{params.subject ?? ''}</Text>
-        <Text style={styles.subjectTeacher}>{params.teacher ?? ''}</Text>
-        <View style={styles.chipRow}>
-          {params.period ? (
-            <View style={styles.chip}>
-              <Ionicons name="calendar-outline" size={12} color={AppColors.mutedForeground} />
-              <Text style={styles.chipText}>{params.period}</Text>
-            </View>
-          ) : null}
-          {params.section ? (
-            <View style={styles.chip}>
-              <Ionicons name="people-outline" size={12} color={AppColors.mutedForeground} />
-              <Text style={styles.chipText}>{params.section}</Text>
-            </View>
-          ) : null}
+      <View style={styles.subjectBanner}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.bannerTitle}>{params.subject}</Text>
+          <Text style={styles.bannerSub}>
+            {params.section ? `${params.section} · ` : ""}
+          </Text>
         </View>
+        <Ionicons
+          name="information-circle-outline"
+          size={22}
+          color={AppColors.mutedForeground}
+        />
       </View>
 
       <TabBar tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
@@ -202,19 +202,19 @@ export default function SubjectDetail() {
                   })}
                   onPress={() =>
                     router.push({
-                    pathname: '/student/lesson-view' as any,
-                    params: {
-                      lesson_id:     l.lesson_id,
-                      class_id:      classId,        // ← add this
-                      subject_id:    subjectId,      // ← add this too (good to have)
-                      subject:       params.subject,
-                      lessonTitle:   l.title,
-                      description:   l.description ?? '',
-                      scheduledDate: new Date(l.created_at).toLocaleDateString('en-US', {
-                        month: 'long', day: 'numeric', year: 'numeric',
-                      }),
-                    },
-                  })
+                      pathname: '/student/lesson-view' as any,
+                      params: {
+                        lesson_id: l.lesson_id,
+                        class_id: classId,        // ← add this
+                        subject_id: subjectId,      // ← add this too (good to have)
+                        subject: params.subject,
+                        lessonTitle: l.title,
+                        description: l.description ?? '',
+                        scheduledDate: new Date(l.created_at).toLocaleDateString('en-US', {
+                          month: 'long', day: 'numeric', year: 'numeric',
+                        }),
+                      },
+                    })
                   }
                 />
               ))
@@ -276,6 +276,22 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.card,
     borderBottomWidth: Borders.width, borderBottomColor: AppColors.border,
   },
+  subjectBanner: {
+    marginTop: 12,
+    marginHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: BANNER_BG,
+    borderWidth: Borders.width,
+    borderColor: AppColors.border,
+    borderRadius: 10,
+    padding: Spacing.md,
+    gap: 12,
+    marginBottom: 16,
+    ...NeoShadow.md,
+  },
+  bannerTitle: { fontSize: 22, fontWeight: "900", color: AppColors.foreground },
+  bannerSub: { fontSize: 13, color: AppColors.mutedForeground, marginTop: 6, lineHeight: 18 },
   backRow: { flexDirection: 'row', alignItems: 'center' },
   backText: { fontSize: 22, fontWeight: '700', color: AppColors.foreground },
   subjectCard: {
@@ -286,7 +302,7 @@ const styles = StyleSheet.create({
     gap: 6,
     ...NeoShadow.lg,
   },
-  subjectTitle:   { fontSize: 18, fontWeight: '700', color: AppColors.foreground },
+  subjectTitle: { fontSize: 18, fontWeight: '700', color: AppColors.foreground },
   subjectTeacher: { fontSize: 13, color: AppColors.foreground },
   chipRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   chip: {
@@ -297,10 +313,10 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 11, fontWeight: '600', color: AppColors.mutedForeground },
   content: { padding: Spacing.md, paddingBottom: 32, gap: 12 },
   section: { gap: 12 },
-  center:  { alignItems: 'center', paddingTop: 48, gap: 10 },
+  center: { alignItems: 'center', paddingTop: 48, gap: 10 },
   emptyText: { fontSize: 15, fontWeight: '600', color: AppColors.mutedForeground },
   errorText: { fontSize: 14, color: AppColors.destructive, textAlign: 'center' },
-  hint:     { fontSize: 14, color: AppColors.mutedForeground, textAlign: 'center', marginTop: 24 },
+  hint: { fontSize: 14, color: AppColors.mutedForeground, textAlign: 'center', marginTop: 24 },
   retryBtn: {
     paddingHorizontal: 20, paddingVertical: 8,
     borderRadius: 8, borderWidth: Borders.width, borderColor: AppColors.border,
