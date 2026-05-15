@@ -10,6 +10,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as Sharing from 'expo-sharing';
+import { API_BASE_URL } from '@/constants/api';
 import { AppColors, Spacing, Borders, NeoShadow } from '@/constants/theme';
 
 export type FileItem = {
@@ -108,7 +109,7 @@ export default function FileViewer({
 }: FileViewerProps) {
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
 
-  const API_BASE = process.env.EXPO_PUBLIC_API_URL || downloadBaseUrl;
+  const API_BASE = downloadBaseUrl || API_BASE_URL;
 
   /** Build an authenticated download URL for this file */
   const buildFileUrl = (file: FileItem): string | null => {

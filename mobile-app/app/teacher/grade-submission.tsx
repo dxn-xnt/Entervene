@@ -17,8 +17,7 @@ import { useAuth } from '@/context/AuthContext';
 import { apiFetch } from '@/hooks/api';
 import { AppColors, Spacing, Borders, NeoShadow } from '@/constants/theme';
 import { Submission } from '@/hooks/useSubmissions';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { API_BASE_URL } from '@/constants/api';
 
 function formatBytes(bytes: number): string {
   if (!bytes) return '';
@@ -79,7 +78,7 @@ export default function GradeSubmission() {
   }, [params.submission_id, session?.token]);
 
   const handleOpenFile = async (attachmentId: number) => {
-    const url = `${API_URL}/api/v1/submissions/${params.submission_id}/attachments/${attachmentId}/download`;
+    const url = `${API_BASE_URL}/api/v1/submissions/${params.submission_id}/attachments/${attachmentId}/download`;
     const tokenParam = session?.token ? `?token=${encodeURIComponent(session.token)}` : '';
     try {
       await WebBrowser.openBrowserAsync(`${url}${tokenParam}`);

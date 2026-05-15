@@ -7,9 +7,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from '@/context/AuthContext';
 import { apiFetch, apiUpload } from '@/hooks/api';
+import { API_BASE_URL } from '@/constants/api';
 import { AppColors, Spacing, Borders, NeoShadow } from '@/constants/theme';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 const statusColors: Record<string, string> = { pending: '#f59e0b', submitted: '#3b82f6', graded: '#22c55e', late: '#ef4444' };
 
@@ -58,14 +57,14 @@ export default function ClassworkView() {
   };
 
   const openClassworkAttachment = async (classworkId: number, attachmentId: number) => {
-    const url = `${API_URL}/api/v1/classwork-assignments/classwork/${classworkId}/attachments/${attachmentId}/download`;
+    const url = `${API_BASE_URL}/api/v1/classwork-assignments/classwork/${classworkId}/attachments/${attachmentId}/download`;
     const tokenParam = session?.token ? `?token=${encodeURIComponent(session.token)}` : '';
     try { await WebBrowser.openBrowserAsync(`${url}${tokenParam}`); }
     catch (e: any) { Alert.alert('Error', e.message || 'Cannot open file'); }
   };
 
   const openSubmissionAttachment = async (submissionId: number, attachmentId: number) => {
-    const url = `${API_URL}/api/v1/submissions/${submissionId}/attachments/${attachmentId}/download`;
+    const url = `${API_BASE_URL}/api/v1/submissions/${submissionId}/attachments/${attachmentId}/download`;
     const tokenParam = session?.token ? `?token=${encodeURIComponent(session.token)}` : '';
     try { await WebBrowser.openBrowserAsync(`${url}${tokenParam}`); }
     catch (e: any) { Alert.alert('Error', e.message || 'Cannot open file'); }
