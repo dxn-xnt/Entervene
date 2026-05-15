@@ -76,6 +76,7 @@ export default function ClassworkDetail() {
   const [loading, setLoading] = useState(true);
   const classworkId = params.classwork_id ? Number(params.classwork_id) : null;
 
+  // Use classwork-level tracking endpoint
   const { tracking, isLoading: submissionsLoading, error: submissionError } = useClassworkSubmissionTracking(classworkId || 0);
 
   useEffect(() => {
@@ -353,10 +354,10 @@ const s = StyleSheet.create({
     borderRadius: 999,
     ...NeoShadow.xs,
   },
-  miniPillLive:   { backgroundColor: PUBLISHED_BG, borderColor: '#166534' },
-  miniPillDraft:  { backgroundColor: AppColors.muted, borderColor: AppColors.border },
+  miniPillLive: { backgroundColor: PUBLISHED_BG, borderColor: '#166534' },
+  miniPillDraft: { backgroundColor: AppColors.muted, borderColor: AppColors.border },
   miniPillLocked: { backgroundColor: LOCKED_BG, borderColor: '#991b1b' },
-  miniPillText:       { fontSize: 11, fontWeight: '800', color: AppColors.foreground },
+  miniPillText: { fontSize: 11, fontWeight: '800', color: AppColors.foreground },
   miniPillLockedText: { fontSize: 11, fontWeight: '800', color: '#991b1b' },
   editButton: {
     width: 32,
@@ -443,10 +444,10 @@ const s = StyleSheet.create({
     borderWidth: Borders.width,
     borderRadius: 6,
   },
-  dueChipSet:  { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+  dueChipSet: { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
   dueChipNone: { backgroundColor: AppColors.inputBackground, borderColor: AppColors.border },
   dueChipText: { fontSize: 12, fontWeight: '700' },
-  dueChipTextSet:  { color: '#166534' },
+  dueChipTextSet: { color: '#166534' },
   dueChipTextNone: { color: AppColors.mutedForeground },
   dateRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
   dateText: { fontSize: 12, color: AppColors.mutedForeground },
