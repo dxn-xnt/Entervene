@@ -22,7 +22,13 @@ export default function TeacherDashboard() {
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <ScrollView>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={openDrawer} activeOpacity={0.7}>
+            <Ionicons name="menu" size={24} color={AppColors.foreground} />
+          </TouchableOpacity>
 
+          <Text style={styles.title}>Dashboard</Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
