@@ -26,6 +26,7 @@ class SubmissionResponse(BaseModel):
     graded_at: Optional[datetime] = None
     graded_by_staff_id: Optional[str] = None
     attachments: list[SubmissionAttachmentResponse] = []
+    total_points: Optional[float] = None
     created_at: Optional[datetime] = None
 
 

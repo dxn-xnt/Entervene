@@ -16,6 +16,7 @@ export type Submission = {
   attempt_count: number;
   graded_at: string | null;
   attachments: { submission_attachment_id: number; file_name: string; file_type: string | null; file_size: number }[];
+  total_points?: number | null;
   created_at: string | null;
 };
 
