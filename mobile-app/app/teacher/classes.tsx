@@ -11,23 +11,23 @@ import { useTeacherClasses, useTeacherClassworks } from '@/hooks/useTeacherData'
 import { AppColors, Spacing, Borders, NeoShadow } from '@/constants/theme';
 import { useTeacherAcademicYear } from '@/hooks/useTeacherAcademicYear';
 
-const CARD_BG = '#F6E9B2';
+const CARD_BG  = '#F6E9B2';
 const SCREEN_W = Dimensions.get('window').width;
-const CARD_W = (SCREEN_W - Spacing.md * 2 - 12) / 2; // 2-col gap 12
+const CARD_W   = (SCREEN_W - Spacing.md * 2 - 12) / 2; // 2-col gap 12
 
 // Badge colour per classwork type
 function badgeColor(type: string) {
-  if (type === 'QUIZ') return { bg: '#fecaca', text: '#991b1b' };
-  if (type === 'ACTIVITY') return { bg: '#bbf7d0', text: '#166534' };
+  if (type === 'QUIZ')       return { bg: '#fecaca', text: '#991b1b' };
+  if (type === 'ACTIVITY')   return { bg: '#bbf7d0', text: '#166534' };
   if (type === 'ASSIGNMENT') return { bg: '#fef08a', text: '#854d0e' };
-  return { bg: AppColors.muted, text: AppColors.mutedForeground };
+  return                            { bg: AppColors.muted, text: AppColors.mutedForeground };
 }
 
 export default function TeacherClasses() {
   const { openDrawer } = useDrawer();
   const router = useRouter();
   const { classes, isLoading: classesLoading } = useTeacherClasses();
-  const { classworks, isLoading: cwLoading } = useTeacherClassworks();
+  const { classworks, isLoading: cwLoading }   = useTeacherClassworks();
   const { activeQuarter } = useTeacherAcademicYear();
 
   const isLoading = classesLoading || cwLoading;
@@ -58,7 +58,7 @@ export default function TeacherClasses() {
 
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={() => { }} />}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={() => {}} />}
       >
         {isLoading ? (
           <ActivityIndicator size="large" color={AppColors.primary} style={{ marginTop: 40 }} />
@@ -71,11 +71,11 @@ export default function TeacherClasses() {
           <>
             {/* ── Year group header ── */}
             <View style={styles.yearHeader}>
-              <Text style={styles.yearLabel}>
-                {activeQuarter
-                  ? `${activeQuarter.period_name} · ${activeQuarter.year_label}`
-                  : 'Current Academic Year'}
-              </Text>
+             <Text style={styles.yearLabel}>
+              {activeQuarter
+                ? `${activeQuarter.period_name} · ${activeQuarter.year_label}`
+                : 'Current Academic Year'}
+            </Text>
               <View style={styles.yearInfo}>
                 <Ionicons name="information-circle-outline" size={18} color={AppColors.mutedForeground} />
               </View>
@@ -84,22 +84,22 @@ export default function TeacherClasses() {
             {/* ── 2-col grid of class cards ── */}
             <View style={styles.grid}>
               {classes.map((c) => {
-                const counts = cwBySubject[c.subject_id] ?? {};
-                const hasWork = Object.keys(counts).length > 0;
+                const counts   = cwBySubject[c.subject_id] ?? {};
+                const hasWork  = Object.keys(counts).length > 0;
                 return (
                   <TouchableOpacity
                     key={c.subject_load_id}
-                    style={[styles.card, { width: "100%" }]}
+                    style={[styles.card, { width: CARD_W }]}
                     activeOpacity={0.85}
                     onPress={() =>
                       router.push({
                         pathname: '/teacher/subject-detail' as any,
                         params: {
                           subject_load_id: c.subject_load_id,
-                          class_id: c.class_id,
-                          subject_id: c.subject_id,
-                          subject: c.subject_name,
-                          section: c.section_name,
+                          class_id:        c.class_id,
+                          subject_id:      c.subject_id,
+                          subject:         c.subject_name,
+                          section:         c.section_name,
                         },
                       })
                     }
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
     ...NeoShadow.sm,
   },
   yearLabel: { fontSize: 18, fontWeight: '800', color: AppColors.foreground },
-  yearInfo: { padding: 4 },
+  yearInfo:  { padding: 4 },
   // Grid
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   card: {
@@ -166,13 +166,13 @@ const styles = StyleSheet.create({
   },
   cardSection: { fontSize: 16, fontWeight: '700', color: AppColors.foreground },
   cardSubject: { fontSize: 12, color: AppColors.mutedForeground, marginBottom: 4 },
-  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  badgeRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   badge: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 8, paddingVertical: 3,
     borderRadius: 999,
   },
   badgeText: { fontSize: 11, fontWeight: '700' },
-  emptyBox: { alignItems: 'center', paddingTop: 60, gap: 10 },
+  emptyBox:  { alignItems: 'center', paddingTop: 60, gap: 10 },
   emptyText: { fontSize: 14, color: AppColors.mutedForeground },
 });

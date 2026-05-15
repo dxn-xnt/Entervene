@@ -16,7 +16,6 @@ import { AppColors, Spacing, Borders, NeoShadow } from "@/constants/theme";
 
 export default function TeacherDashboard() {
   const { openDrawer } = useDrawer();
-
   //   const router = useRouter();
 
   return (
@@ -39,8 +38,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: AppColors.background,
   },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 16 },
-  gridItem: { width: "100%" },
 
   header: {
     flexDirection: "row",

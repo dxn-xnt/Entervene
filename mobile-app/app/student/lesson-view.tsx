@@ -52,27 +52,27 @@ const LessonView = () => {
   const { session } = useAuth();
   const params = useLocalSearchParams<LessonParams>();
 
-  const subjectName = params.subject ?? '';
-  const lessonTitle = params.lessonTitle ?? '';
+  const subjectName   = params.subject     ?? '';
+  const lessonTitle   = params.lessonTitle  ?? '';
   const scheduledDate = params.scheduledDate ?? '';
-  const description = params.description ?? '';
-  const lessonId = params.lesson_id ? parseInt(params.lesson_id) : null;
-  const classId = params.class_id ? parseInt(params.class_id) : null;
+  const description   = params.description  ?? '';
+  const lessonId      = params.lesson_id    ? parseInt(params.lesson_id)   : null;
+  const classId       = params.class_id     ? parseInt(params.class_id)    : null;
 
-  const [lessonDetail, setLessonDetail] = useState<LessonDetail | null>(null);
-  const [classworks, setClassworks] = useState<LessonClasswork[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [lessonDetail, setLessonDetail]      = useState<LessonDetail | null>(null);
+  const [classworks, setClassworks]          = useState<LessonClasswork[]>([]);
+  const [loading, setLoading]                = useState(true);
+  const [error, setError]                    = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!session?.token || !lessonId || !classId) {
-      setLoading(false);
-      return;
+    if (!session?.token || !lessonId || !classId) { 
+      setLoading(false); 
+      return; 
     }
-
-    setLoading(true);
+    
+    setLoading(true); 
     setError(null);
-
+    
     try {
       // Fetch lesson details (including attachments)
       const lesson = await apiFetch<LessonDetail>(
@@ -94,8 +94,8 @@ const LessonView = () => {
     }
   }, [session?.token, lessonId, classId]);
 
-  useEffect(() => {
-    fetchData();
+  useEffect(() => { 
+    fetchData(); 
   }, [fetchData]);
 
   const formatFileSize = (bytes: number): string => {
@@ -116,14 +116,14 @@ const LessonView = () => {
 
   const handleDownloadAttachment = (attachmentId: number, fileName: string) => {
     if (!lessonId) return;
-
+    
     const downloadUrl = `${process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/api/v1/lessons/${lessonId}/attachments/${attachmentId}/download`;
-
+    
     Alert.alert(
       'Download File',
       `Opening: ${fileName}`,
       [
-        { text: 'Cancel', onPress: () => { } },
+        { text: 'Cancel', onPress: () => {} },
         { text: 'Open', onPress: () => Linking.openURL(downloadUrl) },
       ]
     );
@@ -224,16 +224,16 @@ const LessonView = () => {
 };
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: AppColors.background },
+  safe:    { flex: 1, backgroundColor: AppColors.background },
   header: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: Spacing.md, paddingVertical: 14,
     borderBottomWidth: Borders.width, borderBottomColor: AppColors.border,
     backgroundColor: AppColors.card,
   },
-  backRow: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
+  backRow:  { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
   backText: { fontSize: 17, fontWeight: '700', color: AppColors.foreground, flex: 1 },
-  content: { padding: Spacing.md, gap: 16, paddingBottom: 40 },
+  content:  { padding: Spacing.md, gap: 16, paddingBottom: 40 },
   lessonCard: {
     borderWidth: Borders.width, borderColor: AppColors.border, borderRadius: 10,
     padding: Spacing.md, backgroundColor: '#F6E9B2', gap: 8,
@@ -246,8 +246,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   typePillText: { fontSize: 11, fontWeight: '800', color: AppColors.primaryForeground },
-  title: { fontSize: 18, fontWeight: '700', color: AppColors.foreground },
-  desc: { fontSize: 13, color: AppColors.foreground, lineHeight: 20 },
+  title:    { fontSize: 18, fontWeight: '700', color: AppColors.foreground },
+  desc:     { fontSize: 13, color: AppColors.foreground, lineHeight: 20 },
   datePill: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   datePillText: { fontSize: 12, color: AppColors.mutedForeground },
   sectionLabel: {
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: AppColors.mutedForeground,
   },
-  cwList: { gap: 10 },
+  cwList:    { gap: 10 },
   emptyBox: { alignItems: 'center', gap: 8, paddingVertical: 24 },
   emptyText: { fontSize: 14, color: AppColors.mutedForeground },
   errorText: { fontSize: 13, color: AppColors.destructive },
