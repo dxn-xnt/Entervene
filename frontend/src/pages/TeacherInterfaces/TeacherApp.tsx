@@ -5,6 +5,7 @@ import Navbar from "../../components/Navbar";
 import { useEffect, useState } from "react";
 import Classworks from "./Classworks";
 import Notifications from "./Notifications";
+import AppLayout from "@/layouts/app-layout";
 
 const TeacherApp = () => {
   const [activeNav, setActiveNav] = useState("Dashboard");
@@ -16,7 +17,8 @@ const TeacherApp = () => {
   }, [activeNav]);
 
   return (
-    <div className="flex min-h-screen">
+    // <AppLayout className="flex min-h-screen">
+    <AppLayout>
       <Navbar
         activeNav={activeNav}
         setActiveNav={(nav) => {
@@ -30,7 +32,7 @@ const TeacherApp = () => {
         {activeNav === "Classworks" && <Classworks />}
         {activeNav === "Notifications" && <Notifications />}
       </main>
-    </div>
+    </AppLayout>
   );
 };
 

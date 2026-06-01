@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import LessonModal from "@/components/LessonModal";
 import Tabs from "@/components/Tabs";
+import AppLayout from "@/layouts/app-layout";
 
 interface Lesson {
   lesson_id: number;
@@ -122,7 +123,8 @@ export default function Lessons() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    // <AppLayout className="min-h-screen bg-gray-50">
+    <AppLayout>
       <header className="bg-white border-b px-6 py-5 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Lessons</h1>
@@ -231,6 +233,6 @@ export default function Lessons() {
         subjectId={parseInt(subjectId || "0")}
         onLessonCreated={handleLessonCreated}
       />
-    </div>
+    </AppLayout>
   );
 }

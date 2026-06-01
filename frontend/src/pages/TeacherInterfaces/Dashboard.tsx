@@ -1,9 +1,11 @@
 import Card from "../../components/TeacherUIComponents/DashboardCard";
 import AnnouncementCard from "../../components/TeacherUIComponents/AnnouncementCard";
 import { ArrowUpRight } from "lucide-react";
+import AppLayout from "@/layouts/app-layout";
+
 const Dashboard = () => {
   return (
-    <div>
+    <AppLayout>
       <header className="px-5 py-5 flex flex-col gap-2 border-b border-gray-500">
         <h1 className="text-4xl font-semibold">Dashboard</h1>
         <p className="text-sm text-gray-500">Good morning, teacher Dan!</p>
@@ -72,7 +74,7 @@ const Dashboard = () => {
           </div>
         </div>
       </main>
-    </div>
+    </AppLayout>
   );
 };
 
