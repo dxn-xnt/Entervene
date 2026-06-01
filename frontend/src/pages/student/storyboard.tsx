@@ -81,3 +81,4 @@ const StoryBoard = () => {
   );
 };
 
+export default StoryBoard;

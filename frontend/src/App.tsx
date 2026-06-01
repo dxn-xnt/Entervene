@@ -5,7 +5,7 @@ import Login from "./pages/Login";
 import { routes } from "@/../routes";
 
 // import StudentApp from "./pages/StudentInterfaces/StudentApp";
-import TeacherApp from "./pages/TeacherInterfaces/TeacherApp";
+// import TeacherApp from "./pages/TeacherInterfaces/TeacherApp";
 
 // Admin pages
 import AdminDashboard from "./pages/admin/dashboard";
@@ -15,15 +15,18 @@ import AdminUsers from "./pages/admin/users";
 import AdminInterventions from "./pages/admin/interventions";
 import AdminNotifications from "./pages/admin/notifications";
 import AdminSettings from "./pages/admin/system-settings";
-import AppLayout from "./layouts/app-layout";
+// import AppLayout from "./layouts/app-layout";
 
-//Teacher pages
-// import TeacherDashboard from "./pages/teacher/TeacherDashboard";
-// import TeacherClasses from "./pages/teacher/TeacherClasses";
-// import TeacherClassworks from "./pages/teacher/TeacherClassworks";
-// import TeacherInterventions from "./pages/teacher/TeacherInterventions";
-// import TeacherGrades from "./pages/teacher/TeacherGrades";
-// import TeacherNotifications from "./pages/teacher/TeacherNotifications";
+// Teacher pages
+import TeacherDashboard from "./pages/TeacherInterfaces/Dashboard";
+// import TeacherClasses from "./pages/TeacherInterfaces/Classworks";
+import ClassesPage from "./pages/TeacherInterfaces/Classes/ClassesPage";
+// import SubjectDetails from "./pages/TeacherInterfaces/Classes/SubjectDetails";
+import Subjects from "./pages/TeacherInterfaces/Classes/Subjects";
+import TeacherClassworks from "./pages/TeacherInterfaces/Classworks";
+import TeacherInterventions from "./pages/TeacherInterfaces/Lessons";
+import TeacherGrades from "./pages/TeacherInterfaces/grades";
+import TeacherNotifications from "./pages/TeacherInterfaces/Notifications";
 
 // // Student pages
 import StudentBoard from "./pages/student/storyboard";
@@ -46,41 +49,70 @@ const App = () => {
 
           {/* Admin */}
           <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
-            <Route index element={<Navigate to={routes.admin.dashboard} replace />} />
+            <Route
+              index
+              element={<Navigate to={routes.admin.dashboard} replace />}
+            />
             <Route path={routes.admin.dashboard} element={<AdminDashboard />} />
             <Route path={routes.admin.subjects} element={<AdminSubjects />} />
             <Route path={routes.admin.classes} element={<AdminClasses />} />
             <Route path={routes.admin.users} element={<AdminUsers />} />
-            <Route path={routes.admin.interventions} element={<AdminInterventions />} />
-            <Route path={routes.admin.notifications} element={<AdminNotifications />} />
+            <Route
+              path={routes.admin.interventions}
+              element={<AdminInterventions />}
+            />
+            <Route
+              path={routes.admin.notifications}
+              element={<AdminNotifications />}
+            />
             <Route path={routes.admin.settings} element={<AdminSettings />} />
           </Route>
 
           {/* Teacher */}
           <Route element={<ProtectedRoute allowedRoles={["teacher"]} />}>
-            <Route path="/teacher" element={<TeacherApp />} />
-            {/* <Route element={<TeacherLayout />}>
-              <Route path={routes.teacher.dashboard} element={<TeacherDashboard />} />
-              <Route path={routes.teacher.classes} element={<TeacherClasses />} />
-              <Route path={routes.teacher.classworks} element={<TeacherClassworks />} />
-              <Route path={routes.teacher.interventions} element={<TeacherInterventions />} />
-              <Route path={routes.teacher.grades} element={<TeacherGrades />} />
-              <Route path={routes.teacher.notifications} element={<TeacherNotifications />} />
-            </Route> */}
+            <Route index element={<Navigate to={routes.teacher.dashboard} replace />}/>
+            <Route path={routes.teacher.dashboard} element={<TeacherDashboard />}/>
+            {/* <Route path={routes.teacher.classes} element={<TeacherClasses />} /> */}
+            <Route path={routes.teacher.classes} element={<ClassesPage />} />
+            <Route path={routes.teacher.classDetail} element={<Subjects />} />
+            {/* <Route path={routes.teacher.subjects} element={<SubjectDetails />} /> */}
+            <Route path={routes.teacher.classworks} element={<TeacherClassworks />} />
+            <Route path={routes.teacher.interventions} element={<TeacherInterventions />} />
+            <Route path={routes.teacher.grades} element={<TeacherGrades />} />
+            <Route path={routes.teacher.notifications} element={<TeacherNotifications />}/>
           </Route>
 
           {/* Student */}
           <Route element={<ProtectedRoute allowedRoles={["student"]} />}>
-            <Route index element={<Navigate to={routes.student.board} replace />} />
+            <Route
+              index
+              element={<Navigate to={routes.student.board} replace />}
+            />
             <Route path={routes.student.board} element={<StudentBoard />} />
-            <Route path={routes.student.subjects} element={<StudentSubjects />} />
-            <Route path={routes.student.interventions} element={<div className="p-5"><h1 className="text-3xl font-semibold">Interventions</h1></div>} />
+            <Route
+              path={routes.student.subjects}
+              element={<StudentSubjects />}
+            />
+            <Route
+              path={routes.student.interventions}
+              element={
+                <div className="p-5">
+                  <h1 className="text-3xl font-semibold">Interventions</h1>
+                </div>
+              }
+            />
             <Route path={routes.student.grades} element={<StudentGrades />} />
             <Route path={routes.student.todo} element={<StudentTodo />} />
-            <Route path={routes.student.notifications} element={<StudentNotifications />} />
+            <Route
+              path={routes.student.notifications}
+              element={<StudentNotifications />}
+            />
           </Route>
 
-          <Route path="*" element={<Navigate to={routes.auth.login} replace />} />
+          <Route
+            path="*"
+            element={<Navigate to={routes.auth.login} replace />}
+          />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

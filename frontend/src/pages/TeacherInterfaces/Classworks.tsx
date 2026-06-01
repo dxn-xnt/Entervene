@@ -1,6 +1,7 @@
 import Cards from "@/components/classwork-cards";
 import Tabs from "../../components/Tabs";
 import { useState } from "react";
+import AppLayout from "@/layouts/app-layout";
 
 // #region agent log
 fetch('http://127.0.0.1:7485/ingest/3a9a3448-1bd9-405f-8357-a95cb0abb46c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ccf95c'},body:JSON.stringify({sessionId:'ccf95c',runId:'pre-fix',hypothesisId:'H1',location:'Classworks.tsx:5',message:'Classworks module evaluated',data:{cardsImportPath:'@/components/classwork-cards'},timestamp:Date.now()})}).catch(()=>{});
@@ -63,7 +64,7 @@ const Classworks = () => {
       : classworkItems.filter((item) => item.type === activeTab);
 
   return (
-    <div>
+    <AppLayout>
       <header className="px-5 py-5 flex flex-row justify-between gap-2 items-center">
         <h1 className="text-4xl font-semibold">Classworks</h1>
         <button className="bg-[#7ABA78] text-black rounded px-5 py-2 border">
@@ -86,7 +87,7 @@ const Classworks = () => {
           <p className="text-gray-500 text-center mt-10">No items found.</p>
         )}
       </main>
-    </div>
+    </AppLayout>
   );
 };
 

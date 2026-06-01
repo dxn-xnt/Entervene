@@ -3,11 +3,11 @@ import AnnouncementCard from "../../components/TeacherUIComponents/AnnouncementC
 import { ArrowUpRight } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 
-const Dashboard = () => {
+const Grades = () => {
   return (
     <AppLayout>
       <header className="px-5 py-5 flex flex-col gap-2 border-b border-gray-500">
-        <h1 className="text-4xl font-semibold">Dashboard</h1>
+        <h1 className="text-4xl font-semibold">Grades</h1>
         <p className="text-sm text-gray-500">Good morning, teacher Dan!</p>
       </header>
       <main className="px-5 py-5 flex flex-col gap-4 min-h-screen">
@@ -78,4 +78,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default Grades;
