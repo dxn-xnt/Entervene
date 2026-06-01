@@ -125,7 +125,7 @@ export default function Lessons() {
   return (
     // <AppLayout className="min-h-screen bg-gray-50">
     <AppLayout>
-      <header className="bg-white border-b px-6 py-5 flex justify-between items-center">
+      <header className="bg-white px-6 py-5 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Lessons</h1>
           <p className="text-gray-600 mt-1">

@@ -1,5 +1,6 @@
 import Card from "../../../components/TeacherUIComponents/ClassesCard";
 import { ArrowUpRight } from "lucide-react";
+import AppLayout from "@/layouts/app-layout";
 
 type ClassesPageProps = {
   setActiveNav: (nav: string) => void;
@@ -7,7 +8,7 @@ type ClassesPageProps = {
 
 const ClassesPage = ({ setActiveNav }: ClassesPageProps) => {
   return (
-    <div>
+    <AppLayout>
       <header className="px-5 py-5 flex flex-col gap-2 border-b border-gray-500">
         <h1 className="text-4xl font-semibold">Classes</h1>
       </header>
@@ -66,7 +67,7 @@ const ClassesPage = ({ setActiveNav }: ClassesPageProps) => {
           </div>
         </div>
       </main>
-    </div>
+    </AppLayout>
   );
 };
 

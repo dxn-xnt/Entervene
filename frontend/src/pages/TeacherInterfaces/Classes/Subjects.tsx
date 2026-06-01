@@ -1,12 +1,14 @@
 import { ChevronRight } from "lucide-react";
 import Card from "../../../components/TeacherUIComponents/SubjectCard";
+import AppLayout from "@/layouts/app-layout";
+
 type SubjectProps = {
   setActiveNav: (nav: string) => void;
 };
 
 const Subject = ({ setActiveNav }: SubjectProps) => {
   return (
-    <div>
+    <AppLayout>
       <header className="px-5 py-5 flex items-center gap-3 border-b border-gray-500">
         <button
           onClick={() => setActiveNav("Classes")}
@@ -27,7 +29,7 @@ const Subject = ({ setActiveNav }: SubjectProps) => {
           date="November 10, 2026"
         />
       </main>
-    </div>
+    </AppLayout>
   );
 };
 

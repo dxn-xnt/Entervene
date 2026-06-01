@@ -19,10 +19,13 @@ import AdminSettings from "./pages/admin/system-settings";
 
 // Teacher pages
 import TeacherDashboard from "./pages/TeacherInterfaces/Dashboard";
-import TeacherClasses from "./pages/TeacherInterfaces/Classworks";
-import TeacherClassworks from "./pages/TeacherInterfaces/DraftLessons";
+// import TeacherClasses from "./pages/TeacherInterfaces/Classworks";
+import ClassesPage from "./pages/TeacherInterfaces/Classes/ClassesPage";
+// import SubjectDetails from "./pages/TeacherInterfaces/Classes/SubjectDetails";
+import Subjects from "./pages/TeacherInterfaces/Classes/Subjects";
+import TeacherClassworks from "./pages/TeacherInterfaces/Classworks";
 import TeacherInterventions from "./pages/TeacherInterfaces/Lessons";
-import TeacherGrades from "./pages/TeacherInterfaces/TeacherApp";
+import TeacherGrades from "./pages/TeacherInterfaces/grades";
 import TeacherNotifications from "./pages/TeacherInterfaces/Notifications";
 
 // // Student pages
@@ -67,28 +70,16 @@ const App = () => {
 
           {/* Teacher */}
           <Route element={<ProtectedRoute allowedRoles={["teacher"]} />}>
-            <Route
-              index
-              element={<Navigate to={routes.teacher.dashboard} replace />}
-            />
-            <Route
-              path={routes.teacher.dashboard}
-              element={<TeacherDashboard />}
-            />
-            <Route path={routes.teacher.classes} element={<TeacherClasses />} />
-            <Route
-              path={routes.teacher.classworks}
-              element={<TeacherClassworks />}
-            />
-            <Route
-              path={routes.teacher.interventions}
-              element={<TeacherInterventions />}
-            />
+            <Route index element={<Navigate to={routes.teacher.dashboard} replace />}/>
+            <Route path={routes.teacher.dashboard} element={<TeacherDashboard />}/>
+            {/* <Route path={routes.teacher.classes} element={<TeacherClasses />} /> */}
+            <Route path={routes.teacher.classes} element={<ClassesPage />} />
+            <Route path={routes.teacher.classDetail} element={<Subjects />} />
+            {/* <Route path={routes.teacher.subjects} element={<SubjectDetails />} /> */}
+            <Route path={routes.teacher.classworks} element={<TeacherClassworks />} />
+            <Route path={routes.teacher.interventions} element={<TeacherInterventions />} />
             <Route path={routes.teacher.grades} element={<TeacherGrades />} />
-            <Route
-              path={routes.teacher.notifications}
-              element={<TeacherNotifications />}
-            />
+            <Route path={routes.teacher.notifications} element={<TeacherNotifications />}/>
           </Route>
 
           {/* Student */}
