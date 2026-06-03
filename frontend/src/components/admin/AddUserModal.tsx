@@ -1,4 +1,5 @@
-import { useState, useRef } from "react";
+import { useRef, useState } from "react";
+import { apiFetch } from "@/lib/api";
 
 type Step = "choose" | "import" | "manual";
 type Role = "Teacher" | "Student" | "Admin";
@@ -50,6 +51,9 @@ export default function AddUserModal({ open, onClose, onUserAdded }: AddUserModa
   const [form, setForm] = useState<ManualFormData>(EMPTY_FORM);
   const [dragOver, setDragOver] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [importRole, setImportRole] = useState<"Teacher" | "Student">("Teacher");
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ created: number; skipped: number; skipped_emails?: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!open) return null;
@@ -57,18 +61,78 @@ export default function AddUserModal({ open, onClose, onUserAdded }: AddUserModa
   const handleClose = () => {
     setStep("choose");
     setForm(EMPTY_FORM);
+    setDragOver(false);
     setUploadedFile(null);
+    setImportResult(null);
+    setImporting(false);
     onClose();
+  };
+
+  const handleImportSubmit = async () => {
+    if (!uploadedFile) return;
+
+    setImporting(true);
+    setImportResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", uploadedFile);
+
+      const res = await apiFetch(`/api/v1/admin/users/upload-csv?role=${encodeURIComponent(importRole)}`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json().catch(() => ({}));
+      setImportResult(data);
+
+      if (res.ok) {
+        onUserAdded?.(form);
+      }
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handleField = (field: keyof ManualFormData, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleManualSubmit = () => {
+const handleManualSubmit = async () => {
+  try {
+    const res = await apiFetch("/api/v1/users/invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        first_name: form.firstName.trim(),
+        last_name: form.lastName.trim(),
+        middle_name: form.middleName.trim(),
+        email: form.email.trim().toLowerCase(),
+        role: form.role,
+        suffix: form.suffix.trim(),
+        gender: form.gender,
+        contact_number: form.contactNumber.trim(),
+        address: form.address.trim(),
+        hired_date: form.hiredDate,
+        employment_status: form.employmentStatus,
+        student_lrn: form.studentLrn.trim(),
+        academic_level_id: form.academicLevelId ? Number(form.academicLevelId) : null,
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      window.alert(data.detail ?? "Unable to send invite.");
+      return;
+    }
+
     onUserAdded?.(form);
     handleClose();
-  };
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : "Unable to send invite.");
+  }
+};
 
   const handleFileDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -145,6 +209,19 @@ export default function AddUserModal({ open, onClose, onUserAdded }: AddUserModa
               <button onClick={handleClose} className="text-white/70 hover:text-white text-lg leading-none">×</button>
             </div>
             <div className="p-5">
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-medium text-gray-600">Role for imported users</label>
+                <select
+                  value={importRole}
+                  onChange={(e) => setImportRole(e.target.value as "Teacher" | "Student")}
+                  className="w-full border rounded px-3 py-1.5 text-sm bg-white"
+                  style={{ borderColor: "#ccc" }}
+                >
+                  <option value="Teacher">Teacher</option>
+                  <option value="Student">Student</option>
+                </select>
+              </div>
+
               <div
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
@@ -172,7 +249,7 @@ export default function AddUserModal({ open, onClose, onUserAdded }: AddUserModa
                     >
                       Upload
                     </button>
-                    <span className="text-xs text-gray-400">Drag & drop file here</span>
+                    <span className="text-xs text-gray-400">Drag & drop CSV or Excel file here</span>
                   </>
                 )}
               </div>
@@ -183,6 +260,13 @@ export default function AddUserModal({ open, onClose, onUserAdded }: AddUserModa
                 className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) setUploadedFile(f); }}
               />
+
+              {importResult && (
+                <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                  Imported {importResult.created} user(s); skipped {importResult.skipped} user(s).
+                  {importResult.skipped_emails?.length ? ` Skipped: ${importResult.skipped_emails.join(", ")}` : ""}
+                </div>
+              )}
             </div>
             <div
               className="flex justify-end px-5 py-3 gap-2"
@@ -196,12 +280,12 @@ export default function AddUserModal({ open, onClose, onUserAdded }: AddUserModa
                 Back
               </button>
               <button
-                disabled={!uploadedFile}
+                disabled={!uploadedFile || importing}
                 className="px-4 py-1.5 rounded text-sm font-semibold text-white transition disabled:opacity-50"
                 style={{ background: "#5c8f5c" }}
-                onClick={handleClose}
+                onClick={handleImportSubmit}
               >
-                Next
+                {importing ? "Importing..." : "Import"}
               </button>
             </div>
           </>
@@ -414,7 +498,7 @@ export default function AddUserModal({ open, onClose, onUserAdded }: AddUserModa
                 className="px-5 py-1.5 rounded text-sm font-semibold text-white transition hover:opacity-90"
                 style={{ background: "#5c8f5c" }}
               >
-                Add
+                Send Invitation
               </button>
             </div>
           </>

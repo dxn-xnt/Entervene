@@ -32,7 +32,6 @@ type SubjectLessonTabProps = {
 export default function SubjectLessonTab({
   classId,
   subjectId,
-  subject,
 }: SubjectLessonTabProps) {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);

@@ -85,7 +85,6 @@ export default function AttachmentDisplay({
             {attachments.map((attachment, idx) => {
               const isPdfFile = isPdf(attachment.file_name);
               const url = getAttachmentUrl(attachment);
-              const attachmentId = attachment[`${type}_attachment_id`] as number;
 
               return (
                 <div

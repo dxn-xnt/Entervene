@@ -17,6 +17,7 @@ interface AuthContextType {
   role: Role;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<Role>;
+  acceptInvitation: (token: string, password: string, confirmPassword: string) => Promise<Role>;
   logout: () => Promise<void>;
   refresh: () => Promise<boolean>;
 }
@@ -99,6 +100,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return authUser.role;
   };
 
+  const acceptInvitation = async (
+    token: string,
+    password: string,
+    confirmPassword: string,
+  ): Promise<Role> => {
+    const res = await apiFetch("/api/v1/auth/accept-invitation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password, confirm_password: confirmPassword }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail ?? "Unable to activate account");
+    }
+
+    const data = await res.json();
+    const refreshed = await refresh();
+    if (refreshed) return data.role;
+
+    const authUser = userFromAuthResponse(data);
+    setUser(authUser);
+    return authUser.role;
+  };
+
   const logout = async () => {
     try {
       await apiFetch("/api/v1/auth/logout", { method: "POST" });
@@ -108,7 +134,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, role: user?.role ?? null, isLoading, login, logout, refresh }}>
+    <AuthContext.Provider value={{ user, role: user?.role ?? null, isLoading, login, acceptInvitation, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );

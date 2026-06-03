@@ -5,3 +5,6 @@ from .Subject        import Subject
 from .Class_         import Class
 from .SubjectLoad    import SubjectLoad
 from .StudentCLass   import StudentClass
+from .Lesson         import Lesson
+from .LessonAssignment import LessonAssignment
+from .LessonAttachment import LessonAttachment

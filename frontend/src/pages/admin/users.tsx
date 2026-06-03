@@ -1,10 +1,10 @@
-import AddUserModal from "@/components/admin/AddUserModal";
-import { Badge } from "@/components/retroui/Badge";
-import { Input } from "@/components/retroui/Input";
-import { Loader } from "@/components/retroui/Loader";
-import Tabs from "@/components/Tabs";
-import AppLayout from "@/layouts/app-layout";
-import { getUsers, type User, type UserRole } from "@/lib/api";
+import AddUserModal from "../../components/admin/AddUserModal";
+import { Badge } from "../../components/retroui/Badge";
+import { Input } from "../../components/retroui/Input";
+import { Loader } from "../../components/retroui/Loader";
+import Tabs from "../../components/Tabs";
+import AppLayout from "../../layouts/app-layout";
+import { getUsers, type User, type UserRole } from "../../lib/api";
 import {
   ArrowDownUp,
   BookOpen,
@@ -32,6 +32,47 @@ function visibleSubjects(subjects: string[] | undefined) {
     shown: subjects?.slice(0, 2) ?? [],
     extra: Math.max((subjects?.length ?? 0) - 2, 0),
   };
+}
+
+type StatusStyle = {
+  badge: string;
+  dot: string;
+  label: string;
+};
+
+function getStatusStyle(status: string | undefined | null): StatusStyle {
+  switch ((status || "").toLowerCase()) {
+    case "active":
+      return {
+        badge: "bg-emerald-50 border-emerald-300 text-emerald-700",
+        dot: "bg-emerald-500",
+        label: "Active",
+      };
+    case "pending":
+      return {
+        badge: "bg-amber-50 border-amber-300 text-amber-700",
+        dot: "bg-amber-400",
+        label: "Pending",
+      };
+    case "inactive":
+      return {
+        badge: "bg-slate-100 border-slate-300 text-slate-500",
+        dot: "bg-slate-400",
+        label: "Inactive",
+      };
+    case "suspended":
+      return {
+        badge: "bg-red-50 border-red-300 text-red-600",
+        dot: "bg-red-500",
+        label: "Suspended",
+      };
+    default:
+      return {
+        badge: "bg-slate-100 border-slate-200 text-slate-600",
+        dot: "bg-slate-400",
+        label: status ? status.charAt(0).toUpperCase() + status.slice(1) : "Unknown",
+      };
+  }
 }
 
 export default function AdminUsers() {
@@ -130,6 +171,11 @@ export default function AdminUsers() {
                 </div>
               )}
 
+              {/* Table header */}
+              {!loading && users.length > 0 && (
+                <TableHeader activeTab={activeTab} />
+              )}
+
               <div className="overflow-hidden rounded-xl border border-black bg-background shadow-[4px_5px_0_#000]">
                 {loading && (
                   <div className="flex items-center justify-center gap-3 py-12 text-sm text-muted-foreground">
@@ -164,68 +210,150 @@ export default function AdminUsers() {
   );
 }
 
+function TableHeader({ activeTab }: { activeTab: TabId }) {
+  if (activeTab === "teacher") {
+    return (
+      <div className="hidden grid-cols-[minmax(220px,1fr)_120px_minmax(180px,1fr)_110px] gap-3 px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:grid">
+        <span>Name</span>
+        <span>Status</span>
+        <span className="text-center">Subjects</span>
+        <span className="text-right">Classes</span>
+      </div>
+    );
+  }
+
+  if (activeTab === "student") {
+    return (
+      <div className="hidden grid-cols-[minmax(200px,1fr)_120px_minmax(140px,1fr)_90px] gap-3 px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:grid">
+        <span>Name</span>
+        <span>Status</span>
+        <span className="text-center">Section</span>
+        <span className="text-right">Average</span>
+      </div>
+    );
+  }
+
+  // admin
+  return (
+    <div className="hidden grid-cols-[minmax(200px,1fr)_120px_minmax(160px,1fr)] gap-3 px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:grid">
+      <span>Name / Email</span>
+      <span>Status</span>
+      <span className="text-right">Joined</span>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string | undefined | null }) {
+  const style = getStatusStyle(status);
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${style.badge}`}
+    >
+      <span className={`size-1.5 rounded-full ${style.dot}`} />
+      {style.label}
+    </span>
+  );
+}
+
 function UserRow({ user, activeTab }: { user: User; activeTab: TabId }) {
   const { shown, extra } = visibleSubjects(user.subjects);
 
-  return (
-    <div className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-black/50 px-3 py-2 last:border-b-0 md:grid-cols-[minmax(220px,1fr)_minmax(180px,1fr)_110px]">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="grid size-7 shrink-0 place-items-center rounded-full border border-amber-700 bg-amber-200 text-[13px]">
-          {user.name.charAt(0).toUpperCase()}
+  if (activeTab === "teacher") {
+    return (
+      <div className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-black/50 px-3 py-2.5 last:border-b-0 md:grid-cols-[minmax(220px,1fr)_120px_minmax(180px,1fr)_110px]">
+        <NameCell name={user.name} />
+
+        <div className="hidden md:block">
+          <StatusBadge status={user.account_status} />
         </div>
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">{user.name}</div>
-          {activeTab === "admin" && <div className="truncate text-xs text-muted-foreground">{user.email}</div>}
+
+        <div className="hidden flex-wrap justify-center gap-1.5 md:flex">
+          {shown.length > 0 ? (
+            shown.map((subject) => (
+              <Badge key={subject} variant="outline" size="sm" className="bg-background text-[10px] font-medium">
+                {subject}
+              </Badge>
+            ))
+          ) : (
+            <span className="text-xs text-muted-foreground">No subjects</span>
+          )}
+          {extra > 0 && (
+            <Badge variant="outline" size="sm" className="bg-background text-[10px] font-medium">
+              +{extra}
+            </Badge>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-1 text-xs font-semibold">
+          <School className="size-3.5" />
+          {user.class_count ?? 0}
         </div>
       </div>
+    );
+  }
 
-      {activeTab === "teacher" && (
-        <>
-          <div className="hidden flex-wrap justify-center gap-2 md:flex">
-            {shown.length > 0 ? (
-              shown.map((subject) => (
-                <Badge key={subject} variant="outline" size="sm" className="bg-background text-[10px] font-medium">
-                  {subject}
-                </Badge>
-              ))
-            ) : (
-              <span className="text-xs text-muted-foreground">No subjects</span>
-            )}
-            {extra > 0 && (
-              <Badge variant="outline" size="sm" className="bg-background text-[10px] font-medium">
-                {extra}+
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center justify-end gap-1 text-xs font-semibold">
-            <School className="size-3.5" />
-            Classes: {user.class_count ?? 0}
-          </div>
-        </>
-      )}
+  if (activeTab === "student") {
+    return (
+      <div className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-black/50 px-3 py-2.5 last:border-b-0 md:grid-cols-[minmax(200px,1fr)_120px_minmax(140px,1fr)_90px]">
+        <NameCell name={user.name} subtitle={user.email} />
 
-      {activeTab === "student" && (
-        <>
-          <div className="hidden justify-center md:flex">
+        <div className="hidden md:block">
+          <StatusBadge status={user.account_status} />
+        </div>
+
+        <div className="hidden justify-center md:flex">
+          {user.section ? (
             <Badge variant="outline" size="sm" className="bg-background text-[10px] font-medium">
-              {user.section ?? "No section"}
+              {user.section}
             </Badge>
-          </div>
-          <div className="text-right text-xl font-black leading-none">
-            {user.average ?? "-"}
-            {user.average != null && <span className="text-sm font-semibold">%</span>}
-          </div>
-        </>
-      )}
+          ) : (
+            <span className="text-xs text-muted-foreground">No section</span>
+          )}
+        </div>
 
-      {activeTab === "admin" && (
-        <>
-          <div className="hidden text-sm text-muted-foreground md:block">{user.created_at || "No date"}</div>
-          <div className="flex justify-end">
-            <UsersRound className="size-4 text-muted-foreground" />
-          </div>
-        </>
-      )}
+        <div className="text-right font-black leading-none">
+          {user.average != null ? (
+            <>
+              <span className="text-lg">{user.average}</span>
+              <span className="text-xs font-semibold">%</span>
+            </>
+          ) : (
+            <span className="text-sm font-normal text-muted-foreground">—</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // admin
+  return (
+    <div className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-black/50 px-3 py-2.5 last:border-b-0 md:grid-cols-[minmax(200px,1fr)_120px_minmax(160px,1fr)]">
+      <NameCell name={user.name} subtitle={user.email} />
+
+      <div className="hidden md:block">
+        <StatusBadge status={user.account_status} />
+      </div>
+
+      <div className="hidden items-center justify-end gap-1.5 text-xs text-muted-foreground md:flex">
+        <UsersRound className="size-3.5" />
+        {user.created_at || "—"}
+      </div>
+    </div>
+  );
+}
+
+function NameCell({ name, subtitle }: { name: string; subtitle?: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <div className="grid size-7 shrink-0 place-items-center rounded-full border border-amber-700 bg-amber-200 text-[13px] font-semibold text-amber-900">
+        {name.charAt(0).toUpperCase()}
+      </div>
+      <div className="min-w-0">
+        <div className="truncate text-sm font-semibold">{name}</div>
+        {subtitle && (
+          <div className="truncate text-xs text-muted-foreground">{subtitle}</div>
+        )}
+      </div>
     </div>
   );
 }

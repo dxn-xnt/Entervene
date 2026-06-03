@@ -17,7 +17,7 @@ const tabs = [
   { id: "classwork", label: "Classwork" },
 ];
 
-const SubjectDetail = ({ subject, classId, subjectId, onBack }: SubjectDetailProps) => {
+const SubjectDetail = ({ subject, classId, subjectId }: SubjectDetailProps) => {
   const [activeTab, setActiveTab] = useState("lessons");
 
   return (
