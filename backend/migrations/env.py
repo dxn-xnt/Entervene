@@ -4,6 +4,17 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+from app.core.Config import settings
+from app.db.Base import Base
+import app.models.auth.Role  # noqa: F401
+import app.models.auth.UserAccount  # noqa: F401
+import app.models.auth.UserLoginLog  # noqa: F401
+import app.models.auth.UserRoles  # noqa: F401
+import app.models.people.Student  # noqa: F401
+import app.models.people.AcademicStaff  # noqa: F401
+import app.models.academic.AcademicLevel  # noqa: F401
+import app.models.classwork.ClassworkAssignment  # noqa: F401
+import app.models.submissions.StudentSubmission  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -18,7 +29,8 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-target_metadata = None
+target_metadata = Base.metadata
+config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

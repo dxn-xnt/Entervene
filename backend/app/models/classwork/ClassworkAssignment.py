@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.Base import Base
@@ -8,6 +8,8 @@ class ClassworkAssignment(Base):
     __tablename__ = "classwork_assignment"
     __table_args__ = (
         UniqueConstraint("classwork_id", "class_id", name="uq_classwork_assignment"),
+        Index("ix_classwork_assignment_class_published_due", "class_id", "is_published", "due_date"),
+        Index("ix_classwork_assignment_classwork_id", "classwork_id"),
     )
 
     classwork_assignment_id = Column(Integer, primary_key=True, autoincrement=True)

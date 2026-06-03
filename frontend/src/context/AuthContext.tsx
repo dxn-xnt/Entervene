@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { apiFetch } from "../lib/api";
 
 type Role = "student" | "teacher" | "admin" | null;
 
@@ -8,124 +9,106 @@ interface AuthUser {
   userId: string;
   fullName: string;
   email: string;
-  token: string;
   avatar?: string;
 }
 
 interface AuthContextType {
   user: AuthUser | null;
   role: Role;
+  isLoading: boolean;
   login: (email: string, password: string) => Promise<Role>;
   logout: () => Promise<void>;
+  refresh: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const API_URL = import.meta.env.VITE_API_URL;
+function userFromAuthResponse(data: {
+  role: Role;
+  user_id: string;
+  full_name?: string;
+  email?: string;
+  avatar?: string;
+}): AuthUser {
+  return {
+    role: data.role,
+    userId: data.user_id,
+    fullName: data.full_name?.trim() || data.email?.split("@")[0] || "User",
+    email: data.email ?? "",
+    avatar: data.avatar ?? "",
+  };
+}
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    const stored = localStorage.getItem("auth");
-    if (!stored) return null;
-    try {
-      const parsed = JSON.parse(stored);
-      return {
-        role: parsed.role ?? null,
-        userId: parsed.userId ?? "",
-        fullName: parsed.fullName ?? "",
-        email: parsed.email ?? "",
-        token: parsed.token ?? "",
-        avatar: parsed.avatar ?? "",
-      };
-    } catch {
-      return null;
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const refresh = async (): Promise<boolean> => {
+    const res = await apiFetch("/api/v1/auth/refresh", { method: "POST" });
+    if (!res.ok) {
+      setUser(null);
+      return false;
     }
-  });
 
-  // Always re-fetch /me on mount to get fresh name from DB
+    const data = await res.json();
+    setUser(userFromAuthResponse(data));
+    return true;
+  };
+
   useEffect(() => {
-    if (!user?.token) return;
+    let cancelled = false;
 
-    fetch(`${API_URL}/api/v1/auth/me`, {
-      headers: { Authorization: `Bearer ${user.token}` },
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((meData) => {
-        console.log("useEffect /me response:", JSON.stringify(meData));
-        if (!meData) return;
+    async function loadSession() {
+      try {
+        let res = await apiFetch("/api/v1/auth/me");
+        if (res.status === 401) {
+          const refreshed = await refresh();
+          if (!refreshed) return;
+          res = await apiFetch("/api/v1/auth/me");
+        }
+        if (!cancelled && res.ok) {
+          const meData = await res.json();
+          setUser(userFromAuthResponse(meData));
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
 
-        const freshName = meData.full_name?.trim() || user.email?.split("@")[0] || "User";
-        const updated: AuthUser = {
-          ...user,
-          fullName: freshName,
-          email: meData.email ?? user.email,
-        };
-        setUser(updated);
-        localStorage.setItem("auth", JSON.stringify(updated));
-      })
-      .catch(() => { });
+    loadSession();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = async (email: string, password: string): Promise<Role> => {
-    const res = await fetch(`${API_URL}/api/v1/auth/login`, {
+    const res = await apiFetch("/api/v1/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
 
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({}));
       throw new Error(err.detail ?? "Login failed");
     }
 
     const data = await res.json();
-    console.log("Login raw response:", JSON.stringify(data));
-
-    const meRes = await fetch(`${API_URL}/api/v1/auth/me`, {
-      headers: { Authorization: `Bearer ${data.access_token}` },
-    });
-    const meData = meRes.ok ? await meRes.json() : null;
-    console.log("Login /me response:", JSON.stringify(meData));
-
-    const authUser: AuthUser = {
-      role: data.role as Role,
-      userId: data.user_id,
-      fullName:
-        meData?.full_name?.trim() ||
-        data.full_name?.trim() ||
-        data.email?.split("@")[0] ||
-        "User",
-      email: meData?.email ?? data.email ?? "",
-      token: data.access_token,
-      avatar: meData?.avatar ?? "",
-    };
-
-    console.log("authUser being stored:", JSON.stringify(authUser));
-
+    const authUser = userFromAuthResponse(data);
     setUser(authUser);
-    localStorage.setItem("auth", JSON.stringify(authUser));
-
     return authUser.role;
   };
 
   const logout = async () => {
-    if (user?.token) {
-      try {
-        await fetch(`${API_URL}/api/v1/auth/logout`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${user.token}` },
-        });
-      } catch {
-        // Network error — still clear client state
-      }
+    try {
+      await apiFetch("/api/v1/auth/logout", { method: "POST" });
+    } finally {
+      setUser(null);
     }
-
-    setUser(null);
-    localStorage.removeItem("auth");
   };
 
   return (
-    <AuthContext.Provider value={{ user, role: user?.role ?? null, login, logout }}>
+    <AuthContext.Provider value={{ user, role: user?.role ?? null, isLoading, login, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );
