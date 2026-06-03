@@ -10,12 +10,6 @@
 // const TeacherApp = () => {
 //   const [activeNav, setActiveNav] = useState("Dashboard");
 
-//   useEffect(() => {
-//     // #region agent log
-//     fetch('http://127.0.0.1:7485/ingest/3a9a3448-1bd9-405f-8357-a95cb0abb46c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ccf95c'},body:JSON.stringify({sessionId:'ccf95c',runId:'pre-fix',hypothesisId:'H3',location:'TeacherApp.tsx:13',message:'TeacherApp activeNav changed',data:{activeNav},timestamp:Date.now()})}).catch(()=>{});
-//     // #endregion
-//   }, [activeNav]);
-
 //   return (
 //     // <AppLayout className="flex min-h-screen">
 //     <AppLayout>

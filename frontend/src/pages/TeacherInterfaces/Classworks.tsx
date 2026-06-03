@@ -3,10 +3,6 @@ import Tabs from "../../components/Tabs";
 import { useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 
-// #region agent log
-fetch('http://127.0.0.1:7485/ingest/3a9a3448-1bd9-405f-8357-a95cb0abb46c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ccf95c'},body:JSON.stringify({sessionId:'ccf95c',runId:'pre-fix',hypothesisId:'H1',location:'Classworks.tsx:5',message:'Classworks module evaluated',data:{cardsImportPath:'@/components/classwork-cards'},timestamp:Date.now()})}).catch(()=>{});
-// #endregion
-
 const tabs = [
   { id: "all", label: "All" },
   { id: "readings", label: "Readings" },
@@ -54,9 +50,6 @@ const classworkItems = [
 
 const Classworks = () => {
   const [activeTab, setActiveTab] = useState("all");
-  // #region agent log
-  fetch('http://127.0.0.1:7485/ingest/3a9a3448-1bd9-405f-8357-a95cb0abb46c',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'ccf95c'},body:JSON.stringify({sessionId:'ccf95c',runId:'pre-fix',hypothesisId:'H4',location:'Classworks.tsx:55',message:'Classworks render',data:{activeTab,totalItems:classworkItems.length},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   const filteredItems =
     activeTab === "all"

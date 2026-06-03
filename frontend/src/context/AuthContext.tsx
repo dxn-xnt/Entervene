@@ -40,6 +40,21 @@ function userFromAuthResponse(data: {
   };
 }
 
+function getErrorMessage(err: unknown): string {
+  if (typeof err === "string") return err;
+  if (Array.isArray(err)) {
+    return err
+      .map((item) => {
+        if (item && typeof item === "object" && "msg" in item) {
+          return String(item.msg);
+        }
+        return String(item);
+      })
+      .join(", ");
+  }
+  return "Login failed";
+}
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,12 +101,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const res = await apiFetch("/api/v1/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email: email.trim(), password }),
     });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail ?? "Login failed");
+      throw new Error(getErrorMessage(err.detail));
     }
 
     const data = await res.json();
