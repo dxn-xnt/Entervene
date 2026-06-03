@@ -32,7 +32,7 @@ export const SidebarConfigs: Record<string, NavItem[]> = {
     student: [
       { title: "Study Board",   url: routes.student.board,          icon: <LayoutDashboard /> },
       { title: "Subjects",      url: routes.student.subjects,       icon: <BookOpen />        },
-      { title: "Interventions", url: routes.student.interventions,  icon: <Shield />          },
+      // { title: "Interventions", url: routes.student.interventions,  icon: <Shield />          },
       { title: "Grades",        url: routes.student.grades,         icon: <BarChart2 />       },
       { title: "To Do",         url: routes.student.todo,           icon: <CheckSquare />     },
       { title: "Notifications", url: routes.student.notifications,  icon: <Bell />            },

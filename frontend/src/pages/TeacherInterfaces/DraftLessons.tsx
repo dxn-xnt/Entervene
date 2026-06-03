@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import LessonModal from "@/components/LessonModal";
+import AppLayout from "@/layouts/app-layout";
 
 interface DraftLesson {
   lesson_id: number;
@@ -104,7 +105,8 @@ export default function DraftLessons() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    // <AppLayout className="min-h-screen bg-gray-50">
+    <AppLayout>
       <header className="bg-white border-b px-6 py-5">
         <div className="flex justify-between items-center">
           <div>
@@ -218,6 +220,6 @@ export default function DraftLessons() {
         subjectId={selectedSubjectId}
         onLessonCreated={fetchDraftLessons}
       />
-    </div>
+    </AppLayout>
   );
 }

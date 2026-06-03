@@ -1,8 +1,4 @@
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,55 +7,48 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar"
-<<<<<<< HEAD
-import { EllipsisVerticalIcon, CircleUserRoundIcon, CreditCardIcon, BellIcon, LogOutIcon } from "lucide-react"
-import { Link } from "react-router"
-import { routes } from "@/../routes";
-
-=======
+} from "@/components/ui/sidebar";
 import {
   EllipsisVerticalIcon,
   CircleUserRoundIcon,
   BellIcon,
   LogOutIcon,
   Loader2Icon,
-} from "lucide-react"
-import { useAuth } from "@/context/AuthContext"
-import { useNavigate } from "react-router-dom"
-import { useState } from "react"
->>>>>>> 9c5e4e84b21793047b3bdafa6bccde4f1fa77064
+} from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 
 export function NavUser() {
-  const { user, logout } = useAuth()
-  const navigate = useNavigate()
-  const { isMobile } = useSidebar()
-  const [loggingOut, setLoggingOut] = useState(false)
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const { isMobile } = useSidebar();
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const handleLogout = async () => {
-    setLoggingOut(true)
-    await logout()
-    navigate("/login", { replace: true })
-  }
+    setLoggingOut(true);
+    await logout();
+    navigate("/login", { replace: true });
+  };
 
   const initials = user?.fullName
     ? user.fullName
-      .split(" ")
-      .filter((part) => part.length > 0)
-      .map((part, index, array) => {
-        if (index === 0) return part[0]
-        if (index === array.length - 1) return part[0]
-        return ""
-      })
-      .join("")
-      .toUpperCase()
-    : "?"
+        .split(" ")
+        .filter((part) => part.length > 0)
+        .map((part, index, array) => {
+          if (index === 0) return part[0];
+          if (index === array.length - 1) return part[0];
+          return "";
+        })
+        .join("")
+        .toUpperCase()
+    : "?";
 
   return (
     <SidebarMenu>
@@ -71,8 +60,13 @@ export function NavUser() {
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground border-t-2 border-border p-6 py-8"
             >
               <Avatar className="h-8 w-8 rounded-lg grayscale">
-                <AvatarImage src={user?.avatar ?? ""} alt={user?.fullName ?? ""} />
-                <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
+                <AvatarImage
+                  src={user?.avatar ?? ""}
+                  alt={user?.fullName ?? ""}
+                />
+                <AvatarFallback className="rounded-lg">
+                  {initials}
+                </AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left leading-tight">
                 <span className="truncate text-sm font-semibold">
@@ -95,8 +89,13 @@ export function NavUser() {
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user?.avatar ?? ""} alt={user?.fullName ?? ""} />
-                  <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
+                  <AvatarImage
+                    src={user?.avatar ?? ""}
+                    alt={user?.fullName ?? ""}
+                  />
+                  <AvatarFallback className="rounded-lg">
+                    {initials}
+                  </AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left leading-tight">
                   <span className="truncate text-sm font-semibold">
@@ -123,14 +122,6 @@ export function NavUser() {
             </DropdownMenuGroup>
 
             <DropdownMenuSeparator />
-<<<<<<< HEAD
-            <Link to={routes.auth.login}>
-
-            <DropdownMenuItem>
-              <LogOutIcon
-              />
-              Log out
-=======
 
             <DropdownMenuItem
               onClick={handleLogout}
@@ -143,12 +134,10 @@ export function NavUser() {
                 <LogOutIcon />
               )}
               {loggingOut ? "Logging out…" : "Log out"}
->>>>>>> 9c5e4e84b21793047b3bdafa6bccde4f1fa77064
             </DropdownMenuItem>
-            </Link>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
-  )
+  );
 }

@@ -22,7 +22,7 @@ export default function AppLayout({
       <AppSidebar variant="inset" />
       <SidebarInset>
         <AppContent>
-        <SiteHeader breadcrumbs={breadcrumbs}/>
+        {/* <SiteHeader breadcrumbs={breadcrumbs}/> */}
           {children}
         </AppContent>
       </SidebarInset>
