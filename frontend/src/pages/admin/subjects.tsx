@@ -3,7 +3,7 @@ import { Card as RetroCard } from "@/components/retroui/Card";
 import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/card";
 import AppLayout from "@/layouts/app-layout";
 import { Button } from "@/components/retroui/Button";
-import { Plus } from "lucide-react";
+import { ArrowUpRight, Plus } from "lucide-react";
 
 const DESCRIPTION = "Teachers Assigned";
 
@@ -66,7 +66,9 @@ export default function AdminSubjects() {
               <RetroCard key={item.grade} className="w-full p-4">
                 <div className="flex flex-row justify-between items-center mb-4">
                   <h2 className="text-lg font-semibold">{item.grade}</h2>
-                  <Button>See all</Button>
+                  <button className="grid place-items-center size-8 rounded-full border-2 border-black cursor-pointer">
+                    <ArrowUpRight className="size-4" />
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-4 gap-3">
