@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, Numeric
+from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, Numeric, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -7,6 +7,9 @@ from app.db.Base import Base
 
 class StudentSubmission(Base):
     __tablename__ = "student_submission"
+    __table_args__ = (
+        Index("ix_student_submission_assignment_student", "classwork_assignment_id", "student_id"),
+    )
 
     submission_id           = Column(Integer, primary_key=True, autoincrement=True)
     student_id              = Column(UUID(as_uuid=True), ForeignKey("student.student_id", ondelete="CASCADE"), nullable=False)

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from fastapi import Depends
 from app.core.Config import settings
+from app.core.Csrf import CSRFMiddleware
 from app.db.Session import get_db
 from app.api.v1.routes.Predictions import router as predictions_router
 from app.api.v1.routes.Auth import router as auth_router
@@ -18,6 +19,8 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
 )
+
+app.add_middleware(CSRFMiddleware)
 
 # Cannot use allow_origins=["*"] with allow_credentials=True (browser rejects).
 # List common dev origins + regex for LAN (Expo) so preflight/login always get CORS headers.

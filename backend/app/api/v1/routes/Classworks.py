@@ -1,7 +1,7 @@
 # app/api/v1/routes/Classworks.py
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Query
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from typing import List, Optional
 from pathlib import Path
 from datetime import datetime
@@ -75,13 +75,12 @@ def _att_resp(a):
 
 
 def _build_cw(cw, db):
-    subj = db.query(Subject).filter(Subject.subject_id == cw.subject_id).first()
-    staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == cw.created_by_staff_id).first()
+    subj = cw.subject
+    staff = cw.staff
     
     assignments_data = []
-    assignments = db.query(ClassworkAssignment).filter(ClassworkAssignment.classwork_id == cw.classwork_id).all()
-    for a in assignments:
-        cls = db.query(Class).filter(Class.class_id == a.class_id).first()
+    for a in cw.assignments:
+        cls = a.class_
         assignments_data.append({
             "classwork_assignment_id": a.classwork_assignment_id,
             "classwork_id": a.classwork_id,
@@ -134,7 +133,18 @@ def create_classwork(body: ClassworkCreate, staff_id: str = Depends(get_staff_id
 
 @router.get("/my-classworks", response_model=List[ClassworkResponse])
 def get_my_classworks(staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db)):
-    cws = db.query(Classwork).filter(Classwork.created_by_staff_id == staff_id).order_by(Classwork.created_at.desc()).all()
+    cws = (
+        db.query(Classwork)
+        .options(
+            joinedload(Classwork.subject),
+            joinedload(Classwork.staff),
+            selectinload(Classwork.attachments),
+            selectinload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
+        )
+        .filter(Classwork.created_by_staff_id == staff_id)
+        .order_by(Classwork.created_at.desc())
+        .all()
+    )
     return [_build_cw(c, db) for c in cws]
 
 @router.get("/classwork/{classwork_id}", response_model=ClassworkResponse)
@@ -144,7 +154,17 @@ def get_classwork(
     current_user: dict = Depends(require_role("teacher", "admin", "student")), 
     db: Session = Depends(get_db)
 ):
-    cw = db.query(Classwork).filter(Classwork.classwork_id == classwork_id).first()
+    cw = (
+        db.query(Classwork)
+        .options(
+            joinedload(Classwork.subject),
+            joinedload(Classwork.staff),
+            selectinload(Classwork.attachments),
+            selectinload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
+        )
+        .filter(Classwork.classwork_id == classwork_id)
+        .first()
+    )
     if not cw: 
         raise HTTPException(status_code=404, detail="Classwork not found")
     
@@ -172,7 +192,17 @@ def get_classwork(
 
 @router.put("/classwork/{classwork_id}", response_model=ClassworkResponse)
 def update_classwork(classwork_id: int, body: ClassworkUpdate, staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db)):
-    cw = db.query(Classwork).filter(Classwork.classwork_id == classwork_id, Classwork.created_by_staff_id == staff_id).first()
+    cw = (
+        db.query(Classwork)
+        .options(
+            joinedload(Classwork.subject),
+            joinedload(Classwork.staff),
+            selectinload(Classwork.attachments),
+            selectinload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
+        )
+        .filter(Classwork.classwork_id == classwork_id, Classwork.created_by_staff_id == staff_id)
+        .first()
+    )
     if not cw: raise HTTPException(status_code=404, detail="Classwork not found or not yours")
     for f, v in body.model_dump(exclude_unset=True).items(): setattr(cw, f, v)
     db.commit(); db.refresh(cw)
