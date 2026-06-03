@@ -7,6 +7,10 @@
     "module": "ESNext",
     "types": ["vite/client"],
     "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
 
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -16,6 +20,7 @@
     "jsx": "react-jsx",
 
     "strict": true,
+
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,

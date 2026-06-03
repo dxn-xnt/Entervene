@@ -40,6 +40,7 @@ class LessonResponse(BaseModel):
     is_published: bool
     is_draft: bool
     is_locked: bool
+    is_archived: bool
     subject_id: int
     subject_name: Optional[str] = None
     created_by_staff_id: Optional[str]

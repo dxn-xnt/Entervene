@@ -6,8 +6,8 @@ Create Date: 2026-06-03
 """
 
 from alembic import op
+import bcrypt
 import sqlalchemy as sa
-from passlib.context import CryptContext
 
 
 revision = "20260603_security_integrity"
@@ -15,11 +15,13 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 def _is_bcrypt(value: str | None) -> bool:
     return bool(value and value.startswith(("$2a$", "$2b$", "$2y$")))
+
+
+def _hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def upgrade() -> None:
@@ -31,7 +33,7 @@ def upgrade() -> None:
         if password_value and not _is_bcrypt(password_value):
             bind.execute(
                 sa.text("UPDATE user_account SET password_hash = :password_hash WHERE user_id = :user_id"),
-                {"password_hash": pwd_context.hash(password_value), "user_id": user_id},
+                {"password_hash": _hash_password(password_value), "user_id": user_id},
             )
 
     bind.execute(
