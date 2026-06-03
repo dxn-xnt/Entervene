@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import LessonModal from "@/components/LessonModal";
 import Tabs from "@/components/Tabs";
 import AppLayout from "@/layouts/app-layout";
@@ -27,7 +27,6 @@ export default function Lessons() {
     classId: string;
     subjectId: string;
   }>();
-  const navigate = useNavigate();
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>("");
@@ -78,9 +77,10 @@ export default function Lessons() {
     if (!confirm("Are you sure you want to delete this lesson?")) return;
 
     try {
-      const response = await apiFetch(`/api/v1/lessons/${lessonId}`, {
-        method: "DELETE",
-      });
+      const response = await apiFetch(
+        `/api/v1/lessons/${lessonId}`,
+        { method: "DELETE" }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to delete lesson");
@@ -94,9 +94,10 @@ export default function Lessons() {
 
   const handlePublishLesson = async (lessonId: number) => {
     try {
-      const response = await apiFetch(`/api/v1/lessons/${lessonId}/publish`, {
-        method: "PUT",
-      });
+      const response = await apiFetch(
+        `/api/v1/lessons/${lessonId}/publish`,
+        { method: "PUT" }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to publish lesson");
@@ -120,7 +121,7 @@ export default function Lessons() {
           </p>
         </div>
         <button
-          onClick={() => navigate("/teacher/lessons/create")}
+          onClick={() => setIsModalOpen(true)}
           className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
         >
           + New Lesson
