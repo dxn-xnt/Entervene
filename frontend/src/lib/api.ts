@@ -8,6 +8,10 @@ export type User = {
   email: string;
   role: UserRole;
   created_at: string;
+  subjects?: string[];
+  class_count?: number;
+  section?: string | null;
+  average?: number | null;
 };
 
 function getCookie(name: string): string | null {
