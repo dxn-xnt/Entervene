@@ -12,6 +12,7 @@ from app.api.v1.routes.Students import router as students_router
 from app.api.v1.routes.Classworks import router as classworks_router
 from app.api.v1.routes.Lessons import router as lessons_router
 from app.api.v1.routes.Submissions import router as submissions_router
+from app.api.v1.routes.Users import router as users_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -48,6 +49,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router,        prefix="/api/v1/auth",                 tags=["Auth"])
+app.include_router(users_router,       prefix="/api/v1",                      tags=["Users"])
 app.include_router(predictions_router, prefix="/api/v1/predictions",           tags=["Predictions"])
 app.include_router(students_router,    prefix="/api/v1/students",              tags=["Students"])
 app.include_router(
