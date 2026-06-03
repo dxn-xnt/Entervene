@@ -33,63 +33,80 @@ export default function AdminDashboard() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-            <div className="grid grid-cols-1 gap-4 px-4 lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
-              {overviewCards.map((card) => (
-                <OverviewCard
-                  key={card.title}
-                  title={card.title}
-                  count={card.count}
-                  stat={card.stat}
-                />
-              ))}
-            </div>
-            <div className="grid grid-cols-[2fr_1fr] gap-4">
-              {/* Left column */}
-              <div className="flex flex-col gap-4">
-                <ChartAreaInteractive />
-                <div className="grid grid-cols-2 gap-4">
-                  <Card className="w-full p-4 flex flex-col gap-3">
-                    <h2 className="text-lg font-semibold">
-                      Grade Level Passing Rates
-                    </h2>
-                    {gradeLevelRates.map((item) => (
-                      <div key={item.label} className="flex items-center gap-3">
-                        <span className="text-sm w-20 shrink-0">
-                          {item.label}
-                        </span>
-                        <Progress value={item.value} className="flex-1" />
-                        <span className="text-sm font-semibold w-10 text-right">
-                          {item.value}%
-                        </span>
-                      </div>
-                    ))}
-                  </Card>
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
+            <header className="flex items-center justify-between">
+              <div className="flex flex-col items-start">
+                <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
+                <p>Good morning, Admin!</p>
+              </div>
+              <div className="flex flex-col items-end">
+                <h1 className="text-4xl font-bold tracking-tight">00:00</h1>
+                <p>January 8, 2026</p>
+              </div>
+            </header>
 
-                  <Card className="w-full p-4 flex flex-col gap-3">
-                    <h2 className="text-lg font-semibold">
-                      Subject Mastery Rates
-                    </h2>
-                    {subjectMasteryRates.map((item, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <span className="text-sm w-20 shrink-0">
-                          {item.label}
-                        </span>
-                        <Progress value={item.value} className="flex-1" />
-                        <span className="text-sm font-semibold w-10 text-right">
-                          {item.value}%
-                        </span>
-                      </div>
-                    ))}
-                  </Card>
-                </div>
+            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+              <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+                {overviewCards.map((card) => (
+                  <OverviewCard
+                    key={card.title}
+                    title={card.title}
+                    count={card.count}
+                    stat={card.stat}
+                  />
+                ))}
               </div>
 
-              {/* Right column */}
-              <Card className="p-4">
-                <h2 className="text-lg font-semibold">Recent Activity</h2>
-              </Card>
+              <div className="grid grid-cols-[2fr_1fr] gap-4">
+                {/* Left column */}
+                <div className="flex flex-col gap-4">
+                  <ChartAreaInteractive />
+                  <div className="grid grid-cols-2 gap-4">
+                    <Card className="w-full p-4 flex flex-col gap-3">
+                      <h2 className="text-lg font-semibold">
+                        Grade Level Passing Rates
+                      </h2>
+                      {gradeLevelRates.map((item) => (
+                        <div
+                          key={item.label}
+                          className="flex items-center gap-3"
+                        >
+                          <span className="text-sm w-20 shrink-0">
+                            {item.label}
+                          </span>
+                          <Progress value={item.value} className="flex-1" />
+                          <span className="text-sm font-semibold w-10 text-right">
+                            {item.value}%
+                          </span>
+                        </div>
+                      ))}
+                    </Card>
+
+                    <Card className="w-full p-4 flex flex-col gap-3">
+                      <h2 className="text-lg font-semibold">
+                        Subject Mastery Rates
+                      </h2>
+                      {subjectMasteryRates.map((item, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <span className="text-sm w-20 shrink-0">
+                            {item.label}
+                          </span>
+                          <Progress value={item.value} className="flex-1" />
+                          <span className="text-sm font-semibold w-10 text-right">
+                            {item.value}%
+                          </span>
+                        </div>
+                      ))}
+                    </Card>
+                  </div>
+                </div>
+
+                {/* Right column */}
+                <Card className="p-4">
+                  <h2 className="text-lg font-semibold">Recent Activity</h2>
+                </Card>
+              </div>
             </div>
           </div>
         </div>
