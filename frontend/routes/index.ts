@@ -28,8 +28,12 @@ export const routes = {
   teacher: {
     dashboard: "/teacher/dashboard",
     classes: "/teacher/classes",
+    classSections: "/teacher/classes/sections",
     classDetail: "/teacher/classes/:classId",
+    subjects: "/teacher/classes/subjects",
     classSubjects: "/teacher/classes/:classId/subjects",
+    subjectDetail: "/teacher/classes/:classId/subjects/:subjectId",
+    createLesson: "/teacher/lessons/create",
     classworks: "/teacher/classworks",
     interventions: "/teacher/interventions",
     grades: "/teacher/grades",

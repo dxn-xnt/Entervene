@@ -1,6 +1,7 @@
 # app/api/v1/routes/Lessons.py
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from fastapi.responses import FileResponse
+from starlette.datastructures import UploadFile as StarletteUploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
 from typing import List, Optional
@@ -220,6 +221,7 @@ def get_lessons_for_class_subject(
             Lesson.subject_id == subject_id,
             Lesson.is_published == True,
             LessonAssignment.is_published == True,
+            Lesson.is_archived == False,
         )
         .order_by(Lesson.order_index.asc(), Lesson.created_at.desc())
         .all()
@@ -381,16 +383,16 @@ def assign_lesson(
     return {"message": f"Lesson assigned to {len(created)} class(es)", "class_ids": created}
 
 
-async def _files_from_form(request: Request, field_names: set[str]) -> list[UploadFile]:
+async def _files_from_form(request: Request, field_names: set[str]) -> list[StarletteUploadFile]:
     """Read upload files from common multipart field names without causing 422s."""
     try:
         form = await request.form()
     except Exception:
         return []
 
-    uploads: list[UploadFile] = []
+    uploads: list[StarletteUploadFile] = []
     for key, value in form.multi_items():
-        if key in field_names and hasattr(value, "filename") and value.filename:
+        if key in field_names and isinstance(value, StarletteUploadFile) and value.filename:
             uploads.append(value)
     return uploads
 
@@ -411,7 +413,7 @@ async def upload_lesson_attachment(
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found or not yours")
 
-    upload = file
+    upload: UploadFile | StarletteUploadFile | None = file
     if upload is None:
         candidates = await _files_from_form(request, {"file", "files", "attachment", "attachments"})
         upload = candidates[0] if candidates else None
@@ -562,6 +564,88 @@ def download_lesson_attachment(
     )
 
 
+@router.put("/{lesson_id}/archive")
+def archive_lesson(
+    lesson_id: int,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    """Archive a lesson (soft delete). Lesson remains in database but is hidden from view."""
+    lesson = db.query(Lesson).filter(
+        Lesson.lesson_id == lesson_id,
+        Lesson.created_by_staff_id == staff_id,
+    ).first()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found or not yours")
+
+    lesson.is_archived = True
+    db.commit()
+    db.refresh(lesson)
+
+    return {
+        "message": "Lesson archived",
+        "lesson_id": lesson_id,
+        "is_archived": lesson.is_archived,
+    }
+
+
+@router.put("/{lesson_id}/unarchive")
+def unarchive_lesson(
+    lesson_id: int,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    """Restore an archived lesson."""
+    lesson = db.query(Lesson).filter(
+        Lesson.lesson_id == lesson_id,
+        Lesson.created_by_staff_id == staff_id,
+    ).first()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found or not yours")
+
+    lesson.is_archived = False
+    db.commit()
+    db.refresh(lesson)
+
+    return {
+        "message": "Lesson restored",
+        "lesson_id": lesson_id,
+        "is_archived": lesson.is_archived,
+    }
+
+
+@router.delete("/{lesson_id}/classwork/{classwork_id}")
+def unlink_classwork_from_lesson(
+    lesson_id: int,
+    classwork_id: int,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    """Unlink a classwork from a lesson without deleting either resource."""
+    lesson = db.query(Lesson).filter(
+        Lesson.lesson_id == lesson_id,
+        Lesson.created_by_staff_id == staff_id,
+    ).first()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found or not yours")
+
+    cw_lesson = db.query(ClassworkLesson).filter(
+        ClassworkLesson.lesson_id == lesson_id,
+        ClassworkLesson.classwork_id == classwork_id,
+    ).first()
+    if not cw_lesson:
+        raise HTTPException(status_code=404, detail="Classwork is not linked to this lesson")
+
+    db.delete(cw_lesson)
+    db.commit()
+
+    return {
+        "message": "Classwork unlinked from lesson",
+        "lesson_id": lesson_id,
+        "classwork_id": classwork_id,
+    }
+
+
 # ──────────────────────────── HELPERS ──────────────────────────────────────
 
 
@@ -579,6 +663,7 @@ def _build_lesson_response(lesson: Lesson, db: Session) -> LessonResponse:
         is_published=lesson.is_published,
         is_draft=lesson.is_draft,
         is_locked=lesson.is_locked,
+        is_archived=lesson.is_archived,
         subject_id=lesson.subject_id,
         subject_name=subject.subject_name if subject else None,
         created_by_staff_id=lesson.created_by_staff_id,

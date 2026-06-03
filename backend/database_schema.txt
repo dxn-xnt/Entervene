@@ -398,6 +398,8 @@ CREATE TABLE lesson (
 
     is_locked BOOLEAN DEFAULT FALSE,
 
+    is_archived BOOLEAN DEFAULT FALSE,
+
     created_by_staff_id VARCHAR(20)
         REFERENCES academic_staff(staff_id)
         ON DELETE SET NULL,
@@ -771,6 +773,42 @@ CREATE INDEX idx_user_login_log_logout ON user_login_log(logout_at) WHERE logout
 -- SAMPLE DATA (Based on Schema 1)
 -- ============================================================
 
+-- Insert User Roles
+INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES
+('660f9511-f30c-52e5-b827-557766551111', 1, '2026-04-30 14:36:05.037726+08'),
+('770a0622-a41d-63f6-c938-668877662222', 2, '2026-04-30 14:36:11.045518+08'),
+('990c2844-c63f-85a8-e150-880099884444', 0, '2026-05-03 00:11:59.219496+08')
+ON CONFLICT (user_id, role_id) DO NOTHING;
+
+-- Insert Academic Staff
+INSERT INTO academic_staff (staff_id, first_name, middle_name, last_name, dob, suffix, gender, contact_number, email, address, hired_date, employment_status, user_id) VALUES
+('2026-0002', 'Maria', NULL, 'Cruz', NULL, NULL, NULL, NULL, 'm.cruz@school.edu.ph', NULL, '2026-02-10', 'Contractual', '660f9511-f30c-52e5-b827-557766551111'),
+('ADM-2026-0001', 'MNSTS', NULL, 'Administrator', NULL, NULL, NULL, NULL, 'admin@mnsts.edu.ph', NULL, '2026-05-03', 'Regular', '990c2844-c63f-85a8-e150-880099884444')
+ON CONFLICT (staff_id) DO NOTHING;
+
+-- Insert Academic Year
+INSERT INTO academic_year (academic_year_id, year_label, start_date, end_date, is_active, created_at) VALUES
+(1, '2025-2026', '2025-06-02', '2026-03-31', true, '2026-05-07 23:52:51.280471+08')
+ON CONFLICT (academic_year_id) DO NOTHING;
+
+-- Insert Academic Periods
+INSERT INTO academic_period (academic_period_id, period_name, period_type, start_date, end_date, is_active, academic_year_id, created_at) VALUES
+(1, 'Quarter 1', 'QUARTER', '2025-06-02', '2025-08-22', true, 1, '2026-05-07 23:52:51.280471+08'),
+(2, 'Quarter 2', 'QUARTER', '2025-09-01', '2025-11-14', false, 1, '2026-05-07 23:52:51.280471+08'),
+(3, 'Quarter 3', 'QUARTER', '2025-11-24', '2026-01-30', false, 1, '2026-05-07 23:52:51.280471+08'),
+(4, 'Quarter 4', 'QUARTER', '2026-02-09', '2026-03-27', false, 1, '2026-05-07 23:52:51.280471+08')
+ON CONFLICT (academic_period_id) DO NOTHING;
+
+-- Insert Academic Level
+INSERT INTO academic_level (academic_level_id, level_name, grade_level, created_at, updated_at) VALUES
+(1, 'Grade 7', 7, '2026-05-07 23:52:51.280471+08', '2026-05-07 23:52:51.280471+08')
+ON CONFLICT (academic_level_id) DO NOTHING;
+
+-- Insert Student
+INSERT INTO student (student_id, student_lrn, first_name, middle_name, last_name, suffix, gender, contact_number, email, address, account_status, guardian_id, academic_level_id, import_log_id, user_id) VALUES
+('e06f9e10-e7d3-4d8f-a26b-4e53058043dd', '123456789012', 'Juan', NULL, 'Dela Cruz', NULL, NULL, NULL, 'juan.delacruz@student.ph', NULL, 'active', NULL, 1, NULL, '770a0622-a41d-63f6-c938-668877662222')
+ON CONFLICT (student_id) DO NOTHING;
+
 -- Insert Roles
 INSERT INTO role (role_id, role_name, description) VALUES
 (0, 'Admin', 'System administrator with full access'),
@@ -832,42 +870,6 @@ AND NOT EXISTS (
     WHERE sc.student_id = s.student_id AND sc.class_id = 1
 );
 
-
--- Insert User Roles
-INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES
-('660f9511-f30c-52e5-b827-557766551111', 1, '2026-04-30 14:36:05.037726+08'),
-('770a0622-a41d-63f6-c938-668877662222', 2, '2026-04-30 14:36:11.045518+08'),
-('990c2844-c63f-85a8-e150-880099884444', 0, '2026-05-03 00:11:59.219496+08')
-ON CONFLICT (user_id, role_id) DO NOTHING;
-
--- Insert Academic Staff
-INSERT INTO academic_staff (staff_id, first_name, middle_name, last_name, dob, suffix, gender, contact_number, email, address, hired_date, employment_status, user_id) VALUES
-('2026-0002', 'Maria', NULL, 'Cruz', NULL, NULL, NULL, NULL, 'm.cruz@school.edu.ph', NULL, '2026-02-10', 'Contractual', '660f9511-f30c-52e5-b827-557766551111'),
-('ADM-2026-0001', 'MNSTS', NULL, 'Administrator', NULL, NULL, NULL, NULL, 'admin@mnsts.edu.ph', NULL, '2026-05-03', 'Regular', '990c2844-c63f-85a8-e150-880099884444')
-ON CONFLICT (staff_id) DO NOTHING;
-
--- Insert Academic Year
-INSERT INTO academic_year (academic_year_id, year_label, start_date, end_date, is_active, created_at) VALUES
-(1, '2025-2026', '2025-06-02', '2026-03-31', true, '2026-05-07 23:52:51.280471+08')
-ON CONFLICT (academic_year_id) DO NOTHING;
-
--- Insert Academic Periods
-INSERT INTO academic_period (academic_period_id, period_name, period_type, start_date, end_date, is_active, academic_year_id, created_at) VALUES
-(1, 'Quarter 1', 'QUARTER', '2025-06-02', '2025-08-22', true, 1, '2026-05-07 23:52:51.280471+08'),
-(2, 'Quarter 2', 'QUARTER', '2025-09-01', '2025-11-14', false, 1, '2026-05-07 23:52:51.280471+08'),
-(3, 'Quarter 3', 'QUARTER', '2025-11-24', '2026-01-30', false, 1, '2026-05-07 23:52:51.280471+08'),
-(4, 'Quarter 4', 'QUARTER', '2026-02-09', '2026-03-27', false, 1, '2026-05-07 23:52:51.280471+08')
-ON CONFLICT (academic_period_id) DO NOTHING;
-
--- Insert Academic Level
-INSERT INTO academic_level (academic_level_id, level_name, grade_level, created_at, updated_at) VALUES
-(1, 'Grade 7', 7, '2026-05-07 23:52:51.280471+08', '2026-05-07 23:52:51.280471+08')
-ON CONFLICT (academic_level_id) DO NOTHING;
-
--- Insert Student
-INSERT INTO student (student_id, student_lrn, first_name, middle_name, last_name, suffix, gender, contact_number, email, address, account_status, guardian_id, academic_level_id, import_log_id, user_id) VALUES
-('e06f9e10-e7d3-4d8f-a26b-4e53058043dd', '123456789012', 'Juan', NULL, 'Dela Cruz', NULL, NULL, NULL, 'juan.delacruz@student.ph', NULL, 'active', NULL, 1, NULL, '770a0622-a41d-63f6-c938-668877662222')
-ON CONFLICT (student_id) DO NOTHING;
 
 -- Insert Subject
 INSERT INTO subject (subject_id, subject_name, subject_codename, description, status, academic_level_id, created_at, updated_at) VALUES

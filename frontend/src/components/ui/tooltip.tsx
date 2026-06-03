@@ -9,26 +9,6 @@ function TooltipProvider({
   delayDuration = 0,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
-  // #region agent log
-  React.useEffect(() => {
-    fetch("http://127.0.0.1:7485/ingest/3a9a3448-1bd9-405f-8357-a95cb0abb46c", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "a2a5e6",
-      },
-      body: JSON.stringify({
-        sessionId: "a2a5e6",
-        runId: "post-fix",
-        hypothesisId: "H1",
-        location: "tooltip.tsx:TooltipProvider",
-        message: "TooltipProvider mounted",
-        data: {},
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-  }, [])
-  // #endregion
   return (
     <TooltipPrimitive.Provider
       data-slot="tooltip-provider"
@@ -41,24 +21,6 @@ function TooltipProvider({
 function Tooltip({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
-  // #region agent log
-  fetch("http://127.0.0.1:7485/ingest/3a9a3448-1bd9-405f-8357-a95cb0abb46c", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "a2a5e6",
-    },
-    body: JSON.stringify({
-      sessionId: "a2a5e6",
-      runId: "pre-fix",
-      hypothesisId: "H2",
-      location: "tooltip.tsx:Tooltip",
-      message: "Tooltip Root render (before Provider context)",
-      data: {},
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {})
-  // #endregion
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
 }
 

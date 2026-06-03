@@ -7,7 +7,8 @@ File upload utilities for the Entervene LMS.
 import os
 import uuid
 from pathlib import Path
-from fastapi import UploadFile, HTTPException
+from fastapi import HTTPException
+from starlette.datastructures import UploadFile
 
 MAX_FILE_SIZE = 4 * 1024 * 1024  # 4 MB
 
@@ -28,10 +29,11 @@ UPLOAD_BASE_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
 
 async def validate_file(file: UploadFile) -> None:
     """Validate file extension and size. Raises HTTPException on failure."""
-    if not file.filename:
+    filename = file.filename
+    if not filename:
         raise HTTPException(status_code=400, detail="File must have a name.")
 
-    ext = os.path.splitext(file.filename)[1].lower()
+    ext = os.path.splitext(filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
@@ -63,7 +65,8 @@ async def save_file(file: UploadFile, category: str) -> dict:
     """
     await validate_file(file)
 
-    ext = os.path.splitext(file.filename)[1].lower()
+    filename = file.filename or "upload"
+    ext = os.path.splitext(filename)[1].lower()
     unique_name = f"{uuid.uuid4().hex}{ext}"
 
     target_dir = UPLOAD_BASE_DIR / category
@@ -76,7 +79,7 @@ async def save_file(file: UploadFile, category: str) -> dict:
         f.write(content)
 
     return {
-        "file_name": file.filename,
+        "file_name": filename,
         "file_path": str(target_path),
         "file_type": ALLOWED_MIME_TYPES.get(ext, file.content_type or "application/octet-stream"),
         "file_size": len(content),

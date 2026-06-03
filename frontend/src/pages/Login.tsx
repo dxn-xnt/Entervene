@@ -19,9 +19,21 @@ const Login = () => {
 
   const handleLogin = async () => {
     setError("");
+    const email = username.trim();
+
+    if (!email || !password) {
+      setError("Enter your email and password.");
+      return;
+    }
+
+    if (!email.includes("@")) {
+      setError("Enter a valid email address.");
+      return;
+    }
+
     setLoading(true);
     try {
-      const matchedRole = await login(username, password);
+      const matchedRole = await login(email, password);
       if (matchedRole === "admin") navigate(routes.admin.dashboard);
       else if (matchedRole === "teacher") navigate(routes.teacher.dashboard);
       else if (matchedRole === "student") navigate(routes.student.board);

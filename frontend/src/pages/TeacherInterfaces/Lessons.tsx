@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import LessonModal from "@/components/LessonModal";
 import Tabs from "@/components/Tabs";
 import AppLayout from "@/layouts/app-layout";
+import { apiFetch } from "@/lib/api";
 
 interface Lesson {
   lesson_id: number;
@@ -43,15 +44,8 @@ export default function Lessons() {
     setError("");
 
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/v1/lessons/my-class/${classId}/subject/${subjectId}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-        }
+      const response = await apiFetch(
+        `/api/v1/lessons/my-class/${classId}/subject/${subjectId}`
       );
 
       if (!response.ok) {
@@ -83,12 +77,9 @@ export default function Lessons() {
     if (!confirm("Are you sure you want to delete this lesson?")) return;
 
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/v1/lessons/${lessonId}`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        }
+      const response = await apiFetch(
+        `/api/v1/lessons/${lessonId}`,
+        { method: "DELETE" }
       );
 
       if (!response.ok) {
@@ -103,12 +94,9 @@ export default function Lessons() {
 
   const handlePublishLesson = async (lessonId: number) => {
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/v1/lessons/${lessonId}/publish`,
-        {
-          method: "PUT",
-          credentials: "include",
-        }
+      const response = await apiFetch(
+        `/api/v1/lessons/${lessonId}/publish`,
+        { method: "PUT" }
       );
 
       if (!response.ok) {
