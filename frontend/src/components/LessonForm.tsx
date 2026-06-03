@@ -17,8 +17,6 @@ export interface LessonFormData {
 }
 
 export default function LessonForm({
-  classId,
-  subjectId,
   onSubmit,
   isLoading = false,
   initialData,

@@ -33,7 +33,7 @@ import StudentBoard from "./pages/student/storyboard";
 import StudentSubjects from "./pages/student/Subjects/subject";
 // import StudentInterventions from "./pages/student/StudentInterventions";
 import StudentGrades from "./pages/student/Grades/grades";
-import StudentTodo from "./pages/student/to-do";
+import StudentTodo from "./pages/student/todo";
 import StudentNotifications from "./pages/student/notification";
 
 // // Layouts

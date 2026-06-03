@@ -1,12 +1,12 @@
 import Card from "../../../components/TeacherUIComponents/ClassesCard";
 import { ArrowUpRight } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
+import { Link } from "react-router-dom";
+import { routes } from "@/../routes";
 
-type ClassesPageProps = {
-  setActiveNav: (nav: string) => void;
-};
+const ClassesPage = () => {
+  const classDetailRoute = routes.teacher.classDetail.replace(":classId", "1");
 
-const ClassesPage = ({ setActiveNav }: ClassesPageProps) => {
   return (
     <AppLayout>
       <header className="px-5 py-5 flex flex-col gap-2 border-b border-gray-500">
@@ -16,12 +16,12 @@ const ClassesPage = ({ setActiveNav }: ClassesPageProps) => {
         <div className="flex flex-col border rounded px-5 py-5 gap-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex flex-row justify-between">
             <p className="text-3xl font-semibold">Subjects</p>
-            <button
-              onClick={() => setActiveNav("Subject")}
+            <Link
+              to={classDetailRoute}
               className="border border-black rounded-full p-1 cursor-pointer"
             >
               <ArrowUpRight size={18} />
-            </button>
+            </Link>
           </div>
           <div className="grid grid-cols-4 gap-4 w-full self-start">
             <Card

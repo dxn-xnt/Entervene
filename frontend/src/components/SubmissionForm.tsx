@@ -10,7 +10,6 @@ interface SubmissionFormProps {
 }
 
 export default function SubmissionForm({
-  assignmentId,
   onSubmit,
   isLoading = false,
   maxAttempts = 1,

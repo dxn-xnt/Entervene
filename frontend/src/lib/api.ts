@@ -8,6 +8,7 @@ export type User = {
   email: string;
   role: UserRole;
   created_at: string;
+  account_status: string;
   subjects?: string[];
   class_count?: number;
   section?: string | null;

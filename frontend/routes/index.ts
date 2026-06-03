@@ -1,3 +1,5 @@
+import SetupPassword from "../src/pages/SetupPassword";
+
 export const routes = {
   auth: {
     login: "/login",
@@ -42,4 +44,10 @@ export const routes = {
     todo: "/student/todo",
     notifications: "/student/notifications",
   },
+
+  setupPassword: {
+    path: "/setup-password",
+    component: SetupPassword,
+  },
+
 } as const;

@@ -167,8 +167,7 @@ export default function SubjectClassworkTab({
   };
 
   const handleDeleteSubmission = async (
-    assignmentId: number,
-    submissionId: number
+    assignmentId: number
   ) => {
     setDeletingId(assignmentId);
     try {
@@ -368,8 +367,7 @@ export default function SubjectClassworkTab({
                       maxAttempts={cw.max_attempts}
                       onDeleteSubmission={() =>
                         handleDeleteSubmission(
-                          cw.classwork_assignment_id,
-                          submission.submission_id
+                          cw.classwork_assignment_id
                         )
                       }
                       onResubmit={() => fetchSubmission(cw.classwork_assignment_id)}

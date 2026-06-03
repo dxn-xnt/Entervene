@@ -6,6 +6,7 @@ from sqlalchemy import pool
 from alembic import context
 from app.core.Config import settings
 from app.db.Base import Base
+import app.models  # noqa: F401
 import app.models.auth.Role  # noqa: F401
 import app.models.auth.UserAccount  # noqa: F401
 import app.models.auth.UserLoginLog  # noqa: F401
