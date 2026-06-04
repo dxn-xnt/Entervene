@@ -246,7 +246,7 @@ function ProfileHeader({ user, onEdit, onArchive }: { user: UserDetail; onEdit: 
       : user.email;
 
   return (
-    <div className="relative flex items-center justify-between rounded-lg border border-black bg-background px-4 py-3 shadow-[4px_5px_0_#000]">
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-black bg-background px-4 py-3 shadow-[4px_5px_0_#000]">
       <div className="flex min-w-0 items-center gap-3">
         <div className="grid size-10 shrink-0 place-items-center rounded-full border border-amber-700 bg-amber-200 text-lg font-bold text-amber-900">
           {user.name.charAt(0).toUpperCase()}
@@ -257,37 +257,39 @@ function ProfileHeader({ user, onEdit, onArchive }: { user: UserDetail; onEdit: 
           {user.role === "student" && <div className="truncate text-xs text-muted-foreground">{user.email}</div>}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <span className={`${STATUS_BADGE_BASE} ${status.badge}`}>
-          <span className={`size-1.5 rounded-full ${status.dot}`} />
-          {statusLabel(user)}
-        </span>
-        <button
-          type="button"
-          onClick={onEdit}
-          disabled={isPending || isArchived}
-          title={actionDisabledReason}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-black bg-background px-3 text-xs font-semibold transition hover:bg-accent hover:text-sidebar-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Pencil className="size-3.5" />
-          Edit
-        </button>
-        <button
-          type="button"
-          onClick={onArchive}
-          disabled={isPending || isArchived}
-          title={actionDisabledReason}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-3 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Archive className="size-3.5" />
-          Archive
-        </button>
-      </div>
-      {isPending && (
-        <div className="absolute right-4 top-full mt-2 text-[10px] font-medium text-muted-foreground">
-          Pending accounts can be managed after the invitation is accepted.
+      <div className="flex shrink-0 flex-col items-end gap-1.5">
+        <div className="flex items-center gap-2">
+          <span className={`${STATUS_BADGE_BASE} ${status.badge}`}>
+            <span className={`size-1.5 rounded-full ${status.dot}`} />
+            {statusLabel(user)}
+          </span>
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={isPending || isArchived}
+            title={actionDisabledReason}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-black bg-background px-3 text-xs font-semibold transition hover:bg-accent hover:text-sidebar-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Pencil className="size-3.5" />
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={onArchive}
+            disabled={isPending || isArchived}
+            title={actionDisabledReason}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-3 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Archive className="size-3.5" />
+            Archive
+          </button>
         </div>
-      )}
+        {isPending && (
+          <div className="max-w-[360px] text-right text-[10px] font-medium leading-snug text-muted-foreground">
+            Pending accounts can be managed after the invitation is accepted.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
