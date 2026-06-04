@@ -367,16 +367,11 @@ export default function AddUserModal({
         {/* ── STEP: MANUAL ─────────────────────────────────── */}
         {step === "manual" && (
           <>
-            <div
-              className="flex items-center justify-between px-5 py-3"
-              style={{ background: "#5c8f5c" }}
-            >
-              <span className="font-semibold text-sm text-white">
-                Create user manually
-              </span>
+            <div className="flex items-center justify-between p-4 border-b border-black bg-[#5c8f5c]">
+              <span className="font-semibold text-s">Create user manually</span>
               <button
                 onClick={handleClose}
-                className="text-white/70 hover:text-white text-lg leading-none"
+                className=" hover:text-gray-700 text-lg leading-none"
               >
                 ×
               </button>
@@ -387,8 +382,7 @@ export default function AddUserModal({
                 <select
                   value={form.role}
                   onChange={(e) => handleField("role", e.target.value as Role)}
-                  className="w-full border rounded px-3 py-1.5 text-sm bg-white"
-                  style={{ borderColor: "#ccc" }}
+                  className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white"
                 >
                   <option>Teacher</option>
                   <option>Student</option>
@@ -400,8 +394,7 @@ export default function AddUserModal({
               <div className="grid grid-cols-2 gap-3">
                 <Field label="First Name">
                   <input
-                    className="w-full border rounded px-3 py-1.5 text-sm"
-                    style={{ borderColor: "#ccc" }}
+                    className="w-full border rounded-lg px-3 py-1.5 text-sm"
                     placeholder="John"
                     value={form.firstName}
                     onChange={(e) => handleField("firstName", e.target.value)}
@@ -409,8 +402,7 @@ export default function AddUserModal({
                 </Field>
                 <Field label="Last Name">
                   <input
-                    className="w-full border rounded px-3 py-1.5 text-sm"
-                    style={{ borderColor: "#ccc" }}
+                    className="w-full border rounded-lg px-3 py-1.5 text-sm"
                     placeholder="Doe"
                     value={form.lastName}
                     onChange={(e) => handleField("lastName", e.target.value)}
@@ -421,8 +413,7 @@ export default function AddUserModal({
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Middle Name">
                   <input
-                    className="w-full border rounded px-3 py-1.5 text-sm"
-                    style={{ borderColor: "#ccc" }}
+                    className="w-full border rounded-lg px-3 py-1.5 text-sm"
                     placeholder="(optional)"
                     value={form.middleName}
                     onChange={(e) => handleField("middleName", e.target.value)}
@@ -431,8 +422,7 @@ export default function AddUserModal({
                 {(isStudent || !isAdmin) && (
                   <Field label="Suffix">
                     <input
-                      className="w-full border rounded px-3 py-1.5 text-sm"
-                      style={{ borderColor: "#ccc" }}
+                      className="w-full border rounded-lg px-3 py-1.5 text-sm"
                       placeholder="Jr., Sr., III…"
                       value={form.suffix}
                       onChange={(e) => handleField("suffix", e.target.value)}
@@ -444,8 +434,7 @@ export default function AddUserModal({
               <Field label="Email Address">
                 <input
                   type="email"
-                  className="w-full border rounded px-3 py-1.5 text-sm"
-                  style={{ borderColor: "#ccc" }}
+                  className="w-full border rounded-lg px-3 py-1.5 text-sm"
                   placeholder="john@example.com"
                   value={form.email}
                   onChange={(e) => handleField("email", e.target.value)}
@@ -457,8 +446,7 @@ export default function AddUserModal({
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Gender">
                     <select
-                      className="w-full border rounded px-3 py-1.5 text-sm bg-white"
-                      style={{ borderColor: "#ccc" }}
+                      className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white"
                       value={form.gender}
                       onChange={(e) => handleField("gender", e.target.value)}
                     >
@@ -470,8 +458,7 @@ export default function AddUserModal({
                   </Field>
                   <Field label="Contact Number">
                     <input
-                      className="w-full border rounded px-3 py-1.5 text-sm"
-                      style={{ borderColor: "#ccc" }}
+                      className="w-full border rounded-lg px-3 py-1.5 text-sm"
                       placeholder="+63 9XX XXX XXXX"
                       value={form.contactNumber}
                       onChange={(e) =>
@@ -487,8 +474,7 @@ export default function AddUserModal({
                 <Field label="Address">
                   <textarea
                     rows={2}
-                    className="w-full border rounded px-3 py-1.5 text-sm resize-none"
-                    style={{ borderColor: "#ccc" }}
+                    className="w-full border rounded-lg px-3 py-1.5 text-sm resize-none"
                     placeholder="Street, Barangay, City…"
                     value={form.address}
                     onChange={(e) => handleField("address", e.target.value)}
@@ -502,8 +488,7 @@ export default function AddUserModal({
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Staff ID">
                       <input
-                        className="w-full border rounded px-3 py-1.5 text-sm"
-                        style={{ borderColor: "#ccc" }}
+                        className="w-full border rounded-lg px-3 py-1.5 text-sm"
                         placeholder="e.g. TCH-001"
                         value={form.staffId}
                         onChange={(e) => handleField("staffId", e.target.value)}
@@ -512,8 +497,7 @@ export default function AddUserModal({
                     <Field label="Hired Date">
                       <input
                         type="date"
-                        className="w-full border rounded px-3 py-1.5 text-sm"
-                        style={{ borderColor: "#ccc" }}
+                        className="w-full border rounded-lg px-3 py-1.5 text-sm"
                         value={form.hiredDate}
                         onChange={(e) =>
                           handleField("hiredDate", e.target.value)
@@ -523,8 +507,7 @@ export default function AddUserModal({
                   </div>
                   <Field label="Employment Status">
                     <select
-                      className="w-full border rounded px-3 py-1.5 text-sm bg-white"
-                      style={{ borderColor: "#ccc" }}
+                      className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white"
                       value={form.employmentStatus}
                       onChange={(e) =>
                         handleField("employmentStatus", e.target.value)
@@ -545,8 +528,7 @@ export default function AddUserModal({
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Student LRN">
                       <input
-                        className="w-full border rounded px-3 py-1.5 text-sm font-mono"
-                        style={{ borderColor: "#ccc" }}
+                        className="w-full border rounded-lg px-3 py-1.5 text-sm font-mono"
                         placeholder="12-digit LRN"
                         maxLength={12}
                         value={form.studentLrn}
@@ -560,8 +542,7 @@ export default function AddUserModal({
                     </Field>
                     <Field label="Academic Level">
                       <input
-                        className="w-full border rounded px-3 py-1.5 text-sm"
-                        style={{ borderColor: "#ccc" }}
+                        className="w-full border rounded-lg px-3 py-1.5 text-sm"
                         placeholder="e.g. Grade 7"
                         value={form.academicLevelId}
                         onChange={(e) =>
@@ -574,21 +555,16 @@ export default function AddUserModal({
               )}
             </div>
 
-            <div
-              className="flex justify-end px-5 py-3 gap-2"
-              style={{ borderTop: "1px solid #e5e3de" }}
-            >
+            <div className="flex justify-end border-t p-4 gap-2">
               <button
                 onClick={() => setStep("choose")}
-                className="px-4 py-1.5 rounded border text-sm text-gray-600 hover:bg-gray-100 transition"
-                style={{ borderColor: "#d1cfc9" }}
+                className="px-4 py-1.5 rounded-lg border text-sm hover:bg-gray-100 transition"
               >
                 Back
               </button>
               <button
                 onClick={handleManualSubmit}
-                className="px-5 py-1.5 rounded text-sm font-semibold text-white transition hover:opacity-90"
-                style={{ background: "#5c8f5c" }}
+                className="px-5 py-1.5 rounded-lg border text-sm font-semibold bg-[#5c8f5c] transition hover:opacity-90"
               >
                 Send Invitation
               </button>
@@ -609,7 +585,7 @@ function Field({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-gray-600">{label}</label>
+      <label className="text-xs font-medium">{label}</label>
       {children}
     </div>
   );
