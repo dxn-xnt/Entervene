@@ -3,6 +3,7 @@ import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import { routes } from "@/../routes";
+import SetupPassword from "./pages/SetupPassword";
 
 // import StudentApp from "./pages/StudentInterfaces/StudentApp";
 // import TeacherApp from "./pages/TeacherInterfaces/TeacherApp";
@@ -48,6 +49,7 @@ const App = () => {
       <BrowserRouter>
         <Routes>
           <Route path={routes.auth.login} element={<Login />} />
+          <Route path="/setup-password" element={<SetupPassword />} />
 
           {/* Admin */}
           <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>

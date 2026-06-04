@@ -17,7 +17,6 @@ class Student(Base):
     contact_number    = Column(String(20))
     email             = Column(String(255), unique=True)
     address           = Column(Text)
-    account_status    = Column(String(50), default="active")
     # guardian_id       = Column(UUID(as_uuid=True))   # not in DB yet
     academic_level_id = Column(Integer, ForeignKey("academic_level.academic_level_id", ondelete="RESTRICT"), nullable=True)
     # import_log_id     = Column(Integer)              # not in DB yet

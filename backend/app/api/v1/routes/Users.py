@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401
 from app.api.v1.routes.Auth import create_access_token, create_refresh_token, get_current_user, set_auth_cookies
-from app.core.Security import hash_password          # your existing hasher
+from app.core.Security import hash_password
 from app.core.StaffId import generate_staff_id
 from app.db.Session import get_db
 from app.models.academic.Class_ import Class
@@ -136,6 +136,7 @@ def list_users(
 
     return response
 
+
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def _sha256(token: str) -> str:
@@ -147,6 +148,19 @@ def _normalize_upload_row(row: dict[str, Any]) -> dict[str, str]:
         str(key).strip(): "" if value is None else str(value).strip()
         for key, value in row.items()
     }
+
+
+def _normalize_lrn(raw: str) -> str:
+    """
+    Fix Excel scientific notation: '9.33553E+11' → '933553000000'.
+    Returns the original string if it's already numeric or empty.
+    """
+    if raw and "E+" in raw.upper():
+        try:
+            return str(int(float(raw)))
+        except ValueError:
+            pass
+    return raw
 
 
 async def _read_upload_rows(file: UploadFile) -> tuple[list[dict[str, str]], set[str]]:
@@ -185,7 +199,7 @@ def _create_pending_account(db: Session, email: str, role_name: str) -> tuple[Us
         account_status="pending",
     )
     db.add(account)
-    db.flush()  # get user_id without committing
+    db.flush()
 
     role = db.query(Role).filter(Role.role_name == role_name).first()
     if not role:
@@ -266,6 +280,7 @@ def invite_single_user(
 TEACHER_COLUMNS = {"first_name", "last_name", "email"}
 STUDENT_COLUMNS = {"first_name", "last_name", "email", "student_lrn"}
 
+
 @router.post("/admin/users/upload-csv")
 @router.post("/users/upload-csv")
 async def upload_csv(
@@ -308,7 +323,8 @@ async def upload_csv(
             continue
 
         if role == "Student":
-            student_lrn = (row.get("student_lrn") or "").strip()
+            student_lrn = _normalize_lrn((row.get("student_lrn") or "").strip())
+
             if not student_lrn or student_lrn in seen_student_lrns:
                 skipped.append(email)
                 continue
@@ -322,6 +338,9 @@ async def upload_csv(
 
         data = {k: (v or "").strip() for k, v in row.items()}
         data["email"] = email
+
+        if role == "Student":
+            data["student_lrn"] = student_lrn  # use the normalized value
 
         if role == "Teacher":
             _attach_staff_profile(db, account.user_id, data)
