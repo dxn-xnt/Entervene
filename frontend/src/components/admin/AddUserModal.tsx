@@ -20,7 +20,7 @@ interface ManualFormData {
   // Student-specific
   studentLrn: string;
   suffix: string;
-  academicLevelId: string;
+  gradeLevel: string;
 }
 
 const EMPTY_FORM: ManualFormData = {
@@ -37,7 +37,7 @@ const EMPTY_FORM: ManualFormData = {
   employmentStatus: "",
   studentLrn: "",
   suffix: "",
-  academicLevelId: "",
+  gradeLevel: "",
 };
 
 interface AddUserModalProps {
@@ -116,7 +116,7 @@ const handleManualSubmit = async () => {
         hired_date: form.hiredDate,
         employment_status: form.employmentStatus,
         student_lrn: form.studentLrn.trim(),
-        academic_level_id: form.academicLevelId ? Number(form.academicLevelId) : null,
+        grade_level: form.gradeLevel ? Number(form.gradeLevel) : null,
       }),
     });
 
@@ -468,14 +468,21 @@ const handleManualSubmit = async () => {
                         onChange={(e) => handleField("studentLrn", e.target.value.replace(/\D/g, ""))}
                       />
                     </Field>
-                    <Field label="Academic Level">
-                      <input
-                        className="w-full border rounded px-3 py-1.5 text-sm"
+                    <Field label="Grade Level">
+                      <select
+                        className="w-full border rounded px-3 py-1.5 text-sm bg-white"
                         style={{ borderColor: "#ccc" }}
-                        placeholder="e.g. Grade 7"
-                        value={form.academicLevelId}
-                        onChange={(e) => handleField("academicLevelId", e.target.value)}
-                      />
+                        value={form.gradeLevel}
+                        onChange={(e) => handleField("gradeLevel", e.target.value)}
+                      >
+                        <option value="">Select...</option>
+                        <option value="7">Grade 7</option>
+                        <option value="8">Grade 8</option>
+                        <option value="9">Grade 9</option>
+                        <option value="10">Grade 10</option>
+                        <option value="11">Grade 11</option>
+                        <option value="12">Grade 12</option>
+                      </select>
                     </Field>
                   </div>
                 </>

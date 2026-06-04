@@ -18,6 +18,21 @@ class InviteSingleUserRequest(BaseModel):
     # Student fields
     student_lrn: str = ""
     academic_level_id: int | None = None
+    grade_level: int | None = None
+    academic_level: str = ""
+
+
+class UpdateUserRequest(BaseModel):
+    first_name: str
+    last_name: str
+    middle_name: str = ""
+    email: EmailStr
+    account_status: str
+    contact_number: str = ""
+    address: str = ""
+    employment_status: str = ""
+    grade_level: int | None = None
+    section: str | None = None
 
 
 class AcceptInvitationRequest(BaseModel):
