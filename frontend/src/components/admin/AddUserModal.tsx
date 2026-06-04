@@ -46,14 +46,24 @@ interface AddUserModalProps {
   onUserAdded?: (data: ManualFormData) => void;
 }
 
-export default function AddUserModal({ open, onClose, onUserAdded }: AddUserModalProps) {
+export default function AddUserModal({
+  open,
+  onClose,
+  onUserAdded,
+}: AddUserModalProps) {
   const [step, setStep] = useState<Step>("choose");
   const [form, setForm] = useState<ManualFormData>(EMPTY_FORM);
   const [dragOver, setDragOver] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [importRole, setImportRole] = useState<"Teacher" | "Student">("Teacher");
+  const [importRole, setImportRole] = useState<"Teacher" | "Student">(
+    "Teacher",
+  );
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ created: number; skipped: number; skipped_emails?: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{
+    created: number;
+    skipped: number;
+    skipped_emails?: string[];
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!open) return null;
@@ -78,10 +88,13 @@ export default function AddUserModal({ open, onClose, onUserAdded }: AddUserModa
       const formData = new FormData();
       formData.append("file", uploadedFile);
 
-      const res = await apiFetch(`/api/v1/admin/users/upload-csv?role=${encodeURIComponent(importRole)}`, {
-        method: "POST",
-        body: formData,
-      });
+      const res = await apiFetch(
+        `/api/v1/admin/users/upload-csv?role=${encodeURIComponent(importRole)}`,
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
 
       const data = await res.json().catch(() => ({}));
       setImportResult(data);
@@ -98,41 +111,43 @@ export default function AddUserModal({ open, onClose, onUserAdded }: AddUserModa
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-const handleManualSubmit = async () => {
-  try {
-    const res = await apiFetch("/api/v1/users/invite", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        first_name: form.firstName.trim(),
-        last_name: form.lastName.trim(),
-        middle_name: form.middleName.trim(),
-        email: form.email.trim().toLowerCase(),
-        role: form.role,
-        suffix: form.suffix.trim(),
-        gender: form.gender,
-        contact_number: form.contactNumber.trim(),
-        address: form.address.trim(),
-        hired_date: form.hiredDate,
-        employment_status: form.employmentStatus,
-        student_lrn: form.studentLrn.trim(),
-        grade_level: form.gradeLevel ? Number(form.gradeLevel) : null,
-      }),
-    });
+  const handleManualSubmit = async () => {
+    try {
+      const res = await apiFetch("/api/v1/users/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          first_name: form.firstName.trim(),
+          last_name: form.lastName.trim(),
+          middle_name: form.middleName.trim(),
+          email: form.email.trim().toLowerCase(),
+          role: form.role,
+          suffix: form.suffix.trim(),
+          gender: form.gender,
+          contact_number: form.contactNumber.trim(),
+          address: form.address.trim(),
+          hired_date: form.hiredDate,
+          employment_status: form.employmentStatus,
+          student_lrn: form.studentLrn.trim(),
+          grade_level: form.gradeLevel ? Number(form.gradeLevel) : null,
+        }),
+      });
 
-    const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      window.alert(data.detail ?? "Unable to send invite.");
-      return;
+      if (!res.ok) {
+        window.alert(data.detail ?? "Unable to send invite.");
+        return;
+      }
+
+      onUserAdded?.(form);
+      handleClose();
+    } catch (error) {
+      window.alert(
+        error instanceof Error ? error.message : "Unable to send invite.",
+      );
     }
-
-    onUserAdded?.(form);
-    handleClose();
-  } catch (error) {
-    window.alert(error instanceof Error ? error.message : "Unable to send invite.");
-  }
-};
+  };
 
   const handleFileDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -151,46 +166,72 @@ const handleManualSubmit = async () => {
       onClick={handleClose}
     >
       <div
-        className="relative w-full max-w-md rounded-xl shadow-2xl overflow-hidden"
-        style={{ background: "#faf9f6", border: "2px solid #e5e3de" }}
+        className="relative w-full max-w-md rounded-xl border border-black overflow-hidden"
+        style={{ background: "#faf9f6" }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── STEP: CHOOSE ─────────────────────────────────── */}
         {step === "choose" && (
           <>
-            <div className="flex items-center justify-between px-5 py-4">
-              <span className="font-semibold text-base text-gray-800">Add new users</span>
-              <button onClick={handleClose} className="text-gray-400 hover:text-gray-700 text-lg leading-none">×</button>
+            <div className="flex items-center justify-between p-4 border-b">
+              <span className="font-semibold text-base ">Add new users</span>
+              <button
+                onClick={handleClose}
+                className=" hover:text-gray-700 text-lg leading-none"
+              >
+                ×
+              </button>
             </div>
-            <div className="flex gap-3 px-5 pb-5">
+            <div className="flex gap-3 p-4 border-b">
               <button
                 onClick={() => setStep("import")}
-                className="flex-1 rounded-lg p-4 text-left transition-all hover:opacity-90 active:scale-95"
-                style={{ background: "#5c8f5c", color: "#fff", border: "none" }}
+                className="flex-1 rounded-lg p-4 text-left transition-all border bg-[#5c8f5c] hover:opacity-90 active:scale-95 overflow-hidden"
               >
                 <div className="flex items-center gap-2 font-semibold text-sm mb-1">
-                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+                  <svg
+                    width="16"
+                    height="16"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+                  </svg>
                   Import from file
                 </div>
-                <p className="text-xs opacity-80">Upload a CSV or Excel file to add multiple users at once</p>
+                <p className="text-xs opacity-80">
+                  Upload a CSV or Excel file to add multiple users at once
+                </p>
               </button>
               <button
                 onClick={() => setStep("manual")}
-                className="flex-1 rounded-lg p-4 text-left transition-all hover:opacity-90 active:scale-95"
-                style={{ background: "#5c8f5c", color: "#fff", border: "none" }}
+                className="flex-1 rounded-lg p-4 text-left transition-all border bg-[#5c8f5c] hover:opacity-90 active:scale-95 overflow-hidden"
               >
                 <div className="flex items-center gap-2 font-semibold text-sm mb-1">
-                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  <svg
+                    width="16"
+                    height="16"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
                   Create manually
                 </div>
-                <p className="text-xs opacity-80">Add individual user accounts one at a time</p>
+                <p className="text-xs opacity-80">
+                  Add individual user accounts one at a time
+                </p>
               </button>
             </div>
-            <div className="flex justify-end px-5 pb-4">
+            <div className="flex justify-end p-4">
               <button
                 onClick={handleClose}
-                className="px-4 py-1.5 rounded border text-sm text-gray-600 hover:bg-gray-100 transition"
-                style={{ borderColor: "#d1cfc9" }}
+                className="px-4 py-1.5 rounded-lg border text-sm hover:bg-gray-100 transition"
+                // style={{ borderColor: "#d1cfc9" }}
               >
                 Cancel
               </button>
@@ -201,21 +242,26 @@ const handleManualSubmit = async () => {
         {/* ── STEP: IMPORT ─────────────────────────────────── */}
         {step === "import" && (
           <>
-            <div
-              className="flex items-center justify-between px-5 py-3"
-              style={{ background: "#5c8f5c" }}
-            >
-              <span className="font-semibold text-sm text-white">Import from file</span>
-              <button onClick={handleClose} className="text-white/70 hover:text-white text-lg leading-none">×</button>
+            <div className="flex items-center justify-between p-4 border-b border-black bg-[#5c8f5c]">
+              <span className="font-semibold text-s">Import from file</span>
+              <button
+                onClick={handleClose}
+                className=" hover:text-gray-700 text-lg leading-none"
+              >
+                ×
+              </button>
             </div>
-            <div className="p-5">
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-medium text-gray-600">Role for imported users</label>
+            <div className="flex flex-col gap-5 p-4">
+              <div>
+                <label className="text-xs font-medium text-gray-600">
+                  Role for imported users
+                </label>
                 <select
                   value={importRole}
-                  onChange={(e) => setImportRole(e.target.value as "Teacher" | "Student")}
-                  className="w-full border rounded px-3 py-1.5 text-sm bg-white"
-                  style={{ borderColor: "#ccc" }}
+                  onChange={(e) =>
+                    setImportRole(e.target.value as "Teacher" | "Student")
+                  }
+                  className="w-full border rounded-lg px-3 pr-8 py-1.5 text-sm bg-white cursor-pointer"
                 >
                   <option value="Teacher">Teacher</option>
                   <option value="Student">Student</option>
@@ -223,33 +269,52 @@ const handleManualSubmit = async () => {
               </div>
 
               <div
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleFileDrop}
                 onClick={() => fileInputRef.current?.click()}
                 className="flex flex-col items-center justify-center gap-3 rounded-lg cursor-pointer transition-all"
                 style={{
                   minHeight: 140,
-                  border: `2px dashed ${dragOver ? "#5c8f5c" : "#ccc"}`,
+                  border: `1px solid ${dragOver ? "#5c8f5c" : "black"}`,
                   background: dragOver ? "#f0f7f0" : "#fff",
                 }}
               >
                 {uploadedFile ? (
                   <>
-                    <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="#5c8f5c" strokeWidth="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    <span className="text-sm font-medium text-gray-700">{uploadedFile.name}</span>
-                    <span className="text-xs text-gray-400">{(uploadedFile.size / 1024).toFixed(1)} KB</span>
+                    {/* <svg
+                      width="28"
+                      height="28"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="#5c8f5c"
+                      strokeWidth="2"
+                    >
+                      <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg> */}
+                    <span className="text-sm font-medium text-gray-700">
+                      {uploadedFile.name}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      {(uploadedFile.size / 1024).toFixed(1)} KB
+                    </span>
                   </>
                 ) : (
                   <>
                     <button
-                      className="px-4 py-1.5 rounded border text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
-                      style={{ borderColor: "#ccc" }}
-                      onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                      className="px-4 py-1.5 rounded-lg border text-sm font-medium hover:bg-gray-50 transition cursor-pointer"
+                      // style={{ borderColor: "#ccc" }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fileInputRef.current?.click();
+                      }}
                     >
                       Upload
                     </button>
-                    <span className="text-xs text-gray-400">Drag & drop CSV or Excel file here</span>
+                    <span className="text-xs">Drag & drop file here</span>
                   </>
                 )}
               </div>
@@ -258,30 +323,36 @@ const handleManualSubmit = async () => {
                 type="file"
                 accept=".csv,.xlsx,.xls"
                 className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) setUploadedFile(f); }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) setUploadedFile(f);
+                }}
               />
 
               {importResult && (
                 <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-                  Imported {importResult.created} user(s); skipped {importResult.skipped} user(s).
-                  {importResult.skipped_emails?.length ? ` Skipped: ${importResult.skipped_emails.join(", ")}` : ""}
+                  Imported {importResult.created} user(s); skipped{" "}
+                  {importResult.skipped} user(s).
+                  {importResult.skipped_emails?.length
+                    ? ` Skipped: ${importResult.skipped_emails.join(", ")}`
+                    : ""}
                 </div>
               )}
             </div>
             <div
-              className="flex justify-end px-5 py-3 gap-2"
-              style={{ borderTop: "1px solid #e5e3de" }}
+              className="flex justify-end border-t p-4 gap-2"
+              // style={{ borderTop: "1px solid #e5e3de" }}
             >
               <button
                 onClick={() => setStep("choose")}
-                className="px-4 py-1.5 rounded border text-sm text-gray-600 hover:bg-gray-100 transition"
-                style={{ borderColor: "#d1cfc9" }}
+                className="px-4 py-1.5 rounded-lg border text-sm hover:bg-gray-100 transition cursor-pointer"
+                // style={{ borderColor: "#d1cfc9" }}
               >
                 Back
               </button>
               <button
                 disabled={!uploadedFile || importing}
-                className="px-4 py-1.5 rounded text-sm font-semibold text-white transition disabled:opacity-50"
+                className="px-4 py-1.5 rounded-lg border text-sm font-semibold transition cursor-pointer"
                 style={{ background: "#5c8f5c" }}
                 onClick={handleImportSubmit}
               >
@@ -294,22 +365,22 @@ const handleManualSubmit = async () => {
         {/* ── STEP: MANUAL ─────────────────────────────────── */}
         {step === "manual" && (
           <>
-            <div
-              className="flex items-center justify-between px-5 py-3"
-              style={{ background: "#5c8f5c" }}
-            >
-              <span className="font-semibold text-sm text-white">Create user manually</span>
-              <button onClick={handleClose} className="text-white/70 hover:text-white text-lg leading-none">×</button>
+            <div className="flex items-center justify-between p-4 border-b border-black bg-[#5c8f5c]">
+              <span className="font-semibold text-s">Create user manually</span>
+              <button
+                onClick={handleClose}
+                className=" hover:text-gray-700 text-lg leading-none"
+              >
+                ×
+              </button>
             </div>
             <div className="p-5 flex flex-col gap-3 max-h-[70vh] overflow-y-auto">
-
               {/* Role — first so fields adapt below */}
               <Field label="Role">
                 <select
                   value={form.role}
                   onChange={(e) => handleField("role", e.target.value as Role)}
-                  className="w-full border rounded px-3 py-1.5 text-sm bg-white"
-                  style={{ borderColor: "#ccc" }}
+                  className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white"
                 >
                   <option>Teacher</option>
                   <option>Student</option>
@@ -321,8 +392,7 @@ const handleManualSubmit = async () => {
               <div className="grid grid-cols-2 gap-3">
                 <Field label="First Name">
                   <input
-                    className="w-full border rounded px-3 py-1.5 text-sm"
-                    style={{ borderColor: "#ccc" }}
+                    className="w-full border rounded-lg px-3 py-1.5 text-sm"
                     placeholder="John"
                     value={form.firstName}
                     onChange={(e) => handleField("firstName", e.target.value)}
@@ -330,8 +400,7 @@ const handleManualSubmit = async () => {
                 </Field>
                 <Field label="Last Name">
                   <input
-                    className="w-full border rounded px-3 py-1.5 text-sm"
-                    style={{ borderColor: "#ccc" }}
+                    className="w-full border rounded-lg px-3 py-1.5 text-sm"
                     placeholder="Doe"
                     value={form.lastName}
                     onChange={(e) => handleField("lastName", e.target.value)}
@@ -342,8 +411,7 @@ const handleManualSubmit = async () => {
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Middle Name">
                   <input
-                    className="w-full border rounded px-3 py-1.5 text-sm"
-                    style={{ borderColor: "#ccc" }}
+                    className="w-full border rounded-lg px-3 py-1.5 text-sm"
                     placeholder="(optional)"
                     value={form.middleName}
                     onChange={(e) => handleField("middleName", e.target.value)}
@@ -352,8 +420,7 @@ const handleManualSubmit = async () => {
                 {(isStudent || !isAdmin) && (
                   <Field label="Suffix">
                     <input
-                      className="w-full border rounded px-3 py-1.5 text-sm"
-                      style={{ borderColor: "#ccc" }}
+                      className="w-full border rounded-lg px-3 py-1.5 text-sm"
                       placeholder="Jr., Sr., III…"
                       value={form.suffix}
                       onChange={(e) => handleField("suffix", e.target.value)}
@@ -365,8 +432,7 @@ const handleManualSubmit = async () => {
               <Field label="Email Address">
                 <input
                   type="email"
-                  className="w-full border rounded px-3 py-1.5 text-sm"
-                  style={{ borderColor: "#ccc" }}
+                  className="w-full border rounded-lg px-3 py-1.5 text-sm"
                   placeholder="john@example.com"
                   value={form.email}
                   onChange={(e) => handleField("email", e.target.value)}
@@ -378,8 +444,7 @@ const handleManualSubmit = async () => {
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Gender">
                     <select
-                      className="w-full border rounded px-3 py-1.5 text-sm bg-white"
-                      style={{ borderColor: "#ccc" }}
+                      className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white"
                       value={form.gender}
                       onChange={(e) => handleField("gender", e.target.value)}
                     >
@@ -391,11 +456,12 @@ const handleManualSubmit = async () => {
                   </Field>
                   <Field label="Contact Number">
                     <input
-                      className="w-full border rounded px-3 py-1.5 text-sm"
-                      style={{ borderColor: "#ccc" }}
+                      className="w-full border rounded-lg px-3 py-1.5 text-sm"
                       placeholder="+63 9XX XXX XXXX"
                       value={form.contactNumber}
-                      onChange={(e) => handleField("contactNumber", e.target.value)}
+                      onChange={(e) =>
+                        handleField("contactNumber", e.target.value)
+                      }
                     />
                   </Field>
                 </div>
@@ -406,8 +472,7 @@ const handleManualSubmit = async () => {
                 <Field label="Address">
                   <textarea
                     rows={2}
-                    className="w-full border rounded px-3 py-1.5 text-sm resize-none"
-                    style={{ borderColor: "#ccc" }}
+                    className="w-full border rounded-lg px-3 py-1.5 text-sm resize-none"
                     placeholder="Street, Barangay, City…"
                     value={form.address}
                     onChange={(e) => handleField("address", e.target.value)}
@@ -421,8 +486,7 @@ const handleManualSubmit = async () => {
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Staff ID">
                       <input
-                        className="w-full border rounded px-3 py-1.5 text-sm"
-                        style={{ borderColor: "#ccc" }}
+                        className="w-full border rounded-lg px-3 py-1.5 text-sm"
                         placeholder="e.g. TCH-001"
                         value={form.staffId}
                         onChange={(e) => handleField("staffId", e.target.value)}
@@ -431,19 +495,21 @@ const handleManualSubmit = async () => {
                     <Field label="Hired Date">
                       <input
                         type="date"
-                        className="w-full border rounded px-3 py-1.5 text-sm"
-                        style={{ borderColor: "#ccc" }}
+                        className="w-full border rounded-lg px-3 py-1.5 text-sm"
                         value={form.hiredDate}
-                        onChange={(e) => handleField("hiredDate", e.target.value)}
+                        onChange={(e) =>
+                          handleField("hiredDate", e.target.value)
+                        }
                       />
                     </Field>
                   </div>
                   <Field label="Employment Status">
                     <select
-                      className="w-full border rounded px-3 py-1.5 text-sm bg-white"
-                      style={{ borderColor: "#ccc" }}
+                      className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white"
                       value={form.employmentStatus}
-                      onChange={(e) => handleField("employmentStatus", e.target.value)}
+                      onChange={(e) =>
+                        handleField("employmentStatus", e.target.value)
+                      }
                     >
                       <option value="">Select…</option>
                       <option>Regular</option>
@@ -460,12 +526,16 @@ const handleManualSubmit = async () => {
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Student LRN">
                       <input
-                        className="w-full border rounded px-3 py-1.5 text-sm font-mono"
-                        style={{ borderColor: "#ccc" }}
+                        className="w-full border rounded-lg px-3 py-1.5 text-sm font-mono"
                         placeholder="12-digit LRN"
                         maxLength={12}
                         value={form.studentLrn}
-                        onChange={(e) => handleField("studentLrn", e.target.value.replace(/\D/g, ""))}
+                        onChange={(e) =>
+                          handleField(
+                            "studentLrn",
+                            e.target.value.replace(/\D/g, ""),
+                          )
+                        }
                       />
                     </Field>
                     <Field label="Grade Level">
@@ -489,21 +559,16 @@ const handleManualSubmit = async () => {
               )}
             </div>
 
-            <div
-              className="flex justify-end px-5 py-3 gap-2"
-              style={{ borderTop: "1px solid #e5e3de" }}
-            >
+            <div className="flex justify-end border-t p-4 gap-2">
               <button
                 onClick={() => setStep("choose")}
-                className="px-4 py-1.5 rounded border text-sm text-gray-600 hover:bg-gray-100 transition"
-                style={{ borderColor: "#d1cfc9" }}
+                className="px-4 py-1.5 rounded-lg border text-sm hover:bg-gray-100 transition"
               >
                 Back
               </button>
               <button
                 onClick={handleManualSubmit}
-                className="px-5 py-1.5 rounded text-sm font-semibold text-white transition hover:opacity-90"
-                style={{ background: "#5c8f5c" }}
+                className="px-5 py-1.5 rounded-lg border text-sm font-semibold bg-[#5c8f5c] transition hover:opacity-90"
               >
                 Send Invitation
               </button>
@@ -515,10 +580,16 @@ const handleManualSubmit = async () => {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-gray-600">{label}</label>
+      <label className="text-xs font-medium">{label}</label>
       {children}
     </div>
   );

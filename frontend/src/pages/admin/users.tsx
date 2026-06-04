@@ -246,12 +246,12 @@ export default function AdminUsers() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5">
+        <div className="@container/main flex flex-1 flex-col gap-2">
+          <div className="flex flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
 
             {/* ── Header ── */}
-            <div className="flex items-center justify-between px-4 md:px-6">
-              <h1 className="text-2xl font-bold tracking-tight">User Management</h1>
+            <header className="flex items-center justify-between">
+              <h1 className="text-4xl font-bold tracking-tight">User Management</h1>
               <button
                 onClick={() => setModalOpen(true)}
                 className="flex items-center gap-1.5 rounded-lg border-2 border-black bg-[#79bd80] px-4 py-2 text-sm font-semibold text-black shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000]"
@@ -259,10 +259,10 @@ export default function AdminUsers() {
                 <Plus className="size-4" />
                 New User
               </button>
-            </div>
+            </header>
 
             {/* ── Tabs ── */}
-            <div className="border-b border-black/40 px-4 md:px-6">
+            <div className="-mx-4 border-b border-black/40 md:-mx-6">
               <Tabs tabs={tabs} activeTab={activeTab} onChange={(id) => setActiveTab(id as TabId)} />
             </div>
 
