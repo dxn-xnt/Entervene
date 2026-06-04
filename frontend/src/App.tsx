@@ -13,6 +13,7 @@ import AdminDashboard from "./pages/admin/dashboard";
 import AdminSubjects from "./pages/admin/subjects";
 import AdminClasses from "./pages/admin/classes";
 import AdminUsers from "./pages/admin/users";
+import AdminUserDetail from "./pages/admin/user-detail";
 import AdminInterventions from "./pages/admin/interventions";
 import AdminNotifications from "./pages/admin/notifications";
 import AdminSettings from "./pages/admin/system-settings";
@@ -61,6 +62,7 @@ const App = () => {
             <Route path={routes.admin.subjects} element={<AdminSubjects />} />
             <Route path={routes.admin.classes} element={<AdminClasses />} />
             <Route path={routes.admin.users} element={<AdminUsers />} />
+            <Route path={routes.admin.userDetail} element={<AdminUserDetail />} />
             <Route
               path={routes.admin.interventions}
               element={<AdminInterventions />}

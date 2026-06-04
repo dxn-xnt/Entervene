@@ -11,6 +11,7 @@ export const routes = {
     subjects: "/admin/subjects",
     classes: "/admin/classes",
     users: "/admin/users",
+    userDetail: "/admin/users/:role/:userId",
     interventions: "/admin/interventions",
     notifications: "/admin/notifications",
     settings: "/admin/settings",
