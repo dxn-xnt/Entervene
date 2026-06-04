@@ -168,7 +168,7 @@ export default function AddUserModal({
       onClick={handleClose}
     >
       <div
-        className="relative w-full max-w-md rounded-xl border border-blackoverflow-hidden"
+        className="relative w-full max-w-md rounded-xl border border-black overflow-hidden"
         style={{ background: "#faf9f6" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -187,8 +187,7 @@ export default function AddUserModal({
             <div className="flex gap-3 p-4 border-b">
               <button
                 onClick={() => setStep("import")}
-                className="flex-1 rounded-lg p-4 text-left transition-all hover:opacity-90 active:scale-95"
-                style={{ background: "#5c8f5c", color: "black", border: "none" }}
+                className="flex-1 rounded-lg p-4 text-left transition-all border bg-[#5c8f5c] hover:opacity-90 active:scale-95 overflow-hidden"
               >
                 <div className="flex items-center gap-2 font-semibold text-sm mb-1">
                   <svg
@@ -209,8 +208,7 @@ export default function AddUserModal({
               </button>
               <button
                 onClick={() => setStep("manual")}
-                className="flex-1 rounded-lg p-4 text-left transition-all hover:opacity-90 active:scale-95"
-                style={{ background: "#5c8f5c", color: "black", border: "none" }}
+                className="flex-1 rounded-lg p-4 text-left transition-all border bg-[#5c8f5c] hover:opacity-90 active:scale-95 overflow-hidden"
               >
                 <div className="flex items-center gap-2 font-semibold text-sm mb-1">
                   <svg
@@ -246,22 +244,17 @@ export default function AddUserModal({
         {/* ── STEP: IMPORT ─────────────────────────────────── */}
         {step === "import" && (
           <>
-            <div
-              className="flex items-center justify-between px-5 py-3"
-              style={{ background: "#5c8f5c" }}
-            >
-              <span className="font-semibold text-sm text-white">
-                Import from file
-              </span>
+            <div className="flex items-center justify-between p-4 border-b border-black bg-[#5c8f5c]">
+              <span className="font-semibold text-s">Import from file</span>
               <button
                 onClick={handleClose}
-                className="text-white/70 hover:text-white text-lg leading-none"
+                className=" hover:text-gray-700 text-lg leading-none"
               >
                 ×
               </button>
             </div>
-            <div className="p-5">
-              <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-5 p-4">
+              <div>
                 <label className="text-xs font-medium text-gray-600">
                   Role for imported users
                 </label>
@@ -270,8 +263,7 @@ export default function AddUserModal({
                   onChange={(e) =>
                     setImportRole(e.target.value as "Teacher" | "Student")
                   }
-                  className="w-full border rounded px-3 py-1.5 text-sm bg-white"
-                  style={{ borderColor: "#ccc" }}
+                  className="w-full border rounded-lg px-3 pr-8 py-1.5 text-sm bg-white cursor-pointer"
                 >
                   <option value="Teacher">Teacher</option>
                   <option value="Student">Student</option>
@@ -289,13 +281,13 @@ export default function AddUserModal({
                 className="flex flex-col items-center justify-center gap-3 rounded-lg cursor-pointer transition-all"
                 style={{
                   minHeight: 140,
-                  border: `2px dashed ${dragOver ? "#5c8f5c" : "#ccc"}`,
+                  border: `1px solid ${dragOver ? "#5c8f5c" : "black"}`,
                   background: dragOver ? "#f0f7f0" : "#fff",
                 }}
               >
                 {uploadedFile ? (
                   <>
-                    <svg
+                    {/* <svg
                       width="28"
                       height="28"
                       fill="none"
@@ -304,7 +296,7 @@ export default function AddUserModal({
                       strokeWidth="2"
                     >
                       <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+                    </svg> */}
                     <span className="text-sm font-medium text-gray-700">
                       {uploadedFile.name}
                     </span>
@@ -315,8 +307,8 @@ export default function AddUserModal({
                 ) : (
                   <>
                     <button
-                      className="px-4 py-1.5 rounded border text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
-                      style={{ borderColor: "#ccc" }}
+                      className="px-4 py-1.5 rounded-lg border text-sm font-medium hover:bg-gray-50 transition cursor-pointer"
+                      // style={{ borderColor: "#ccc" }}
                       onClick={(e) => {
                         e.stopPropagation();
                         fileInputRef.current?.click();
@@ -324,9 +316,7 @@ export default function AddUserModal({
                     >
                       Upload
                     </button>
-                    <span className="text-xs text-gray-400">
-                      Drag & drop CSV or Excel file here
-                    </span>
+                    <span className="text-xs">Drag & drop file here</span>
                   </>
                 )}
               </div>
@@ -352,19 +342,19 @@ export default function AddUserModal({
               )}
             </div>
             <div
-              className="flex justify-end px-5 py-3 gap-2"
-              style={{ borderTop: "1px solid #e5e3de" }}
+              className="flex justify-end border-t p-4 gap-2"
+              // style={{ borderTop: "1px solid #e5e3de" }}
             >
               <button
                 onClick={() => setStep("choose")}
-                className="px-4 py-1.5 rounded border text-sm text-gray-600 hover:bg-gray-100 transition"
-                style={{ borderColor: "#d1cfc9" }}
+                className="px-4 py-1.5 rounded-lg border text-sm hover:bg-gray-100 transition cursor-pointer"
+                // style={{ borderColor: "#d1cfc9" }}
               >
                 Back
               </button>
               <button
                 disabled={!uploadedFile || importing}
-                className="px-4 py-1.5 rounded text-sm font-semibold text-white transition disabled:opacity-50"
+                className="px-4 py-1.5 rounded-lg border text-sm font-semibold transition cursor-pointer"
                 style={{ background: "#5c8f5c" }}
                 onClick={handleImportSubmit}
               >
