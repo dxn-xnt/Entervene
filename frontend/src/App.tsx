@@ -11,7 +11,7 @@ import SetupPassword from "./pages/SetupPassword";
 // Admin pages
 import AdminDashboard from "./pages/admin/dashboard";
 import AdminSubjects from "./pages/admin/subjects";
-import AdminClasses from "./pages/admin/classes";
+import AdminClasses, { AdminClassDetail } from "./pages/admin/classes";
 import AdminUsers from "./pages/admin/users";
 import AdminUserDetail from "./pages/admin/user-detail";
 import AdminInterventions from "./pages/admin/interventions";
@@ -61,6 +61,7 @@ const App = () => {
             <Route path={routes.admin.dashboard} element={<AdminDashboard />} />
             <Route path={routes.admin.subjects} element={<AdminSubjects />} />
             <Route path={routes.admin.classes} element={<AdminClasses />} />
+            <Route path={routes.admin.classDetail} element={<AdminClassDetail />} />
             <Route path={routes.admin.users} element={<AdminUsers />} />
             <Route path={routes.admin.userDetail} element={<AdminUserDetail />} />
             <Route
