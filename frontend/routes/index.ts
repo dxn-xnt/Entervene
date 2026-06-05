@@ -10,6 +10,7 @@ export const routes = {
     dashboard: "/admin/dashboard",
     subjects: "/admin/subjects",
     classes: "/admin/classes",
+    classDetail: "/admin/classes/:classId",
     users: "/admin/users",
     userDetail: "/admin/users/:role/:userId",
     interventions: "/admin/interventions",
