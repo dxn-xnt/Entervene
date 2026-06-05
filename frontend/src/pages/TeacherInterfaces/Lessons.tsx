@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
+import { Search } from "lucide-react";
 import LessonModal from "@/components/LessonModal";
 import Tabs from "@/components/Tabs";
 import AppLayout from "@/layouts/app-layout";
@@ -31,6 +32,7 @@ export default function Lessons() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>("");
   const [activeTab, setActiveTab] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
@@ -64,9 +66,21 @@ export default function Lessons() {
   };
 
   const filteredLessons = lessons.filter((lesson) => {
-    if (activeTab === "published") return lesson.is_published && !lesson.is_draft;
-    if (activeTab === "drafts") return lesson.is_draft;
-    return true;
+    const matchesTab =
+      activeTab === "published"
+        ? lesson.is_published && !lesson.is_draft
+        : activeTab === "drafts"
+          ? lesson.is_draft
+          : true;
+
+    const query = searchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !query ||
+      [lesson.title, lesson.description, lesson.subject_name, lesson.teacher_name]
+        .filter(Boolean)
+        .some((value) => value?.toLowerCase().includes(query));
+
+    return matchesTab && matchesSearch;
   });
 
   const handleLessonCreated = () => {
@@ -137,6 +151,17 @@ export default function Lessons() {
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
       <main className="px-6 py-6">
+        <div className="mb-5 flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 md:w-96">
+          <Search size={16} className="text-gray-500" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            className="w-full bg-transparent text-sm outline-none placeholder:text-gray-500"
+            placeholder="Search lessons"
+          />
+        </div>
+
         {isLoading ? (
           <div className="text-center py-12">
             <p className="text-gray-500">Loading lessons...</p>
@@ -203,13 +228,17 @@ export default function Lessons() {
           </div>
         ) : (
           <div className="text-center py-12 bg-white rounded-lg">
-            <p className="text-gray-500">No lessons found</p>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="mt-4 text-green-600 hover:text-green-700 font-medium"
-            >
-              Create your first lesson
-            </button>
+            <p className="text-gray-500">
+              {lessons.length > 0 ? "No matching lessons found" : "No lessons found"}
+            </p>
+            {lessons.length === 0 && (
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="mt-4 text-green-600 hover:text-green-700 font-medium"
+              >
+                Create your first lesson
+              </button>
+            )}
           </div>
         )}
       </main>

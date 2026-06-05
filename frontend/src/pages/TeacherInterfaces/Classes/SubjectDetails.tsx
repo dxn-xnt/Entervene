@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, ChevronDown, ChevronRight, ClipboardList, FileText, Info, Plus, Search, X } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, ClipboardList, Eye, FileText, Info, Paperclip, Plus, Search, Users, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { apiFetch } from "@/lib/api";
+import AttachmentDisplay from "@/components/AttachmentDisplay";
 
 type TeacherClassLoad = {
   subject_load_id: number;
@@ -30,6 +31,49 @@ type LinkedClasswork = {
   classwork_type?: string | null;
   due_date?: string | null;
   attachment_count?: number;
+};
+
+type ClassworkAttachment = {
+  classwork_attachment_id: number;
+  file_name: string;
+  file_type?: string;
+  file_size: number;
+  uploaded_at?: string;
+};
+
+type ClassworkDetail = {
+  classwork_assignment_id: number;
+  classwork_id: number;
+  class_id: number;
+  section_name?: string | null;
+  title: string;
+  description?: string | null;
+  instructions?: string | null;
+  classwork_type?: string | null;
+  classwork_category?: string | null;
+  total_points?: number | null;
+  due_date?: string | null;
+  is_published: boolean;
+  is_locked?: boolean;
+  teacher_name?: string | null;
+  attachments: ClassworkAttachment[];
+};
+
+type TrackingStudent = {
+  student_id: string;
+  student_name: string;
+  status: string;
+  submitted_at?: string | null;
+  grade?: number | null;
+  attachment_count?: number;
+};
+
+type SubmissionTracking = {
+  total_students: number;
+  submitted_count: number;
+  missing_count: number;
+  submitted: TrackingStudent[];
+  missing: TrackingStudent[];
 };
 
 type ClassworkDraft = {
@@ -75,6 +119,11 @@ export default function SubjectDetails() {
   const [classworkLesson, setClassworkLesson] = useState<Lesson | null>(null);
   const [classworkDraft, setClassworkDraft] = useState<ClassworkDraft>(emptyClassworkDraft);
   const [isCreatingClasswork, setIsCreatingClasswork] = useState(false);
+  const [selectedClasswork, setSelectedClasswork] = useState<ClassworkDetail | null>(null);
+  const [selectedTracking, setSelectedTracking] = useState<SubmissionTracking | null>(null);
+  const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
+  const [detailError, setDetailError] = useState("");
+  const [lessonSearch, setLessonSearch] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -122,6 +171,16 @@ export default function SubjectDetails() {
 
   const subjectName = subjectLoad?.subject_name || "Subject";
   const sectionName = subjectLoad?.section_name;
+  const filteredLessons = useMemo(() => {
+    const query = lessonSearch.trim().toLowerCase();
+    if (!query) return lessons;
+
+    return lessons.filter((lesson) =>
+      [lesson.title, lesson.description]
+        .filter(Boolean)
+        .some((value) => value?.toLowerCase().includes(query))
+    );
+  }, [lessonSearch, lessons]);
 
   const toggleLesson = async (lessonId: number) => {
     if (expandedLessonId === lessonId) {
@@ -185,6 +244,39 @@ export default function SubjectDetails() {
     if (isCreatingClasswork) return;
     setClassworkLesson(null);
     setClassworkDraft(emptyClassworkDraft);
+  };
+
+  const openClassworkDetail = async (classwork: LinkedClasswork) => {
+    setDetailLoadingId(classwork.classwork_assignment_id);
+    setDetailError("");
+
+    try {
+      const [detailResponse, trackingResponse] = await Promise.all([
+        apiFetch(`/api/v1/classwork-assignments/assignment/${classwork.classwork_assignment_id}`),
+        apiFetch(`/api/v1/submissions/assignment/${classwork.classwork_assignment_id}/tracking`),
+      ]);
+
+      if (!detailResponse.ok) {
+        throw new Error("Unable to load classwork details.");
+      }
+
+      if (!trackingResponse.ok) {
+        throw new Error("Unable to load submission tracking.");
+      }
+
+      setSelectedClasswork((await detailResponse.json()) as ClassworkDetail);
+      setSelectedTracking((await trackingResponse.json()) as SubmissionTracking);
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Unable to load classwork details.");
+    } finally {
+      setDetailLoadingId(null);
+    }
+  };
+
+  const closeClassworkDetail = () => {
+    setSelectedClasswork(null);
+    setSelectedTracking(null);
+    setDetailError("");
   };
 
   const createClassworkForLesson = async () => {
@@ -309,7 +401,13 @@ export default function SubjectDetails() {
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 md:w-80">
               <Search size={16} className="text-gray-500" />
-              <span className="text-sm text-gray-500">Search lessons</span>
+              <input
+                type="search"
+                value={lessonSearch}
+                onChange={(event) => setLessonSearch(event.target.value)}
+                className="w-full bg-transparent text-sm outline-none placeholder:text-gray-500"
+                placeholder="Search lessons"
+              />
             </div>
             <button
               type="button"
@@ -322,8 +420,8 @@ export default function SubjectDetails() {
 
           {isLoading ? (
             <p className="py-8 text-center text-gray-500">Loading lessons...</p>
-          ) : lessons.length > 0 ? (
-            lessons.map((lesson) => {
+          ) : filteredLessons.length > 0 ? (
+            filteredLessons.map((lesson) => {
               const isExpanded = expandedLessonId === lesson.lesson_id;
               const classworks = linkedClassworks[lesson.lesson_id] || [];
 
@@ -364,9 +462,11 @@ export default function SubjectDetails() {
                         </div>
                       ) : classworks.length > 0 ? (
                         classworks.map((classwork) => (
-                          <div
+                          <button
+                            type="button"
                             key={classwork.classwork_assignment_id}
-                            className="flex items-center justify-between rounded-lg border border-black bg-white px-4 py-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                            onClick={() => openClassworkDetail(classwork)}
+                            className="flex w-full items-center justify-between rounded-lg border border-black bg-white px-4 py-3 text-left shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
                           >
                             <div className="flex items-center gap-3">
                               <FileText size={20} />
@@ -383,7 +483,11 @@ export default function SubjectDetails() {
                                 File {classwork.attachment_count}
                               </span>
                             ) : null}
-                          </div>
+                            <span className="ml-3 inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs font-semibold">
+                              <Eye size={14} />
+                              Details
+                            </span>
+                          </button>
                         ))
                       ) : (
                         <div className="flex items-center justify-between rounded-lg border border-black bg-white px-4 py-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
@@ -403,6 +507,14 @@ export default function SubjectDetails() {
                 </div>
               );
             })
+          ) : lessons.length > 0 ? (
+            <div className="flex items-center justify-between rounded-lg border border-black bg-white px-4 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <div>
+                <p className="text-lg font-bold">No matching lessons</p>
+                <p className="text-xs font-medium">Try a different lesson name or description.</p>
+              </div>
+              <Search size={20} />
+            </div>
           ) : (
             <>
               <div className="flex items-center justify-between rounded-lg border border-black bg-[#F6E9B2] px-4 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -582,6 +694,163 @@ export default function SubjectDetails() {
                 {isCreatingClasswork ? "Adding..." : "Add Classwork"}
               </button>
             </div>
+          </section>
+        </div>
+      )}
+
+      {(selectedClasswork || detailLoadingId || detailError) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
+          <section className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <div className="sticky top-0 flex items-center justify-between border-b border-black bg-[#F6E9B2] px-5 py-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Teacher classwork detail</p>
+                <h2 className="text-xl font-bold">
+                  {selectedClasswork?.title || "Classwork"}
+                </h2>
+              </div>
+              <button type="button" onClick={closeClassworkDetail} className="rounded p-1 hover:bg-white/60">
+                <X size={18} />
+              </button>
+            </div>
+
+            {detailLoadingId ? (
+              <div className="p-8 text-center text-sm font-semibold text-gray-600">Loading classwork details...</div>
+            ) : detailError ? (
+              <div className="m-5 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {detailError}
+              </div>
+            ) : selectedClasswork ? (
+              <div className="grid gap-5 p-5 lg:grid-cols-[1.4fr_1fr]">
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-black bg-[#7ABA78] px-3 py-1 text-xs font-bold">
+                        {selectedClasswork.classwork_type || "Classwork"}
+                      </span>
+                      {selectedClasswork.classwork_category && (
+                        <span className="rounded-full border border-gray-300 px-3 py-1 text-xs font-semibold">
+                          {selectedClasswork.classwork_category.replace(/_/g, " ")}
+                        </span>
+                      )}
+                      <span className="rounded-full border border-gray-300 px-3 py-1 text-xs font-semibold">
+                        {selectedClasswork.is_published ? "Published" : "Draft"}
+                      </span>
+                      {selectedClasswork.is_locked && (
+                        <span className="rounded-full border border-red-300 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                          Locked
+                        </span>
+                      )}
+                    </div>
+
+                    <h3 className="mt-4 text-3xl font-bold">{selectedClasswork.title}</h3>
+                    <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+                      <div className="rounded-lg bg-gray-50 p-3">
+                        <p className="font-semibold text-gray-600">Due date</p>
+                        <p className="font-bold">
+                          {selectedClasswork.due_date
+                            ? new Date(selectedClasswork.due_date).toLocaleString()
+                            : "No due date"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-gray-50 p-3">
+                        <p className="font-semibold text-gray-600">Points</p>
+                        <p className="font-bold">{selectedClasswork.total_points ?? "Not set"}</p>
+                      </div>
+                      <div className="rounded-lg bg-gray-50 p-3">
+                        <p className="font-semibold text-gray-600">Section</p>
+                        <p className="font-bold">{selectedClasswork.section_name || sectionName || "Class"}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {(selectedClasswork.description || selectedClasswork.instructions) && (
+                    <div className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                      {selectedClasswork.description && (
+                        <div>
+                          <h4 className="font-bold">Description</h4>
+                          <p className="mt-1 text-sm text-gray-700">{selectedClasswork.description}</p>
+                        </div>
+                      )}
+                      {selectedClasswork.instructions && (
+                        <div className="mt-4">
+                          <h4 className="font-bold">Instructions</h4>
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{selectedClasswork.instructions}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <div className="mb-3 flex items-center gap-2">
+                      <Paperclip size={18} />
+                      <h4 className="font-bold">Reference Files</h4>
+                    </div>
+                    {selectedClasswork.attachments?.length ? (
+                      <AttachmentDisplay attachments={selectedClasswork.attachments} type="classwork" />
+                    ) : (
+                      <p className="text-sm text-gray-600">No classwork files attached.</p>
+                    )}
+                  </div>
+                </div>
+
+                <aside className="space-y-4">
+                  <div className="rounded-lg border border-black bg-[#F6E9B2] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <div className="flex items-center gap-2">
+                      <Users size={18} />
+                      <h3 className="font-bold">Submission Tracking</h3>
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                      <div className="rounded-lg border border-black bg-white p-2">
+                        <p className="text-2xl font-bold">{selectedTracking?.total_students ?? 0}</p>
+                        <p className="text-[11px] font-semibold">Students</p>
+                      </div>
+                      <div className="rounded-lg border border-black bg-white p-2">
+                        <p className="text-2xl font-bold">{selectedTracking?.submitted_count ?? 0}</p>
+                        <p className="text-[11px] font-semibold">Submitted</p>
+                      </div>
+                      <div className="rounded-lg border border-black bg-white p-2">
+                        <p className="text-2xl font-bold">{selectedTracking?.missing_count ?? 0}</p>
+                        <p className="text-[11px] font-semibold">Pending</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <h4 className="mb-3 font-bold">Submitted Students</h4>
+                    <div className="space-y-2">
+                      {(selectedTracking?.submitted ?? []).slice(0, 6).map((student) => (
+                        <div key={student.student_id} className="rounded-lg border border-gray-200 px-3 py-2 text-sm">
+                          <p className="font-semibold">{student.student_name}</p>
+                          <p className="text-xs text-gray-600">
+                            {student.status}
+                            {student.submitted_at ? ` | ${new Date(student.submitted_at).toLocaleString()}` : ""}
+                            {student.grade != null ? ` | Grade ${student.grade}` : ""}
+                          </p>
+                        </div>
+                      ))}
+                      {(selectedTracking?.submitted ?? []).length === 0 && (
+                        <p className="text-sm text-gray-600">No submissions yet.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <h4 className="mb-3 font-bold">Needs Follow-up</h4>
+                    <div className="space-y-2">
+                      {(selectedTracking?.missing ?? []).slice(0, 6).map((student) => (
+                        <div key={student.student_id} className="rounded-lg border border-gray-200 px-3 py-2 text-sm">
+                          <p className="font-semibold">{student.student_name}</p>
+                          <p className="text-xs text-gray-600">{student.status.replace(/_/g, " ")}</p>
+                        </div>
+                      ))}
+                      {(selectedTracking?.missing ?? []).length === 0 && (
+                        <p className="text-sm text-gray-600">Everyone is accounted for.</p>
+                      )}
+                    </div>
+                  </div>
+                </aside>
+              </div>
+            ) : null}
           </section>
         </div>
       )}
