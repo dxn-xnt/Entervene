@@ -43,7 +43,10 @@ CREATE TABLE user_account (
     email_verified_at TIMESTAMP WITH TIME ZONE,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT uq_class_adviser_academic_year
+        UNIQUE (adviser_staff_id, academic_year_id)
 );
 
 CREATE INDEX idx_user_account_ref ON user_account(ref_type, ref_id);

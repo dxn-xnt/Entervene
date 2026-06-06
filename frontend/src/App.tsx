@@ -11,7 +11,8 @@ import SetupPassword from "./pages/SetupPassword";
 // Admin pages
 import AdminDashboard from "./pages/admin/dashboard";
 import AdminSubjects from "./pages/admin/subjects";
-import AdminClasses, { AdminClassDetail } from "./pages/admin/classes";
+import AdminClasses from "./pages/admin/classes";
+import AdminClassDetail from "./pages/admin/class-detail";
 import AdminUsers from "./pages/admin/users";
 import AdminUserDetail from "./pages/admin/user-detail";
 import AdminInterventions from "./pages/admin/interventions";

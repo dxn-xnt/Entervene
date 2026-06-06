@@ -13,6 +13,8 @@ from app.api.v1.routes.Classworks import router as classworks_router
 from app.api.v1.routes.Lessons import router as lessons_router
 from app.api.v1.routes.Submissions import router as submissions_router
 from app.api.v1.routes.Users import router as users_router
+from app.api.v1.routes.Classes import router as classes_router
+from app.services.ClassManagement import ClassManagementError, class_management_error_handler
 
 app = FastAPI(
     title=settings.app_name,
@@ -22,6 +24,7 @@ app = FastAPI(
 )
 
 app.add_middleware(CSRFMiddleware)
+app.add_exception_handler(ClassManagementError, class_management_error_handler)
 
 # Cannot use allow_origins=["*"] with allow_credentials=True (browser rejects).
 # List common dev origins + regex for LAN (Expo) so preflight/login always get CORS headers.
@@ -59,6 +62,7 @@ app.include_router(
 )
 app.include_router(lessons_router,     prefix="/api/v1/lessons",               tags=["Lessons"])
 app.include_router(submissions_router, prefix="/api/v1/submissions",           tags=["Submissions"])
+app.include_router(classes_router,     prefix="/api/v1/classes",               tags=["Classes"])
 
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):

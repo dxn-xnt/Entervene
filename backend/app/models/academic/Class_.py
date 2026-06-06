@@ -1,10 +1,14 @@
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.Base import Base
 
 class Class(Base):
     __tablename__ = "class"
+    __table_args__ = (
+        UniqueConstraint("class_id", "academic_year_id", name="uq_class_class_id_academic_year_id"),
+        UniqueConstraint("adviser_staff_id", "academic_year_id", name="uq_class_adviser_academic_year"),
+    )
 
     class_id           = Column(Integer, primary_key=True, autoincrement=True)
     section_name       = Column(String(100), nullable=False)
