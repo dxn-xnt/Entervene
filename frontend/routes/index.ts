@@ -45,6 +45,7 @@ export const routes = {
   student: {
     board: "/student/studyboard",
     subjects: "/student/subjects",
+    subjectDetail: "/student/subjects/:classId/:subjectId",
     interventions: "/student/interventions",
     grades: "/student/grades",
     todo: "/student/todo",
