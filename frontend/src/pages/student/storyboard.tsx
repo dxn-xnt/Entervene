@@ -1,11 +1,40 @@
+import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import Card from "../../components/StudentUIComponents/Card";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Loader2, BookOpen } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
+import { apiFetch } from "@/lib/api";
+
+interface EnrolledSubject {
+  subject_load_id: number;
+  class_id: number;
+  subject_id: number;
+  subject_name: string;
+  teacher_name: string;
+  section_name: string;
+}
 
 const StoryBoard = () => {
   const navigate = useNavigate();
+  const [subjects, setSubjects] = useState<EnrolledSubject[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    apiFetch("/api/v1/students/me/subjects")
+      .then((r) => r.json())
+      .then((data) => setSubjects(data))
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const handleSubjectClick = (subject: EnrolledSubject) => {
+    navigate(
+      routes.student.subjectDetail
+        .replace(":classId", String(subject.class_id))
+        .replace(":subjectId", String(subject.subject_id))
+    );
+  };
 
   return (
     <AppLayout>
@@ -14,55 +43,26 @@ const StoryBoard = () => {
       </header>
       <main className="px-5 py-5 flex flex-row gap-4 min-h-screen">
         <div className="grid grid-cols-2 gap-4 w-[65%] self-start">
-          <Card
-            title="Computer Programming"
-            onClick={() => navigate(routes.student.subjects)}
-            teacher="Juan Dela Cruz"
-            badges={[
-              { label: "Quizzes", count: 1 },
-              { label: "Assignments", count: 2 },
-              { label: "Activities", count: 1 },
-            ]}
-          />
-          <Card
-            title="English"
-            onClick={() => navigate(routes.student.subjects)}
-            teacher="Marie Tess"
-            badges={[
-              { label: "Assignments", count: 1 },
-              { label: "Readings", count: 1 },
-            ]}
-          />
-          <Card
-            title="Science & Technology"
-            onClick={() => navigate(routes.student.subjects)}
-            teacher="Jose Rizal"
-            badges={[{ label: "Tasks All Completed", count: 0 }]}
-          />
-          <Card
-            title="Mathematics"
-            onClick={() => navigate(routes.student.subjects)}
-            teacher="Maria Clara"
-            badges={[
-              { label: "Activities", count: 1 },
-              { label: "Readings", count: 1 },
-            ]}
-          />
-          <Card
-            title="Filipino"
-            onClick={() => navigate(routes.student.subjects)}
-            teacher="Maripusa"
-            badges={[
-              { label: "Quizzes", count: 1 },
-              { label: "Readings", count: 1 },
-            ]}
-          />
-          <Card
-            title="System Designs"
-            onClick={() => navigate(routes.student.subjects)}
-            teacher="Alden Richards"
-            badges={[{ label: "Tasks All Completed", count: 0 }]}
-          />
+          {isLoading ? (
+            <div className="col-span-2 flex justify-center py-16">
+              <Loader2 className="animate-spin text-gray-400" size={36} />
+            </div>
+          ) : subjects.length === 0 ? (
+            <div className="col-span-2 flex flex-col items-center py-16 gap-3 text-gray-400">
+              <BookOpen size={40} className="opacity-50" />
+              <p>No enrolled subjects found</p>
+            </div>
+          ) : (
+            subjects.map((subject) => (
+              <Card
+                key={subject.subject_load_id}
+                title={subject.subject_name}
+                onClick={() => handleSubjectClick(subject)}
+                teacher={subject.teacher_name}
+                badges={[{ label: subject.section_name || "Section", count: 0 }]}
+              />
+            ))
+          )}
         </div>
 
         <div className="w-[35%] border rounded px-5 py-5 self-stretch shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
