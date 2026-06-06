@@ -85,15 +85,12 @@ function getStatusStyle(status: string | undefined | null): StatusStyle {
   }
 }
 
-/** Parse a section string like "7-Sampaguita" → { grade: 7, section: "Sampaguita" }.
- *  Returns null when the user truly has no section. */
 function parseSectionInfo(section: string | undefined | null): { grade: number; sectionName: string } | null {
   if (!section) return null;
   const match = section.match(/^(\d+)-(.+)$/);
   if (match) {
     return { grade: parseInt(match[1], 10), sectionName: match[2] };
   }
-  // Section exists but doesn't follow the "grade-section" pattern — treat as-is
   return { grade: 0, sectionName: section };
 }
 
@@ -106,8 +103,6 @@ function getSectionDisplayName(section: string | undefined | null): string | nul
   return parseSectionInfo(section)?.sectionName ?? null;
 }
 
-/** Group students into section buckets.
- *  Key "unassigned" holds students with no section. */
 function groupStudents(students: User[]): Map<string, User[]> {
   const map = new Map<string, User[]>();
   const UNASSIGNED = "__unassigned__";
@@ -119,7 +114,6 @@ function groupStudents(students: User[]): Map<string, User[]> {
     map.set(key, bucket);
   }
 
-  // Sort map: unassigned first, then by grade asc, then section name asc
   const sorted = new Map<string, User[]>();
   if (map.has(UNASSIGNED)) sorted.set(UNASSIGNED, map.get(UNASSIGNED)!);
 
@@ -151,11 +145,8 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Student-specific filters
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-
-  // Collapsed section keys (collapsed = hidden rows)
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
   const fetchUsers = useCallback(async () => {
@@ -182,7 +173,6 @@ export default function AdminUsers() {
     return "No admins found";
   }, [activeTab]);
 
-  // Reset student filters when switching tabs
   useEffect(() => {
     setGradeFilter("all");
     setStatusFilter("all");
@@ -198,9 +188,6 @@ export default function AdminUsers() {
     void fetchUsers();
   }, [fetchUsers]);
 
-  // ── Derived data ──────────────────────────────────────────────────────────
-
-  /** Students filtered by grade + status (search is handled server-side) */
   const filteredStudents = useMemo(() => {
     if (activeTab !== "student") return users;
     return users.filter((u) => {
@@ -240,8 +227,6 @@ export default function AdminUsers() {
   function openUser(user: User) {
     navigate(`/admin/users/${user.role}/${user.id}`);
   }
-
-  // ─────────────────────────────────────────────────────────────────────────
 
   return (
     <AppLayout>
@@ -295,21 +280,31 @@ export default function AdminUsers() {
               {/* ── Student-specific controls ── */}
               {activeTab === "student" && (
                 <>
-                  {/* Summary stats */}
+                  {/* ── Summary stat cards — aligned to classes.tsx SummaryCard ── */}
                   {studentStats && !loading && (
                     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                      <StatCard label="Total Students" value={studentStats.total} />
-                      <StatCard label="Active" value={studentStats.active} color="green" />
+                      <StatCard
+                        label="Total Students"
+                        value={studentStats.total}
+                        icon={<Users className="size-5" />}
+                      />
+                      <StatCard
+                        label="Active"
+                        value={studentStats.active}
+                        color="green"
+                        icon={<GraduationCap className="size-5" />}
+                      />
                       <StatCard
                         label="Pending"
                         value={studentStats.pending}
                         color={studentStats.pending > 0 ? "amber" : undefined}
+                        icon={<School className="size-5" />}
                       />
                       <StatCard
                         label="Unassigned"
                         value={studentStats.unassigned}
                         color={studentStats.unassigned > 0 ? "amber" : undefined}
-                        icon={studentStats.unassigned > 0 ? <AlertTriangle className="size-3.5" /> : undefined}
+                        icon={<AlertTriangle className="size-5" />}
                       />
                     </div>
                   )}
@@ -375,7 +370,6 @@ export default function AdminUsers() {
                       {emptyText}
                     </div>
                   )}
-
                   {[...studentGroups.entries()].map(([key, groupUsers]) => (
                     <SectionGroup
                       key={key}
@@ -389,7 +383,7 @@ export default function AdminUsers() {
                 </>
               )}
 
-              {/* ── Teacher / Admin flat view (unchanged) ── */}
+              {/* ── Teacher / Admin flat view ── */}
               {!loading && activeTab !== "student" && (
                 <>
                   {!loading && users.length > 0 && <TableHeader activeTab={activeTab} />}
@@ -422,6 +416,14 @@ export default function AdminUsers() {
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
+/**
+ * Aligned to SummaryCard from classes.tsx:
+ * - border border-black + shadow-[3px_3px_0_#000]
+ * - bg-[#fffdf5] cream background
+ * - label as text-sm font-bold with icon top-right
+ * - value as text-3xl font-black
+ * - color variants applied to the value only
+ */
 function StatCard({
   label,
   value,
@@ -443,12 +445,12 @@ function StatCard({
           : "";
 
   return (
-    <div className="rounded-lg border border-black/10 bg-muted/40 px-4 py-3">
-      <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={`flex items-center gap-1.5 text-2xl font-bold ${valueColor}`}>
-        {icon && <span className="mt-0.5">{icon}</span>}
-        {value}
+    <div className="rounded-lg border border-black bg-[#fffdf5] p-4 shadow-[3px_3px_0_#000]">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-bold">{label}</p>
+        {icon && <span className="text-muted-foreground">{icon}</span>}
       </div>
+      <p className={`mt-3 text-3xl font-black ${valueColor}`}>{value}</p>
     </div>
   );
 }
@@ -485,7 +487,6 @@ function SectionGroup({
         isUnassigned ? "border-amber-400" : "border-black"
       }`}
     >
-      {/* Section header */}
       <button
         onClick={onToggle}
         className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors ${
@@ -522,10 +523,8 @@ function SectionGroup({
         )}
       </button>
 
-      {/* Column headers + rows */}
       {!collapsed && (
         <div className="bg-background">
-          {/* col header */}
           <div
             className={`grid gap-3 border-t px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ${
               isUnassigned ? "border-amber-300 bg-amber-50/60" : "border-black/20 bg-muted/30"
@@ -600,7 +599,7 @@ function StudentRow({ user, showGrade, onOpenUser }: { user: User; showGrade: bo
   );
 }
 
-// ─── Unchanged teacher/admin components ───────────────────────────────────────
+// ─── Teacher / Admin components (unchanged) ───────────────────────────────────
 
 function TableHeader({ activeTab }: { activeTab: TabId }) {
   if (activeTab === "teacher") {
@@ -670,7 +669,6 @@ function UserRow({ user, activeTab, onOpenUser }: { user: User; activeTab: TabId
     );
   }
 
-  // admin
   return (
     <button
       type="button"

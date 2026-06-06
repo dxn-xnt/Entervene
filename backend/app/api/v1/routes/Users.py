@@ -31,6 +31,7 @@ from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.schemas.User import AcceptInvitationRequest, AcceptInvitationResponse, InviteSingleUserRequest, UpdateUserRequest
 from app.services.MailService import send_invitation_email
+from app.services.ClassManagement import build_student_class_assignment
 
 router = APIRouter()
 
@@ -358,8 +359,9 @@ def update_user(
             )
             if current_enrollment:
                 current_enrollment.class_id = class_row.class_id
+                current_enrollment.academic_year_id = class_row.academic_year_id
             else:
-                db.add(StudentClass(student_id=student.student_id, class_id=class_row.class_id, enrollment_status="enrolled"))
+                db.add(build_student_class_assignment(student.student_id, class_row))
 
     elif client_role == "teacher":
         staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()

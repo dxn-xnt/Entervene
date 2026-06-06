@@ -1,3 +1,5 @@
+import type { ClassFormOptions, UnassignedClassStudentsResponse } from "@/types/adminClasses";
+
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
 export type UserRole = "admin" | "teacher" | "student";
@@ -151,4 +153,34 @@ export async function archiveUser(userId: string) {
   }
 
   return (await response.json()) as { message: string };
+}
+
+function classOptionsErrorMessage(data: unknown): string {
+  if (!data || typeof data !== "object") return "Unable to load class options.";
+  if ("message" in data && typeof data.message === "string") return data.message;
+  if ("detail" in data && typeof data.detail === "string") return data.detail;
+  return "Unable to load class options.";
+}
+
+export async function getClassFormOptions(): Promise<ClassFormOptions> {
+  const response = await apiFetch("/api/v1/classes/form-options");
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(classOptionsErrorMessage(data));
+  }
+
+  return (await response.json()) as ClassFormOptions;
+}
+
+export async function getUnassignedClassStudents(academicLevelId: number): Promise<UnassignedClassStudentsResponse> {
+  const query = new URLSearchParams({ academic_level_id: String(academicLevelId) });
+  const response = await apiFetch(`/api/v1/classes/unassigned-students?${query.toString()}`);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(classOptionsErrorMessage(data).replace("class options", "unassigned students"));
+  }
+
+  return (await response.json()) as UnassignedClassStudentsResponse;
 }
