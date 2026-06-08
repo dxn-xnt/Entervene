@@ -1,6 +1,6 @@
 import re
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -10,13 +10,19 @@ from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
+from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.schemas.Class import (
     BatchCreateClassesRequest,
     BatchCreateClassesResponse,
+    ClassDetailResponse,
     ClassListResponse,
     ClassFormOptionsResponse,
+    ClassStudentListResponse,
+    ClassTransferOptionsResponse,
+    ClassUpdateRequest,
+    UpdateClassStudentListRequest,
     UnassignedStudentsResponse,
     ValidateClassImportResponse,
 )
@@ -53,6 +59,113 @@ def _academic_level_option(academic_level) -> dict:
         "level_name": academic_level.level_name,
         "grade_level": academic_level.grade_level,
     }
+
+
+def _adviser_option(adviser) -> dict | None:
+    if adviser is None:
+        return None
+    return {
+        "staff_id": adviser.staff_id,
+        "first_name": adviser.first_name,
+        "middle_name": adviser.middle_name,
+        "last_name": adviser.last_name,
+        "suffix": adviser.suffix,
+    }
+
+
+def _class_detail_response(db: Session, class_id: int) -> dict:
+    class_row = (
+        db.query(Class, AcademicLevel, AcademicYear, AcademicStaff)
+        .join(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
+        .join(AcademicYear, Class.academic_year_id == AcademicYear.academic_year_id)
+        .outerjoin(AcademicStaff, Class.adviser_staff_id == AcademicStaff.staff_id)
+        .filter(Class.class_id == class_id)
+        .first()
+    )
+    if class_row is None:
+        raise HTTPException(status_code=404, detail="Class not found.")
+
+    class_, academic_level, academic_year, adviser = class_row
+    student_count = (
+        db.query(func.count(StudentClass.student_class_id))
+        .filter(StudentClass.class_id == class_.class_id)
+        .scalar()
+    )
+    subject_count = (
+        db.query(func.count(SubjectLoad.subject_load_id))
+        .filter(SubjectLoad.class_id == class_.class_id)
+        .scalar()
+    )
+
+    return {
+        "class_id": class_.class_id,
+        "section_name": class_.section_name,
+        "class_status": readable_text(class_.class_status) or "active",
+        "created_at": class_.created_at,
+        "academic_year": _academic_year_option(academic_year),
+        "academic_level": _academic_level_option(academic_level),
+        "adviser": _adviser_option(adviser),
+        "statistics": {
+            "student_count": int(student_count or 0),
+            "subject_count": int(subject_count or 0),
+            "schedule_count": 0,
+        },
+    }
+
+
+def _student_full_name(student: Student) -> str:
+    first_name = readable_text(student.first_name)
+    middle_name = readable_text(student.middle_name)
+    last_name = readable_text(student.last_name)
+    suffix = readable_text(student.suffix)
+    middle_initial = f"{middle_name[:1].upper()}." if middle_name else ""
+    given_name = " ".join(part for part in [first_name, middle_initial] if part)
+    family_name = " ".join(part for part in [last_name, suffix] if part)
+    if family_name and given_name:
+        return f"{family_name}, {given_name}"
+    return family_name or given_name
+
+
+def _student_gender_group(value) -> str:
+    gender = normalized_text(value)
+    if gender in {"female", "f", "girl"}:
+        return "Female"
+    if gender in {"male", "m", "boy"}:
+        return "Male"
+    if gender:
+        return "Other"
+    return "Unspecified"
+
+
+def _gender_count_key(group: str) -> str:
+    if group == "Female":
+        return "female"
+    if group == "Male":
+        return "male"
+    if group == "Other":
+        return "other"
+    return "unspecified"
+
+
+def _student_list_item(student: Student) -> dict:
+    full_name = _student_full_name(student)
+    return {
+        "student_id": student.student_id,
+        "full_name": full_name,
+        "gender": _student_gender_group(student.gender),
+        "avatar_initial": (readable_text(student.first_name)[:1] or "?").upper(),
+    }
+
+
+def _get_class_or_404(db: Session, class_id: int) -> Class:
+    class_ = db.query(Class).filter(Class.class_id == class_id).first()
+    if class_ is None:
+        raise HTTPException(status_code=404, detail="Class not found.")
+    return class_
+
+
+def _active_class_filter():
+    return func.lower(func.coalesce(Class.class_status, "active")) != "archived"
 
 
 @router.get("/form-options", response_model=ClassFormOptionsResponse)
@@ -530,3 +643,247 @@ def get_unassigned_students(
             for student in students
         ],
     }
+
+
+@router.get("/{class_id}/students", response_model=ClassStudentListResponse)
+def get_class_students(
+    class_id: int,
+    search: str = "",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=200),
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    class_row = (
+        db.query(Class, AcademicLevel)
+        .join(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
+        .filter(Class.class_id == class_id)
+        .first()
+    )
+    if class_row is None:
+        raise HTTPException(status_code=404, detail="Class not found.")
+
+    class_, academic_level = class_row
+    rows = (
+        db.query(Student)
+        .join(StudentClass, Student.student_id == StudentClass.student_id)
+        .filter(StudentClass.class_id == class_.class_id)
+        .filter(StudentClass.academic_year_id == class_.academic_year_id)
+        .all()
+    )
+
+    items = [_student_list_item(student) for student in rows]
+    search_term = normalized_text(search)
+    if search_term:
+        items = [item for item in items if search_term in normalized_text(item["full_name"])]
+
+    items.sort(key=lambda item: item["full_name"].casefold())
+    gender_counts = {"female": 0, "male": 0, "other": 0, "unspecified": 0}
+    for item in items:
+        gender_counts[_gender_count_key(item["gender"])] += 1
+
+    total_items = len(items)
+    total_pages = max((total_items + page_size - 1) // page_size, 1)
+    start = (page - 1) * page_size
+    paged_items = items[start:start + page_size]
+
+    return {
+        "class_id": class_.class_id,
+        "section_name": class_.section_name,
+        "academic_level": {
+            "academic_level_id": academic_level.academic_level_id,
+            "level_name": academic_level.level_name,
+        },
+        "summary": {
+            "total_students": total_items,
+            "gender_counts": gender_counts,
+        },
+        "students": paged_items,
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total_items": total_items,
+            "total_pages": total_pages,
+        },
+    }
+
+
+@router.get("/{class_id}/transfer-options", response_model=ClassTransferOptionsResponse)
+def get_class_transfer_options(
+    class_id: int,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    class_row = (
+        db.query(Class, AcademicLevel)
+        .join(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
+        .filter(Class.class_id == class_id)
+        .first()
+    )
+    if class_row is None:
+        raise HTTPException(status_code=404, detail="Class not found.")
+
+    class_, academic_level = class_row
+    sections = (
+        db.query(Class)
+        .filter(Class.class_id != class_.class_id)
+        .filter(Class.academic_level_id == class_.academic_level_id)
+        .filter(Class.academic_year_id == class_.academic_year_id)
+        .filter(_active_class_filter())
+        .order_by(func.lower(Class.section_name))
+        .all()
+    )
+
+    return {
+        "current_class_id": class_.class_id,
+        "academic_level": {
+            "academic_level_id": academic_level.academic_level_id,
+            "level_name": academic_level.level_name,
+        },
+        "available_sections": [
+            {"class_id": section.class_id, "section_name": section.section_name}
+            for section in sections
+        ],
+    }
+
+
+@router.patch("/{class_id}/students", response_model=ClassStudentListResponse)
+def update_class_students(
+    class_id: int,
+    payload: UpdateClassStudentListRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    if not payload.removals and not payload.transfers:
+        raise HTTPException(status_code=400, detail="Provide at least one student list change.")
+
+    class_ = _get_class_or_404(db, class_id)
+    removal_ids = [item.student_id for item in payload.removals]
+    transfer_ids = [item.student_id for item in payload.transfers]
+    overlap = set(removal_ids).intersection(transfer_ids)
+    if overlap:
+        raise HTTPException(status_code=400, detail="A student cannot be removed and transferred in the same request.")
+    if len(set(removal_ids)) != len(removal_ids) or len(set(transfer_ids)) != len(transfer_ids):
+        raise HTTPException(status_code=400, detail="Duplicate student changes are not allowed.")
+
+    requested_student_ids = set(removal_ids + transfer_ids)
+    assignments = {
+        assignment.student_id: assignment
+        for assignment in (
+            db.query(StudentClass)
+            .filter(StudentClass.class_id == class_.class_id)
+            .filter(StudentClass.academic_year_id == class_.academic_year_id)
+            .filter(StudentClass.student_id.in_(requested_student_ids))
+            .all()
+        )
+    } if requested_student_ids else {}
+    if set(assignments.keys()) != requested_student_ids:
+        raise HTTPException(status_code=400, detail="Student is not assigned to this class.")
+
+    target_class_ids = {item.target_class_id for item in payload.transfers}
+    target_classes = {
+        target.class_id: target
+        for target in db.query(Class).filter(Class.class_id.in_(target_class_ids)).all()
+    } if target_class_ids else {}
+    for transfer in payload.transfers:
+        target = target_classes.get(transfer.target_class_id)
+        if target is None:
+            raise HTTPException(status_code=404, detail="Target class not found.")
+        if target.class_id == class_.class_id:
+            raise HTTPException(status_code=400, detail="Target class must be different from the current class.")
+        if target.academic_level_id != class_.academic_level_id:
+            raise HTTPException(status_code=400, detail="Target class must use the same academic level.")
+        if target.academic_year_id != class_.academic_year_id:
+            raise HTTPException(status_code=400, detail="Target class must use the same academic year.")
+        if normalized_text(target.class_status or "active") == "archived":
+            raise HTTPException(status_code=400, detail="Target class must be active.")
+
+    try:
+        for student_id in removal_ids:
+            db.delete(assignments[student_id])
+        for transfer in payload.transfers:
+            assignment = assignments[transfer.student_id]
+            assignment.class_id = transfer.target_class_id
+            assignment.academic_year_id = target_classes[transfer.target_class_id].academic_year_id
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return get_class_students(class_id=class_.class_id, page=1, page_size=200, current_user=current_user, db=db)
+
+
+@router.get("/{class_id}", response_model=ClassDetailResponse)
+def get_class_detail(
+    class_id: int,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return _class_detail_response(db, class_id)
+
+
+@router.patch("/{class_id}", response_model=ClassDetailResponse)
+def update_class(
+    class_id: int,
+    payload: ClassUpdateRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="Provide at least one editable field.")
+
+    class_ = db.query(Class).filter(Class.class_id == class_id).first()
+    if class_ is None:
+        raise HTTPException(status_code=404, detail="Class not found.")
+
+    if "section_name" in changes:
+        section_name = readable_text(changes["section_name"])
+        if not section_name:
+            raise HTTPException(status_code=400, detail="Section name is required.")
+        duplicate = (
+            db.query(Class.class_id)
+            .filter(Class.class_id != class_.class_id)
+            .filter(Class.academic_year_id == class_.academic_year_id)
+            .filter(Class.academic_level_id == class_.academic_level_id)
+            .filter(func.lower(Class.section_name) == section_name.lower())
+            .first()
+        )
+        if duplicate:
+            raise HTTPException(
+                status_code=409,
+                detail="A class with the same section and academic configuration already exists.",
+            )
+        class_.section_name = section_name
+
+    if "adviser_staff_id" in changes:
+        adviser_staff_id = changes["adviser_staff_id"]
+        if adviser_staff_id is None or readable_text(adviser_staff_id) == "":
+            class_.adviser_staff_id = None
+        else:
+            adviser_staff_id = readable_text(adviser_staff_id)
+            adviser = (
+                eligible_advisers_query(db)
+                .filter(AcademicStaff.staff_id == adviser_staff_id)
+                .first()
+            )
+            if adviser is None:
+                raise HTTPException(status_code=400, detail="Adviser not found.")
+            assigned_elsewhere = (
+                db.query(Class.class_id)
+                .filter(Class.class_id != class_.class_id)
+                .filter(Class.academic_year_id == class_.academic_year_id)
+                .filter(Class.adviser_staff_id == adviser_staff_id)
+                .first()
+            )
+            if assigned_elsewhere:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This adviser is already assigned to another class in this academic year.",
+                )
+            class_.adviser_staff_id = adviser_staff_id
+
+    db.commit()
+    db.refresh(class_)
+    return _class_detail_response(db, class_.class_id)

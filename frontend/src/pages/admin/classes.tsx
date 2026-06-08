@@ -5,6 +5,7 @@ import ClassCard from "@/components/admin/classes/ClassCard";
 import SummaryCard from "@/components/admin/classes/SummaryCard";
 import AddClassModal from "@/components/admin/classes/modals/AddClassModal";
 import ArchiveClassModal from "@/components/admin/classes/modals/ArchiveClassModal";
+import EditClassModal from "@/components/admin/classes/modals/EditClassModal";
 import { getClasses } from "@/lib/api";
 import type { ClassListItem, GetClassesResponse, StatusFilter } from "@/types/adminClasses";
 
@@ -14,6 +15,7 @@ export default function AdminClasses() {
   const [yearFilter, setYearFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [showNewClass, setShowNewClass] = useState(false);
+  const [editTarget, setEditTarget] = useState<ClassListItem | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<ClassListItem | null>(null);
   const [classList, setClassList] = useState<GetClassesResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -36,26 +38,35 @@ export default function AdminClasses() {
   }, [refreshClasses]);
 
   const classes = useMemo(() => classList?.classes ?? [], [classList]);
+
   const gradeOptions = useMemo(() => {
     const byLevel = new Map<number, { label: string; gradeLevel: number }>();
-    classes.forEach((item) => byLevel.set(item.academic_level.academic_level_id, {
-      label: item.academic_level.level_name,
-      gradeLevel: item.academic_level.grade_level,
-    }));
-    return ["All", ...Array.from(byLevel.values()).sort((a, b) => a.gradeLevel - b.gradeLevel).map((item) => item.label)];
+    classes.forEach((item) =>
+      byLevel.set(item.academic_level.academic_level_id, {
+        label: item.academic_level.level_name,
+        gradeLevel: item.academic_level.grade_level,
+      })
+    );
+    return [
+      "All",
+      ...Array.from(byLevel.values())
+        .sort((a, b) => a.gradeLevel - b.gradeLevel)
+        .map((item) => item.label),
+    ];
   }, [classes]);
-  const yearOptions = useMemo(() => ["All", ...Array.from(new Set(classes.map((item) => item.academic_year.year_label))).sort()], [classes]);
+
+  const yearOptions = useMemo(
+    () => ["All", ...Array.from(new Set(classes.map((item) => item.academic_year.year_label))).sort()],
+    [classes]
+  );
 
   const filteredClasses = useMemo(() => {
     const searchTerm = search.trim().toLocaleLowerCase();
     return classes.filter((item) => {
       const adviserName = adviserDisplayName(item);
-      const text = [
-        item.section_name,
-        item.academic_level.level_name,
-        adviserName,
-        item.adviser?.staff_id ?? "",
-      ].join(" ").toLocaleLowerCase();
+      const text = [item.section_name, item.academic_level.level_name, adviserName, item.adviser?.staff_id ?? ""]
+        .join(" ")
+        .toLocaleLowerCase();
       return (
         (!searchTerm || text.includes(searchTerm)) &&
         (gradeFilter === "All" || item.academic_level.level_name === gradeFilter) &&
@@ -133,7 +144,9 @@ export default function AdminClasses() {
               onChange={(event) => setYearFilter(event.target.value)}
               className="h-10 rounded-md border border-black bg-[#fffdf5] px-3 text-sm outline-none"
             >
-              {yearOptions.map((year) => <option key={year}>{year}</option>)}
+              {yearOptions.map((year) => (
+                <option key={year}>{year}</option>
+              ))}
             </select>
             <select
               value={statusFilter}
@@ -179,41 +192,74 @@ export default function AdminClasses() {
             <StatePanel message="Loading classes..." />
           ) : loadError ? (
             <StatePanel message="Unable to load classes." detail={loadError}>
-              <button className="rounded-md border border-black bg-[#79bd80] px-3 py-1 text-xs font-bold shadow-[2px_2px_0_#000]" onClick={() => void refreshClasses()}>Retry</button>
+              <button
+                className="rounded-md border border-black bg-[#79bd80] px-3 py-1 text-xs font-bold shadow-[2px_2px_0_#000]"
+                onClick={() => void refreshClasses()}
+              >
+                Retry
+              </button>
             </StatePanel>
           ) : !classes.length ? (
             <StatePanel message="No classes found." detail="Create a new class to get started." />
           ) : grouped.length === 0 ? (
             <StatePanel message="No classes match the selected filters." />
-          ) : grouped.map((group) => (
-            <div key={group.levelName} className="rounded-lg border-2 border-black bg-[#fffdf5] p-4 shadow-[4px_4px_0_#000]">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-xl font-bold">{group.levelName}</h2>
-                <span className="rounded-full border border-black bg-[#f7e9aa] px-3 py-1 text-xs font-bold text-[#7a5c00]">
-                  {group.classes.length} section{group.classes.length !== 1 ? "s" : ""}
-                </span>
+          ) : (
+            grouped.map((group) => (
+              <div
+                key={group.levelName}
+                className="rounded-lg border-2 border-black bg-[#fffdf5] p-4 shadow-[4px_4px_0_#000]"
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-xl font-bold">{group.levelName}</h2>
+                  <span className="rounded-full border border-black bg-[#f7e9aa] px-3 py-1 text-xs font-bold text-[#7a5c00]">
+                    {group.classes.length} section{group.classes.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {group.classes.map((item) => (
+                    <ClassCard
+                      key={item.class_id}
+                      item={item}
+                      onEdit={() => setEditTarget(item)}
+                      onArchive={() => setArchiveTarget(item)}
+                    />
+                  ))}
+                </div>
               </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {group.classes.map((item) => (
-                  <ClassCard
-                    key={item.class_id}
-                    item={item}
-                    onEdit={() => setShowNewClass(true)}
-                    onArchive={() => setArchiveTarget(item)}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </section>
       </main>
 
-      {showNewClass && <AddClassModal onClose={() => setShowNewClass(false)} onClassesCreated={() => void refreshClasses()} />}
+      {/* New class modal */}
+      {showNewClass && (
+        <AddClassModal
+          onClose={() => setShowNewClass(false)}
+          onClassesCreated={() => void refreshClasses()}
+        />
+      )}
+
+      {/* Edit class modal */}
+      {editTarget && (
+        <EditClassModal
+          classId={editTarget.class_id}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => {
+            setEditTarget(null);
+            void refreshClasses();
+          }}
+        />
+      )}
+
+      {/* Archive confirmation modal */}
       {archiveTarget && (
         <ArchiveClassModal
           classRecord={archiveTarget}
           onClose={() => setArchiveTarget(null)}
-          onConfirm={() => setArchiveTarget(null)}
+          onConfirm={() => {
+            setArchiveTarget(null);
+            void refreshClasses();
+          }}
         />
       )}
     </AppLayout>
@@ -221,7 +267,11 @@ export default function AdminClasses() {
 }
 
 function adviserDisplayName(item: ClassListItem) {
-  return item.adviser ? [item.adviser.first_name, item.adviser.middle_name, item.adviser.last_name, item.adviser.suffix].filter(Boolean).join(" ") : "No adviser assigned";
+  return item.adviser
+    ? [item.adviser.first_name, item.adviser.middle_name, item.adviser.last_name, item.adviser.suffix]
+        .filter(Boolean)
+        .join(" ")
+    : "No adviser assigned";
 }
 
 function normalizedStatus(status: string) {

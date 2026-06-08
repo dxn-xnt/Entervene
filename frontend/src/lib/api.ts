@@ -1,8 +1,13 @@
 import type {
   BatchCreateClassesRequest,
   BatchCreateClassesResponse,
+  ClassDetailResponse,
   ClassFormOptions,
+  ClassStudentListResponse,
+  ClassTransferOptionsResponse,
   GetClassesResponse,
+  UpdateClassStudentListRequest,
+  UpdateClassRequest,
   UnassignedClassStudentsResponse,
   ValidateClassImportResponse,
 } from "@/types/adminClasses";
@@ -203,6 +208,84 @@ export async function getClasses(): Promise<GetClassesResponse> {
   return (await response.json()) as GetClassesResponse;
 }
 
+export async function getClassDetail(classId: string | number): Promise<ClassDetailResponse> {
+  const response = await apiFetch(`/api/v1/classes/${encodeURIComponent(String(classId))}`);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(classDetailErrorMessage(data, response.status));
+  }
+
+  return (await response.json()) as ClassDetailResponse;
+}
+
+export async function updateClass(
+  classId: string | number,
+  payload: UpdateClassRequest
+): Promise<ClassDetailResponse> {
+  const response = await apiFetch(`/api/v1/classes/${encodeURIComponent(String(classId))}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(classUpdateErrorMessage(data, response.status), response.status, data);
+  }
+
+  return (await response.json()) as ClassDetailResponse;
+}
+
+export async function getClassStudents(
+  classId: string | number,
+  options: { search?: string; page?: number; pageSize?: number } = {}
+): Promise<ClassStudentListResponse> {
+  const query = new URLSearchParams();
+  if (options.search?.trim()) query.set("search", options.search.trim());
+  if (options.page) query.set("page", String(options.page));
+  if (options.pageSize) query.set("page_size", String(options.pageSize));
+  const response = await apiFetch(
+    `/api/v1/classes/${encodeURIComponent(String(classId))}/students${query.toString() ? `?${query.toString()}` : ""}`
+  );
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(classStudentsErrorMessage(data, response.status));
+  }
+
+  return (await response.json()) as ClassStudentListResponse;
+}
+
+export async function getClassTransferOptions(classId: string | number): Promise<ClassTransferOptionsResponse> {
+  const response = await apiFetch(`/api/v1/classes/${encodeURIComponent(String(classId))}/transfer-options`);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(classStudentsErrorMessage(data, response.status));
+  }
+
+  return (await response.json()) as ClassTransferOptionsResponse;
+}
+
+export async function updateClassStudentList(
+  classId: string | number,
+  payload: UpdateClassStudentListRequest
+): Promise<ClassStudentListResponse> {
+  const response = await apiFetch(`/api/v1/classes/${encodeURIComponent(String(classId))}/students`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(classStudentsErrorMessage(data, response.status), response.status, data);
+  }
+
+  return (await response.json()) as ClassStudentListResponse;
+}
+
 export async function getUnassignedClassStudents(academicLevelId: number): Promise<UnassignedClassStudentsResponse> {
   const query = new URLSearchParams({ academic_level_id: String(academicLevelId) });
   const response = await apiFetch(`/api/v1/classes/unassigned-students?${query.toString()}`);
@@ -222,6 +305,40 @@ function classListErrorMessage(data: unknown, status: number): string {
   if ("message" in data && typeof data.message === "string") return data.message;
   if ("detail" in data && typeof data.detail === "string") return data.detail;
   return "Unable to load classes.";
+}
+
+function classDetailErrorMessage(data: unknown, status: number): string {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to view this class.";
+  if (status === 404) return "Unable to load class details.";
+  if (!data || typeof data !== "object") return "Unable to load class details.";
+  if ("message" in data && typeof data.message === "string") return data.message;
+  if ("detail" in data && typeof data.detail === "string") return data.detail;
+  return "Unable to load class details.";
+}
+
+function classUpdateErrorMessage(data: unknown, status: number): string {
+  if (status === 400) return safeClassErrorMessage(data, "Unable to update class.");
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to update this class.";
+  if (status === 404) return "Class not found.";
+  if (status === 409) return safeClassErrorMessage(data, "Unable to update class because it conflicts with existing class data.");
+  return safeClassErrorMessage(data, "Unable to update class.");
+}
+
+function classStudentsErrorMessage(data: unknown, status: number): string {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to update this class.";
+  if (status === 404) return safeClassErrorMessage(data, "Class not found.");
+  if (status === 409) return safeClassErrorMessage(data, "Unable to update student list.");
+  return safeClassErrorMessage(data, "Unable to update student list.");
+}
+
+function safeClassErrorMessage(data: unknown, fallback: string): string {
+  if (!data || typeof data !== "object") return fallback;
+  if ("message" in data && typeof data.message === "string") return data.message;
+  if ("detail" in data && typeof data.detail === "string") return data.detail;
+  return fallback;
 }
 
 export async function createClassesBatch(payload: BatchCreateClassesRequest): Promise<BatchCreateClassesResponse> {
