@@ -82,6 +82,90 @@ export type GetClassesResponse = {
   classes: ClassListItem[];
 };
 
+export type ClassDetailStatistics = {
+  student_count: number;
+  subject_count: number;
+  schedule_count: number;
+};
+
+export type ClassDetailResponse = {
+  class_id: number;
+  section_name: string;
+  class_status: string;
+  created_at: string | null;
+  academic_year: AcademicYearOption;
+  academic_level: AcademicLevelOption;
+  adviser: AdviserOption | null;
+  statistics: ClassDetailStatistics;
+};
+
+export type UpdateClassRequest = {
+  section_name?: string;
+  adviser_staff_id?: string | null;
+};
+
+export type ClassStudentListItem = {
+  student_id: string;
+  full_name: string;
+  gender: string;
+  avatar_initial: string;
+};
+
+export type ClassStudentGenderCounts = {
+  female: number;
+  male: number;
+  other: number;
+  unspecified: number;
+};
+
+export type ClassStudentListResponse = {
+  class_id: number;
+  section_name: string;
+  academic_level: {
+    academic_level_id: number;
+    level_name: string;
+  };
+  summary: {
+    total_students: number;
+    gender_counts: ClassStudentGenderCounts;
+  };
+  students: ClassStudentListItem[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total_items: number;
+    total_pages: number;
+  };
+};
+
+export type ClassTransferOption = {
+  class_id: number;
+  section_name: string;
+};
+
+export type ClassTransferOptionsResponse = {
+  current_class_id: number;
+  academic_level: {
+    academic_level_id: number;
+    level_name: string;
+  };
+  available_sections: ClassTransferOption[];
+};
+
+export type PendingStudentRemoval = {
+  student_id: string;
+};
+
+export type PendingStudentTransfer = {
+  student_id: string;
+  target_class_id: number;
+};
+
+export type UpdateClassStudentListRequest = {
+  removals: PendingStudentRemoval[];
+  transfers: PendingStudentTransfer[];
+};
+
 export type ManualSectionDraft = {
   localId: string;
   sectionName: string;
