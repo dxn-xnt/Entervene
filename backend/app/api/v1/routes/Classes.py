@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -5,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.Dependencies import require_role
 from app.db.Session import get_db
 from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.people.AcademicStaff import AcademicStaff
@@ -12,6 +15,7 @@ from app.models.people.Student import Student
 from app.schemas.Class import (
     BatchCreateClassesRequest,
     BatchCreateClassesResponse,
+    ClassListResponse,
     ClassFormOptionsResponse,
     UnassignedStudentsResponse,
     ValidateClassImportResponse,
@@ -33,6 +37,7 @@ from app.services.ClassManagement import (
 )
 
 router = APIRouter()
+SCIENTIFIC_NOTATION_PATTERN = re.compile(r"^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$")
 
 
 def _academic_year_option(academic_year) -> dict:
@@ -85,6 +90,70 @@ def get_class_form_options(
             }
             for adviser in eligible_advisers
         ],
+    }
+
+
+@router.get("", response_model=ClassListResponse)
+def list_classes(
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    class_rows = (
+        db.query(
+            Class,
+            AcademicLevel,
+            AcademicYear,
+            AcademicStaff,
+            func.count(StudentClass.student_class_id).label("student_count"),
+        )
+        .join(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
+        .join(AcademicYear, Class.academic_year_id == AcademicYear.academic_year_id)
+        .outerjoin(AcademicStaff, Class.adviser_staff_id == AcademicStaff.staff_id)
+        .outerjoin(StudentClass, Class.class_id == StudentClass.class_id)
+        .group_by(Class.class_id, AcademicLevel.academic_level_id, AcademicYear.academic_year_id, AcademicStaff.staff_id)
+        .order_by(AcademicLevel.grade_level, func.lower(Class.section_name))
+        .all()
+    )
+
+    classes = []
+    total_students = 0
+    active_classes = 0
+    archived_classes = 0
+    for class_, academic_level, academic_year, adviser, student_count in class_rows:
+        count = int(student_count or 0)
+        total_students += count
+        status = readable_text(class_.class_status) or "active"
+        normalized_status = normalized_text(status)
+        if normalized_status == "active":
+            active_classes += 1
+        elif normalized_status == "archived":
+            archived_classes += 1
+
+        classes.append({
+            "class_id": class_.class_id,
+            "section_name": class_.section_name,
+            "class_status": status,
+            "academic_year": _academic_year_option(academic_year),
+            "academic_level": _academic_level_option(academic_level),
+            "adviser": None if adviser is None else {
+                "staff_id": adviser.staff_id,
+                "first_name": adviser.first_name,
+                "middle_name": adviser.middle_name,
+                "last_name": adviser.last_name,
+                "suffix": adviser.suffix,
+            },
+            "student_count": count,
+            "subject_count": 0,
+        })
+
+    return {
+        "summary": {
+            "total_classes": len(classes),
+            "active_classes": active_classes,
+            "archived_classes": archived_classes,
+            "students_assigned": total_students,
+        },
+        "classes": classes,
     }
 
 
@@ -204,6 +273,23 @@ async def validate_class_import(
                 "section_name",
             ))
 
+        grade_level = readable_text(row["grade_level"])
+        if not grade_level:
+            errors.append(csv_validation_error(
+                "missing_required_field", "Grade level is required.", row_number, "grade_level"
+            ))
+        elif not grade_level.isdecimal():
+            errors.append(csv_validation_error(
+                "invalid_grade_level", "Grade level must be a whole number.", row_number, "grade_level"
+            ))
+        elif int(grade_level) != academic_level.grade_level:
+            errors.append(csv_validation_error(
+                "academic_level_mismatch",
+                f"CSV grade level {int(grade_level)} does not match the selected academic level {academic_level.level_name}.",
+                row_number,
+                "grade_level",
+            ))
+
         adviser_id = readable_text(row["adviser_staff_id"])
         adviser = advisers.get(adviser_id)
         if not adviser_id:
@@ -276,6 +362,13 @@ async def validate_class_import(
         if not student_lrn:
             errors.append(csv_validation_error(
                 "student_lrn_required", "Student LRN is required.", row_number, "student_lrn"
+            ))
+        elif SCIENTIFIC_NOTATION_PATTERN.fullmatch(student_lrn):
+            errors.append(csv_validation_error(
+                "student_lrn_scientific_notation",
+                "Student LRN was converted to scientific notation by spreadsheet software. Use the complete 12-digit LRN and format the student_lrn column as Text before saving the CSV.",
+                row_number,
+                "student_lrn",
             ))
         elif not (len(student_lrn) == 12 and student_lrn.isdigit()):
             errors.append(csv_validation_error(

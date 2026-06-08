@@ -21,6 +21,7 @@ from app.models.people.Student import Student
 
 CLASS_IMPORT_HEADERS = [
     "section_name",
+    "grade_level",
     "adviser_staff_id",
     "adviser_first_name",
     "adviser_middle_name",

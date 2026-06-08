@@ -60,10 +60,15 @@ export default function AddUserModal({
   );
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{
-    created: number;
-    skipped: number;
+    message?: string;
+    created?: number;
+    skipped?: number;
+    created_count?: number;
+    failed_count?: number;
     skipped_emails?: string[];
+    errors?: Array<{ row: number; field: string; value: string; reason: string }>;
   } | null>(null);
+  const [manualSubmitting, setManualSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!open) return null;
@@ -97,7 +102,7 @@ export default function AddUserModal({
       );
 
       const data = await res.json().catch(() => ({}));
-      setImportResult(data);
+      setImportResult(res.ok ? data : data.detail ?? data);
 
       if (res.ok) {
         onUserAdded?.(form);
@@ -112,6 +117,8 @@ export default function AddUserModal({
   };
 
   const handleManualSubmit = async () => {
+    if (manualSubmitting) return;
+    setManualSubmitting(true);
     try {
       const res = await apiFetch("/api/v1/users/invite", {
         method: "POST",
@@ -146,6 +153,8 @@ export default function AddUserModal({
       window.alert(
         error instanceof Error ? error.message : "Unable to send invite.",
       );
+    } finally {
+      setManualSubmitting(false);
     }
   };
 
@@ -330,12 +339,30 @@ export default function AddUserModal({
               />
 
               {importResult && (
-                <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-                  Imported {importResult.created} user(s); skipped{" "}
-                  {importResult.skipped} user(s).
+                <div
+                  className={`rounded border px-3 py-2 text-xs ${
+                    importResult.errors?.length
+                      ? "border-red-200 bg-red-50 text-red-800"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  }`}
+                >
+                  <div>
+                    {importResult.message ? `${importResult.message}. ` : ""}
+                    Imported {importResult.created_count ?? importResult.created ?? 0} user(s); failed{" "}
+                    {importResult.failed_count ?? importResult.skipped ?? 0} user(s).
+                  </div>
                   {importResult.skipped_emails?.length
                     ? ` Skipped: ${importResult.skipped_emails.join(", ")}`
                     : ""}
+                  {importResult.errors?.length ? (
+                    <ul className="mt-2 max-h-24 overflow-y-auto list-disc pl-4">
+                      {importResult.errors.map((error, index) => (
+                        <li key={`${error.row}-${error.field}-${index}`}>
+                          Row {error.row}, {error.field}: {error.reason}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -568,9 +595,10 @@ export default function AddUserModal({
               </button>
               <button
                 onClick={handleManualSubmit}
+                disabled={manualSubmitting}
                 className="px-5 py-1.5 rounded-lg border text-sm font-semibold bg-[#5c8f5c] transition hover:opacity-90"
               >
-                Send Invitation
+                {manualSubmitting ? "Sending..." : "Send Invitation"}
               </button>
             </div>
           </>

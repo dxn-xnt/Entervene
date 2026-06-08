@@ -15,7 +15,7 @@ export default function AddClassMethodSelection({ onClose, onSelect }: {
         <div className="grid gap-4 border-b border-black px-5 py-5 md:grid-cols-2">
           <button className="rounded-lg border border-black bg-[#5c8f5c] p-5 text-left transition hover:opacity-90 active:scale-95" onClick={() => onSelect("import")}>
             <div className="mb-2 flex items-center gap-3 text-base font-semibold"><Download className="size-5" />Import from file</div>
-            <p className="text-sm leading-snug text-black/80">Upload a CSV or Excel file to add multiple classes at once</p>
+            <p className="text-sm leading-snug text-black/80">Upload a CSV file to add multiple classes at once</p>
           </button>
           <button className="rounded-lg border border-black bg-[#5c8f5c] p-5 text-left transition hover:opacity-90 active:scale-95" onClick={() => onSelect("manual")}>
             <div className="mb-2 flex items-center gap-3 text-base font-semibold"><UserPlus className="size-5" />Create manually</div>
