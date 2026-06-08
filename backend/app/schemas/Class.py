@@ -28,6 +28,29 @@ class ClassFormOptionsResponse(BaseModel):
     eligible_advisers: list[AdviserOption]
 
 
+class ClassListItem(BaseModel):
+    class_id: int
+    section_name: str
+    class_status: str
+    academic_year: AcademicYearOption
+    academic_level: AcademicLevelOption
+    adviser: AdviserOption | None
+    student_count: int
+    subject_count: int
+
+
+class ClassListSummary(BaseModel):
+    total_classes: int
+    active_classes: int
+    archived_classes: int
+    students_assigned: int
+
+
+class ClassListResponse(BaseModel):
+    summary: ClassListSummary
+    classes: list[ClassListItem]
+
+
 class UnassignedStudentItem(BaseModel):
     student_id: UUID
     student_lrn: str
