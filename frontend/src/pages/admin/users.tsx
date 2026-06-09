@@ -1,3 +1,4 @@
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import AddUserModal from "../../components/admin/AddUserModal";
 import { Badge } from "../../components/retroui/Badge";
 import { Input } from "../../components/retroui/Input";
@@ -29,7 +30,17 @@ import { useNavigate } from "react-router-dom";
 type TabId = UserRole;
 
 type GradeFilter = "all" | 7 | 8 | 9 | 10 | 11 | 12;
-type StatusFilter = "all" | "active" | "pending" | "inactive" | "suspended" | "archived" | "graduated" | "transferred" | "dropped" | "no section assigned";
+type StatusFilter =
+  | "all"
+  | "active"
+  | "pending"
+  | "inactive"
+  | "suspended"
+  | "archived"
+  | "graduated"
+  | "transferred"
+  | "dropped"
+  | "no section assigned";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -38,7 +49,11 @@ const GRADE_LEVELS: GradeFilter[] = ["all", 7, 8, 9, 10, 11, 12];
 const tabs: { id: TabId; label: string; icon: ReactNode }[] = [
   { id: "admin", label: "Admin", icon: <UserCog className="size-3.5" /> },
   { id: "teacher", label: "Teachers", icon: <BookOpen className="size-3.5" /> },
-  { id: "student", label: "Students", icon: <GraduationCap className="size-3.5" /> },
+  {
+    id: "student",
+    label: "Students",
+    icon: <GraduationCap className="size-3.5" />,
+  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -59,33 +74,73 @@ const STATUS_BADGE_BASE =
 function getStatusStyle(status: string | undefined | null): StatusStyle {
   switch ((status || "").toLowerCase()) {
     case "active":
-      return { badge: "bg-emerald-50 border-emerald-300 text-emerald-700", dot: "bg-emerald-500", label: "Active" };
+      return {
+        badge: "bg-emerald-50 border-emerald-300 text-emerald-700",
+        dot: "bg-emerald-500",
+        label: "Active",
+      };
     case "pending":
-      return { badge: "bg-amber-50 border-amber-300 text-amber-700", dot: "bg-amber-400", label: "Pending" };
+      return {
+        badge: "bg-amber-50 border-amber-300 text-amber-700",
+        dot: "bg-amber-400",
+        label: "Pending",
+      };
     case "inactive":
-      return { badge: "bg-slate-100 border-slate-300 text-slate-500", dot: "bg-slate-400", label: "Inactive" };
+      return {
+        badge: "bg-slate-100 border-slate-300 text-slate-500",
+        dot: "bg-slate-400",
+        label: "Inactive",
+      };
     case "suspended":
-      return { badge: "bg-red-50 border-red-300 text-red-600", dot: "bg-red-500", label: "Suspended" };
+      return {
+        badge: "bg-red-50 border-red-300 text-red-600",
+        dot: "bg-red-500",
+        label: "Suspended",
+      };
     case "archived":
-      return { badge: "bg-zinc-100 border-zinc-300 text-zinc-600", dot: "bg-zinc-500", label: "Archived" };
+      return {
+        badge: "bg-zinc-100 border-zinc-300 text-zinc-600",
+        dot: "bg-zinc-500",
+        label: "Archived",
+      };
     case "graduated":
-      return { badge: "bg-blue-50 border-blue-300 text-blue-700", dot: "bg-blue-500", label: "Graduated" };
+      return {
+        badge: "bg-blue-50 border-blue-300 text-blue-700",
+        dot: "bg-blue-500",
+        label: "Graduated",
+      };
     case "transferred":
-      return { badge: "bg-violet-50 border-violet-300 text-violet-700", dot: "bg-violet-500", label: "Transferred" };
+      return {
+        badge: "bg-violet-50 border-violet-300 text-violet-700",
+        dot: "bg-violet-500",
+        label: "Transferred",
+      };
     case "dropped":
-      return { badge: "bg-red-50 border-red-300 text-red-600", dot: "bg-red-500", label: "Dropped" };
+      return {
+        badge: "bg-red-50 border-red-300 text-red-600",
+        dot: "bg-red-500",
+        label: "Dropped",
+      };
     case "no section assigned":
-      return { badge: "bg-amber-50 border-amber-300 text-amber-700", dot: "bg-amber-400", label: "No Section" };
+      return {
+        badge: "bg-amber-50 border-amber-300 text-amber-700",
+        dot: "bg-amber-400",
+        label: "No Section",
+      };
     default:
       return {
         badge: "bg-slate-100 border-slate-200 text-slate-600",
         dot: "bg-slate-400",
-        label: status ? status.charAt(0).toUpperCase() + status.slice(1) : "Unknown",
+        label: status
+          ? status.charAt(0).toUpperCase() + status.slice(1)
+          : "Unknown",
       };
   }
 }
 
-function parseSectionInfo(section: string | undefined | null): { grade: number; sectionName: string } | null {
+function parseSectionInfo(
+  section: string | undefined | null,
+): { grade: number; sectionName: string } | null {
   if (!section) return null;
   const match = section.match(/^(\d+)-(.+)$/);
   if (match) {
@@ -96,10 +151,14 @@ function parseSectionInfo(section: string | undefined | null): { grade: number; 
 
 function getStudentGradeLevel(user: User): number | null {
   const parsedGrade = parseSectionInfo(user.section)?.grade;
-  return parsedGrade && parsedGrade > 0 ? parsedGrade : user.grade_level ?? null;
+  return parsedGrade && parsedGrade > 0
+    ? parsedGrade
+    : (user.grade_level ?? null);
 }
 
-function getSectionDisplayName(section: string | undefined | null): string | null {
+function getSectionDisplayName(
+  section: string | undefined | null,
+): string | null {
   return parseSectionInfo(section)?.sectionName ?? null;
 }
 
@@ -147,7 +206,9 @@ export default function AdminUsers() {
 
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    new Set(),
+  );
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -156,7 +217,10 @@ export default function AdminUsers() {
       const data = await getUsers({
         role: activeTab,
         search: debouncedSearch,
-        status: activeTab === "student" && statusFilter !== "all" ? statusFilter : undefined,
+        status:
+          activeTab === "student" && statusFilter !== "all"
+            ? statusFilter
+            : undefined,
       });
       setUsers(data);
     } catch (err) {
@@ -191,7 +255,11 @@ export default function AdminUsers() {
   const filteredStudents = useMemo(() => {
     if (activeTab !== "student") return users;
     return users.filter((u) => {
-      if (statusFilter !== "all" && (u.account_status ?? "").toLowerCase() !== statusFilter) return false;
+      if (
+        statusFilter !== "all" &&
+        (u.account_status ?? "").toLowerCase() !== statusFilter
+      )
+        return false;
       if (gradeFilter !== "all") {
         const grade = getStudentGradeLevel(u);
         if (grade !== gradeFilter) return false;
@@ -201,7 +269,8 @@ export default function AdminUsers() {
   }, [users, activeTab, gradeFilter, statusFilter]);
 
   const studentGroups = useMemo(
-    () => (activeTab === "student" ? groupStudents(filteredStudents) : new Map()),
+    () =>
+      activeTab === "student" ? groupStudents(filteredStudents) : new Map(),
     [activeTab, filteredStudents],
   );
 
@@ -209,8 +278,12 @@ export default function AdminUsers() {
     if (activeTab !== "student") return null;
     return {
       total: users.length,
-      active: users.filter((u) => (u.account_status ?? "").toLowerCase() === "active").length,
-      pending: users.filter((u) => (u.account_status ?? "").toLowerCase() === "pending").length,
+      active: users.filter(
+        (u) => (u.account_status ?? "").toLowerCase() === "active",
+      ).length,
+      pending: users.filter(
+        (u) => (u.account_status ?? "").toLowerCase() === "pending",
+      ).length,
       unassigned: users.filter((u) => !u.section).length,
     };
   }, [users, activeTab]);
@@ -231,36 +304,38 @@ export default function AdminUsers() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
-
-            {/* ── Header ── */}
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6 pb-6">
             <header className="flex items-center justify-between">
-              <h1 className="text-4xl font-bold tracking-tight">User Management</h1>
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="md:hidden" />
+                <h1 className="text-2xl md:text-4xl font-bold tracking-tight">User Management</h1>
+              </div>
               <button
                 onClick={() => setModalOpen(true)}
-                className="flex items-center gap-1.5 rounded-lg border-2 border-black bg-[#79bd80] px-4 py-2 text-sm font-semibold text-black shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000]"
+                className="flex items-center gap-1.5 rounded-lg border border-black bg-[#79bd80] px-4 py-2 text-sm font-semibold text-black shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000]"
               >
                 <Plus className="size-4" />
                 New User
               </button>
             </header>
 
-            {/* ── Tabs ── */}
-            <div className="-mx-4 border-b border-black/40 md:-mx-6">
-              <Tabs tabs={tabs} activeTab={activeTab} onChange={(id) => setActiveTab(id as TabId)} />
+            <div className="-mx-4 md:-mx-6 border-black/40">
+              <Tabs
+                tabs={tabs}
+                activeTab={activeTab}
+                onChange={(id) => setActiveTab(id as TabId)}
+              />
             </div>
 
-            <div className="flex flex-col gap-3 px-4 md:px-6">
-
-              {/* ── Search + controls row ── */}
+            <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="relative max-w-md flex-1">
                   <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     aria-label="Search users"
                     className="h-9 rounded-md border border-black/70 pl-9 shadow-none"
-                    placeholder={activeTab === "student" ? "Search student..." : "Search user"}
+                    placeholder="Search user"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
@@ -277,41 +352,41 @@ export default function AdminUsers() {
                 </div>
               </div>
 
-              {/* ── Student-specific controls ── */}
               {activeTab === "student" && (
                 <>
-                  {/* ── Summary stat cards — aligned to classes.tsx SummaryCard ── */}
                   {studentStats && !loading && (
                     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                       <StatCard
                         label="Total Students"
                         value={studentStats.total}
-                        icon={<Users className="size-5" />}
+                        icon={<Users className="size-5 text-black" />}
                       />
                       <StatCard
                         label="Active"
                         value={studentStats.active}
-                        color="green"
-                        icon={<GraduationCap className="size-5" />}
+                        icon={<GraduationCap className="size-5 text-black" />}
                       />
                       <StatCard
                         label="Pending"
                         value={studentStats.pending}
                         color={studentStats.pending > 0 ? "amber" : undefined}
-                        icon={<School className="size-5" />}
+                        icon={<School className="size-5 text-black" />}
                       />
                       <StatCard
                         label="Unassigned"
                         value={studentStats.unassigned}
-                        color={studentStats.unassigned > 0 ? "amber" : undefined}
-                        icon={<AlertTriangle className="size-5" />}
+                        color={
+                          studentStats.unassigned > 0 ? "amber" : undefined
+                        }
+                        icon={<AlertTriangle className="size-5 text-black" />}
                       />
                     </div>
                   )}
 
-                  {/* Grade filter pills */}
                   <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                    <span className="shrink-0 text-xs font-medium text-muted-foreground">Grade:</span>
+                    <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                      Grade:
+                    </span>
                     {GRADE_LEVELS.map((g) => (
                       <button
                         key={g}
@@ -328,7 +403,9 @@ export default function AdminUsers() {
                     <div className="ml-auto shrink-0">
                       <select
                         value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                        onChange={(e) =>
+                          setStatusFilter(e.target.value as StatusFilter)
+                        }
                         className="h-7 rounded-md border border-black/30 bg-background px-2 text-xs font-medium text-muted-foreground hover:border-black/60"
                       >
                         <option value="all">All Statuses</option>
@@ -340,21 +417,21 @@ export default function AdminUsers() {
                         <option value="graduated">Graduated</option>
                         <option value="transferred">Transferred</option>
                         <option value="dropped">Dropped</option>
-                        <option value="no section assigned">No Section Assigned</option>
+                        <option value="no section assigned">
+                          No Section Assigned
+                        </option>
                       </select>
                     </div>
                   </div>
                 </>
               )}
 
-              {/* ── Error ── */}
               {error && (
                 <div className="rounded border-2 border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {error}
                 </div>
               )}
 
-              {/* ── Loading ── */}
               {loading && (
                 <div className="flex items-center justify-center gap-3 rounded-xl border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
                   <Loader size="sm" />
@@ -362,7 +439,6 @@ export default function AdminUsers() {
                 </div>
               )}
 
-              {/* ── Student grouped view ── */}
               {!loading && activeTab === "student" && (
                 <>
                   {studentGroups.size === 0 && (
@@ -383,16 +459,22 @@ export default function AdminUsers() {
                 </>
               )}
 
-              {/* ── Teacher / Admin flat view ── */}
               {!loading && activeTab !== "student" && (
                 <>
-                  {!loading && users.length > 0 && <TableHeader activeTab={activeTab} />}
+                  {users.length > 0 && <TableHeader activeTab={activeTab} />}
                   <div className="overflow-hidden rounded-xl border border-black bg-background shadow-[4px_5px_0_#000]">
                     {users.length === 0 && (
-                      <div className="py-12 text-center text-sm text-muted-foreground">{emptyText}</div>
+                      <div className="py-12 text-center text-sm text-muted-foreground">
+                        {emptyText}
+                      </div>
                     )}
                     {users.map((user) => (
-                      <UserRow key={user.id} user={user} activeTab={activeTab} onOpenUser={openUser} />
+                      <UserRow
+                        key={user.id}
+                        user={user}
+                        activeTab={activeTab}
+                        onOpenUser={openUser}
+                      />
                     ))}
                   </div>
                 </>
@@ -445,7 +527,7 @@ function StatCard({
           : "";
 
   return (
-    <div className="rounded-lg border border-black bg-[#fffdf5] p-4 shadow-[3px_3px_0_#000]">
+    <div className="rounded-lg border border-black bg-accent! p-4 shadow-[3px_3px_0_#000]">
       <div className="flex items-center justify-between">
         <p className="text-sm font-bold">{label}</p>
         {icon && <span className="text-muted-foreground">{icon}</span>}
@@ -502,7 +584,9 @@ function SectionGroup({
           <Users className="size-4 shrink-0 text-muted-foreground" />
         )}
 
-        <span className={`flex-1 text-sm font-semibold ${isUnassigned ? "text-amber-800" : ""}`}>
+        <span
+          className={`flex-1 text-sm font-semibold ${isUnassigned ? "text-amber-800" : ""}`}
+        >
           {headerLabel}
         </span>
 
@@ -527,17 +611,26 @@ function SectionGroup({
         <div className="bg-background">
           <div
             className={`grid gap-3 border-t px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ${
-              isUnassigned ? "border-amber-300 bg-amber-50/60" : "border-black/20 bg-muted/30"
+              isUnassigned
+                ? "border-amber-300 bg-amber-50/60"
+                : "border-black/20 bg-muted/30"
             } ${isUnassigned ? "grid-cols-[minmax(0,1fr)_120px_120px_90px]" : "grid-cols-[minmax(0,1fr)_120px_150px_90px]"}`}
           >
             <span>Name</span>
             <span className="text-center">Status</span>
-            <span className="text-center">{isUnassigned ? "Grade level" : "Section"}</span>
+            <span className="text-center">
+              {isUnassigned ? "Grade level" : "Section"}
+            </span>
             <span className="text-right">Average</span>
           </div>
 
           {users.map((user) => (
-            <StudentRow key={user.id} user={user} showGrade={isUnassigned} onOpenUser={onOpenUser} />
+            <StudentRow
+              key={user.id}
+              user={user}
+              showGrade={isUnassigned}
+              onOpenUser={onOpenUser}
+            />
           ))}
         </div>
       )}
@@ -545,7 +638,15 @@ function SectionGroup({
   );
 }
 
-function StudentRow({ user, showGrade, onOpenUser }: { user: User; showGrade: boolean; onOpenUser: (user: User) => void }) {
+function StudentRow({
+  user,
+  showGrade,
+  onOpenUser,
+}: {
+  user: User;
+  showGrade: boolean;
+  onOpenUser: (user: User) => void;
+}) {
   const status = getStatusStyle(user.account_status);
   const gradeLevel = getStudentGradeLevel(user);
   const sectionName = getSectionDisplayName(user.section);
@@ -562,7 +663,9 @@ function StudentRow({ user, showGrade, onOpenUser }: { user: User; showGrade: bo
     >
       <NameCell name={user.name} subtitle={user.email} />
 
-      <span className={`justify-self-center ${STATUS_BADGE_BASE} ${status.badge}`}>
+      <span
+        className={`justify-self-center ${STATUS_BADGE_BASE} ${status.badge}`}
+      >
         <span className={`size-1.5 rounded-full ${status.dot}`} />
         {status.label}
       </span>
@@ -577,7 +680,11 @@ function StudentRow({ user, showGrade, onOpenUser }: { user: User; showGrade: bo
             <span className="text-xs text-muted-foreground">—</span>
           )
         ) : sectionName ? (
-          <Badge variant="outline" size="sm" className="bg-background text-[10px] font-medium">
+          <Badge
+            variant="outline"
+            size="sm"
+            className="bg-background text-[10px] font-medium"
+          >
             {sectionName}
           </Badge>
         ) : (
@@ -631,7 +738,15 @@ function StatusBadge({ status }: { status: string | undefined | null }) {
   );
 }
 
-function UserRow({ user, activeTab, onOpenUser }: { user: User; activeTab: TabId; onOpenUser: (user: User) => void }) {
+function UserRow({
+  user,
+  activeTab,
+  onOpenUser,
+}: {
+  user: User;
+  activeTab: TabId;
+  onOpenUser: (user: User) => void;
+}) {
   const { shown, extra } = visibleSubjects(user.subjects);
 
   if (activeTab === "teacher") {
@@ -648,7 +763,12 @@ function UserRow({ user, activeTab, onOpenUser }: { user: User; activeTab: TabId
         <div className="hidden flex-wrap justify-center gap-1.5 md:flex">
           {shown.length > 0 ? (
             shown.map((subject) => (
-              <Badge key={subject} variant="outline" size="sm" className="bg-background text-[10px] font-medium">
+              <Badge
+                key={subject}
+                variant="outline"
+                size="sm"
+                className="bg-background text-[10px] font-medium"
+              >
                 {subject}
               </Badge>
             ))
@@ -656,7 +776,11 @@ function UserRow({ user, activeTab, onOpenUser }: { user: User; activeTab: TabId
             <span className="text-xs text-muted-foreground">No subjects</span>
           )}
           {extra > 0 && (
-            <Badge variant="outline" size="sm" className="bg-background text-[10px] font-medium">
+            <Badge
+              variant="outline"
+              size="sm"
+              className="bg-background text-[10px] font-medium"
+            >
               +{extra}
             </Badge>
           )}
@@ -695,7 +819,11 @@ function NameCell({ name, subtitle }: { name: string; subtitle?: string }) {
       </div>
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold">{name}</div>
-        {subtitle && <div className="truncate text-xs text-muted-foreground">{subtitle}</div>}
+        {subtitle && (
+          <div className="truncate text-xs text-muted-foreground">
+            {subtitle}
+          </div>
+        )}
       </div>
     </div>
   );

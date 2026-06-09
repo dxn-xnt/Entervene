@@ -2,6 +2,7 @@ import { ChartAreaInteractive } from "@/components/chart-area-interactive";
 import { OverviewCard } from "@/components/overview-cards";
 import { Progress } from "@/components/retroui/Progress";
 import { Card } from "@/components/retroui/Card";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 
 const overviewCards = [
@@ -34,16 +35,22 @@ export default function AdminDashboard() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center justify-between">
-              <div className="flex flex-col items-start">
-                <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
-                <p>Good morning, Admin!</p>
+          <div className="flex flex-col gap-3 p-4">
+            <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="md:hidden" />
+                <div className="flex flex-col items-start">
+                  <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
+                    Dashboard
+                  </h1>
+                  <p>Good morning, Admin!</p>
+                </div>
               </div>
-              <div className="flex flex-col items-end">
+
+              {/* <div className="flex flex-col sm:items-end">
                 <h1 className="text-4xl font-bold tracking-tight">00:00</h1>
                 <p>January 8, 2026</p>
-              </div>
+              </div> */}
             </header>
 
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
@@ -58,11 +65,11 @@ export default function AdminDashboard() {
                 ))}
               </div>
 
-              <div className="grid grid-cols-[2fr_1fr] gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4">
                 {/* Left column */}
                 <div className="flex flex-col gap-4">
                   <ChartAreaInteractive />
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Card className="w-full p-4 flex flex-col gap-3">
                       <h2 className="text-lg font-semibold">
                         Grade Level Passing Rates
