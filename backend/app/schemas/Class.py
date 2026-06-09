@@ -69,6 +69,13 @@ class ClassDetailResponse(BaseModel):
     statistics: ClassDetailStatistics
 
 
+class ArchiveClassResponse(BaseModel):
+    class_id: int
+    section_name: str
+    class_status: str
+    message: str
+
+
 class ClassUpdateRequest(BaseModel):
     section_name: str | None = None
     adviser_staff_id: str | None = None

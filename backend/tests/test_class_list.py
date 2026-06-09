@@ -201,7 +201,7 @@ def test_list_classes_returns_real_rows_counts_null_adviser_and_sorted_order(cli
         "archived_classes": 1,
         "students_assigned": 3,
     }
-    assert [item["section_name"] for item in body["classes"]] == ["Alpha", "Sapphire", "Aristotle"]
+    assert [item["section_name"] for item in body["classes"]] == ["Alpha", "Sapphire"]
 
     alpha_item = body["classes"][0]
     assert alpha_item["adviser"] is None
@@ -231,6 +231,19 @@ def test_list_classes_returns_real_rows_counts_null_adviser_and_sorted_order(cli
     assert sapphire_item["student_count"] == 2
     assert "password_hash" not in response.text
     assert "super-secret-hash" not in response.text
+
+    archived_response = client.get("/api/v1/classes?status=archived")
+    assert archived_response.status_code == 200
+    archived_body = archived_response.json()
+    assert archived_body["summary"] == body["summary"]
+    assert [item["section_name"] for item in archived_body["classes"]] == ["Aristotle"]
+    assert archived_body["classes"][0]["class_status"] == "archived"
+
+
+def test_list_classes_rejects_unknown_status_filter(client):
+    response = client.get("/api/v1/classes?status=unknown")
+
+    assert response.status_code == 422
 
 
 def test_list_classes_requires_admin_and_authentication(client):
