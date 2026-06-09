@@ -14,6 +14,7 @@ from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.schemas.Class import (
+    ArchiveClassResponse,
     BatchCreateClassesRequest,
     BatchCreateClassesResponse,
     ClassDetailResponse,
@@ -208,9 +209,11 @@ def get_class_form_options(
 
 @router.get("", response_model=ClassListResponse)
 def list_classes(
+    status: str = Query("active", pattern="^(active|archived)$"),
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
+    requested_status = normalized_text(status)
     class_rows = (
         db.query(
             Class,
@@ -235,33 +238,34 @@ def list_classes(
     for class_, academic_level, academic_year, adviser, student_count in class_rows:
         count = int(student_count or 0)
         total_students += count
-        status = readable_text(class_.class_status) or "active"
-        normalized_status = normalized_text(status)
+        class_status = readable_text(class_.class_status) or "active"
+        normalized_status = normalized_text(class_status)
         if normalized_status == "active":
             active_classes += 1
         elif normalized_status == "archived":
             archived_classes += 1
 
-        classes.append({
-            "class_id": class_.class_id,
-            "section_name": class_.section_name,
-            "class_status": status,
-            "academic_year": _academic_year_option(academic_year),
-            "academic_level": _academic_level_option(academic_level),
-            "adviser": None if adviser is None else {
-                "staff_id": adviser.staff_id,
-                "first_name": adviser.first_name,
-                "middle_name": adviser.middle_name,
-                "last_name": adviser.last_name,
-                "suffix": adviser.suffix,
-            },
-            "student_count": count,
-            "subject_count": 0,
-        })
+        if normalized_status == requested_status:
+            classes.append({
+                "class_id": class_.class_id,
+                "section_name": class_.section_name,
+                "class_status": class_status,
+                "academic_year": _academic_year_option(academic_year),
+                "academic_level": _academic_level_option(academic_level),
+                "adviser": None if adviser is None else {
+                    "staff_id": adviser.staff_id,
+                    "first_name": adviser.first_name,
+                    "middle_name": adviser.middle_name,
+                    "last_name": adviser.last_name,
+                    "suffix": adviser.suffix,
+                },
+                "student_count": count,
+                "subject_count": 0,
+            })
 
     return {
         "summary": {
-            "total_classes": len(classes),
+            "total_classes": len(class_rows),
             "active_classes": active_classes,
             "archived_classes": archived_classes,
             "students_assigned": total_students,
@@ -758,6 +762,11 @@ def update_class_students(
         raise HTTPException(status_code=400, detail="Provide at least one student list change.")
 
     class_ = _get_class_or_404(db, class_id)
+    if normalized_text(class_.class_status or "active") == "archived":
+        raise HTTPException(
+            status_code=409,
+            detail="Archived classes cannot be modified. Restore the class before editing.",
+        )
     removal_ids = [item.student_id for item in payload.removals]
     transfer_ids = [item.student_id for item in payload.transfers]
     overlap = set(removal_ids).intersection(transfer_ids)
@@ -823,6 +832,32 @@ def get_class_detail(
     return _class_detail_response(db, class_id)
 
 
+@router.patch("/{class_id}/archive", response_model=ArchiveClassResponse)
+def archive_class(
+    class_id: int,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    class_ = _get_class_or_404(db, class_id)
+    if normalized_text(class_.class_status or "active") == "archived":
+        raise HTTPException(status_code=409, detail="Class is already archived.")
+
+    class_.class_status = "archived"
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unable to archive class.")
+    db.refresh(class_)
+
+    return {
+        "class_id": class_.class_id,
+        "section_name": class_.section_name,
+        "class_status": class_.class_status,
+        "message": "Class archived successfully.",
+    }
+
+
 @router.patch("/{class_id}", response_model=ClassDetailResponse)
 def update_class(
     class_id: int,
@@ -837,6 +872,11 @@ def update_class(
     class_ = db.query(Class).filter(Class.class_id == class_id).first()
     if class_ is None:
         raise HTTPException(status_code=404, detail="Class not found.")
+    if normalized_text(class_.class_status or "active") == "archived":
+        raise HTTPException(
+            status_code=409,
+            detail="Archived classes cannot be modified. Restore the class before editing.",
+        )
 
     if "section_name" in changes:
         section_name = readable_text(changes["section_name"])

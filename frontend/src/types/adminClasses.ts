@@ -99,6 +99,13 @@ export type ClassDetailResponse = {
   statistics: ClassDetailStatistics;
 };
 
+export type ArchiveClassResponse = {
+  class_id: number;
+  section_name: string;
+  class_status: string;
+  message: string;
+};
+
 export type UpdateClassRequest = {
   section_name?: string;
   adviser_staff_id?: string | null;

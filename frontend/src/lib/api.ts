@@ -1,4 +1,5 @@
 import type {
+  ArchiveClassResponse,
   BatchCreateClassesRequest,
   BatchCreateClassesResponse,
   ClassDetailResponse,
@@ -197,8 +198,9 @@ export async function getClassFormOptions(): Promise<ClassFormOptions> {
   return (await response.json()) as ClassFormOptions;
 }
 
-export async function getClasses(): Promise<GetClassesResponse> {
-  const response = await apiFetch("/api/v1/classes");
+export async function getClasses(status: "active" | "archived" = "active"): Promise<GetClassesResponse> {
+  const query = new URLSearchParams({ status });
+  const response = await apiFetch(`/api/v1/classes?${query.toString()}`);
 
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null);
@@ -235,6 +237,19 @@ export async function updateClass(
   }
 
   return (await response.json()) as ClassDetailResponse;
+}
+
+export async function archiveClass(classId: string | number): Promise<ArchiveClassResponse> {
+  const response = await apiFetch(`/api/v1/classes/${encodeURIComponent(String(classId))}/archive`, {
+    method: "PATCH",
+  });
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(classArchiveErrorMessage(data, response.status), response.status, data);
+  }
+
+  return (await response.json()) as ArchiveClassResponse;
 }
 
 export async function getClassStudents(
@@ -324,6 +339,14 @@ function classUpdateErrorMessage(data: unknown, status: number): string {
   if (status === 404) return "Class not found.";
   if (status === 409) return safeClassErrorMessage(data, "Unable to update class because it conflicts with existing class data.");
   return safeClassErrorMessage(data, "Unable to update class.");
+}
+
+function classArchiveErrorMessage(data: unknown, status: number): string {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to archive this class.";
+  if (status === 404) return "Unable to archive class.";
+  if (status === 409) return safeClassErrorMessage(data, "Class is already archived.");
+  return safeClassErrorMessage(data, "Unable to archive class.");
 }
 
 function classStudentsErrorMessage(data: unknown, status: number): string {

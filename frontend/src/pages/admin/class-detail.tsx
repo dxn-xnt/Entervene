@@ -124,6 +124,7 @@ export default function AdminClassDetail() {
   }
 
   const loadedClass = classDetail;
+  const isArchived = normalizedClassStatus(loadedClass.class_status) === "Archived";
   const adviserName = adviserDisplayName(loadedClass);
   const activeSince = formatClassDate(loadedClass.created_at);
   const placeholderClass = classData[0];
@@ -143,6 +144,7 @@ export default function AdminClassDetail() {
   }
 
   async function openEditStudentList() {
+      if (isArchived) return;
       setTransferOptionsError("");
       try {
         const [studentData, options] = await Promise.all([
@@ -191,15 +193,16 @@ export default function AdminClassDetail() {
 
               {/* Context-aware action buttons */}
               <div className="flex items-center gap-2">
-                {tab === "subjects" && (
+                {tab === "subjects" && !isArchived && (
                   <ActionButton secondary>
                     <Plus className="size-4" /> Add Subject Load
                   </ActionButton>
                 )}
-                {/* Edit Class is always visible — this is its canonical home */}
-                <ActionButton onClick={() => setShowEditClass(true)}>
-                  <Pencil className="size-4" /> Edit Class
-                </ActionButton>
+                {!isArchived && (
+                  <ActionButton onClick={() => setShowEditClass(true)}>
+                    <Pencil className="size-4" /> Edit Class
+                  </ActionButton>
+                )}
               </div>
             </header>
 
@@ -218,6 +221,12 @@ export default function AdminClassDetail() {
 
             {/* Tab content */}
             <div className="flex flex-col gap-3 pt-4">
+              {isArchived && (
+                <section className="rounded-lg border-2 border-black bg-[#f7e9aa] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">
+                  This class is archived and read-only. Restore it before editing
+                  class information, Student assignments, or subject loads.
+                </section>
+              )}
               {/* Class identity banner */}
               <section className="rounded-lg border border-black bg-[#f7e9aa] p-4 shadow-[3px_3px_0_#000]">
                 <h2 className="text-2xl font-bold">{selectedClass.section}</h2>
@@ -236,6 +245,7 @@ export default function AdminClassDetail() {
                   error={studentsError}
                   success={studentsSuccess}
                   editError={transferOptionsError}
+                  isReadOnly={isArchived}
                   onRetry={() => void refreshStudents()}
                   onEdit={() => void openEditStudentList()}
                 />
@@ -247,7 +257,7 @@ export default function AdminClassDetail() {
           </div>
         </div>
       </div>
-      {showEditClass && (
+      {showEditClass && !isArchived && (
         <EditClassModal
           classId={loadedClass.class_id}
           initialClass={loadedClass}
@@ -255,7 +265,7 @@ export default function AdminClassDetail() {
           onSaved={(updatedClass) => setClassDetail(updatedClass)}
         />
       )}
-      {showEditStudents && classStudents && (
+      {showEditStudents && classStudents && !isArchived && (
         <EditStudentListModal
           currentSectionId={loadedClass.class_id}
           currentSectionName={loadedClass.section_name}
@@ -491,6 +501,7 @@ function StudentsTab({
   error,
   success,
   editError,
+  isReadOnly,
   onRetry,
   onEdit,
 }: {
@@ -499,6 +510,7 @@ function StudentsTab({
   error: string;
   success: string;
   editError: string;
+  isReadOnly: boolean;
   onRetry: () => void;
   onEdit: () => void;
 }) {
@@ -545,7 +557,11 @@ function StudentsTab({
               placeholder="Search students..."
               className="h-10 rounded-md border border-black bg-[#fffdf5] px-3 text-sm sm:w-64"
             />
-            <button className={retroDetailButton("!bg-[#79bd80]")} onClick={onEdit}>Edit Student List</button>
+            {!isReadOnly && (
+              <button className={retroDetailButton("!bg-[#79bd80]")} onClick={onEdit}>
+                Edit Student List
+              </button>
+            )}
           </div>
         </div>
         {success && <div className="mb-2 rounded-md border border-black bg-[#d8efca] p-2 text-xs font-bold">{success}</div>}

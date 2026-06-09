@@ -261,6 +261,100 @@ def test_class_detail_requires_admin_and_authentication(client):
     assert client.get("/api/v1/classes/1").status_code == 401
 
 
+def test_archive_class_preserves_related_records_and_remains_readable(client, db):
+    year = add_year(db, "2025-2026")
+    level = add_level(db, "Grade 7", 7)
+    adviser = add_staff(db, "T-1")
+    class_ = Class(
+        section_name="Galileo",
+        class_status="active",
+        adviser_staff_id=adviser.staff_id,
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    other_class = Class(
+        section_name="Newton",
+        class_status="active",
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    db.add_all([class_, other_class])
+    db.flush()
+    student = add_student(db, level, "100000000001")
+    subject = Subject(subject_name="Science", academic_level_id=level.academic_level_id)
+    period = AcademicPeriod(
+        period_name="Q1",
+        period_type="QUARTER",
+        start_date=date(2025, 6, 1),
+        end_date=date(2025, 8, 31),
+        academic_year_id=year.academic_year_id,
+    )
+    db.add_all([subject, period])
+    db.flush()
+    db.add(build_student_class_assignment(student.student_id, class_))
+    db.add(SubjectLoad(
+        staff_id=adviser.staff_id,
+        subject_id=subject.subject_id,
+        class_id=class_.class_id,
+        academic_period_id=period.academic_period_id,
+    ))
+    db.commit()
+
+    response = client.patch(f"/api/v1/classes/{class_.class_id}/archive")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "class_id": class_.class_id,
+        "section_name": "Galileo",
+        "class_status": "archived",
+        "message": "Class archived successfully.",
+    }
+    assert db.query(Class).filter(Class.class_id == class_.class_id).one().class_status == "archived"
+    assert db.query(StudentClass).count() == 1
+    assert db.query(Student).count() == 1
+    assert db.query(SubjectLoad).count() == 1
+    assert db.query(Class).filter(Class.class_id == class_.class_id).one().adviser_staff_id == adviser.staff_id
+    assert "password_hash" not in response.text
+    detail = client.get(f"/api/v1/classes/{class_.class_id}")
+    assert detail.status_code == 200
+    assert detail.json()["class_status"] == "archived"
+    active_classes = client.get("/api/v1/classes").json()["classes"]
+    assert [item["section_name"] for item in active_classes] == ["Newton"]
+    transfer_options = client.get(f"/api/v1/classes/{other_class.class_id}/transfer-options")
+    assert transfer_options.status_code == 200
+    assert transfer_options.json()["available_sections"] == []
+
+
+def test_archive_class_handles_missing_already_archived_and_access_safely(client, db):
+    year = add_year(db, "2025-2026")
+    level = add_level(db, "Grade 7", 7)
+    class_ = Class(
+        section_name="Galileo",
+        class_status="archived",
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    db.add(class_)
+    db.commit()
+
+    missing = client.patch("/api/v1/classes/999/archive")
+    assert missing.status_code == 404
+    assert missing.json()["detail"] == "Class not found."
+
+    repeated = client.patch(f"/api/v1/classes/{class_.class_id}/archive")
+    assert repeated.status_code == 409
+    assert repeated.json()["detail"] == "Class is already archived."
+
+    client.app.dependency_overrides[get_current_user] = lambda: {
+        "sub": str(uuid.uuid4()),
+        "role": "teacher",
+    }
+    assert client.patch(f"/api/v1/classes/{class_.class_id}/archive").status_code == 403
+
+    del client.app.dependency_overrides[get_current_user]
+    assert client.patch(f"/api/v1/classes/{class_.class_id}/archive").status_code == 401
+
+
 def test_update_class_changes_section_and_preserves_students_and_adviser(client, db):
     year = add_year(db, "2025-2026")
     level = add_level(db, "Grade 7", 7)
@@ -389,6 +483,40 @@ def test_update_class_requires_admin_and_authentication(client):
 
     del client.app.dependency_overrides[get_current_user]
     assert client.patch("/api/v1/classes/1", json={"section_name": "Newton"}).status_code == 401
+
+
+def test_archived_class_rejects_basic_and_student_list_edits(client, db):
+    year = add_year(db, "2025-2026")
+    level = add_level(db, "Grade 7", 7)
+    class_ = Class(
+        section_name="Galileo",
+        class_status="archived",
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    db.add(class_)
+    db.flush()
+    student = add_student(db, level, "100000000001")
+    db.add(build_student_class_assignment(student.student_id, class_))
+    db.commit()
+
+    basic_edit = client.patch(
+        f"/api/v1/classes/{class_.class_id}",
+        json={"section_name": "Newton"},
+    )
+    student_edit = client.patch(
+        f"/api/v1/classes/{class_.class_id}/students",
+        json={"removals": [{"student_id": str(student.student_id)}], "transfers": []},
+    )
+
+    expected_detail = "Archived classes cannot be modified. Restore the class before editing."
+    assert basic_edit.status_code == 409
+    assert basic_edit.json()["detail"] == expected_detail
+    assert student_edit.status_code == 409
+    assert student_edit.json()["detail"] == expected_detail
+    assert db.query(Class).filter(Class.class_id == class_.class_id).one().section_name == "Galileo"
+    assert db.query(StudentClass).filter(StudentClass.class_id == class_.class_id).count() == 1
+    assert db.query(Student).count() == 1
 
 
 def test_class_students_returns_assigned_students_sorted_counts_search_and_safe_fields(client, db):
