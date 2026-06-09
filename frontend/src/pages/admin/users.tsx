@@ -232,7 +232,7 @@ export default function AdminUsers() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
+          <div className="flex flex-col gap-3 p-4">
 
             {/* ── Header ── */}
             <header className="flex items-center justify-between">
