@@ -1,3 +1,4 @@
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import AddUserModal from "../../components/admin/AddUserModal";
 import { Badge } from "../../components/retroui/Badge";
 import { Input } from "../../components/retroui/Input";
@@ -303,13 +304,13 @@ export default function AdminUsers() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 p-4">
-            {/* ── Header ── */}
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6 pb-6">
             <header className="flex items-center justify-between">
-              <h1 className="text-4xl font-bold tracking-tight">
-                User Management
-              </h1>
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="md:hidden" />
+                <h1 className="text-2xl md:text-4xl font-bold tracking-tight">User Management</h1>
+              </div>
               <button
                 onClick={() => setModalOpen(true)}
                 className="flex items-center gap-1.5 rounded-lg border border-black bg-[#79bd80] px-4 py-2 text-sm font-semibold text-black shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000]"
@@ -319,8 +320,7 @@ export default function AdminUsers() {
               </button>
             </header>
 
-            {/* ── Tabs ── */}
-            <div className="-mx-4 border-black/40">
+            <div className="-mx-4 md:-mx-6 border-black/40">
               <Tabs
                 tabs={tabs}
                 activeTab={activeTab}
@@ -329,16 +329,13 @@ export default function AdminUsers() {
             </div>
 
             <div className="flex flex-col gap-3">
-              {/* ── Search + controls row ── */}
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="relative max-w-md flex-1">
                   <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     aria-label="Search users"
                     className="h-9 rounded-md border border-black/70 pl-9 shadow-none"
-                    placeholder={
-                      activeTab === "student" ? "Search user" : "Search user"
-                    }
+                    placeholder="Search user"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
@@ -355,10 +352,8 @@ export default function AdminUsers() {
                 </div>
               </div>
 
-              {/* ── Student-specific controls ── */}
               {activeTab === "student" && (
                 <>
-                  {/* ── Summary stat cards — aligned to classes.tsx SummaryCard ── */}
                   {studentStats && !loading && (
                     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                       <StatCard
@@ -371,7 +366,7 @@ export default function AdminUsers() {
                         value={studentStats.active}
                         icon={<GraduationCap className="size-5 text-black" />}
                       />
-                      <StatCard text-black
+                      <StatCard
                         label="Pending"
                         value={studentStats.pending}
                         color={studentStats.pending > 0 ? "amber" : undefined}
@@ -388,7 +383,6 @@ export default function AdminUsers() {
                     </div>
                   )}
 
-                  {/* Grade filter pills */}
                   <div className="flex items-center gap-2 overflow-x-auto pb-1">
                     <span className="shrink-0 text-xs font-medium text-muted-foreground">
                       Grade:
@@ -432,14 +426,12 @@ export default function AdminUsers() {
                 </>
               )}
 
-              {/* ── Error ── */}
               {error && (
                 <div className="rounded border-2 border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {error}
                 </div>
               )}
 
-              {/* ── Loading ── */}
               {loading && (
                 <div className="flex items-center justify-center gap-3 rounded-xl border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
                   <Loader size="sm" />
@@ -447,7 +439,6 @@ export default function AdminUsers() {
                 </div>
               )}
 
-              {/* ── Student grouped view ── */}
               {!loading && activeTab === "student" && (
                 <>
                   {studentGroups.size === 0 && (
@@ -468,12 +459,9 @@ export default function AdminUsers() {
                 </>
               )}
 
-              {/* ── Teacher / Admin flat view ── */}
               {!loading && activeTab !== "student" && (
                 <>
-                  {!loading && users.length > 0 && (
-                    <TableHeader activeTab={activeTab} />
-                  )}
+                  {users.length > 0 && <TableHeader activeTab={activeTab} />}
                   <div className="overflow-hidden rounded-xl border border-black bg-background shadow-[4px_5px_0_#000]">
                     {users.length === 0 && (
                       <div className="py-12 text-center text-sm text-muted-foreground">

@@ -40,17 +40,17 @@ export default function AdminDashboard() {
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <div className="flex flex-col items-start">
-                  <h1 className="text-4xl font-bold tracking-tight">
+                  <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
                     Dashboard
                   </h1>
                   <p>Good morning, Admin!</p>
                 </div>
               </div>
 
-              <div className="flex flex-col sm:items-end">
+              {/* <div className="flex flex-col sm:items-end">
                 <h1 className="text-4xl font-bold tracking-tight">00:00</h1>
                 <p>January 8, 2026</p>
-              </div>
+              </div> */}
             </header>
 
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
