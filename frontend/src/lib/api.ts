@@ -1,4 +1,17 @@
-import type { ClassFormOptions, UnassignedClassStudentsResponse } from "@/types/adminClasses";
+import type {
+  ArchiveClassResponse,
+  BatchCreateClassesRequest,
+  BatchCreateClassesResponse,
+  ClassDetailResponse,
+  ClassFormOptions,
+  ClassStudentListResponse,
+  ClassTransferOptionsResponse,
+  GetClassesResponse,
+  UpdateClassStudentListRequest,
+  UpdateClassRequest,
+  UnassignedClassStudentsResponse,
+  ValidateClassImportResponse,
+} from "@/types/adminClasses";
 
 const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
@@ -162,6 +175,18 @@ function classOptionsErrorMessage(data: unknown): string {
   return "Unable to load class options.";
 }
 
+export class ApiRequestError extends Error {
+  status: number;
+  data: unknown;
+
+  constructor(message: string, status: number, data: unknown) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.data = data;
+  }
+}
+
 export async function getClassFormOptions(): Promise<ClassFormOptions> {
   const response = await apiFetch("/api/v1/classes/form-options");
 
@@ -171,6 +196,109 @@ export async function getClassFormOptions(): Promise<ClassFormOptions> {
   }
 
   return (await response.json()) as ClassFormOptions;
+}
+
+export async function getClasses(status: "active" | "archived" = "active"): Promise<GetClassesResponse> {
+  const query = new URLSearchParams({ status });
+  const response = await apiFetch(`/api/v1/classes?${query.toString()}`);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(classListErrorMessage(data, response.status));
+  }
+
+  return (await response.json()) as GetClassesResponse;
+}
+
+export async function getClassDetail(classId: string | number): Promise<ClassDetailResponse> {
+  const response = await apiFetch(`/api/v1/classes/${encodeURIComponent(String(classId))}`);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(classDetailErrorMessage(data, response.status));
+  }
+
+  return (await response.json()) as ClassDetailResponse;
+}
+
+export async function updateClass(
+  classId: string | number,
+  payload: UpdateClassRequest
+): Promise<ClassDetailResponse> {
+  const response = await apiFetch(`/api/v1/classes/${encodeURIComponent(String(classId))}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(classUpdateErrorMessage(data, response.status), response.status, data);
+  }
+
+  return (await response.json()) as ClassDetailResponse;
+}
+
+export async function archiveClass(classId: string | number): Promise<ArchiveClassResponse> {
+  const response = await apiFetch(`/api/v1/classes/${encodeURIComponent(String(classId))}/archive`, {
+    method: "PATCH",
+  });
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(classArchiveErrorMessage(data, response.status), response.status, data);
+  }
+
+  return (await response.json()) as ArchiveClassResponse;
+}
+
+export async function getClassStudents(
+  classId: string | number,
+  options: { search?: string; page?: number; pageSize?: number } = {}
+): Promise<ClassStudentListResponse> {
+  const query = new URLSearchParams();
+  if (options.search?.trim()) query.set("search", options.search.trim());
+  if (options.page) query.set("page", String(options.page));
+  if (options.pageSize) query.set("page_size", String(options.pageSize));
+  const response = await apiFetch(
+    `/api/v1/classes/${encodeURIComponent(String(classId))}/students${query.toString() ? `?${query.toString()}` : ""}`
+  );
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(classStudentsErrorMessage(data, response.status));
+  }
+
+  return (await response.json()) as ClassStudentListResponse;
+}
+
+export async function getClassTransferOptions(classId: string | number): Promise<ClassTransferOptionsResponse> {
+  const response = await apiFetch(`/api/v1/classes/${encodeURIComponent(String(classId))}/transfer-options`);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(classStudentsErrorMessage(data, response.status));
+  }
+
+  return (await response.json()) as ClassTransferOptionsResponse;
+}
+
+export async function updateClassStudentList(
+  classId: string | number,
+  payload: UpdateClassStudentListRequest
+): Promise<ClassStudentListResponse> {
+  const response = await apiFetch(`/api/v1/classes/${encodeURIComponent(String(classId))}/students`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(classStudentsErrorMessage(data, response.status), response.status, data);
+  }
+
+  return (await response.json()) as ClassStudentListResponse;
 }
 
 export async function getUnassignedClassStudents(academicLevelId: number): Promise<UnassignedClassStudentsResponse> {
@@ -183,4 +311,106 @@ export async function getUnassignedClassStudents(academicLevelId: number): Promi
   }
 
   return (await response.json()) as UnassignedClassStudentsResponse;
+}
+
+function classListErrorMessage(data: unknown, status: number): string {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to view classes.";
+  if (!data || typeof data !== "object") return "Unable to load classes.";
+  if ("message" in data && typeof data.message === "string") return data.message;
+  if ("detail" in data && typeof data.detail === "string") return data.detail;
+  return "Unable to load classes.";
+}
+
+function classDetailErrorMessage(data: unknown, status: number): string {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to view this class.";
+  if (status === 404) return "Unable to load class details.";
+  if (!data || typeof data !== "object") return "Unable to load class details.";
+  if ("message" in data && typeof data.message === "string") return data.message;
+  if ("detail" in data && typeof data.detail === "string") return data.detail;
+  return "Unable to load class details.";
+}
+
+function classUpdateErrorMessage(data: unknown, status: number): string {
+  if (status === 400) return safeClassErrorMessage(data, "Unable to update class.");
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to update this class.";
+  if (status === 404) return "Class not found.";
+  if (status === 409) return safeClassErrorMessage(data, "Unable to update class because it conflicts with existing class data.");
+  return safeClassErrorMessage(data, "Unable to update class.");
+}
+
+function classArchiveErrorMessage(data: unknown, status: number): string {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to archive this class.";
+  if (status === 404) return "Unable to archive class.";
+  if (status === 409) return safeClassErrorMessage(data, "Class is already archived.");
+  return safeClassErrorMessage(data, "Unable to archive class.");
+}
+
+function classStudentsErrorMessage(data: unknown, status: number): string {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to update this class.";
+  if (status === 404) return safeClassErrorMessage(data, "Class not found.");
+  if (status === 409) return safeClassErrorMessage(data, "Unable to update student list.");
+  return safeClassErrorMessage(data, "Unable to update student list.");
+}
+
+function safeClassErrorMessage(data: unknown, fallback: string): string {
+  if (!data || typeof data !== "object") return fallback;
+  if ("message" in data && typeof data.message === "string") return data.message;
+  if ("detail" in data && typeof data.detail === "string") return data.detail;
+  return fallback;
+}
+
+export async function createClassesBatch(payload: BatchCreateClassesRequest): Promise<BatchCreateClassesResponse> {
+  const response = await apiFetch("/api/v1/classes/batch-create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(batchCreateErrorMessage(data, response.status), response.status, data);
+  }
+
+  return (await response.json()) as BatchCreateClassesResponse;
+}
+
+export async function validateClassImport(file: File, academicLevelId: number): Promise<ValidateClassImportResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("academic_level_id", String(academicLevelId));
+
+  const response = await apiFetch("/api/v1/classes/validate-import", {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(classImportErrorMessage(data, response.status), response.status, data);
+  }
+
+  return (await response.json()) as ValidateClassImportResponse;
+}
+
+function batchCreateErrorMessage(data: unknown, status: number): string {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to create classes.";
+  if (!data || typeof data !== "object") return "Unable to save classes. Please try again.";
+  if ("message" in data && typeof data.message === "string") return data.message;
+  if ("detail" in data && typeof data.detail === "string") return data.detail;
+  return "Unable to save classes. Please try again.";
+}
+
+function classImportErrorMessage(data: unknown, status: number): string {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to validate class imports.";
+  if (!data || typeof data !== "object") return "Unable to validate CSV. Please try again.";
+  if ("message" in data && typeof data.message === "string") return data.message;
+  if ("detail" in data && typeof data.detail === "string") return data.detail;
+  return "Unable to validate CSV. Please try again.";
 }

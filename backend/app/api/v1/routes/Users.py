@@ -1,6 +1,7 @@
 import csv
 import hashlib
 import io
+import re
 import secrets
 import uuid
 from datetime import datetime, timezone
@@ -8,11 +9,13 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 import pandas as pd
+from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, aliased
 
 import app.models  # noqa: F401
 from app.api.v1.routes.Auth import create_access_token, create_refresh_token, get_current_user, set_auth_cookies
+from app.core.FileUpload import MAX_FILE_SIZE
 from app.core.Security import hash_password
 from app.core.StaffId import generate_staff_id
 from app.db.Session import get_db
@@ -38,6 +41,8 @@ router = APIRouter()
 ClientRole = Literal["admin", "teacher", "student"]
 COMMON_STATUSES = {"active", "pending", "inactive", "suspended", "archived"}
 STUDENT_STATUSES = COMMON_STATUSES | {"no section assigned", "graduated", "transferred", "dropped"}
+EMAIL_ADAPTER = TypeAdapter(EmailStr)
+LRN_RE = re.compile(r"^\d{12}$")
 
 
 def _role_name_to_client_role(role_name: str | None) -> ClientRole:
@@ -453,20 +458,45 @@ def _normalize_upload_row(row: dict[str, Any]) -> dict[str, str]:
 
 def _normalize_lrn(raw: str) -> str:
     """
-    Fix Excel scientific notation: '9.33553E+11' → '933553000000'.
-    Returns the original string if it's already numeric or empty.
+    Normalize spreadsheet-preserved LRNs while keeping them as strings.
+    Handles a leading apostrophe and simple Excel scientific notation.
     """
-    if raw and "E+" in raw.upper():
+    value = (raw or "").strip()
+    if value.startswith("'"):
+        value = value[1:].strip()
+
+    if value and "E+" in value.upper():
         try:
-            return str(int(float(raw)))
+            return str(int(float(value)))
         except ValueError:
             pass
-    return raw
+    return value
+
+
+def _normalize_email(raw: str) -> str:
+    value = (raw or "").strip().lower()
+    if not value:
+        return ""
+    try:
+        return str(EMAIL_ADAPTER.validate_python(value)).lower()
+    except ValidationError:
+        return value
+
+
+def _csv_error(row: int, field: str, value: Any, reason: str) -> dict[str, Any]:
+    return {
+        "row": row,
+        "field": field,
+        "value": "" if value is None else str(value),
+        "reason": reason,
+    }
 
 
 async def _read_upload_rows(file: UploadFile) -> tuple[list[dict[str, str]], set[str]]:
     filename = (file.filename or "").lower()
     content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail=f"File too large. Maximum is {MAX_FILE_SIZE} bytes.")
 
     if filename.endswith(".csv"):
         reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
@@ -489,6 +519,94 @@ async def _read_upload_rows(file: UploadFile) -> tuple[list[dict[str, str]], set
         return rows, fieldnames
 
     raise HTTPException(status_code=400, detail="Upload a .csv, .xlsx, or .xls file.")
+
+
+def _validate_required_name(data: dict[str, Any], errors: list[dict[str, Any]] | None = None, row: int = 0) -> None:
+    for field in ("first_name", "last_name"):
+        if not str(data.get(field) or "").strip():
+            if errors is not None:
+                errors.append(_csv_error(row, field, data.get(field, ""), "Required field is missing"))
+            else:
+                raise HTTPException(status_code=400, detail=f"{field.replace('_', ' ').title()} is required")
+
+
+def _validate_student_data(db: Session, data: dict[str, Any], *, user_id: uuid.UUID | None = None) -> None:
+    _validate_required_name(data)
+    student_lrn = _normalize_lrn(str(data.get("student_lrn") or ""))
+    if not LRN_RE.fullmatch(student_lrn):
+        raise HTTPException(status_code=400, detail="Student LRN must be exactly 12 digits")
+
+    existing_lrn = db.query(Student).filter(Student.student_lrn == student_lrn).first()
+    if existing_lrn and existing_lrn.user_id != user_id:
+        raise HTTPException(status_code=409, detail="Student LRN already registered")
+
+    if _resolve_academic_level_id(db, data) is None:
+        raise HTTPException(status_code=400, detail="Invalid grade level")
+
+
+def _validate_staff_data(data: dict[str, Any]) -> None:
+    _validate_required_name(data)
+
+
+def _validate_import_rows(db: Session, role: str, rows: list[dict[str, str]]) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
+    valid_rows: list[dict[str, str]] = []
+    errors: list[dict[str, Any]] = []
+    seen_emails: dict[str, int] = {}
+    seen_student_lrns: dict[str, int] = {}
+
+    if not rows:
+        return valid_rows, [_csv_error(1, "file", "", "File contains no data rows")]
+
+    for index, row in enumerate(rows, start=2):
+        if not any((value or "").strip() for value in row.values()):
+            continue
+
+        normalized = {key: (value or "").strip() for key, value in row.items()}
+        _validate_required_name(normalized, errors, index)
+
+        raw_email = normalized.get("email", "")
+        email = _normalize_email(raw_email)
+        normalized["email"] = email
+        if not raw_email.strip():
+            errors.append(_csv_error(index, "email", raw_email, "Email is required"))
+        else:
+            try:
+                EMAIL_ADAPTER.validate_python(email)
+            except ValidationError:
+                errors.append(_csv_error(index, "email", raw_email, "Invalid email address"))
+
+        if email:
+            if email in seen_emails:
+                errors.append(_csv_error(index, "email", raw_email, f"Duplicate email in upload; first seen on row {seen_emails[email]}"))
+            else:
+                seen_emails[email] = index
+            if db.query(UserAccount).filter(UserAccount.email == email).first():
+                errors.append(_csv_error(index, "email", raw_email, "Email already registered"))
+
+        if role == "Student":
+            raw_lrn = normalized.get("student_lrn", "")
+            student_lrn = _normalize_lrn(raw_lrn)
+            normalized["student_lrn"] = student_lrn
+            if not LRN_RE.fullmatch(student_lrn):
+                errors.append(_csv_error(index, "student_lrn", raw_lrn, "Student LRN must be exactly 12 digits"))
+            else:
+                if student_lrn in seen_student_lrns:
+                    errors.append(_csv_error(index, "student_lrn", raw_lrn, f"Duplicate LRN in upload; first seen on row {seen_student_lrns[student_lrn]}"))
+                else:
+                    seen_student_lrns[student_lrn] = index
+                if db.query(Student).filter(Student.student_lrn == student_lrn).first():
+                    errors.append(_csv_error(index, "student_lrn", raw_lrn, "Student LRN already registered"))
+
+            if _resolve_academic_level_id(db, normalized) is None:
+                grade_value = normalized.get("grade_level") or normalized.get("academic_level") or normalized.get("academic_level_id") or ""
+                errors.append(_csv_error(index, "grade_level", grade_value, "Grade level does not match an existing academic level"))
+
+        valid_rows.append(normalized)
+
+    if not valid_rows and not errors:
+        errors.append(_csv_error(1, "file", "", "File contains no data rows"))
+
+    return valid_rows, errors
 
 
 def _create_pending_account(db: Session, email: str, role_name: str) -> tuple[UserAccount, str]:
@@ -569,7 +687,7 @@ def _attach_student_profile(db: Session, user_id: uuid.UUID, data: dict) -> None
     db.add(Student(
         student_id=uuid.uuid4(),
         user_id=user_id,
-        student_lrn=data.get("student_lrn", ""),
+        student_lrn=_normalize_lrn(data.get("student_lrn", "")),
         first_name=data.get("first_name", ""),
         middle_name=data.get("middle_name", ""),
         last_name=data.get("last_name", ""),
@@ -593,20 +711,29 @@ def invite_single_user(
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    if db.query(UserAccount).filter(UserAccount.email == payload.email).first():
+    email = str(payload.email).lower()
+    if db.query(UserAccount).filter(UserAccount.email == email).first():
         raise HTTPException(status_code=409, detail="Email already registered")
 
-    account, raw_token = _create_pending_account(db, payload.email, payload.role)
-
     data = payload.model_dump()
+    data["email"] = email
+    if payload.role == "Student":
+        _validate_student_data(db, data)
+    elif payload.role == "Teacher":
+        _validate_staff_data(data)
+    else:
+        _validate_required_name(data)
+
+    account, raw_token = _create_pending_account(db, email, payload.role)
+
     if payload.role == "Teacher":
         _attach_staff_profile(db, account.user_id, data)
     elif payload.role == "Student":
         _attach_student_profile(db, account.user_id, data)
 
     db.commit()
-    send_invitation_email(payload.email, raw_token)
-    return {"message": f"Invitation sent to {payload.email}"}
+    send_invitation_email(email, raw_token)
+    return {"message": f"Invitation sent to {email}"}
 
 
 # ── CSV bulk invite ───────────────────────────────────────────────────────────
@@ -643,60 +770,55 @@ async def upload_csv(
             detail="File missing a student grade column: use grade_level with values like 7, 8, 9, 10, 11, or 12.",
         )
 
+    valid_rows, errors = _validate_import_rows(db, role, rows)
+    total_rows = len(valid_rows)
+    if errors:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Student import failed validation" if role == "Student" else "User import failed validation",
+                "total_rows": total_rows,
+                "created_count": 0,
+                "failed_count": len({error["row"] for error in errors}),
+                "errors": errors,
+            },
+        )
+
     created: list[str] = []
-    skipped: list[str] = []
-    seen_emails: set[str] = set()
-    seen_student_lrns: set[str] = set()
     invitations_to_send: list[tuple[str, str]] = []
 
-    for row in rows:
-        email = (row.get("email") or "").strip().lower()
-        if not email:
-            continue
+    try:
+        for row in valid_rows:
+            email = row["email"]
+            account, raw_token = _create_pending_account(db, email, role)
 
-        if email in seen_emails:
-            skipped.append(email)
-            continue
-        seen_emails.add(email)
+            if role == "Teacher":
+                _attach_staff_profile(db, account.user_id, row)
+            else:
+                _attach_student_profile(db, account.user_id, row)
 
-        if db.query(UserAccount).filter(UserAccount.email == email).first():
-            skipped.append(email)
-            continue
+            invitations_to_send.append((email, raw_token))
+            created.append(email)
 
-        if role == "Student":
-            student_lrn = _normalize_lrn((row.get("student_lrn") or "").strip())
-
-            if not student_lrn or student_lrn in seen_student_lrns:
-                skipped.append(email)
-                continue
-            seen_student_lrns.add(student_lrn)
-
-            if db.query(Student).filter(Student.student_lrn == student_lrn).first():
-                skipped.append(email)
-                continue
-
-        account, raw_token = _create_pending_account(db, email, role)
-
-        data = {k: (v or "").strip() for k, v in row.items()}
-        data["email"] = email
-
-        if role == "Student":
-            data["student_lrn"] = student_lrn  # use the normalized value
-
-        if role == "Teacher":
-            _attach_staff_profile(db, account.user_id, data)
-        else:
-            _attach_student_profile(db, account.user_id, data)
-
-        invitations_to_send.append((email, raw_token))
-        created.append(email)
-
-    db.commit()
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
     for email, raw_token in invitations_to_send:
         send_invitation_email(email, raw_token)
 
-    return {"created": len(created), "skipped": len(skipped), "skipped_emails": skipped}
+    return {
+        "message": "Student import completed" if role == "Student" else "User import completed",
+        "total_rows": total_rows,
+        "created_count": len(created),
+        "failed_count": 0,
+        "created_users": created,
+        "errors": [],
+        "created": len(created),
+        "skipped": 0,
+        "skipped_emails": [],
+    }
 
 
 # ── accept invitation (set password) ─────────────────────────────────────────

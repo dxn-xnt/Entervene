@@ -42,6 +42,7 @@ TABLES = [
     StudentClass.__table__,
 ]
 HEADER = ",".join(CLASS_IMPORT_HEADERS)
+OLD_HEADER = ",".join(header for header in CLASS_IMPORT_HEADERS if header != "grade_level")
 
 
 @pytest.fixture
@@ -169,6 +170,7 @@ def import_data(db):
 
 def csv_row(
     section="Sapphire",
+    grade="7",
     adviser_id="T-1",
     adviser_first="John",
     adviser_middle="NULL",
@@ -182,6 +184,7 @@ def csv_row(
     return ",".join(
         [
             section,
+            grade,
             adviser_id,
             adviser_first,
             adviser_middle,
@@ -254,6 +257,17 @@ def test_valid_csv_groups_sorts_summarizes_handles_bom_blank_rows_and_writes_not
     assert (db.query(Class).count(), db.query(StudentClass).count()) == before
 
 
+def test_valid_csv_handles_whitespace_around_matching_grade_level(client, db, import_data):
+    _, level, _, _, _ = import_data
+    before = (db.query(Class).count(), db.query(StudentClass).count())
+
+    response = upload(client, level.academic_level_id, HEADER + "\n" + csv_row(grade=" 7 "))
+
+    assert response.status_code == 200
+    assert response.json()["summary"] == {"section_count": 1, "student_count": 1}
+    assert (db.query(Class).count(), db.query(StudentClass).count()) == before
+
+
 def test_duplicate_imported_adviser_assignment_is_rejected(client, db, import_data):
     _, level, _, _, _ = import_data
     add_student(db, level, "100000000004", "Bea", "Cruz", "Female")
@@ -297,6 +311,7 @@ def test_adviser_already_assigned_in_active_year_is_rejected(client, db, import_
         ("classes.txt", HEADER + "\n" + csv_row(), "invalid_file_type"),
         ("classes.csv", "", "file_empty"),
         ("classes.csv", "section_name,student_lrn\nSapphire,100000000001", "invalid_headers"),
+        ("classes.csv", OLD_HEADER + "\n" + csv_row().replace(",7,", ",", 1), "invalid_headers"),
         ("classes.csv", HEADER + ",extra\n" + csv_row() + ",x", "invalid_headers"),
         ("classes.csv", ",".join(reversed(CLASS_IMPORT_HEADERS)) + "\n" + csv_row(), "invalid_headers"),
         ("classes.csv", b"\xff\xfe", "invalid_encoding"),
@@ -376,6 +391,10 @@ def test_existing_normalized_section_and_conflicting_adviser_are_rejected(client
     ("row", "expected_code"),
     [
         (csv_row(section=" "), "section_name_required"),
+        (csv_row(grade=""), "missing_required_field"),
+        (csv_row(grade="seven"), "invalid_grade_level"),
+        (csv_row(grade="7.5"), "invalid_grade_level"),
+        (csv_row(grade="8"), "academic_level_mismatch"),
         (csv_row(adviser_id=""), "adviser_staff_id_required"),
         (csv_row(adviser_id="NOPE"), "adviser_not_found"),
         (csv_row(adviser_first="Wrong"), "adviser_name_mismatch"),
@@ -393,6 +412,30 @@ def test_row_validation_errors(client, import_data, row, expected_code):
 
     assert response.status_code == 422
     assert expected_code in error_codes(response)
+
+
+@pytest.mark.parametrize("lrn", ["7.86966E+11", "7.86966e+11"])
+def test_scientific_notation_lrn_is_rejected_with_specific_guidance(client, db, import_data, lrn):
+    _, level, _, _, _ = import_data
+    before = (
+        db.query(Student).count(),
+        db.query(Class).count(),
+        db.query(StudentClass).count(),
+    )
+
+    response = upload(client, level.academic_level_id, HEADER + "\n" + csv_row(lrn=lrn))
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["errors"][0]["code"] == "student_lrn_scientific_notation"
+    assert body["errors"][0]["row"] == 2
+    assert body["errors"][0]["field"] == "student_lrn"
+    assert "scientific notation" in body["errors"][0]["message"]
+    assert (
+        db.query(Student).count(),
+        db.query(Class).count(),
+        db.query(StudentClass).count(),
+    ) == before
 
 
 def test_ineligible_adviser_and_student_level_mismatch_are_rejected(client, db, import_data):
@@ -416,6 +459,27 @@ def test_ineligible_adviser_and_student_level_mismatch_are_rejected(client, db, 
     )
 
     assert {"adviser_not_eligible", "student_level_mismatch"}.issubset(error_codes(response))
+
+
+def test_mixed_grade_levels_are_rejected(client, db, import_data):
+    _, level, _, _, _ = import_data
+    add_student(db, level, "100000000004", "Bea", "Cruz", "Female")
+    db.commit()
+
+    response = upload(
+        client,
+        level.academic_level_id,
+        HEADER + "\n" + csv_row() + "\n" + csv_row(
+            grade="8",
+            lrn="100000000004",
+            student_first="Bea",
+            student_last="Cruz",
+            gender="Female",
+        ),
+    )
+
+    assert response.status_code == 422
+    assert "academic_level_mismatch" in error_codes(response)
 
 
 def test_active_year_assignment_is_rejected_but_other_year_assignment_is_valid(client, db, import_data):

@@ -53,6 +53,126 @@ export type ClassFormOptions = {
   eligible_advisers: AdviserOption[];
 };
 
+export type ClassListAdviser = AdviserOption;
+
+export type ClassListAcademicLevel = AcademicLevelOption;
+
+export type ClassListAcademicYear = AcademicYearOption;
+
+export type ClassListItem = {
+  class_id: number;
+  section_name: string;
+  class_status: string;
+  academic_year: ClassListAcademicYear;
+  academic_level: ClassListAcademicLevel;
+  adviser: ClassListAdviser | null;
+  student_count: number;
+  subject_count: number;
+};
+
+export type ClassListSummary = {
+  total_classes: number;
+  active_classes: number;
+  archived_classes: number;
+  students_assigned: number;
+};
+
+export type GetClassesResponse = {
+  summary: ClassListSummary;
+  classes: ClassListItem[];
+};
+
+export type ClassDetailStatistics = {
+  student_count: number;
+  subject_count: number;
+  schedule_count: number;
+};
+
+export type ClassDetailResponse = {
+  class_id: number;
+  section_name: string;
+  class_status: string;
+  created_at: string | null;
+  academic_year: AcademicYearOption;
+  academic_level: AcademicLevelOption;
+  adviser: AdviserOption | null;
+  statistics: ClassDetailStatistics;
+};
+
+export type ArchiveClassResponse = {
+  class_id: number;
+  section_name: string;
+  class_status: string;
+  message: string;
+};
+
+export type UpdateClassRequest = {
+  section_name?: string;
+  adviser_staff_id?: string | null;
+};
+
+export type ClassStudentListItem = {
+  student_id: string;
+  full_name: string;
+  gender: string;
+  avatar_initial: string;
+};
+
+export type ClassStudentGenderCounts = {
+  female: number;
+  male: number;
+  other: number;
+  unspecified: number;
+};
+
+export type ClassStudentListResponse = {
+  class_id: number;
+  section_name: string;
+  academic_level: {
+    academic_level_id: number;
+    level_name: string;
+  };
+  summary: {
+    total_students: number;
+    gender_counts: ClassStudentGenderCounts;
+  };
+  students: ClassStudentListItem[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total_items: number;
+    total_pages: number;
+  };
+};
+
+export type ClassTransferOption = {
+  class_id: number;
+  section_name: string;
+};
+
+export type ClassTransferOptionsResponse = {
+  current_class_id: number;
+  academic_level: {
+    academic_level_id: number;
+    level_name: string;
+  };
+  available_sections: ClassTransferOption[];
+};
+
+export type PendingStudentRemoval = {
+  student_id: string;
+};
+
+export type PendingStudentTransfer = {
+  student_id: string;
+  target_class_id: number;
+};
+
+export type UpdateClassStudentListRequest = {
+  removals: PendingStudentRemoval[];
+  transfers: PendingStudentTransfer[];
+};
+
 export type ManualSectionDraft = {
   localId: string;
   sectionName: string;
@@ -90,4 +210,91 @@ export type ManualAssignmentWorkspaceState = {
   unassignedStudents: ClassAssignmentStudent[];
   assignmentsBySection: StudentAssignmentsBySection;
   selectedStudentIds: Set<string>;
+};
+
+export type BatchCreateSectionRequest = {
+  section_name: string;
+  adviser_staff_id: string;
+  student_ids: string[];
+};
+
+export type BatchCreateClassesRequest = {
+  academic_level_id: number;
+  sections: BatchCreateSectionRequest[];
+};
+
+export type CreatedClassItem = {
+  class_id: number;
+  section_name: string;
+  adviser_staff_id: string;
+  student_count: number;
+};
+
+export type BatchCreateClassesResponse = {
+  message: string;
+  academic_level_id: number;
+  academic_year_id: number;
+  summary: {
+    class_count: number;
+    student_assignment_count: number;
+  };
+  classes: CreatedClassItem[];
+};
+
+export type ValidatedImportAcademicLevel = {
+  academic_level_id: number;
+  level_name: string;
+  grade_level: number;
+};
+
+export type ValidatedImportAcademicYear = {
+  academic_year_id: number;
+  year_label: string;
+};
+
+export type ValidatedImportAdviser = {
+  staff_id: string;
+  first_name: string;
+  middle_name: string | null;
+  last_name: string;
+  suffix: string | null;
+};
+
+export type ValidatedImportStudent = {
+  student_id: string;
+  student_lrn: string;
+  first_name: string;
+  middle_name: string | null;
+  last_name: string;
+  gender: string | null;
+  academic_level_id: number;
+};
+
+export type ValidatedImportSection = {
+  section_name: string;
+  adviser: ValidatedImportAdviser;
+  students: ValidatedImportStudent[];
+};
+
+export type ValidateClassImportResponse = {
+  academic_level: ValidatedImportAcademicLevel;
+  academic_year: ValidatedImportAcademicYear;
+  sections: ValidatedImportSection[];
+  summary: {
+    section_count: number;
+    student_count: number;
+  };
+};
+
+export type ClassImportValidationErrorItem = {
+  row?: number | null;
+  field?: string | null;
+  code: string;
+  message: string;
+};
+
+export type ClassImportValidationErrorResponse = {
+  message: string;
+  code: string;
+  errors: ClassImportValidationErrorItem[];
 };
