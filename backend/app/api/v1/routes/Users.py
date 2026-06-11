@@ -54,6 +54,15 @@ def _normalize_status(status: str) -> str:
     return status.strip().lower()
 
 
+def _capitalize_name(value: Any) -> str:
+    name = str(value or "").strip()
+    return f"{name[:1].upper()}{name[1:]}" if name else ""
+
+
+def _display_name(first_name: Any, last_name: Any, fallback: str) -> str:
+    return " ".join(filter(None, (_capitalize_name(first_name), _capitalize_name(last_name)))) or fallback
+
+
 @router.get("/users")
 def list_users(
     role: ClientRole | None = Query(default=None),
@@ -64,11 +73,6 @@ def list_users(
 ):
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
-
-    full_name = func.coalesce(
-        func.nullif(func.concat(AcademicStaff.first_name, " ", AcademicStaff.last_name), " "),
-        func.nullif(func.concat(Student.first_name, " ", Student.last_name), " "),
-    ).label("full_name")
 
     student_academic_level = aliased(AcademicLevel)
     student_grade_level = aliased(AcademicLevel)
@@ -98,7 +102,6 @@ def list_users(
             Student.contact_number.label("student_contact_number"),
             Student.address.label("student_address"),
             resolved_grade_level,
-            full_name,
         )
         .join(UserRoles, UserAccount.user_id == UserRoles.user_id)
         .join(Role, UserRoles.role_id == Role.role_id)
@@ -133,9 +136,11 @@ def list_users(
     response = []
     for user in users:
         client_role = _role_name_to_client_role(user.role_name)
+        first_name = user.student_first_name if client_role == "student" else user.staff_first_name
+        last_name = user.student_last_name if client_role == "student" else user.staff_last_name
         item = {
             "id": str(user.user_id),
-            "name": (user.full_name or "").strip() or user.email,
+            "name": _display_name(first_name, last_name, user.email),
             "email": user.email,
             "role": client_role,
             "created_at": user.created_at.date().isoformat() if user.created_at else "",
@@ -187,10 +192,6 @@ def get_user_detail(
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    staff_name = func.nullif(func.concat(AcademicStaff.first_name, " ", AcademicStaff.last_name), " ")
-    student_name = func.nullif(func.concat(Student.first_name, " ", Student.last_name), " ")
-    full_name = func.coalesce(staff_name, student_name).label("full_name")
-
     student_academic_level = aliased(AcademicLevel)
     student_grade_level = aliased(AcademicLevel)
     resolved_grade_level = func.coalesce(
@@ -219,7 +220,6 @@ def get_user_detail(
             Student.contact_number.label("student_contact_number"),
             Student.address.label("student_address"),
             resolved_grade_level,
-            full_name,
         )
         .join(UserRoles, UserAccount.user_id == UserRoles.user_id)
         .join(Role, UserRoles.role_id == Role.role_id)
@@ -235,16 +235,19 @@ def get_user_detail(
         raise HTTPException(status_code=404, detail="User not found")
 
     client_role = _role_name_to_client_role(user.role_name)
+    first_name = user.student_first_name if client_role == "student" else user.staff_first_name
+    middle_name = user.student_middle_name if client_role == "student" else user.staff_middle_name
+    last_name = user.student_last_name if client_role == "student" else user.staff_last_name
     item: dict[str, Any] = {
         "id": str(user.user_id),
-        "name": (user.full_name or "").strip() or user.email,
+        "name": _display_name(first_name, last_name, user.email),
         "email": user.email,
         "role": client_role,
         "created_at": user.created_at.date().isoformat() if user.created_at else "",
         "account_status": user.account_status,
-        "first_name": (user.staff_first_name if client_role != "student" else user.student_first_name) or "",
-        "middle_name": (user.staff_middle_name if client_role != "student" else user.student_middle_name) or "",
-        "last_name": (user.staff_last_name if client_role != "student" else user.student_last_name) or "",
+        "first_name": _capitalize_name(first_name),
+        "middle_name": _capitalize_name(middle_name),
+        "last_name": _capitalize_name(last_name),
         "contact_number": (user.staff_contact_number if client_role != "student" else user.student_contact_number) or "",
         "address": (user.staff_address if client_role != "student" else user.student_address) or "",
     }
@@ -318,8 +321,9 @@ def update_user(
     if status not in allowed_statuses:
         raise HTTPException(status_code=400, detail="Invalid account status")
 
-    first_name = payload.first_name.strip()
-    last_name = payload.last_name.strip()
+    first_name = _capitalize_name(payload.first_name)
+    middle_name = _capitalize_name(payload.middle_name)
+    last_name = _capitalize_name(payload.last_name)
     email = payload.email.lower()
     if not first_name or not last_name:
         raise HTTPException(status_code=400, detail="First name and last name are required")
@@ -337,7 +341,7 @@ def update_user(
             raise HTTPException(status_code=404, detail="Student profile not found")
 
         student.first_name = first_name
-        student.middle_name = payload.middle_name.strip()
+        student.middle_name = middle_name
         student.last_name = last_name
         student.email = email
         student.contact_number = payload.contact_number.strip()
@@ -374,7 +378,7 @@ def update_user(
             raise HTTPException(status_code=404, detail="Teacher profile not found")
 
         staff.first_name = first_name
-        staff.middle_name = payload.middle_name.strip()
+        staff.middle_name = middle_name
         staff.last_name = last_name
         staff.email = email
         staff.contact_number = payload.contact_number.strip()
@@ -385,7 +389,7 @@ def update_user(
         staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
         if staff:
             staff.first_name = first_name
-            staff.middle_name = payload.middle_name.strip()
+            staff.middle_name = middle_name
             staff.last_name = last_name
             staff.email = email
 
@@ -669,9 +673,9 @@ def _attach_staff_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
     db.add(AcademicStaff(
         staff_id=staff_id,
         user_id=user_id,
-        first_name=data.get("first_name", ""),
-        middle_name=data.get("middle_name", ""),
-        last_name=data.get("last_name", ""),
+        first_name=_capitalize_name(data.get("first_name")),
+        middle_name=_capitalize_name(data.get("middle_name")),
+        last_name=_capitalize_name(data.get("last_name")),
         suffix=data.get("suffix", ""),
         gender=data.get("gender", ""),
         contact_number=data.get("contact_number", ""),
@@ -688,9 +692,9 @@ def _attach_student_profile(db: Session, user_id: uuid.UUID, data: dict) -> None
         student_id=uuid.uuid4(),
         user_id=user_id,
         student_lrn=_normalize_lrn(data.get("student_lrn", "")),
-        first_name=data.get("first_name", ""),
-        middle_name=data.get("middle_name", ""),
-        last_name=data.get("last_name", ""),
+        first_name=_capitalize_name(data.get("first_name")),
+        middle_name=_capitalize_name(data.get("middle_name")),
+        last_name=_capitalize_name(data.get("last_name")),
         suffix=data.get("suffix", ""),
         gender=data.get("gender", ""),
         contact_number=data.get("contact_number", ""),
