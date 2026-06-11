@@ -142,6 +142,13 @@ def test_csv_import_preserves_leading_zero_lrn(client, db):
     assert db.query(Student).filter(Student.student_lrn == "012345678901").count() == 1
 
 
+def test_csv_import_normalizes_scientific_notation_lrn(client, db):
+    response = upload(client, HEADER + "\n" + row(lrn="7.86966032787E+11"))
+
+    assert response.status_code == 200
+    assert db.query(Student).filter(Student.student_lrn == "786966032787").count() == 1
+
+
 def test_csv_import_rejects_invalid_header(client, db):
     response = upload(client, "first_name,last_name,email\nAda,Lovelace,ada@example.com")
 
@@ -219,3 +226,31 @@ def test_csv_import_rejects_unsupported_extension(client, db):
     assert response.status_code == 400
     assert "Upload a .csv" in response.json()["detail"]
     assert db.query(UserAccount).count() == 0
+
+
+def test_csv_import_rolls_back_whole_batch_when_persistence_fails(client, db, monkeypatch):
+    from app.services.users import UserImportService
+
+    original_create = UserImportService.create_pending_account
+    calls = 0
+
+    def fail_second_account(db, email, role_name):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("simulated persistence failure")
+        return original_create(db, email, role_name)
+
+    monkeypatch.setattr(UserImportService, "create_pending_account", fail_second_account)
+    content = HEADER + "\n" + row(email="first@example.com", lrn="'111111111111") + "\n" + row(
+        first="Second",
+        email="second@example.com",
+        lrn="'222222222222",
+    )
+
+    with pytest.raises(RuntimeError, match="simulated persistence failure"):
+        upload(client, content)
+
+    assert db.query(UserAccount).count() == 0
+    assert db.query(Student).count() == 0
+    assert db.query(InvitationToken).count() == 0

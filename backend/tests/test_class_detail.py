@@ -25,11 +25,14 @@ from app.models.auth.UserAccount import UserAccount
 from app.models.auth.UserRoles import UserRoles
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
-from app.services.ClassManagement import (
-    ClassManagementError,
+from app.services.classes.ClassService import (
+    archive_class_record,
     build_student_class_assignment,
-    class_management_error_handler,
+    update_class_record,
 )
+from app.services.classes.ClassShared import ClassManagementError, class_management_error_handler
+from app.schemas.Class import ClassUpdateRequest, UpdateClassStudentListRequest
+from app.services.classes.ClassStudentService import update_class_student_assignments
 
 
 TABLES = [
@@ -355,6 +358,31 @@ def test_archive_class_handles_missing_already_archived_and_access_safely(client
     assert client.patch(f"/api/v1/classes/{class_.class_id}/archive").status_code == 401
 
 
+def test_archive_class_record_rolls_back_when_commit_fails(db, monkeypatch):
+    year = add_year(db, "2025-2026")
+    level = add_level(db, "Grade 7", 7)
+    class_ = Class(
+        section_name="Galileo",
+        class_status="active",
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    db.add(class_)
+    db.commit()
+
+    def fail_commit():
+        raise RuntimeError("simulated commit failure")
+
+    monkeypatch.setattr(db, "commit", fail_commit)
+
+    with pytest.raises(Exception) as exc_info:
+        archive_class_record(db=db, class_id=class_.class_id)
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == "Unable to archive class."
+    assert db.query(Class).filter(Class.class_id == class_.class_id).one().class_status == "active"
+
+
 def test_update_class_changes_section_and_preserves_students_and_adviser(client, db):
     year = add_year(db, "2025-2026")
     level = add_level(db, "Grade 7", 7)
@@ -485,6 +513,33 @@ def test_update_class_requires_admin_and_authentication(client):
     assert client.patch("/api/v1/classes/1", json={"section_name": "Newton"}).status_code == 401
 
 
+def test_update_class_record_rolls_back_when_commit_fails(db, monkeypatch):
+    year = add_year(db, "2025-2026")
+    level = add_level(db, "Grade 7", 7)
+    class_ = Class(
+        section_name="Galileo",
+        class_status="active",
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    db.add(class_)
+    db.commit()
+
+    def fail_commit():
+        raise RuntimeError("simulated commit failure")
+
+    monkeypatch.setattr(db, "commit", fail_commit)
+
+    with pytest.raises(RuntimeError, match="simulated commit failure"):
+        update_class_record(
+            db=db,
+            class_id=class_.class_id,
+            payload=ClassUpdateRequest(section_name="Newton"),
+        )
+
+    assert db.query(Class).filter(Class.class_id == class_.class_id).one().section_name == "Galileo"
+
+
 def test_archived_class_rejects_basic_and_student_list_edits(client, db):
     year = add_year(db, "2025-2026")
     level = add_level(db, "Grade 7", 7)
@@ -562,6 +617,41 @@ def test_class_students_returns_assigned_students_sorted_counts_search_and_safe_
     assert [student["full_name"] for student in filtered["students"]] == ["Santos, Bea M."]
 
 
+def test_class_students_paginates_and_filtered_summary_matches_filtered_results(client, db):
+    year = add_year(db, "2025-2026")
+    level = add_level(db, "Grade 7", 7)
+    class_ = Class(section_name="Aristotle", academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id)
+    db.add(class_)
+    db.flush()
+    students = [
+        add_student(db, level, "100000000001"),
+        add_student(db, level, "100000000002"),
+        add_student(db, level, "100000000003"),
+    ]
+    students[0].first_name, students[0].last_name, students[0].gender = "Amy", "Able", "Female"
+    students[1].first_name, students[1].last_name, students[1].gender = "Ben", "Baker", "Male"
+    students[2].first_name, students[2].last_name, students[2].gender = "Cara", "Cruz", "Female"
+    db.add_all([build_student_class_assignment(student.student_id, class_) for student in students])
+    db.commit()
+
+    page_two = client.get(f"/api/v1/classes/{class_.class_id}/students?page=2&page_size=1")
+    filtered = client.get(f"/api/v1/classes/{class_.class_id}/students?search=cara&page_size=1")
+
+    assert page_two.status_code == 200
+    assert [student["full_name"] for student in page_two.json()["students"]] == ["Baker, Ben"]
+    assert page_two.json()["pagination"] == {
+        "page": 2,
+        "page_size": 1,
+        "total_items": 3,
+        "total_pages": 3,
+    }
+    assert filtered.status_code == 200
+    assert filtered.json()["summary"] == {
+        "total_students": 1,
+        "gender_counts": {"female": 1, "male": 0, "other": 0, "unspecified": 0},
+    }
+
+
 def test_class_students_requires_admin_and_authentication(client):
     client.app.dependency_overrides[get_current_user] = lambda: {
         "sub": str(uuid.uuid4()),
@@ -589,6 +679,31 @@ def test_transfer_options_returns_valid_same_level_active_sections(client, db):
 
     assert response.status_code == 200
     assert [section["section_name"] for section in response.json()["available_sections"]] == ["Alpha", "Zeta"]
+
+
+def test_transfer_options_excludes_same_level_class_from_other_academic_year(client, db):
+    year = add_year(db, "2025-2026")
+    other_year = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=False,
+    )
+    level = add_level(db, "Grade 7", 7)
+    db.add(other_year)
+    db.flush()
+    current = Class(section_name="Aristotle", academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id)
+    same_year = Class(section_name="Newton", academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id)
+    other_year_class = Class(section_name="Future", academic_year_id=other_year.academic_year_id, academic_level_id=level.academic_level_id)
+    db.add_all([current, same_year, other_year_class])
+    db.commit()
+
+    response = client.get(f"/api/v1/classes/{current.class_id}/transfer-options")
+
+    assert response.status_code == 200
+    assert response.json()["available_sections"] == [
+        {"class_id": same_year.class_id, "section_name": "Newton"}
+    ]
 
 
 def test_update_class_students_removes_and_transfers_assignments_without_deleting_students(client, db):
@@ -645,3 +760,62 @@ def test_update_class_students_rejects_invalid_transfer_and_rolls_back(client, d
     assert response.status_code == 400
     assert "same academic level" in response.json()["detail"]
     assert db.query(StudentClass).filter(StudentClass.class_id == source.class_id).count() == 2
+
+
+def test_update_class_students_rejects_cross_academic_year_transfer(client, db):
+    year = add_year(db, "2025-2026")
+    other_year = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=False,
+    )
+    level = add_level(db, "Grade 7", 7)
+    db.add(other_year)
+    db.flush()
+    source = Class(section_name="Aristotle", academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id)
+    target = Class(section_name="Newton", academic_year_id=other_year.academic_year_id, academic_level_id=level.academic_level_id)
+    db.add_all([source, target])
+    db.flush()
+    student = add_student(db, level, "100000000001")
+    db.add(build_student_class_assignment(student.student_id, source))
+    db.commit()
+
+    response = client.patch(
+        f"/api/v1/classes/{source.class_id}/students",
+        json={
+            "removals": [],
+            "transfers": [{"student_id": str(student.student_id), "target_class_id": target.class_id}],
+        },
+    )
+
+    assert response.status_code == 400
+    assert "same academic year" in response.json()["detail"]
+    assignment = db.query(StudentClass).filter(StudentClass.student_id == student.student_id).one()
+    assert assignment.class_id == source.class_id
+
+
+def test_update_class_student_assignments_rolls_back_when_commit_fails(db, monkeypatch):
+    year = add_year(db, "2025-2026")
+    level = add_level(db, "Grade 7", 7)
+    source = Class(section_name="Aristotle", academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id)
+    target = Class(section_name="Newton", academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id)
+    db.add_all([source, target])
+    db.flush()
+    student = add_student(db, level, "100000000001")
+    db.add(build_student_class_assignment(student.student_id, source))
+    db.commit()
+    payload = UpdateClassStudentListRequest(
+        transfers=[{"student_id": student.student_id, "target_class_id": target.class_id}]
+    )
+
+    def fail_commit():
+        raise RuntimeError("simulated commit failure")
+
+    monkeypatch.setattr(db, "commit", fail_commit)
+
+    with pytest.raises(RuntimeError, match="simulated commit failure"):
+        update_class_student_assignments(db=db, class_id=source.class_id, payload=payload)
+
+    assignment = db.query(StudentClass).filter(StudentClass.student_id == student.student_id).one()
+    assert assignment.class_id == source.class_id
