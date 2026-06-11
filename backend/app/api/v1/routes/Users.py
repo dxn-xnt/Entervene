@@ -129,6 +129,54 @@ def list_users(
 
     users = query.order_by(UserAccount.created_at.desc()).all()
 
+    teacher_ids = {user.staff_id for user in users if user.role_name == "Teacher" and user.staff_id}
+    teacher_summary_by_staff_id: dict[str, dict[str, set]] = {}
+    if teacher_ids:
+        teacher_loads = (
+            db.query(SubjectLoad.staff_id, Subject.subject_name, SubjectLoad.class_id)
+            .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
+            .filter(SubjectLoad.staff_id.in_(teacher_ids))
+            .filter(SubjectLoad.status == "active")
+            .all()
+        )
+        for load in teacher_loads:
+            summary = teacher_summary_by_staff_id.setdefault(
+                load.staff_id,
+                {"subjects": set(), "class_ids": set()},
+            )
+            if load.subject_name:
+                summary["subjects"].add(load.subject_name)
+            if load.class_id is not None:
+                summary["class_ids"].add(load.class_id)
+
+    student_ids = {user.student_id for user in users if user.role_name == "Student" and user.student_id}
+    latest_section_by_student_id = {}
+    average_by_student_id = {}
+    if student_ids:
+        enrollment_rows = (
+            db.query(StudentClass.student_id, Class.section_name)
+            .join(Class, Class.class_id == StudentClass.class_id)
+            .filter(StudentClass.student_id.in_(student_ids))
+            .filter(StudentClass.enrollment_status == "enrolled")
+            .order_by(StudentClass.student_id, StudentClass.enrolled_at.desc())
+            .all()
+        )
+        for enrollment in enrollment_rows:
+            latest_section_by_student_id.setdefault(enrollment.student_id, enrollment.section_name)
+
+        average_rows = (
+            db.query(
+                StudentSubmission.student_id,
+                func.avg(StudentSubmission.grade).label("average"),
+            )
+            .filter(StudentSubmission.student_id.in_(student_ids))
+            .filter(StudentSubmission.status == "graded")
+            .filter(StudentSubmission.grade.isnot(None))
+            .group_by(StudentSubmission.student_id)
+            .all()
+        )
+        average_by_student_id = {row.student_id: row.average for row in average_rows}
+
     response = []
     for user in users:
         client_role = _role_name_to_client_role(user.role_name)
@@ -144,33 +192,13 @@ def list_users(
         }
 
         if client_role == "teacher" and user.staff_id:
-            teacher_loads = (
-                db.query(Subject.subject_name, SubjectLoad.class_id)
-                .join(SubjectLoad, Subject.subject_id == SubjectLoad.subject_id)
-                .filter(SubjectLoad.staff_id == user.staff_id)
-                .filter(SubjectLoad.status == "active")
-                .all()
-            )
-            item["subjects"] = sorted({load.subject_name for load in teacher_loads if load.subject_name})
-            item["class_count"] = len({load.class_id for load in teacher_loads if load.class_id is not None})
+            summary = teacher_summary_by_staff_id.get(user.staff_id, {"subjects": set(), "class_ids": set()})
+            item["subjects"] = sorted(summary["subjects"])
+            item["class_count"] = len(summary["class_ids"])
 
         if client_role == "student" and user.student_id:
-            class_row = (
-                db.query(Class.section_name)
-                .join(StudentClass, Class.class_id == StudentClass.class_id)
-                .filter(StudentClass.student_id == user.student_id)
-                .filter(StudentClass.enrollment_status == "enrolled")
-                .order_by(StudentClass.enrolled_at.desc())
-                .first()
-            )
-            average = (
-                db.query(func.avg(StudentSubmission.grade))
-                .filter(StudentSubmission.student_id == user.student_id)
-                .filter(StudentSubmission.status == "graded")
-                .filter(StudentSubmission.grade.isnot(None))
-                .scalar()
-            )
-            item["section"] = class_row.section_name if class_row else None
+            average = average_by_student_id.get(user.student_id)
+            item["section"] = latest_section_by_student_id.get(user.student_id)
             item["grade_level"] = user.grade_level
             item["average"] = round(float(average)) if average is not None else None
 
