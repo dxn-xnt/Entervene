@@ -163,12 +163,17 @@ export type PendingStudentRemoval = {
   student_id: string;
 };
 
+export type PendingStudentAddition = {
+  student_id: string;
+};
+
 export type PendingStudentTransfer = {
   student_id: string;
   target_class_id: number;
 };
 
 export type UpdateClassStudentListRequest = {
+  additions: PendingStudentAddition[];
   removals: PendingStudentRemoval[];
   transfers: PendingStudentTransfer[];
 };

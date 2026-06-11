@@ -9,7 +9,7 @@ Entervene is a Learning Management System with early-warning and intervention fe
 - Mobile: Expo React Native.
 - Architecture direction: keep Entervene as a clean modular monolith, not microservices.
 
-## 2. Working Branch and Repository Location
+## 2. Working Branch
 
 ```text
 Branch: roy-dev
@@ -19,201 +19,193 @@ C:\Users\Roy Adrian Rondina\Desktop\3rd Year\2nd Sem\Entervene\Entervene
 
 ## 3. Completed Class-Management Refactor
 
-`backend/app/api/v1/routes/Classes.py` was converted into a thin route file.
-
-Current package:
+`backend/app/api/v1/routes/Classes.py` is a thin route file. Focused class-management logic lives under:
 
 ```text
 backend/app/services/classes/
-├── __init__.py
-├── ClassShared.py
-├── ClassService.py
-├── ClassImportService.py
-├── ClassStudentService.py
-└── ClassQueryService.py
+|-- __init__.py
+|-- ClassShared.py
+|-- ClassService.py
+|-- ClassImportService.py
+|-- ClassStudentService.py
+`-- ClassQueryService.py
 ```
 
-Responsibilities:
+The package preserves the modular-monolith architecture and existing class-management contracts.
 
-- `ClassShared.py`: shared class-management errors, exception handling, active academic-year resolution, adviser queries, text normalization, and student sorting.
-- `ClassService.py`: class creation, archive, update, and reusable student-class assignment construction.
-- `ClassImportService.py`: class CSV parsing, validation, grouping, and import-preview response construction.
-- `ClassStudentService.py`: student removal and transfer validation plus transaction handling.
-- `ClassQueryService.py`: read-only class listing, details, form options, unassigned students, class students, and transfer options.
+## 4. Completed User-Management Refactor
 
-`backend/app/services/ClassManagement.py` was removed. No backend imports still reference the removed module.
-
-`Classes.py` contains only route declarations, dependencies, request parameters, response models, and thin service calls. Class-management tests pass.
-
-## 4. Completed User-Import Refactor
+`backend/app/api/v1/routes/Users.py` is now a thin route file containing endpoint declarations, dependencies, request parameters, authorization checks, and service calls. It no longer constructs SQLAlchemy queries or performs transaction mutations directly.
 
 Current package:
 
 ```text
 backend/app/services/users/
-├── __init__.py
-├── UserShared.py
-└── UserImportService.py
+|-- __init__.py
+|-- UserShared.py
+|-- UserImportService.py
+|-- UserQueryService.py
+|-- UserAccountService.py
+`-- UserInvitationService.py
 ```
 
-- `UserImportService.py` handles CSV, XLS, and XLSX parsing, validation, duplicate detection, and atomic bulk account/profile creation.
-- `UserShared.py` contains helpers genuinely shared between bulk import and manual invitation creation, including pending-account creation, profile attachment, LRN normalization, academic-level resolution, and required-name validation.
+Responsibilities:
 
-Existing upload endpoint paths remain unchanged:
+- `UserShared.py`: helpers genuinely shared across user services, including account/profile creation, LRN normalization, academic-level resolution, and required-name validation.
+- `UserImportService.py`: CSV/XLS/XLSX parsing, validation, duplicate detection, and atomic bulk invitation/profile creation.
+- `UserQueryService.py`: listing filters and ordering, batched teacher/student summaries, user details, and the analytics placeholder response.
+- `UserAccountService.py`: user edits, role/profile update validation, section assignment updates, and account archiving.
+- `UserInvitationService.py`: manual invitation validation and creation plus invitation acceptance.
+
+Preserved upload paths:
 
 - `/api/v1/admin/users/upload-csv`
 - `/api/v1/users/upload-csv`
 
-Invitations are created within the database transaction and invitation emails are sent only after a successful commit. Database failures roll back the full batch, so partial database imports are not possible.
+Invitation records are created inside the database transaction. Invitation email is sent only after a successful commit. Email delivery failure after commit cannot roll back created accounts.
 
-## 5. Completed User-Listing Optimization
+## 5. User Listing And Average
 
-The confirmed `list_users()` N+1 issue in `backend/app/api/v1/routes/Users.py` was fixed.
+`list_users()` remains bounded to no more than four SQL statements regardless of returned user count:
 
-Previous behavior:
+| Area | Query strategy |
+| --- | --- |
+| Base users | One query |
+| Teacher summaries | One batched query |
+| Student sections | One batched query |
+| Student averages | One grouped query |
 
-- One subject-load query per teacher.
-- One enrollment query per student.
-- One average-grade query per student.
+The student `average` behavior was preserved unchanged:
 
-Current strategy:
+- Rounded raw arithmetic mean of graded, non-null `StudentSubmission.grade` values.
+- Not normalized against `Classwork.total_points`.
+- Not grouped by subject, academic period, or academic year.
+- Not an official academic percentage.
+- The frontend still displays it with `%`; this semantic ambiguity is deferred work.
 
-| Area | Before | After |
-| --- | --- | --- |
-| Base users | One query | One query |
-| Teacher summaries | One query per teacher | One batched query |
-| Student sections | One query per student | One batched query |
-| Student averages | One query per student | One grouped query |
+## 6. Class Student-List Additions
 
-The endpoint now executes no more than four SQL statements regardless of the returned user count.
+`PATCH /api/v1/classes/{class_id}/students` now accepts staged additions together with removals and transfers:
 
-`backend/tests/test_user_list.py` verifies mixed teacher/student response behavior and includes a query-count regression test that enforces the bounded query count.
-
-## 6. Latest Verified Test Results
-
-```powershell
-python -m pytest -q
+```json
+{
+  "additions": [{"student_id": "student-uuid"}],
+  "removals": [{"student_id": "student-uuid"}],
+  "transfers": [{"student_id": "student-uuid", "target_class_id": 2}]
+}
 ```
 
-Latest confirmed result:
+All three collections default to empty lists, so existing removal-only and transfer-only requests remain compatible.
+
+Before writing, `ClassStudentService.update_class_student_assignments()` validates:
+
+- The target class exists and is not archived.
+- Every added student exists and belongs to the target class academic level.
+- Added students have no `StudentClass` assignment in the target class academic year.
+- Additions, removals, and transfers contain no duplicate or overlapping student changes.
+- Removed and transferred students are currently assigned to the source class and academic year.
+- Transfer targets remain different, same-level, same-year, and active.
+
+The service validates the complete request first, then creates additions with
+`build_student_class_assignment()`, applies removals and transfers, and commits
+once. Any write or integrity failure rolls back the complete transaction.
+
+The existing unassigned-students endpoint and its filters were not changed.
+Account status, archived account status, enrollment status, and archived-class
+assignment filtering remain deferred until the business rule is explicitly
+defined.
+
+## 7. Edit Student List Frontend
+
+The Admin Classes Edit Student List modal is now a viewport-constrained workspace
+with a fixed green modal header, a scrollable central content area, and an always
+visible footer. It preserves the retro cream background, black borders, offset
+shadows, compact badges, and existing remove/transfer controls.
+
+The modal has two tabs:
+
+- `Enrolled students`: preserves separate enrolled search, select-multiple,
+  staged removals, staged transfers, gender panels, transfer selection, and
+  discard-unsaved-changes behavior.
+- `Add students`: displays the existing unassigned-students endpoint response in
+  one full-width searchable list. Additions remain visible with `Added` and
+  `Pending save` states and can be undone before saving.
+
+The modal tracks additions, removals, and transfers independently across tab
+switches. The Save Changes count includes all three categories. A successful
+atomic PATCH clears staged changes, refreshes the enrolled response and available
+students, updates class detail when available, and keeps the modal open with a
+success banner. PATCH failures preserve all staged changes.
+
+`UpdateClassStudentListRequest` now includes:
+
+```ts
+additions: Array<{ student_id: string }>;
+```
+
+Available students are loaded with the existing `getUnassignedClassStudents()`
+helper when the modal opens. No duplicate API helper or frontend eligibility
+filter was added.
+
+## 8. Latest Verification
+
+Focused Class Student-List tests:
 
 ```text
-124 passed
+tests/test_class_detail.py: 33 passed
+tests/test_classes_phase_one.py: 8 passed
+tests/test_class_batch_create.py: 16 passed
+tests/test_student_class_integrity.py: 10 passed
 ```
 
-```powershell
-git diff --check
-```
-
-Latest confirmed result:
+Full backend suite:
 
 ```text
-Passed, with only existing LF-to-CRLF notices.
+134 passed
 ```
 
-Existing SQLAlchemy, Starlette TestClient, JWT, and dependency deprecation warnings remain.
+`git diff --check` passed with only LF-to-CRLF working-copy notices.
+Existing SQLAlchemy and pytest-cache warnings remain.
 
-## 7. Files Recently Created
+Frontend verification:
 
 ```text
-backend/app/services/classes/ClassShared.py
-backend/app/services/classes/ClassService.py
-backend/app/services/classes/ClassImportService.py
-backend/app/services/classes/ClassStudentService.py
-backend/app/services/classes/ClassQueryService.py
-backend/app/services/users/UserShared.py
-backend/app/services/users/UserImportService.py
-backend/tests/test_user_list.py
+Targeted ESLint for all touched frontend files: passed
+npm run build: blocked by two pre-existing unused variables in
+  src/pages/student/Subjects/tabs/SubjectLessonTab.tsx
+npm run lint: blocked by existing unrelated lint errors and warnings
 ```
 
-## 8. Files Recently Modified
+Interactive manual review is blocked because no running authenticated frontend,
+backend, or realistic 20+ male and 20+ female student test dataset was available
+in this session. The responsive layout and staged-state behavior were reviewed
+from the implementation, but the requested browser walkthrough was not claimed
+as completed.
+
+## 9. Current Task Files
+
+Modified:
 
 ```text
-backend/app/api/v1/routes/Classes.py
-backend/app/api/v1/routes/Users.py
-backend/app/main.py
-backend/tests/test_class_adviser_integrity.py
-backend/tests/test_class_batch_create.py
-backend/tests/test_class_detail.py
-backend/tests/test_class_import_validation.py
-backend/tests/test_class_list.py
-backend/tests/test_classes_phase_one.py
-backend/tests/test_student_class_integrity.py
-backend/tests/test_user_student_import.py
-backend/tests/test_user_list.py
+frontend/src/components/admin/classes/modals/EditStudentListModal.tsx
+frontend/src/components/admin/classes/modals/ModalShell.tsx
+frontend/src/pages/admin/class-detail.tsx
+frontend/src/types/adminClasses.ts
+docs/CODEX_HANDOFF.md
 ```
 
-Current uncommitted working-tree changes verified before this handoff:
+## 10. Risks And Deferred Work
 
-```text
-M backend/app/api/v1/routes/Users.py
-?? backend/tests/test_user_list.py
-```
-
-## 9. Current Risks and Deferred Work
-
-- `list_users()` still returns all matched users without pagination.
+- User Management listing still returns all matched users without pagination.
 - The latest-section batched query loads enrolled rows for returned students and chooses the first per student in Python.
-- Existing SQLAlchemy, Starlette TestClient, JWT, and dependency deprecation warnings remain.
+- The student `average` is raw persisted grade points while the frontend displays `%`; do not treat it as an official percentage without a confirmed grading policy.
 - Invitation-email failure after commit cannot roll back created user accounts.
+- Unassigned-student eligibility does not currently filter account status, archived account status, enrollment status, or assignments associated with archived classes.
+- Existing SQLAlchemy, Starlette TestClient, JWT, and dependency deprecation warnings remain.
 - Predictions and analytics are still outline-stage modules and should not be prioritized yet.
-- Do not introduce microservices.
-- Do not add a repository layer unless repeated query reuse genuinely requires it.
+- Do not introduce microservices or a repository layer.
 
-## 10. Recommended Next Task
+## 11. Recommended Next Task
 
-```text
-Add backend and frontend pagination for User Management listing.
-```
-
-The next Codex session must inspect the frontend consumer before editing the backend contract.
-
-Likely relevant files:
-
-```text
-backend/app/api/v1/routes/Users.py
-backend/tests/test_user_list.py
-frontend/src/pages/admin/users.tsx
-frontend/src/lib/api.ts
-```
-
-The next session must verify the actual frontend files before making changes.
-
-The pagination task should preserve:
-
-- Role filtering.
-- Status filtering.
-- Search filtering.
-- Archived-account behavior.
-- Ordering.
-- Existing user fields.
-- Teacher summaries.
-- Student section and average fields.
-- Authorization.
-- Bounded query count.
-
-## 11. Recommended Next-Session Prompt
-
-```text
-Read docs/CODEX_HANDOFF.md first.
-
-Then:
-1. Inspect the current git status and diff.
-2. Confirm the working branch is roy-dev.
-3. Inspect the backend user-listing endpoint in backend/app/api/v1/routes/Users.py.
-4. Inspect the actual frontend User Management API consumer, especially frontend/src/pages/admin/users.tsx and frontend/src/lib/api.ts.
-5. Propose a pagination request/response contract before editing.
-6. Keep all changes scoped to backend and frontend User Management pagination.
-7. Preserve filters, archived-account behavior, ordering, user fields, role-specific summaries, authorization, and bounded query count.
-8. Run focused backend/frontend tests before the full suite.
-9. Avoid unrelated refactoring, microservices, and repository-layer changes.
-```
-
-## 12. Git Checkpoint Instructions
-
-```powershell
-git status
-git add .
-git commit -m "document codex handoff after user listing optimization"
-git push origin roy-dev
-```
+Resolve the existing frontend TypeScript and ESLint baseline errors, then perform
+the interactive Edit Student List walkthrough with realistic large-section data.
