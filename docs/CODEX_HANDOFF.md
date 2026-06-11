@@ -115,7 +115,39 @@ Account status, archived account status, enrollment status, and archived-class
 assignment filtering remain deferred until the business rule is explicitly
 defined.
 
-## 7. Latest Verification
+## 7. Edit Student List Frontend
+
+The Admin Classes Edit Student List modal is now a viewport-constrained workspace
+with a fixed green modal header, a scrollable central content area, and an always
+visible footer. It preserves the retro cream background, black borders, offset
+shadows, compact badges, and existing remove/transfer controls.
+
+The modal has two tabs:
+
+- `Enrolled students`: preserves separate enrolled search, select-multiple,
+  staged removals, staged transfers, gender panels, transfer selection, and
+  discard-unsaved-changes behavior.
+- `Add students`: displays the existing unassigned-students endpoint response in
+  one full-width searchable list. Additions remain visible with `Added` and
+  `Pending save` states and can be undone before saving.
+
+The modal tracks additions, removals, and transfers independently across tab
+switches. The Save Changes count includes all three categories. A successful
+atomic PATCH clears staged changes, refreshes the enrolled response and available
+students, updates class detail when available, and keeps the modal open with a
+success banner. PATCH failures preserve all staged changes.
+
+`UpdateClassStudentListRequest` now includes:
+
+```ts
+additions: Array<{ student_id: string }>;
+```
+
+Available students are loaded with the existing `getUnassignedClassStudents()`
+helper when the modal opens. No duplicate API helper or frontend eligibility
+filter was added.
+
+## 8. Latest Verification
 
 Focused Class Student-List tests:
 
@@ -135,18 +167,34 @@ Full backend suite:
 `git diff --check` passed with only LF-to-CRLF working-copy notices.
 Existing SQLAlchemy and pytest-cache warnings remain.
 
-## 8. Current Task Files
+Frontend verification:
+
+```text
+Targeted ESLint for all touched frontend files: passed
+npm run build: blocked by two pre-existing unused variables in
+  src/pages/student/Subjects/tabs/SubjectLessonTab.tsx
+npm run lint: blocked by existing unrelated lint errors and warnings
+```
+
+Interactive manual review is blocked because no running authenticated frontend,
+backend, or realistic 20+ male and 20+ female student test dataset was available
+in this session. The responsive layout and staged-state behavior were reviewed
+from the implementation, but the requested browser walkthrough was not claimed
+as completed.
+
+## 9. Current Task Files
 
 Modified:
 
 ```text
-backend/app/schemas/Class.py
-backend/app/services/classes/ClassStudentService.py
-backend/tests/test_class_detail.py
+frontend/src/components/admin/classes/modals/EditStudentListModal.tsx
+frontend/src/components/admin/classes/modals/ModalShell.tsx
+frontend/src/pages/admin/class-detail.tsx
+frontend/src/types/adminClasses.ts
 docs/CODEX_HANDOFF.md
 ```
 
-## 9. Risks And Deferred Work
+## 10. Risks And Deferred Work
 
 - User Management listing still returns all matched users without pagination.
 - The latest-section batched query loads enrolled rows for returned students and chooses the first per student in Python.
@@ -157,19 +205,7 @@ docs/CODEX_HANDOFF.md
 - Predictions and analytics are still outline-stage modules and should not be prioritized yet.
 - Do not introduce microservices or a repository layer.
 
-## 10. Recommended Next Task
+## 11. Recommended Next Task
 
-Add the Enrolled Students and Add Students tabs to the existing frontend Edit
-Student List modal. Reuse `getUnassignedClassStudents()` and extend the frontend
-student-list PATCH type with the new `additions` collection.
-
-Inspect:
-
-```text
-frontend/src/pages/admin/class-detail.tsx
-frontend/src/components/admin/classes/modals/EditStudentListModal.tsx
-frontend/src/types/adminClasses.ts
-frontend/src/lib/api.ts
-```
-
-Preserve the current staged Save Changes and discard-unsaved-changes behavior.
+Resolve the existing frontend TypeScript and ESLint baseline errors, then perform
+the interactive Edit Student List walkthrough with realistic large-section data.
