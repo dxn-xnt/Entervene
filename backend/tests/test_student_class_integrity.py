@@ -21,7 +21,7 @@ from app.models.academic.StudentCLass import StudentClass
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
-from app.services.ClassManagement import build_student_class_assignment
+from app.services.classes.ClassService import build_student_class_assignment
 
 
 MIGRATION_PATH = (

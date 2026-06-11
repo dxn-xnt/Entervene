@@ -25,10 +25,10 @@ from app.schemas.Class import (
     UnassignedStudentsResponse,
     ValidateClassImportResponse,
 )
-from app.services.ClassManagement import (
+from app.services.classes.ClassService import batch_create_classes
+from app.services.classes.ClassShared import (
     ClassManagementError,
     available_advisers_query,
-    batch_create_classes,
     eligible_advisers_query,
     normalized_text,
     readable_text,

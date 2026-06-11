@@ -34,7 +34,7 @@ from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.schemas.User import AcceptInvitationRequest, AcceptInvitationResponse, InviteSingleUserRequest, UpdateUserRequest
 from app.services.MailService import send_invitation_email
-from app.services.ClassManagement import build_student_class_assignment
+from app.services.classes.ClassService import build_student_class_assignment
 
 router = APIRouter()
 

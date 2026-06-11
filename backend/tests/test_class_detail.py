@@ -25,11 +25,8 @@ from app.models.auth.UserAccount import UserAccount
 from app.models.auth.UserRoles import UserRoles
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
-from app.services.ClassManagement import (
-    ClassManagementError,
-    build_student_class_assignment,
-    class_management_error_handler,
-)
+from app.services.classes.ClassService import build_student_class_assignment
+from app.services.classes.ClassShared import ClassManagementError, class_management_error_handler
 from app.schemas.Class import UpdateClassStudentListRequest
 from app.services.classes.ClassStudentService import update_class_student_assignments
 

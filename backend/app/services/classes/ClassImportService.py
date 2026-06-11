@@ -1,4 +1,7 @@
+import csv
+import io
 import re
+from typing import Any
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
@@ -8,22 +11,122 @@ from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
-from app.services.ClassManagement import (
+from app.services.classes.ClassShared import (
     ClassManagementError,
-    csv_validation_error,
     eligible_advisers_query,
-    normalized_import_row,
     normalized_middle_name,
     normalized_text,
-    raise_csv_validation_errors,
-    read_class_import_rows,
     readable_text,
     resolve_active_academic_year,
     student_sort_key,
 )
 
 
+CLASS_IMPORT_HEADERS = [
+    "section_name",
+    "grade_level",
+    "adviser_staff_id",
+    "adviser_first_name",
+    "adviser_middle_name",
+    "adviser_last_name",
+    "student_lrn",
+    "student_first_name",
+    "student_middle_name",
+    "student_last_name",
+    "student_gender",
+]
 SCIENTIFIC_NOTATION_PATTERN = re.compile(r"^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$")
+
+
+def normalized_import_row(row: dict[str, Any]) -> tuple[str, ...]:
+    return tuple(
+        normalized_middle_name(row.get(header))
+        if header in {"adviser_middle_name", "student_middle_name"}
+        else normalized_text(row.get(header))
+        for header in CLASS_IMPORT_HEADERS
+    )
+
+
+def csv_validation_error(
+    code: str,
+    message: str,
+    row: int | None = None,
+    field: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "row": row,
+        "field": field,
+        "code": code,
+        "message": message,
+    }
+
+
+def raise_csv_validation_errors(errors: list[dict[str, Any]]) -> None:
+    raise ClassManagementError(
+        status_code=422,
+        message="CSV validation failed.",
+        code="csv_validation_failed",
+        errors=errors,
+    )
+
+
+async def read_class_import_rows(file: UploadFile) -> list[tuple[int, dict[str, str]]]:
+    filename = readable_text(file.filename)
+    if not filename.casefold().endswith(".csv"):
+        raise_csv_validation_errors(
+            [csv_validation_error("invalid_file_type", "Upload a .csv file.")]
+        )
+
+    content = await file.read()
+    if not content:
+        raise_csv_validation_errors(
+            [csv_validation_error("file_empty", "The CSV file is empty.")]
+        )
+
+    try:
+        decoded = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise_csv_validation_errors(
+            [csv_validation_error("invalid_encoding", "The CSV file must use UTF-8 encoding.")]
+        )
+    if not decoded.strip():
+        raise_csv_validation_errors(
+            [csv_validation_error("file_empty", "The CSV file is empty.")]
+        )
+
+    try:
+        reader = csv.DictReader(io.StringIO(decoded, newline=""), strict=True)
+        headers = reader.fieldnames
+        if headers != CLASS_IMPORT_HEADERS:
+            raise_csv_validation_errors(
+                [
+                    csv_validation_error(
+                        "invalid_headers",
+                        "CSV headers must exactly match the required ordered header list.",
+                    )
+                ]
+            )
+
+        rows: list[tuple[int, dict[str, str]]] = []
+        for row_number, row in enumerate(reader, start=2):
+            if None in row:
+                raise csv.Error("Row contains more values than the header.")
+            trimmed = {header: readable_text(row.get(header)) for header in CLASS_IMPORT_HEADERS}
+            if any(trimmed.values()):
+                rows.append((row_number, trimmed))
+    except ClassManagementError:
+        raise
+    except (csv.Error, UnicodeError):
+        raise_csv_validation_errors(
+            [csv_validation_error("csv_parse_error", "The CSV file could not be parsed.")]
+        )
+
+    if not rows:
+        raise_csv_validation_errors(
+            [csv_validation_error("file_empty", "The CSV file contains no data rows.")]
+        )
+
+    return rows
 
 
 def _academic_year_option(academic_year) -> dict:

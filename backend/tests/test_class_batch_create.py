@@ -23,11 +23,8 @@ from app.models.auth.UserAccount import UserAccount
 from app.models.auth.UserRoles import UserRoles
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
-from app.services.ClassManagement import (
-    ClassManagementError,
-    build_student_class_assignment,
-    class_management_error_handler,
-)
+from app.services.classes.ClassService import build_student_class_assignment
+from app.services.classes.ClassShared import ClassManagementError, class_management_error_handler
 
 
 TABLES = [
@@ -374,7 +371,7 @@ def test_assignment_integrity_error_rolls_back_everything_and_returns_safe_confl
     def fail_assignment(*args, **kwargs):
         raise IntegrityError("statement", {}, Exception("raw database detail"))
 
-    monkeypatch.setattr("app.services.ClassManagement.build_student_class_assignment", fail_assignment)
+    monkeypatch.setattr("app.services.classes.ClassService.build_student_class_assignment", fail_assignment)
 
     response = post_batch(client, level.academic_level_id, [section("Sapphire", student_ids=[students[0].student_id])])
 

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.schemas.Class import UpdateClassStudentListRequest
-from app.services.ClassManagement import normalized_text
+from app.services.classes.ClassShared import normalized_text
 
 
 def update_class_student_assignments(
