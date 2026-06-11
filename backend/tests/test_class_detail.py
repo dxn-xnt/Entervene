@@ -25,9 +25,13 @@ from app.models.auth.UserAccount import UserAccount
 from app.models.auth.UserRoles import UserRoles
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
-from app.services.classes.ClassService import build_student_class_assignment
+from app.services.classes.ClassService import (
+    archive_class_record,
+    build_student_class_assignment,
+    update_class_record,
+)
 from app.services.classes.ClassShared import ClassManagementError, class_management_error_handler
-from app.schemas.Class import UpdateClassStudentListRequest
+from app.schemas.Class import ClassUpdateRequest, UpdateClassStudentListRequest
 from app.services.classes.ClassStudentService import update_class_student_assignments
 
 
@@ -354,6 +358,31 @@ def test_archive_class_handles_missing_already_archived_and_access_safely(client
     assert client.patch(f"/api/v1/classes/{class_.class_id}/archive").status_code == 401
 
 
+def test_archive_class_record_rolls_back_when_commit_fails(db, monkeypatch):
+    year = add_year(db, "2025-2026")
+    level = add_level(db, "Grade 7", 7)
+    class_ = Class(
+        section_name="Galileo",
+        class_status="active",
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    db.add(class_)
+    db.commit()
+
+    def fail_commit():
+        raise RuntimeError("simulated commit failure")
+
+    monkeypatch.setattr(db, "commit", fail_commit)
+
+    with pytest.raises(Exception) as exc_info:
+        archive_class_record(db=db, class_id=class_.class_id)
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == "Unable to archive class."
+    assert db.query(Class).filter(Class.class_id == class_.class_id).one().class_status == "active"
+
+
 def test_update_class_changes_section_and_preserves_students_and_adviser(client, db):
     year = add_year(db, "2025-2026")
     level = add_level(db, "Grade 7", 7)
@@ -482,6 +511,33 @@ def test_update_class_requires_admin_and_authentication(client):
 
     del client.app.dependency_overrides[get_current_user]
     assert client.patch("/api/v1/classes/1", json={"section_name": "Newton"}).status_code == 401
+
+
+def test_update_class_record_rolls_back_when_commit_fails(db, monkeypatch):
+    year = add_year(db, "2025-2026")
+    level = add_level(db, "Grade 7", 7)
+    class_ = Class(
+        section_name="Galileo",
+        class_status="active",
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    db.add(class_)
+    db.commit()
+
+    def fail_commit():
+        raise RuntimeError("simulated commit failure")
+
+    monkeypatch.setattr(db, "commit", fail_commit)
+
+    with pytest.raises(RuntimeError, match="simulated commit failure"):
+        update_class_record(
+            db=db,
+            class_id=class_.class_id,
+            payload=ClassUpdateRequest(section_name="Newton"),
+        )
+
+    assert db.query(Class).filter(Class.class_id == class_.class_id).one().section_name == "Galileo"
 
 
 def test_archived_class_rejects_basic_and_student_list_edits(client, db):
