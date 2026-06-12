@@ -11,7 +11,6 @@ interface ManualFormData {
   email: string;
   role: Role;
   // Staff-specific
-  staffId: string;
   gender: string;
   contactNumber: string;
   address: string;
@@ -29,7 +28,6 @@ const EMPTY_FORM: ManualFormData = {
   middleName: "",
   email: "",
   role: "Teacher",
-  staffId: "",
   gender: "",
   contactNumber: "",
   address: "",
@@ -510,15 +508,7 @@ export default function AddUserModal({
               {/* ── Teacher/Staff-specific ── */}
               {!isStudent && !isAdmin && (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Staff ID">
-                      <input
-                        className="w-full border rounded-lg px-3 py-1.5 text-sm"
-                        placeholder="e.g. TCH-001"
-                        value={form.staffId}
-                        onChange={(e) => handleField("staffId", e.target.value)}
-                      />
-                    </Field>
+                  <div>
                     <Field label="Hired Date">
                       <input
                         type="date"

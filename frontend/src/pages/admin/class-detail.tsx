@@ -5,10 +5,11 @@ import Tabs from "@/components/Tabs";
 import EditClassModal from "@/components/admin/classes/modals/EditClassModal";
 import EditStudentListModal from "@/components/admin/classes/modals/EditStudentListModal";
 import AppLayout from "@/layouts/app-layout";
-import { getClassDetail, getClassStudents, getClassTransferOptions, updateClassStudentList } from "@/lib/api";
+import { getClassDetail, getClassStudents, getClassTransferOptions, getUnassignedClassStudents, updateClassStudentList } from "@/lib/api";
 import { classData } from "@/mocks/adminClasses";
 import type {
   ClassDetailResponse,
+  ClassAssignmentStudent,
   ClassRecord,
   ClassStudentListItem,
   ClassStudentListResponse,
@@ -31,6 +32,7 @@ export default function AdminClassDetail() {
   const [studentsSuccess, setStudentsSuccess] = useState("");
   const [showEditStudents, setShowEditStudents] = useState(false);
   const [transferOptions, setTransferOptions] = useState<ClassTransferOption[]>([]);
+  const [availableStudents, setAvailableStudents] = useState<ClassAssignmentStudent[]>([]);
   const [transferOptionsError, setTransferOptionsError] = useState("");
 
   useEffect(() => {
@@ -95,6 +97,7 @@ export default function AdminClassDetail() {
     setStudentsSuccess("");
     setShowEditStudents(false);
     setTransferOptions([]);
+    setAvailableStudents([]);
     setTransferOptionsError("");
   }, [classId]);
 
@@ -144,15 +147,17 @@ export default function AdminClassDetail() {
   }
 
   async function openEditStudentList() {
-      if (isArchived) return;
-      setTransferOptionsError("");
-      try {
-        const [studentData, options] = await Promise.all([
+    if (isArchived) return;
+    setTransferOptionsError("");
+    try {
+      const [studentData, options, available] = await Promise.all([
         getClassStudents(loadedClass.class_id, { pageSize: 200 }),
         getClassTransferOptions(loadedClass.class_id),
+        getUnassignedClassStudents(loadedClass.academic_level.academic_level_id),
       ]);
       setClassStudents(studentData);
       setTransferOptions(options.available_sections);
+      setAvailableStudents(available.students);
       setShowEditStudents(true);
     } catch {
       setTransferOptionsError("Unable to load student edit options.");
@@ -162,9 +167,13 @@ export default function AdminClassDetail() {
   async function saveStudentListChanges(payload: UpdateClassStudentListRequest) {
     const updatedStudents = await updateClassStudentList(loadedClass.class_id, payload);
     setClassStudents(updatedStudents);
-    setClassDetail(await getClassDetail(loadedClass.class_id));
+    const [availableResult, detailResult] = await Promise.allSettled([
+      getUnassignedClassStudents(loadedClass.academic_level.academic_level_id),
+      getClassDetail(loadedClass.class_id),
+    ]);
+    if (availableResult.status === "fulfilled") setAvailableStudents(availableResult.value.students);
+    if (detailResult.status === "fulfilled") setClassDetail(detailResult.value);
     setStudentsSuccess("Student list updated successfully.");
-    setShowEditStudents(false);
   }
 
   return (
@@ -271,6 +280,7 @@ export default function AdminClassDetail() {
           currentSectionName={loadedClass.section_name}
           academicLevel={loadedClass.academic_level.level_name}
           students={classStudents.students}
+          availableStudents={availableStudents}
           availableSections={transferOptions}
           onSaveChanges={saveStudentListChanges}
           onClose={() => setShowEditStudents(false)}

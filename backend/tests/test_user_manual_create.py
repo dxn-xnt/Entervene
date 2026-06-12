@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401
 from app.api.v1.routes.Auth import get_current_user
-from app.api.v1.routes.Users import router as users_router
+from app.api.v1.routes.Users import _capitalize_name, _display_name, router as users_router
 from app.db.Base import Base
 from app.db.Session import get_db
 from app.models.academic.AcademicLevel import AcademicLevel
@@ -151,6 +151,9 @@ def test_manual_student_rejects_invalid_grade_level_before_insert(client, db):
 def test_valid_manual_teacher_creation_creates_staff_profile(client, db):
     response = invite(
         client,
+        first_name="ada",
+        middle_name="byron",
+        last_name="lovelace",
         role="Teacher",
         email="teacher@example.com",
         student_lrn="",
@@ -162,8 +165,14 @@ def test_valid_manual_teacher_creation_creates_staff_profile(client, db):
     account = db.query(UserAccount).filter(UserAccount.email == "teacher@example.com").one()
     staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == account.user_id).one()
     assert staff.staff_id.startswith(f"{date.today().year}-")
+    assert (staff.first_name, staff.middle_name, staff.last_name) == ("Ada", "Byron", "Lovelace")
     assert staff.employment_status == "Regular"
     assert db.query(Student).count() == 0
+
+
+def test_fetched_name_formatting_capitalizes_first_letters():
+    assert _display_name("ada", "lovelace", "fallback@example.com") == "Ada Lovelace"
+    assert _capitalize_name("byron") == "Byron"
 
 
 def test_valid_manual_admin_creation_has_no_student_or_staff_profile(client, db):

@@ -1,227 +1,119 @@
-import csv
-import io
 from typing import Any
 
-from fastapi import Request, UploadFile
+from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from starlette.responses import JSONResponse
 
 from app.models.academic.AcademicLevel import AcademicLevel
-from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
-from app.models.auth.Role import Role
-from app.models.auth.UserAccount import UserAccount
-from app.models.auth.UserRoles import UserRoles
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
+from app.schemas.Class import ClassUpdateRequest
+from app.services.classes.ClassQueryService import get_class_detail_data
+from app.services.classes.ClassShared import (
+    ClassManagementError,
+    eligible_advisers_query,
+    normalized_text,
+    readable_text,
+    resolve_active_academic_year,
+)
 
 
-CLASS_IMPORT_HEADERS = [
-    "section_name",
-    "grade_level",
-    "adviser_staff_id",
-    "adviser_first_name",
-    "adviser_middle_name",
-    "adviser_last_name",
-    "student_lrn",
-    "student_first_name",
-    "student_middle_name",
-    "student_last_name",
-    "student_gender",
-]
+def _get_class_or_404(db: Session, class_id: int) -> Class:
+    class_ = db.query(Class).filter(Class.class_id == class_id).first()
+    if class_ is None:
+        raise HTTPException(status_code=404, detail="Class not found.")
+    return class_
 
 
-class ClassManagementError(Exception):
-    def __init__(
-        self,
-        status_code: int,
-        message: str,
-        code: str,
-        errors: list[dict[str, Any]] | None = None,
-    ) -> None:
-        self.status_code = status_code
-        self.payload = {
-            "message": message,
-            "code": code,
-            "errors": errors or [],
-        }
-        super().__init__(message)
+def archive_class_record(db: Session, class_id: int) -> dict:
+    class_ = _get_class_or_404(db, class_id)
+    if normalized_text(class_.class_status or "active") == "archived":
+        raise HTTPException(status_code=409, detail="Class is already archived.")
 
+    class_.class_status = "archived"
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unable to archive class.")
+    db.refresh(class_)
 
-async def class_management_error_handler(
-    request: Request,
-    exc: ClassManagementError,
-) -> JSONResponse:
-    return JSONResponse(status_code=exc.status_code, content=exc.payload)
-
-
-def resolve_active_academic_year(db: Session) -> AcademicYear:
-    active_years = (
-        db.query(AcademicYear)
-        .filter(AcademicYear.is_active.is_(True))
-        .limit(2)
-        .all()
-    )
-
-    if not active_years:
-        raise ClassManagementError(
-            status_code=409,
-            message="Active academic year configuration is invalid.",
-            code="active_academic_year_missing",
-        )
-    if len(active_years) > 1:
-        raise ClassManagementError(
-            status_code=409,
-            message="Active academic year configuration is invalid.",
-            code="active_academic_year_multiple",
-        )
-
-    return active_years[0]
-
-
-def eligible_advisers_query(db: Session):
-    return (
-        db.query(AcademicStaff)
-        .join(UserAccount, AcademicStaff.user_id == UserAccount.user_id)
-        .join(UserRoles, UserAccount.user_id == UserRoles.user_id)
-        .join(Role, UserRoles.role_id == Role.role_id)
-        .filter(func.lower(UserAccount.account_status) == "active")
-        .filter(Role.role_name == "Teacher")
-    )
-
-
-def available_advisers_query(db: Session, academic_year_id: int):
-    assigned_in_year = (
-        db.query(Class.class_id)
-        .filter(Class.adviser_staff_id == AcademicStaff.staff_id)
-        .filter(Class.academic_year_id == academic_year_id)
-        .exists()
-    )
-    return eligible_advisers_query(db).filter(~assigned_in_year)
-
-
-def readable_text(value: Any) -> str:
-    return "" if value is None else str(value).strip()
-
-
-def normalized_text(value: Any) -> str:
-    return readable_text(value).casefold()
-
-
-def normalized_middle_name(value: Any) -> str:
-    normalized = normalized_text(value)
-    return "" if normalized == "null" else normalized
-
-
-def normalized_import_row(row: dict[str, Any]) -> tuple[str, ...]:
-    return tuple(
-        normalized_middle_name(row.get(header))
-        if header in {"adviser_middle_name", "student_middle_name"}
-        else normalized_text(row.get(header))
-        for header in CLASS_IMPORT_HEADERS
-    )
-
-
-def csv_validation_error(
-    code: str,
-    message: str,
-    row: int | None = None,
-    field: str | None = None,
-) -> dict[str, Any]:
     return {
-        "row": row,
-        "field": field,
-        "code": code,
-        "message": message,
+        "class_id": class_.class_id,
+        "section_name": class_.section_name,
+        "class_status": class_.class_status,
+        "message": "Class archived successfully.",
     }
 
 
-def raise_csv_validation_errors(errors: list[dict[str, Any]]) -> None:
-    raise ClassManagementError(
-        status_code=422,
-        message="CSV validation failed.",
-        code="csv_validation_failed",
-        errors=errors,
-    )
+def update_class_record(
+    db: Session,
+    class_id: int,
+    payload: ClassUpdateRequest,
+) -> dict:
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="Provide at least one editable field.")
 
-
-async def read_class_import_rows(file: UploadFile) -> list[tuple[int, dict[str, str]]]:
-    filename = readable_text(file.filename)
-    if not filename.casefold().endswith(".csv"):
-        raise_csv_validation_errors(
-            [csv_validation_error("invalid_file_type", "Upload a .csv file.")]
+    class_ = _get_class_or_404(db, class_id)
+    if normalized_text(class_.class_status or "active") == "archived":
+        raise HTTPException(
+            status_code=409,
+            detail="Archived classes cannot be modified. Restore the class before editing.",
         )
 
-    content = await file.read()
-    if not content:
-        raise_csv_validation_errors(
-            [csv_validation_error("file_empty", "The CSV file is empty.")]
+    if "section_name" in changes:
+        section_name = readable_text(changes["section_name"])
+        if not section_name:
+            raise HTTPException(status_code=400, detail="Section name is required.")
+        duplicate = (
+            db.query(Class.class_id)
+            .filter(Class.class_id != class_.class_id)
+            .filter(Class.academic_year_id == class_.academic_year_id)
+            .filter(Class.academic_level_id == class_.academic_level_id)
+            .filter(func.lower(Class.section_name) == section_name.lower())
+            .first()
         )
-
-    try:
-        decoded = content.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        raise_csv_validation_errors(
-            [csv_validation_error("invalid_encoding", "The CSV file must use UTF-8 encoding.")]
-        )
-    if not decoded.strip():
-        raise_csv_validation_errors(
-            [csv_validation_error("file_empty", "The CSV file is empty.")]
-        )
-
-    try:
-        reader = csv.DictReader(io.StringIO(decoded, newline=""), strict=True)
-        headers = reader.fieldnames
-        if headers != CLASS_IMPORT_HEADERS:
-            raise_csv_validation_errors(
-                [
-                    csv_validation_error(
-                        "invalid_headers",
-                        "CSV headers must exactly match the required ordered header list.",
-                    )
-                ]
+        if duplicate:
+            raise HTTPException(
+                status_code=409,
+                detail="A class with the same section and academic configuration already exists.",
             )
+        class_.section_name = section_name
 
-        rows: list[tuple[int, dict[str, str]]] = []
-        for row_number, row in enumerate(reader, start=2):
-            if None in row:
-                raise csv.Error("Row contains more values than the header.")
-            trimmed = {header: readable_text(row.get(header)) for header in CLASS_IMPORT_HEADERS}
-            if any(trimmed.values()):
-                rows.append((row_number, trimmed))
-    except ClassManagementError:
+    if "adviser_staff_id" in changes:
+        adviser_staff_id = changes["adviser_staff_id"]
+        if adviser_staff_id is None or readable_text(adviser_staff_id) == "":
+            class_.adviser_staff_id = None
+        else:
+            adviser_staff_id = readable_text(adviser_staff_id)
+            adviser = eligible_advisers_query(db).filter(AcademicStaff.staff_id == adviser_staff_id).first()
+            if adviser is None:
+                raise HTTPException(status_code=400, detail="Adviser not found.")
+            assigned_elsewhere = (
+                db.query(Class.class_id)
+                .filter(Class.class_id != class_.class_id)
+                .filter(Class.academic_year_id == class_.academic_year_id)
+                .filter(Class.adviser_staff_id == adviser_staff_id)
+                .first()
+            )
+            if assigned_elsewhere:
+                raise HTTPException(
+                    status_code=409,
+                    detail="This adviser is already assigned to another class in this academic year.",
+                )
+            class_.adviser_staff_id = adviser_staff_id
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
         raise
-    except (csv.Error, UnicodeError):
-        raise_csv_validation_errors(
-            [csv_validation_error("csv_parse_error", "The CSV file could not be parsed.")]
-        )
-
-    if not rows:
-        raise_csv_validation_errors(
-            [csv_validation_error("file_empty", "The CSV file contains no data rows.")]
-        )
-
-    return rows
-
-
-def student_sort_key(student: Any) -> tuple[int, str, str, str]:
-    gender = (student.gender or "").strip().lower()
-    if gender in {"male", "m", "boy"}:
-        gender_priority = 0
-    elif gender in {"female", "f", "girl"}:
-        gender_priority = 1
-    else:
-        gender_priority = 2
-
-    return (
-        gender_priority,
-        (student.last_name or "").lower(),
-        (student.first_name or "").lower(),
-        (student.middle_name or "").lower(),
-    )
+    db.refresh(class_)
+    return get_class_detail_data(db=db, class_id=class_.class_id)
 
 
 def build_student_class_assignment(
