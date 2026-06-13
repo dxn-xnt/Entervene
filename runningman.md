@@ -1,4 +1,6 @@
 #backend
+pip install -r requirements.txt
+
 .venv\Scripts\activate
 
 uvicorn app.main:app

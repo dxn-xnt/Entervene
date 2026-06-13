@@ -6,7 +6,7 @@ import type { ButtonHTMLAttributes } from "react";
 import { Slot } from "@radix-ui/react-slot";
 
 export const buttonVariants = cva(
-  "font-head transition-all rounded outline-hidden cursor-pointer duration-200 font-medium flex items-center justify-center",
+  "font-sans transition-all rounded outline-hidden cursor-pointer duration-200 font-medium flex items-center justify-center",
   {
     variants: {
       variant: {
@@ -35,7 +35,7 @@ export const buttonVariants = cva(
 
 export interface IButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+  VariantProps<typeof buttonVariants> {
   asChild?: boolean;
 }
 
