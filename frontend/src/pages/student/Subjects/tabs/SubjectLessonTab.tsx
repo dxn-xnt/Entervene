@@ -335,9 +335,6 @@ export default function SubjectLessonTab({
     return sortAsc ? da - db : db - da;
   });
 
-  const expandedLesson = sortedLessons.find((l) => l.lesson_id === expandedId);
-  const expandedClassworks = expandedId !== null ? (classworksByLesson[expandedId] ?? []) : [];
-
   // ─── Loading skeleton ──────────────────────────────────────────────────
   if (isLoading) {
     return (
