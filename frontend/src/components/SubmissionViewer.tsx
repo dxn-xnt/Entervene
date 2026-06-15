@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Trash2, AlertCircle } from "lucide-react";
 import AttachmentDisplay from "./AttachmentDisplay";
+import { API_URL } from "@/lib/api";
 
 interface SubmissionAttachment {
   submission_attachment_id: number;
@@ -132,6 +133,9 @@ export default function SubmissionViewer({
           <AttachmentDisplay
             attachments={submission.attachments}
             type="submission"
+            downloadUrl={(attachmentId) =>
+              `${API_URL}/api/v1/submissions/${submission.submission_id}/attachments/${attachmentId}/download`
+            }
           />
         </div>
       )}

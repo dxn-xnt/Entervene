@@ -14,7 +14,7 @@ import {
 import AttachmentDisplay from "@/components/AttachmentDisplay";
 import SubmissionForm from "@/components/SubmissionForm";
 import SubmissionViewer from "@/components/SubmissionViewer";
-import { apiFetch } from "@/lib/api";
+import { API_URL, apiFetch } from "@/lib/api";
 
 // ─── Interfaces ────────────────────────────────────────────────────────────
 
@@ -29,8 +29,8 @@ interface LessonAttachment {
 interface Lesson {
   lesson_id: number;
   title: string;
-  description?: string;
-  content?: string;
+  description?: string | null;
+  content?: string | null;
   subject_name?: string;
   teacher_name?: string;
   is_published: boolean;
@@ -178,7 +178,9 @@ export default function SubjectLessonTab({
           s.class_id === classId && s.subject_id === subjectId,
       );
       if (match) setSubjectInfo({ subject_name: match.subject_name, teacher_name: match.teacher_name });
-    } catch {}
+    } catch {
+      // The lesson list remains usable when optional subject metadata is unavailable.
+    }
   };
 
   const fetchLessons = async () => {
@@ -421,14 +423,22 @@ export default function SubjectLessonTab({
                       onClick={() => toggleLesson(lesson.lesson_id)}
                       className="w-full rounded-lg border border-black bg-[#F6E9B2] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between hover:bg-[#f0e09a] transition-colors text-left"
                     >
-                      <div>
-                        <h4 className="font-bold text-lg leading-tight">{lesson.title}</h4>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-bold text-lg leading-tight">{lesson.title}</h4>
+                          {lesson.attachments.length > 0 && (
+                            <span className="rounded-full border border-black bg-[#7ABA78] px-2 py-0.5 text-[10px] font-bold">
+                              {lesson.attachments.length} material{lesson.attachments.length === 1 ? "" : "s"}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-600 mt-0.5">
-                          {lesson.updated_at
-                            ? `Scheduled ${fmtDate(lesson.updated_at)}`
-                            : lesson.created_at
-                              ? `Created ${fmtDate(lesson.created_at)}`
-                              : ""}
+                          {lesson.description ||
+                            (lesson.updated_at
+                              ? `Updated ${fmtDate(lesson.updated_at)}`
+                              : lesson.created_at
+                                ? `Created ${fmtDate(lesson.created_at)}`
+                                : "")}
                         </p>
                       </div>
                       {isExpanded ? (
@@ -441,6 +451,62 @@ export default function SubjectLessonTab({
                     {/* ── Inline classwork items (expanded) ── */}
                     {isExpanded && (
                       <div className="mt-2 space-y-2 pl-3">
+                        <section className="rounded-lg border border-black bg-white p-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-[#F6E9B2]">
+                              <BookOpen size={19} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h5 className="font-bold">Lesson Overview</h5>
+                              {lesson.description ? (
+                                <p className="mt-1 text-sm text-gray-700">{lesson.description}</p>
+                              ) : (
+                                <p className="mt-1 text-sm text-gray-500">No lesson description provided.</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {lesson.content ? (
+                            <div className="mt-4 rounded-lg border border-gray-200 bg-[#FFFBEE] p-4">
+                              <h5 className="mb-2 text-sm font-bold">Lesson Content</h5>
+                              <p className="whitespace-pre-wrap text-sm leading-6 text-gray-800">
+                                {lesson.content}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                              This lesson has no written content yet.
+                            </p>
+                          )}
+                        </section>
+
+                        <section className="rounded-lg border border-black bg-white p-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                          <div className="mb-3 flex items-center gap-2">
+                            <Paperclip size={18} />
+                            <div>
+                              <h5 className="font-bold">Lesson Materials</h5>
+                              <p className="text-xs text-gray-500">Open or download the teacher-provided study files.</p>
+                            </div>
+                          </div>
+                          {lesson.attachments.length > 0 ? (
+                            <AttachmentDisplay
+                              attachments={lesson.attachments}
+                              type="lesson"
+                              downloadUrl={(attachmentId) =>
+                                `${API_URL}/api/v1/lessons/${lesson.lesson_id}/attachments/${attachmentId}/download`
+                              }
+                            />
+                          ) : (
+                            <p className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                              No lesson materials attached.
+                            </p>
+                          )}
+                        </section>
+
+                        <div className="flex items-center gap-2 px-1 pt-2">
+                          <ClipboardList size={17} />
+                          <h5 className="font-bold">Linked Classwork</h5>
+                        </div>
                         {classworkLoadingId === lesson.lesson_id ? (
                           <div className="text-center py-4 text-sm text-gray-400">
                             Loading classworks...
@@ -670,7 +736,13 @@ export default function SubjectLessonTab({
                       <h4 className="font-bold">Reference Files</h4>
                     </div>
                     {selectedClasswork.attachments?.length ? (
-                      <AttachmentDisplay attachments={selectedClasswork.attachments} type="classwork" />
+                      <AttachmentDisplay
+                        attachments={selectedClasswork.attachments}
+                        type="classwork"
+                        downloadUrl={(attachmentId) =>
+                          `${API_URL}/api/v1/classwork-assignments/classwork/${selectedClasswork.classwork_id}/attachments/${attachmentId}/download`
+                        }
+                      />
                     ) : (
                       <p className="text-sm text-gray-600">No reference files attached.</p>
                     )}

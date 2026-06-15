@@ -12,10 +12,13 @@ Entervene is a Learning Management System with early-warning and intervention fe
 ## 2. Working Branch
 
 ```text
-Branch: roy-dev
+Current branch: ian_dev
 Repository root:
-C:\Users\Roy Adrian Rondina\Desktop\3rd Year\2nd Sem\Entervene\Entervene
+C:\Users\Ian Jhon\School\BSIT III-B\2nd Sem\Capstone\Entervene
 ```
+
+Sections 3 through 11 preserve the earlier `roy-dev` handoff context. Current
+`ian_dev` work is recorded in section 12.
 
 ## 3. Completed Class-Management Refactor
 
@@ -209,3 +212,57 @@ docs/CODEX_HANDOFF.md
 
 Resolve the existing frontend TypeScript and ESLint baseline errors, then perform
 the interactive Edit Student List walkthrough with realistic large-section data.
+
+## 12. Current Branch Update: ian_dev
+
+### June 15, 2026
+
+Classwork material upload and attachment viewing were expanded across the teacher
+classwork flow:
+
+- Teachers can select multiple PDF, DOCX, PPTX, JPG, JPEG, or PNG materials while
+  creating classwork.
+- The classwork form validates supported extensions, enforces a 4 MB limit per
+  file, prevents duplicate selections, and allows selected files to be removed
+  before submission.
+- Selected materials are uploaded after classwork creation and before assignment.
+- Classwork reference files now use the shared `AttachmentDisplay` component with
+  the classwork download endpoint.
+- PDF previews request inline content while retaining the normal attachment URL
+  for downloads.
+- JPG, JPEG, and PNG files can be previewed from authenticated blob URLs. Preview
+  requests retry once after refreshing an expired session, and generated object
+  URLs are revoked when closed or replaced.
+- The backend classwork attachment download endpoint now accepts `inline=true`,
+  authenticates using bearer headers, session cookies, or the existing token
+  query fallback, and controls the response content disposition accordingly.
+
+Classwork route typing and defensive handling were also cleaned up:
+
+- The FastAPI `Request` parameter is now required instead of being declared as a
+  non-optional type with a `None` default.
+- Assignment lookup returns `404 Classwork not found` when its referenced
+  classwork record is missing.
+- The legacy SQLAlchemy `Class.section_name` value is cast to the response
+  schema's expected runtime string type.
+- An unused `Badge` import was removed from the admin system settings page.
+
+Current verification:
+
+```text
+backend/app/api/v1/routes/Classworks.py: py_compile passed
+backend/app/api/v1/routes/Classworks.py: AST parse passed
+FastAPI Classworks router import: passed, 13 routes imported
+git diff --check for Classworks.py: passed with an LF-to-CRLF notice
+Backend pytest suite: not run because pytest is not installed in backend/venv
+Frontend build/lint: not run for the current ian_dev changes
+```
+
+Current working-tree notes:
+
+- The attachment/classwork changes are not yet committed.
+- `frontend/package.json` and `frontend/package-lock.json` currently contain an
+  unstaged Vite upgrade from `^7.3.1` to `^8.0.16`; validate Node compatibility
+  and the frontend build before including it in the attachment work.
+- Untracked planning documents and the `screens/` directory remain outside this
+  handoff update.

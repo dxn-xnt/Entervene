@@ -18,6 +18,10 @@ from app.services.classes.ClassShared import (
     student_sort_key,
 )
 
+# READ SIDE OF CLASS MANAGEMENT
+# Functions in this module assemble data for admin pages without changing class
+# records. Routes call these functions after access control has already passed.
+
 
 def _academic_year_option(academic_year) -> dict:
     return {
@@ -95,6 +99,7 @@ def _active_class_filter():
 
 
 def get_class_form_options_data(db: Session) -> dict:
+    # This is the first request made by the class-creation page.
     academic_year = resolve_active_academic_year(db)
     academic_levels = (
         db.query(AcademicLevel)
@@ -119,6 +124,8 @@ def get_class_form_options_data(db: Session) -> dict:
 
 def list_classes_data(db: Session, status: str) -> dict:
     requested_status = normalized_text(status)
+    # Load all statuses once because the summary describes the complete class
+    # inventory while only the returned class list follows the status filter.
     class_rows = (
         db.query(
             Class,
@@ -189,6 +196,8 @@ def get_unassigned_students_data(db: Session, academic_level_id: int) -> dict:
             }],
         )
 
+    # "Unassigned" is year-specific: historical StudentClass rows must not hide
+    # a student from the active-year class creation workflow.
     assigned_in_active_year = (
         db.query(StudentClass.student_class_id)
         .join(Class, StudentClass.class_id == Class.class_id)
@@ -236,6 +245,8 @@ def get_class_students_data(
         raise HTTPException(status_code=404, detail="Class not found.")
 
     class_, academic_level = class_row
+    # Restrict the roster to the class's academic year so historical enrollment
+    # records do not leak into the current admin view.
     rows = (
         db.query(Student)
         .join(StudentClass, Student.student_id == StudentClass.student_id)
@@ -285,6 +296,7 @@ def get_class_transfer_options_data(db: Session, class_id: int) -> dict:
         raise HTTPException(status_code=404, detail="Class not found.")
 
     class_, academic_level = class_row
+    # Transfers are limited to another active section in the same year and level.
     sections = (
         db.query(Class)
         .filter(Class.class_id != class_.class_id)

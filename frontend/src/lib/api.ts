@@ -13,7 +13,7 @@ import type {
   ValidateClassImportResponse,
 } from "@/types/adminClasses";
 
-const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
+export const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
 export type UserRole = "admin" | "teacher" | "student";
 
@@ -80,7 +80,9 @@ function getCookie(name: string): string | null {
   return value ? decodeURIComponent(value) : null;
 }
 
-export async function apiFetch(path: string, init: RequestInit = {}) {
+let refreshRequest: Promise<boolean> | null = null;
+
+function request(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   const method = (init.method ?? "GET").toUpperCase();
   const csrfToken = getCookie("entervene_csrf");
@@ -89,11 +91,35 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
     headers.set("X-CSRF-Token", csrfToken);
   }
 
-  return fetch(`${API_URL}${path}`, {
+  const url = /^https?:\/\//i.test(path) ? path : `${API_URL}${path}`;
+
+  return fetch(url, {
     ...init,
     headers,
     credentials: "include",
   });
+}
+
+async function refreshAccessToken(): Promise<boolean> {
+  if (!refreshRequest) {
+    refreshRequest = request("/api/v1/auth/refresh", { method: "POST" })
+      .then((response) => response.ok)
+      .finally(() => {
+        refreshRequest = null;
+      });
+  }
+  return refreshRequest;
+}
+
+export async function apiFetch(path: string, init: RequestInit = {}) {
+  const response = await request(path, init);
+  const isAuthRequest = path.startsWith("/api/v1/auth/");
+
+  if (response.status === 401 && !isAuthRequest && await refreshAccessToken()) {
+    return request(path, init);
+  }
+
+  return response;
 }
 
 export async function getUsers(params: { role?: UserRole; search?: string; status?: string } = {}) {

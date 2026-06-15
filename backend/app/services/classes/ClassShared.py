@@ -12,6 +12,10 @@ from app.models.auth.UserAccount import UserAccount
 from app.models.auth.UserRoles import UserRoles
 from app.models.people.AcademicStaff import AcademicStaff
 
+# SHARED CLASS-MANAGEMENT RULES
+# Query, import, and write services use this module so active-year rules, adviser
+# eligibility, text normalization, and structured errors behave consistently.
+
 
 class ClassManagementError(Exception):
     def __init__(
@@ -38,6 +42,8 @@ async def class_management_error_handler(
 
 
 def resolve_active_academic_year(db: Session) -> AcademicYear:
+    # Class-management operations require one unambiguous academic-year scope.
+    # Failing here prevents assignments from being written into an arbitrary year.
     active_years = (
         db.query(AcademicYear)
         .filter(AcademicYear.is_active.is_(True))
@@ -62,6 +68,8 @@ def resolve_active_academic_year(db: Session) -> AcademicYear:
 
 
 def eligible_advisers_query(db: Session):
+    # Adviser eligibility is derived from both the staff profile and its active
+    # teacher account; a staff row alone is not enough for admin assignment.
     return (
         db.query(AcademicStaff)
         .join(UserAccount, AcademicStaff.user_id == UserAccount.user_id)
@@ -73,6 +81,7 @@ def eligible_advisers_query(db: Session):
 
 
 def available_advisers_query(db: Session, academic_year_id: int):
+    # An adviser may own at most one class per academic year.
     assigned_in_year = (
         db.query(Class.class_id)
         .filter(Class.adviser_staff_id == AcademicStaff.staff_id)

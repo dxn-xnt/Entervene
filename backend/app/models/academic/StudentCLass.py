@@ -7,6 +7,8 @@ from app.db.Base import Base
 
 class StudentClass(Base):
     __tablename__ = "student_class"
+    # A student may have many historical class records, but only one assignment
+    # per academic year. Services validate this early; the constraint enforces it.
     __table_args__ = (
         UniqueConstraint("student_id", "class_id", name="uq_student_class"),
         UniqueConstraint("student_id", "academic_year_id", name="uq_student_class_student_academic_year"),

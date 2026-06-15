@@ -5,6 +5,8 @@ from app.db.Base import Base
 
 class Class(Base):
     __tablename__ = "class"
+    # Database constraints enforce the same academic-year adviser invariant
+    # validated by the class-management services.
     __table_args__ = (
         UniqueConstraint("class_id", "academic_year_id", name="uq_class_class_id_academic_year_id"),
         UniqueConstraint("adviser_staff_id", "academic_year_id", name="uq_class_adviser_academic_year"),

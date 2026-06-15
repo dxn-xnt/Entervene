@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, ChevronDown, ChevronRight, ClipboardList, Eye, FileText, Info, Paperclip, Plus, Search, Users, X } from "lucide-react";
+import { Archive, BookOpen, ChevronDown, ChevronRight, ClipboardList, Eye, FileText, Info, Paperclip, Pencil, Plus, Search, Trash2, Upload, Users, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
-import { apiFetch } from "@/lib/api";
+import { API_URL, apiFetch } from "@/lib/api";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
 
 type TeacherClassLoad = {
@@ -17,11 +17,31 @@ type TeacherClassLoad = {
 type Lesson = {
   lesson_id: number;
   title: string;
-  description?: string;
+  description?: string | null;
+  content?: string | null;
+  order_index: number;
   created_at?: string;
   updated_at?: string;
   is_published: boolean;
   is_draft: boolean;
+  is_archived: boolean;
+  attachments: LessonAttachment[];
+};
+
+type LessonAttachment = {
+  lesson_attachment_id: number;
+  file_name: string;
+  file_type?: string;
+  file_size: number;
+  uploaded_at?: string;
+};
+
+type LessonDraft = {
+  title: string;
+  description: string;
+  content: string;
+  order_index: string;
+  is_published: boolean;
 };
 
 type LinkedClasswork = {
@@ -98,6 +118,9 @@ const emptyClassworkDraft: ClassworkDraft = {
   is_published: true,
 };
 
+const allowedMaterialExtensions = [".pdf", ".docx", ".pptx", ".jpg", ".jpeg", ".png"];
+const maxMaterialSize = 4 * 1024 * 1024;
+
 function MetricCard({ title, value, note }: { title: string; value: string; note: string }) {
   return (
     <div className="rounded-lg border border-black bg-[#F6E9B2] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -113,11 +136,19 @@ export default function SubjectDetails() {
   const navigate = useNavigate();
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
+  const [lessonDraft, setLessonDraft] = useState<LessonDraft | null>(null);
+  const [lessonClassIds, setLessonClassIds] = useState<number[]>([]);
+  const [lessonMaterials, setLessonMaterials] = useState<File[]>([]);
+  const [isSavingLesson, setIsSavingLesson] = useState(false);
+  const [isArchivingLesson, setIsArchivingLesson] = useState(false);
+  const [removingLessonAttachmentId, setRemovingLessonAttachmentId] = useState<number | null>(null);
   const [expandedLessonId, setExpandedLessonId] = useState<number | null>(null);
   const [linkedClassworks, setLinkedClassworks] = useState<Record<number, LinkedClasswork[]>>({});
   const [loadingClassworkId, setLoadingClassworkId] = useState<number | null>(null);
   const [classworkLesson, setClassworkLesson] = useState<Lesson | null>(null);
   const [classworkDraft, setClassworkDraft] = useState<ClassworkDraft>(emptyClassworkDraft);
+  const [classworkMaterials, setClassworkMaterials] = useState<File[]>([]);
   const [isCreatingClasswork, setIsCreatingClasswork] = useState(false);
   const [selectedClasswork, setSelectedClasswork] = useState<ClassworkDetail | null>(null);
   const [selectedTracking, setSelectedTracking] = useState<SubmissionTracking | null>(null);
@@ -150,7 +181,8 @@ export default function SubjectDetails() {
           if (!lessonsResponse.ok) {
             throw new Error("Unable to load lessons.");
           }
-          setLessons((await lessonsResponse.json()) as Lesson[]);
+          const lessonData = (await lessonsResponse.json()) as Lesson[];
+          setLessons(lessonData.filter((lesson) => !lesson.is_archived));
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load subject details.");
@@ -171,6 +203,11 @@ export default function SubjectDetails() {
 
   const subjectName = subjectLoad?.subject_name || "Subject";
   const sectionName = subjectLoad?.section_name;
+  const classesForSubject = useMemo(() => {
+    return loads
+      .filter((load) => load.subject_id === Number(subjectId))
+      .sort((a, b) => a.section_name.localeCompare(b.section_name));
+  }, [loads, subjectId]);
   const filteredLessons = useMemo(() => {
     const query = lessonSearch.trim().toLowerCase();
     if (!query) return lessons;
@@ -235,15 +272,257 @@ export default function SubjectDetails() {
   };
 
   const openClassworkForm = (lesson: Lesson) => {
+    setError("");
     setClassworkLesson(lesson);
     setClassworkDraft(emptyClassworkDraft);
+    setClassworkMaterials([]);
     setExpandedLessonId(lesson.lesson_id);
+  };
+
+  const openLessonManager = (lesson: Lesson) => {
+    setError("");
+    setSelectedLesson(lesson);
+    setLessonDraft({
+      title: lesson.title,
+      description: lesson.description || "",
+      content: lesson.content || "",
+      order_index: String(lesson.order_index || 1),
+      is_published: lesson.is_published,
+    });
+    setLessonClassIds(classId ? [Number(classId)] : []);
+    setLessonMaterials([]);
+  };
+
+  const closeLessonManager = () => {
+    if (isSavingLesson || isArchivingLesson || removingLessonAttachmentId !== null) return;
+    setSelectedLesson(null);
+    setLessonDraft(null);
+    setLessonClassIds([]);
+    setLessonMaterials([]);
+    setError("");
+  };
+
+  const addLessonMaterials = (files: FileList | null) => {
+    if (!files) return;
+
+    const selected = Array.from(files);
+    const invalidType = selected.find((file) => {
+      const extension = `.${file.name.split(".").pop()?.toLowerCase()}`;
+      return !allowedMaterialExtensions.includes(extension);
+    });
+    if (invalidType) {
+      setError(`${invalidType.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`);
+      return;
+    }
+
+    const oversized = selected.find((file) => file.size > maxMaterialSize);
+    if (oversized) {
+      setError(`${oversized.name} is larger than the 4 MB file limit.`);
+      return;
+    }
+
+    setError("");
+    setLessonMaterials((current) => {
+      const existing = new Set(current.map((file) => `${file.name}-${file.size}`));
+      return [...current, ...selected.filter((file) => !existing.has(`${file.name}-${file.size}`))];
+    });
+  };
+
+  const toggleLessonClass = (targetClassId: number) => {
+    setLessonClassIds((current) =>
+      current.includes(targetClassId)
+        ? current.filter((id) => id !== targetClassId)
+        : [...current, targetClassId]
+    );
+  };
+
+  const saveLesson = async () => {
+    if (!selectedLesson || !lessonDraft) return;
+
+    setError("");
+    if (!lessonDraft.title.trim()) {
+      setError("Lesson title is required.");
+      return;
+    }
+    if (lessonClassIds.length === 0) {
+      setError("Select at least one class or section.");
+      return;
+    }
+    const orderIndex = Number(lessonDraft.order_index);
+    if (!Number.isInteger(orderIndex) || orderIndex < 1) {
+      setError("Lesson order must be a positive whole number.");
+      return;
+    }
+
+    setIsSavingLesson(true);
+    try {
+      const updateResponse = await apiFetch(`/api/v1/lessons/${selectedLesson.lesson_id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: lessonDraft.title.trim(),
+          description: lessonDraft.description.trim() || null,
+          content: lessonDraft.content.trim() || null,
+          order_index: orderIndex,
+          is_published: lessonDraft.is_published,
+          is_draft: !lessonDraft.is_published,
+        }),
+      });
+      if (!updateResponse.ok) {
+        throw new Error("Unable to update lesson.");
+      }
+
+      let updatedLesson = (await updateResponse.json()) as Lesson;
+
+      const assignResponse = await apiFetch(`/api/v1/lessons/${selectedLesson.lesson_id}/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          class_ids: lessonClassIds,
+          is_published: lessonDraft.is_published,
+        }),
+      });
+      if (!assignResponse.ok) {
+        throw new Error("Lesson details were saved, but section assignment failed.");
+      }
+
+      for (const material of lessonMaterials) {
+        const formData = new FormData();
+        formData.append("file", material);
+        const uploadResponse = await apiFetch(`/api/v1/lessons/${selectedLesson.lesson_id}/attachments`, {
+          method: "POST",
+          body: formData,
+        });
+        if (!uploadResponse.ok) {
+          throw new Error(`Lesson details were saved, but ${material.name} could not be uploaded.`);
+        }
+      }
+
+      if (lessonDraft.is_published) {
+        const publishResponse = await apiFetch(`/api/v1/lessons/${selectedLesson.lesson_id}/publish`, {
+          method: "PUT",
+        });
+        if (!publishResponse.ok) {
+          throw new Error("Lesson details were saved, but publishing failed.");
+        }
+      }
+
+      const detailResponse = await apiFetch(`/api/v1/lessons/${selectedLesson.lesson_id}`);
+      if (detailResponse.ok) {
+        updatedLesson = (await detailResponse.json()) as Lesson;
+      }
+      setLessons((current) =>
+        current
+          .map((lesson) => lesson.lesson_id === updatedLesson.lesson_id ? updatedLesson : lesson)
+          .sort((a, b) => a.order_index - b.order_index)
+      );
+      setSelectedLesson(updatedLesson);
+      setLessonDraft({
+        title: updatedLesson.title,
+        description: updatedLesson.description || "",
+        content: updatedLesson.content || "",
+        order_index: String(updatedLesson.order_index || 1),
+        is_published: updatedLesson.is_published,
+      });
+      setLessonMaterials([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update lesson.");
+    } finally {
+      setIsSavingLesson(false);
+    }
+  };
+
+  const removeLessonAttachment = async (attachmentId: number) => {
+    if (!selectedLesson) return;
+
+    setRemovingLessonAttachmentId(attachmentId);
+    setError("");
+    try {
+      const response = await apiFetch(
+        `/api/v1/lessons/${selectedLesson.lesson_id}/attachments/${attachmentId}`,
+        { method: "DELETE" }
+      );
+      if (!response.ok) {
+        throw new Error("Unable to remove lesson material.");
+      }
+
+      const updatedLesson = {
+        ...selectedLesson,
+        attachments: selectedLesson.attachments.filter(
+          (attachment) => attachment.lesson_attachment_id !== attachmentId
+        ),
+      };
+      setSelectedLesson(updatedLesson);
+      setLessons((current) =>
+        current.map((lesson) => lesson.lesson_id === updatedLesson.lesson_id ? updatedLesson : lesson)
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to remove lesson material.");
+    } finally {
+      setRemovingLessonAttachmentId(null);
+    }
+  };
+
+  const archiveLesson = async () => {
+    if (!selectedLesson) return;
+
+    setIsArchivingLesson(true);
+    setError("");
+    try {
+      const response = await apiFetch(`/api/v1/lessons/${selectedLesson.lesson_id}/archive`, {
+        method: "PUT",
+      });
+      if (!response.ok) {
+        throw new Error("Unable to archive lesson.");
+      }
+      setLessons((current) => current.filter((lesson) => lesson.lesson_id !== selectedLesson.lesson_id));
+      setSelectedLesson(null);
+      setLessonDraft(null);
+      setLessonClassIds([]);
+      setLessonMaterials([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to archive lesson.");
+    } finally {
+      setIsArchivingLesson(false);
+    }
   };
 
   const closeClassworkForm = () => {
     if (isCreatingClasswork) return;
     setClassworkLesson(null);
     setClassworkDraft(emptyClassworkDraft);
+    setClassworkMaterials([]);
+    setError("");
+  };
+
+  const addClassworkMaterials = (files: FileList | null) => {
+    if (!files) return;
+
+    const selected = Array.from(files);
+    const invalidType = selected.find((file) => {
+      const extension = `.${file.name.split(".").pop()?.toLowerCase()}`;
+      return !allowedMaterialExtensions.includes(extension);
+    });
+    if (invalidType) {
+      setError(`${invalidType.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`);
+      return;
+    }
+
+    const oversized = selected.find((file) => file.size > maxMaterialSize);
+    if (oversized) {
+      setError(`${oversized.name} is larger than the 4 MB file limit.`);
+      return;
+    }
+
+    setError("");
+    setClassworkMaterials((current) => {
+      const existing = new Set(current.map((file) => `${file.name}-${file.size}`));
+      return [...current, ...selected.filter((file) => !existing.has(`${file.name}-${file.size}`))];
+    });
+  };
+
+  const removeClassworkMaterial = (index: number) => {
+    setClassworkMaterials((current) => current.filter((_, currentIndex) => currentIndex !== index));
   };
 
   const openClassworkDetail = async (classwork: LinkedClasswork) => {
@@ -287,7 +566,6 @@ export default function SubjectDetails() {
       setError("Classwork title is required.");
       return;
     }
-
     const totalPoints = Number(classworkDraft.total_points);
     if (classworkDraft.total_points && Number.isNaN(totalPoints)) {
       setError("Total points must be a number.");
@@ -317,6 +595,26 @@ export default function SubjectDetails() {
       }
 
       const created = (await createResponse.json()) as { classwork_id: number };
+
+      for (const material of classworkMaterials) {
+        const formData = new FormData();
+        formData.append("file", material);
+        const uploadResponse = await apiFetch(
+          `/api/v1/classwork-assignments/classwork/${created.classwork_id}/attachments`,
+          {
+            method: "POST",
+            body: formData,
+          }
+        );
+
+        if (!uploadResponse.ok) {
+          const uploadError = await uploadResponse.json().catch(() => ({}));
+          throw new Error(
+            uploadError.detail || `Classwork was created, but ${material.name} could not be uploaded.`
+          );
+        }
+      }
+
       const assignResponse = await apiFetch(`/api/v1/classwork-assignments/classwork/${created.classwork_id}/assign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -334,6 +632,7 @@ export default function SubjectDetails() {
       await loadLessonClassworks(classworkLesson.lesson_id);
       setClassworkLesson(null);
       setClassworkDraft(emptyClassworkDraft);
+      setClassworkMaterials([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create classwork.");
     } finally {
@@ -427,22 +726,42 @@ export default function SubjectDetails() {
 
               return (
                 <div key={lesson.lesson_id} className="flex flex-col gap-2">
-                  <button
-                    type="button"
-                    onClick={() => toggleLesson(lesson.lesson_id)}
-                    className="flex items-center justify-between rounded-lg border border-black bg-[#F6E9B2] px-4 py-3 text-left shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
-                  >
-                    <div>
-                      <p className="text-2xl font-bold text-gray-950">{lesson.title}</p>
-                      <p className="text-xs font-medium text-gray-700">
-                        {lesson.description ||
-                          (lesson.created_at
-                            ? `Created ${new Date(lesson.created_at).toLocaleDateString()}`
-                            : "Lesson folder")}
-                      </p>
-                    </div>
-                    {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                  </button>
+                  <div className="flex items-center gap-2 rounded-lg border border-black bg-[#F6E9B2] px-4 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                    <button
+                      type="button"
+                      onClick={() => toggleLesson(lesson.lesson_id)}
+                      className="flex min-w-0 flex-1 items-center justify-between text-left"
+                    >
+                      <div className="min-w-0">
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <p className="truncate text-2xl font-bold text-gray-950">{lesson.title}</p>
+                          <span className="rounded-full border border-black bg-white px-2 py-0.5 text-[10px] font-bold">
+                            {lesson.is_published ? "Published" : "Draft"}
+                          </span>
+                          {lesson.attachments.length > 0 && (
+                            <span className="rounded-full border border-black bg-[#7ABA78] px-2 py-0.5 text-[10px] font-bold">
+                              {lesson.attachments.length} material{lesson.attachments.length === 1 ? "" : "s"}
+                            </span>
+                          )}
+                        </div>
+                        <p className="truncate text-xs font-medium text-gray-700">
+                          {lesson.description ||
+                            (lesson.created_at
+                              ? `Created ${new Date(lesson.created_at).toLocaleDateString()}`
+                              : "Lesson folder")}
+                        </p>
+                      </div>
+                      {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openLessonManager(lesson)}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-black bg-white px-3 py-2 text-xs font-bold hover:bg-gray-50"
+                    >
+                      <Pencil size={14} />
+                      Manage
+                    </button>
+                  </div>
 
                   {isExpanded && (
                     <div className="ml-3 flex flex-col gap-2 border-l-2 border-black pl-3">
@@ -538,6 +857,269 @@ export default function SubjectDetails() {
         </section>
       </main>
 
+      {selectedLesson && lessonDraft && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
+          <section className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-black bg-[#F6E9B2] px-5 py-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Teacher lesson management</p>
+                <h2 className="text-xl font-bold">{selectedLesson.title}</h2>
+              </div>
+              <button type="button" onClick={closeLessonManager} className="rounded p-1 hover:bg-white/60">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid gap-5 p-5 lg:grid-cols-[1.25fr_0.85fr]">
+              <div className="space-y-4">
+                {error && (
+                  <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                    {error}
+                  </div>
+                )}
+
+                <div className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="grid gap-4 sm:grid-cols-[1fr_130px]">
+                    <div>
+                      <label htmlFor="manage-lesson-title" className="mb-1 block text-sm font-semibold">Lesson title</label>
+                      <input
+                        id="manage-lesson-title"
+                        value={lessonDraft.title}
+                        onChange={(event) =>
+                          setLessonDraft((current) => current ? { ...current, title: event.target.value } : current)
+                        }
+                        disabled={isSavingLesson}
+                        className="w-full rounded-lg border border-gray-700 px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="manage-lesson-order" className="mb-1 block text-sm font-semibold">Order</label>
+                      <input
+                        id="manage-lesson-order"
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={lessonDraft.order_index}
+                        onChange={(event) =>
+                          setLessonDraft((current) => current ? { ...current, order_index: event.target.value } : current)
+                        }
+                        disabled={isSavingLesson}
+                        className="w-full rounded-lg border border-gray-700 px-3 py-2"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <label htmlFor="manage-lesson-description" className="mb-1 block text-sm font-semibold">Description</label>
+                    <textarea
+                      id="manage-lesson-description"
+                      value={lessonDraft.description}
+                      onChange={(event) =>
+                        setLessonDraft((current) => current ? { ...current, description: event.target.value } : current)
+                      }
+                      disabled={isSavingLesson}
+                      className="min-h-20 w-full rounded-lg border border-gray-700 px-3 py-2"
+                      placeholder="Short lesson summary"
+                    />
+                  </div>
+
+                  <div className="mt-4">
+                    <label htmlFor="manage-lesson-content" className="mb-1 block text-sm font-semibold">Lesson content</label>
+                    <textarea
+                      id="manage-lesson-content"
+                      value={lessonDraft.content}
+                      onChange={(event) =>
+                        setLessonDraft((current) => current ? { ...current, content: event.target.value } : current)
+                      }
+                      disabled={isSavingLesson}
+                      className="min-h-52 w-full rounded-lg border border-gray-700 px-3 py-2"
+                      placeholder="Write the lesson notes or learning content students will read."
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Paperclip size={18} />
+                    <h3 className="font-bold">Current Materials</h3>
+                  </div>
+                  {selectedLesson.attachments.length > 0 ? (
+                    <>
+                      <AttachmentDisplay
+                        attachments={selectedLesson.attachments}
+                        type="lesson"
+                        downloadUrl={(attachmentId) =>
+                          `${API_URL}/api/v1/lessons/${selectedLesson.lesson_id}/attachments/${attachmentId}/download`
+                        }
+                      />
+                      <div className="mt-3 space-y-2 border-t border-gray-200 pt-3">
+                        {selectedLesson.attachments.map((attachment) => (
+                          <div key={attachment.lesson_attachment_id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
+                            <p className="truncate text-sm font-semibold">{attachment.file_name}</p>
+                            <button
+                              type="button"
+                              onClick={() => removeLessonAttachment(attachment.lesson_attachment_id)}
+                              disabled={removingLessonAttachmentId !== null || isSavingLesson}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-red-300 bg-red-50 px-2 py-1 text-xs font-bold text-red-700 disabled:opacity-50"
+                            >
+                              <Trash2 size={14} />
+                              {removingLessonAttachmentId === attachment.lesson_attachment_id ? "Removing..." : "Remove"}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-600">No lesson materials attached.</p>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <label htmlFor="manage-lesson-materials" className="block text-sm font-semibold">Add Materials</label>
+                    <span className="text-xs font-medium text-gray-500">PDF, DOCX, PPTX, JPG, PNG | 4 MB each</span>
+                  </div>
+                  <label
+                    htmlFor="manage-lesson-materials"
+                    className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-5 text-sm font-semibold ${
+                      isSavingLesson
+                        ? "cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400"
+                        : "border-gray-700 bg-gray-50 hover:bg-[#F6E9B2]"
+                    }`}
+                  >
+                    <Upload size={18} />
+                    Select material files
+                  </label>
+                  <input
+                    id="manage-lesson-materials"
+                    type="file"
+                    multiple
+                    accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
+                    className="hidden"
+                    disabled={isSavingLesson}
+                    onChange={(event) => {
+                      addLessonMaterials(event.target.files);
+                      event.target.value = "";
+                    }}
+                  />
+
+                  {lessonMaterials.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {lessonMaterials.map((material, index) => (
+                        <div key={`${material.name}-${material.size}`} className="flex items-center gap-3 rounded-lg border px-3 py-2">
+                          <FileText size={17} />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold">{material.name}</p>
+                            <p className="text-xs text-gray-500">{(material.size / 1024 / 1024).toFixed(2)} MB</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setLessonMaterials((current) => current.filter((_, currentIndex) => currentIndex !== index))
+                            }
+                            disabled={isSavingLesson}
+                            className="rounded p-1 text-red-600 hover:bg-red-50"
+                            aria-label={`Remove ${material.name}`}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <aside className="space-y-4">
+                <div className="rounded-lg border border-black bg-[#F6E9B2] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                  <h3 className="font-bold">Publication</h3>
+                  <label className="mt-3 flex items-start gap-3 rounded-lg border border-black bg-white px-3 py-3 text-sm font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={lessonDraft.is_published}
+                      onChange={(event) =>
+                        setLessonDraft((current) => current ? { ...current, is_published: event.target.checked } : current)
+                      }
+                      disabled={isSavingLesson}
+                    />
+                    <span>
+                      {lessonDraft.is_published ? "Published to assigned sections" : "Saved as draft"}
+                      <span className="mt-1 block text-xs font-normal text-gray-600">
+                        Draft lessons stay hidden from students.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+
+                <div className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                  <h3 className="font-bold">Assigned Sections</h3>
+                  <p className="mt-1 text-xs text-gray-600">
+                    Select sections to keep or add. Existing assignments cannot be removed by the current lesson API.
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {classesForSubject.map((item) => (
+                      <label key={item.subject_load_id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={lessonClassIds.includes(item.class_id)}
+                          onChange={() => toggleLessonClass(item.class_id)}
+                          disabled={isSavingLesson || item.class_id === Number(classId)}
+                        />
+                        <span className="flex-1">{item.section_name}</span>
+                        {item.class_id === Number(classId) && (
+                          <span className="text-[10px] font-bold uppercase text-gray-500">Current</span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-red-300 bg-red-50 p-4">
+                  <div className="flex items-center gap-2 text-red-800">
+                    <Archive size={17} />
+                    <h3 className="font-bold">Archive Lesson</h3>
+                  </div>
+                  <p className="mt-2 text-xs text-red-700">
+                    Archive hides this lesson from the routed teacher list and student lesson views.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(`Archive "${selectedLesson.title}"?`)) {
+                        archiveLesson();
+                      }
+                    }}
+                    disabled={isArchivingLesson || isSavingLesson}
+                    className="mt-3 w-full rounded-lg border border-red-400 bg-white px-3 py-2 text-sm font-bold text-red-700 disabled:opacity-50"
+                  >
+                    {isArchivingLesson ? "Archiving..." : "Archive Lesson"}
+                  </button>
+                </div>
+              </aside>
+            </div>
+
+            <div className="sticky bottom-0 flex justify-end gap-3 border-t border-black bg-white px-5 py-4">
+              <button
+                type="button"
+                onClick={closeLessonManager}
+                disabled={isSavingLesson || isArchivingLesson || removingLessonAttachmentId !== null}
+                className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={saveLesson}
+                disabled={isSavingLesson || isArchivingLesson || removingLessonAttachmentId !== null}
+                className="rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
+              >
+                {isSavingLesson ? "Saving..." : lessonDraft.is_published ? "Save and Publish" : "Save Draft"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       {classworkLesson && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
           <section className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -552,6 +1134,12 @@ export default function SubjectDetails() {
             </div>
 
             <div className="space-y-4 p-5">
+              {error && (
+                <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                  {error}
+                </div>
+              )}
+
               <div>
                 <label htmlFor="classwork-title" className="mb-1 block text-sm font-semibold">Title</label>
                 <input
@@ -661,6 +1249,69 @@ export default function SubjectDetails() {
                   className="min-h-24 w-full rounded-lg border border-gray-700 px-3 py-2"
                   placeholder="What students need to do"
                 />
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <label htmlFor="classwork-materials" className="block text-sm font-semibold">
+                    Upload Material
+                  </label>
+                  <span className="text-xs font-medium text-gray-500">
+                    PDF, DOCX, PPTX, JPG, PNG | 4 MB each
+                  </span>
+                </div>
+
+                <label
+                  htmlFor="classwork-materials"
+                  className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-5 text-sm font-semibold transition-colors ${
+                    isCreatingClasswork
+                      ? "cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400"
+                      : "border-gray-700 bg-gray-50 hover:bg-[#F6E9B2]"
+                  }`}
+                >
+                  <Upload size={18} />
+                  Select material files
+                </label>
+                <input
+                  id="classwork-materials"
+                  type="file"
+                  multiple
+                  accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
+                  onChange={(event) => {
+                    addClassworkMaterials(event.target.files);
+                    event.target.value = "";
+                  }}
+                  disabled={isCreatingClasswork}
+                  className="hidden"
+                />
+
+                {classworkMaterials.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {classworkMaterials.map((material, index) => (
+                      <div
+                        key={`${material.name}-${material.size}`}
+                        className="flex items-center gap-3 rounded-lg border border-gray-300 bg-white px-3 py-2"
+                      >
+                        <FileText size={17} className="shrink-0 text-gray-700" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold">{material.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {(material.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeClassworkMaterial(index)}
+                          disabled={isCreatingClasswork}
+                          className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          aria-label={`Remove ${material.name}`}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium">
@@ -786,7 +1437,13 @@ export default function SubjectDetails() {
                       <h4 className="font-bold">Reference Files</h4>
                     </div>
                     {selectedClasswork.attachments?.length ? (
-                      <AttachmentDisplay attachments={selectedClasswork.attachments} type="classwork" />
+                      <AttachmentDisplay
+                        attachments={selectedClasswork.attachments}
+                        type="classwork"
+                        downloadUrl={(attachmentId) =>
+                          `${API_URL}/api/v1/classwork-assignments/classwork/${selectedClasswork.classwork_id}/attachments/${attachmentId}/download`
+                        }
+                      />
                     ) : (
                       <p className="text-sm text-gray-600">No classwork files attached.</p>
                     )}
