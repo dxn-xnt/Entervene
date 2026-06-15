@@ -21,9 +21,20 @@ from app.services.users.UserQueryService import list_users as query_users
 from app.services.users.UserShared import capitalize_name as _capitalize_name
 
 
+# USER MANAGEMENT FLOW
+# 1. Admin-only endpoints list, inspect, update, archive, invite, or import users.
+# 2. Routes authenticate the requester, then delegate work to a user service:
+#    - UserQueryService: build admin list/detail responses
+#    - UserAccountService: update or archive existing users
+#    - UserInvitationService: invite users and activate pending accounts
+#    - UserImportService: validate and create users from CSV/Excel files
+# 3. A new user starts as "pending" and becomes "active" after accepting the
+#    invitation and creating a password.
 router = APIRouter()
 
 
+# User routes use get_current_user plus this check because this router also
+# contains the public invitation-acceptance endpoint below.
 def _require_admin(current_user: dict) -> None:
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -82,6 +93,8 @@ def get_user_analytics(
     return query_user_analytics(db, user_id)
 
 
+# Single invite flow: validate details -> create pending account and profile ->
+# commit records -> send the invitation email.
 @router.post("/users/invite")
 def invite_single_user(
     payload: InviteSingleUserRequest,
@@ -92,6 +105,9 @@ def invite_single_user(
     return invite_user(db, payload, send_invitation_email)
 
 
+# Bulk invite flow follows the same account lifecycle as a single invite, but
+# validates every uploaded row before creating any account.
+# Keep the legacy admin path and the current path mapped to the same import flow.
 @router.post("/admin/users/upload-csv")
 @router.post("/users/upload-csv")
 async def upload_csv(
@@ -104,6 +120,8 @@ async def upload_csv(
     return await import_users_file(db=db, file=file, role=role, invitation_sender=send_invitation_email)
 
 
+# Invitation acceptance is intentionally public; possession of the one-time
+# invitation token is the authorization required to activate the account.
 @router.post("/auth/accept-invitation", response_model=AcceptInvitationResponse)
 def accept_invitation(
     payload: AcceptInvitationRequest,

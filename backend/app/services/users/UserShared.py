@@ -17,6 +17,10 @@ from app.models.auth.UserRoles import UserRoles
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 
+# SHARED USER-CREATION HELPERS
+# Single-user invitations and bulk imports both use these helpers so they create
+# accounts, roles, invitation tokens, and role-specific profiles consistently.
+
 
 LRN_RE = re.compile(r"^\d{12}$")
 
@@ -72,6 +76,8 @@ def create_pending_account(db: Session, email: str, role_name: str) -> tuple[Use
         raise HTTPException(status_code=400, detail=f"Role '{role_name}' not found in DB")
 
     db.add(UserRoles(user_id=account.user_id, role_id=role.role_id))
+    # Only the hash is persisted; the raw token exists solely for the invitation
+    # link and cannot be recovered from the database.
     raw_token = secrets.token_urlsafe(32)
     db.add(InvitationToken(user_id=account.user_id, token_hash=sha256_token(raw_token)))
     return account, raw_token
