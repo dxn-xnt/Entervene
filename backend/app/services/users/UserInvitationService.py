@@ -23,6 +23,11 @@ from app.services.users.UserShared import (
     validate_required_name,
 )
 
+# USER INVITATION LIFECYCLE
+# invite_single_user creates a pending account and profile. accept_invitation
+# verifies the one-time token, sets the password, activates the account, and
+# returns authentication tokens.
+
 
 def invite_single_user(
     db: Session,
@@ -42,6 +47,8 @@ def invite_single_user(
     else:
         validate_required_name(data)
 
+    # Invitation creates the account, role, profile, and token together; the
+    # account remains unusable until accept_invitation sets a password.
     account, raw_token = create_pending_account(db, email, payload.role)
     if payload.role == "Teacher":
         attach_staff_profile(db, account.user_id, data)
@@ -90,6 +97,7 @@ def accept_invitation(
     if account.account_status == "active":
         raise HTTPException(status_code=400, detail="Account already activated")
 
+    # Activation consumes the one-time token and signs the user in immediately.
     account.password_hash = hash_password(payload.password)
     account.account_status = "active"
     account.email_verified_at = datetime.now(timezone.utc)

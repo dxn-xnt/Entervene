@@ -20,6 +20,10 @@ from app.services.classes.ClassShared import (
     resolve_active_academic_year,
 )
 
+# WRITE SIDE OF CLASS MANAGEMENT
+# This module owns class creation, editing, and archiving. It validates business
+# rules before commit and rolls back multi-record operations when any part fails.
+
 
 def _get_class_or_404(db: Session, class_id: int) -> Class:
     class_ = db.query(Class).filter(Class.class_id == class_id).first()
@@ -33,6 +37,8 @@ def archive_class_record(db: Session, class_id: int) -> dict:
     if normalized_text(class_.class_status or "active") == "archived":
         raise HTTPException(status_code=409, detail="Class is already archived.")
 
+    # Archiving is a soft state change; related enrollments and subject loads
+    # remain available for historical reporting.
     class_.class_status = "archived"
     try:
         db.commit()
@@ -90,6 +96,8 @@ def update_class_record(
             class_.adviser_staff_id = None
         else:
             adviser_staff_id = readable_text(adviser_staff_id)
+            # Re-check eligibility during mutation; form-option data may be stale
+            # by the time the admin submits an update.
             adviser = eligible_advisers_query(db).filter(AcademicStaff.staff_id == adviser_staff_id).first()
             if adviser is None:
                 raise HTTPException(status_code=400, detail="Adviser not found.")
@@ -169,6 +177,8 @@ def _raise_class_creation_conflict() -> None:
 
 
 def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
+    # The entire batch is validated before any class is persisted. A failure in
+    # one section rejects the batch so classes and rosters cannot be half-created.
     try:
         academic_year = resolve_active_academic_year(db)
         academic_level = (
@@ -201,6 +211,7 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
             )
             _raise_batch_validation_errors(errors)
 
+        # Phase 1: validate duplicates and required values inside the request.
         normalized_sections: list[dict[str, Any]] = []
         seen_section_names: dict[str, str] = {}
         adviser_ids: set[str] = set()
@@ -278,6 +289,7 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                 }
             )
 
+        # Phase 2: compare the request with existing classes and assignments.
         existing_section_names = {
             normalized_text(section_name)
             for section_name, in (
@@ -352,6 +364,8 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                 )
             )
 
+        # Lock submitted students until commit to reduce concurrent requests
+        # assigning the same student twice in the active academic year.
         students = {
             student.student_id: student
             for student in (
@@ -402,6 +416,7 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
         if errors:
             _raise_batch_validation_errors(errors)
 
+        # Phase 3: after all validation passes, create classes and their rosters.
         created: list[tuple[Class, dict[str, Any]]] = []
         for section in normalized_sections:
             class_ = Class(
@@ -415,6 +430,7 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
             db.add(class_)
             created.append((class_, section))
 
+        # Class IDs are required before their StudentClass rows can be created.
         db.flush()
 
         for class_, section in created:

@@ -21,6 +21,10 @@ from app.services.classes.ClassShared import (
     student_sort_key,
 )
 
+# CLASS CSV PREVIEW FLOW
+# read file -> validate every row against database records -> group students by
+# section -> return preview. No Class or StudentClass record is created here.
+
 
 CLASS_IMPORT_HEADERS = [
     "section_name",
@@ -149,6 +153,8 @@ async def validate_class_import_file(
     file: UploadFile,
     academic_level_id: int,
 ) -> dict:
+    # This endpoint only validates and builds a preview. Persistence is handled
+    # later by batch_create_classes after the admin confirms the grouped sections.
     academic_year = resolve_active_academic_year(db)
     academic_level = db.query(AcademicLevel).filter(AcademicLevel.academic_level_id == academic_level_id).first()
     if not academic_level:
@@ -164,11 +170,14 @@ async def validate_class_import_file(
             }],
         )
 
+    # Phase 1: parse the uploaded CSV and prepare containers for all validation
+    # errors so the admin can fix the file in one pass.
     rows = await read_class_import_rows(file)
     errors: list[dict] = []
     seen_rows: dict[tuple[str, ...], int] = {}
     seen_lrns: dict[str, int] = {}
 
+    # Phase 2: preload referenced records instead of querying once per CSV row.
     adviser_ids = {row["adviser_staff_id"] for _, row in rows if row["adviser_staff_id"]}
     student_lrns = {row["student_lrn"] for _, row in rows if row["student_lrn"]}
     advisers = {
@@ -212,8 +221,11 @@ async def validate_class_import_file(
         )
     }
 
+    # A class import uses one row per student, so repeated section rows are
+    # grouped into the section payload expected by the batch-create endpoint.
     grouped: dict[str, dict] = {}
     imported_adviser_sections: dict[str, str] = {}
+    # Phase 3: validate each row and group valid students under their section.
     for row_number, row in rows:
         row_error_count = len(errors)
         row_key = normalized_import_row(row)
@@ -341,6 +353,7 @@ async def validate_class_import_file(
     if errors:
         raise_csv_validation_errors(errors)
 
+    # Phase 4: convert validated groups into the preview returned to the frontend.
     sections = []
     for section in sorted(grouped.values(), key=lambda value: value["section_name"].casefold()):
         adviser = section["adviser"]

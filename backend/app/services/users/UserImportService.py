@@ -20,6 +20,10 @@ from app.services.users.UserShared import (
     validate_required_name,
 )
 
+# BULK USER INVITATION FLOW
+# read CSV/Excel -> validate every row -> create pending accounts and profiles ->
+# commit the complete batch -> send invitation emails.
+
 
 EMAIL_ADAPTER = TypeAdapter(EmailStr)
 TEACHER_COLUMNS = {"first_name", "last_name", "email"}
@@ -142,6 +146,7 @@ async def import_users_file(
     if role not in ("Teacher", "Student"):
         raise HTTPException(status_code=400, detail="role must be Teacher or Student")
 
+    # Phase 1: verify file structure and validate all rows before writing.
     required = TEACHER_COLUMNS if role == "Teacher" else STUDENT_COLUMNS
     rows, fieldnames = await _read_import_rows(file)
     if not required.issubset(fieldnames):
@@ -167,6 +172,8 @@ async def import_users_file(
             },
         )
 
+    # Phase 2: persist the complete import before sending email. This keeps the database
+    # all-or-nothing and avoids invitations pointing to rolled-back accounts.
     created: list[str] = []
     invitations_to_send: list[tuple[str, str]] = []
     try:
@@ -184,6 +191,7 @@ async def import_users_file(
         db.rollback()
         raise
 
+    # Phase 3: email delivery is deliberately outside the database transaction.
     for email, raw_token in invitations_to_send:
         invitation_sender(email, raw_token)
 

@@ -9,12 +9,18 @@ from app.schemas.Class import UpdateClassStudentListRequest
 from app.services.classes.ClassShared import normalized_text
 from app.services.classes.ClassService import build_student_class_assignment
 
+# CLASS ROSTER WRITE FLOW
+# The admin submits additions, removals, and transfers together. This service
+# validates the complete request first, then commits every roster change at once.
+
 
 def update_class_student_assignments(
     db: Session,
     class_id: int,
     payload: UpdateClassStudentListRequest,
 ) -> None:
+    # Additions, removals, and transfers form one atomic roster change. Validate
+    # every requested operation before mutating any StudentClass rows.
     if not payload.removals and not payload.transfers and not payload.additions:
         raise HTTPException(status_code=400, detail="Provide at least one student list change.")
 
@@ -61,6 +67,8 @@ def update_class_student_assignments(
     if set(assignments.keys()) != requested_student_ids:
         raise HTTPException(status_code=400, detail="Student is not assigned to this class.")
 
+    # New assignments are locked while validating the academic-year uniqueness
+    # rule; the database constraint remains the final concurrency safeguard.
     addition_students = {
         student.student_id: student
         for student in (
@@ -105,6 +113,8 @@ def update_class_student_assignments(
         if normalized_text(target.class_status or "active") == "archived":
             raise HTTPException(status_code=400, detail="Target class must be active.")
 
+    # No roster row is changed until all source students, additions, and transfer
+    # destinations have passed validation.
     try:
         for student_id in addition_ids:
             db.add(build_student_class_assignment(student_id, class_))

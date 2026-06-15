@@ -18,6 +18,10 @@ from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.users.UserShared import capitalize_name
 
+# READ SIDE OF USER MANAGEMENT
+# User data is spread across authentication, role, staff/student profile, class,
+# and submission tables. This module combines those records for the admin UI.
+
 
 ClientRole = Literal["admin", "teacher", "student"]
 
@@ -39,6 +43,8 @@ def _base_user_query(db: Session):
         student_grade_level.grade_level,
     ).label("grade_level")
 
+    # UserAccount owns authentication state, while role-specific names and
+    # profile fields live in either AcademicStaff or Student.
     return (
         db.query(
             UserAccount.user_id,
@@ -149,6 +155,8 @@ def list_users(
         )
 
     users = query.order_by(UserAccount.created_at.desc()).all()
+    # Fetch role-specific summaries in batches to avoid per-user queries on the
+    # admin list page.
     teacher_ids = {user.staff_id for user in users if user.role_name == "Teacher" and user.staff_id}
     student_ids = {user.student_id for user in users if user.role_name == "Student" and user.student_id}
     teacher_summaries = _teacher_summaries(db, teacher_ids)
@@ -203,6 +211,7 @@ def get_user_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any]:
         "address": (user.staff_address if client_role != "student" else user.student_address) or "",
     }
 
+    # Add role-specific fields only after the common account/profile data exists.
     if client_role == "teacher" and user.staff_id:
         teacher_loads = (
             db.query(Subject.subject_name, SubjectLoad.class_id)

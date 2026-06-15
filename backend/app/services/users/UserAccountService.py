@@ -16,6 +16,10 @@ from app.services.classes.ClassService import build_student_class_assignment
 from app.services.users.UserQueryService import get_user_detail, role_name_to_client_role
 from app.services.users.UserShared import capitalize_name, resolve_academic_level_id
 
+# EXISTING USER WRITE FLOW
+# Admin edits update UserAccount plus the matching Student or AcademicStaff
+# profile. Invitation creation and activation are handled in separate services.
+
 
 COMMON_STATUSES = {"active", "pending", "inactive", "suspended", "archived"}
 STUDENT_STATUSES = COMMON_STATUSES | {"no section assigned", "graduated", "transferred", "dropped"}
@@ -49,6 +53,8 @@ def update_user(db: Session, user_id: uuid.UUID, payload: UpdateUserRequest) -> 
     if db.query(UserAccount).filter(UserAccount.email == email, UserAccount.user_id != user_id).first():
         raise HTTPException(status_code=409, detail="Email already registered")
 
+    # Keep authentication data and the role-specific profile synchronized in
+    # the same transaction.
     account.email = email
     account.account_status = status
     if client_role == "student":
@@ -98,6 +104,8 @@ def _update_student(
     class_row = db.query(Class).filter(func.lower(Class.section_name) == section.lower()).first()
     if not class_row:
         raise HTTPException(status_code=400, detail="Section not found")
+    # User management edits the student's latest enrolled section in place;
+    # full roster add/remove/transfer operations belong to class management.
     current_enrollment = (
         db.query(StudentClass)
         .filter(StudentClass.student_id == student.student_id)
@@ -134,6 +142,7 @@ def _update_teacher(
 
 
 def archive_user(db: Session, user_id: uuid.UUID) -> dict[str, str]:
+    # Archiving disables the account without deleting its profile or history.
     account = db.query(UserAccount).filter(UserAccount.user_id == user_id).first()
     if not account:
         raise HTTPException(status_code=404, detail="User not found")
