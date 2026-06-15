@@ -28,7 +28,8 @@ import ClassSections from "./pages/teacher/Classes/class-section";
 import SubjectDetails from "./pages/teacher/Classes/subject-details";
 import Subjects from "./pages/teacher/Classes/subjects";
 import TeacherClassworks from "./pages/teacher/classworks";
-import TeacherInterventions from "./pages/teacher/lessons";
+import TeacherLessons from "./pages/teacher/lessons";
+// import TeacherInterventions from "./pages/teacher/interventions";
 import CreateLesson from "./pages/teacher/create-lesson";
 import TeacherGrades from "./pages/teacher/grades";
 import TeacherNotifications from "./pages/teacher/notifications";
@@ -90,7 +91,8 @@ const App = () => {
             <Route path={routes.teacher.subjectDetail} element={<SubjectDetails />} />
             <Route path={routes.teacher.classworks} element={<TeacherClassworks />} />
             <Route path={routes.teacher.createLesson} element={<CreateLesson />} />
-            <Route path={routes.teacher.interventions} element={<TeacherInterventions />} />
+            <Route path={routes.teacher.lessons} element={<TeacherLessons />} />
+            {/* <Route path={routes.teacher.interventions} element={<TeacherInterventions />} /> */}
             <Route path={routes.teacher.grades} element={<TeacherGrades />} />
             <Route path={routes.teacher.notifications} element={<TeacherNotifications />}/>
           </Route>

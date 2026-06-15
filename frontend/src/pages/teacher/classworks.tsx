@@ -1,5 +1,6 @@
 import Cards from "@/components/classwork-cards";
 import Tabs from "../../components/Tabs";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 
@@ -58,28 +59,46 @@ const Classworks = () => {
 
   return (
     <AppLayout>
-      <header className="px-5 py-5 flex flex-row justify-between gap-2 items-center">
-        <h1 className="text-4xl font-semibold">Classworks</h1>
-        <button className="bg-[#7ABA78] text-black rounded px-5 py-2 border">
-          + New Classwork
-        </button>
-      </header>
-      <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-      <main className="px-5 py-5 flex flex-col gap-5">
-        {filteredItems.length > 0 ? (
-          filteredItems.map((item, index) => (
-            <Cards
-              key={index}
-              title={item.title}
-              subject={item.subject}
-              date={item.date}
-              badge={item.badge}
-            />
-          ))
-        ) : (
-          <p className="text-gray-500 text-center mt-10">No items found.</p>
-        )}
-      </main>
+      <div className="flex flex-1 flex-col">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
+            <header className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="md:hidden" />
+                <h1 className="text-2xl md:text-4xl font-semibold">
+                  Classworks
+                </h1>
+              </div>
+              <button className="bg-[#7ABA78] text-black rounded px-4 py-2 border text-sm font-medium">
+                <span className="hidden sm:inline">+ New Classwork</span>
+                <span className="sm:hidden">+</span>
+              </button>
+            </header>
+
+            <div className="-mx-4 md:-mx-6 overflow-x-auto">
+              <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+            </div>
+
+            <div className="flex flex-col gap-5">
+              {filteredItems.length > 0 ? (
+                filteredItems.map((item, index) => (
+                  <Cards
+                    key={index}
+                    title={item.title}
+                    subject={item.subject}
+                    date={item.date}
+                    badge={item.badge}
+                  />
+                ))
+              ) : (
+                <p className="text-gray-500 text-center mt-10">
+                  No items found.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </AppLayout>
   );
 };
