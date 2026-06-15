@@ -39,6 +39,7 @@ export const routes = {
     subjectDetail: "/teacher/classes/:classId/subjects/:subjectId",
     createLesson: "/teacher/lessons/create",
     classworks: "/teacher/classworks",
+    lessons: "/teacher/lessons",
     interventions: "/teacher/interventions",
     grades: "/teacher/grades",
     notifications: "/teacher/notifications",

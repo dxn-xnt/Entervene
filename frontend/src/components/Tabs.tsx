@@ -12,7 +12,7 @@ interface TabsProps {
 
 const Tabs = ({ tabs, activeTab, onChange }: TabsProps) => {
   return (
-    <div className="px-5 flex border-b">
+    <div className="px-4 md:px-6 flex border-b">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         return (
