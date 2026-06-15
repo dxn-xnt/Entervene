@@ -5,7 +5,7 @@ import AppLayout from "@/layouts/app-layout";
 import { Plus } from "lucide-react";
 import { Text } from "@/components/retroui/Text";
 import { OverviewCard } from "@/components/overview-cards";
-import SubjectItemLine from "@/components/subject-item-line";
+import SubjectItemLine from "@/components/item-line/subject";
 import { useNavigate, useParams } from "react-router-dom";
 
 
@@ -40,7 +40,9 @@ export default function AdminSubjectLevel() {
                 <Breadcrumb>
                   <Breadcrumb.List>
                     <Breadcrumb.Item>
-                      <Breadcrumb.Link href="/admin/subjects" className="text-2xl    ">Subjects</Breadcrumb.Link>
+                      <Breadcrumb.Link href="/admin/subjects" className="text-2xl">
+                        Subjects
+                      </Breadcrumb.Link>
                     </Breadcrumb.Item>
                     <Breadcrumb.Separator />
                     <Breadcrumb.Item>
@@ -57,7 +59,7 @@ export default function AdminSubjectLevel() {
             </header>
             <div className="-mx-4 md:-mx-6 border-b border-black/40" />
 
-            <RetroCard className="p-3">
+            <RetroCard className="py-3 px-4 bg-accent">
               <div className="flex flex-col gap-1">
                 <div className="flex flex-row gap-3 items-end">
                   <Text as="h1" className="font-sans text-2xl font-bold">
@@ -101,7 +103,7 @@ export default function AdminSubjectLevel() {
                     key={i}
                     subject={subject.title}
                     date={subject.count}
-                    onClick={() => navigate(`/admin/subjects/${encodeURIComponent(decodedGrade)}/${encodeURIComponent(subject.title)}`)}
+                    onClick={() => navigate(`/admin/subjects/${encodeURIComponent(decodedGrade)}/${encodeURIComponent(subject.title)}`, { state: { subject, grade: decodedGrade } })}
                   />
                 ))}
               </div>

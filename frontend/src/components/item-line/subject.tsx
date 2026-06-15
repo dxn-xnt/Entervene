@@ -5,11 +5,12 @@ type CardProps = {
     subject?: string;
     date?: string;
     badge?: string;
+    onClick?: () => void;
 };
 
-const SubjectItemLine = ({ subject, date, badge }: CardProps) => {
+const SubjectItemLine = ({ subject, date, badge, onClick }: CardProps) => {
     return (
-        <RetroCard className="flex flex-row justify-between items-center px-4 py-3">
+        <RetroCard className="flex flex-row justify-between items-center px-4 py-3" onClick={onClick}>
             <div className="flex flex-col gap-1">
                 <div className="flex flex-row gap-3 items-center">
                     <p className="font-semibold text-2xl">{subject}</p>

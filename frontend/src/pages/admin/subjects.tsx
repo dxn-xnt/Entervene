@@ -70,7 +70,7 @@ export default function AdminSubjects() {
             {grades.map((item) => (
               <RetroCard key={item.grade} className="w-full p-4">
                 <div className="flex flex-row justify-between items-center mb-4">
-                  <h2 className="text-lg font-semibold">{item.grade}</h2>
+                  <h2 className="text-xl font-semibold">{item.grade}</h2>
                   <button
                     className="grid place-items-center size-8 rounded-full border-2 border-black cursor-pointer"
                     onClick={() => navigate(`/admin/subjects/${encodeURIComponent(item.grade)}`, { state: { grade: item } })}
@@ -84,6 +84,7 @@ export default function AdminSubjects() {
                     <Card
                       key={i}
                       className="bg-accent! cursor-pointer shrink-0 w-36 sm:w-44 md:w-52 lg:w-60 block"
+                      onClick={() => navigate(`/admin/subjects/${encodeURIComponent(item.grade)}/${encodeURIComponent(subject.title)}`, { state: { subject, grade: item } })}
                     >
                       <CardHeader>
                         <CardTitle>{subject.title}</CardTitle>
