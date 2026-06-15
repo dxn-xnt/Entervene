@@ -6,12 +6,14 @@ from sqlalchemy import func as sqlfunc
 from typing import List, Optional
 from pathlib import Path
 from datetime import datetime, timezone
+from uuid import UUID
 import logging
 
 from app.db.Session import get_db
 from app.core.Dependencies import require_role, get_staff_id, get_student_record
 from app.core.Security import decode_access_token
 from app.core.FileUpload import save_file, delete_file
+from app.api.v1.routes.Auth import ACCESS_COOKIE_NAME
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.submissions.SubmissionAttachment import SubmissionAttachment
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
@@ -25,6 +27,14 @@ from app.schemas.Submission import (
 
 router = APIRouter()
 logger = logging.getLogger("app.submissions")
+
+
+def _user_id(current_user: dict):
+    value = current_user.get("sub")
+    try:
+        return UUID(value) if isinstance(value, str) else value
+    except ValueError:
+        return value
 
 
 async def _files_from_form(request: Request, field_names: set[str]) -> list[UploadFile]:
@@ -58,6 +68,21 @@ def _teacher_owns_assignment(assignment_id: int, staff_id: str, db: Session) -> 
     if not cw or cw.created_by_staff_id != staff_id:
         raise HTTPException(status_code=403, detail="You do not own this assignment")
     return ca
+
+
+def _authorize_submission_access(sub: StudentSubmission, current_user: dict, db: Session) -> None:
+    role = current_user.get("role")
+    user_id = _user_id(current_user)
+    if role == "student":
+        student = db.query(Student).filter(Student.user_id == user_id).first()
+        if student and str(sub.student_id) == str(student.student_id):
+            return
+    if role == "teacher":
+        staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
+        if staff:
+            _teacher_owns_assignment(sub.classwork_assignment_id, staff.staff_id, db)
+            return
+    raise HTTPException(status_code=403, detail="Access denied")
 
 
 def _att_resp(a):
@@ -372,7 +397,6 @@ def get_assignment_submission_tracking(
     }
 
 
-@router.get("/classwork/{classwork_id}/debug")
 def debug_tracking(
     classwork_id: int,
     staff_id: str = Depends(get_staff_id),
@@ -539,12 +563,14 @@ def get_tracking_by_classwork(
 @router.get("/{submission_id}/detail", response_model=SubmissionResponse)
 def get_submission_detail_teacher(
     submission_id: int,
+    current_user: dict = Depends(require_role("teacher")),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
     sub = db.query(StudentSubmission).filter(StudentSubmission.submission_id == submission_id).first()
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
+    _teacher_owns_assignment(sub.classwork_assignment_id, staff_id, db)
     return _build_sub(sub, db)
 
 
@@ -566,19 +592,18 @@ def download_submission_attachment(
     auth_header = request.headers.get("Authorization", "") if request else ""
     if auth_header.startswith("Bearer "):
         payload = decode_access_token(auth_header[7:])
+    elif request and request.cookies.get(ACCESS_COOKIE_NAME):
+        payload = decode_access_token(request.cookies[ACCESS_COOKIE_NAME])
     elif token:
         payload = decode_access_token(token)
 
     if not payload:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    role = payload.get("role", "")
-    user_id = payload.get("sub", "")
-
-    # Teachers and admins can download any submission attachment
-    # Students can only download their own submission attachments
-    if role not in ("teacher", "admin", "student"):
-        raise HTTPException(status_code=403, detail="Access denied")
+    sub = db.query(StudentSubmission).filter(StudentSubmission.submission_id == submission_id).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    _authorize_submission_access(sub, payload, db)
 
     att = db.query(SubmissionAttachment).filter(
         SubmissionAttachment.submission_attachment_id == attachment_id,
@@ -586,17 +611,6 @@ def download_submission_attachment(
     ).first()
     if not att:
         raise HTTPException(status_code=404, detail="Attachment not found")
-
-    # If student, verify they own the submission
-    if role == "student":
-        sub = db.query(StudentSubmission).filter(
-            StudentSubmission.submission_id == submission_id
-        ).first()
-        if not sub:
-            raise HTTPException(status_code=404, detail="Submission not found")
-        student = db.query(Student).filter(Student.user_id == user_id).first()
-        if not student or str(sub.student_id) != str(student.student_id):
-            raise HTTPException(status_code=403, detail="Access denied")
 
     p = Path(att.file_path)
     if not p.exists():
@@ -612,15 +626,14 @@ def download_submission_attachment(
 def grade_submission(
     submission_id: int,
     body: GradeRequest,
+    current_user: dict = Depends(require_role("teacher")),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
     sub = db.query(StudentSubmission).filter(StudentSubmission.submission_id == submission_id).first()
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
-    ca = db.query(ClassworkAssignment).filter(
-        ClassworkAssignment.classwork_assignment_id == sub.classwork_assignment_id
-    ).first()
+    ca = _teacher_owns_assignment(sub.classwork_assignment_id, staff_id, db)
     cw = db.query(Classwork).filter(Classwork.classwork_id == ca.classwork_id).first() if ca else None
     if body.grade < 0:
         raise HTTPException(status_code=400, detail="Grade cannot be negative")
@@ -648,4 +661,5 @@ def get_submission(
     sub = db.query(StudentSubmission).filter(StudentSubmission.submission_id == submission_id).first()
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
+    _authorize_submission_access(sub, current_user, db)
     return _build_sub(sub, db)

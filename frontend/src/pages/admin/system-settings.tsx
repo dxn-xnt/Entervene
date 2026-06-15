@@ -7,7 +7,6 @@ import { Accordion } from "@/components/retroui/Accordion";
 import { Input } from "@/components/retroui/Input";
 import { ArrowUpRight } from 'lucide-react';
 import { Table } from "@/components/retroui/Table";
-import { Badge } from "@/components/retroui/Badge";
 
 export default function AdminSystemSettings() {
   const academiclevels = [
