@@ -10,7 +10,7 @@ const Card = ({ className, ...props }: ICardProps) => {
   return (
     <div
       className={cn(
-        "inline-block border-2 rounded-lg shadow-md transition-all hover:shadow-none bg-card",
+        "inline-block border-2 rounded-lg shadow-md transition-all hover:shadow-none bg-card p-4",
         className,
       )}
       {...props}
@@ -21,14 +21,14 @@ const Card = ({ className, ...props }: ICardProps) => {
 const CardHeader = ({ className, ...props }: ICardProps) => {
   return (
     <div
-      className={cn("flex flex-col justify-start p-6", className)}
+      className={cn("flex flex-col justify-start mb-2", className)}
       {...props}
     />
   );
 };
 
 const CardTitle = ({ className, ...props }: ICardProps) => {
-  return <Text as="h3" className={cn("mb-2", className)} {...props} />;
+  return <Text as="h2" className={cn("mb-2", className)} {...props} />;
 };
 
 const CardDescription = ({ className, ...props }: ICardProps) => (
@@ -36,7 +36,7 @@ const CardDescription = ({ className, ...props }: ICardProps) => (
 );
 
 const CardContent = ({ className, ...props }: ICardProps) => {
-  return <div className={cn("p-6", className)} {...props} />;
+  return <div className={cn("", className)} {...props} />;
 };
 
 const CardComponent = Object.assign(Card, {

@@ -4,7 +4,6 @@ import { Card, CardTitle, CardHeader, CardContent } from "@/components/ui/card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { ArrowUpRight, Plus } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 
 const DESCRIPTION = "Teachers Assigned";
 
@@ -47,9 +46,7 @@ const grades = [
   },
 ];
 
-export default function AdminSubjects() {
-  const navigate = useNavigate();
-
+export default function AdminSubjectView() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
@@ -58,7 +55,9 @@ export default function AdminSubjects() {
             <header className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl md:text-4xl font-bold tracking-normal">Subjects</h1>
+                <h1 className="text-2xl md:text-4xl font-bold tracking-wide">
+                  Subjectsww
+                </h1>
               </div>
 
               <button className="flex items-center gap-1.5 rounded-lg border border-black bg-[#79bd80] px-4 py-2 text-sm font-semibold text-black shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000]">
@@ -71,10 +70,7 @@ export default function AdminSubjects() {
               <RetroCard key={item.grade} className="w-full p-4">
                 <div className="flex flex-row justify-between items-center mb-4">
                   <h2 className="text-lg font-semibold">{item.grade}</h2>
-                  <button
-                    className="grid place-items-center size-8 rounded-full border-2 border-black cursor-pointer"
-                    onClick={() => navigate(`/admin/subjects/${encodeURIComponent(item.grade)}`, { state: { grade: item } })}
-                  >
+                  <button className="grid place-items-center size-8 rounded-full border-2 border-black cursor-pointer">
                     <ArrowUpRight className="size-4" />
                   </button>
                 </div>

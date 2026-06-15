@@ -6,9 +6,9 @@
 //   return (
 //     <Card className="@container/card">
 //       <Card.Header>
-        
+
 //         <Card.Description>Total Revenue</Card.Description>
-        
+
 //         <Card.Title className="text-4xl font-bold">$1,250.00</Card.Title>
 //       </Card.Header>
 //     </Card>
@@ -32,9 +32,9 @@ export function OverviewCard({ title, count, stat, className }: OverviewCardProp
     <Card className={cn("@container/card", className)}>
       <Card.Header>
         <Card.Description>{title}</Card.Description>
-        <Card.Title className="text-4xl font-bold">{count}</Card.Title>
       </Card.Header>
       <Card.Content>
+        <Card.Title className="text-4xl font-bold">{count}</Card.Title>
         <p className="text-sm">
           <span className="font-semibold">+{stat}</span> increase from last month
         </p>

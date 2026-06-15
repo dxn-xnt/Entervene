@@ -7,7 +7,7 @@ import { Accordion } from "@/components/retroui/Accordion";
 import { Input } from "@/components/retroui/Input";
 import { ArrowUpRight } from 'lucide-react';
 import { Table } from "@/components/retroui/Table";
-import { Badge } from "@/components/retroui/Badge";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 export default function AdminSystemSettings() {
   const academiclevels = [
@@ -30,13 +30,25 @@ export default function AdminSystemSettings() {
       level: "Grade 12",
     },
   ]
+  const strands = [
+    {
+      level: "Science, Technology, Engineering and Mathematics (STEM)",
+    },
+    {
+      level: "Technical-Vocational-Livelihood (TVL)",
+    },
+    {
+      level: "General Academic Strand (GAS)",
+    },
+  ]
 
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col gap-2">
           <div className="flex flex-col gap-3 py-3 md:py-4 px-4 md:px-4">
-            <header className="flex items-center">
+            <header className="flex items-center gap-3">
+              <SidebarTrigger className="md:hidden" />
               <h1 className="text-4xl font-bold tracking-tight">
                 System Settings
               </h1>
@@ -47,7 +59,7 @@ export default function AdminSystemSettings() {
               <CardHeader>
                 <CardTitle>Passing Grade Threshold</CardTitle>
               </CardHeader>
-              <CardContent className="px-2 pt-4 sm:px-4 sm:pt-4 flex flex-col gap-4">
+              <CardContent className="px-4 pt-4 flex flex-col gap-4">
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-row justify-between w-full items-center">
                     <Text as="h6" className="font-sans font-medium">
@@ -136,7 +148,7 @@ export default function AdminSystemSettings() {
                   </Button>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="px-2 pt-4 sm:px-4 sm:pt-4 flex flex-col gap-4">
+              <CardContent className="px-4 pt-4 flex flex-col gap-4">
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-row justify-between w-full items-center">
                     <Text as="h6" className="font-sans font-medium">
@@ -212,18 +224,33 @@ export default function AdminSystemSettings() {
             <Card className="@container/card">
               <CardHeader>
                 <CardTitle className="flex flex-row justify-between w-full items-center">
-                  Academic Period
+                  Academic Level
                   <Button size={"sm"}>
-                    New Academic Period
+                    Add Academic Level
                   </Button>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="px-2 pt-4 sm:px-4 sm:pt-4 flex flex-col gap-4">
+              <CardContent className="px-4 pt-4 flex flex-col gap-4">
                 <Table className="">
                   <Table.Body>
                     {academiclevels.map((item) => (
                       <Table.Row key={item.level}>
-                        <Table.Cell className="font-medium">{item.level}</Table.Cell>
+                        <Accordion className="space-y-3 w-full">
+                          <Accordion.Item value="item-1" className="border-0">
+                            <Accordion.Header>{item.level}</Accordion.Header>
+                            <Accordion.Content>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-16 md:justify-between w-full">
+                                {strands.map((strand) => (
+                                  <div className="flex flex-row justify-between md:justify-start md:gap-2 w-full items-center">
+                                    <Text as="h6" className="font-sans text-foreground font-semibold text-md">
+                                      {strand.level}
+                                    </Text>
+                                  </div>
+                                ))}
+                              </div>
+                            </Accordion.Content>
+                          </Accordion.Item>
+                        </Accordion>
                       </Table.Row>
                     ))}
                   </Table.Body>
