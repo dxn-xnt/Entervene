@@ -36,7 +36,7 @@ import TeacherNotifications from "./pages/TeacherInterfaces/Notifications";
 // // Student pages
 import StudentBoard from "./pages/student/storyboard";
 import StudentSubjects from "./pages/student/subjects";
-import StudentSubjectDetail from "./pages/student/StudentSubjectDetail";
+import StudentSubjectDetail from "./pages/student/student-subject-detail";
 // import StudentInterventions from "./pages/student/StudentInterventions";
 import StudentGrades from "./pages/student/Grades/grades";
 import StudentTodo from "./pages/student/todo";

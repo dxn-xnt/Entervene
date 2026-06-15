@@ -3,8 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { BookOpen, ClipboardList, Loader2 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import Tabs from "@/components/Tabs";
-import SubjectLessonTab from "./Subjects/tabs/SubjectLessonTab";
-import SubjectClassworkTab from "./Subjects/tabs/SubjectClassworkTab";
+import SubjectLessonTab from "./Subjects/tabs/subject-lesson-tab";
+import SubjectClassworkTab from "./Subjects/tabs/subject-classwork-tab";
 import { routes } from "@/../routes";
 import { apiFetch } from "@/lib/api";
 
