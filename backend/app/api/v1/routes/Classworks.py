@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
-from typing import List, Optional
+from typing import List, Optional, cast
 from pathlib import Path
 from datetime import datetime
 
@@ -249,9 +249,9 @@ async def upload_cw_attachment(
 def download_classwork_attachment(
     classwork_id: int,
     attachment_id: int,
+    request: Request,
     token: Optional[str] = Query(None, description="JWT token as fallback for browser-based access"),
     inline: bool = Query(False, description="Display supported files in the browser instead of downloading"),
-    request: Request = None,
     db: Session = Depends(get_db),
 ):
     """
@@ -260,10 +260,10 @@ def download_classwork_attachment(
     Both teachers and students can download classwork attachments.
     """
     payload = None
-    auth_header = request.headers.get("Authorization", "") if request else ""
+    auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         payload = decode_access_token(auth_header[7:])
-    elif request and request.cookies.get(ACCESS_COOKIE_NAME):
+    elif request.cookies.get(ACCESS_COOKIE_NAME):
         payload = decode_access_token(request.cookies[ACCESS_COOKIE_NAME])
     elif token:
         payload = decode_access_token(token)
@@ -367,11 +367,12 @@ def get_cw_assignment(assignment_id: int, current_user: dict = Depends(require_r
     ca = db.query(ClassworkAssignment).filter(ClassworkAssignment.classwork_assignment_id == assignment_id).first()
     if not ca: raise HTTPException(status_code=404, detail="Assignment not found")
     cw = db.query(Classwork).filter(Classwork.classwork_id == ca.classwork_id).first()
+    if not cw: raise HTTPException(status_code=404, detail="Classwork not found")
     cls = db.query(Class).filter(Class.class_id == ca.class_id).first()
     staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == cw.created_by_staff_id).first()
     return ClassworkAssignmentResponse(
         classwork_assignment_id=ca.classwork_assignment_id, classwork_id=cw.classwork_id,
-        class_id=ca.class_id, section_name=cls.section_name if cls else None,
+        class_id=ca.class_id, section_name=cast(str, cls.section_name) if cls else None,
         title=cw.title, description=cw.description, instructions=cw.instructions,
         classwork_type=cw.classwork_type, classwork_category=cw.classwork_category,
         total_points=float(cw.total_points) if cw.total_points else None,
