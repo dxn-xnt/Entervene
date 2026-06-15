@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, ChevronDown, ChevronRight, ClipboardList, Eye, FileText, Info, Paperclip, Plus, Search, Users, X } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, ClipboardList, Eye, FileText, Info, Paperclip, Plus, Search, Trash2, Upload, Users, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
-import { apiFetch } from "@/lib/api";
+import { API_URL, apiFetch } from "@/lib/api";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
 
 type TeacherClassLoad = {
@@ -98,6 +98,9 @@ const emptyClassworkDraft: ClassworkDraft = {
   is_published: true,
 };
 
+const allowedMaterialExtensions = [".pdf", ".docx", ".pptx", ".jpg", ".jpeg", ".png"];
+const maxMaterialSize = 4 * 1024 * 1024;
+
 function MetricCard({ title, value, note }: { title: string; value: string; note: string }) {
   return (
     <div className="rounded-lg border border-black bg-[#F6E9B2] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -118,6 +121,7 @@ export default function SubjectDetails() {
   const [loadingClassworkId, setLoadingClassworkId] = useState<number | null>(null);
   const [classworkLesson, setClassworkLesson] = useState<Lesson | null>(null);
   const [classworkDraft, setClassworkDraft] = useState<ClassworkDraft>(emptyClassworkDraft);
+  const [classworkMaterials, setClassworkMaterials] = useState<File[]>([]);
   const [isCreatingClasswork, setIsCreatingClasswork] = useState(false);
   const [selectedClasswork, setSelectedClasswork] = useState<ClassworkDetail | null>(null);
   const [selectedTracking, setSelectedTracking] = useState<SubmissionTracking | null>(null);
@@ -235,8 +239,10 @@ export default function SubjectDetails() {
   };
 
   const openClassworkForm = (lesson: Lesson) => {
+    setError("");
     setClassworkLesson(lesson);
     setClassworkDraft(emptyClassworkDraft);
+    setClassworkMaterials([]);
     setExpandedLessonId(lesson.lesson_id);
   };
 
@@ -244,6 +250,38 @@ export default function SubjectDetails() {
     if (isCreatingClasswork) return;
     setClassworkLesson(null);
     setClassworkDraft(emptyClassworkDraft);
+    setClassworkMaterials([]);
+    setError("");
+  };
+
+  const addClassworkMaterials = (files: FileList | null) => {
+    if (!files) return;
+
+    const selected = Array.from(files);
+    const invalidType = selected.find((file) => {
+      const extension = `.${file.name.split(".").pop()?.toLowerCase()}`;
+      return !allowedMaterialExtensions.includes(extension);
+    });
+    if (invalidType) {
+      setError(`${invalidType.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`);
+      return;
+    }
+
+    const oversized = selected.find((file) => file.size > maxMaterialSize);
+    if (oversized) {
+      setError(`${oversized.name} is larger than the 4 MB file limit.`);
+      return;
+    }
+
+    setError("");
+    setClassworkMaterials((current) => {
+      const existing = new Set(current.map((file) => `${file.name}-${file.size}`));
+      return [...current, ...selected.filter((file) => !existing.has(`${file.name}-${file.size}`))];
+    });
+  };
+
+  const removeClassworkMaterial = (index: number) => {
+    setClassworkMaterials((current) => current.filter((_, currentIndex) => currentIndex !== index));
   };
 
   const openClassworkDetail = async (classwork: LinkedClasswork) => {
@@ -287,7 +325,6 @@ export default function SubjectDetails() {
       setError("Classwork title is required.");
       return;
     }
-
     const totalPoints = Number(classworkDraft.total_points);
     if (classworkDraft.total_points && Number.isNaN(totalPoints)) {
       setError("Total points must be a number.");
@@ -317,6 +354,26 @@ export default function SubjectDetails() {
       }
 
       const created = (await createResponse.json()) as { classwork_id: number };
+
+      for (const material of classworkMaterials) {
+        const formData = new FormData();
+        formData.append("file", material);
+        const uploadResponse = await apiFetch(
+          `/api/v1/classwork-assignments/classwork/${created.classwork_id}/attachments`,
+          {
+            method: "POST",
+            body: formData,
+          }
+        );
+
+        if (!uploadResponse.ok) {
+          const uploadError = await uploadResponse.json().catch(() => ({}));
+          throw new Error(
+            uploadError.detail || `Classwork was created, but ${material.name} could not be uploaded.`
+          );
+        }
+      }
+
       const assignResponse = await apiFetch(`/api/v1/classwork-assignments/classwork/${created.classwork_id}/assign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -334,6 +391,7 @@ export default function SubjectDetails() {
       await loadLessonClassworks(classworkLesson.lesson_id);
       setClassworkLesson(null);
       setClassworkDraft(emptyClassworkDraft);
+      setClassworkMaterials([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create classwork.");
     } finally {
@@ -552,6 +610,12 @@ export default function SubjectDetails() {
             </div>
 
             <div className="space-y-4 p-5">
+              {error && (
+                <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                  {error}
+                </div>
+              )}
+
               <div>
                 <label htmlFor="classwork-title" className="mb-1 block text-sm font-semibold">Title</label>
                 <input
@@ -661,6 +725,69 @@ export default function SubjectDetails() {
                   className="min-h-24 w-full rounded-lg border border-gray-700 px-3 py-2"
                   placeholder="What students need to do"
                 />
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <label htmlFor="classwork-materials" className="block text-sm font-semibold">
+                    Upload Material
+                  </label>
+                  <span className="text-xs font-medium text-gray-500">
+                    PDF, DOCX, PPTX, JPG, PNG | 4 MB each
+                  </span>
+                </div>
+
+                <label
+                  htmlFor="classwork-materials"
+                  className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-5 text-sm font-semibold transition-colors ${
+                    isCreatingClasswork
+                      ? "cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400"
+                      : "border-gray-700 bg-gray-50 hover:bg-[#F6E9B2]"
+                  }`}
+                >
+                  <Upload size={18} />
+                  Select material files
+                </label>
+                <input
+                  id="classwork-materials"
+                  type="file"
+                  multiple
+                  accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
+                  onChange={(event) => {
+                    addClassworkMaterials(event.target.files);
+                    event.target.value = "";
+                  }}
+                  disabled={isCreatingClasswork}
+                  className="hidden"
+                />
+
+                {classworkMaterials.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {classworkMaterials.map((material, index) => (
+                      <div
+                        key={`${material.name}-${material.size}`}
+                        className="flex items-center gap-3 rounded-lg border border-gray-300 bg-white px-3 py-2"
+                      >
+                        <FileText size={17} className="shrink-0 text-gray-700" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold">{material.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {(material.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeClassworkMaterial(index)}
+                          disabled={isCreatingClasswork}
+                          className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          aria-label={`Remove ${material.name}`}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium">
@@ -786,7 +913,13 @@ export default function SubjectDetails() {
                       <h4 className="font-bold">Reference Files</h4>
                     </div>
                     {selectedClasswork.attachments?.length ? (
-                      <AttachmentDisplay attachments={selectedClasswork.attachments} type="classwork" />
+                      <AttachmentDisplay
+                        attachments={selectedClasswork.attachments}
+                        type="classwork"
+                        downloadUrl={(attachmentId) =>
+                          `${API_URL}/api/v1/classwork-assignments/classwork/${selectedClasswork.classwork_id}/attachments/${attachmentId}/download`
+                        }
+                      />
                     ) : (
                       <p className="text-sm text-gray-600">No classwork files attached.</p>
                     )}

@@ -10,6 +10,7 @@ from app.db.Session import get_db
 from app.core.Dependencies import require_role, get_staff_id, get_student_record
 from app.core.Security import decode_access_token
 from app.core.FileUpload import save_file, delete_file
+from app.api.v1.routes.Auth import ACCESS_COOKIE_NAME
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
@@ -249,6 +250,7 @@ def download_classwork_attachment(
     classwork_id: int,
     attachment_id: int,
     token: Optional[str] = Query(None, description="JWT token as fallback for browser-based access"),
+    inline: bool = Query(False, description="Display supported files in the browser instead of downloading"),
     request: Request = None,
     db: Session = Depends(get_db),
 ):
@@ -261,6 +263,8 @@ def download_classwork_attachment(
     auth_header = request.headers.get("Authorization", "") if request else ""
     if auth_header.startswith("Bearer "):
         payload = decode_access_token(auth_header[7:])
+    elif request and request.cookies.get(ACCESS_COOKIE_NAME):
+        payload = decode_access_token(request.cookies[ACCESS_COOKIE_NAME])
     elif token:
         payload = decode_access_token(token)
 
@@ -289,6 +293,7 @@ def download_classwork_attachment(
         path=str(p),
         filename=att.file_name,
         media_type=att.file_type or "application/octet-stream",
+        content_disposition_type="inline" if inline else "attachment",
     )
 
 

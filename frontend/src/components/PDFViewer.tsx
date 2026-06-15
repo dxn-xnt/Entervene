@@ -3,11 +3,12 @@ import { Download, X } from "lucide-react";
 
 interface PDFViewerProps {
   pdfUrl: string;
+  downloadUrl?: string;
   fileName: string;
   onClose?: () => void;
 }
 
-export default function PDFViewer({ pdfUrl, fileName, onClose }: PDFViewerProps) {
+export default function PDFViewer({ pdfUrl, downloadUrl, fileName, onClose }: PDFViewerProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   return (
@@ -19,7 +20,7 @@ export default function PDFViewer({ pdfUrl, fileName, onClose }: PDFViewerProps)
         </div>
         <div className="flex gap-2">
           <a
-            href={pdfUrl}
+            href={downloadUrl || pdfUrl}
             download={fileName}
             className="p-2 hover:bg-gray-700 rounded transition-colors"
             title="Download PDF"
