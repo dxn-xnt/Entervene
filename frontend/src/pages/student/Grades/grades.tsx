@@ -1,6 +1,6 @@
 import { useState } from "react";
 import SubjectCardHeader from "../../../components/StudentUIComponents/SubjectCardHeader";
-import SubjectGrade from "./SubjectGrade";
+import SubjectGrade from "./subject-grade";
 import AppLayout from "@/layouts/app-layout";
 
 const subjectPerformanceData = [

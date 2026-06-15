@@ -6,7 +6,7 @@ import { routes } from "@/../routes";
 import SetupPassword from "./pages/SetupPassword";
 
 // import StudentApp from "./pages/StudentInterfaces/StudentApp";
-// import TeacherApp from "./pages/TeacherInterfaces/TeacherApp";
+// import TeacherApp from "./pages/teacher/TeacherApp";
 
 // Admin pages
 import AdminDashboard from "./pages/admin/dashboard";
@@ -21,22 +21,22 @@ import AdminSettings from "./pages/admin/system-settings";
 // import AppLayout from "./layouts/app-layout";
 
 // Teacher pages
-import TeacherDashboard from "./pages/TeacherInterfaces/Dashboard";
-// import TeacherClasses from "./pages/TeacherInterfaces/Classworks";
-import ClassesPage from "./pages/TeacherInterfaces/Classes/ClassesPage";
-import ClassSections from "./pages/TeacherInterfaces/Classes/ClassSections";
-import SubjectDetails from "./pages/TeacherInterfaces/Classes/SubjectDetails";
-import Subjects from "./pages/TeacherInterfaces/Classes/Subjects";
-import TeacherClassworks from "./pages/TeacherInterfaces/Classworks";
-import TeacherInterventions from "./pages/TeacherInterfaces/Lessons";
-import CreateLesson from "./pages/teacher/CreateLesson";
-import TeacherGrades from "./pages/TeacherInterfaces/grades";
-import TeacherNotifications from "./pages/TeacherInterfaces/Notifications";
+import TeacherDashboard from "./pages/teacher/dashboard";
+// import TeacherClasses from "./pages/teacher/Classworks";
+import ClassesPage from "./pages/teacher/Classes/classes-page";
+import ClassSections from "./pages/teacher/Classes/class-section";
+import SubjectDetails from "./pages/teacher/Classes/subject-details";
+import Subjects from "./pages/teacher/Classes/subjects";
+import TeacherClassworks from "./pages/teacher/classworks";
+import TeacherInterventions from "./pages/teacher/lessons";
+import CreateLesson from "./pages/teacher/create-lesson";
+import TeacherGrades from "./pages/teacher/grades";
+import TeacherNotifications from "./pages/teacher/notifications";
 
 // // Student pages
 import StudentBoard from "./pages/student/storyboard";
 import StudentSubjects from "./pages/student/subjects";
-import StudentSubjectDetail from "./pages/student/StudentSubjectDetail";
+import StudentSubjectDetail from "./pages/student/student-subject-detail";
 // import StudentInterventions from "./pages/student/StudentInterventions";
 import StudentGrades from "./pages/student/Grades/grades";
 import StudentTodo from "./pages/student/todo";
