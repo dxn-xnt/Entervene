@@ -2,14 +2,16 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
-from typing import List, Optional
+from typing import List, Optional, cast
 from pathlib import Path
 from datetime import datetime
+from uuid import UUID
 
 from app.db.Session import get_db
 from app.core.Dependencies import require_role, get_staff_id, get_student_record
 from app.core.Security import decode_access_token
 from app.core.FileUpload import save_file, delete_file
+from app.api.v1.routes.Auth import ACCESS_COOKIE_NAME
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
@@ -21,6 +23,7 @@ from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Class_ import Class
 from app.models.people.AcademicStaff import AcademicStaff
+from app.models.people.Student import Student
 from app.schemas.Classwork import (
     ClassworkCreate, ClassworkUpdate, ClassworkResponse,
     ClassworkAttachmentResponse, ClassworkAssignRequest,
@@ -32,6 +35,14 @@ router = APIRouter()
 # Project root = 4 levels up from this file (app/api/v1/routes/Classworks.py)
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 UPLOADS_DIR = BASE_DIR / "uploads"
+
+
+def _user_id(current_user: dict):
+    value = current_user.get("sub")
+    try:
+        return UUID(value) if isinstance(value, str) else value
+    except ValueError:
+        return value
 
 
 def _resolve_file_path(stored_path: str) -> Path:
@@ -105,6 +116,63 @@ def _build_cw(cw, db):
     )
 
 
+def _authorize_classwork_access(
+    cw: Classwork,
+    current_user: dict,
+    db: Session,
+    class_id: Optional[int] = None,
+) -> None:
+    role = current_user.get("role")
+    user_id = _user_id(current_user)
+    if role == "admin":
+        return
+    if role == "teacher":
+        staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
+        if staff and cw.created_by_staff_id == staff.staff_id:
+            return
+    if role == "student":
+        student = db.query(Student).filter(Student.user_id == user_id).first()
+        if student:
+            query = (
+                db.query(ClassworkAssignment)
+                .join(StudentClass, StudentClass.class_id == ClassworkAssignment.class_id)
+                .filter(
+                    ClassworkAssignment.classwork_id == cw.classwork_id,
+                    ClassworkAssignment.is_published == True,
+                    StudentClass.student_id == student.student_id,
+                    StudentClass.enrollment_status == "enrolled",
+                )
+            )
+            if class_id is not None:
+                query = query.filter(ClassworkAssignment.class_id == class_id)
+            if query.first():
+                return
+    raise HTTPException(status_code=403, detail="Access denied")
+
+
+def _authorize_assignment_access(
+    assignment: ClassworkAssignment,
+    cw: Classwork,
+    current_user: dict,
+    db: Session,
+) -> None:
+    role = current_user.get("role")
+    user_id = _user_id(current_user)
+    if role == "teacher":
+        staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
+        if staff and cw.created_by_staff_id == staff.staff_id:
+            return
+    if role == "student" and assignment.is_published:
+        student = db.query(Student).filter(Student.user_id == user_id).first()
+        if student and db.query(StudentClass).filter(
+            StudentClass.student_id == student.student_id,
+            StudentClass.class_id == assignment.class_id,
+            StudentClass.enrollment_status == "enrolled",
+        ).first():
+            return
+    raise HTTPException(status_code=403, detail="Access denied")
+
+
 @router.post("/", response_model=ClassworkResponse)
 def create_classwork(body: ClassworkCreate, staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db)):
     load = db.query(SubjectLoad).filter(SubjectLoad.staff_id == staff_id, SubjectLoad.subject_id == body.subject_id, SubjectLoad.status == "active").first()
@@ -150,7 +218,7 @@ def get_my_classworks(staff_id: str = Depends(get_staff_id), db: Session = Depen
 @router.get("/classwork/{classwork_id}", response_model=ClassworkResponse)
 def get_classwork(
     classwork_id: int, 
-    class_id: int = Query(None, description="Optional class ID to get assignment-specific details"),
+    class_id: Optional[int] = Query(None, description="Optional class ID to get assignment-specific details"),
     current_user: dict = Depends(require_role("teacher", "admin", "student")), 
     db: Session = Depends(get_db)
 ):
@@ -167,6 +235,7 @@ def get_classwork(
     )
     if not cw: 
         raise HTTPException(status_code=404, detail="Classwork not found")
+    _authorize_classwork_access(cw, current_user, db, class_id)
     
     # Get assignment details if class_id is provided
     assignment = None
@@ -248,8 +317,9 @@ async def upload_cw_attachment(
 def download_classwork_attachment(
     classwork_id: int,
     attachment_id: int,
+    request: Request,
     token: Optional[str] = Query(None, description="JWT token as fallback for browser-based access"),
-    request: Request = None,
+    inline: bool = Query(False, description="Display supported files in the browser instead of downloading"),
     db: Session = Depends(get_db),
 ):
     """
@@ -258,18 +328,21 @@ def download_classwork_attachment(
     Both teachers and students can download classwork attachments.
     """
     payload = None
-    auth_header = request.headers.get("Authorization", "") if request else ""
+    auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         payload = decode_access_token(auth_header[7:])
+    elif request.cookies.get(ACCESS_COOKIE_NAME):
+        payload = decode_access_token(request.cookies[ACCESS_COOKIE_NAME])
     elif token:
         payload = decode_access_token(token)
 
     if not payload:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    role = payload.get("role", "")
-    if role not in ("teacher", "admin", "student"):
-        raise HTTPException(status_code=403, detail="Access denied")
+    cw = db.query(Classwork).filter(Classwork.classwork_id == classwork_id).first()
+    if not cw:
+        raise HTTPException(status_code=404, detail="Classwork not found")
+    _authorize_classwork_access(cw, payload, db)
 
     att = db.query(ClassworkAttachment).filter(
         ClassworkAttachment.classwork_attachment_id == attachment_id,
@@ -289,6 +362,7 @@ def download_classwork_attachment(
         path=str(p),
         filename=att.file_name,
         media_type=att.file_type or "application/octet-stream",
+        content_disposition_type="inline" if inline else "attachment",
     )
 
 
@@ -296,8 +370,20 @@ def download_classwork_attachment(
 def assign_classwork(classwork_id: int, body: ClassworkAssignRequest, staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db)):
     cw = db.query(Classwork).filter(Classwork.classwork_id == classwork_id, Classwork.created_by_staff_id == staff_id).first()
     if not cw: raise HTTPException(status_code=404, detail="Classwork not found or not yours")
+    class_ids = list(dict.fromkeys(body.class_ids))
+    valid_class_ids = {
+        row[0]
+        for row in db.query(SubjectLoad.class_id).filter(
+            SubjectLoad.staff_id == staff_id,
+            SubjectLoad.subject_id == cw.subject_id,
+            SubjectLoad.class_id.in_(class_ids),
+            SubjectLoad.status == "active",
+        ).all()
+    }
+    if set(class_ids) != valid_class_ids:
+        raise HTTPException(status_code=403, detail="Not assigned to one or more class/subject targets")
     created = []
-    for cid in body.class_ids:
+    for cid in class_ids:
         if db.query(ClassworkAssignment).filter(ClassworkAssignment.classwork_id == classwork_id, ClassworkAssignment.class_id == cid).first():
             continue
         a = ClassworkAssignment(classwork_id=classwork_id, class_id=cid, assigned_by_staff_id=staff_id,
@@ -362,11 +448,13 @@ def get_cw_assignment(assignment_id: int, current_user: dict = Depends(require_r
     ca = db.query(ClassworkAssignment).filter(ClassworkAssignment.classwork_assignment_id == assignment_id).first()
     if not ca: raise HTTPException(status_code=404, detail="Assignment not found")
     cw = db.query(Classwork).filter(Classwork.classwork_id == ca.classwork_id).first()
+    if not cw: raise HTTPException(status_code=404, detail="Classwork not found")
+    _authorize_assignment_access(ca, cw, current_user, db)
     cls = db.query(Class).filter(Class.class_id == ca.class_id).first()
     staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == cw.created_by_staff_id).first()
     return ClassworkAssignmentResponse(
         classwork_assignment_id=ca.classwork_assignment_id, classwork_id=cw.classwork_id,
-        class_id=ca.class_id, section_name=cls.section_name if cls else None,
+        class_id=ca.class_id, section_name=cast(str, cls.section_name) if cls else None,
         title=cw.title, description=cw.description, instructions=cw.instructions,
         classwork_type=cw.classwork_type, classwork_category=cw.classwork_category,
         total_points=float(cw.total_points) if cw.total_points else None,

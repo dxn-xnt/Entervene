@@ -21,7 +21,7 @@ import SummaryCard from "@/components/admin/classes/SummaryCard";
 import AddClassModal from "@/components/admin/classes/modals/AddClassModal";
 import ArchiveClassModal from "@/components/admin/classes/modals/ArchiveClassModal";
 import EditClassModal from "@/components/admin/classes/modals/EditClassModal";
-import { getClasses } from "@/lib/api";
+import { archiveClass, getClasses } from "@/lib/api";
 import type {
   ClassListItem,
   GetClassesResponse,
@@ -42,12 +42,17 @@ export default function AdminClasses() {
   const [classList, setClassList] = useState<GetClassesResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [archiveError, setArchiveError] = useState("");
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [notice, setNotice] = useState("");
 
   const refreshClasses = useCallback(async () => {
     setIsLoading(true);
     setLoadError("");
     try {
-      setClassList(await getClasses());
+      setClassList(
+        await getClasses(statusFilter === "Archived" ? "archived" : "active"),
+      );
     } catch (error: unknown) {
       setLoadError(
         error instanceof Error ? error.message : "Unable to load classes.",
@@ -55,11 +60,31 @@ export default function AdminClasses() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [statusFilter]);
 
   useEffect(() => {
     void refreshClasses();
   }, [refreshClasses]);
+
+  const handleArchive = useCallback(async () => {
+    if (!archiveTarget || isArchiving) return;
+
+    setIsArchiving(true);
+    setArchiveError("");
+    setNotice("");
+    try {
+      const result = await archiveClass(archiveTarget.class_id);
+      await refreshClasses();
+      setArchiveTarget(null);
+      setNotice(result.message || "Class archived successfully.");
+    } catch (error: unknown) {
+      setArchiveError(
+        error instanceof Error ? error.message : "Unable to archive class.",
+      );
+    } finally {
+      setIsArchiving(false);
+    }
+  }, [archiveTarget, isArchiving, refreshClasses]);
 
   const classes = useMemo(() => classList?.classes ?? [], [classList]);
 
@@ -173,6 +198,12 @@ export default function AdminClasses() {
             </header>
 
             <div className="-mx-4 md:-mx-6 border-b border-black/40" />
+
+            {notice && (
+              <p className="border-2 border-black bg-[#bbf7d0] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">
+                {notice}
+              </p>
+            )}
 
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <SummaryCard
@@ -301,7 +332,11 @@ export default function AdminClasses() {
                           key={item.class_id}
                           item={item}
                           onEdit={() => setEditTarget(item)}
-                          onArchive={() => setArchiveTarget(item)}
+                          onArchive={() => {
+                            setArchiveError("");
+                            setNotice("");
+                            setArchiveTarget(item);
+                          }}
                         />
                       ))}
                     </div>
@@ -334,11 +369,14 @@ export default function AdminClasses() {
       {archiveTarget && (
         <ArchiveClassModal
           classRecord={archiveTarget}
-          onClose={() => setArchiveTarget(null)}
-          onConfirm={() => {
+          isArchiving={isArchiving}
+          error={archiveError}
+          onClose={() => {
+            if (isArchiving) return;
+            setArchiveError("");
             setArchiveTarget(null);
-            void refreshClasses();
           }}
+          onConfirm={handleArchive}
         />
       )}
     </AppLayout>

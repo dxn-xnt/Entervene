@@ -1,19 +1,10 @@
-import re
-
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from sqlalchemy import func
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.Dependencies import require_role
 from app.db.Session import get_db
-from app.models.academic.AcademicLevel import AcademicLevel
-from app.models.academic.AcademicYear import AcademicYear
-from app.models.academic.Class_ import Class
-from app.models.academic.StudentCLass import StudentClass
-from app.models.academic.SubjectLoad import SubjectLoad
-from app.models.people.AcademicStaff import AcademicStaff
-from app.models.people.Student import Student
 from app.schemas.Class import (
+    ArchiveClassResponse,
     BatchCreateClassesRequest,
     BatchCreateClassesResponse,
     ClassDetailResponse,
@@ -26,250 +17,50 @@ from app.schemas.Class import (
     UnassignedStudentsResponse,
     ValidateClassImportResponse,
 )
-from app.services.ClassManagement import (
-    ClassManagementError,
-    available_advisers_query,
-    batch_create_classes,
-    csv_validation_error,
-    eligible_advisers_query,
-    normalized_import_row,
-    normalized_middle_name,
-    normalized_text,
-    raise_csv_validation_errors,
-    read_class_import_rows,
-    readable_text,
-    resolve_active_academic_year,
-    student_sort_key,
+from app.services.classes.ClassService import archive_class_record, batch_create_classes, update_class_record
+from app.services.classes.ClassImportService import validate_class_import_file
+from app.services.classes.ClassQueryService import (
+    get_class_detail_data,
+    get_class_form_options_data,
+    get_class_students_data,
+    get_class_transfer_options_data,
+    get_unassigned_students_data,
+    list_classes_data,
 )
+from app.services.classes.ClassStudentService import update_class_student_assignments
 
+# CLASS MANAGEMENT FLOW
+# 1. The admin frontend sends a request to one of the endpoints in this file.
+# 2. require_role("admin") blocks non-admin users before the endpoint runs.
+# 3. The route delegates business rules and database work to a class service:
+#    - ClassQueryService: read class, adviser, and student data
+#    - ClassService: create, update, and archive classes
+#    - ClassImportService: validate a CSV and prepare an import preview
+#    - ClassStudentService: add, remove, or transfer students
+# 4. The response_model validates the final response returned to the frontend.
 router = APIRouter()
-SCIENTIFIC_NOTATION_PATTERN = re.compile(r"^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$")
 
 
-def _academic_year_option(academic_year) -> dict:
-    return {
-        "academic_year_id": academic_year.academic_year_id,
-        "year_label": academic_year.year_label,
-    }
-
-
-def _academic_level_option(academic_level) -> dict:
-    return {
-        "academic_level_id": academic_level.academic_level_id,
-        "level_name": academic_level.level_name,
-        "grade_level": academic_level.grade_level,
-    }
-
-
-def _adviser_option(adviser) -> dict | None:
-    if adviser is None:
-        return None
-    return {
-        "staff_id": adviser.staff_id,
-        "first_name": adviser.first_name,
-        "middle_name": adviser.middle_name,
-        "last_name": adviser.last_name,
-        "suffix": adviser.suffix,
-    }
-
-
-def _class_detail_response(db: Session, class_id: int) -> dict:
-    class_row = (
-        db.query(Class, AcademicLevel, AcademicYear, AcademicStaff)
-        .join(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
-        .join(AcademicYear, Class.academic_year_id == AcademicYear.academic_year_id)
-        .outerjoin(AcademicStaff, Class.adviser_staff_id == AcademicStaff.staff_id)
-        .filter(Class.class_id == class_id)
-        .first()
-    )
-    if class_row is None:
-        raise HTTPException(status_code=404, detail="Class not found.")
-
-    class_, academic_level, academic_year, adviser = class_row
-    student_count = (
-        db.query(func.count(StudentClass.student_class_id))
-        .filter(StudentClass.class_id == class_.class_id)
-        .scalar()
-    )
-    subject_count = (
-        db.query(func.count(SubjectLoad.subject_load_id))
-        .filter(SubjectLoad.class_id == class_.class_id)
-        .scalar()
-    )
-
-    return {
-        "class_id": class_.class_id,
-        "section_name": class_.section_name,
-        "class_status": readable_text(class_.class_status) or "active",
-        "created_at": class_.created_at,
-        "academic_year": _academic_year_option(academic_year),
-        "academic_level": _academic_level_option(academic_level),
-        "adviser": _adviser_option(adviser),
-        "statistics": {
-            "student_count": int(student_count or 0),
-            "subject_count": int(subject_count or 0),
-            "schedule_count": 0,
-        },
-    }
-
-
-def _student_full_name(student: Student) -> str:
-    first_name = readable_text(student.first_name)
-    middle_name = readable_text(student.middle_name)
-    last_name = readable_text(student.last_name)
-    suffix = readable_text(student.suffix)
-    middle_initial = f"{middle_name[:1].upper()}." if middle_name else ""
-    given_name = " ".join(part for part in [first_name, middle_initial] if part)
-    family_name = " ".join(part for part in [last_name, suffix] if part)
-    if family_name and given_name:
-        return f"{family_name}, {given_name}"
-    return family_name or given_name
-
-
-def _student_gender_group(value) -> str:
-    gender = normalized_text(value)
-    if gender in {"female", "f", "girl"}:
-        return "Female"
-    if gender in {"male", "m", "boy"}:
-        return "Male"
-    if gender:
-        return "Other"
-    return "Unspecified"
-
-
-def _gender_count_key(group: str) -> str:
-    if group == "Female":
-        return "female"
-    if group == "Male":
-        return "male"
-    if group == "Other":
-        return "other"
-    return "unspecified"
-
-
-def _student_list_item(student: Student) -> dict:
-    full_name = _student_full_name(student)
-    return {
-        "student_id": student.student_id,
-        "full_name": full_name,
-        "gender": _student_gender_group(student.gender),
-        "avatar_initial": (readable_text(student.first_name)[:1] or "?").upper(),
-    }
-
-
-def _get_class_or_404(db: Session, class_id: int) -> Class:
-    class_ = db.query(Class).filter(Class.class_id == class_id).first()
-    if class_ is None:
-        raise HTTPException(status_code=404, detail="Class not found.")
-    return class_
-
-
-def _active_class_filter():
-    return func.lower(func.coalesce(Class.class_status, "active")) != "archived"
-
-
+# Data used by the admin class-creation form: active year, levels, and advisers.
 @router.get("/form-options", response_model=ClassFormOptionsResponse)
 def get_class_form_options(
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    academic_year = resolve_active_academic_year(db)
-
-    academic_levels = (
-        db.query(AcademicLevel)
-        .order_by(AcademicLevel.grade_level, func.lower(AcademicLevel.level_name))
-        .all()
-    )
-    eligible_advisers = (
-        available_advisers_query(db, academic_year.academic_year_id)
-        .order_by(
-            func.lower(AcademicStaff.last_name),
-            func.lower(AcademicStaff.first_name),
-            func.lower(func.coalesce(AcademicStaff.middle_name, "")),
-        )
-        .all()
-    )
-
-    return {
-        "academic_year": _academic_year_option(academic_year),
-        "academic_levels": [_academic_level_option(level) for level in academic_levels],
-        "eligible_advisers": [
-            {
-                "staff_id": adviser.staff_id,
-                "first_name": adviser.first_name,
-                "middle_name": adviser.middle_name,
-                "last_name": adviser.last_name,
-                "suffix": adviser.suffix,
-            }
-            for adviser in eligible_advisers
-        ],
-    }
+    return get_class_form_options_data(db=db)
 
 
 @router.get("", response_model=ClassListResponse)
 def list_classes(
+    status: str = Query("active", pattern="^(active|archived)$"),
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    class_rows = (
-        db.query(
-            Class,
-            AcademicLevel,
-            AcademicYear,
-            AcademicStaff,
-            func.count(StudentClass.student_class_id).label("student_count"),
-        )
-        .join(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
-        .join(AcademicYear, Class.academic_year_id == AcademicYear.academic_year_id)
-        .outerjoin(AcademicStaff, Class.adviser_staff_id == AcademicStaff.staff_id)
-        .outerjoin(StudentClass, Class.class_id == StudentClass.class_id)
-        .group_by(Class.class_id, AcademicLevel.academic_level_id, AcademicYear.academic_year_id, AcademicStaff.staff_id)
-        .order_by(AcademicLevel.grade_level, func.lower(Class.section_name))
-        .all()
-    )
-
-    classes = []
-    total_students = 0
-    active_classes = 0
-    archived_classes = 0
-    for class_, academic_level, academic_year, adviser, student_count in class_rows:
-        count = int(student_count or 0)
-        total_students += count
-        status = readable_text(class_.class_status) or "active"
-        normalized_status = normalized_text(status)
-        if normalized_status == "active":
-            active_classes += 1
-        elif normalized_status == "archived":
-            archived_classes += 1
-
-        classes.append({
-            "class_id": class_.class_id,
-            "section_name": class_.section_name,
-            "class_status": status,
-            "academic_year": _academic_year_option(academic_year),
-            "academic_level": _academic_level_option(academic_level),
-            "adviser": None if adviser is None else {
-                "staff_id": adviser.staff_id,
-                "first_name": adviser.first_name,
-                "middle_name": adviser.middle_name,
-                "last_name": adviser.last_name,
-                "suffix": adviser.suffix,
-            },
-            "student_count": count,
-            "subject_count": 0,
-        })
-
-    return {
-        "summary": {
-            "total_classes": len(classes),
-            "active_classes": active_classes,
-            "archived_classes": archived_classes,
-            "students_assigned": total_students,
-        },
-        "classes": classes,
-    }
+    return list_classes_data(db=db, status=status)
 
 
+# Class creation has two entry paths. Manual creation sends this payload
+# directly; CSV creation first calls /validate-import, then sends its preview here.
 @router.post("/batch-create", response_model=BatchCreateClassesResponse, status_code=201)
 def create_classes_batch(
     payload: BatchCreateClassesRequest,
@@ -279,6 +70,8 @@ def create_classes_batch(
     return batch_create_classes(db, payload)
 
 
+# CSV validation does not create classes. It returns a clean preview that the
+# admin can review before submitting it to /batch-create.
 @router.post("/validate-import", response_model=ValidateClassImportResponse)
 async def validate_class_import(
     file: UploadFile = File(...),
@@ -286,363 +79,22 @@ async def validate_class_import(
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    academic_year = resolve_active_academic_year(db)
-    academic_level = (
-        db.query(AcademicLevel)
-        .filter(AcademicLevel.academic_level_id == academic_level_id)
-        .first()
+    return await validate_class_import_file(
+        db=db,
+        file=file,
+        academic_level_id=academic_level_id,
     )
-    if not academic_level:
-        raise ClassManagementError(
-            status_code=404,
-            message="Request validation failed.",
-            code="validation_failed",
-            errors=[
-                {
-                    "row": None,
-                    "field": "academic_level_id",
-                    "code": "academic_level_not_found",
-                    "message": f"Academic level {academic_level_id} does not exist.",
-                }
-            ],
-        )
-
-    rows = await read_class_import_rows(file)
-    errors: list[dict] = []
-    seen_rows: dict[tuple[str, ...], int] = {}
-    seen_lrns: dict[str, int] = {}
-
-    adviser_ids = {row["adviser_staff_id"] for _, row in rows if row["adviser_staff_id"]}
-    student_lrns = {row["student_lrn"] for _, row in rows if row["student_lrn"]}
-    advisers = {
-        adviser.staff_id: adviser
-        for adviser in db.query(AcademicStaff).filter(AcademicStaff.staff_id.in_(adviser_ids)).all()
-    } if adviser_ids else {}
-    eligible_adviser_ids = {
-        adviser.staff_id
-        for adviser in eligible_advisers_query(db).filter(AcademicStaff.staff_id.in_(adviser_ids)).all()
-    } if adviser_ids else set()
-    assigned_adviser_ids = {
-        adviser_id
-        for adviser_id, in (
-            db.query(Class.adviser_staff_id)
-            .filter(Class.academic_year_id == academic_year.academic_year_id)
-            .filter(Class.adviser_staff_id.in_(adviser_ids))
-            .all()
-        )
-    } if adviser_ids else set()
-    students = {
-        student.student_lrn: student
-        for student in db.query(Student).filter(Student.student_lrn.in_(student_lrns)).all()
-    } if student_lrns else {}
-    assigned_lrns = {
-        row.student_lrn
-        for row in (
-            db.query(Student.student_lrn)
-            .join(StudentClass, Student.student_id == StudentClass.student_id)
-            .filter(StudentClass.academic_year_id == academic_year.academic_year_id)
-            .filter(Student.student_lrn.in_(student_lrns))
-            .all()
-        )
-    } if student_lrns else set()
-    existing_sections = {
-        normalized_text(section_name)
-        for section_name, in (
-            db.query(Class.section_name)
-            .filter(Class.academic_year_id == academic_year.academic_year_id)
-            .filter(Class.academic_level_id == academic_level_id)
-            .all()
-        )
-    }
-
-    grouped: dict[str, dict] = {}
-    imported_adviser_sections: dict[str, str] = {}
-    for row_number, row in rows:
-        row_error_count = len(errors)
-        row_key = normalized_import_row(row)
-        if row_key in seen_rows:
-            errors.append(
-                csv_validation_error(
-                    "duplicate_row",
-                    f"Row duplicates CSV row {seen_rows[row_key]}.",
-                    row_number,
-                    None,
-                )
-            )
-        else:
-            seen_rows[row_key] = row_number
-
-        section_name = readable_text(row["section_name"])
-        section_key = normalized_text(section_name)
-        if not section_name:
-            errors.append(csv_validation_error(
-                "section_name_required", "Section name is required.", row_number, "section_name"
-            ))
-        elif section_key in existing_sections:
-            errors.append(csv_validation_error(
-                "section_already_exists",
-                f'Section "{section_name}" already exists for the selected academic level and active academic year.',
-                row_number,
-                "section_name",
-            ))
-
-        grade_level = readable_text(row["grade_level"])
-        if not grade_level:
-            errors.append(csv_validation_error(
-                "missing_required_field", "Grade level is required.", row_number, "grade_level"
-            ))
-        elif not grade_level.isdecimal():
-            errors.append(csv_validation_error(
-                "invalid_grade_level", "Grade level must be a whole number.", row_number, "grade_level"
-            ))
-        elif int(grade_level) != academic_level.grade_level:
-            errors.append(csv_validation_error(
-                "academic_level_mismatch",
-                f"CSV grade level {int(grade_level)} does not match the selected academic level {academic_level.level_name}.",
-                row_number,
-                "grade_level",
-            ))
-
-        adviser_id = readable_text(row["adviser_staff_id"])
-        adviser = advisers.get(adviser_id)
-        if not adviser_id:
-            errors.append(csv_validation_error(
-                "adviser_staff_id_required", "Adviser staff ID is required.", row_number, "adviser_staff_id"
-            ))
-        elif not adviser:
-            errors.append(csv_validation_error(
-                "adviser_not_found", f'No adviser exists with staff ID "{adviser_id}".', row_number, "adviser_staff_id"
-            ))
-        elif adviser_id not in eligible_adviser_ids:
-            errors.append(csv_validation_error(
-                "adviser_not_eligible", f'Adviser "{adviser_id}" is not eligible.', row_number, "adviser_staff_id"
-            ))
-        elif adviser_id in assigned_adviser_ids:
-            errors.append(csv_validation_error(
-                "adviser_already_assigned",
-                f'Adviser "{adviser_id}" is already assigned during the active academic year.',
-                row_number,
-                "adviser_staff_id",
-            ))
-        elif (
-            normalized_text(row["adviser_first_name"]) != normalized_text(adviser.first_name)
-            or normalized_middle_name(row["adviser_middle_name"]) != normalized_middle_name(adviser.middle_name)
-            or normalized_text(row["adviser_last_name"]) != normalized_text(adviser.last_name)
-        ):
-            errors.append(csv_validation_error(
-                "adviser_name_mismatch",
-                f'Adviser name does not match adviser staff ID "{adviser_id}".',
-                row_number,
-                "adviser_staff_id",
-            ))
-
-        adviser_signature = (
-            adviser_id.casefold(),
-            normalized_text(row["adviser_first_name"]),
-            normalized_middle_name(row["adviser_middle_name"]),
-            normalized_text(row["adviser_last_name"]),
-        )
-        if section_key:
-            previous_section = imported_adviser_sections.get(adviser_id)
-            if adviser_id and previous_section and previous_section != section_key:
-                errors.append(csv_validation_error(
-                    "duplicate_adviser_assignment",
-                    f'Adviser "{adviser_id}" is assigned to multiple imported sections.',
-                    row_number,
-                    "adviser_staff_id",
-                ))
-            elif adviser_id:
-                imported_adviser_sections[adviser_id] = section_key
-            section = grouped.setdefault(
-                section_key,
-                {
-                    "section_name": section_name,
-                    "adviser_signature": adviser_signature,
-                    "adviser": adviser,
-                    "students": [],
-                },
-            )
-            if section["adviser_signature"] != adviser_signature:
-                errors.append(csv_validation_error(
-                    "conflicting_section_adviser",
-                    f'Section "{section["section_name"]}" uses conflicting adviser information.',
-                    row_number,
-                    "adviser_staff_id",
-                ))
-
-        student_lrn = readable_text(row["student_lrn"])
-        student = students.get(student_lrn)
-        if not student_lrn:
-            errors.append(csv_validation_error(
-                "student_lrn_required", "Student LRN is required.", row_number, "student_lrn"
-            ))
-        elif SCIENTIFIC_NOTATION_PATTERN.fullmatch(student_lrn):
-            errors.append(csv_validation_error(
-                "student_lrn_scientific_notation",
-                "Student LRN was converted to scientific notation by spreadsheet software. Use the complete 12-digit LRN and format the student_lrn column as Text before saving the CSV.",
-                row_number,
-                "student_lrn",
-            ))
-        elif not (len(student_lrn) == 12 and student_lrn.isdigit()):
-            errors.append(csv_validation_error(
-                "student_lrn_invalid_format",
-                "Student LRN must contain exactly 12 numeric characters.",
-                row_number,
-                "student_lrn",
-            ))
-        elif student_lrn in seen_lrns:
-            errors.append(csv_validation_error(
-                "duplicate_student_lrn",
-                f"Student LRN {student_lrn} already appears on CSV row {seen_lrns[student_lrn]}.",
-                row_number,
-                "student_lrn",
-            ))
-        else:
-            seen_lrns[student_lrn] = row_number
-
-        if student_lrn and len(student_lrn) == 12 and student_lrn.isdigit():
-            if not student:
-                errors.append(csv_validation_error(
-                    "student_not_found", f"No student exists with LRN {student_lrn}.", row_number, "student_lrn"
-                ))
-            elif student.academic_level_id != academic_level_id:
-                errors.append(csv_validation_error(
-                    "student_level_mismatch",
-                    f"Student LRN {student_lrn} does not belong to the selected academic level.",
-                    row_number,
-                    "student_lrn",
-                ))
-            else:
-                if (
-                    normalized_text(row["student_first_name"]) != normalized_text(student.first_name)
-                    or normalized_middle_name(row["student_middle_name"]) != normalized_middle_name(student.middle_name)
-                    or normalized_text(row["student_last_name"]) != normalized_text(student.last_name)
-                ):
-                    errors.append(csv_validation_error(
-                        "student_name_mismatch",
-                        f"Student name does not match student LRN {student_lrn}.",
-                        row_number,
-                        "student_lrn",
-                    ))
-                if normalized_text(row["student_gender"]) != normalized_text(student.gender):
-                    errors.append(csv_validation_error(
-                        "student_gender_mismatch",
-                        f"Student gender does not match student LRN {student_lrn}.",
-                        row_number,
-                        "student_gender",
-                    ))
-                if student_lrn in assigned_lrns:
-                    errors.append(csv_validation_error(
-                        "student_already_assigned",
-                        f"Student LRN {student_lrn} is already assigned during the active academic year.",
-                        row_number,
-                        "student_lrn",
-                    ))
-
-        if len(errors) == row_error_count and section_key:
-            grouped[section_key]["students"].append(student)
-
-    if errors:
-        raise_csv_validation_errors(errors)
-
-    sections = []
-    for section in sorted(grouped.values(), key=lambda value: value["section_name"].casefold()):
-        adviser = section["adviser"]
-        section_students = sorted(section["students"], key=student_sort_key)
-        sections.append(
-            {
-                "section_name": section["section_name"],
-                "adviser": {
-                    "staff_id": adviser.staff_id,
-                    "first_name": adviser.first_name,
-                    "middle_name": adviser.middle_name,
-                    "last_name": adviser.last_name,
-                    "suffix": adviser.suffix,
-                },
-                "students": [
-                    {
-                        "student_id": student.student_id,
-                        "student_lrn": student.student_lrn,
-                        "first_name": student.first_name,
-                        "middle_name": student.middle_name,
-                        "last_name": student.last_name,
-                        "gender": student.gender,
-                        "academic_level_id": student.academic_level_id,
-                    }
-                    for student in section_students
-                ],
-            }
-        )
-
-    return {
-        "academic_level": _academic_level_option(academic_level),
-        "academic_year": _academic_year_option(academic_year),
-        "sections": sections,
-        "summary": {
-            "section_count": len(sections),
-            "student_count": sum(len(section["students"]) for section in sections),
-        },
-    }
 
 
+# These students can be selected during class creation because they do not yet
+# have a class assignment in the active academic year.
 @router.get("/unassigned-students", response_model=UnassignedStudentsResponse)
 def get_unassigned_students(
     academic_level_id: int = Query(...),
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    academic_year = resolve_active_academic_year(db)
-    academic_level = (
-        db.query(AcademicLevel)
-        .filter(AcademicLevel.academic_level_id == academic_level_id)
-        .first()
-    )
-    if not academic_level:
-        raise ClassManagementError(
-            status_code=404,
-            message="Request validation failed.",
-            code="validation_failed",
-            errors=[
-                {
-                    "row": None,
-                    "field": "academic_level_id",
-                    "code": "academic_level_not_found",
-                    "message": f"Academic level {academic_level_id} does not exist.",
-                }
-            ],
-        )
-
-    assigned_in_active_year = (
-        db.query(StudentClass.student_class_id)
-        .join(Class, StudentClass.class_id == Class.class_id)
-        .filter(StudentClass.student_id == Student.student_id)
-        .filter(Class.academic_year_id == academic_year.academic_year_id)
-        .exists()
-    )
-    students = (
-        db.query(Student)
-        .filter(Student.academic_level_id == academic_level_id)
-        .filter(~assigned_in_active_year)
-        .all()
-    )
-    students.sort(key=student_sort_key)
-
-    return {
-        "academic_level": _academic_level_option(academic_level),
-        "academic_year": _academic_year_option(academic_year),
-        "students": [
-            {
-                "student_id": student.student_id,
-                "student_lrn": student.student_lrn,
-                "first_name": student.first_name,
-                "middle_name": student.middle_name,
-                "last_name": student.last_name,
-                "gender": student.gender,
-                "academic_level_id": student.academic_level_id,
-            }
-            for student in students
-        ],
-    }
+    return get_unassigned_students_data(db=db, academic_level_id=academic_level_id)
 
 
 @router.get("/{class_id}/students", response_model=ClassStudentListResponse)
@@ -654,58 +106,7 @@ def get_class_students(
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    class_row = (
-        db.query(Class, AcademicLevel)
-        .join(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
-        .filter(Class.class_id == class_id)
-        .first()
-    )
-    if class_row is None:
-        raise HTTPException(status_code=404, detail="Class not found.")
-
-    class_, academic_level = class_row
-    rows = (
-        db.query(Student)
-        .join(StudentClass, Student.student_id == StudentClass.student_id)
-        .filter(StudentClass.class_id == class_.class_id)
-        .filter(StudentClass.academic_year_id == class_.academic_year_id)
-        .all()
-    )
-
-    items = [_student_list_item(student) for student in rows]
-    search_term = normalized_text(search)
-    if search_term:
-        items = [item for item in items if search_term in normalized_text(item["full_name"])]
-
-    items.sort(key=lambda item: item["full_name"].casefold())
-    gender_counts = {"female": 0, "male": 0, "other": 0, "unspecified": 0}
-    for item in items:
-        gender_counts[_gender_count_key(item["gender"])] += 1
-
-    total_items = len(items)
-    total_pages = max((total_items + page_size - 1) // page_size, 1)
-    start = (page - 1) * page_size
-    paged_items = items[start:start + page_size]
-
-    return {
-        "class_id": class_.class_id,
-        "section_name": class_.section_name,
-        "academic_level": {
-            "academic_level_id": academic_level.academic_level_id,
-            "level_name": academic_level.level_name,
-        },
-        "summary": {
-            "total_students": total_items,
-            "gender_counts": gender_counts,
-        },
-        "students": paged_items,
-        "pagination": {
-            "page": page,
-            "page_size": page_size,
-            "total_items": total_items,
-            "total_pages": total_pages,
-        },
-    }
+    return get_class_students_data(db=db, class_id=class_id, search=search, page=page, page_size=page_size)
 
 
 @router.get("/{class_id}/transfer-options", response_model=ClassTransferOptionsResponse)
@@ -714,39 +115,11 @@ def get_class_transfer_options(
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    class_row = (
-        db.query(Class, AcademicLevel)
-        .join(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
-        .filter(Class.class_id == class_id)
-        .first()
-    )
-    if class_row is None:
-        raise HTTPException(status_code=404, detail="Class not found.")
-
-    class_, academic_level = class_row
-    sections = (
-        db.query(Class)
-        .filter(Class.class_id != class_.class_id)
-        .filter(Class.academic_level_id == class_.academic_level_id)
-        .filter(Class.academic_year_id == class_.academic_year_id)
-        .filter(_active_class_filter())
-        .order_by(func.lower(Class.section_name))
-        .all()
-    )
-
-    return {
-        "current_class_id": class_.class_id,
-        "academic_level": {
-            "academic_level_id": academic_level.academic_level_id,
-            "level_name": academic_level.level_name,
-        },
-        "available_sections": [
-            {"class_id": section.class_id, "section_name": section.section_name}
-            for section in sections
-        ],
-    }
+    return get_class_transfer_options_data(db=db, class_id=class_id)
 
 
+# One request may add, remove, and transfer students; the service commits those
+# roster changes as a single transaction.
 @router.patch("/{class_id}/students", response_model=ClassStudentListResponse)
 def update_class_students(
     class_id: int,
@@ -754,64 +127,10 @@ def update_class_students(
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    if not payload.removals and not payload.transfers:
-        raise HTTPException(status_code=400, detail="Provide at least one student list change.")
-
-    class_ = _get_class_or_404(db, class_id)
-    removal_ids = [item.student_id for item in payload.removals]
-    transfer_ids = [item.student_id for item in payload.transfers]
-    overlap = set(removal_ids).intersection(transfer_ids)
-    if overlap:
-        raise HTTPException(status_code=400, detail="A student cannot be removed and transferred in the same request.")
-    if len(set(removal_ids)) != len(removal_ids) or len(set(transfer_ids)) != len(transfer_ids):
-        raise HTTPException(status_code=400, detail="Duplicate student changes are not allowed.")
-
-    requested_student_ids = set(removal_ids + transfer_ids)
-    assignments = {
-        assignment.student_id: assignment
-        for assignment in (
-            db.query(StudentClass)
-            .filter(StudentClass.class_id == class_.class_id)
-            .filter(StudentClass.academic_year_id == class_.academic_year_id)
-            .filter(StudentClass.student_id.in_(requested_student_ids))
-            .all()
-        )
-    } if requested_student_ids else {}
-    if set(assignments.keys()) != requested_student_ids:
-        raise HTTPException(status_code=400, detail="Student is not assigned to this class.")
-
-    target_class_ids = {item.target_class_id for item in payload.transfers}
-    target_classes = {
-        target.class_id: target
-        for target in db.query(Class).filter(Class.class_id.in_(target_class_ids)).all()
-    } if target_class_ids else {}
-    for transfer in payload.transfers:
-        target = target_classes.get(transfer.target_class_id)
-        if target is None:
-            raise HTTPException(status_code=404, detail="Target class not found.")
-        if target.class_id == class_.class_id:
-            raise HTTPException(status_code=400, detail="Target class must be different from the current class.")
-        if target.academic_level_id != class_.academic_level_id:
-            raise HTTPException(status_code=400, detail="Target class must use the same academic level.")
-        if target.academic_year_id != class_.academic_year_id:
-            raise HTTPException(status_code=400, detail="Target class must use the same academic year.")
-        if normalized_text(target.class_status or "active") == "archived":
-            raise HTTPException(status_code=400, detail="Target class must be active.")
-
-    try:
-        for student_id in removal_ids:
-            db.delete(assignments[student_id])
-        for transfer in payload.transfers:
-            assignment = assignments[transfer.student_id]
-            assignment.class_id = transfer.target_class_id
-            assignment.academic_year_id = target_classes[transfer.target_class_id].academic_year_id
-
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-
-    return get_class_students(class_id=class_.class_id, page=1, page_size=200, current_user=current_user, db=db)
+    # Return a fresh class roster so the admin UI receives the committed state,
+    # including transfers and additions, without issuing a second request.
+    update_class_student_assignments(db=db, class_id=class_id, payload=payload)
+    return get_class_students_data(db=db, class_id=class_id, page=1, page_size=200)
 
 
 @router.get("/{class_id}", response_model=ClassDetailResponse)
@@ -820,7 +139,16 @@ def get_class_detail(
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    return _class_detail_response(db, class_id)
+    return get_class_detail_data(db=db, class_id=class_id)
+
+
+@router.patch("/{class_id}/archive", response_model=ArchiveClassResponse)
+def archive_class(
+    class_id: int,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return archive_class_record(db=db, class_id=class_id)
 
 
 @router.patch("/{class_id}", response_model=ClassDetailResponse)
@@ -830,60 +158,4 @@ def update_class(
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
-    changes = payload.model_dump(exclude_unset=True)
-    if not changes:
-        raise HTTPException(status_code=400, detail="Provide at least one editable field.")
-
-    class_ = db.query(Class).filter(Class.class_id == class_id).first()
-    if class_ is None:
-        raise HTTPException(status_code=404, detail="Class not found.")
-
-    if "section_name" in changes:
-        section_name = readable_text(changes["section_name"])
-        if not section_name:
-            raise HTTPException(status_code=400, detail="Section name is required.")
-        duplicate = (
-            db.query(Class.class_id)
-            .filter(Class.class_id != class_.class_id)
-            .filter(Class.academic_year_id == class_.academic_year_id)
-            .filter(Class.academic_level_id == class_.academic_level_id)
-            .filter(func.lower(Class.section_name) == section_name.lower())
-            .first()
-        )
-        if duplicate:
-            raise HTTPException(
-                status_code=409,
-                detail="A class with the same section and academic configuration already exists.",
-            )
-        class_.section_name = section_name
-
-    if "adviser_staff_id" in changes:
-        adviser_staff_id = changes["adviser_staff_id"]
-        if adviser_staff_id is None or readable_text(adviser_staff_id) == "":
-            class_.adviser_staff_id = None
-        else:
-            adviser_staff_id = readable_text(adviser_staff_id)
-            adviser = (
-                eligible_advisers_query(db)
-                .filter(AcademicStaff.staff_id == adviser_staff_id)
-                .first()
-            )
-            if adviser is None:
-                raise HTTPException(status_code=400, detail="Adviser not found.")
-            assigned_elsewhere = (
-                db.query(Class.class_id)
-                .filter(Class.class_id != class_.class_id)
-                .filter(Class.academic_year_id == class_.academic_year_id)
-                .filter(Class.adviser_staff_id == adviser_staff_id)
-                .first()
-            )
-            if assigned_elsewhere:
-                raise HTTPException(
-                    status_code=409,
-                    detail="This adviser is already assigned to another class in this academic year.",
-                )
-            class_.adviser_staff_id = adviser_staff_id
-
-    db.commit()
-    db.refresh(class_)
-    return _class_detail_response(db, class_.class_id)
+    return update_class_record(db=db, class_id=class_id, payload=payload)

@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import SubmissionForm from "@/components/SubmissionForm";
 import SubmissionViewer from "@/components/SubmissionViewer";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
+import { API_URL } from "@/lib/api";
 
 interface Attachment {
   classwork_attachment_id: number;
@@ -350,6 +351,9 @@ export default function SubjectClassworkTab({
                     <AttachmentDisplay
                       attachments={cw.attachments}
                       type="classwork"
+                      downloadUrl={(attachmentId) =>
+                        `${API_URL}/api/v1/classwork-assignments/classwork/${cw.classwork_id}/attachments/${attachmentId}/download`
+                      }
                     />
                   </div>
                 )}

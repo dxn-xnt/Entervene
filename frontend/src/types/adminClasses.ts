@@ -99,6 +99,13 @@ export type ClassDetailResponse = {
   statistics: ClassDetailStatistics;
 };
 
+export type ArchiveClassResponse = {
+  class_id: number;
+  section_name: string;
+  class_status: string;
+  message: string;
+};
+
 export type UpdateClassRequest = {
   section_name?: string;
   adviser_staff_id?: string | null;
@@ -156,12 +163,17 @@ export type PendingStudentRemoval = {
   student_id: string;
 };
 
+export type PendingStudentAddition = {
+  student_id: string;
+};
+
 export type PendingStudentTransfer = {
   student_id: string;
   target_class_id: number;
 };
 
 export type UpdateClassStudentListRequest = {
+  additions: PendingStudentAddition[];
   removals: PendingStudentRemoval[];
   transfers: PendingStudentTransfer[];
 };

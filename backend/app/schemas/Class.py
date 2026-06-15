@@ -69,6 +69,13 @@ class ClassDetailResponse(BaseModel):
     statistics: ClassDetailStatistics
 
 
+class ArchiveClassResponse(BaseModel):
+    class_id: int
+    section_name: str
+    class_status: str
+    message: str
+
+
 class ClassUpdateRequest(BaseModel):
     section_name: str | None = None
     adviser_staff_id: str | None = None
@@ -129,6 +136,10 @@ class ClassStudentRemovalRequest(BaseModel):
     student_id: UUID
 
 
+class ClassStudentAdditionRequest(BaseModel):
+    student_id: UUID
+
+
 class ClassStudentTransferRequest(BaseModel):
     student_id: UUID
     target_class_id: int
@@ -137,6 +148,7 @@ class ClassStudentTransferRequest(BaseModel):
 class UpdateClassStudentListRequest(BaseModel):
     removals: list[ClassStudentRemovalRequest] = []
     transfers: list[ClassStudentTransferRequest] = []
+    additions: list[ClassStudentAdditionRequest] = []
 
 
 class UnassignedStudentItem(BaseModel):

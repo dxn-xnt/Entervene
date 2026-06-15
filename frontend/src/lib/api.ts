@@ -1,4 +1,5 @@
 import type {
+  ArchiveClassResponse,
   BatchCreateClassesRequest,
   BatchCreateClassesResponse,
   ClassDetailResponse,
@@ -12,7 +13,7 @@ import type {
   ValidateClassImportResponse,
 } from "@/types/adminClasses";
 
-const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
+export const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
 export type UserRole = "admin" | "teacher" | "student";
 
@@ -79,7 +80,9 @@ function getCookie(name: string): string | null {
   return value ? decodeURIComponent(value) : null;
 }
 
-export async function apiFetch(path: string, init: RequestInit = {}) {
+let refreshRequest: Promise<boolean> | null = null;
+
+function request(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   const method = (init.method ?? "GET").toUpperCase();
   const csrfToken = getCookie("entervene_csrf");
@@ -88,11 +91,35 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
     headers.set("X-CSRF-Token", csrfToken);
   }
 
-  return fetch(`${API_URL}${path}`, {
+  const url = /^https?:\/\//i.test(path) ? path : `${API_URL}${path}`;
+
+  return fetch(url, {
     ...init,
     headers,
     credentials: "include",
   });
+}
+
+async function refreshAccessToken(): Promise<boolean> {
+  if (!refreshRequest) {
+    refreshRequest = request("/api/v1/auth/refresh", { method: "POST" })
+      .then((response) => response.ok)
+      .finally(() => {
+        refreshRequest = null;
+      });
+  }
+  return refreshRequest;
+}
+
+export async function apiFetch(path: string, init: RequestInit = {}) {
+  const response = await request(path, init);
+  const isAuthRequest = path.startsWith("/api/v1/auth/");
+
+  if (response.status === 401 && !isAuthRequest && await refreshAccessToken()) {
+    return request(path, init);
+  }
+
+  return response;
 }
 
 export async function getUsers(params: { role?: UserRole; search?: string; status?: string } = {}) {
@@ -197,8 +224,9 @@ export async function getClassFormOptions(): Promise<ClassFormOptions> {
   return (await response.json()) as ClassFormOptions;
 }
 
-export async function getClasses(): Promise<GetClassesResponse> {
-  const response = await apiFetch("/api/v1/classes");
+export async function getClasses(status: "active" | "archived" = "active"): Promise<GetClassesResponse> {
+  const query = new URLSearchParams({ status });
+  const response = await apiFetch(`/api/v1/classes?${query.toString()}`);
 
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null);
@@ -235,6 +263,19 @@ export async function updateClass(
   }
 
   return (await response.json()) as ClassDetailResponse;
+}
+
+export async function archiveClass(classId: string | number): Promise<ArchiveClassResponse> {
+  const response = await apiFetch(`/api/v1/classes/${encodeURIComponent(String(classId))}/archive`, {
+    method: "PATCH",
+  });
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(classArchiveErrorMessage(data, response.status), response.status, data);
+  }
+
+  return (await response.json()) as ArchiveClassResponse;
 }
 
 export async function getClassStudents(
@@ -324,6 +365,14 @@ function classUpdateErrorMessage(data: unknown, status: number): string {
   if (status === 404) return "Class not found.";
   if (status === 409) return safeClassErrorMessage(data, "Unable to update class because it conflicts with existing class data.");
   return safeClassErrorMessage(data, "Unable to update class.");
+}
+
+function classArchiveErrorMessage(data: unknown, status: number): string {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to archive this class.";
+  if (status === 404) return "Unable to archive class.";
+  if (status === 409) return safeClassErrorMessage(data, "Class is already archived.");
+  return safeClassErrorMessage(data, "Unable to archive class.");
 }
 
 function classStudentsErrorMessage(data: unknown, status: number): string {
