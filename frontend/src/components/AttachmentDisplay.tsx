@@ -37,15 +37,19 @@ export default function AttachmentDisplay({
   const [selectedPdfDownload, setSelectedPdfDownload] = useState<string>("");
   const [selectedImage, setSelectedImage] = useState<{ url: string; name: string } | null>(null);
   const [imageLoadingName, setImageLoadingName] = useState<string | null>(null);
+  const [downloadLoadingName, setDownloadLoadingName] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState("");
 
   useEffect(() => {
     return () => {
+      if (selectedPdf?.startsWith("blob:")) {
+        URL.revokeObjectURL(selectedPdf);
+      }
       if (selectedImage?.url.startsWith("blob:")) {
         URL.revokeObjectURL(selectedImage.url);
       }
     };
-  }, [selectedImage]);
+  }, [selectedImage, selectedPdf]);
 
   if (!attachments || attachments.length === 0) {
     return (
@@ -82,12 +86,24 @@ export default function AttachmentDisplay({
     return `${url}${url.includes("?") ? "&" : "?"}inline=true`;
   };
 
-  const handleOpenPdf = (attachment: Attachment) => {
+  const handleOpenPdf = async (attachment: Attachment) => {
     const url = getInlineUrl(attachment);
-    if (url) {
-      setSelectedPdf(url);
+    if (!url) return;
+
+    setImageLoadingName(attachment.file_name);
+    setPreviewError("");
+    try {
+      const response = await apiFetch(url);
+      if (!response.ok) throw new Error("The PDF could not be loaded.");
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      setSelectedPdf(blobUrl);
       setSelectedPdfName(attachment.file_name);
-      setSelectedPdfDownload(getAttachmentUrl(attachment));
+      setSelectedPdfDownload(blobUrl);
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : "The PDF could not be loaded.");
+    } finally {
+      setImageLoadingName(null);
     }
   };
 
@@ -106,19 +122,9 @@ export default function AttachmentDisplay({
     setPreviewError("");
 
     try {
-      let response = await fetch(url, { credentials: "include" });
-      if (response.status === 401) {
-        const refreshResponse = await apiFetch("/api/v1/auth/refresh", { method: "POST" });
-        if (refreshResponse.ok) {
-          response = await fetch(url, { credentials: "include" });
-        }
-      }
+      const response = await apiFetch(url);
       if (!response.ok) {
-        throw new Error(
-          response.status === 401
-            ? "Your session was not accepted for this preview. Restart the backend, then sign in again."
-            : "The image could not be loaded."
-        );
+        throw new Error("The image could not be loaded.");
       }
 
       const blob = await response.blob();
@@ -137,6 +143,28 @@ export default function AttachmentDisplay({
     }
   };
 
+  const handleDownload = async (attachment: Attachment) => {
+    const url = getAttachmentUrl(attachment);
+    if (!url) return;
+
+    setDownloadLoadingName(attachment.file_name);
+    setPreviewError("");
+    try {
+      const response = await apiFetch(url);
+      if (!response.ok) throw new Error("The file could not be downloaded.");
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = attachment.file_name;
+      link.click();
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : "The file could not be downloaded.");
+    } finally {
+      setDownloadLoadingName(null);
+    }
+  };
+
   return (
     <div className="space-y-3">
       {selectedPdf && (
@@ -146,6 +174,7 @@ export default function AttachmentDisplay({
             downloadUrl={selectedPdfDownload}
             fileName={selectedPdfName}
             onClose={() => {
+              if (selectedPdf.startsWith("blob:")) URL.revokeObjectURL(selectedPdf);
               setSelectedPdf(null);
               setSelectedPdfDownload("");
             }}
@@ -224,14 +253,15 @@ export default function AttachmentDisplay({
                       </button>
                     )}
                     {url && (
-                      <a
-                        href={url}
-                        download={attachment.file_name}
+                      <button
+                        type="button"
+                        onClick={() => handleDownload(attachment)}
+                        disabled={downloadLoadingName === attachment.file_name}
                         className="px-3 py-1 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 transition-colors flex items-center gap-1"
                       >
                         <Download size={14} />
-                        Download
-                      </a>
+                        {downloadLoadingName === attachment.file_name ? "Downloading..." : "Download"}
+                      </button>
                     )}
                   </div>
                 </div>

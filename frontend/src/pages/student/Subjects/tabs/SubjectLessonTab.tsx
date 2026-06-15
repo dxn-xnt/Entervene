@@ -736,7 +736,13 @@ export default function SubjectLessonTab({
                       <h4 className="font-bold">Reference Files</h4>
                     </div>
                     {selectedClasswork.attachments?.length ? (
-                      <AttachmentDisplay attachments={selectedClasswork.attachments} type="classwork" />
+                      <AttachmentDisplay
+                        attachments={selectedClasswork.attachments}
+                        type="classwork"
+                        downloadUrl={(attachmentId) =>
+                          `${API_URL}/api/v1/classwork-assignments/classwork/${selectedClasswork.classwork_id}/attachments/${attachmentId}/download`
+                        }
+                      />
                     ) : (
                       <p className="text-sm text-gray-600">No reference files attached.</p>
                     )}
