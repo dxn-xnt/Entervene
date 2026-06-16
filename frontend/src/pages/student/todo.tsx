@@ -2,6 +2,7 @@ import { useState } from "react";
 import Tabs from "../../components/Tabs";
 import ToDoItem from "../../components/StudentUIComponents/ListCardItems/ToDoItem";
 import AppLayout from "@/layouts/app-layout";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 const todoTabs = [
   { id: "pending", label: "Pending" },
@@ -66,64 +67,78 @@ const completedItems = [
   },
 ];
 
-export default function ToDo () {
+export default function ToDo() {
   const [activeTab, setActiveTab] = useState("pending");
 
   return (
     <AppLayout>
-      <header className="px-5 py-5">
-        <h1 className="text-4xl font-semibold">To Do</h1>
-      </header>
-      <Tabs tabs={todoTabs} activeTab={activeTab} onChange={setActiveTab} />
-      <div className="px-5 py-5 flex flex-col gap-5">
+      <div className="flex flex-1 flex-col overflow-x-hidden">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
+            <header className="flex items-center gap-3">
+              <SidebarTrigger className="md:hidden" />
+              <h1 className="text-2xl md:text-4xl font-semibold">To Do</h1>
+            </header>
 
-        {/* Pending Tab: Intervention + Past Due + Upcoming */}
-        {activeTab === "pending" && (
-          <>
-            <section className="flex flex-col gap-4">
-              <h3 className="text-3xl font-semibold">Intervention</h3>
-              {interventionItems.map((item, index) => (
-                <ToDoItem key={index} {...item} />
-              ))}
-            </section>
+            <div className="-mx-4 md:-mx-6">
+              <Tabs
+                tabs={todoTabs}
+                activeTab={activeTab}
+                onChange={setActiveTab}
+              />
+            </div>
 
-            <section className="flex flex-col gap-4">
-              <h3 className="text-3xl font-semibold">Past Due</h3>
-              {pastDueItems.map((item, index) => (
-                <ToDoItem key={index} {...item} />
-              ))}
-            </section>
+            {activeTab === "pending" && (
+              <>
+                <section className="flex flex-col gap-4">
+                  <h3 className="text-xl md:text-3xl font-semibold">
+                    Intervention
+                  </h3>
+                  {interventionItems.map((item, index) => (
+                    <ToDoItem key={index} {...item} />
+                  ))}
+                </section>
 
-            <section className="flex flex-col gap-4">
-              <h3 className="text-3xl font-semibold">Upcoming</h3>
-              {upcomingItems.map((item, index) => (
-                <ToDoItem key={index} {...item} />
-              ))}
-            </section>
-          </>
-        )}
+                <section className="flex flex-col gap-4">
+                  <h3 className="text-xl md:text-3xl font-semibold">
+                    Past Due
+                  </h3>
+                  {pastDueItems.map((item, index) => (
+                    <ToDoItem key={index} {...item} />
+                  ))}
+                </section>
 
-        {/* Past Due Tab */}
-        {activeTab === "pastdue" && (
-          <section className="flex flex-col gap-4">
-            <h3 className="text-3xl font-semibold">Past Due</h3>
-            {pastDueItems.map((item, index) => (
-              <ToDoItem key={index} {...item} />
-            ))}
-          </section>
-        )}
+                <section className="flex flex-col gap-4">
+                  <h3 className="text-xl md:text-3xl font-semibold">
+                    Upcoming
+                  </h3>
+                  {upcomingItems.map((item, index) => (
+                    <ToDoItem key={index} {...item} />
+                  ))}
+                </section>
+              </>
+            )}
 
-        {/* Completed Tab */}
-        {activeTab === "completed" && (
-          <section className="flex flex-col gap-4">
-            <h3 className="text-3xl font-semibold">Completed</h3>
-            {completedItems.map((item, index) => (
-              <ToDoItem key={index} {...item} />
-            ))}
-          </section>
-        )}
+            {activeTab === "pastdue" && (
+              <section className="flex flex-col gap-4">
+                <h3 className="text-xl md:text-3xl font-semibold">Past Due</h3>
+                {pastDueItems.map((item, index) => (
+                  <ToDoItem key={index} {...item} />
+                ))}
+              </section>
+            )}
 
+            {activeTab === "completed" && (
+              <section className="flex flex-col gap-4">
+                <h3 className="text-xl md:text-3xl font-semibold">Completed</h3>
+                {completedItems.map((item, index) => (
+                  <ToDoItem key={index} {...item} />
+                ))}
+              </section>
+            )}
+          </div>
+        </div>
       </div>
     </AppLayout>
   );
-};
+}
