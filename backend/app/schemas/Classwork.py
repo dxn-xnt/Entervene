@@ -24,6 +24,7 @@ class ClassworkUpdate(BaseModel):
     classwork_category: Optional[str] = None
     total_points: Optional[float] = None
     is_published: Optional[bool] = None
+    lesson_ids: Optional[list[int]] = None
 
 
 class ClassworkAttachmentResponse(BaseModel):
@@ -37,6 +38,7 @@ class ClassworkAttachmentResponse(BaseModel):
 class CwAssignmentRow(BaseModel):
     classwork_assignment_id: int
     classwork_id: int
+    class_id: int
     title: Optional[str] = None
     classwork_type: Optional[str] = None
     due_date: Optional[datetime] = None
@@ -73,6 +75,7 @@ class ClassworkAssignRequest(BaseModel):
 
 
 class ClassworkAssignmentResponse(BaseModel):
+    """Class-specific classwork view used by student and teacher assignment pages."""
     classwork_assignment_id: int
     classwork_id: int
     class_id: int
@@ -85,6 +88,8 @@ class ClassworkAssignmentResponse(BaseModel):
     total_points: Optional[float]
     due_date: Optional[datetime]
     is_published: bool
+    is_locked: Optional[bool] = False
+    max_attempts: Optional[int] = 1
     teacher_name: Optional[str] = None
     attachments: list[ClassworkAttachmentResponse] = []
     assignments: Optional[list[CwAssignmentRow]] = None
