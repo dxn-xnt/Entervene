@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import SubmissionForm from "@/components/SubmissionForm";
 import SubmissionViewer from "@/components/SubmissionViewer";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
-import { API_URL } from "@/lib/api";
+import { API_URL, apiFetch } from "@/lib/api";
 
 interface Attachment {
   classwork_attachment_id: number;
@@ -15,6 +15,7 @@ interface Attachment {
 
 interface Submission {
   submission_id: number;
+  classwork_assignment_id: number;
   status: string;
   submitted_at?: string;
   grade?: number;
@@ -64,26 +65,16 @@ export default function SubjectClassworkTab({
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (classId && subjectId) {
-      fetchClassworks();
-    }
-  }, [classId, subjectId]);
-
-  const fetchClassworks = async () => {
+  const fetchClassworks = useCallback(async () => {
+    // Load assigned classworks, then merge in the student's current submission state.
     if (!classId || !subjectId) return;
 
     setIsLoading(true);
     setError("");
 
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/v1/classwork-assignments/class/${classId}/subject/${subjectId}`,
-        {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-        }
+      const response = await apiFetch(
+        `/api/v1/classwork-assignments/class/${classId}/subject/${subjectId}`
       );
 
       if (!response.ok) {
@@ -93,10 +84,15 @@ export default function SubjectClassworkTab({
       const data = await response.json();
       setClassworks(data);
 
-      // Fetch submissions
       const submissionsData: Record<number, Submission> = {};
-      for (const cw of data) {
-        const sub = await fetchSubmission(cw.classwork_assignment_id);
+      const submissionsResponse = await apiFetch("/api/v1/submissions/my-submissions");
+      const allSubmissions = submissionsResponse.ok
+        ? ((await submissionsResponse.json()) as Submission[])
+        : [];
+      for (const cw of data as ClassworkAssignment[]) {
+        const sub = allSubmissions.find(
+          (submission) => submission.classwork_assignment_id === cw.classwork_assignment_id
+        );
         if (sub) {
           submissionsData[cw.classwork_assignment_id] = sub;
         }
@@ -107,24 +103,23 @@ export default function SubjectClassworkTab({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [classId, subjectId]);
+
+  useEffect(() => {
+    if (classId && subjectId) {
+      fetchClassworks();
+    }
+  }, [classId, subjectId, fetchClassworks]);
 
   const fetchSubmission = async (
     assignmentId: number
   ): Promise<Submission | null> => {
+    // The backend exposes submissions as a student list; pick the matching assignment.
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/v1/submissions/assignment/${assignmentId}/submit`,
-        {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-        }
-      );
-
-      if (response.ok) {
-        return await response.json();
-      }
+      const response = await apiFetch("/api/v1/submissions/my-submissions");
+      if (!response.ok) return null;
+      const data = (await response.json()) as Submission[];
+      return data.find((submission) => submission.classwork_assignment_id === assignmentId) ?? null;
     } catch (err) {
       console.error("Error fetching submission:", err);
     }
@@ -139,14 +134,10 @@ export default function SubjectClassworkTab({
         formData.append("files", file);
       });
 
-      const response = await fetch(
-        `http://localhost:8000/api/v1/submissions/assignment/${assignmentId}/submit`,
-        {
-          method: "POST",
-          credentials: "include",
-          body: formData,
-        }
-      );
+      const response = await apiFetch(`/api/v1/submissions/assignment/${assignmentId}/submit`, {
+        method: "POST",
+        body: formData,
+      });
 
       if (!response.ok) {
         throw new Error("Failed to submit assignment");
@@ -170,15 +161,12 @@ export default function SubjectClassworkTab({
   const handleDeleteSubmission = async (
     assignmentId: number
   ) => {
+    // Backend clears files but keeps attempt history, so max attempts stay enforced.
     setDeletingId(assignmentId);
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/v1/submissions/assignment/${assignmentId}/submit`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        }
-      );
+      const response = await apiFetch(`/api/v1/submissions/assignment/${assignmentId}/submit`, {
+        method: "DELETE",
+      });
 
       if (!response.ok) {
         throw new Error("Failed to delete submission");

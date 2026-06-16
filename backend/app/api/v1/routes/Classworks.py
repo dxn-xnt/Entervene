@@ -1,10 +1,12 @@
 # app/api/v1/routes/Classworks.py
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Query
+import json
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Query, Form
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
 from typing import List, Optional, cast
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from app.db.Session import get_db
@@ -85,6 +87,120 @@ def _att_resp(a):
     )
 
 
+def _normalize_uploaded_path(info: dict) -> dict:
+    raw_path = info.get("file_path", "")
+    normalized = raw_path.replace("\\", "/")
+    try:
+        uploads_idx = next(i for i, part in enumerate(Path(normalized).parts) if part == "uploads")
+        info["file_path"] = str(Path(*Path(normalized).parts[uploads_idx:]))
+    except StopIteration:
+        pass
+    return info
+
+
+def _validate_classwork_values(total_points: Optional[float] = None, max_attempts: Optional[int] = None) -> None:
+    """Keep classwork scoring and retry limits valid before writing rows."""
+    if total_points is not None and total_points <= 0:
+        raise HTTPException(status_code=400, detail="Total points must be greater than zero")
+    if max_attempts is not None and max_attempts <= 0:
+        raise HTTPException(status_code=400, detail="Max attempts must be greater than zero")
+
+
+def _validate_schedule(
+    publish_date: Optional[datetime],
+    due_date: Optional[datetime],
+    lock_date: Optional[datetime],
+) -> None:
+    if publish_date and due_date and publish_date > due_date:
+        raise HTTPException(status_code=400, detail="Publish date must be before or equal to due date")
+    if due_date and lock_date and due_date > lock_date:
+        raise HTTPException(status_code=400, detail="Due date must be before or equal to lock date")
+    if publish_date and lock_date and publish_date > lock_date:
+        raise HTTPException(status_code=400, detail="Publish date must be before or equal to lock date")
+
+
+def _dedupe_ids(ids: Optional[list[int]]) -> list[int]:
+    return list(dict.fromkeys(ids or []))
+
+
+def _parse_id_list(raw: Optional[str], field_name: str) -> list[int]:
+    if not raw:
+        return []
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail=f"{field_name} must be a JSON array")
+    if not isinstance(value, list) or not all(isinstance(item, int) for item in value):
+        raise HTTPException(status_code=400, detail=f"{field_name} must be a JSON array of IDs")
+    return _dedupe_ids(value)
+
+
+def _ensure_subject_owner(db: Session, staff_id: str, subject_id: int) -> None:
+    """Teachers can only create or assign classwork for active subject loads."""
+    load = db.query(SubjectLoad).filter(
+        SubjectLoad.staff_id == staff_id,
+        SubjectLoad.subject_id == subject_id,
+        SubjectLoad.status == "active",
+    ).first()
+    if not load:
+        raise HTTPException(status_code=403, detail="You are not assigned to this subject")
+
+
+def _ensure_lessons_owned(db: Session, staff_id: str, subject_id: int, lesson_ids: list[int]) -> None:
+    """Linked lessons must belong to the same teacher and subject as the classwork."""
+    if not lesson_ids:
+        return
+    lessons = db.query(Lesson).filter(
+        Lesson.lesson_id.in_(lesson_ids),
+        Lesson.subject_id == subject_id,
+        Lesson.created_by_staff_id == staff_id,
+    ).all()
+    if len(lessons) != len(lesson_ids):
+        raise HTTPException(status_code=400, detail="One or more lessons cannot be linked to this classwork")
+
+
+def _ensure_class_targets(db: Session, staff_id: str, subject_id: int, class_ids: list[int]) -> None:
+    """Class assignment targets must match the teacher's active subject loads."""
+    if not class_ids:
+        raise HTTPException(status_code=400, detail="Select at least one class target")
+    valid_class_ids = {
+        row[0]
+        for row in db.query(SubjectLoad.class_id).filter(
+            SubjectLoad.staff_id == staff_id,
+            SubjectLoad.subject_id == subject_id,
+            SubjectLoad.class_id.in_(class_ids),
+            SubjectLoad.status == "active",
+        ).all()
+    }
+    if set(class_ids) != valid_class_ids:
+        raise HTTPException(status_code=403, detail="Not assigned to one or more class/subject targets")
+
+
+def _cleanup_saved_files(file_paths: list[str]) -> None:
+    for file_path in file_paths:
+        delete_file(file_path)
+
+
+def _aware_utc(value: Optional[datetime]) -> Optional[datetime]:
+    if value and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _assignment_is_available(ca: ClassworkAssignment, now: Optional[datetime] = None) -> bool:
+    """Students can see an assignment only after it is published and released."""
+    if not ca.is_published:
+        return False
+    publish_date = _aware_utc(ca.publish_date)
+    return not publish_date or (now or datetime.now(timezone.utc)) >= publish_date
+
+
+def _assignment_is_locked(ca: ClassworkAssignment, now: Optional[datetime] = None) -> bool:
+    """Treat elapsed lock dates the same as an explicit locked flag."""
+    lock_date = _aware_utc(ca.lock_date)
+    return bool(ca.is_locked or (lock_date and (now or datetime.now(timezone.utc)) >= lock_date))
+
+
 def _build_cw(cw, db):
     subj = cw.subject
     staff = cw.staff
@@ -95,6 +211,7 @@ def _build_cw(cw, db):
         assignments_data.append({
             "classwork_assignment_id": a.classwork_assignment_id,
             "classwork_id": a.classwork_id,
+            "class_id": a.class_id,
             "title": cls.section_name if cls else "Unknown Section",
             "classwork_type": cw.classwork_type,
             "due_date": a.due_date,
@@ -138,14 +255,13 @@ def _authorize_classwork_access(
                 .join(StudentClass, StudentClass.class_id == ClassworkAssignment.class_id)
                 .filter(
                     ClassworkAssignment.classwork_id == cw.classwork_id,
-                    ClassworkAssignment.is_published == True,
                     StudentClass.student_id == student.student_id,
                     StudentClass.enrollment_status == "enrolled",
                 )
             )
             if class_id is not None:
                 query = query.filter(ClassworkAssignment.class_id == class_id)
-            if query.first():
+            if any(_assignment_is_available(assignment) for assignment in query.all()):
                 return
     raise HTTPException(status_code=403, detail="Access denied")
 
@@ -162,7 +278,7 @@ def _authorize_assignment_access(
         staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
         if staff and cw.created_by_staff_id == staff.staff_id:
             return
-    if role == "student" and assignment.is_published:
+    if role == "student" and _assignment_is_available(assignment):
         student = db.query(Student).filter(Student.user_id == user_id).first()
         if student and db.query(StudentClass).filter(
             StudentClass.student_id == student.student_id,
@@ -175,28 +291,97 @@ def _authorize_assignment_access(
 
 @router.post("/", response_model=ClassworkResponse)
 def create_classwork(body: ClassworkCreate, staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db)):
-    load = db.query(SubjectLoad).filter(SubjectLoad.staff_id == staff_id, SubjectLoad.subject_id == body.subject_id, SubjectLoad.status == "active").first()
-    if not load:
-        raise HTTPException(status_code=403, detail="You are not assigned to this subject")
-    lesson_ids = list(dict.fromkeys(body.lesson_ids or []))
-    if lesson_ids:
-        lessons = db.query(Lesson).filter(
-            Lesson.lesson_id.in_(lesson_ids),
-            Lesson.subject_id == body.subject_id,
-            Lesson.created_by_staff_id == staff_id,
-        ).all()
-        if len(lessons) != len(lesson_ids):
-            raise HTTPException(status_code=400, detail="One or more lessons cannot be linked to this classwork")
+    _validate_classwork_values(total_points=body.total_points)
+    _ensure_subject_owner(db, staff_id, body.subject_id)
+    lesson_ids = _dedupe_ids(body.lesson_ids)
+    _ensure_lessons_owned(db, staff_id, body.subject_id, lesson_ids)
 
     cw = Classwork(title=body.title, description=body.description, instructions=body.instructions,
                    classwork_type=body.classwork_type, classwork_category=body.classwork_category,
                    total_points=body.total_points, subject_id=body.subject_id,
                    is_published=body.is_published, created_by_staff_id=staff_id)
-    db.add(cw); db.flush()
-    for lesson_id in lesson_ids:
-        db.add(ClassworkLesson(classwork_id=cw.classwork_id, lesson_id=lesson_id))
-    db.commit(); db.refresh(cw)
+    try:
+        db.add(cw); db.flush()
+        for lesson_id in lesson_ids:
+            db.add(ClassworkLesson(classwork_id=cw.classwork_id, lesson_id=lesson_id))
+        db.commit(); db.refresh(cw)
+    except Exception:
+        db.rollback()
+        raise
     return _build_cw(cw, db)
+
+
+@router.post("/with-assignments", response_model=ClassworkResponse)
+async def create_classwork_with_assignments(
+    title: str = Form(...),
+    classwork_type: str = Form(...),
+    subject_id: int = Form(...),
+    description: Optional[str] = Form(None),
+    instructions: Optional[str] = Form(None),
+    classwork_category: Optional[str] = Form(None),
+    total_points: Optional[float] = Form(100),
+    is_published: bool = Form(False),
+    class_ids: str = Form(...),
+    lesson_ids: Optional[str] = Form(None),
+    publish_date: Optional[datetime] = Form(None),
+    due_date: Optional[datetime] = Form(None),
+    lock_date: Optional[datetime] = Form(None),
+    max_attempts: Optional[int] = Form(1),
+    files: Optional[List[UploadFile]] = File(None),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    """Atomic navbar wizard endpoint: create, link, attach, and assign together."""
+    selected_class_ids = _parse_id_list(class_ids, "class_ids")
+    selected_lesson_ids = _parse_id_list(lesson_ids, "lesson_ids")
+    _validate_classwork_values(total_points=total_points, max_attempts=max_attempts)
+    _validate_schedule(publish_date, due_date, lock_date)
+    _ensure_subject_owner(db, staff_id, subject_id)
+    _ensure_lessons_owned(db, staff_id, subject_id, selected_lesson_ids)
+    _ensure_class_targets(db, staff_id, subject_id, selected_class_ids)
+
+    saved_paths: list[str] = []
+    try:
+        cw = Classwork(
+            title=title.strip(),
+            description=description,
+            instructions=instructions,
+            classwork_type=classwork_type,
+            classwork_category=classwork_category,
+            total_points=total_points,
+            subject_id=subject_id,
+            is_published=is_published,
+            created_by_staff_id=staff_id,
+        )
+        db.add(cw); db.flush()
+
+        for lesson_id in selected_lesson_ids:
+            db.add(ClassworkLesson(classwork_id=cw.classwork_id, lesson_id=lesson_id))
+
+        for cid in selected_class_ids:
+            db.add(ClassworkAssignment(
+                classwork_id=cw.classwork_id,
+                class_id=cid,
+                assigned_by_staff_id=staff_id,
+                publish_date=publish_date,
+                due_date=due_date,
+                lock_date=lock_date,
+                max_attempts=max_attempts,
+                is_published=is_published,
+            ))
+
+        for upload in files or []:
+            info = _normalize_uploaded_path(await save_file(upload, "classworks"))
+            saved_paths.append(info["file_path"])
+            db.add(ClassworkAttachment(classwork_id=cw.classwork_id, **info))
+
+        db.commit()
+        db.refresh(cw)
+        return _build_cw(cw, db)
+    except Exception:
+        db.rollback()
+        _cleanup_saved_files(saved_paths)
+        raise
 
 
 @router.get("/my-classworks", response_model=List[ClassworkResponse])
@@ -273,8 +458,22 @@ def update_classwork(classwork_id: int, body: ClassworkUpdate, staff_id: str = D
         .first()
     )
     if not cw: raise HTTPException(status_code=404, detail="Classwork not found or not yours")
-    for f, v in body.model_dump(exclude_unset=True).items(): setattr(cw, f, v)
-    db.commit(); db.refresh(cw)
+    values = body.model_dump(exclude_unset=True)
+    _validate_classwork_values(total_points=values.get("total_points"))
+    lesson_ids = values.pop("lesson_ids", None)
+    if lesson_ids is not None:
+        lesson_ids = _dedupe_ids(lesson_ids)
+        _ensure_lessons_owned(db, staff_id, cw.subject_id, lesson_ids)
+    try:
+        for f, v in values.items(): setattr(cw, f, v)
+        if lesson_ids is not None:
+            db.query(ClassworkLesson).filter(ClassworkLesson.classwork_id == classwork_id).delete()
+            for lesson_id in lesson_ids:
+                db.add(ClassworkLesson(classwork_id=classwork_id, lesson_id=lesson_id))
+        db.commit(); db.refresh(cw)
+    except Exception:
+        db.rollback()
+        raise
     return _build_cw(cw, db)
 
 
@@ -296,7 +495,7 @@ async def upload_cw_attachment(
 ):
     cw = db.query(Classwork).filter(Classwork.classwork_id == classwork_id, Classwork.created_by_staff_id == staff_id).first()
     if not cw: raise HTTPException(status_code=404, detail="Classwork not found or not yours")
-    info = await save_file(file, "classworks")
+    info = _normalize_uploaded_path(await save_file(file, "classworks"))
 
     # Normalize file_path to always store relative (e.g. uploads/classworks/abc123.pdf)
     # so downloads work regardless of machine or OS.
@@ -308,8 +507,13 @@ async def upload_cw_attachment(
     except StopIteration:
         pass  # Already relative or unexpected format — keep as-is
 
-    att = ClassworkAttachment(classwork_id=classwork_id, **info)
-    db.add(att); db.commit(); db.refresh(att)
+    try:
+        att = ClassworkAttachment(classwork_id=classwork_id, **info)
+        db.add(att); db.commit(); db.refresh(att)
+    except Exception:
+        db.rollback()
+        delete_file(info["file_path"])
+        raise
     return _att_resp(att)
 
 
@@ -370,27 +574,23 @@ def download_classwork_attachment(
 def assign_classwork(classwork_id: int, body: ClassworkAssignRequest, staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db)):
     cw = db.query(Classwork).filter(Classwork.classwork_id == classwork_id, Classwork.created_by_staff_id == staff_id).first()
     if not cw: raise HTTPException(status_code=404, detail="Classwork not found or not yours")
-    class_ids = list(dict.fromkeys(body.class_ids))
-    valid_class_ids = {
-        row[0]
-        for row in db.query(SubjectLoad.class_id).filter(
-            SubjectLoad.staff_id == staff_id,
-            SubjectLoad.subject_id == cw.subject_id,
-            SubjectLoad.class_id.in_(class_ids),
-            SubjectLoad.status == "active",
-        ).all()
-    }
-    if set(class_ids) != valid_class_ids:
-        raise HTTPException(status_code=403, detail="Not assigned to one or more class/subject targets")
+    class_ids = _dedupe_ids(body.class_ids)
+    _validate_classwork_values(max_attempts=body.max_attempts)
+    _validate_schedule(body.publish_date, body.due_date, body.lock_date)
+    _ensure_class_targets(db, staff_id, cw.subject_id, class_ids)
     created = []
-    for cid in class_ids:
-        if db.query(ClassworkAssignment).filter(ClassworkAssignment.classwork_id == classwork_id, ClassworkAssignment.class_id == cid).first():
-            continue
-        a = ClassworkAssignment(classwork_id=classwork_id, class_id=cid, assigned_by_staff_id=staff_id,
-                                publish_date=body.publish_date, due_date=body.due_date, lock_date=body.lock_date,
-                                max_attempts=body.max_attempts, is_published=body.is_published)
-        db.add(a); created.append(cid)
-    db.commit()
+    try:
+        for cid in class_ids:
+            if db.query(ClassworkAssignment).filter(ClassworkAssignment.classwork_id == classwork_id, ClassworkAssignment.class_id == cid).first():
+                continue
+            a = ClassworkAssignment(classwork_id=classwork_id, class_id=cid, assigned_by_staff_id=staff_id,
+                                    publish_date=body.publish_date, due_date=body.due_date, lock_date=body.lock_date,
+                                    max_attempts=body.max_attempts, is_published=body.is_published)
+            db.add(a); created.append(cid)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {"message": f"Assigned to {len(created)} class(es)", "class_ids": created}
 
 
@@ -408,6 +608,8 @@ def get_cw_for_class(class_id: int, subject_id: int, student=Depends(get_student
     now = datetime.now(timezone.utc)
     
     for ca, cw, cls in rows:
+        if not _assignment_is_available(ca, now):
+            continue
         sub = db.query(StudentSubmission).filter(StudentSubmission.classwork_assignment_id == ca.classwork_assignment_id, StudentSubmission.student_id == student.student_id).first()
         staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == cw.created_by_staff_id).first()
         
@@ -436,6 +638,7 @@ def get_cw_for_class(class_id: int, subject_id: int, student=Depends(get_student
             description=cw.description, instructions=cw.instructions, classwork_type=cw.classwork_type,
             classwork_category=cw.classwork_category, total_points=float(cw.total_points) if cw.total_points else None,
             due_date=ca.due_date, is_published=ca.is_published,
+            is_locked=_assignment_is_locked(ca, now), max_attempts=ca.max_attempts,
             teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
             attachments=[_att_resp(a) for a in cw.attachments],
             submission_status=display_status,
@@ -459,6 +662,7 @@ def get_cw_assignment(assignment_id: int, current_user: dict = Depends(require_r
         classwork_type=cw.classwork_type, classwork_category=cw.classwork_category,
         total_points=float(cw.total_points) if cw.total_points else None,
         due_date=ca.due_date, is_published=ca.is_published,
+        is_locked=_assignment_is_locked(ca), max_attempts=ca.max_attempts,
         teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
         attachments=[_att_resp(a) for a in cw.attachments],
     )
@@ -521,6 +725,8 @@ def get_teacher_assignments_for_class_subject(
                 total_points=float(cw.total_points) if cw.total_points else None,
                 due_date=ca.due_date,
                 is_published=ca.is_published,
+                is_locked=_assignment_is_locked(ca),
+                max_attempts=ca.max_attempts,
                 teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
                 attachments=[_att_resp(a) for a in cw.attachments],
                 submission_status=None,
@@ -561,6 +767,8 @@ def get_student_assignments(student=Depends(get_student_record), db: Session = D
     graded = []
 
     for ca, cw, subj, staff in assignments:
+        if not _assignment_is_available(ca):
+            continue
         submission = db.query(StudentSubmission).filter(
             StudentSubmission.classwork_assignment_id == ca.classwork_assignment_id,
             StudentSubmission.student_id == student.student_id
@@ -580,7 +788,7 @@ def get_student_assignments(student=Depends(get_student_record), db: Session = D
             "due_date": ca.due_date.isoformat() if ca.due_date else None,
             "lock_date": ca.lock_date.isoformat() if ca.lock_date else None,
             "is_published": ca.is_published,
-            "is_locked": ca.is_locked,
+            "is_locked": _assignment_is_locked(ca),
             "max_attempts": ca.max_attempts,
             "submission_status": submission.status if submission else None,
             "grade": float(submission.grade) if submission and submission.grade else None,
