@@ -2,6 +2,7 @@ import { useState } from "react";
 import Tabs from "../../components/Tabs";
 import NotificationCard from "../../components/StudentUIComponents/NotificationCard";
 import AppLayout from "@/layouts/app-layout";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 const tabs = [
   { id: "all", label: "All" },
@@ -55,34 +56,52 @@ const Notifications = () => {
 
   return (
     <AppLayout>
-      <header className="px-5 py-5 flex flex-row justify-between">
-        <h1 className="text-4xl font-semibold">Notifications</h1>
-        <button className="bg-[#7ABA78] text-black rounded px-5 py-2 border">
-          Mark all as read
-        </button>
-      </header>
-      <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-      <main className="px-5 py-5 flex flex-col gap-5">
-        {/* Classwork Section */}
-        {(activeTab === "all" || activeTab === "classworks") && (
-          <section className="flex flex-col gap-3">
-            <h2 className="text-3xl font-semibold">Classwork</h2>
-            {classworkCards.map((card, index) => (
-              <NotificationCard key={index} {...card} />
-            ))}
-          </section>
-        )}
+      <div className="flex flex-1 flex-col overflow-x-hidden">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
+            <header className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="md:hidden" />
+                <h1 className="text-2xl md:text-4xl font-semibold">
+                  Notifications
+                </h1>
+              </div>
+              <button className="flex items-center gap-1.5 rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-semibold text-black shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000]">
+                <span className="hidden sm:inline">Mark all as read</span>
+                <span className="sm:hidden">Read All</span>
+              </button>
+            </header>
 
-        {/* Announcement Section */}
-        {(activeTab === "all" || activeTab === "announcements") && (
-          <section className="flex flex-col gap-3">
-            <h2 className="text-3xl font-semibold">Announcement</h2>
-            {announcementCards.map((card, index) => (
-              <NotificationCard key={index} {...card} />
-            ))}
-          </section>
-        )}
-      </main>
+            <div className="-mx-4 md:-mx-6">
+              <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+            </div>
+
+            <div className="flex flex-col gap-5">
+              {(activeTab === "all" || activeTab === "classworks") && (
+                <section className="flex flex-col gap-3">
+                  <h2 className="text-xl md:text-3xl font-semibold">
+                    Classwork
+                  </h2>
+                  {classworkCards.map((card, index) => (
+                    <NotificationCard key={index} {...card} />
+                  ))}
+                </section>
+              )}
+
+              {(activeTab === "all" || activeTab === "announcements") && (
+                <section className="flex flex-col gap-3">
+                  <h2 className="text-xl md:text-3xl font-semibold">
+                    Announcement
+                  </h2>
+                  {announcementCards.map((card, index) => (
+                    <NotificationCard key={index} {...card} />
+                  ))}
+                </section>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </AppLayout>
   );
 };
