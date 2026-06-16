@@ -14,7 +14,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
 import { API_URL, apiFetch } from "@/lib/api";
@@ -67,6 +66,47 @@ type TeacherClassLoad = {
   subject_codename?: string | null;
   class_id: number;
   section_name: string;
+};
+
+type TrackingStudent = {
+  student_id: string;
+  student_name: string;
+  status: string;
+  submission_id?: number | null;
+  grade?: number | null;
+  attachment_count?: number;
+};
+
+type AssignmentTracking = {
+  classwork_assignment_id: number;
+  classwork_id: number;
+  classwork_title?: string | null;
+  total_students: number;
+  submitted_count: number;
+  missing_count: number;
+  submitted: TrackingStudent[];
+  missing: TrackingStudent[];
+};
+
+type SubmissionAttachment = {
+  submission_attachment_id: number;
+  file_name: string;
+  file_type?: string | null;
+  file_size: number;
+  uploaded_at?: string | null;
+};
+
+type TeacherSubmissionDetail = {
+  submission_id: number;
+  student_id: string;
+  student_name?: string | null;
+  classwork_assignment_id: number;
+  status: string;
+  grade?: number | null;
+  feedback?: string | null;
+  submitted_at?: string | null;
+  attachments: SubmissionAttachment[];
+  total_points?: number | null;
 };
 
 type CreateDraft = {
@@ -170,6 +210,20 @@ function fileExtension(fileName: string) {
   return suffix ? `.${suffix}` : "";
 }
 
+function scoreBand(points: number | null | undefined, ratio: number) {
+  if (!points) return "0 pts";
+  return `${Math.max(1, Math.round(points * ratio))} pts`;
+}
+
+function submissionStatusLabel(status?: string | null) {
+  if (status === "graded") return "Graded";
+  if (status === "late") return "Late submission";
+  if (status === "submitted") return "On-time submission";
+  if (status === "pending") return "Ungraded";
+  if (status === "not_submitted") return "Missing";
+  return "Ungraded";
+}
+
 function ClassworkCard({
   item,
   onOpen,
@@ -216,7 +270,6 @@ function ClassworkCard({
 }
 
 export default function Classworks() {
-  const navigate = useNavigate();
   const [items, setItems] = useState<TeacherClasswork[]>([]);
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("all");
@@ -234,6 +287,19 @@ export default function Classworks() {
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [selected, setSelected] = useState<TeacherClasswork | null>(null);
+  const [tracking, setTracking] = useState<AssignmentTracking | null>(null);
+  const [isTrackingLoading, setIsTrackingLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
+  const [submissionSort, setSubmissionSort] = useState<"name" | "score">("name");
+  const [selectedStudent, setSelectedStudent] = useState<TrackingStudent | null>(null);
+  const [selectedSubmissionDetail, setSelectedSubmissionDetail] = useState<TeacherSubmissionDetail | null>(null);
+  const [isSubmissionLoading, setIsSubmissionLoading] = useState(false);
+  const [submissionDetailError, setSubmissionDetailError] = useState("");
+  const [gradeError, setGradeError] = useState("");
+  const [gradeDraft, setGradeDraft] = useState("");
+  const [feedbackDraft, setFeedbackDraft] = useState("");
+  const [isPostingGrade, setIsPostingGrade] = useState(false);
+  const [gradeSuccess, setGradeSuccess] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -470,28 +536,424 @@ export default function Classworks() {
     }
   };
 
+  const openClassworkDetail = async (item: TeacherClasswork) => {
+    setSelected(item);
+    setTracking(null);
+    setDetailError("");
+
+    const assignmentId = item.assignments?.[0]?.classwork_assignment_id;
+    if (!assignmentId) return;
+
+    setIsTrackingLoading(true);
+    try {
+      const response = await apiFetch(`/api/v1/submissions/assignment/${assignmentId}/tracking`);
+      if (!response.ok) {
+        throw new Error("Unable to load student submissions.");
+      }
+      setTracking((await response.json()) as AssignmentTracking);
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Unable to load student submissions.");
+    } finally {
+      setIsTrackingLoading(false);
+    }
+  };
+
+  const closeClassworkDetail = () => {
+    setSelected(null);
+    setTracking(null);
+    setDetailError("");
+    setSelectedStudent(null);
+    setSelectedSubmissionDetail(null);
+    setSubmissionDetailError("");
+    setGradeError("");
+    setGradeSuccess("");
+  };
+
+  const openStudentSubmission = async (student: TrackingStudent) => {
+    // Opens the teacher review view for a single student's submission.
+    setSelectedStudent(student);
+    setSelectedSubmissionDetail(null);
+    setSubmissionDetailError("");
+    setGradeError("");
+    setGradeSuccess("");
+    setGradeDraft(student.grade !== null && student.grade !== undefined ? String(student.grade) : "");
+    setFeedbackDraft("");
+
+    if (!student.submission_id) return;
+
+    setIsSubmissionLoading(true);
+    try {
+      const response = await apiFetch(`/api/v1/submissions/${student.submission_id}/detail`);
+      if (!response.ok) {
+        throw new Error("Unable to load submission detail.");
+      }
+      const detail = (await response.json()) as TeacherSubmissionDetail;
+      setSelectedSubmissionDetail(detail);
+      setGradeDraft(detail.grade !== null && detail.grade !== undefined ? String(detail.grade) : "");
+      setFeedbackDraft(detail.feedback ?? "");
+    } catch (err) {
+      setSubmissionDetailError(err instanceof Error ? err.message : "Unable to load submission detail.");
+    } finally {
+      setIsSubmissionLoading(false);
+    }
+  };
+
+  const closeStudentSubmission = () => {
+    setSelectedStudent(null);
+    setSelectedSubmissionDetail(null);
+    setSubmissionDetailError("");
+  };
+
+  const postGrade = async () => {
+    // Grade endpoint doubles as update, so teachers can correct scores/feedback.
+    if (!selectedSubmissionDetail || !selected) return;
+    const grade = Number(gradeDraft);
+    if (!Number.isFinite(grade) || grade < 0) {
+      setGradeError("Enter a valid score.");
+      return;
+    }
+    if (selected.total_points !== null && selected.total_points !== undefined && grade > selected.total_points) {
+      setGradeError(`Score cannot be greater than ${selected.total_points}.`);
+      return;
+    }
+
+    setIsPostingGrade(true);
+    setSubmissionDetailError("");
+    setGradeError("");
+    setGradeSuccess("");
+    try {
+      const response = await apiFetch(`/api/v1/submissions/${selectedSubmissionDetail.submission_id}/grade`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grade, feedback: feedbackDraft.trim() || null }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || "Unable to post grade.");
+      }
+      const updated = (await response.json()) as TeacherSubmissionDetail;
+      setSelectedSubmissionDetail(updated);
+      setSelectedStudent((current) =>
+        current ? { ...current, status: updated.status, grade: updated.grade ?? null } : current
+      );
+      setTracking((current) => {
+        if (!current) return current;
+        const updateRow = (row: TrackingStudent) =>
+          row.submission_id === updated.submission_id
+            ? { ...row, status: updated.status, grade: updated.grade ?? null }
+            : row;
+        return {
+          ...current,
+          submitted: current.submitted.map(updateRow),
+          missing: current.missing.map(updateRow),
+        };
+      });
+      setGradeSuccess("Grade and feedback saved.");
+    } catch (err) {
+      setGradeError(err instanceof Error ? err.message : "Unable to post grade.");
+    } finally {
+      setIsPostingGrade(false);
+    }
+  };
+
   const cycleSort = () => {
     setSortMode((current) =>
       current === "newest" ? "oldest" : current === "oldest" ? "title" : "newest"
     );
   };
 
-  const manageClasswork = (item: TeacherClasswork) => {
-    const firstAssignment = item.assignments?.[0];
-    const matchingLoad = firstAssignment
-      ? loads.find(
-          (load) => load.class_id === firstAssignment.class_id && load.subject_id === item.subject_id
-        )
-      : loads.find((load) => load.subject_id === item.subject_id);
-    if (matchingLoad) {
-      navigate(`/teacher/classes/${matchingLoad.class_id}/subjects/${matchingLoad.subject_id}`);
-    }
-  };
-
   const selectedTypeOption = createOptions.find((option) => option.type === selectedType);
+  const selectedAssignment = selected?.assignments?.[0] ?? null;
+  const trackingRows = useMemo(() => {
+    const rows = [...(tracking?.submitted ?? []), ...(tracking?.missing ?? [])];
+    return rows.sort((a, b) => {
+      if (submissionSort === "score") {
+        return (b.grade ?? -1) - (a.grade ?? -1);
+      }
+      return a.student_name.localeCompare(b.student_name);
+    });
+  }, [submissionSort, tracking]);
 
   return (
     <AppLayout>
+      {selected ? (
+        <main className="min-h-screen bg-[#F8F6ED] px-5 py-5">
+          <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-black/30 pb-4 text-lg font-bold">
+            <button
+              type="button"
+              onClick={closeClassworkDetail}
+              className="rounded-full p-1 hover:bg-black/10"
+              aria-label="Back to classworks"
+            >
+              <X size={20} />
+            </button>
+            <span>{selectedAssignment?.title || selected.subject_name || "Classwork"}</span>
+            <span className="text-black/50">›</span>
+            <span>...</span>
+            <span className="text-black/50">›</span>
+            <span>{selectedStudent?.student_name || selected.title}</span>
+          </div>
+
+          <section className="mx-auto max-w-5xl space-y-4">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={selectedStudent ? closeStudentSubmission : closeClassworkDetail}
+                className="rounded-full border border-transparent p-1 hover:border-black"
+                aria-label="Back"
+              >
+                ‹
+              </button>
+              <FileText size={24} />
+              <h1 className="text-3xl font-bold">{selected.title}</h1>
+            </div>
+
+            {selectedStudent ? (
+              // Student-level review view shown after clicking a name.
+              <>
+                <div className="overflow-hidden rounded-lg border border-black bg-white shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="flex items-center justify-between gap-3 border-b border-black bg-[#F6E9B2] px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h2 className="text-2xl font-bold">{selectedStudent.student_name} Submission</h2>
+                      <span className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium">
+                        {submissionStatusLabel(selectedStudent.status)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeStudentSubmission}
+                      className="rounded border border-black px-2 py-1 text-xs font-bold"
+                    >
+                      Back
+                    </button>
+                  </div>
+                  <div className="min-h-48 p-5">
+                    {isSubmissionLoading ? (
+                      <p className="text-center text-sm font-semibold text-gray-500">Loading submission...</p>
+                    ) : submissionDetailError ? (
+                      <p className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                        {submissionDetailError}
+                      </p>
+                    ) : selectedSubmissionDetail ? (
+                      selectedSubmissionDetail.attachments.length > 0 ? (
+                        <AttachmentDisplay
+                          attachments={selectedSubmissionDetail.attachments.map((attachment) => ({
+                            ...attachment,
+                            file_type: attachment.file_type ?? undefined,
+                          }))}
+                          type="submission"
+                          downloadUrl={(attachmentId) =>
+                            `${API_URL}/api/v1/submissions/${selectedSubmissionDetail.submission_id}/attachments/${attachmentId}/download`
+                          }
+                        />
+                      ) : (
+                        <p className="text-sm font-medium text-gray-500">No submitted files attached.</p>
+                      )
+                    ) : (
+                      <p className="text-sm font-medium text-gray-500">
+                        This student has not submitted work yet.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h2 className="text-xl font-bold">Score & Feedback</h2>
+                    <div className="flex items-center gap-1 rounded border border-black px-2 py-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max={selected.total_points ?? undefined}
+                        value={gradeDraft}
+                        onChange={(event) => {
+                          setGradeDraft(event.target.value);
+                          setGradeError("");
+                          setGradeSuccess("");
+                        }}
+                        disabled={!selectedSubmissionDetail || isPostingGrade}
+                        className="w-12 bg-transparent text-right text-lg font-bold outline-none"
+                        placeholder="0"
+                      />
+                      <span className="text-sm">/{selected.total_points ?? 0}</span>
+                    </div>
+                  </div>
+                  <div className="mb-4 grid gap-3 md:grid-cols-5">
+                    {[
+                      ["Excellent", scoreBand(selected.total_points, 1), "Displays all required components clearly and accurately."],
+                      ["Good", scoreBand(selected.total_points, 0.8), "Most components are present with minor errors."],
+                      ["Fair", scoreBand(selected.total_points, 0.6), "Some required parts are missing or unclear."],
+                      ["Needs Improvement", scoreBand(selected.total_points, 0.4), "Many required elements are missing."],
+                      ["Poor", scoreBand(selected.total_points, 0.2), "Work is incomplete or not submitted."],
+                    ].map(([label, points, description], index) => (
+                      <div
+                        key={label}
+                        className={`rounded-lg border border-black p-3 ${index === 0 ? "bg-[#8BCB88]" : ""}`}
+                      >
+                        <div className="mb-3 flex items-center justify-between gap-2">
+                          <p className="font-bold">{label}</p>
+                          <p className="text-sm font-bold">{points}</p>
+                        </div>
+                        <p className="text-xs">{description}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <label className="block text-sm font-bold">
+                    Comments
+                    <textarea
+                      value={feedbackDraft}
+                      onChange={(event) => {
+                        setFeedbackDraft(event.target.value);
+                        setGradeError("");
+                        setGradeSuccess("");
+                      }}
+                      disabled={!selectedSubmissionDetail || isPostingGrade}
+                      className="mt-2 min-h-20 w-full rounded-lg border border-black px-3 py-2 text-sm outline-none"
+                      placeholder="Write feedback for the student."
+                    />
+                  </label>
+                  {gradeSuccess && (
+                    <p className="mt-3 rounded border border-green-300 bg-green-50 px-3 py-2 text-sm font-semibold text-green-700">
+                      {gradeSuccess}
+                    </p>
+                  )}
+                  {gradeError && (
+                    <p className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                      {gradeError}
+                    </p>
+                  )}
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={postGrade}
+                      disabled={!selectedSubmissionDetail || isPostingGrade}
+                      className="rounded-lg border border-black bg-white px-4 py-2 text-sm font-bold disabled:opacity-50"
+                    >
+                      {isPostingGrade
+                        ? "Saving..."
+                        : selectedSubmissionDetail?.status === "graded"
+                          ? "Update"
+                          : "Post"}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+            <div className="rounded-lg border border-black bg-white p-4 text-sm font-semibold shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+              {selected.instructions || selected.description || "No instructions provided."}
+            </div>
+
+            <div className="rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="font-bold">Attached Files</h2>
+                <span className="rounded-full bg-[#7ABA78] px-3 py-1 text-xs font-bold">
+                  File {selected.attachments.length}
+                </span>
+              </div>
+              {selected.attachments.length > 0 ? (
+                <AttachmentDisplay
+                  attachments={selected.attachments}
+                  type="classwork"
+                  downloadUrl={(attachmentId) =>
+                    `${API_URL}/api/v1/classwork-assignments/classwork/${selected.classwork_id}/attachments/${attachmentId}/download`
+                  }
+                />
+              ) : (
+                <p className="text-sm font-medium text-gray-500">No files attached.</p>
+              )}
+            </div>
+
+            <div className="rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="font-bold">Activity Score</h2>
+                <p className="text-sm font-bold">Total: {selected.total_points ?? 0} pts</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-5">
+                {[
+                  ["Excellent", scoreBand(selected.total_points, 1), "Displays all required components clearly and accurately."],
+                  ["Good", scoreBand(selected.total_points, 0.8), "Most components are present with minor errors."],
+                  ["Fair", scoreBand(selected.total_points, 0.6), "Some required parts are missing or unclear."],
+                  ["Needs Improvement", scoreBand(selected.total_points, 0.4), "Many required elements are missing."],
+                  ["Poor", scoreBand(selected.total_points, 0.2), "Work is incomplete or not submitted."],
+                ].map(([label, points, description]) => (
+                  <div key={label} className="rounded-lg border border-black p-3">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <p className="font-bold">{label}</p>
+                      <p className="text-sm font-bold">{points}</p>
+                    </div>
+                    <p className="text-xs">{description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="text-2xl font-bold">Student's Submissions</h2>
+                <button
+                  type="button"
+                  onClick={() => setSubmissionSort((current) => (current === "name" ? "score" : "name"))}
+                  className="inline-flex items-center gap-2 text-sm font-medium"
+                >
+                  <ArrowUpDown size={16} />
+                  Sort By {submissionSort === "name" ? "Name" : "Score"}
+                </button>
+              </div>
+
+              <div className="overflow-hidden rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                {detailError && (
+                  <div className="border-b border-black bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                    {detailError}
+                  </div>
+                )}
+                {isTrackingLoading ? (
+                  <p className="px-4 py-6 text-center text-sm font-semibold text-gray-500">
+                    Loading submissions...
+                  </p>
+                ) : trackingRows.length > 0 ? (
+                  trackingRows.map((student) => {
+                    const isGraded = student.status === "graded" || student.grade !== null && student.grade !== undefined;
+                    const scoreLabel = isGraded
+                      ? `${student.grade ?? 0}/${selected.total_points ?? 0}`
+                      : `0/${selected.total_points ?? 0}`;
+                    return (
+                      <div
+                        key={student.student_id}
+                        className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-black px-4 py-3 last:border-b-0"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="grid h-8 w-8 place-items-center rounded-full bg-[#FFD08A] text-xs font-bold">
+                            {student.student_name.slice(0, 1)}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openStudentSubmission(student)}
+                            className="font-bold hover:underline"
+                          >
+                            {student.student_name}
+                          </button>
+                        </div>
+                        <span className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium">
+                          {submissionStatusLabel(isGraded ? "graded" : student.status)}
+                        </span>
+                        <p className="min-w-20 text-right text-sm font-semibold text-gray-700">{scoreLabel}</p>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="px-4 py-6 text-center text-sm font-semibold text-gray-500">
+                    No submissions found for this classwork yet.
+                  </p>
+                )}
+              </div>
+            </div>
+              </>
+            )}
+          </section>
+        </main>
+      ) : (
+        <>
       <header className="border-b border-gray-300 bg-white px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-3xl font-bold">Classwork</h1>
@@ -622,7 +1084,7 @@ export default function Classworks() {
         ) : filteredItems.length > 0 ? (
           <section className="space-y-3">
             {filteredItems.map((item) => (
-              <ClassworkCard key={item.classwork_id} item={item} onOpen={setSelected} />
+              <ClassworkCard key={item.classwork_id} item={item} onOpen={openClassworkDetail} />
             ))}
           </section>
         ) : (
@@ -947,94 +1409,7 @@ export default function Classworks() {
         </div>
       )}
 
-      {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
-          <section className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-black bg-white shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-            <div className="sticky top-0 flex items-start justify-between gap-4 border-b border-black bg-[#F6E9B2] px-5 py-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide">{selected.classwork_type}</p>
-                <h2 className="text-2xl font-bold">{selected.title}</h2>
-                <p className="text-xs font-medium text-gray-600">
-                  {selected.subject_name} | Created {formatDate(selected.created_at)}
-                </p>
-              </div>
-              <button type="button" onClick={() => setSelected(null)}>
-                <X size={19} />
-              </button>
-            </div>
-            <div className="space-y-4 p-5">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-lg border border-black p-3">
-                  <p className="text-xs font-bold uppercase text-gray-500">Status</p>
-                  <p className="font-bold">{selected.is_published ? "Published" : "Draft"}</p>
-                </div>
-                <div className="rounded-lg border border-black p-3">
-                  <p className="text-xs font-bold uppercase text-gray-500">Points</p>
-                  <p className="font-bold">{selected.total_points ?? "Not set"}</p>
-                </div>
-                <div className="rounded-lg border border-black p-3">
-                  <p className="text-xs font-bold uppercase text-gray-500">Sections</p>
-                  <p className="font-bold">{selected.assignments?.length ?? 0}</p>
-                </div>
-              </div>
-
-              {selected.description && (
-                <div>
-                  <h3 className="font-bold">Description</h3>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{selected.description}</p>
-                </div>
-              )}
-              {selected.instructions && (
-                <div>
-                  <h3 className="font-bold">Instructions</h3>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{selected.instructions}</p>
-                </div>
-              )}
-              {!!selected.assignments?.length && (
-                <div>
-                  <h3 className="mb-2 font-bold">Assigned Sections</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {selected.assignments.map((assignment) => (
-                      <span
-                        key={assignment.classwork_assignment_id}
-                        className="rounded-full border border-black bg-[#F6E9B2] px-3 py-1 text-xs font-semibold"
-                      >
-                        {assignment.title || `Class ${assignment.class_id}`}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div>
-                <h3 className="mb-2 font-bold">Materials</h3>
-                <AttachmentDisplay
-                  attachments={selected.attachments}
-                  type="classwork"
-                  downloadUrl={(attachmentId) =>
-                    `${API_URL}/api/v1/classwork-assignments/classwork/${selected.classwork_id}/attachments/${attachmentId}/download`
-                  }
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 border-t border-black px-5 py-4">
-              <button
-                type="button"
-                onClick={() => setSelected(null)}
-                className="rounded-lg border border-black px-4 py-2 text-sm font-bold"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => manageClasswork(selected)}
-                disabled={!loads.some((load) => load.subject_id === selected.subject_id)}
-                className="rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-bold disabled:opacity-50"
-              >
-                Manage in Subject
-              </button>
-            </div>
-          </section>
-        </div>
+        </>
       )}
     </AppLayout>
   );
