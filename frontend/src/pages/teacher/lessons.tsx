@@ -138,9 +138,9 @@ export default function Lessons() {
                   <h1 className="text-2xl md:text-4xl font-semibold">
                     Lessons
                   </h1>
-                  <p className="text-sm text-gray-500">
+                  {/* <p className="text-sm text-gray-500">
                     Manage lessons for your class and subject
-                  </p>
+                  </p> */}
                 </div>
               </div>
               <button
