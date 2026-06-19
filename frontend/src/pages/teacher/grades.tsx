@@ -14,9 +14,9 @@ const Grades = () => {
               <SidebarTrigger className="md:hidden" />
               <div>
                 <h1 className="text-2xl md:text-4xl font-semibold">Grades</h1>
-                <p className="text-sm text-gray-500">
+                {/* <p className="text-sm text-gray-500">
                   Good morning, teacher Dan!
-                </p>
+                </p> */}
               </div>
             </header>
 
