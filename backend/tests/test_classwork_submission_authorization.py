@@ -439,6 +439,66 @@ def test_student_classwork_list_respects_publish_date_and_returns_attempt_lock_m
     assert hidden.json() == []
 
 
+def test_archiving_classwork_with_turned_in_submissions_is_blocked(authz_context):
+    c = authz_context
+
+    response = c["client"].put(
+        f"/api/v1/classwork-assignments/classwork/{c['classwork'].classwork_id}/archive"
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Classwork has turned-in submissions and cannot be archived"
+    c["db"].refresh(c["classwork"])
+    assert c["classwork"].is_archived is False
+
+
+def test_unsubmitted_classwork_archive_preserves_lesson_link_and_hides_normal_lists(authz_context):
+    c = authz_context
+    lesson = Lesson(
+        title="Linked Lesson",
+        subject_id=c["subject"].subject_id,
+        created_by_staff_id=c["owner"].staff_id,
+        is_published=True,
+        is_draft=False,
+    )
+    c["db"].add(lesson)
+    c["db"].flush()
+    c["db"].add(
+        ClassworkLesson(
+            classwork_id=c["classwork"].classwork_id,
+            lesson_id=lesson.lesson_id,
+        )
+    )
+    c["db"].commit()
+    c["submission"].status = "pending"
+    c["db"].commit()
+
+    response = c["client"].put(
+        f"/api/v1/classwork-assignments/classwork/{c['classwork'].classwork_id}/archive"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["is_archived"] is True
+    c["db"].refresh(c["classwork"])
+    c["db"].refresh(lesson)
+    assert c["classwork"].is_archived is True
+    assert lesson.is_archived is False
+    assert c["db"].query(Classwork).filter_by(classwork_id=c["classwork"].classwork_id).count() == 1
+    assert c["db"].query(ClassworkLesson).filter_by(
+        classwork_id=c["classwork"].classwork_id,
+        lesson_id=lesson.lesson_id,
+    ).count() == 1
+
+    assert c["client"].get("/api/v1/classwork-assignments/my-classworks").json() == []
+    _act_as(c, "student", "student")
+    student_list = c["client"].get(
+        f"/api/v1/classwork-assignments/class/{c['allowed_class'].class_id}"
+        f"/subject/{c['subject'].subject_id}"
+    )
+    assert student_list.status_code == 200
+    assert student_list.json() == []
+
+
 def test_delete_resubmit_preserves_attempt_count_and_cannot_bypass_limit(authz_context):
     c = authz_context
     c["assignment"].max_attempts = 1
@@ -521,3 +581,20 @@ def test_attachment_downloads_are_scoped_and_debug_route_is_removed(authz_contex
     assert c["client"].get(
         f"/api/v1/submissions/classwork/{c['classwork'].classwork_id}/debug"
     ).status_code == 404
+
+
+def test_teacher_can_delete_owned_classwork_attachment(authz_context, monkeypatch):
+    c = authz_context
+    deleted_paths = []
+    monkeypatch.setattr(classwork_routes, "delete_file", deleted_paths.append)
+
+    response = c["client"].delete(
+        f"/api/v1/classwork-assignments/classwork/{c['classwork'].classwork_id}"
+        f"/attachments/{c['classwork_attachment'].classwork_attachment_id}"
+    )
+
+    assert response.status_code == 200
+    assert deleted_paths == [c["classwork_attachment"].file_path]
+    assert c["db"].query(ClassworkAttachment).filter_by(
+        classwork_attachment_id=c["classwork_attachment"].classwork_attachment_id
+    ).count() == 0

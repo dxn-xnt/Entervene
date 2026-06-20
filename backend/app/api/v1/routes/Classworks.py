@@ -1,6 +1,4 @@
 # app/api/v1/routes/Classworks.py
-import json
-
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Query, Form
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -19,7 +17,6 @@ from app.models.classwork.ClassworkAttachment import ClassworkAttachment
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.submissions.StudentSubmission import StudentSubmission
-from app.models.academic.Lesson import Lesson
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.StudentCLass import StudentClass
@@ -30,6 +27,19 @@ from app.schemas.Classwork import (
     ClassworkCreate, ClassworkUpdate, ClassworkResponse,
     ClassworkAttachmentResponse, ClassworkAssignRequest,
     ClassworkAssignmentResponse,
+)
+from app.services.classwork.ClassworkShared import (
+    assignment_is_available as _assignment_is_available,
+    assignment_is_locked as _assignment_is_locked,
+    cleanup_saved_files as _cleanup_saved_files,
+    dedupe_ids as _dedupe_ids,
+    ensure_class_targets as _ensure_class_targets,
+    ensure_lessons_owned as _ensure_lessons_owned,
+    ensure_subject_owner as _ensure_subject_owner,
+    normalize_uploaded_path as _normalize_uploaded_path,
+    parse_id_list as _parse_id_list,
+    validate_classwork_values as _validate_classwork_values,
+    validate_schedule as _validate_schedule,
 )
 
 router = APIRouter()
@@ -87,120 +97,6 @@ def _att_resp(a):
     )
 
 
-def _normalize_uploaded_path(info: dict) -> dict:
-    raw_path = info.get("file_path", "")
-    normalized = raw_path.replace("\\", "/")
-    try:
-        uploads_idx = next(i for i, part in enumerate(Path(normalized).parts) if part == "uploads")
-        info["file_path"] = str(Path(*Path(normalized).parts[uploads_idx:]))
-    except StopIteration:
-        pass
-    return info
-
-
-def _validate_classwork_values(total_points: Optional[float] = None, max_attempts: Optional[int] = None) -> None:
-    """Keep classwork scoring and retry limits valid before writing rows."""
-    if total_points is not None and total_points <= 0:
-        raise HTTPException(status_code=400, detail="Total points must be greater than zero")
-    if max_attempts is not None and max_attempts <= 0:
-        raise HTTPException(status_code=400, detail="Max attempts must be greater than zero")
-
-
-def _validate_schedule(
-    publish_date: Optional[datetime],
-    due_date: Optional[datetime],
-    lock_date: Optional[datetime],
-) -> None:
-    if publish_date and due_date and publish_date > due_date:
-        raise HTTPException(status_code=400, detail="Publish date must be before or equal to due date")
-    if due_date and lock_date and due_date > lock_date:
-        raise HTTPException(status_code=400, detail="Due date must be before or equal to lock date")
-    if publish_date and lock_date and publish_date > lock_date:
-        raise HTTPException(status_code=400, detail="Publish date must be before or equal to lock date")
-
-
-def _dedupe_ids(ids: Optional[list[int]]) -> list[int]:
-    return list(dict.fromkeys(ids or []))
-
-
-def _parse_id_list(raw: Optional[str], field_name: str) -> list[int]:
-    if not raw:
-        return []
-    try:
-        value = json.loads(raw)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail=f"{field_name} must be a JSON array")
-    if not isinstance(value, list) or not all(isinstance(item, int) for item in value):
-        raise HTTPException(status_code=400, detail=f"{field_name} must be a JSON array of IDs")
-    return _dedupe_ids(value)
-
-
-def _ensure_subject_owner(db: Session, staff_id: str, subject_id: int) -> None:
-    """Teachers can only create or assign classwork for active subject loads."""
-    load = db.query(SubjectLoad).filter(
-        SubjectLoad.staff_id == staff_id,
-        SubjectLoad.subject_id == subject_id,
-        SubjectLoad.status == "active",
-    ).first()
-    if not load:
-        raise HTTPException(status_code=403, detail="You are not assigned to this subject")
-
-
-def _ensure_lessons_owned(db: Session, staff_id: str, subject_id: int, lesson_ids: list[int]) -> None:
-    """Linked lessons must belong to the same teacher and subject as the classwork."""
-    if not lesson_ids:
-        return
-    lessons = db.query(Lesson).filter(
-        Lesson.lesson_id.in_(lesson_ids),
-        Lesson.subject_id == subject_id,
-        Lesson.created_by_staff_id == staff_id,
-    ).all()
-    if len(lessons) != len(lesson_ids):
-        raise HTTPException(status_code=400, detail="One or more lessons cannot be linked to this classwork")
-
-
-def _ensure_class_targets(db: Session, staff_id: str, subject_id: int, class_ids: list[int]) -> None:
-    """Class assignment targets must match the teacher's active subject loads."""
-    if not class_ids:
-        raise HTTPException(status_code=400, detail="Select at least one class target")
-    valid_class_ids = {
-        row[0]
-        for row in db.query(SubjectLoad.class_id).filter(
-            SubjectLoad.staff_id == staff_id,
-            SubjectLoad.subject_id == subject_id,
-            SubjectLoad.class_id.in_(class_ids),
-            SubjectLoad.status == "active",
-        ).all()
-    }
-    if set(class_ids) != valid_class_ids:
-        raise HTTPException(status_code=403, detail="Not assigned to one or more class/subject targets")
-
-
-def _cleanup_saved_files(file_paths: list[str]) -> None:
-    for file_path in file_paths:
-        delete_file(file_path)
-
-
-def _aware_utc(value: Optional[datetime]) -> Optional[datetime]:
-    if value and value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value
-
-
-def _assignment_is_available(ca: ClassworkAssignment, now: Optional[datetime] = None) -> bool:
-    """Students can see an assignment only after it is published and released."""
-    if not ca.is_published:
-        return False
-    publish_date = _aware_utc(ca.publish_date)
-    return not publish_date or (now or datetime.now(timezone.utc)) >= publish_date
-
-
-def _assignment_is_locked(ca: ClassworkAssignment, now: Optional[datetime] = None) -> bool:
-    """Treat elapsed lock dates the same as an explicit locked flag."""
-    lock_date = _aware_utc(ca.lock_date)
-    return bool(ca.is_locked or (lock_date and (now or datetime.now(timezone.utc)) >= lock_date))
-
-
 def _build_cw(cw, db):
     subj = cw.subject
     staff = cw.staff
@@ -224,6 +120,7 @@ def _build_cw(cw, db):
         classwork_category=cw.classwork_category,
         total_points=float(cw.total_points) if cw.total_points else None,
         is_published=cw.is_published, is_locked=cw.is_locked,
+        is_archived=cw.is_archived,
         subject_id=cw.subject_id, subject_name=subj.subject_name if subj else None,
         created_by_staff_id=cw.created_by_staff_id,
         teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
@@ -247,6 +144,8 @@ def _authorize_classwork_access(
         staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
         if staff and cw.created_by_staff_id == staff.staff_id:
             return
+    if cw.is_archived:
+        raise HTTPException(status_code=404, detail="Classwork not found")
     if role == "student":
         student = db.query(Student).filter(Student.user_id == user_id).first()
         if student:
@@ -278,6 +177,8 @@ def _authorize_assignment_access(
         staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
         if staff and cw.created_by_staff_id == staff.staff_id:
             return
+    if cw.is_archived:
+        raise HTTPException(status_code=404, detail="Classwork not found")
     if role == "student" and _assignment_is_available(assignment):
         student = db.query(Student).filter(Student.user_id == user_id).first()
         if student and db.query(StudentClass).filter(
@@ -287,6 +188,23 @@ def _authorize_assignment_access(
         ).first():
             return
     raise HTTPException(status_code=403, detail="Access denied")
+
+
+def _classwork_has_submissions(db: Session, classwork_id: int) -> bool:
+    """Classwork can only be archived while no student work is turned in."""
+    return (
+        db.query(StudentSubmission)
+        .join(
+            ClassworkAssignment,
+            ClassworkAssignment.classwork_assignment_id == StudentSubmission.classwork_assignment_id,
+        )
+        .filter(
+            ClassworkAssignment.classwork_id == classwork_id,
+            StudentSubmission.status.in_(("submitted", "late", "graded")),
+        )
+        .first()
+        is not None
+    )
 
 
 @router.post("/", response_model=ClassworkResponse)
@@ -394,7 +312,10 @@ def get_my_classworks(staff_id: str = Depends(get_staff_id), db: Session = Depen
             selectinload(Classwork.attachments),
             selectinload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
         )
-        .filter(Classwork.created_by_staff_id == staff_id)
+        .filter(
+            Classwork.created_by_staff_id == staff_id,
+            Classwork.is_archived == False,
+        )
         .order_by(Classwork.created_at.desc())
         .all()
     )
@@ -481,9 +402,32 @@ def update_classwork(classwork_id: int, body: ClassworkUpdate, staff_id: str = D
 def delete_classwork(classwork_id: int, staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db)):
     cw = db.query(Classwork).filter(Classwork.classwork_id == classwork_id, Classwork.created_by_staff_id == staff_id).first()
     if not cw: raise HTTPException(status_code=404, detail="Classwork not found or not yours")
-    for att in cw.attachments: delete_file(att.file_path)
-    db.delete(cw); db.commit()
-    return {"message": "Classwork deleted"}
+    if _classwork_has_submissions(db, classwork_id):
+        raise HTTPException(status_code=409, detail="Classwork has turned-in submissions and cannot be archived")
+    # Soft archive keeps linked lessons, submissions, and attachment records intact.
+    cw.is_archived = True
+    db.commit()
+    return {"message": "Classwork archived", "classwork_id": classwork_id, "is_archived": True}
+
+
+@router.put("/classwork/{classwork_id}/archive")
+def archive_classwork(classwork_id: int, staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db)):
+    cw = db.query(Classwork).filter(Classwork.classwork_id == classwork_id, Classwork.created_by_staff_id == staff_id).first()
+    if not cw: raise HTTPException(status_code=404, detail="Classwork not found or not yours")
+    if _classwork_has_submissions(db, classwork_id):
+        raise HTTPException(status_code=409, detail="Classwork has turned-in submissions and cannot be archived")
+    cw.is_archived = True
+    db.commit()
+    return {"message": "Classwork archived", "classwork_id": classwork_id, "is_archived": True}
+
+
+@router.put("/classwork/{classwork_id}/unarchive")
+def unarchive_classwork(classwork_id: int, staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db)):
+    cw = db.query(Classwork).filter(Classwork.classwork_id == classwork_id, Classwork.created_by_staff_id == staff_id).first()
+    if not cw: raise HTTPException(status_code=404, detail="Classwork not found or not yours")
+    cw.is_archived = False
+    db.commit()
+    return {"message": "Classwork restored", "classwork_id": classwork_id, "is_archived": False}
 
 
 @router.post("/classwork/{classwork_id}/attachments", response_model=ClassworkAttachmentResponse)
@@ -495,6 +439,7 @@ async def upload_cw_attachment(
 ):
     cw = db.query(Classwork).filter(Classwork.classwork_id == classwork_id, Classwork.created_by_staff_id == staff_id).first()
     if not cw: raise HTTPException(status_code=404, detail="Classwork not found or not yours")
+    if cw.is_archived: raise HTTPException(status_code=400, detail="Cannot attach files to archived classwork")
     info = _normalize_uploaded_path(await save_file(file, "classworks"))
 
     # Normalize file_path to always store relative (e.g. uploads/classworks/abc123.pdf)
@@ -515,6 +460,35 @@ async def upload_cw_attachment(
         delete_file(info["file_path"])
         raise
     return _att_resp(att)
+
+
+@router.delete("/classwork/{classwork_id}/attachments/{attachment_id}")
+def delete_cw_attachment(
+    classwork_id: int,
+    attachment_id: int,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    cw = db.query(Classwork).filter(
+        Classwork.classwork_id == classwork_id,
+        Classwork.created_by_staff_id == staff_id,
+    ).first()
+    if not cw:
+        raise HTTPException(status_code=404, detail="Classwork not found or not yours")
+    if cw.is_archived:
+        raise HTTPException(status_code=400, detail="Cannot remove files from archived classwork")
+
+    attachment = db.query(ClassworkAttachment).filter(
+        ClassworkAttachment.classwork_attachment_id == attachment_id,
+        ClassworkAttachment.classwork_id == classwork_id,
+    ).first()
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    delete_file(attachment.file_path)
+    db.delete(attachment)
+    db.commit()
+    return {"message": "Attachment deleted"}
 
 
 @router.get("/classwork/{classwork_id}/attachments/{attachment_id}/download")
@@ -574,6 +548,7 @@ def download_classwork_attachment(
 def assign_classwork(classwork_id: int, body: ClassworkAssignRequest, staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db)):
     cw = db.query(Classwork).filter(Classwork.classwork_id == classwork_id, Classwork.created_by_staff_id == staff_id).first()
     if not cw: raise HTTPException(status_code=404, detail="Classwork not found or not yours")
+    if cw.is_archived: raise HTTPException(status_code=400, detail="Cannot assign archived classwork")
     class_ids = _dedupe_ids(body.class_ids)
     _validate_classwork_values(max_attempts=body.max_attempts)
     _validate_schedule(body.publish_date, body.due_date, body.lock_date)
@@ -600,7 +575,7 @@ def assign_classwork(classwork_id: int, body: ClassworkAssignRequest, staff_id: 
 def get_cw_for_class(class_id: int, subject_id: int, student=Depends(get_student_record), db: Session = Depends(get_db)):
     enr = db.query(StudentClass).filter(StudentClass.student_id == student.student_id, StudentClass.class_id == class_id, StudentClass.enrollment_status == "enrolled").first()
     if not enr: raise HTTPException(status_code=403, detail="Not enrolled in this class")
-    rows = db.query(ClassworkAssignment, Classwork, Class).join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id).join(Class, Class.class_id == ClassworkAssignment.class_id).filter(ClassworkAssignment.class_id == class_id, Classwork.subject_id == subject_id, ClassworkAssignment.is_published == True).order_by(ClassworkAssignment.created_at.desc()).all()
+    rows = db.query(ClassworkAssignment, Classwork, Class).join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id).join(Class, Class.class_id == ClassworkAssignment.class_id).filter(ClassworkAssignment.class_id == class_id, Classwork.subject_id == subject_id, Classwork.is_archived == False, ClassworkAssignment.is_published == True).order_by(ClassworkAssignment.created_at.desc()).all()
     results = []
     
     # ✅ FIX: Use timezone-aware datetime
@@ -704,6 +679,7 @@ def get_teacher_assignments_for_class_subject(
             ClassworkAssignment.class_id == class_id,
             Classwork.subject_id == subject_id,
             Classwork.created_by_staff_id == staff_id,
+            Classwork.is_archived == False,
         )
         .order_by(ClassworkAssignment.created_at.desc())
         .all()
@@ -759,6 +735,7 @@ def get_student_assignments(student=Depends(get_student_record), db: Session = D
         AcademicStaff, AcademicStaff.staff_id == Classwork.created_by_staff_id
     ).filter(
         ClassworkAssignment.class_id.in_(class_ids),
+        Classwork.is_archived == False,
         ClassworkAssignment.is_published == True
     ).order_by(ClassworkAssignment.due_date.asc()).all()
 

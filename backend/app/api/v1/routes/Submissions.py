@@ -26,6 +26,12 @@ from app.models.people.AcademicStaff import AcademicStaff
 from app.schemas.Submission import (
     SubmissionResponse, SubmissionAttachmentResponse, GradeRequest,
 )
+from app.services.classwork.ClassworkShared import (
+    assignment_is_available as _assignment_is_available,
+    assignment_is_locked as _assignment_is_locked,
+    aware_utc as _aware_utc,
+    cleanup_saved_files as _cleanup_saved_files,
+)
 
 router = APIRouter()
 logger = logging.getLogger("app.submissions")
@@ -63,31 +69,6 @@ def _student_name(student: Student) -> str:
 
 def _is_turned_in(status: Optional[str]) -> bool:
     return status in ("submitted", "late", "graded")
-
-
-def _aware_utc(value: Optional[datetime]) -> Optional[datetime]:
-    if value and value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value
-
-
-def _assignment_is_available(ca: ClassworkAssignment, now: Optional[datetime] = None) -> bool:
-    """Submission endpoints must honor publish scheduling, not just UI state."""
-    if not ca.is_published:
-        return False
-    publish_date = _aware_utc(ca.publish_date)
-    return not publish_date or (now or datetime.now(timezone.utc)) >= publish_date
-
-
-def _assignment_is_locked(ca: ClassworkAssignment, now: Optional[datetime] = None) -> bool:
-    """Lock submissions once the explicit flag or lock date says so."""
-    lock_date = _aware_utc(ca.lock_date)
-    return bool(ca.is_locked or (lock_date and (now or datetime.now(timezone.utc)) >= lock_date))
-
-
-def _cleanup_saved_files(file_paths: list[str]) -> None:
-    for file_path in file_paths:
-        delete_file(file_path)
 
 
 def _teacher_owns_assignment(assignment_id: int, staff_id: str, db: Session) -> ClassworkAssignment:
@@ -176,6 +157,9 @@ async def submit_work(
     ).first()
     if not ca:
         raise HTTPException(status_code=404, detail="Assignment not found")
+    cw = db.query(Classwork).filter(Classwork.classwork_id == ca.classwork_id).first()
+    if not cw or cw.is_archived:
+        raise HTTPException(status_code=404, detail="Classwork not found")
     enr = db.query(StudentClass).filter(
         StudentClass.student_id == student.student_id,
         StudentClass.class_id == ca.class_id,
@@ -269,6 +253,9 @@ def _assert_student_can_modify_submission(
     ).first()
     if not ca:
         raise HTTPException(status_code=404, detail="Assignment not found")
+    cw = db.query(Classwork).filter(Classwork.classwork_id == ca.classwork_id).first()
+    if not cw or cw.is_archived:
+        raise HTTPException(status_code=404, detail="Classwork not found")
     enr = db.query(StudentClass).filter(
         StudentClass.student_id == student.student_id,
         StudentClass.class_id == ca.class_id,

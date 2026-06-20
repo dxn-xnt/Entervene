@@ -15,8 +15,6 @@ from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAttachment import LessonAttachment
 from app.models.academic.LessonAssignment import LessonAssignment
 from app.models.academic.Subject import Subject
-from app.models.academic.SubjectLoad import SubjectLoad
-from app.models.academic.StudentCLass import StudentClass
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
@@ -25,6 +23,13 @@ from app.models.submissions.StudentSubmission import StudentSubmission
 from app.schemas.Lesson import (
     LessonCreate, LessonUpdate, LessonResponse,
     LessonAttachmentResponse, LessonAssignRequest,
+)
+from app.services.lesson.LessonShared import (
+    authorize_lesson_access as _authorize_lesson_access,
+    ensure_student_enrolled as _ensure_student_enrolled,
+    ensure_teacher_class_subject as _ensure_teacher_class_subject,
+    ensure_teacher_subject as _ensure_teacher_subject,
+    get_owned_lesson as _get_owned_lesson,
 )
 
 router = APIRouter()
@@ -40,13 +45,7 @@ def create_lesson(
     db: Session = Depends(get_db),
 ):
     """Create a new lesson."""
-    load = db.query(SubjectLoad).filter(
-        SubjectLoad.staff_id == staff_id,
-        SubjectLoad.subject_id == body.subject_id,
-        SubjectLoad.status == "active",
-    ).first()
-    if not load:
-        raise HTTPException(status_code=403, detail="You are not assigned to this subject")
+    _ensure_teacher_subject(db, staff_id, body.subject_id)
 
     lesson = Lesson(
         title=body.title,
@@ -58,9 +57,13 @@ def create_lesson(
         is_draft=body.is_draft if body.is_draft is not None else True,
         created_by_staff_id=staff_id,
     )
-    db.add(lesson)
-    db.commit()
-    db.refresh(lesson)
+    try:
+        db.add(lesson)
+        db.commit()
+        db.refresh(lesson)
+    except Exception:
+        db.rollback()
+        raise
     return _build_lesson_response(lesson, db)
 
 
@@ -105,18 +108,7 @@ def get_teacher_lessons_for_class_subject(
     db: Session = Depends(get_db),
 ):
     """Lessons you created for this subject that are assigned to this class section."""
-    load = (
-        db.query(SubjectLoad)
-        .filter(
-            SubjectLoad.staff_id == staff_id,
-            SubjectLoad.class_id == class_id,
-            SubjectLoad.subject_id == subject_id,
-            SubjectLoad.status == "active",
-        )
-        .first()
-    )
-    if not load:
-        raise HTTPException(status_code=403, detail="Not assigned to this class/subject")
+    _ensure_teacher_class_subject(db, staff_id, class_id, subject_id)
 
     lessons = (
         db.query(Lesson)
@@ -144,18 +136,7 @@ def get_teacher_lesson_linked_classwork(
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
 
-    load = (
-        db.query(SubjectLoad)
-        .filter(
-            SubjectLoad.staff_id == staff_id,
-            SubjectLoad.class_id == class_id,
-            SubjectLoad.subject_id == lesson.subject_id,
-            SubjectLoad.status == "active",
-        )
-        .first()
-    )
-    if not load:
-        raise HTTPException(status_code=403, detail="Not assigned to this class/subject")
+    _ensure_teacher_class_subject(db, staff_id, class_id, lesson.subject_id)
 
     assigned_here = (
         db.query(LessonAssignment)
@@ -176,6 +157,7 @@ def get_teacher_lesson_linked_classwork(
             ClassworkLesson.lesson_id == lesson_id,
             ClassworkAssignment.class_id == class_id,
             Classwork.created_by_staff_id == staff_id,
+            Classwork.is_archived == False,
         )
         .order_by(ClassworkAssignment.created_at.desc())
         .all()
@@ -205,13 +187,7 @@ def get_lessons_for_class_subject(
     db: Session = Depends(get_db),
 ):
     """List published lessons for a subject in a student's class."""
-    enrollment = db.query(StudentClass).filter(
-        StudentClass.student_id == student.student_id,
-        StudentClass.class_id == class_id,
-        StudentClass.enrollment_status == "enrolled",
-    ).first()
-    if not enrollment:
-        raise HTTPException(status_code=403, detail="Not enrolled in this class")
+    _ensure_student_enrolled(db, student.student_id, class_id)
 
     lessons = (
         db.query(Lesson)
@@ -244,6 +220,7 @@ def get_lesson(
     lesson = db.query(Lesson).filter(Lesson.lesson_id == lesson_id).first()
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
+    _authorize_lesson_access(db, lesson, current_user)
     return _build_lesson_response(lesson, db)
 
 
@@ -255,12 +232,7 @@ def update_lesson(
     db: Session = Depends(get_db),
 ):
     """Update a lesson."""
-    lesson = db.query(Lesson).filter(
-        Lesson.lesson_id == lesson_id,
-        Lesson.created_by_staff_id == staff_id,
-    ).first()
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found or not yours")
+    lesson = _get_owned_lesson(db, staff_id, lesson_id)
 
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(lesson, field, value)
@@ -276,34 +248,12 @@ def delete_lesson(
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    """Delete a lesson and its attachments. Also deletes associated classworks."""
-    lesson = db.query(Lesson).filter(
-        Lesson.lesson_id == lesson_id,
-        Lesson.created_by_staff_id == staff_id,
-    ).first()
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found or not yours")
+    """Archive a lesson without deleting linked classworks or uploaded files."""
+    lesson = _get_owned_lesson(db, staff_id, lesson_id)
 
-    # 1. Find all classworks linked to this lesson and delete them (and their files)
-    linked_classworks = (
-        db.query(Classwork)
-        .join(ClassworkLesson, ClassworkLesson.classwork_id == Classwork.classwork_id)
-        .filter(ClassworkLesson.lesson_id == lesson_id)
-        .all()
-    )
-    for cw in linked_classworks:
-        for cw_att in cw.attachments:
-            delete_file(cw_att.file_path)
-        db.delete(cw)
-
-    # 2. Delete lesson attachment physical files
-    for att in lesson.attachments:
-        delete_file(att.file_path)
-
-    # 3. Delete lesson (DB constraints handles the rest)
-    db.delete(lesson)
+    lesson.is_archived = True
     db.commit()
-    return {"message": "Lesson and associated classworks deleted"}
+    return {"message": "Lesson archived", "lesson_id": lesson_id, "is_archived": True}
 
 
 @router.put("/{lesson_id}/publish")
@@ -313,12 +263,7 @@ def publish_lesson(
     db: Session = Depends(get_db),
 ):
     """Publish a lesson (mark as published and not draft). Also auto-publishes all LessonAssignments."""
-    lesson = db.query(Lesson).filter(
-        Lesson.lesson_id == lesson_id,
-        Lesson.created_by_staff_id == staff_id,
-    ).first()
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found or not yours")
+    lesson = _get_owned_lesson(db, staff_id, lesson_id)
 
     lesson.is_published = True
     lesson.is_draft = False
@@ -349,37 +294,40 @@ def assign_lesson(
     db: Session = Depends(get_db),
 ):
     """Assign a lesson to one or more classes. If lesson is already published, assignment will be published too."""
-    lesson = db.query(Lesson).filter(
-        Lesson.lesson_id == lesson_id,
-        Lesson.created_by_staff_id == staff_id,
-    ).first()
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found or not yours")
+    lesson = _get_owned_lesson(db, staff_id, lesson_id)
+
+    class_ids = list(dict.fromkeys(body.class_ids))
+    for class_id in class_ids:
+        _ensure_teacher_class_subject(db, staff_id, class_id, lesson.subject_id)
 
     created = []
-    for class_id in body.class_ids:
-        existing = db.query(LessonAssignment).filter(
-            LessonAssignment.lesson_id == lesson_id,
-            LessonAssignment.class_id == class_id,
-        ).first()
-        if existing:
-            continue
+    try:
+        for class_id in class_ids:
+            existing = db.query(LessonAssignment).filter(
+                LessonAssignment.lesson_id == lesson_id,
+                LessonAssignment.class_id == class_id,
+            ).first()
+            if existing:
+                continue
 
-        # Auto-publish assignment if the lesson is already published
-        is_published = body.is_published if body.is_published is not None else True
-        if lesson.is_published:
-            is_published = True
-        
-        assignment = LessonAssignment(
-            lesson_id=lesson_id,
-            class_id=class_id,
-            assigned_by_staff_id=staff_id,
-            is_published=is_published,
-        )
-        db.add(assignment)
-        created.append(class_id)
+            # Auto-publish assignment if the lesson is already published.
+            is_published = body.is_published if body.is_published is not None else True
+            if lesson.is_published:
+                is_published = True
 
-    db.commit()
+            assignment = LessonAssignment(
+                lesson_id=lesson_id,
+                class_id=class_id,
+                assigned_by_staff_id=staff_id,
+                is_published=is_published,
+            )
+            db.add(assignment)
+            created.append(class_id)
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {"message": f"Lesson assigned to {len(created)} class(es)", "class_ids": created}
 
 
@@ -406,12 +354,7 @@ async def upload_lesson_attachment(
     db: Session = Depends(get_db),
 ):
     """Upload a file attachment to a lesson."""
-    lesson = db.query(Lesson).filter(
-        Lesson.lesson_id == lesson_id,
-        Lesson.created_by_staff_id == staff_id,
-    ).first()
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found or not yours")
+    lesson = _get_owned_lesson(db, staff_id, lesson_id)
 
     upload: UploadFile | StarletteUploadFile | None = file
     if upload is None:
@@ -422,10 +365,15 @@ async def upload_lesson_attachment(
         raise HTTPException(status_code=400, detail="Attach a file using the 'file' form field.")
 
     file_info = await save_file(upload, "lessons")
-    attachment = LessonAttachment(lesson_id=lesson_id, **file_info)
-    db.add(attachment)
-    db.commit()
-    db.refresh(attachment)
+    try:
+        attachment = LessonAttachment(lesson_id=lesson_id, **file_info)
+        db.add(attachment)
+        db.commit()
+        db.refresh(attachment)
+    except Exception:
+        db.rollback()
+        delete_file(file_info["file_path"])
+        raise
 
     return LessonAttachmentResponse(
         lesson_attachment_id=attachment.lesson_attachment_id,
@@ -444,12 +392,7 @@ def delete_lesson_attachment(
     db: Session = Depends(get_db),
 ):
     """Delete a lesson attachment."""
-    lesson = db.query(Lesson).filter(
-        Lesson.lesson_id == lesson_id,
-        Lesson.created_by_staff_id == staff_id,
-    ).first()
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found or not yours")
+    _get_owned_lesson(db, staff_id, lesson_id)
 
     att = db.query(LessonAttachment).filter(
         LessonAttachment.lesson_attachment_id == attachment_id,
@@ -472,13 +415,7 @@ def get_lesson_classwork_assignments(
     db: Session = Depends(get_db),
 ):
     """Return classwork assignments for a lesson for the student's class."""
-    enrollment = db.query(StudentClass).filter(
-        StudentClass.student_id == student.student_id,
-        StudentClass.class_id == class_id,
-        StudentClass.enrollment_status == "enrolled",
-    ).first()
-    if not enrollment:
-        raise HTTPException(status_code=403, detail="Not enrolled in this class")
+    _ensure_student_enrolled(db, student.student_id, class_id)
 
     rows = (
         db.query(ClassworkAssignment)
@@ -487,6 +424,7 @@ def get_lesson_classwork_assignments(
         .filter(
             ClassworkLesson.lesson_id == lesson_id,
             ClassworkAssignment.class_id == class_id,
+            Classwork.is_archived == False,
             ClassworkAssignment.is_published == True,
         )
         .all()
@@ -552,6 +490,10 @@ def download_lesson_attachment(
     ).first()
     if not att:
         raise HTTPException(status_code=404, detail="Attachment not found")
+    lesson = db.query(Lesson).filter(Lesson.lesson_id == lesson_id).first()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    _authorize_lesson_access(db, lesson, current_user)
 
     file_path = Path(att.file_path)
     if not file_path.exists():
@@ -571,12 +513,7 @@ def archive_lesson(
     db: Session = Depends(get_db),
 ):
     """Archive a lesson (soft delete). Lesson remains in database but is hidden from view."""
-    lesson = db.query(Lesson).filter(
-        Lesson.lesson_id == lesson_id,
-        Lesson.created_by_staff_id == staff_id,
-    ).first()
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found or not yours")
+    lesson = _get_owned_lesson(db, staff_id, lesson_id)
 
     lesson.is_archived = True
     db.commit()
@@ -596,12 +533,7 @@ def unarchive_lesson(
     db: Session = Depends(get_db),
 ):
     """Restore an archived lesson."""
-    lesson = db.query(Lesson).filter(
-        Lesson.lesson_id == lesson_id,
-        Lesson.created_by_staff_id == staff_id,
-    ).first()
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found or not yours")
+    lesson = _get_owned_lesson(db, staff_id, lesson_id)
 
     lesson.is_archived = False
     db.commit()
@@ -622,12 +554,7 @@ def unlink_classwork_from_lesson(
     db: Session = Depends(get_db),
 ):
     """Unlink a classwork from a lesson without deleting either resource."""
-    lesson = db.query(Lesson).filter(
-        Lesson.lesson_id == lesson_id,
-        Lesson.created_by_staff_id == staff_id,
-    ).first()
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found or not yours")
+    _get_owned_lesson(db, staff_id, lesson_id)
 
     cw_lesson = db.query(ClassworkLesson).filter(
         ClassworkLesson.lesson_id == lesson_id,

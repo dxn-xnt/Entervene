@@ -1,12 +1,14 @@
 import {
   ArrowDownAZ,
   ArrowUpDown,
+  Archive,
   BookOpen,
   CheckSquare,
   ClipboardList,
   FileText,
   Filter,
   Link as LinkIcon,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -14,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -52,6 +55,7 @@ type TeacherClasswork = {
   total_points?: number | null;
   is_published: boolean;
   is_locked: boolean;
+  is_archived: boolean;
   subject_id: number;
   subject_name?: string | null;
   attachments: ClassworkAttachment[];
@@ -122,6 +126,16 @@ type CreateDraft = {
   is_published: boolean;
 };
 
+type EditDraft = {
+  title: string;
+  description: string;
+  instructions: string;
+  classwork_type: string;
+  classwork_category: string;
+  total_points: string;
+  is_published: boolean;
+};
+
 const emptyDraft: CreateDraft = {
   subject_id: "",
   title: "",
@@ -134,14 +148,17 @@ const emptyDraft: CreateDraft = {
   is_published: true,
 };
 
-const allowedMaterialExtensions = [
-  ".pdf",
-  ".docx",
-  ".pptx",
-  ".jpg",
-  ".jpeg",
-  ".png",
-];
+const classworkToEditDraft = (item: TeacherClasswork): EditDraft => ({
+  title: item.title,
+  description: item.description ?? "",
+  instructions: item.instructions ?? "",
+  classwork_type: item.classwork_type,
+  classwork_category: item.classwork_category ?? "",
+  total_points: item.total_points !== null && item.total_points !== undefined ? String(item.total_points) : "",
+  is_published: item.is_published,
+});
+
+const allowedMaterialExtensions = [".pdf", ".docx", ".pptx", ".jpg", ".jpeg", ".png"];
 const maxMaterialSize = 4 * 1024 * 1024;
 
 const tabs: Array<{ id: TabId; label: string; icon: LucideIcon }> = [
@@ -280,6 +297,7 @@ function ClassworkCard({
 }
 
 export default function Classworks() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<TeacherClasswork[]>([]);
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("all");
@@ -299,6 +317,14 @@ export default function Classworks() {
   const [selected, setSelected] = useState<TeacherClasswork | null>(null);
   const [tracking, setTracking] = useState<AssignmentTracking | null>(null);
   const [isTrackingLoading, setIsTrackingLoading] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editMaterials, setEditMaterials] = useState<File[]>([]);
+  const [removingAttachmentId, setRemovingAttachmentId] = useState<number | null>(null);
+  const [isUploadingEditMaterials, setIsUploadingEditMaterials] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [submissionSort, setSubmissionSort] = useState<"name" | "score">(
     "name",
@@ -456,22 +482,43 @@ export default function Classworks() {
     }
     setCreateError("");
     setMaterials((current) => {
-      const existing = new Set(
-        current.map((file) => `${file.name}-${file.size}`),
-      );
+      const existing = new Set(current.map((file) => `${file.name}-${file.size}`));
       return [
         ...current,
-        ...selectedFiles.filter(
-          (file) => !existing.has(`${file.name}-${file.size}`),
-        ),
+        ...selectedFiles.filter((file) => !existing.has(`${file.name}-${file.size}`)),
       ];
     });
   };
 
   const removeMaterial = (index: number) => {
-    setMaterials((current) =>
-      current.filter((_, itemIndex) => itemIndex !== index),
-    );
+    setMaterials((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  };
+
+  const addEditMaterials = (files: FileList | null) => {
+    if (!files) return;
+    const selectedFiles = Array.from(files);
+    const invalid = selectedFiles.find((file) => !allowedMaterialExtensions.includes(fileExtension(file.name)));
+    if (invalid) {
+      setDetailError(`${invalid.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`);
+      return;
+    }
+    const oversized = selectedFiles.find((file) => file.size > maxMaterialSize);
+    if (oversized) {
+      setDetailError(`${oversized.name} is larger than the 4 MB limit.`);
+      return;
+    }
+    setDetailError("");
+    setEditMaterials((current) => {
+      const existing = new Set(current.map((file) => `${file.name}-${file.size}`));
+      return [
+        ...current,
+        ...selectedFiles.filter((file) => !existing.has(`${file.name}-${file.size}`)),
+      ];
+    });
+  };
+
+  const removeEditMaterial = (index: number) => {
+    setEditMaterials((current) => current.filter((_, itemIndex) => itemIndex !== index));
   };
 
   const toggleClass = (classId: number) => {
@@ -579,10 +626,14 @@ export default function Classworks() {
     }
   };
 
-  const openClassworkDetail = async (item: TeacherClasswork) => {
+  const openClassworkDetail = useCallback(async (item: TeacherClasswork) => {
     setSelected(item);
     setTracking(null);
     setDetailError("");
+    setIsEditing(false);
+    setEditDraft(classworkToEditDraft(item));
+    setEditMaterials([]);
+    setSearchParams({ classworkId: String(item.classwork_id) });
 
     const assignmentId = item.assignments?.[0]?.classwork_assignment_id;
     if (!assignmentId) return;
@@ -605,17 +656,175 @@ export default function Classworks() {
     } finally {
       setIsTrackingLoading(false);
     }
-  };
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    const classworkId = Number(searchParams.get("classworkId"));
+    if (!classworkId || selected?.classwork_id === classworkId) return;
+    const target = items.find((item) => item.classwork_id === classworkId);
+    if (target) {
+      void openClassworkDetail(target);
+    }
+  }, [items, openClassworkDetail, searchParams, selected?.classwork_id]);
 
   const closeClassworkDetail = () => {
+    if (isArchiving || isSavingEdit) return;
     setSelected(null);
     setTracking(null);
+    setShowArchiveConfirm(false);
+    setIsEditing(false);
+    setEditDraft(null);
+    setEditMaterials([]);
+    setSearchParams({});
     setDetailError("");
     setSelectedStudent(null);
     setSelectedSubmissionDetail(null);
     setSubmissionDetailError("");
     setGradeError("");
     setGradeSuccess("");
+  };
+
+  const saveClassworkEdit = async () => {
+    if (!selected || !editDraft) return;
+
+    const totalPoints = editDraft.total_points ? Number(editDraft.total_points) : null;
+    if (!editDraft.title.trim()) {
+      setDetailError("Classwork title is required.");
+      return;
+    }
+    if (totalPoints !== null && (!Number.isFinite(totalPoints) || totalPoints <= 0)) {
+      setDetailError("Total points must be greater than zero.");
+      return;
+    }
+
+    setIsSavingEdit(true);
+    setDetailError("");
+    try {
+      const response = await apiFetch(`/api/v1/classwork-assignments/classwork/${selected.classwork_id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editDraft.title.trim(),
+          description: editDraft.description.trim() || null,
+          instructions: editDraft.instructions.trim() || null,
+          classwork_type: editDraft.classwork_type,
+          classwork_category: editDraft.classwork_category || null,
+          total_points: totalPoints,
+          is_published: editDraft.is_published,
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || "Unable to update classwork.");
+      }
+
+      const updated = (await response.json()) as TeacherClasswork;
+      setItems((current) =>
+        current.map((item) => item.classwork_id === updated.classwork_id ? updated : item)
+      );
+      setSelected(updated);
+      setEditDraft(classworkToEditDraft(updated));
+      setIsEditing(false);
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Unable to update classwork.");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const uploadEditMaterials = async () => {
+    if (!selected || editMaterials.length === 0) return;
+
+    setIsUploadingEditMaterials(true);
+    setDetailError("");
+    try {
+      const uploaded: ClassworkAttachment[] = [];
+      for (const material of editMaterials) {
+        const formData = new FormData();
+        formData.append("file", material);
+        const response = await apiFetch(
+          `/api/v1/classwork-assignments/classwork/${selected.classwork_id}/attachments`,
+          { method: "POST", body: formData }
+        );
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.detail || `Unable to upload ${material.name}.`);
+        }
+        uploaded.push((await response.json()) as ClassworkAttachment);
+      }
+
+      const updated = { ...selected, attachments: [...selected.attachments, ...uploaded] };
+      setSelected(updated);
+      setItems((current) =>
+        current.map((item) => item.classwork_id === updated.classwork_id ? updated : item)
+      );
+      setEditMaterials([]);
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Unable to upload classwork material.");
+    } finally {
+      setIsUploadingEditMaterials(false);
+    }
+  };
+
+  const removeSelectedAttachment = async (attachmentId: number) => {
+    if (!selected) return;
+
+    setRemovingAttachmentId(attachmentId);
+    setDetailError("");
+    try {
+      const response = await apiFetch(
+        `/api/v1/classwork-assignments/classwork/${selected.classwork_id}/attachments/${attachmentId}`,
+        { method: "DELETE" }
+      );
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || "Unable to remove classwork material.");
+      }
+
+      const updated = {
+        ...selected,
+        attachments: selected.attachments.filter(
+          (attachment) => attachment.classwork_attachment_id !== attachmentId
+        ),
+      };
+      setSelected(updated);
+      setItems((current) =>
+        current.map((item) => item.classwork_id === updated.classwork_id ? updated : item)
+      );
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Unable to remove classwork material.");
+    } finally {
+      setRemovingAttachmentId(null);
+    }
+  };
+
+  const archiveSelectedClasswork = async () => {
+    if (!selected) return;
+
+    setIsArchiving(true);
+    setDetailError("");
+    try {
+      const response = await apiFetch(
+        `/api/v1/classwork-assignments/classwork/${selected.classwork_id}/archive`,
+        { method: "PUT" }
+      );
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || "Unable to archive classwork.");
+      }
+
+      setItems((current) => current.filter((item) => item.classwork_id !== selected.classwork_id));
+      setShowArchiveConfirm(false);
+      setSelected(null);
+      setTracking(null);
+      setSelectedStudent(null);
+      setSelectedSubmissionDetail(null);
+      setSearchParams({});
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : "Unable to archive classwork.");
+    } finally {
+      setIsArchiving(false);
+    }
   };
 
   const openStudentSubmission = async (student: TrackingStudent) => {
@@ -782,7 +991,8 @@ export default function Classworks() {
           </div>
 
           <section className="mx-auto max-w-5xl space-y-4">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={
@@ -797,6 +1007,58 @@ export default function Classworks() {
               </button>
               <FileText size={24} />
               <h1 className="text-3xl font-bold">{selected.title}</h1>
+              </div>
+              {!selectedStudent && (
+                <div className="flex flex-wrap gap-2">
+                {isEditing ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditing(false);
+                        setEditDraft(classworkToEditDraft(selected));
+                        setDetailError("");
+                      }}
+                      disabled={isSavingEdit}
+                      className="rounded-lg border border-gray-700 bg-white px-3 py-2 text-sm font-bold hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={saveClassworkEdit}
+                      disabled={isSavingEdit}
+                      className="rounded-lg border border-black bg-[#7ABA78] px-3 py-2 text-sm font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
+                    >
+                      {isSavingEdit ? "Saving..." : "Save Changes"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditDraft(classworkToEditDraft(selected));
+                      setIsEditing(true);
+                      setDetailError("");
+                    }}
+                    disabled={isArchiving}
+                    className="inline-flex items-center gap-2 rounded-lg border border-black bg-white px-3 py-2 text-sm font-bold hover:bg-[#F6E9B2] disabled:opacity-50"
+                  >
+                    <Pencil size={16} />
+                    Edit Classwork
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowArchiveConfirm(true)}
+                  disabled={isArchiving || isEditing}
+                  className="inline-flex items-center gap-2 rounded-lg border border-red-400 bg-white px-3 py-2 text-sm font-bold text-red-700 transition hover:border-red-700 hover:bg-red-600 hover:text-white disabled:opacity-50 disabled:hover:border-red-400 disabled:hover:bg-white disabled:hover:text-red-700"
+                >
+                  <Archive size={16} />
+                  {isArchiving ? "Archiving..." : "Archive Classwork"}
+                </button>
+                </div>
+              )}
             </div>
 
             {selectedStudent ? (
@@ -961,11 +1223,195 @@ export default function Classworks() {
               </>
             ) : (
               <>
-                <div className="rounded-lg border border-black bg-white p-4 text-sm font-semibold shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-                  {selected.instructions ||
-                    selected.description ||
-                    "No instructions provided."}
+            {isEditing && editDraft ? (
+              <div className="space-y-4 rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block text-xs font-bold">
+                    Title
+                    <input
+                      value={editDraft.title}
+                      onChange={(event) =>
+                        setEditDraft((current) => current ? { ...current, title: event.target.value } : current)
+                      }
+                      disabled={isSavingEdit}
+                      className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm font-semibold"
+                    />
+                  </label>
+                  <label className="block text-xs font-bold">
+                    Type
+                    <select
+                      value={editDraft.classwork_type}
+                      onChange={(event) =>
+                        setEditDraft((current) => current ? { ...current, classwork_type: event.target.value } : current)
+                      }
+                      disabled={isSavingEdit}
+                      className="mt-1 w-full rounded-lg border border-gray-700 bg-white px-3 py-2 text-sm font-semibold"
+                    >
+                      <option value="READING">Reading</option>
+                      <option value="ACTIVITY">Activity</option>
+                      <option value="ASSIGNMENT">Assignment</option>
+                      <option value="QUIZ">Quiz</option>
+                    </select>
+                  </label>
                 </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label className="block text-xs font-bold">
+                    Grading component
+                    <select
+                      value={editDraft.classwork_category}
+                      onChange={(event) =>
+                        setEditDraft((current) => current ? { ...current, classwork_category: event.target.value } : current)
+                      }
+                      disabled={isSavingEdit}
+                      className="mt-1 w-full rounded-lg border border-gray-700 bg-white px-3 py-2 text-sm"
+                    >
+                      <option value="">None</option>
+                      <option value="WRITTEN_WORK">Written Works</option>
+                      <option value="PERFORMANCE_TASK">Performance Task</option>
+                      <option value="PERIODICAL_EXAM">Periodical Exam</option>
+                    </select>
+                  </label>
+                  <label className="block text-xs font-bold">
+                    Total points
+                    <input
+                      type="number"
+                      min="1"
+                      step="0.01"
+                      value={editDraft.total_points}
+                      onChange={(event) =>
+                        setEditDraft((current) => current ? { ...current, total_points: event.target.value } : current)
+                      }
+                      disabled={isSavingEdit}
+                      className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-bold">
+                    <input
+                      type="checkbox"
+                      checked={editDraft.is_published}
+                      onChange={(event) =>
+                        setEditDraft((current) => current ? { ...current, is_published: event.target.checked } : current)
+                      }
+                      disabled={isSavingEdit}
+                    />
+                    Published
+                  </label>
+                </div>
+
+                <label className="block text-xs font-bold">
+                  Description
+                  <input
+                    value={editDraft.description}
+                    onChange={(event) =>
+                      setEditDraft((current) => current ? { ...current, description: event.target.value } : current)
+                    }
+                    disabled={isSavingEdit}
+                    className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                  />
+                </label>
+
+                <label className="block text-xs font-bold">
+                  Instructions
+                  <textarea
+                    value={editDraft.instructions}
+                    onChange={(event) =>
+                      setEditDraft((current) => current ? { ...current, instructions: event.target.value } : current)
+                    }
+                    disabled={isSavingEdit}
+                    className="mt-1 min-h-24 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                  />
+                </label>
+
+                <p className="text-xs font-medium text-gray-600">
+                  Schedule, attempts, and assigned sections are managed from class-specific workflows.
+                </p>
+
+                <div className="rounded-lg border border-gray-300 p-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold">Materials</h3>
+                      <p className="text-xs text-gray-500">Add or remove files attached to this classwork.</p>
+                    </div>
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold hover:bg-[#7ABA78]">
+                      <Plus size={14} />
+                      Add files
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
+                        className="hidden"
+                        disabled={isUploadingEditMaterials || removingAttachmentId !== null}
+                        onChange={(event) => {
+                          addEditMaterials(event.target.files);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  {selected.attachments.length > 0 ? (
+                    <div className="space-y-2">
+                      {selected.attachments.map((attachment) => (
+                        <div
+                          key={attachment.classwork_attachment_id}
+                          className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm"
+                        >
+                          <FileText size={16} />
+                          <span className="min-w-0 flex-1 truncate font-semibold">{attachment.file_name}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeSelectedAttachment(attachment.classwork_attachment_id)}
+                            disabled={removingAttachmentId === attachment.classwork_attachment_id || isUploadingEditMaterials}
+                            className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                            aria-label={`Remove ${attachment.file_name}`}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-lg border border-dashed px-3 py-4 text-center text-sm text-gray-500">
+                      No files attached yet.
+                    </p>
+                  )}
+
+                  {editMaterials.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs font-bold">Pending uploads</p>
+                      {editMaterials.map((material, index) => (
+                        <div key={`${material.name}-${material.size}`} className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm">
+                          <FileText size={16} />
+                          <span className="min-w-0 flex-1 truncate font-semibold">{material.name}</span>
+                          <span className="text-xs text-gray-500">{formatFileSize(material.size)}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeEditMaterial(index)}
+                            disabled={isUploadingEditMaterials}
+                            className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={uploadEditMaterials}
+                        disabled={isUploadingEditMaterials}
+                        className="rounded-lg border border-black bg-[#7ABA78] px-3 py-2 text-xs font-bold disabled:opacity-50"
+                      >
+                        {isUploadingEditMaterials ? "Uploading..." : "Upload selected files"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-black bg-white p-4 text-sm font-semibold shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+                {selected.instructions || selected.description || "No instructions provided."}
+              </div>
+            )}
 
                 <div className="rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
                   <div className="mb-3 flex items-center justify-between">
@@ -1112,6 +1558,54 @@ export default function Classworks() {
                   </div>
                 </div>
               </>
+            )}
+            {showArchiveConfirm && !selectedStudent && (
+              <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4">
+                <section className="w-full max-w-md rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="flex items-center justify-between border-b border-black bg-red-100 px-5 py-3">
+                    <div className="flex items-center gap-2 text-red-800">
+                      <Archive size={18} />
+                      <h2 className="font-bold">Archive Classwork?</h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowArchiveConfirm(false)}
+                      disabled={isArchiving}
+                      className="rounded p-1 hover:bg-white/60 disabled:opacity-50"
+                      aria-label="Close archive confirmation"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                  <div className="space-y-3 p-5">
+                    <p className="text-sm font-medium">
+                      Are you sure you want to archive <span className="font-bold">"{selected.title}"</span>?
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      This only works while no student work is turned in. If there are submissions, ask students to unsubmit first.
+                      Linked lessons stay intact.
+                    </p>
+                  </div>
+                  <div className="flex justify-end gap-3 border-t border-black px-5 py-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowArchiveConfirm(false)}
+                      disabled={isArchiving}
+                      className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={archiveSelectedClasswork}
+                      disabled={isArchiving}
+                      className="rounded-lg border border-black bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {isArchiving ? "Archiving..." : "Archive Classwork"}
+                    </button>
+                  </div>
+                </section>
+              </div>
             )}
           </section>
         </main>

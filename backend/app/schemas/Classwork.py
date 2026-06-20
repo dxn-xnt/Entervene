@@ -55,6 +55,7 @@ class ClassworkResponse(BaseModel):
     total_points: Optional[float]
     is_published: bool
     is_locked: bool
+    is_archived: bool
     subject_id: int
     subject_name: Optional[str] = None
     created_by_staff_id: str
