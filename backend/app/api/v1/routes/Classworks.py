@@ -47,6 +47,20 @@ router = APIRouter()
 # Project root = 4 levels up from this file (app/api/v1/routes/Classworks.py)
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 UPLOADS_DIR = BASE_DIR / "uploads"
+READING_TYPE = "READING"
+QUIZ_TYPE = "QUIZ"
+
+
+def _normalize_classwork_type(value: str) -> str:
+    return value.strip().upper()
+
+
+def _is_reading_type(value: Optional[str]) -> bool:
+    return _normalize_classwork_type(value or "") == READING_TYPE
+
+
+def _is_quiz_type(value: Optional[str]) -> bool:
+    return _normalize_classwork_type(value or "") == QUIZ_TYPE
 
 
 def _user_id(current_user: dict):
@@ -111,7 +125,10 @@ def _build_cw(cw, db):
             "title": cls.section_name if cls else "Unknown Section",
             "classwork_type": cw.classwork_type,
             "due_date": a.due_date,
-            "is_published": a.is_published
+            "lock_date": a.lock_date,
+            "max_attempts": a.max_attempts,
+            "is_published": a.is_published,
+            "is_locked": _assignment_is_locked(a),
         })
 
     return ClassworkResponse(
@@ -160,7 +177,11 @@ def _authorize_classwork_access(
             )
             if class_id is not None:
                 query = query.filter(ClassworkAssignment.class_id == class_id)
-            if any(_assignment_is_available(assignment) for assignment in query.all()):
+            if any(
+                _assignment_is_available(assignment)
+                and not _assignment_is_locked(assignment)
+                for assignment in query.all()
+            ):
                 return
     raise HTTPException(status_code=403, detail="Access denied")
 
@@ -186,6 +207,8 @@ def _authorize_assignment_access(
             StudentClass.class_id == assignment.class_id,
             StudentClass.enrollment_status == "enrolled",
         ).first():
+            if _assignment_is_locked(assignment):
+                raise HTTPException(status_code=403, detail="This assignment is locked")
             return
     raise HTTPException(status_code=403, detail="Access denied")
 
@@ -209,17 +232,21 @@ def _classwork_has_submissions(db: Session, classwork_id: int) -> bool:
 
 @router.post("/", response_model=ClassworkResponse)
 def create_classwork(body: ClassworkCreate, staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db)):
-    _validate_classwork_values(total_points=body.total_points)
+    classwork_type = _normalize_classwork_type(body.classwork_type)
+    total_points = None if _is_reading_type(classwork_type) else body.total_points
+    _validate_classwork_values(total_points=total_points)
     _ensure_subject_owner(db, staff_id, body.subject_id)
     lesson_ids = _dedupe_ids(body.lesson_ids)
     _ensure_lessons_owned(db, staff_id, body.subject_id, lesson_ids)
 
     cw = Classwork(title=body.title, description=body.description, instructions=body.instructions,
-                   classwork_type=body.classwork_type, classwork_category=body.classwork_category,
-                   total_points=body.total_points, subject_id=body.subject_id,
+                   classwork_type=classwork_type, classwork_category=body.classwork_category,
+                   total_points=total_points, subject_id=body.subject_id,
                    is_published=body.is_published, created_by_staff_id=staff_id)
     try:
         db.add(cw); db.flush()
+        if _is_reading_type(classwork_type):
+            cw.total_points = None
         for lesson_id in lesson_ids:
             db.add(ClassworkLesson(classwork_id=cw.classwork_id, lesson_id=lesson_id))
         db.commit(); db.refresh(cw)
@@ -250,10 +277,13 @@ async def create_classwork_with_assignments(
     db: Session = Depends(get_db),
 ):
     """Atomic navbar wizard endpoint: create, link, attach, and assign together."""
+    classwork_type = _normalize_classwork_type(classwork_type)
+    total_points = None if _is_reading_type(classwork_type) else total_points
+    max_attempts = max_attempts if _is_quiz_type(classwork_type) else None
     selected_class_ids = _parse_id_list(class_ids, "class_ids")
     selected_lesson_ids = _parse_id_list(lesson_ids, "lesson_ids")
     _validate_classwork_values(total_points=total_points, max_attempts=max_attempts)
-    _validate_schedule(publish_date, due_date, lock_date)
+    _validate_schedule(None, due_date, lock_date)
     _ensure_subject_owner(db, staff_id, subject_id)
     _ensure_lessons_owned(db, staff_id, subject_id, selected_lesson_ids)
     _ensure_class_targets(db, staff_id, subject_id, selected_class_ids)
@@ -276,22 +306,31 @@ async def create_classwork_with_assignments(
         for lesson_id in selected_lesson_ids:
             db.add(ClassworkLesson(classwork_id=cw.classwork_id, lesson_id=lesson_id))
 
+        created_assignments = []
         for cid in selected_class_ids:
-            db.add(ClassworkAssignment(
+            assignment = ClassworkAssignment(
                 classwork_id=cw.classwork_id,
                 class_id=cid,
                 assigned_by_staff_id=staff_id,
-                publish_date=publish_date,
+                publish_date=None,
                 due_date=due_date,
                 lock_date=lock_date,
                 max_attempts=max_attempts,
                 is_published=is_published,
-            ))
+            )
+            db.add(assignment)
+            created_assignments.append(assignment)
 
         for upload in files or []:
             info = _normalize_uploaded_path(await save_file(upload, "classworks"))
             saved_paths.append(info["file_path"])
             db.add(ClassworkAttachment(classwork_id=cw.classwork_id, **info))
+
+        if _is_reading_type(classwork_type):
+            db.flush()
+            cw.total_points = None
+            for assignment in created_assignments:
+                assignment.max_attempts = None
 
         db.commit()
         db.refresh(cw)
@@ -380,6 +419,11 @@ def update_classwork(classwork_id: int, body: ClassworkUpdate, staff_id: str = D
     )
     if not cw: raise HTTPException(status_code=404, detail="Classwork not found or not yours")
     values = body.model_dump(exclude_unset=True)
+    if "classwork_type" in values and values["classwork_type"]:
+        values["classwork_type"] = _normalize_classwork_type(values["classwork_type"])
+    is_reading = _is_reading_type(values.get("classwork_type", cw.classwork_type))
+    if is_reading:
+        values["total_points"] = None
     _validate_classwork_values(total_points=values.get("total_points"))
     lesson_ids = values.pop("lesson_ids", None)
     if lesson_ids is not None:
@@ -550,23 +594,43 @@ def assign_classwork(classwork_id: int, body: ClassworkAssignRequest, staff_id: 
     if not cw: raise HTTPException(status_code=404, detail="Classwork not found or not yours")
     if cw.is_archived: raise HTTPException(status_code=400, detail="Cannot assign archived classwork")
     class_ids = _dedupe_ids(body.class_ids)
-    _validate_classwork_values(max_attempts=body.max_attempts)
-    _validate_schedule(body.publish_date, body.due_date, body.lock_date)
+    max_attempts = body.max_attempts if _is_quiz_type(cw.classwork_type) else None
+    _validate_classwork_values(max_attempts=max_attempts)
+    _validate_schedule(None, body.due_date, body.lock_date)
     _ensure_class_targets(db, staff_id, cw.subject_id, class_ids)
     created = []
+    updated = []
+    new_assignments = []
     try:
         for cid in class_ids:
-            if db.query(ClassworkAssignment).filter(ClassworkAssignment.classwork_id == classwork_id, ClassworkAssignment.class_id == cid).first():
+            existing = db.query(ClassworkAssignment).filter(ClassworkAssignment.classwork_id == classwork_id, ClassworkAssignment.class_id == cid).first()
+            if existing:
+                # Reusing assign lets the teacher update publish/lock settings for existing sections.
+                existing.publish_date = None
+                existing.due_date = body.due_date
+                existing.lock_date = body.lock_date
+                existing.max_attempts = max_attempts
+                existing.is_published = bool(body.is_published)
+                existing.is_locked = False
+                updated.append(cid)
                 continue
             a = ClassworkAssignment(classwork_id=classwork_id, class_id=cid, assigned_by_staff_id=staff_id,
-                                    publish_date=body.publish_date, due_date=body.due_date, lock_date=body.lock_date,
-                                    max_attempts=body.max_attempts, is_published=body.is_published)
-            db.add(a); created.append(cid)
+                                    publish_date=None, due_date=body.due_date, lock_date=body.lock_date,
+                                    max_attempts=max_attempts, is_published=body.is_published)
+            db.add(a); new_assignments.append(a); created.append(cid)
+        if not _is_quiz_type(cw.classwork_type) and new_assignments:
+            db.flush()
+            for assignment in new_assignments:
+                assignment.max_attempts = None
         db.commit()
     except Exception:
         db.rollback()
         raise
-    return {"message": f"Assigned to {len(created)} class(es)", "class_ids": created}
+    return {
+        "message": f"Assigned to {len(created)} class(es), updated {len(updated)} class(es)",
+        "class_ids": created,
+        "updated_class_ids": updated,
+    }
 
 
 # ── Student endpoints ──
@@ -612,7 +676,7 @@ def get_cw_for_class(class_id: int, subject_id: int, student=Depends(get_student
             class_id=ca.class_id, section_name=cls.section_name, title=cw.title,
             description=cw.description, instructions=cw.instructions, classwork_type=cw.classwork_type,
             classwork_category=cw.classwork_category, total_points=float(cw.total_points) if cw.total_points else None,
-            due_date=ca.due_date, is_published=ca.is_published,
+            due_date=ca.due_date, lock_date=ca.lock_date, is_published=ca.is_published,
             is_locked=_assignment_is_locked(ca, now), max_attempts=ca.max_attempts,
             teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
             attachments=[_att_resp(a) for a in cw.attachments],
@@ -636,7 +700,7 @@ def get_cw_assignment(assignment_id: int, current_user: dict = Depends(require_r
         title=cw.title, description=cw.description, instructions=cw.instructions,
         classwork_type=cw.classwork_type, classwork_category=cw.classwork_category,
         total_points=float(cw.total_points) if cw.total_points else None,
-        due_date=ca.due_date, is_published=ca.is_published,
+        due_date=ca.due_date, lock_date=ca.lock_date, is_published=ca.is_published,
         is_locked=_assignment_is_locked(ca), max_attempts=ca.max_attempts,
         teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
         attachments=[_att_resp(a) for a in cw.attachments],
@@ -700,6 +764,7 @@ def get_teacher_assignments_for_class_subject(
                 classwork_category=cw.classwork_category,
                 total_points=float(cw.total_points) if cw.total_points else None,
                 due_date=ca.due_date,
+                lock_date=ca.lock_date,
                 is_published=ca.is_published,
                 is_locked=_assignment_is_locked(ca),
                 max_attempts=ca.max_attempts,

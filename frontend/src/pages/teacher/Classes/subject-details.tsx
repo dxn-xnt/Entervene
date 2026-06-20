@@ -5,6 +5,9 @@ import AppLayout from "@/layouts/app-layout";
 import { API_URL, apiFetch } from "@/lib/api";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
 
+const LOCKED_CLASSWORK_MESSAGE =
+  "This classwork is not available yet. Please check back later or contact your teacher for more information.";
+
 type TeacherClassLoad = {
   subject_load_id: number;
   subject_id: number;
@@ -539,7 +542,13 @@ export default function SubjectDetails() {
       ]);
 
       if (!detailResponse.ok) {
-        throw new Error("Unable to load classwork details.");
+        const body = await detailResponse.json().catch(() => ({}));
+        const detail = String(body.detail || "");
+        throw new Error(
+          detail.includes("locked") || detail.includes("not available")
+            ? LOCKED_CLASSWORK_MESSAGE
+            : "Unable to load classwork details.",
+        );
       }
 
       if (!trackingResponse.ok) {

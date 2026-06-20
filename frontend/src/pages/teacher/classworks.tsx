@@ -15,7 +15,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
@@ -42,7 +42,10 @@ type ClassworkAssignment = {
   class_id: number;
   title?: string | null;
   due_date?: string | null;
+  lock_date?: string | null;
+  max_attempts?: number | null;
   is_published: boolean;
+  is_locked?: boolean | null;
 };
 
 type TeacherClasswork = {
@@ -71,6 +74,15 @@ type TeacherClassLoad = {
   subject_codename?: string | null;
   class_id: number;
   section_name: string;
+};
+
+type TeacherLesson = {
+  lesson_id: number;
+  title: string;
+  order_index?: number;
+  is_published: boolean;
+  is_draft: boolean;
+  subject_id: number;
 };
 
 type TrackingStudent = {
@@ -122,6 +134,7 @@ type CreateDraft = {
   classwork_category: string;
   total_points: string;
   due_date: string;
+  lock_date: string;
   max_attempts: string;
   is_published: boolean;
 };
@@ -133,6 +146,9 @@ type EditDraft = {
   classwork_type: string;
   classwork_category: string;
   total_points: string;
+  due_date: string;
+  lock_date: string;
+  max_attempts: string;
   is_published: boolean;
 };
 
@@ -144,18 +160,28 @@ const emptyDraft: CreateDraft = {
   classwork_category: "WRITTEN_WORK",
   total_points: "100",
   due_date: "",
+  lock_date: "",
   max_attempts: "1",
   is_published: true,
 };
 
 const classworkToEditDraft = (item: TeacherClasswork): EditDraft => ({
+  // The global editor applies assignment settings to all assigned sections.
+  ...(() => {
+    const firstAssignment = item.assignments?.[0];
+    return {
+      due_date: toDateTimeLocal(firstAssignment?.due_date),
+      lock_date: toDateTimeLocal(firstAssignment?.lock_date),
+      max_attempts: firstAssignment?.max_attempts ? String(firstAssignment.max_attempts) : "1",
+      is_published: firstAssignment?.is_published ?? item.is_published,
+    };
+  })(),
   title: item.title,
   description: item.description ?? "",
   instructions: item.instructions ?? "",
   classwork_type: item.classwork_type,
   classwork_category: item.classwork_category ?? "",
   total_points: item.total_points !== null && item.total_points !== undefined ? String(item.total_points) : "",
-  is_published: item.is_published,
 });
 
 const allowedMaterialExtensions = [".pdf", ".docx", ".pptx", ".jpg", ".jpeg", ".png"];
@@ -224,6 +250,13 @@ function formatDate(value?: string | null) {
   }).format(new Date(value));
 }
 
+function toDateTimeLocal(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 16);
+}
+
 function formatFileSize(bytes: number) {
   if (bytes === 0) return "0 bytes";
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
@@ -238,6 +271,14 @@ function fileExtension(fileName: string) {
 function scoreBand(points: number | null | undefined, ratio: number) {
   if (!points) return "0 pts";
   return `${Math.max(1, Math.round(points * ratio))} pts`;
+}
+
+function isReadingType(value?: string | null) {
+  return value?.toUpperCase() === "READING";
+}
+
+function isQuizType(value?: string | null) {
+  return value?.toUpperCase() === "QUIZ";
 }
 
 function submissionStatusLabel(status?: string | null) {
@@ -298,6 +339,7 @@ function ClassworkCard({
 
 export default function Classworks() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const suppressAutoOpenRef = useRef(false);
   const [items, setItems] = useState<TeacherClasswork[]>([]);
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("all");
@@ -312,6 +354,9 @@ export default function Classworks() {
   const [draft, setDraft] = useState<CreateDraft>(emptyDraft);
   const [materials, setMaterials] = useState<File[]>([]);
   const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);
+  const [availableLessons, setAvailableLessons] = useState<TeacherLesson[]>([]);
+  const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>([]);
+  const [isLessonLoading, setIsLessonLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [selected, setSelected] = useState<TeacherClasswork | null>(null);
@@ -438,6 +483,8 @@ export default function Classworks() {
     });
     setMaterials([]);
     setSelectedClassIds([]);
+    setAvailableLessons([]);
+    setSelectedLessonIds([]);
     setCreateError("");
     setShowCreateWizard(true);
   };
@@ -450,6 +497,8 @@ export default function Classworks() {
     setDraft(emptyDraft);
     setMaterials([]);
     setSelectedClassIds([]);
+    setAvailableLessons([]);
+    setSelectedLessonIds([]);
     setCreateError("");
   };
 
@@ -529,17 +578,29 @@ export default function Classworks() {
     );
   };
 
+  const toggleLesson = (lessonId: number) => {
+    setSelectedLessonIds((current) =>
+      current.includes(lessonId)
+        ? current.filter((id) => id !== lessonId)
+        : [...current, lessonId],
+    );
+  };
+
   const validateDetails = () => {
     if (!selectedType) return "Choose a classwork type.";
     if (!draft.subject_id) return "Choose a subject.";
     if (!draft.title.trim()) return "Topic title is required.";
-    const points = Number(draft.total_points);
-    if (draft.total_points && (!Number.isFinite(points) || points <= 0)) {
-      return "Total points must be greater than zero.";
+    if (!isReadingType(selectedType)) {
+      const points = Number(draft.total_points);
+      if (draft.total_points && (!Number.isFinite(points) || points <= 0)) {
+        return "Total points must be greater than zero.";
+      }
     }
-    const attempts = Number(draft.max_attempts);
-    if (!Number.isInteger(attempts) || attempts <= 0) {
-      return "Allowed attempts must be a positive whole number.";
+    if (isQuizType(selectedType)) {
+      const attempts = Number(draft.max_attempts);
+      if (!Number.isInteger(attempts) || attempts <= 0) {
+        return "Allowed attempts must be a positive whole number.";
+      }
     }
     return "";
   };
@@ -560,6 +621,76 @@ export default function Classworks() {
     setCreateStep("assign");
   };
 
+  useEffect(() => {
+    if (createStep !== "assign" || !draft.subject_id || selectedClassIds.length === 0) {
+      setAvailableLessons([]);
+      setSelectedLessonIds([]);
+      return;
+    }
+
+    let isActive = true;
+    setIsLessonLoading(true);
+
+    const loadEligibleLessons = async () => {
+      try {
+        const lessonGroups = await Promise.all(
+          selectedClassIds.map(async (classId) => {
+            const response = await apiFetch(
+              `/api/v1/lessons/my-class/${classId}/subject/${draft.subject_id}`,
+            );
+            if (!response.ok) {
+              throw new Error("Unable to load lessons for selected sections.");
+            }
+            return (await response.json()) as TeacherLesson[];
+          }),
+        );
+
+        if (!isActive) return;
+
+        const commonIds = lessonGroups.reduce<Set<number> | null>((current, group) => {
+          const groupIds = new Set(group.map((lesson) => lesson.lesson_id));
+          if (!current) return groupIds;
+          return new Set([...current].filter((id) => groupIds.has(id)));
+        }, null);
+        const uniqueLessons = new Map<number, TeacherLesson>();
+        lessonGroups.flat().forEach((lesson) => {
+          if (commonIds?.has(lesson.lesson_id)) {
+            uniqueLessons.set(lesson.lesson_id, lesson);
+          }
+        });
+        const lessons = [...uniqueLessons.values()].sort(
+          (a, b) =>
+            (a.order_index ?? 0) - (b.order_index ?? 0) ||
+            a.title.localeCompare(b.title),
+        );
+
+        setAvailableLessons(lessons);
+        setSelectedLessonIds((current) =>
+          current.filter((id) => uniqueLessons.has(id)),
+        );
+        setCreateError("");
+      } catch (err) {
+        if (!isActive) return;
+        setAvailableLessons([]);
+        setSelectedLessonIds([]);
+        setCreateError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load lessons for selected sections.",
+        );
+      } finally {
+        if (isActive) {
+          setIsLessonLoading(false);
+        }
+      }
+    };
+
+    void loadEligibleLessons();
+    return () => {
+      isActive = false;
+    };
+  }, [createStep, draft.subject_id, selectedClassIds]);
+
   const createClasswork = async () => {
     // Use the atomic backend endpoint so create/upload/assign cannot partially succeed.
     const validationError = validateDetails();
@@ -572,6 +703,10 @@ export default function Classworks() {
       setCreateError("Select at least one section to assign this classwork.");
       return;
     }
+    if (selectedLessonIds.length === 0) {
+      setCreateError("Select the lesson where this classwork should appear.");
+      return;
+    }
 
     setIsCreating(true);
     setCreateError("");
@@ -579,7 +714,8 @@ export default function Classworks() {
       if (!selectedType) {
         throw new Error("Select a classwork type first.");
       }
-      const totalPoints = draft.total_points
+      const isReading = isReadingType(selectedType);
+      const totalPoints = !isReading && draft.total_points
         ? Number(draft.total_points)
         : null;
       const formData = new FormData();
@@ -596,10 +732,16 @@ export default function Classworks() {
       formData.append("subject_id", String(draft.subject_id));
       formData.append("is_published", String(draft.is_published));
       formData.append("class_ids", JSON.stringify(selectedClassIds));
+      formData.append("lesson_ids", JSON.stringify(selectedLessonIds));
       if (draft.due_date) {
         formData.append("due_date", new Date(draft.due_date).toISOString());
       }
-      formData.append("max_attempts", String(Number(draft.max_attempts)));
+      if (draft.lock_date) {
+        formData.append("lock_date", new Date(draft.lock_date).toISOString());
+      }
+      if (isQuizType(selectedType)) {
+        formData.append("max_attempts", String(Number(draft.max_attempts)));
+      }
       materials.forEach((material) => formData.append("files", material));
 
       const createResponse = await apiFetch(
@@ -627,6 +769,7 @@ export default function Classworks() {
   };
 
   const openClassworkDetail = useCallback(async (item: TeacherClasswork) => {
+    suppressAutoOpenRef.current = false;
     setSelected(item);
     setTracking(null);
     setDetailError("");
@@ -660,7 +803,11 @@ export default function Classworks() {
 
   useEffect(() => {
     const classworkId = Number(searchParams.get("classworkId"));
-    if (!classworkId || selected?.classwork_id === classworkId) return;
+    if (!classworkId) {
+      suppressAutoOpenRef.current = false;
+      return;
+    }
+    if (suppressAutoOpenRef.current || selected?.classwork_id === classworkId) return;
     const target = items.find((item) => item.classwork_id === classworkId);
     if (target) {
       void openClassworkDetail(target);
@@ -669,13 +816,15 @@ export default function Classworks() {
 
   const closeClassworkDetail = () => {
     if (isArchiving || isSavingEdit) return;
+    // Prevent the URL sync effect from reopening the detail during close.
+    suppressAutoOpenRef.current = true;
     setSelected(null);
     setTracking(null);
     setShowArchiveConfirm(false);
     setIsEditing(false);
     setEditDraft(null);
     setEditMaterials([]);
-    setSearchParams({});
+    setSearchParams({}, { replace: true });
     setDetailError("");
     setSelectedStudent(null);
     setSelectedSubmissionDetail(null);
@@ -687,13 +836,19 @@ export default function Classworks() {
   const saveClassworkEdit = async () => {
     if (!selected || !editDraft) return;
 
-    const totalPoints = editDraft.total_points ? Number(editDraft.total_points) : null;
+    const isReading = isReadingType(editDraft.classwork_type);
+    const totalPoints = !isReading && editDraft.total_points ? Number(editDraft.total_points) : null;
     if (!editDraft.title.trim()) {
       setDetailError("Classwork title is required.");
       return;
     }
     if (totalPoints !== null && (!Number.isFinite(totalPoints) || totalPoints <= 0)) {
       setDetailError("Total points must be greater than zero.");
+      return;
+    }
+    const attempts = Number(editDraft.max_attempts);
+    if (isQuizType(editDraft.classwork_type) && (!Number.isInteger(attempts) || attempts <= 0)) {
+      setDetailError("Allowed attempts must be a positive whole number.");
       return;
     }
 
@@ -718,7 +873,34 @@ export default function Classworks() {
         throw new Error(body.detail || "Unable to update classwork.");
       }
 
-      const updated = (await response.json()) as TeacherClasswork;
+      let updated = (await response.json()) as TeacherClasswork;
+      const assignedClassIds = selected.assignments?.map((assignment) => assignment.class_id) ?? [];
+      if (assignedClassIds.length > 0) {
+        const assignResponse = await apiFetch(
+          `/api/v1/classwork-assignments/classwork/${selected.classwork_id}/assign`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              class_ids: assignedClassIds,
+              due_date: editDraft.due_date ? new Date(editDraft.due_date).toISOString() : null,
+              lock_date: editDraft.lock_date ? new Date(editDraft.lock_date).toISOString() : null,
+              max_attempts: isQuizType(editDraft.classwork_type) ? attempts : null,
+              is_published: editDraft.is_published,
+            }),
+          },
+        );
+        if (!assignResponse.ok) {
+          const body = await assignResponse.json().catch(() => ({}));
+          throw new Error(body.detail || "Unable to update assignment settings.");
+        }
+        const refreshed = await apiFetch(
+          `/api/v1/classwork-assignments/classwork/${selected.classwork_id}`,
+        );
+        if (refreshed.ok) {
+          updated = (await refreshed.json()) as TeacherClasswork;
+        }
+      }
       setItems((current) =>
         current.map((item) => item.classwork_id === updated.classwork_id ? updated : item)
       );
@@ -1255,7 +1437,7 @@ export default function Classworks() {
                   </label>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className={`grid gap-3 ${isReadingType(editDraft.classwork_type) ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
                   <label className="block text-xs font-bold">
                     Grading component
                     <select
@@ -1272,20 +1454,22 @@ export default function Classworks() {
                       <option value="PERIODICAL_EXAM">Periodical Exam</option>
                     </select>
                   </label>
-                  <label className="block text-xs font-bold">
-                    Total points
-                    <input
-                      type="number"
-                      min="1"
-                      step="0.01"
-                      value={editDraft.total_points}
-                      onChange={(event) =>
-                        setEditDraft((current) => current ? { ...current, total_points: event.target.value } : current)
-                      }
-                      disabled={isSavingEdit}
-                      className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
-                    />
-                  </label>
+                  {!isReadingType(editDraft.classwork_type) && (
+                    <label className="block text-xs font-bold">
+                      Total points
+                      <input
+                        type="number"
+                        min="1"
+                        step="0.01"
+                        value={editDraft.total_points}
+                        onChange={(event) =>
+                          setEditDraft((current) => current ? { ...current, total_points: event.target.value } : current)
+                        }
+                        disabled={isSavingEdit}
+                        className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                      />
+                    </label>
+                  )}
                   <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-bold">
                     <input
                       type="checkbox"
@@ -1297,6 +1481,57 @@ export default function Classworks() {
                     />
                     Published
                   </label>
+                </div>
+
+                <div className="rounded-lg border border-gray-300 p-3">
+                  <p className="mb-3 text-xs font-bold">
+                    Assignment settings
+                  </p>
+                  <div className={`grid gap-3 ${isQuizType(editDraft.classwork_type) ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+                    <label className="block text-xs font-bold">
+                      Due date
+                      <input
+                        type="datetime-local"
+                        value={editDraft.due_date}
+                        onChange={(event) =>
+                          setEditDraft((current) => current ? { ...current, due_date: event.target.value } : current)
+                        }
+                        disabled={isSavingEdit}
+                        className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                      />
+                    </label>
+                    <label className="block text-xs font-bold">
+                      Locked until
+                      <input
+                        type="datetime-local"
+                        value={editDraft.lock_date}
+                        onChange={(event) =>
+                          setEditDraft((current) => current ? { ...current, lock_date: event.target.value } : current)
+                        }
+                        disabled={isSavingEdit || !editDraft.is_published}
+                        className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm disabled:bg-gray-100"
+                      />
+                    </label>
+                    {isQuizType(editDraft.classwork_type) && (
+                      <label className="block text-xs font-bold">
+                        Attempts
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={editDraft.max_attempts}
+                          onChange={(event) =>
+                            setEditDraft((current) => current ? { ...current, max_attempts: event.target.value } : current)
+                          }
+                          disabled={isSavingEdit}
+                          className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs font-medium text-gray-600">
+                    Published classwork is visible to students. A future lock date keeps it visible but blocks access until that time; clear it to unlock now.
+                  </p>
                 </div>
 
                 <label className="block text-xs font-bold">
@@ -1322,10 +1557,6 @@ export default function Classworks() {
                     className="mt-1 min-h-24 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
                   />
                 </label>
-
-                <p className="text-xs font-medium text-gray-600">
-                  Schedule, attempts, and assigned sections are managed from class-specific workflows.
-                </p>
 
                 <div className="rounded-lg border border-gray-300 p-3">
                   <div className="mb-3 flex items-center justify-between gap-3">
@@ -1435,128 +1666,136 @@ export default function Classworks() {
                   )}
                 </div>
 
-                <div className="rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h2 className="font-bold">Activity Score</h2>
-                    <p className="text-sm font-bold">
-                      Total: {selected.total_points ?? 0} pts
-                    </p>
+                {isReadingType(selected.classwork_type) ? (
+                  <div className="rounded-lg border border-black bg-[#F6E9B2] p-4 text-sm font-semibold shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+                    This is a reading material, so scores, attempts, and student submissions are not required.
                   </div>
-                  <div className="grid gap-3 md:grid-cols-5">
-                    {[
-                      [
-                        "Excellent",
-                        scoreBand(selected.total_points, 1),
-                        "Displays all required components clearly and accurately.",
-                      ],
-                      [
-                        "Good",
-                        scoreBand(selected.total_points, 0.8),
-                        "Most components are present with minor errors.",
-                      ],
-                      [
-                        "Fair",
-                        scoreBand(selected.total_points, 0.6),
-                        "Some required parts are missing or unclear.",
-                      ],
-                      [
-                        "Needs Improvement",
-                        scoreBand(selected.total_points, 0.4),
-                        "Many required elements are missing.",
-                      ],
-                      [
-                        "Poor",
-                        scoreBand(selected.total_points, 0.2),
-                        "Work is incomplete or not submitted.",
-                      ],
-                    ].map(([label, points, description]) => (
-                      <div
-                        key={label}
-                        className="rounded-lg border border-black p-3"
-                      >
-                        <div className="mb-3 flex items-center justify-between gap-2">
-                          <p className="font-bold">{label}</p>
-                          <p className="text-sm font-bold">{points}</p>
-                        </div>
-                        <p className="text-xs">{description}</p>
+                ) : (
+                  <>
+                    <div className="rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h2 className="font-bold">Activity Score</h2>
+                        <p className="text-sm font-bold">
+                          Total: {selected.total_points ?? 0} pts
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <h2 className="text-2xl font-bold">
-                      Student's Submissions
-                    </h2>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSubmissionSort((current) =>
-                          current === "name" ? "score" : "name",
-                        )
-                      }
-                      className="inline-flex items-center gap-2 text-sm font-medium"
-                    >
-                      <ArrowUpDown size={16} />
-                      Sort By {submissionSort === "name" ? "Name" : "Score"}
-                    </button>
-                  </div>
-
-                  <div className="overflow-hidden rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                    {detailError && (
-                      <div className="border-b border-black bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                        {detailError}
-                      </div>
-                    )}
-                    {isTrackingLoading ? (
-                      <p className="px-4 py-6 text-center text-sm font-semibold text-gray-500">
-                        Loading submissions...
-                      </p>
-                    ) : trackingRows.length > 0 ? (
-                      trackingRows.map((student) => {
-                        const isGraded =
-                          student.status === "graded" ||
-                          (student.grade !== null &&
-                            student.grade !== undefined);
-                        const scoreLabel = isGraded
-                          ? `${student.grade ?? 0}/${selected.total_points ?? 0}`
-                          : `0/${selected.total_points ?? 0}`;
-                        return (
+                      <div className="grid gap-3 md:grid-cols-5">
+                        {[
+                          [
+                            "Excellent",
+                            scoreBand(selected.total_points, 1),
+                            "Displays all required components clearly and accurately.",
+                          ],
+                          [
+                            "Good",
+                            scoreBand(selected.total_points, 0.8),
+                            "Most components are present with minor errors.",
+                          ],
+                          [
+                            "Fair",
+                            scoreBand(selected.total_points, 0.6),
+                            "Some required parts are missing or unclear.",
+                          ],
+                          [
+                            "Needs Improvement",
+                            scoreBand(selected.total_points, 0.4),
+                            "Many required elements are missing.",
+                          ],
+                          [
+                            "Poor",
+                            scoreBand(selected.total_points, 0.2),
+                            "Work is incomplete or not submitted.",
+                          ],
+                        ].map(([label, points, description]) => (
                           <div
-                            key={student.student_id}
-                            className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-black px-4 py-3 last:border-b-0"
+                            key={label}
+                            className="rounded-lg border border-black p-3"
                           >
-                            <div className="flex items-center gap-3">
-                              <div className="grid h-8 w-8 place-items-center rounded-full bg-[#FFD08A] text-xs font-bold">
-                                {student.student_name.slice(0, 1)}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => openStudentSubmission(student)}
-                                className="font-bold hover:underline"
-                              >
-                                {student.student_name}
-                              </button>
+                            <div className="mb-3 flex items-center justify-between gap-2">
+                              <p className="font-bold">{label}</p>
+                              <p className="text-sm font-bold">{points}</p>
                             </div>
-                            <span className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium">
-                              {submissionStatusLabel(
-                                isGraded ? "graded" : student.status,
-                              )}
-                            </span>
-                            <p className="min-w-20 text-right text-sm font-semibold text-gray-700">
-                              {scoreLabel}
-                            </p>
+                            <p className="text-xs">{description}</p>
                           </div>
-                        );
-                      })
-                    ) : (
-                      <p className="px-4 py-6 text-center text-sm font-semibold text-gray-500">
-                        No submissions found for this classwork yet.
-                      </p>
-                    )}
-                  </div>
-                </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="mb-2 flex items-center justify-between">
+                        <h2 className="text-2xl font-bold">
+                          Student's Submissions
+                        </h2>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSubmissionSort((current) =>
+                              current === "name" ? "score" : "name",
+                            )
+                          }
+                          className="inline-flex items-center gap-2 text-sm font-medium"
+                        >
+                          <ArrowUpDown size={16} />
+                          Sort By {submissionSort === "name" ? "Name" : "Score"}
+                        </button>
+                      </div>
+
+                      <div className="overflow-hidden rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                        {detailError && (
+                          <div className="border-b border-black bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                            {detailError}
+                          </div>
+                        )}
+                        {isTrackingLoading ? (
+                          <p className="px-4 py-6 text-center text-sm font-semibold text-gray-500">
+                            Loading submissions...
+                          </p>
+                        ) : trackingRows.length > 0 ? (
+                          trackingRows.map((student) => {
+                            const isGraded =
+                              student.status === "graded" ||
+                              (student.grade !== null &&
+                                student.grade !== undefined);
+                            const scoreLabel = isGraded
+                              ? `${student.grade ?? 0}/${selected.total_points ?? 0}`
+                              : `0/${selected.total_points ?? 0}`;
+                            return (
+                              <div
+                                key={student.student_id}
+                                className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-black px-4 py-3 last:border-b-0"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="grid h-8 w-8 place-items-center rounded-full bg-[#FFD08A] text-xs font-bold">
+                                    {student.student_name.slice(0, 1)}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => openStudentSubmission(student)}
+                                    className="font-bold hover:underline"
+                                  >
+                                    {student.student_name}
+                                  </button>
+                                </div>
+                                <span className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium">
+                                  {submissionStatusLabel(
+                                    isGraded ? "graded" : student.status,
+                                  )}
+                                </span>
+                                <p className="min-w-20 text-right text-sm font-semibold text-gray-700">
+                                  {scoreLabel}
+                                </p>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <p className="px-4 py-6 text-center text-sm font-semibold text-gray-500">
+                            No submissions found for this classwork yet.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </>
             )}
             {showArchiveConfirm && !selectedStudent && (
@@ -1916,7 +2155,7 @@ export default function Classworks() {
                         />
                       </label>
 
-                      <div className="grid gap-3 sm:grid-cols-3">
+                      <div className={`grid gap-3 ${isQuizType(selectedType) ? "sm:grid-cols-3" : isReadingType(selectedType) ? "sm:grid-cols-1" : "sm:grid-cols-2"}`}>
                         <label className="block text-xs font-bold">
                           Grading component
                           <select
@@ -1939,40 +2178,46 @@ export default function Classworks() {
                             </option>
                           </select>
                         </label>
-                        <label className="block text-xs font-bold">
-                          Total points
-                          <input
-                            type="number"
-                            min="1"
-                            step="0.01"
-                            value={draft.total_points}
-                            onChange={(event) =>
-                              setDraft((current) => ({
-                                ...current,
-                                total_points: event.target.value,
-                              }))
-                            }
-                            disabled={isCreating}
-                            className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
-                          />
-                        </label>
-                        <label className="block text-xs font-bold">
-                          Attempts
-                          <input
-                            type="number"
-                            min="1"
-                            step="1"
-                            value={draft.max_attempts}
-                            onChange={(event) =>
-                              setDraft((current) => ({
-                                ...current,
-                                max_attempts: event.target.value,
-                              }))
-                            }
-                            disabled={isCreating}
-                            className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
-                          />
-                        </label>
+                        {!isReadingType(selectedType) && (
+                          <>
+                            <label className="block text-xs font-bold">
+                              Total points
+                              <input
+                                type="number"
+                                min="1"
+                                step="0.01"
+                                value={draft.total_points}
+                                onChange={(event) =>
+                                  setDraft((current) => ({
+                                    ...current,
+                                    total_points: event.target.value,
+                                  }))
+                                }
+                                disabled={isCreating}
+                                className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                              />
+                            </label>
+                            {isQuizType(selectedType) && (
+                              <label className="block text-xs font-bold">
+                                Attempts
+                                <input
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={draft.max_attempts}
+                                  onChange={(event) =>
+                                    setDraft((current) => ({
+                                      ...current,
+                                      max_attempts: event.target.value,
+                                    }))
+                                  }
+                                  disabled={isCreating}
+                                  className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                                />
+                              </label>
+                            )}
+                          </>
+                        )}
                       </div>
 
                       <div>
@@ -2028,7 +2273,7 @@ export default function Classworks() {
 
                   {createStep === "assign" && (
                     <div className="space-y-4">
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="grid gap-3 sm:grid-cols-3">
                         <label className="block text-xs font-bold">
                           Due date
                           <input
@@ -2060,11 +2305,29 @@ export default function Classworks() {
                           >
                             <option value="published">Publish now</option>
                             <option value="draft">
-                              Save as draft assignment
+                              Keep hidden from students
                             </option>
                           </select>
                         </label>
+                        <label className="block text-xs font-bold">
+                          Locked until
+                          <input
+                            type="datetime-local"
+                            value={draft.lock_date}
+                            onChange={(event) =>
+                              setDraft((current) => ({
+                                ...current,
+                                lock_date: event.target.value,
+                              }))
+                            }
+                            disabled={isCreating || !draft.is_published}
+                            className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm disabled:bg-gray-100"
+                          />
+                        </label>
                       </div>
+                      <p className="text-xs font-medium text-gray-600">
+                        Published work appears to students. Add a future lock date if they should see it but wait before opening, downloading, or submitting.
+                      </p>
 
                       <div>
                         <div className="mb-2 flex items-center justify-between">
@@ -2111,6 +2374,56 @@ export default function Classworks() {
                         {selectedSubjectLoads.length === 0 && (
                           <p className="rounded-lg border border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500">
                             No active sections are assigned to this subject.
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <div className="mb-2">
+                          <p className="text-xs font-bold">
+                            Link under lesson
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Only lessons assigned to every selected section are shown.
+                          </p>
+                        </div>
+                        {selectedClassIds.length === 0 ? (
+                          <p className="rounded-lg border border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500">
+                            Select a section first to load available lessons.
+                          </p>
+                        ) : isLessonLoading ? (
+                          <p className="rounded-lg border border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500">
+                            Loading lessons...
+                          </p>
+                        ) : availableLessons.length > 0 ? (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {availableLessons.map((lesson) => {
+                              const isSelected = selectedLessonIds.includes(
+                                lesson.lesson_id,
+                              );
+                              return (
+                                <button
+                                  key={lesson.lesson_id}
+                                  type="button"
+                                  onClick={() => toggleLesson(lesson.lesson_id)}
+                                  disabled={isCreating}
+                                  className={`rounded-lg border border-black px-3 py-3 text-left text-sm font-bold ${
+                                    isSelected ? "bg-[#7ABA78]" : "bg-white"
+                                  }`}
+                                >
+                                  <span className="block truncate">
+                                    {lesson.title}
+                                  </span>
+                                  <span className="mt-1 block text-xs font-medium text-gray-600">
+                                    {lesson.is_published ? "Published lesson" : "Draft lesson"}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="rounded-lg border border-dashed border-gray-400 px-4 py-5 text-center text-sm text-gray-500">
+                            No shared lesson is assigned to all selected sections.
                           </p>
                         )}
                       </div>

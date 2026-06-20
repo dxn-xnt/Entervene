@@ -16,6 +16,9 @@ import SubmissionForm from "@/components/SubmissionForm";
 import SubmissionViewer from "@/components/SubmissionViewer";
 import { API_URL, apiFetch } from "@/lib/api";
 
+const LOCKED_CLASSWORK_MESSAGE =
+  "This classwork is not available yet. Please check back later or contact your teacher for more information.";
+
 // ─── Interfaces ────────────────────────────────────────────────────────────
 
 interface LessonAttachment {
@@ -114,6 +117,10 @@ function getStatusBadge(status?: string | null, dueDate?: string | null) {
   if (diffDays < 0) return { label: `${Math.abs(diffDays)} days late`, cls: "bg-[#FF4B4B] text-white" };
   if (diffDays === 0) return { label: "Due today", cls: "bg-orange-400 text-white" };
   return { label: `Due in ${diffDays} days`, cls: "bg-[#7ABA78] text-white" };
+}
+
+function isReadingType(value?: string | null) {
+  return value?.toUpperCase() === "READING";
 }
 
 function ClassworkIcon({ type, size = 16 }: { type?: string | null; size?: number }) {
@@ -261,7 +268,15 @@ export default function SubjectLessonTab({
     setDetailError("");
     try {
       const res = await apiFetch(`/api/v1/classwork-assignments/assignment/${cw.classwork_assignment_id}`);
-      if (!res.ok) throw new Error("Unable to load classwork details.");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const detail = String(body.detail || "");
+        throw new Error(
+          detail.includes("locked") || detail.includes("not available")
+            ? LOCKED_CLASSWORK_MESSAGE
+            : "Unable to load classwork details.",
+        );
+      }
       const detail = (await res.json()) as ClassworkDetail;
       const submission = await fetchSubmissionForAssignment(cw.classwork_assignment_id);
       setSelectedClasswork(detail);
@@ -754,10 +769,18 @@ export default function SubjectLessonTab({
                   <div className="mb-3 flex items-center gap-2">
                     {selectedSubmission ? <FileText size={18} /> : <BookOpen size={18} />}
                     <h3 className="font-bold">
-                      {selectedSubmission ? "Your Submission" : "Submit Your Work"}
+                      {isReadingType(selectedClasswork.classwork_type)
+                        ? "Reading Material"
+                        : selectedSubmission
+                          ? "Your Submission"
+                          : "Submit Your Work"}
                     </h3>
                   </div>
-                  {selectedSubmission ? (
+                  {isReadingType(selectedClasswork.classwork_type) ? (
+                    <p className="text-sm font-medium">
+                      Review the content and reference files. No submission is required.
+                    </p>
+                  ) : selectedSubmission ? (
                     <SubmissionViewer
                       submission={selectedSubmission}
                       dueDate={selectedClasswork.due_date ?? undefined}

@@ -37,6 +37,11 @@ router = APIRouter()
 logger = logging.getLogger("app.submissions")
 
 
+def _uses_attempt_limit(cw: Classwork) -> bool:
+    """Only quiz classwork should enforce a resubmission attempt cap."""
+    return (cw.classwork_type or "").upper() == "QUIZ"
+
+
 def _user_id(current_user: dict):
     value = current_user.get("sub")
     try:
@@ -186,6 +191,7 @@ async def submit_work(
 
     due_date = _aware_utc(ca.due_date)
     is_late = bool(due_date and now > due_date)
+    enforce_attempt_limit = _uses_attempt_limit(cw)
 
     saved_paths: list[str] = []
     if existing:
@@ -199,7 +205,7 @@ async def submit_work(
                     detail="Attach at least one file using the 'files' form field.",
                 )
             if upload_files:
-                if existing.attempt_count >= (ca.max_attempts or 1):
+                if enforce_attempt_limit and existing.attempt_count >= (ca.max_attempts or 1):
                     raise HTTPException(status_code=403, detail="Maximum attempts reached")
                 existing.attempt_count += 1
         else:
@@ -208,7 +214,7 @@ async def submit_work(
                     status_code=400,
                     detail="Use Unsubmit first, then upload changes and submit again.",
                 )
-            if existing.attempt_count >= (ca.max_attempts or 1):
+            if enforce_attempt_limit and existing.attempt_count >= (ca.max_attempts or 1):
                 raise HTTPException(status_code=403, detail="Maximum attempts reached")
             existing.attempt_count += 1
         existing.submitted_at = now
