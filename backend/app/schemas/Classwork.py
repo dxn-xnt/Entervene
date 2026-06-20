@@ -8,7 +8,7 @@ class ClassworkCreate(BaseModel):
     title: str
     description: Optional[str] = None
     instructions: Optional[str] = None
-    classwork_type: str  # QUIZ, ASSIGNMENT, ACTIVITY
+    classwork_type: str  # READING, QUIZ, ASSIGNMENT, ACTIVITY
     classwork_category: Optional[str] = None  # WRITTEN_WORK, PERFORMANCE_TASK, PERIODICAL_EXAM
     total_points: Optional[float] = 100
     subject_id: int
@@ -42,7 +42,10 @@ class CwAssignmentRow(BaseModel):
     title: Optional[str] = None
     classwork_type: Optional[str] = None
     due_date: Optional[datetime] = None
+    lock_date: Optional[datetime] = None
+    max_attempts: Optional[int] = 1
     is_published: bool
+    is_locked: Optional[bool] = False
 
 
 class ClassworkResponse(BaseModel):
@@ -55,6 +58,7 @@ class ClassworkResponse(BaseModel):
     total_points: Optional[float]
     is_published: bool
     is_locked: bool
+    is_archived: bool
     subject_id: int
     subject_name: Optional[str] = None
     created_by_staff_id: str
@@ -87,6 +91,7 @@ class ClassworkAssignmentResponse(BaseModel):
     classwork_category: Optional[str]
     total_points: Optional[float]
     due_date: Optional[datetime]
+    lock_date: Optional[datetime] = None
     is_published: bool
     is_locked: Optional[bool] = False
     max_attempts: Optional[int] = 1

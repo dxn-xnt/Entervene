@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.sql import func
-from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.Base import Base
 
 
@@ -25,7 +25,7 @@ class ClassworkAssignment(Base):
     lock_date: Mapped[datetime | None] = Column(DateTime(timezone=True))
     is_published: Mapped[bool] = Column(Boolean, default=False)
     is_locked: Mapped[bool] = Column(Boolean, default=False)
-    max_attempts: Mapped[int] = Column(Integer, default=1)
+    max_attempts: Mapped[int | None] = mapped_column(Integer, default=1, nullable=True)
     assigned_at: Mapped[datetime | None] = Column(DateTime(timezone=True), server_default=func.now())
     created_at: Mapped[datetime | None] = Column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

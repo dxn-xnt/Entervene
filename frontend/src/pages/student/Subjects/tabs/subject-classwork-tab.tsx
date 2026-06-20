@@ -40,6 +40,7 @@ interface ClassworkAssignment {
   classwork_category?: string;
   total_points?: number;
   due_date?: string;
+  lock_date?: string;
   is_published: boolean;
   is_locked?: boolean;
   max_attempts?: number;
@@ -52,6 +53,10 @@ type SubjectClassworkTabProps = {
   classId?: number;
   subjectId?: number;
 };
+
+function isReadingType(value?: string | null) {
+  return value?.toUpperCase() === "READING";
+}
 
 export default function SubjectClassworkTab({
   classId,
@@ -188,6 +193,11 @@ export default function SubjectClassworkTab({
     return new Date(dateString).toLocaleDateString();
   };
 
+  const formatDateTime = (dateString?: string): string => {
+    if (!dateString) return "the unlock time";
+    return new Date(dateString).toLocaleString();
+  };
+
   const isOverdue = (dueDate?: string): boolean => {
     if (!dueDate) return false;
     return new Date() > new Date(dueDate);
@@ -273,6 +283,11 @@ export default function SubjectClassworkTab({
                       Overdue
                     </span>
                   )}
+                  {cw.is_locked && (
+                    <span className="text-xs px-2 py-1 rounded font-medium bg-yellow-100 text-yellow-800">
+                      Locked
+                    </span>
+                  )}
                 </div>
 
                 <div className="text-sm text-gray-600 space-y-1">
@@ -306,6 +321,13 @@ export default function SubjectClassworkTab({
             {/* Details */}
             {isExpanded && (
               <div className="border-t border-gray-200 px-4 py-4 bg-gray-50 space-y-4">
+                {cw.is_locked ? (
+                  <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
+                    This classwork is published but locked until {formatDateTime(cw.lock_date)}.
+                    You can view the title now, but files and submissions open after it unlocks.
+                  </div>
+                ) : (
+                  <>
                 {/* Description & Instructions */}
                 {(cw.description || cw.instructions) && (
                   <div className="space-y-3">
@@ -347,7 +369,11 @@ export default function SubjectClassworkTab({
                 )}
 
                 {/* Submission Status or Form */}
-                {submission ? (
+                {isReadingType(cw.classwork_type) ? (
+                  <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+                    Reading material only. Review the content and attached files; no submission is required.
+                  </div>
+                ) : submission ? (
                   <div>
                     <h5 className="font-medium text-gray-900 mb-2">
                       Your Submission
@@ -381,6 +407,8 @@ export default function SubjectClassworkTab({
                       isLoading={submittingId === cw.classwork_assignment_id}
                     />
                   </div>
+                )}
+                  </>
                 )}
               </div>
             )}
