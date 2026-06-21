@@ -8,3 +8,6 @@ from .StudentCLass   import StudentClass
 from .Lesson         import Lesson
 from .LessonAssignment import LessonAssignment
 from .LessonAttachment import LessonAttachment
+from .AssessmentItem import AssessmentItem
+from .StudentAssessmentScore import StudentAssessmentScore
+from .StudentPeriodGrade import StudentPeriodGrade
