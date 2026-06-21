@@ -20,6 +20,7 @@ import AdminUserDetail from "./pages/admin/user-detail";
 import AdminInterventions from "./pages/admin/interventions";
 import AdminNotifications from "./pages/admin/notifications";
 import AdminSettings from "./pages/admin/system-settings";
+import AcademicPeriods from "./pages/admin/academic-periods";
 // import AppLayout from "./layouts/app-layout";
 
 // Teacher pages
@@ -80,6 +81,7 @@ const App = () => {
               element={<AdminNotifications />}
             />
             <Route path={routes.admin.settings} element={<AdminSettings />} />
+            <Route path={routes.admin.academicPeriods} element={<AcademicPeriods />} />
           </Route>
 
           {/* Teacher */}

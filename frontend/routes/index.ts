@@ -18,6 +18,7 @@ export const routes = {
     interventions: "/admin/interventions",
     notifications: "/admin/notifications",
     settings: "/admin/settings",
+    academicPeriods: "/admin/academic-periods",
   },
 
   // teacher: {

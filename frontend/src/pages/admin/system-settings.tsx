@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Text } from "@/components/retroui/Text";
 import AppLayout from "@/layouts/app-layout";
+import { useNavigate } from "react-router-dom";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
 import { Accordion } from "@/components/retroui/Accordion";
@@ -8,8 +9,11 @@ import { Input } from "@/components/retroui/Input";
 import { ArrowUpRight } from 'lucide-react';
 import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Dialog } from "@/components/retroui/Dialog";
+import AddAcademicPeriodModal from "./forms/add-academic-period";
 
 export default function AdminSystemSettings() {
+  const navigate = useNavigate();
   const academiclevels = [
     {
       level: "Grade 7",
@@ -143,9 +147,14 @@ export default function AdminSystemSettings() {
               <CardHeader>
                 <CardTitle className="flex flex-row justify-between w-full items-center">
                   Academic Period
-                  <Button size={"sm"}>
-                    New Academic Period
-                  </Button>
+                  <Dialog>
+                    <Dialog.Trigger>
+                      <Button size={"sm"}>
+                        New Academic Period
+                      </Button>
+                    </Dialog.Trigger>
+                    <AddAcademicPeriodModal />
+                  </Dialog>
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pt-4 flex flex-col gap-4">
@@ -212,7 +221,8 @@ export default function AdminSystemSettings() {
                     <Text as="p" className="font-sans text-sm">
                       Define the grading periods for Junior and Senior High School used in grade computation and reporting.
                     </Text>
-                    <Button size="sm" variant="link" className=" shadow-none p-0! flex-row gap-2 shrink-0 m-0!">
+                    <Button size="sm" variant="link" className=" shadow-none p-0! flex-row gap-2 shrink-0 m-0!"
+                      onClick={() => navigate(`/admin/academic-periods`)}>
                       View All Periods
                       <ArrowUpRight className="w-4 h-4" />
                     </Button>
