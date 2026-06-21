@@ -8,7 +8,7 @@ class ClassworkCreate(BaseModel):
     title: str
     description: Optional[str] = None
     instructions: Optional[str] = None
-    classwork_type: str  # QUIZ, ASSIGNMENT, ACTIVITY
+    classwork_type: str  # READING, QUIZ, ASSIGNMENT, ACTIVITY
     classwork_category: Optional[str] = None  # WRITTEN_WORK, PERFORMANCE_TASK, PERIODICAL_EXAM
     total_points: Optional[float] = 100
     subject_id: int
@@ -24,6 +24,7 @@ class ClassworkUpdate(BaseModel):
     classwork_category: Optional[str] = None
     total_points: Optional[float] = None
     is_published: Optional[bool] = None
+    lesson_ids: Optional[list[int]] = None
 
 
 class ClassworkAttachmentResponse(BaseModel):
@@ -37,10 +38,14 @@ class ClassworkAttachmentResponse(BaseModel):
 class CwAssignmentRow(BaseModel):
     classwork_assignment_id: int
     classwork_id: int
+    class_id: int
     title: Optional[str] = None
     classwork_type: Optional[str] = None
     due_date: Optional[datetime] = None
+    lock_date: Optional[datetime] = None
+    max_attempts: Optional[int] = 1
     is_published: bool
+    is_locked: Optional[bool] = False
 
 
 class ClassworkResponse(BaseModel):
@@ -53,6 +58,7 @@ class ClassworkResponse(BaseModel):
     total_points: Optional[float]
     is_published: bool
     is_locked: bool
+    is_archived: bool
     subject_id: int
     subject_name: Optional[str] = None
     created_by_staff_id: str
@@ -73,6 +79,7 @@ class ClassworkAssignRequest(BaseModel):
 
 
 class ClassworkAssignmentResponse(BaseModel):
+    """Class-specific classwork view used by student and teacher assignment pages."""
     classwork_assignment_id: int
     classwork_id: int
     class_id: int
@@ -84,7 +91,10 @@ class ClassworkAssignmentResponse(BaseModel):
     classwork_category: Optional[str]
     total_points: Optional[float]
     due_date: Optional[datetime]
+    lock_date: Optional[datetime] = None
     is_published: bool
+    is_locked: Optional[bool] = False
+    max_attempts: Optional[int] = 1
     teacher_name: Optional[str] = None
     attachments: list[ClassworkAttachmentResponse] = []
     assignments: Optional[list[CwAssignmentRow]] = None

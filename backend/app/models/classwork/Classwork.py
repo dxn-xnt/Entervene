@@ -16,11 +16,12 @@ class Classwork(Base):
     title: Mapped[str] = Column(String(255), nullable=False)
     description: Mapped[str | None] = Column(Text)
     instructions: Mapped[str | None] = Column(Text)
-    classwork_type: Mapped[str] = Column(String(50), nullable=False)   # QUIZ, ASSIGNMENT, ACTIVITY
+    classwork_type: Mapped[str] = Column(String(50), nullable=False)   # READING, QUIZ, ASSIGNMENT, ACTIVITY
     classwork_category: Mapped[str | None] = Column(String(50))        # WRITTEN_WORK, PERFORMANCE_TASK, PERIODICAL_EXAM
     total_points: Mapped[Decimal | None] = Column(Numeric(8, 2), default=100)
     is_locked: Mapped[bool] = Column(Boolean, default=False)
     is_published: Mapped[bool] = Column(Boolean, default=False)
+    is_archived: Mapped[bool] = Column(Boolean, default=False, nullable=False)
     subject_id: Mapped[int] = Column(Integer, ForeignKey("subject.subject_id"), nullable=False)
     created_by_staff_id: Mapped[str] = Column(String(20), ForeignKey("academic_staff.staff_id"), nullable=False)
     created_at: Mapped[datetime | None] = Column(DateTime(timezone=True), server_default=func.now())

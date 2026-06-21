@@ -3,11 +3,13 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
-from typing import List, Optional
+from typing import List, Optional, cast
 from pathlib import Path
 from datetime import datetime, timezone
+from decimal import Decimal
 from uuid import UUID
 import logging
+from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from app.db.Session import get_db
 from app.core.Dependencies import require_role, get_staff_id, get_student_record
@@ -24,9 +26,20 @@ from app.models.people.AcademicStaff import AcademicStaff
 from app.schemas.Submission import (
     SubmissionResponse, SubmissionAttachmentResponse, GradeRequest,
 )
+from app.services.classwork.ClassworkShared import (
+    assignment_is_available as _assignment_is_available,
+    assignment_is_locked as _assignment_is_locked,
+    aware_utc as _aware_utc,
+    cleanup_saved_files as _cleanup_saved_files,
+)
 
 router = APIRouter()
 logger = logging.getLogger("app.submissions")
+
+
+def _uses_attempt_limit(cw: Classwork) -> bool:
+    """Only quiz classwork should enforce a resubmission attempt cap."""
+    return (cw.classwork_type or "").upper() == "QUIZ"
 
 
 def _user_id(current_user: dict):
@@ -37,20 +50,25 @@ def _user_id(current_user: dict):
         return value
 
 
-async def _files_from_form(request: Request, field_names: set[str]) -> list[UploadFile]:
+async def _files_from_form(request: Request, field_names: set[str]) -> list[StarletteUploadFile]:
     try:
         form = await request.form()
     except Exception:
         return []
-    uploads: list[UploadFile] = []
+    uploads: list[StarletteUploadFile] = []
     for key, value in form.multi_items():
-        if key in field_names and hasattr(value, "filename") and value.filename:
+        if key in field_names and isinstance(value, StarletteUploadFile) and value.filename:
             uploads.append(value)
     return uploads
 
 
 def _student_name(student: Student) -> str:
-    parts = [student.first_name, student.middle_name, student.last_name, student.suffix]
+    parts = [
+        cast(Optional[str], student.first_name),
+        cast(Optional[str], student.middle_name),
+        cast(Optional[str], student.last_name),
+        cast(Optional[str], student.suffix),
+    ]
     return " ".join([p for p in parts if p])
 
 
@@ -80,7 +98,7 @@ def _authorize_submission_access(sub: StudentSubmission, current_user: dict, db:
     if role == "teacher":
         staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
         if staff:
-            _teacher_owns_assignment(sub.classwork_assignment_id, staff.staff_id, db)
+            _teacher_owns_assignment(sub.classwork_assignment_id, cast(str, staff.staff_id), db)
             return
     raise HTTPException(status_code=403, detail="Access denied")
 
@@ -138,11 +156,15 @@ async def submit_work(
     student=Depends(get_student_record),
     db: Session = Depends(get_db),
 ):
+    """Create or resubmit work while preserving attempts and rolling back failed uploads."""
     ca = db.query(ClassworkAssignment).filter(
         ClassworkAssignment.classwork_assignment_id == assignment_id
     ).first()
     if not ca:
         raise HTTPException(status_code=404, detail="Assignment not found")
+    cw = db.query(Classwork).filter(Classwork.classwork_id == ca.classwork_id).first()
+    if not cw or cw.is_archived:
+        raise HTTPException(status_code=404, detail="Classwork not found")
     enr = db.query(StudentClass).filter(
         StudentClass.student_id == student.student_id,
         StudentClass.class_id == ca.class_id,
@@ -150,7 +172,10 @@ async def submit_work(
     ).first()
     if not enr:
         raise HTTPException(status_code=403, detail="Not enrolled in this class")
-    if ca.is_locked:
+    now = datetime.now(timezone.utc)
+    if not _assignment_is_available(ca, now):
+        raise HTTPException(status_code=403, detail="This assignment is not available")
+    if _assignment_is_locked(ca, now):
         raise HTTPException(status_code=403, detail="This assignment is locked")
 
     existing = db.query(StudentSubmission).filter(
@@ -158,16 +183,17 @@ async def submit_work(
         StudentSubmission.student_id == student.student_id,
     ).first()
 
-    upload_files = [f for f in (files or []) if f and f.filename]
+    upload_files: list[StarletteUploadFile] = [
+        cast(StarletteUploadFile, f) for f in (files or []) if f and f.filename
+    ]
     if not upload_files:
         upload_files = await _files_from_form(request, {"files", "file", "attachments", "attachment"})
 
-    now = datetime.now(timezone.utc)
-    due_date = ca.due_date
-    if due_date and due_date.tzinfo is None:
-        due_date = due_date.replace(tzinfo=timezone.utc)
+    due_date = _aware_utc(ca.due_date)
     is_late = bool(due_date and now > due_date)
+    enforce_attempt_limit = _uses_attempt_limit(cw)
 
+    saved_paths: list[str] = []
     if existing:
         if existing.status == "graded":
             raise HTTPException(status_code=403, detail="Cannot modify a graded submission")
@@ -178,13 +204,17 @@ async def submit_work(
                     status_code=400,
                     detail="Attach at least one file using the 'files' form field.",
                 )
+            if upload_files:
+                if enforce_attempt_limit and existing.attempt_count >= (ca.max_attempts or 1):
+                    raise HTTPException(status_code=403, detail="Maximum attempts reached")
+                existing.attempt_count += 1
         else:
             if not upload_files:
                 raise HTTPException(
                     status_code=400,
                     detail="Use Unsubmit first, then upload changes and submit again.",
                 )
-            if existing.attempt_count >= (ca.max_attempts or 1):
+            if enforce_attempt_limit and existing.attempt_count >= (ca.max_attempts or 1):
                 raise HTTPException(status_code=403, detail="Maximum attempts reached")
             existing.attempt_count += 1
         existing.submitted_at = now
@@ -205,13 +235,19 @@ async def submit_work(
         )
         db.add(submission)
 
-    db.flush()
-    for f in upload_files:
-        info = await save_file(f, "submissions")
-        att = SubmissionAttachment(submission_id=submission.submission_id, **info)
-        db.add(att)
-    db.commit()
-    db.refresh(submission)
+    try:
+        db.flush()
+        for f in upload_files:
+            info = await save_file(f, "submissions")
+            saved_paths.append(info["file_path"])
+            att = SubmissionAttachment(submission_id=submission.submission_id, **info)
+            db.add(att)
+        db.commit()
+        db.refresh(submission)
+    except Exception:
+        db.rollback()
+        _cleanup_saved_files(saved_paths)
+        raise
     return _build_sub(submission, db)
 
 
@@ -223,6 +259,9 @@ def _assert_student_can_modify_submission(
     ).first()
     if not ca:
         raise HTTPException(status_code=404, detail="Assignment not found")
+    cw = db.query(Classwork).filter(Classwork.classwork_id == ca.classwork_id).first()
+    if not cw or cw.is_archived:
+        raise HTTPException(status_code=404, detail="Classwork not found")
     enr = db.query(StudentClass).filter(
         StudentClass.student_id == student.student_id,
         StudentClass.class_id == ca.class_id,
@@ -230,12 +269,12 @@ def _assert_student_can_modify_submission(
     ).first()
     if not enr:
         raise HTTPException(status_code=403, detail="Not enrolled in this class")
-    if ca.is_locked:
-        raise HTTPException(status_code=403, detail="This assignment is locked")
     now = datetime.now(timezone.utc)
-    due_date = ca.due_date
-    if due_date and due_date.tzinfo is None:
-        due_date = due_date.replace(tzinfo=timezone.utc)
+    if not _assignment_is_available(ca, now):
+        raise HTTPException(status_code=403, detail="This assignment is not available")
+    if _assignment_is_locked(ca, now):
+        raise HTTPException(status_code=403, detail="This assignment is locked")
+    due_date = _aware_utc(ca.due_date)
     if due_date and now > due_date:
         raise HTTPException(status_code=403, detail="Cannot modify submission after due date")
     sub = db.query(StudentSubmission).filter(
@@ -314,7 +353,7 @@ def delete_submission_attachment(
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
-    delete_file(attachment.file_path)
+    delete_file(cast(str, attachment.file_path))
     db.delete(attachment)
     db.commit()
     db.refresh(sub)
@@ -323,12 +362,16 @@ def delete_submission_attachment(
 
 @router.delete("/assignment/{assignment_id}/submit")
 def delete_submission(assignment_id: int, student=Depends(get_student_record), db: Session = Depends(get_db)):
+    """Clear submitted files without deleting the attempt history."""
     _, sub = _assert_student_can_modify_submission(assignment_id, student, db)
-    for att in sub.attachments:
-        delete_file(att.file_path)
-    db.delete(sub)
+    for raw_att in sub.attachments:
+        att = cast(SubmissionAttachment, raw_att)
+        delete_file(cast(str, att.file_path))
+        db.delete(att)
+    sub.status = "pending"
+    sub.submitted_at = None
     db.commit()
-    return {"message": "Submission deleted successfully. You can now resubmit."}
+    return {"message": "Submission files cleared. You can now resubmit."}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -578,8 +621,8 @@ def get_submission_detail_teacher(
 def download_submission_attachment(
     submission_id: int,
     attachment_id: int,
+    request: Request,
     token: Optional[str] = Query(None, description="JWT token as fallback for browser-based access"),
-    request: Request = None,
     db: Session = Depends(get_db),
 ):
     """
@@ -589,10 +632,10 @@ def download_submission_attachment(
     """
     # Resolve user from Bearer header or ?token= query param
     payload = None
-    auth_header = request.headers.get("Authorization", "") if request else ""
+    auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         payload = decode_access_token(auth_header[7:])
-    elif request and request.cookies.get(ACCESS_COOKIE_NAME):
+    elif request.cookies.get(ACCESS_COOKIE_NAME):
         payload = decode_access_token(request.cookies[ACCESS_COOKIE_NAME])
     elif token:
         payload = decode_access_token(token)
@@ -612,13 +655,13 @@ def download_submission_attachment(
     if not att:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
-    p = Path(att.file_path)
+    p = Path(cast(str, att.file_path))
     if not p.exists():
         raise HTTPException(status_code=404, detail="File not found on server")
     return FileResponse(
         path=str(p),
-        filename=att.file_name,
-        media_type=att.file_type or "application/octet-stream",
+        filename=cast(str, att.file_name),
+        media_type=cast(Optional[str], att.file_type) or "application/octet-stream",
     )
 
 
@@ -642,7 +685,7 @@ def grade_submission(
             status_code=400,
             detail=f"Grade cannot be greater than {float(cw.total_points)}",
         )
-    sub.grade = body.grade
+    sub.grade = Decimal(str(body.grade))
     sub.feedback = body.feedback
     sub.status = "graded"
     sub.graded_at = datetime.now(timezone.utc)

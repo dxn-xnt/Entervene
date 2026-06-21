@@ -5,6 +5,9 @@ import AppLayout from "@/layouts/app-layout";
 import { API_URL, apiFetch } from "@/lib/api";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
 
+const LOCKED_CLASSWORK_MESSAGE =
+  "This classwork is not available yet. Please check back later or contact your teacher for more information.";
+
 type TeacherClassLoad = {
   subject_load_id: number;
   subject_id: number;
@@ -142,6 +145,7 @@ export default function SubjectDetails() {
   const [lessonMaterials, setLessonMaterials] = useState<File[]>([]);
   const [isSavingLesson, setIsSavingLesson] = useState(false);
   const [isArchivingLesson, setIsArchivingLesson] = useState(false);
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [removingLessonAttachmentId, setRemovingLessonAttachmentId] = useState<number | null>(null);
   const [expandedLessonId, setExpandedLessonId] = useState<number | null>(null);
   const [linkedClassworks, setLinkedClassworks] = useState<Record<number, LinkedClasswork[]>>({});
@@ -299,6 +303,7 @@ export default function SubjectDetails() {
     setLessonDraft(null);
     setLessonClassIds([]);
     setLessonMaterials([]);
+    setShowArchiveConfirm(false);
     setError("");
   };
 
@@ -480,6 +485,7 @@ export default function SubjectDetails() {
       setLessonDraft(null);
       setLessonClassIds([]);
       setLessonMaterials([]);
+      setShowArchiveConfirm(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to archive lesson.");
     } finally {
@@ -536,7 +542,13 @@ export default function SubjectDetails() {
       ]);
 
       if (!detailResponse.ok) {
-        throw new Error("Unable to load classwork details.");
+        const body = await detailResponse.json().catch(() => ({}));
+        const detail = String(body.detail || "");
+        throw new Error(
+          detail.includes("locked") || detail.includes("not available")
+            ? LOCKED_CLASSWORK_MESSAGE
+            : "Unable to load classwork details.",
+        );
       }
 
       if (!trackingResponse.ok) {
@@ -1084,13 +1096,9 @@ export default function SubjectDetails() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (window.confirm(`Archive "${selectedLesson.title}"?`)) {
-                        archiveLesson();
-                      }
-                    }}
+                    onClick={() => setShowArchiveConfirm(true)}
                     disabled={isArchivingLesson || isSavingLesson}
-                    className="mt-3 w-full rounded-lg border border-red-400 bg-white px-3 py-2 text-sm font-bold text-red-700 disabled:opacity-50"
+                    className="mt-3 w-full rounded-lg border border-red-400 bg-white px-3 py-2 text-sm font-bold text-red-700 transition hover:border-red-700 hover:bg-red-600 hover:text-white disabled:opacity-50 disabled:hover:border-red-400 disabled:hover:bg-white disabled:hover:text-red-700"
                   >
                     {isArchivingLesson ? "Archiving..." : "Archive Lesson"}
                   </button>
@@ -1114,6 +1122,54 @@ export default function SubjectDetails() {
                 className="rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
               >
                 {isSavingLesson ? "Saving..." : lessonDraft.is_published ? "Save and Publish" : "Save Draft"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {showArchiveConfirm && selectedLesson && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4">
+          <section className="w-full max-w-md rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <div className="flex items-center justify-between border-b border-black bg-red-100 px-5 py-3">
+              <div className="flex items-center gap-2 text-red-800">
+                <Archive size={18} />
+                <h2 className="font-bold">Archive Lesson?</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowArchiveConfirm(false)}
+                disabled={isArchivingLesson}
+                className="rounded p-1 hover:bg-white/60 disabled:opacity-50"
+                aria-label="Close archive confirmation"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3 p-5">
+              <p className="text-sm font-medium">
+                Are you sure you want to archive <span className="font-bold">"{selectedLesson.title}"</span>?
+              </p>
+              <p className="text-xs text-gray-600">
+                This hides the lesson from the teacher lesson list and student lesson views. You can restore it later from the backend archive flow.
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-black px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setShowArchiveConfirm(false)}
+                disabled={isArchivingLesson}
+                className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={archiveLesson}
+                disabled={isArchivingLesson}
+                className="rounded-lg border border-black bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 disabled:opacity-50"
+              >
+                {isArchivingLesson ? "Archiving..." : "Archive Lesson"}
               </button>
             </div>
           </section>
@@ -1359,9 +1415,20 @@ export default function SubjectDetails() {
                   {selectedClasswork?.title || "Classwork"}
                 </h2>
               </div>
-              <button type="button" onClick={closeClassworkDetail} className="rounded p-1 hover:bg-white/60">
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-2">
+                {selectedClasswork && (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/teacher/classworks?classworkId=${selectedClasswork.classwork_id}`)}
+                    className="rounded-lg border border-black bg-white px-3 py-1.5 text-xs font-bold hover:bg-[#7ABA78]"
+                  >
+                    Click for more details
+                  </button>
+                )}
+                <button type="button" onClick={closeClassworkDetail} className="rounded p-1 hover:bg-white/60">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             {detailLoadingId ? (

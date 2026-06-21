@@ -44,7 +44,7 @@ import StudentSubjectDetail from "./pages/student/student-subject-detail";
 // import StudentInterventions from "./pages/student/StudentInterventions";
 import StudentGrades from "./pages/student/Grades/grades";
 import StudentTodo from "./pages/student/todo";
-import StudentNotifications from "./pages/student/notification";
+import StudentNotifications from "./pages/student/notifications";
 
 // // Layouts
 // import TeacherLayout from "./pages/teacher/TeacherLayout";

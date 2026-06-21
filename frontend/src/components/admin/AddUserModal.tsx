@@ -192,7 +192,7 @@ export default function AddUserModal({
             <div className="flex gap-3 p-4 border-b">
               <button
                 onClick={() => setStep("import")}
-                className="flex-1 rounded-lg p-4 text-left transition-all border bg-[#5c8f5c] hover:opacity-90 active:scale-95 overflow-hidden"
+                className="flex-1 rounded-lg p-4 text-left transition-all border bg-[#7ABA78] hover:opacity-90 active:scale-95 overflow-hidden"
               >
                 <div className="flex items-center gap-2 font-semibold text-sm mb-1">
                   <svg
@@ -213,7 +213,7 @@ export default function AddUserModal({
               </button>
               <button
                 onClick={() => setStep("manual")}
-                className="flex-1 rounded-lg p-4 text-left transition-all border bg-[#5c8f5c] hover:opacity-90 active:scale-95 overflow-hidden"
+                className="flex-1 rounded-lg p-4 text-left transition-all border bg-[#7ABA78] hover:opacity-90 active:scale-95 overflow-hidden"
               >
                 <div className="flex items-center gap-2 font-semibold text-sm mb-1">
                   <svg
@@ -249,7 +249,7 @@ export default function AddUserModal({
         {/* ── STEP: IMPORT ─────────────────────────────────── */}
         {step === "import" && (
           <>
-            <div className="flex items-center justify-between p-4 border-b border-black bg-[#5c8f5c]">
+            <div className="flex items-center justify-between p-4 border-b border-black bg-[#7ABA78]">
               <span className="font-semibold text-s">Import from file</span>
               <button
                 onClick={handleClose}
@@ -377,8 +377,7 @@ export default function AddUserModal({
               </button>
               <button
                 disabled={!uploadedFile || importing}
-                className="px-4 py-1.5 rounded-lg border text-sm font-semibold transition cursor-pointer"
-                style={{ background: "#5c8f5c" }}
+                className="px-4 py-1.5 rounded-lg border text-sm font-semibold transition cursor-pointer bg-[#7ABA78]"
                 onClick={handleImportSubmit}
               >
                 {importing ? "Importing..." : "Import"}
@@ -390,7 +389,7 @@ export default function AddUserModal({
         {/* ── STEP: MANUAL ─────────────────────────────────── */}
         {step === "manual" && (
           <>
-            <div className="flex items-center justify-between p-4 border-b border-black bg-[#5c8f5c]">
+            <div className="flex items-center justify-between p-4 border-b border-black bg-[#7ABA78]">
               <span className="font-semibold text-s">Create user manually</span>
               <button
                 onClick={handleClose}
@@ -586,7 +585,7 @@ export default function AddUserModal({
               <button
                 onClick={handleManualSubmit}
                 disabled={manualSubmitting}
-                className="px-5 py-1.5 rounded-lg border text-sm font-semibold bg-[#5c8f5c] transition hover:opacity-90"
+                className="px-5 py-1.5 rounded-lg border text-sm font-semibold bg-[#7ABA78] transition hover:opacity-90"
               >
                 {manualSubmitting ? "Sending..." : "Send Invitation"}
               </button>

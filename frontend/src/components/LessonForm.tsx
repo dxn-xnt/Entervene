@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 
 interface LessonFormProps {
   classId: number;
@@ -31,7 +31,7 @@ export default function LessonForm({
   const [error, setError] = useState<string>("");
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value, type } = e.target;
     if (type === "checkbox") {
@@ -66,15 +66,9 @@ export default function LessonForm({
   const buttonLabel = formData.publishImmediately
     ? "Publish Lesson"
     : "Save Draft";
-  const buttonColor = formData.publishImmediately
-    ? "bg-green-600 hover:bg-green-700"
-    : "bg-blue-600 hover:bg-blue-700";
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle>Create Lesson</CardTitle>
-      </CardHeader>
+    <div className="w-full">
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (
@@ -94,7 +88,7 @@ export default function LessonForm({
               value={formData.title}
               onChange={handleChange}
               placeholder="Enter lesson title"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={isLoading}
             />
           </div>
@@ -113,7 +107,7 @@ export default function LessonForm({
               onChange={handleChange}
               placeholder="Enter lesson description (optional)"
               rows={3}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={isLoading}
             />
           </div>
@@ -129,7 +123,7 @@ export default function LessonForm({
               onChange={handleChange}
               placeholder="Enter lesson content"
               rows={6}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={isLoading}
             />
           </div>
@@ -157,7 +151,7 @@ export default function LessonForm({
           <div className="flex gap-3 justify-end">
             <button
               type="button"
-              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              className="px-6 py-2 border rounded-lg hover:bg-gray-50"
               disabled={isLoading}
               onClick={() => window.history.back()}
             >
@@ -166,13 +160,13 @@ export default function LessonForm({
             <button
               type="submit"
               disabled={isLoading}
-              className={`px-6 py-2 text-white rounded-lg font-medium transition-colors ${buttonColor} disabled:opacity-50 disabled:cursor-not-allowed`}
+              className={`px-6 py-2 text-black border rounded-lg font-medium transition-colors bg-[#7ABA78] disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               {isLoading ? "Saving..." : buttonLabel}
             </button>
           </div>
         </form>
       </CardContent>
-    </Card>
+    </div>
   );
 }

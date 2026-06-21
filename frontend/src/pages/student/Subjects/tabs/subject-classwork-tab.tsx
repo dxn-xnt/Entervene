@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import SubmissionForm from "@/components/SubmissionForm";
 import SubmissionViewer from "@/components/SubmissionViewer";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
-import { API_URL } from "@/lib/api";
+import { API_URL, apiFetch } from "@/lib/api";
 
 interface Attachment {
   classwork_attachment_id: number;
@@ -15,6 +15,7 @@ interface Attachment {
 
 interface Submission {
   submission_id: number;
+  classwork_assignment_id: number;
   status: string;
   submitted_at?: string;
   grade?: number;
@@ -39,6 +40,7 @@ interface ClassworkAssignment {
   classwork_category?: string;
   total_points?: number;
   due_date?: string;
+  lock_date?: string;
   is_published: boolean;
   is_locked?: boolean;
   max_attempts?: number;
@@ -52,6 +54,10 @@ type SubjectClassworkTabProps = {
   subjectId?: number;
 };
 
+function isReadingType(value?: string | null) {
+  return value?.toUpperCase() === "READING";
+}
+
 export default function SubjectClassworkTab({
   classId,
   subjectId,
@@ -64,26 +70,16 @@ export default function SubjectClassworkTab({
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (classId && subjectId) {
-      fetchClassworks();
-    }
-  }, [classId, subjectId]);
-
-  const fetchClassworks = async () => {
+  const fetchClassworks = useCallback(async () => {
+    // Load assigned classworks, then merge in the student's current submission state.
     if (!classId || !subjectId) return;
 
     setIsLoading(true);
     setError("");
 
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/v1/classwork-assignments/class/${classId}/subject/${subjectId}`,
-        {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-        }
+      const response = await apiFetch(
+        `/api/v1/classwork-assignments/class/${classId}/subject/${subjectId}`
       );
 
       if (!response.ok) {
@@ -93,10 +89,15 @@ export default function SubjectClassworkTab({
       const data = await response.json();
       setClassworks(data);
 
-      // Fetch submissions
       const submissionsData: Record<number, Submission> = {};
-      for (const cw of data) {
-        const sub = await fetchSubmission(cw.classwork_assignment_id);
+      const submissionsResponse = await apiFetch("/api/v1/submissions/my-submissions");
+      const allSubmissions = submissionsResponse.ok
+        ? ((await submissionsResponse.json()) as Submission[])
+        : [];
+      for (const cw of data as ClassworkAssignment[]) {
+        const sub = allSubmissions.find(
+          (submission) => submission.classwork_assignment_id === cw.classwork_assignment_id
+        );
         if (sub) {
           submissionsData[cw.classwork_assignment_id] = sub;
         }
@@ -107,24 +108,23 @@ export default function SubjectClassworkTab({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [classId, subjectId]);
+
+  useEffect(() => {
+    if (classId && subjectId) {
+      fetchClassworks();
+    }
+  }, [classId, subjectId, fetchClassworks]);
 
   const fetchSubmission = async (
     assignmentId: number
   ): Promise<Submission | null> => {
+    // The backend exposes submissions as a student list; pick the matching assignment.
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/v1/submissions/assignment/${assignmentId}/submit`,
-        {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-        }
-      );
-
-      if (response.ok) {
-        return await response.json();
-      }
+      const response = await apiFetch("/api/v1/submissions/my-submissions");
+      if (!response.ok) return null;
+      const data = (await response.json()) as Submission[];
+      return data.find((submission) => submission.classwork_assignment_id === assignmentId) ?? null;
     } catch (err) {
       console.error("Error fetching submission:", err);
     }
@@ -139,14 +139,10 @@ export default function SubjectClassworkTab({
         formData.append("files", file);
       });
 
-      const response = await fetch(
-        `http://localhost:8000/api/v1/submissions/assignment/${assignmentId}/submit`,
-        {
-          method: "POST",
-          credentials: "include",
-          body: formData,
-        }
-      );
+      const response = await apiFetch(`/api/v1/submissions/assignment/${assignmentId}/submit`, {
+        method: "POST",
+        body: formData,
+      });
 
       if (!response.ok) {
         throw new Error("Failed to submit assignment");
@@ -170,15 +166,12 @@ export default function SubjectClassworkTab({
   const handleDeleteSubmission = async (
     assignmentId: number
   ) => {
+    // Backend clears files but keeps attempt history, so max attempts stay enforced.
     setDeletingId(assignmentId);
     try {
-      const response = await fetch(
-        `http://localhost:8000/api/v1/submissions/assignment/${assignmentId}/submit`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        }
-      );
+      const response = await apiFetch(`/api/v1/submissions/assignment/${assignmentId}/submit`, {
+        method: "DELETE",
+      });
 
       if (!response.ok) {
         throw new Error("Failed to delete submission");
@@ -198,6 +191,11 @@ export default function SubjectClassworkTab({
   const formatDate = (dateString?: string): string => {
     if (!dateString) return "No due date";
     return new Date(dateString).toLocaleDateString();
+  };
+
+  const formatDateTime = (dateString?: string): string => {
+    if (!dateString) return "the unlock time";
+    return new Date(dateString).toLocaleString();
   };
 
   const isOverdue = (dueDate?: string): boolean => {
@@ -285,6 +283,11 @@ export default function SubjectClassworkTab({
                       Overdue
                     </span>
                   )}
+                  {cw.is_locked && (
+                    <span className="text-xs px-2 py-1 rounded font-medium bg-yellow-100 text-yellow-800">
+                      Locked
+                    </span>
+                  )}
                 </div>
 
                 <div className="text-sm text-gray-600 space-y-1">
@@ -318,6 +321,13 @@ export default function SubjectClassworkTab({
             {/* Details */}
             {isExpanded && (
               <div className="border-t border-gray-200 px-4 py-4 bg-gray-50 space-y-4">
+                {cw.is_locked ? (
+                  <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
+                    This classwork is published but locked until {formatDateTime(cw.lock_date)}.
+                    You can view the title now, but files and submissions open after it unlocks.
+                  </div>
+                ) : (
+                  <>
                 {/* Description & Instructions */}
                 {(cw.description || cw.instructions) && (
                   <div className="space-y-3">
@@ -359,7 +369,11 @@ export default function SubjectClassworkTab({
                 )}
 
                 {/* Submission Status or Form */}
-                {submission ? (
+                {isReadingType(cw.classwork_type) ? (
+                  <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+                    Reading material only. Review the content and attached files; no submission is required.
+                  </div>
+                ) : submission ? (
                   <div>
                     <h5 className="font-medium text-gray-900 mb-2">
                       Your Submission
@@ -393,6 +407,8 @@ export default function SubjectClassworkTab({
                       isLoading={submittingId === cw.classwork_assignment_id}
                     />
                   </div>
+                )}
+                  </>
                 )}
               </div>
             )}
