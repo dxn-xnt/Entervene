@@ -7,6 +7,8 @@ import type {
   ClassStudentListResponse,
   ClassTransferOptionsResponse,
   GetClassesResponse,
+  TeacherAdvisoryClassDetailResponse,
+  TeacherAdvisoryClassListItem,
   UpdateClassStudentListRequest,
   UpdateClassRequest,
   UnassignedClassStudentsResponse,
@@ -298,6 +300,30 @@ export async function getClassStudents(
   return (await response.json()) as ClassStudentListResponse;
 }
 
+export async function getTeacherAdvisoryClasses(): Promise<TeacherAdvisoryClassListItem[]> {
+  const response = await apiFetch("/api/v1/classes/teacher/advisory");
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(teacherAdvisoryClassErrorMessage(data, response.status, "Unable to load advisory classes."));
+  }
+
+  return (await response.json()) as TeacherAdvisoryClassListItem[];
+}
+
+export async function getTeacherAdvisoryClassDetail(
+  classId: string | number
+): Promise<TeacherAdvisoryClassDetailResponse> {
+  const response = await apiFetch(`/api/v1/classes/teacher/advisory/${encodeURIComponent(String(classId))}`);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(teacherAdvisoryClassErrorMessage(data, response.status, "Unable to load class details."));
+  }
+
+  return (await response.json()) as TeacherAdvisoryClassDetailResponse;
+}
+
 export async function getClassTransferOptions(classId: string | number): Promise<ClassTransferOptionsResponse> {
   const response = await apiFetch(`/api/v1/classes/${encodeURIComponent(String(classId))}/transfer-options`);
 
@@ -381,6 +407,13 @@ function classStudentsErrorMessage(data: unknown, status: number): string {
   if (status === 404) return safeClassErrorMessage(data, "Class not found.");
   if (status === 409) return safeClassErrorMessage(data, "Unable to update student list.");
   return safeClassErrorMessage(data, "Unable to update student list.");
+}
+
+function teacherAdvisoryClassErrorMessage(data: unknown, status: number, fallback: string): string {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to view this advisory class.";
+  if (status === 404) return "Class not found.";
+  return safeClassErrorMessage(data, fallback);
 }
 
 function safeClassErrorMessage(data: unknown, fallback: string): string {

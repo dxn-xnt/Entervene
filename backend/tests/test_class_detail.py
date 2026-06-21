@@ -663,6 +663,222 @@ def test_class_students_requires_admin_and_authentication(client):
     assert client.get("/api/v1/classes/1/students").status_code == 401
 
 
+def test_teacher_adviser_can_list_advisory_classes_without_subject_load(client, db):
+    year = add_year(db, "2025-2026")
+    level = add_level(db, "Grade 7", 7)
+    adviser = add_staff(db, "T-1")
+    class_ = Class(
+        section_name="Sampaguita",
+        class_status="active",
+        adviser_staff_id=adviser.staff_id,
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    db.add(class_)
+    db.flush()
+    student = add_student(db, level, "100000000001")
+    db.add(build_student_class_assignment(student.student_id, class_))
+    db.commit()
+    client.app.dependency_overrides[get_current_user] = lambda: {
+        "sub": adviser.user_id,
+        "role": "teacher",
+    }
+
+    response = client.get("/api/v1/classes/teacher/advisory")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "class_id": class_.class_id,
+            "section_name": "Sampaguita",
+            "academic_level": "Grade 7",
+            "academic_year": "2025-2026",
+            "class_status": "active",
+            "is_archived": False,
+            "student_count": 1,
+            "subject_count": 0,
+        }
+    ]
+
+
+def test_teacher_adviser_can_open_read_only_advisory_class_detail(client, db):
+    year = add_year(db, "2025-2026")
+    level = add_level(db, "Grade 7", 7)
+    adviser = add_staff(db, "T-1")
+    teacher = add_staff(db, "T-2")
+    class_ = Class(
+        section_name="Aristotle",
+        class_status="active",
+        adviser_staff_id=adviser.staff_id,
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    db.add(class_)
+    db.flush()
+    female_account = UserAccount(
+        user_id=uuid.uuid4(),
+        email="christina@example.test",
+        password_hash="secret",
+        account_status="ACTIVE",
+    )
+    db.add(female_account)
+    db.flush()
+    female = Student(
+        student_id=uuid.uuid4(),
+        student_lrn="100000000001",
+        first_name="Christina",
+        middle_name="Vera",
+        last_name="Bautista",
+        gender="Female",
+        email="student-email@example.test",
+        academic_level_id=level.academic_level_id,
+        user_id=female_account.user_id,
+    )
+    male = Student(
+        student_id=uuid.uuid4(),
+        student_lrn="100000000002",
+        first_name="Juan",
+        last_name="Dela Cruz",
+        gender="Male",
+        academic_level_id=level.academic_level_id,
+    )
+    subject = Subject(subject_name="Filipino 7", academic_level_id=level.academic_level_id)
+    period = AcademicPeriod(
+        period_name="Q1",
+        period_type="QUARTER",
+        start_date=date(2025, 6, 1),
+        end_date=date(2025, 8, 31),
+        academic_year_id=year.academic_year_id,
+    )
+    db.add_all([female, male, subject, period])
+    db.flush()
+    db.add(build_student_class_assignment(female.student_id, class_))
+    db.add(build_student_class_assignment(male.student_id, class_))
+    db.add(SubjectLoad(
+        staff_id=teacher.staff_id,
+        subject_id=subject.subject_id,
+        class_id=class_.class_id,
+        academic_period_id=period.academic_period_id,
+        status="active",
+    ))
+    db.commit()
+    client.app.dependency_overrides[get_current_user] = lambda: {
+        "sub": adviser.user_id,
+        "role": "teacher",
+    }
+
+    response = client.get(f"/api/v1/classes/teacher/advisory/{class_.class_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["section_name"] == "Aristotle"
+    assert body["academic_level"] == "Grade 7"
+    assert body["academic_year"] == "2025-2026"
+    assert body["class_status"] == "active"
+    assert body["is_archived"] is False
+    assert body["student_count"] == 2
+    assert body["female_count"] == 1
+    assert body["male_count"] == 1
+    assert body["subject_count"] == 1
+    assert [student["full_name"] for student in body["students"]] == [
+        "Bautista, Christina V.",
+        "Dela Cruz, Juan",
+    ]
+    assert body["students"][0]["student_lrn"] == "100000000001"
+    assert body["students"][0]["email"] == "student-email@example.test"
+    assert body["students"][0]["account_status"] == "ACTIVE"
+    assert body["subject_loads"] == [
+        {
+            "subject_load_id": body["subject_loads"][0]["subject_load_id"],
+            "subject_id": subject.subject_id,
+            "subject_name": "Filipino 7",
+            "teacher_id": teacher.staff_id,
+            "teacher_name": "Ada Byron Lovelace",
+            "schedule": "Q1",
+            "status": "active",
+        }
+    ]
+    assert "secret" not in response.text
+
+
+def test_subject_teacher_who_is_not_adviser_cannot_open_advisory_detail(client, db):
+    year = add_year(db, "2025-2026")
+    level = add_level(db, "Grade 7", 7)
+    adviser = add_staff(db, "T-1")
+    subject_teacher = add_staff(db, "T-2")
+    class_ = Class(
+        section_name="Aristotle",
+        adviser_staff_id=adviser.staff_id,
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    subject = Subject(subject_name="Science", academic_level_id=level.academic_level_id)
+    period = AcademicPeriod(
+        period_name="Q1",
+        period_type="QUARTER",
+        start_date=date(2025, 6, 1),
+        end_date=date(2025, 8, 31),
+        academic_year_id=year.academic_year_id,
+    )
+    db.add_all([class_, subject, period])
+    db.flush()
+    db.add(SubjectLoad(
+        staff_id=subject_teacher.staff_id,
+        subject_id=subject.subject_id,
+        class_id=class_.class_id,
+        academic_period_id=period.academic_period_id,
+    ))
+    db.commit()
+    client.app.dependency_overrides[get_current_user] = lambda: {
+        "sub": subject_teacher.user_id,
+        "role": "teacher",
+    }
+
+    response = client.get(f"/api/v1/classes/teacher/advisory/{class_.class_id}")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "You do not have permission to view this advisory class."
+
+
+def test_teacher_advisory_detail_missing_class_returns_404(client, db):
+    adviser = add_staff(db, "T-1")
+    db.commit()
+    client.app.dependency_overrides[get_current_user] = lambda: {
+        "sub": adviser.user_id,
+        "role": "teacher",
+    }
+
+    response = client.get("/api/v1/classes/teacher/advisory/999")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Class not found."
+
+
+def test_teacher_advisory_detail_returns_archived_status(client, db):
+    year = add_year(db, "2025-2026")
+    level = add_level(db, "Grade 7", 7)
+    adviser = add_staff(db, "T-1")
+    class_ = Class(
+        section_name="Archived Section",
+        class_status="archived",
+        adviser_staff_id=adviser.staff_id,
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    db.add(class_)
+    db.commit()
+    client.app.dependency_overrides[get_current_user] = lambda: {
+        "sub": adviser.user_id,
+        "role": "teacher",
+    }
+
+    response = client.get(f"/api/v1/classes/teacher/advisory/{class_.class_id}")
+
+    assert response.status_code == 200
+    assert response.json()["class_status"] == "archived"
+    assert response.json()["is_archived"] is True
+
+
 def test_transfer_options_returns_valid_same_level_active_sections(client, db):
     year = add_year(db, "2025-2026")
     level = add_level(db, "Grade 7", 7)

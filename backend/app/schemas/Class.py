@@ -121,6 +121,54 @@ class ClassStudentListResponse(BaseModel):
     pagination: ClassStudentPaginationResponse
 
 
+class TeacherAdvisoryClassListItem(BaseModel):
+    class_id: int
+    section_name: str
+    academic_level: str
+    academic_year: str
+    class_status: str
+    is_archived: bool
+    student_count: int
+    subject_count: int
+
+
+class TeacherAdvisoryStudentItem(BaseModel):
+    student_id: UUID
+    full_name: str
+    student_lrn: str | None
+    gender: str
+    email: str | None
+    account_status: str | None
+    avatar_initial: str
+
+
+class TeacherAdvisorySubjectLoadItem(BaseModel):
+    subject_load_id: int
+    subject_id: int
+    subject_name: str
+    teacher_id: str
+    teacher_name: str
+    schedule: str | None
+    status: str | None
+
+
+class TeacherAdvisoryClassDetailResponse(BaseModel):
+    class_id: int
+    section_name: str
+    academic_level: str
+    academic_year: str
+    class_status: str
+    is_archived: bool
+    created_at: datetime | None
+    active_since: str | None
+    student_count: int
+    male_count: int
+    female_count: int
+    subject_count: int
+    students: list[TeacherAdvisoryStudentItem]
+    subject_loads: list[TeacherAdvisorySubjectLoadItem]
+
+
 class ClassTransferOptionItem(BaseModel):
     class_id: int
     section_name: str
