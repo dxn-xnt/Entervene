@@ -3,3 +3,4 @@ from . import academic
 from . import people
 from . import classwork
 from . import submissions
+from . import ai
