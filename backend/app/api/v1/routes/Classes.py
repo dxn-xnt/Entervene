@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.orm import Session
 
-from app.core.Dependencies import require_role
+from app.core.Dependencies import get_staff_id, require_role
 from app.db.Session import get_db
 from app.schemas.Class import (
     ArchiveClassResponse,
@@ -11,6 +11,8 @@ from app.schemas.Class import (
     ClassListResponse,
     ClassFormOptionsResponse,
     ClassStudentListResponse,
+    TeacherAdvisoryClassDetailResponse,
+    TeacherAdvisoryClassListItem,
     ClassTransferOptionsResponse,
     ClassUpdateRequest,
     UpdateClassStudentListRequest,
@@ -24,6 +26,8 @@ from app.services.classes.ClassQueryService import (
     get_class_form_options_data,
     get_class_students_data,
     get_class_transfer_options_data,
+    get_teacher_advisory_class_detail_data,
+    list_teacher_advisory_classes_data,
     get_unassigned_students_data,
     list_classes_data,
 )
@@ -107,6 +111,23 @@ def get_class_students(
     db: Session = Depends(get_db),
 ):
     return get_class_students_data(db=db, class_id=class_id, search=search, page=page, page_size=page_size)
+
+
+@router.get("/teacher/advisory", response_model=list[TeacherAdvisoryClassListItem])
+def list_teacher_advisory_classes(
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return list_teacher_advisory_classes_data(db=db, staff_id=staff_id)
+
+
+@router.get("/teacher/advisory/{class_id}", response_model=TeacherAdvisoryClassDetailResponse)
+def get_teacher_advisory_class_detail(
+    class_id: int,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return get_teacher_advisory_class_detail_data(db=db, class_id=class_id, staff_id=staff_id)
 
 
 @router.get("/{class_id}/transfer-options", response_model=ClassTransferOptionsResponse)
