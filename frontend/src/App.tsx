@@ -27,6 +27,7 @@ import AcademicPeriods from "./pages/admin/academic-periods";
 import TeacherDashboard from "./pages/teacher/dashboard";
 // import TeacherClasses from "./pages/teacher/Classworks";
 import ClassesPage from "./pages/teacher/Classes/classes-page";
+import TeacherClassDetail from "./pages/teacher/Classes/class-detail";
 import ClassSections from "./pages/teacher/Classes/class-section";
 import SubjectDetails from "./pages/teacher/Classes/subject-details";
 import Subjects from "./pages/teacher/Classes/subjects";
@@ -92,7 +93,7 @@ const App = () => {
             <Route path={routes.teacher.classes} element={<ClassesPage />} />
             <Route path={routes.teacher.classSections} element={<ClassSections />} />
             <Route path={routes.teacher.subjects} element={<Subjects />} />
-            <Route path={routes.teacher.classDetail} element={<Subjects />} />
+            <Route path={routes.teacher.classDetail} element={<TeacherClassDetail />} />
             <Route path={routes.teacher.classSubjects} element={<Subjects />} />
             <Route path={routes.teacher.subjectDetail} element={<SubjectDetails />} />
             <Route path={routes.teacher.classworks} element={<TeacherClassworks />} />

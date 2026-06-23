@@ -325,7 +325,11 @@ export default function AdminClasses() {
                         {group.classes.length !== 1 ? "s" : ""}
                       </span>
                     </div>
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div
+                      className={`grid gap-3 md:grid-cols-2 ${
+                        group.classes.length > 2 ? "xl:grid-cols-3" : ""
+                      }`}
+                    >
                       {group.classes.map((item) => (
                         <ClassCard
                           key={item.class_id}

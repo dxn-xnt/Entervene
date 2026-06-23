@@ -145,6 +145,54 @@ export type ClassStudentListResponse = {
   };
 };
 
+export type TeacherAdvisoryClassListItem = {
+  class_id: number;
+  section_name: string;
+  academic_level: string;
+  academic_year: string;
+  class_status: string;
+  is_archived: boolean;
+  student_count: number;
+  subject_count: number;
+};
+
+export type TeacherAdvisoryStudentItem = {
+  student_id: string;
+  full_name: string;
+  student_lrn: string | null;
+  gender: string;
+  email: string | null;
+  account_status: string | null;
+  avatar_initial: string;
+};
+
+export type TeacherAdvisorySubjectLoadItem = {
+  subject_load_id: number;
+  subject_id: number;
+  subject_name: string;
+  teacher_id: string;
+  teacher_name: string;
+  schedule: string | null;
+  status: string | null;
+};
+
+export type TeacherAdvisoryClassDetailResponse = {
+  class_id: number;
+  section_name: string;
+  academic_level: string;
+  academic_year: string;
+  class_status: string;
+  is_archived: boolean;
+  created_at: string | null;
+  active_since: string | null;
+  student_count: number;
+  male_count: number;
+  female_count: number;
+  subject_count: number;
+  students: TeacherAdvisoryStudentItem[];
+  subject_loads: TeacherAdvisorySubjectLoadItem[];
+};
+
 export type ClassTransferOption = {
   class_id: number;
   section_name: string;

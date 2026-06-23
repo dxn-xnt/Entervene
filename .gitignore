@@ -8,9 +8,22 @@ backend/data/
 backend/**/*.pkl
 backend\app\core\Config.py
 
+# Local datasets / ML artifacts
+backend/data/datasets/
+backend/data/dataset_validation/
+backend/data/models/
+backend/data/raw_eclass_records/
+backend/data/normalized_eclass_records/
+
+# Private traceability files
+**/PRIVATE_source_student_identity_map.csv
+
 # Python cache
+__pycache__/
 **/__pycache__/
+*.py[cod]
 *.pyc
+.pytest_cache/
 
 # React / Vite
 frontend/node_modules/
