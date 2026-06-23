@@ -73,6 +73,28 @@ export type UserAnalytics = {
   lms_behavior: Record<string, number | string | null> | null;
 };
 
+export type StudentMyClassSummary = {
+  class_id: number;
+  grade_level: string;
+  section_name: string;
+  academic_year: string;
+  adviser_name: string | null;
+  classmate_count: number;
+};
+
+export type StudentClassmateItem = {
+  student_id: string;
+  full_name: string;
+  gender?: string | null;
+  avatar_initial?: string | null;
+};
+
+export type StudentClassmatesResponse = {
+  class_id: number;
+  section_name: string;
+  classmates: StudentClassmateItem[];
+};
+
 function getCookie(name: string): string | null {
   const value = document.cookie
     .split("; ")
@@ -166,6 +188,30 @@ export async function getUserAnalytics(userId: string) {
   }
 
   return (await response.json()) as UserAnalytics;
+}
+
+export async function getMyClass(): Promise<StudentMyClassSummary | null> {
+  const response = await apiFetch("/api/v1/students/me/class");
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error("Unable to load your section. Please try again.");
+  }
+
+  return (await response.json()) as StudentMyClassSummary;
+}
+
+export async function getMyClassmates(): Promise<StudentClassmatesResponse> {
+  const response = await apiFetch("/api/v1/students/me/classmates");
+
+  if (!response.ok) {
+    throw new Error("Unable to load classmates. Please try again.");
+  }
+
+  return (await response.json()) as StudentClassmatesResponse;
 }
 
 export async function updateUser(userId: string, payload: UpdateUserPayload) {
