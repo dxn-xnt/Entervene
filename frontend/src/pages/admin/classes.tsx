@@ -134,7 +134,7 @@ export default function AdminClasses() {
           item.academic_year.year_label === yearFilter) &&
         (statusFilter === "All" ||
           normalizedStatus(item.class_status) ===
-            statusFilter.toLocaleLowerCase())
+          statusFilter.toLocaleLowerCase())
       );
     });
   }, [classes, gradeFilter, search, statusFilter, yearFilter]);
@@ -175,13 +175,13 @@ export default function AdminClasses() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 p-4">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
             <header className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <div>
                   <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
-                    Classes 
+                    Classes
                   </h1>
                   {/* <p className="text-sm text-black/70">
                     Manage class sections, advisers, students, subject load, and
@@ -271,11 +271,10 @@ export default function AdminClasses() {
                   <button
                     key={grade}
                     onClick={() => setGradeFilter(grade)}
-                    className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
-                      gradeFilter === grade
+                    className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${gradeFilter === grade
                         ? "border-black bg-black text-white"
                         : "border-black/30 bg-transparent text-black/60 hover:border-black/60 hover:text-black"
-                    }`}
+                      }`}
                   >
                     {grade}
                   </button>
@@ -390,13 +389,13 @@ export default function AdminClasses() {
 function adviserDisplayName(item: ClassListItem) {
   return item.adviser
     ? [
-        item.adviser.first_name,
-        item.adviser.middle_name,
-        item.adviser.last_name,
-        item.adviser.suffix,
-      ]
-        .filter(Boolean)
-        .join(" ")
+      item.adviser.first_name,
+      item.adviser.middle_name,
+      item.adviser.last_name,
+      item.adviser.suffix,
+    ]
+      .filter(Boolean)
+      .join(" ")
     : "No adviser assigned";
 }
 

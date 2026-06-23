@@ -11,6 +11,8 @@ import SetupPassword from "./pages/SetupPassword";
 // Admin pages
 import AdminDashboard from "./pages/admin/dashboard";
 import AdminSubjects from "./pages/admin/subjects";
+import AdminSubjectLevel from "./pages/admin/subject-level";
+import AdminSubjectView from "./pages/admin/subject-view";
 import AdminClasses from "./pages/admin/classes";
 import AdminClassDetail from "./pages/admin/class-detail";
 import AdminUsers from "./pages/admin/users";
@@ -18,6 +20,7 @@ import AdminUserDetail from "./pages/admin/user-detail";
 import AdminInterventions from "./pages/admin/interventions";
 import AdminNotifications from "./pages/admin/notifications";
 import AdminSettings from "./pages/admin/system-settings";
+import AcademicPeriods from "./pages/admin/academic-periods";
 // import AppLayout from "./layouts/app-layout";
 
 // Teacher pages
@@ -64,6 +67,8 @@ const App = () => {
             />
             <Route path={routes.admin.dashboard} element={<AdminDashboard />} />
             <Route path={routes.admin.subjects} element={<AdminSubjects />} />
+            <Route path={routes.admin.subjectLevel} element={<AdminSubjectLevel />} />
+            <Route path={routes.admin.subjectView} element={<AdminSubjectView />} />
             <Route path={routes.admin.classes} element={<AdminClasses />} />
             <Route path={routes.admin.classDetail} element={<AdminClassDetail />} />
             <Route path={routes.admin.users} element={<AdminUsers />} />
@@ -77,12 +82,13 @@ const App = () => {
               element={<AdminNotifications />}
             />
             <Route path={routes.admin.settings} element={<AdminSettings />} />
+            <Route path={routes.admin.academicPeriods} element={<AcademicPeriods />} />
           </Route>
 
           {/* Teacher */}
           <Route element={<ProtectedRoute allowedRoles={["teacher"]} />}>
-            <Route index element={<Navigate to={routes.teacher.dashboard} replace />}/>
-            <Route path={routes.teacher.dashboard} element={<TeacherDashboard />}/>
+            <Route index element={<Navigate to={routes.teacher.dashboard} replace />} />
+            <Route path={routes.teacher.dashboard} element={<TeacherDashboard />} />
             {/* <Route path={routes.teacher.classes} element={<TeacherClasses />} /> */}
             <Route path={routes.teacher.classes} element={<ClassesPage />} />
             <Route path={routes.teacher.classSections} element={<ClassSections />} />
@@ -95,7 +101,7 @@ const App = () => {
             <Route path={routes.teacher.lessons} element={<TeacherLessons />} />
             {/* <Route path={routes.teacher.interventions} element={<TeacherInterventions />} /> */}
             <Route path={routes.teacher.grades} element={<TeacherGrades />} />
-            <Route path={routes.teacher.notifications} element={<TeacherNotifications />}/>
+            <Route path={routes.teacher.notifications} element={<TeacherNotifications />} />
           </Route>
 
           {/* Student */}

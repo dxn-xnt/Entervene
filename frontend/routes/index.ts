@@ -9,6 +9,8 @@ export const routes = {
   admin: {
     dashboard: "/admin/dashboard",
     subjects: "/admin/subjects",
+    subjectLevel: "/admin/subjects/:grade",
+    subjectView: "/admin/subjects/:grade/:subject",
     classes: "/admin/classes",
     classDetail: "/admin/classes/:classId",
     users: "/admin/users",
@@ -16,6 +18,7 @@ export const routes = {
     interventions: "/admin/interventions",
     notifications: "/admin/notifications",
     settings: "/admin/settings",
+    academicPeriods: "/admin/academic-periods",
   },
 
   // teacher: {
