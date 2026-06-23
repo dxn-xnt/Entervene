@@ -1,3 +1,4 @@
+import * as React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Text } from "@/components/retroui/Text";
 import AppLayout from "@/layouts/app-layout";
@@ -11,9 +12,58 @@ import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Dialog } from "@/components/retroui/Dialog";
 import AddAcademicPeriodModal from "./forms/add-academic-period";
+import AddGradingComponentModal from "./forms/add-grading-component";
 
 export default function AdminSystemSettings() {
   const navigate = useNavigate();
+  const [juniorPeriod, setJuniorPeriod] = React.useState<string>("Q1");
+  const [seniorPeriod, setSeniorPeriod] = React.useState<string>("Sem1");
+  const [pendingChange, setPendingChange] = React.useState<{
+    level: "junior" | "senior";
+    nextValue: string;
+    nextLabel: string;
+    prevLabel: string;
+  } | null>(null);
+
+  const juniorLabels: Record<string, string> = {
+    Q1: "1st Quarter",
+    Q2: "2nd Quarter",
+    Q3: "3rd Quarter",
+    Q4: "4th Quarter",
+  };
+
+  const seniorLabels: Record<string, string> = {
+    Sem1: "1st Semester",
+    Sem2: "2nd Semester",
+  };
+
+  const handleJuniorChange = (value: string) => {
+    setPendingChange({
+      level: "junior",
+      nextValue: value,
+      nextLabel: juniorLabels[value],
+      prevLabel: juniorLabels[juniorPeriod],
+    });
+  };
+
+  const handleSeniorChange = (value: string) => {
+    setPendingChange({
+      level: "senior",
+      nextValue: value,
+      nextLabel: seniorLabels[value],
+      prevLabel: seniorLabels[seniorPeriod],
+    });
+  };
+
+  const confirmChange = () => {
+    if (!pendingChange) return;
+    if (pendingChange.level === "junior") {
+      setJuniorPeriod(pendingChange.nextValue);
+    } else {
+      setSeniorPeriod(pendingChange.nextValue);
+    }
+    setPendingChange(null);
+  };
   const academiclevels = [
     {
       level: "Grade 7",
@@ -50,7 +100,7 @@ export default function AdminSystemSettings() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 py-3 md:py-4 px-4 md:px-4">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
               <h1 className="text-4xl font-bold tracking-tight">
@@ -80,9 +130,14 @@ export default function AdminSystemSettings() {
                     <Text as="h6" className="font-sans font-medium">
                       Grading Components
                     </Text>
-                    <Button size={"sm"}>
-                      New Grading Component
-                    </Button>
+                    <Dialog>
+                      <Dialog.Trigger>
+                        <Button size={"sm"}>
+                          New Grading Component
+                        </Button>
+                      </Dialog.Trigger>
+                      <AddGradingComponentModal />
+                    </Dialog>
                   </div>
                   <Accordion className="space-y-3 w-full">
                     <Accordion.Item value="item-1">
@@ -187,7 +242,7 @@ export default function AdminSystemSettings() {
                     <Text as="h6" className="font-sans font-medium">
                       Junior High School Period
                     </Text>
-                    <Select>
+                    <Select value={juniorPeriod} onValueChange={handleJuniorChange}>
                       <Select.Trigger className="w-60">
                         <Select.Value placeholder="1st Quarter" />
                       </Select.Trigger>
@@ -205,7 +260,7 @@ export default function AdminSystemSettings() {
                     <Text as="h6" className="font-sans font-medium">
                       Senior High School Period
                     </Text>
-                    <Select>
+                    <Select value={seniorPeriod} onValueChange={handleSeniorChange}>
                       <Select.Trigger className="w-60">
                         <Select.Value placeholder="1st Semester" />
                       </Select.Trigger>
@@ -273,6 +328,26 @@ export default function AdminSystemSettings() {
           </div>
         </div>
       </div>
+      <Dialog open={pendingChange !== null} onOpenChange={(open) => { if (!open) setPendingChange(null); }}>
+        <Dialog.Content size="md">
+          <Dialog.Header position="static">
+            <Text as="h5" className="font-sans text-xl font-bold">Confirm Period Change</Text>
+          </Dialog.Header>
+          <section className="flex flex-col gap-4 p-4 text-sm">
+            <p>
+              Would you like to change the <strong>{pendingChange?.nextLabel}</strong> for{" "}
+              {pendingChange?.level === "junior" ? "junior" : "senior"} high? This will mark the previous{" "}
+              <strong>{pendingChange?.prevLabel}</strong> as completed.
+            </p>
+          </section>
+          <Dialog.Footer position="static">
+            <Button onClick={confirmChange}>Confirm</Button>
+            <Button variant="outline" onClick={() => setPendingChange(null)}>
+              Cancel
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
     </AppLayout>
   );
 }

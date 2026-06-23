@@ -4,8 +4,15 @@ import { Button } from "@/components/retroui/Button";
 import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "@/components/retroui/Badge";
+import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { ArrowUpRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Dialog } from "@/components/retroui/Dialog";
+import AddAcademicPeriodModal from "./forms/add-academic-period";
+import ViewPreviousPeriodsModal from "./forms/view-previous-periods";
 
 export default function AdminAcademicPeriods() {
+  const navigate = useNavigate();
   const academicPeriods = [
     {
       id: "1",
@@ -45,21 +52,34 @@ export default function AdminAcademicPeriods() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 py-3 md:py-4 px-4 md:px-4">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
-              <h1 className="text-4xl font-bold tracking-tight">
-                System Settings
-              </h1>
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="md:hidden" />
+                <Breadcrumb>
+                  <Breadcrumb.List>
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Link href="/admin/settings" className="text-4xl">
+                        System Settings
+                      </Breadcrumb.Link>
+                    </Breadcrumb.Item>
+                    <Breadcrumb.Separator />
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Page>Academic Periods</Breadcrumb.Page>
+                    </Breadcrumb.Item>
+                  </Breadcrumb.List>
+                </Breadcrumb>
+              </div>
             </header>
             <div className="-mx-4 md:-mx-6 border-b border-black/40" />
 
             <Card className="@container/card">
               <CardHeader>
                 <CardTitle className="flex flex-row justify-between w-full items-center">
-                  Academic Period
+                  Junior High School Periods
                   <Button size={"sm"}>
-                    Add Academic Period
+                    Marked as Complete
                   </Button>
                 </CardTitle>
               </CardHeader>
@@ -99,7 +119,72 @@ export default function AdminAcademicPeriods() {
                     ))}
                   </Table.Body>
                 </Table>
+                <Dialog>
+                  <Dialog.Trigger className="w-full flex justify-end">
+                    <Button size="sm" variant="link" className=" shadow-none p-0! flex-row gap-2 shrink-0 m-0! justify-end w-fit">
+                      View Previous Periods
+                      <ArrowUpRight className="w-4 h-4" />
+                    </Button>
+                  </Dialog.Trigger>
+                  <ViewPreviousPeriodsModal yearLevel="junior-high" />
+                </Dialog>
+              </CardContent>
+            </Card>
 
+            <Card className="@container/card">
+              <CardHeader>
+                <CardTitle className="flex flex-row justify-between w-full items-center">
+                  Senior High School Periods
+                  <Button size={"sm"}>
+                    Marked as Complete
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pt-2 flex flex-col gap-4">
+                <Table>
+                  <Table.Header className="font-sans">
+                    <Table.Row>
+                      <Table.Head>Period</Table.Head>
+                      <Table.Head>Academic Year</Table.Head>
+                      <Table.Head>Start Date</Table.Head>
+                      <Table.Head>End Date</Table.Head>
+                      <Table.Head>Status</Table.Head>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {academicPeriods.map((item) => (
+                      <Table.Row key={item.id}>
+                        <Table.Cell className="font-medium">{item.period}</Table.Cell>
+                        <Table.Cell className="font-medium">{item.academicyear}</Table.Cell>
+                        <Table.Cell className="font-medium">{item.startDate}</Table.Cell>
+                        <Table.Cell className="font-medium">{item.endDate}</Table.Cell>
+                        <Table.Cell>
+                          <Badge
+                            variant={
+                              item.status === "Active"
+                                ? "surface"
+                                : item.status === "Passed"
+                                  ? "default"
+                                  : "outline"
+                            }
+                            size="sm"
+                          >
+                            {item.status}
+                          </Badge>
+                        </Table.Cell>
+                      </Table.Row>
+                    ))}
+                  </Table.Body>
+                </Table>
+                <Dialog>
+                  <Dialog.Trigger className="w-full flex justify-end">
+                    <Button size="sm" variant="link" className=" shadow-none p-0! flex-row gap-2 shrink-0 m-0! justify-end w-fit">
+                      View Previous Periods
+                      <ArrowUpRight className="w-4 h-4" />
+                    </Button>
+                  </Dialog.Trigger>
+                  <ViewPreviousPeriodsModal yearLevel="senior-high" />
+                </Dialog>
               </CardContent>
             </Card>
 
