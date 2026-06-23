@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { BookOpen, ChevronDown, ChevronRight, Search, Users } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, Users } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Tabs from "@/components/Tabs";
 import AppLayout from "@/layouts/app-layout";
@@ -218,21 +218,15 @@ function StudentsTab({ detail }: { detail: TeacherAdvisoryClassDetailResponse })
         <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <h3 className="text-lg font-bold">Students</h3>
-            <p className="text-xs font-semibold text-black/65">{detail.student_count} Students</p>
-            <div className="mt-1 flex flex-wrap gap-2 text-xs font-semibold text-black/70">
-              <span className="rounded-full border border-black/30 bg-white px-2 py-0.5">Male: {detail.male_count}</span>
-              <span className="rounded-full border border-black/30 bg-white px-2 py-0.5">Female: {detail.female_count}</span>
-            </div>
           </div>
-          <label className="flex h-10 items-center gap-2 rounded-md border border-black bg-[#fffdf5] px-3 text-sm sm:w-72">
-            <Search className="size-4 text-black/50" />
+          <div className="flex flex-col gap-2 sm:flex-row">
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search students..."
-              className="min-w-0 flex-1 bg-transparent outline-none"
+              className="h-10 rounded-md border border-black bg-[#fffdf5] px-3 text-sm sm:w-64"
             />
-          </label>
+          </div>
         </div>
         <div className="max-h-[560px] overflow-y-auto rounded-lg border border-black bg-[#fffdf5] p-4 shadow-[3px_3px_0_#000]">
           {!detail.students.length ? (
@@ -240,7 +234,7 @@ function StudentsTab({ detail }: { detail: TeacherAdvisoryClassDetailResponse })
           ) : !filteredStudents.length ? (
             <StateInline message="No students match your search." />
           ) : (
-            <div className="grid items-start gap-3 lg:grid-cols-2">
+            <div className="grid items-start gap-3">
               {groupedStudents.map(([gender, students]) => (
                 <details key={gender} open className="group overflow-hidden rounded-lg border-2 border-black bg-[#fffdf5] shadow-[3px_3px_0_#000]">
                   <summary className="flex cursor-pointer list-none items-center justify-between bg-[#f7e9aa] px-4 py-3 text-sm font-black">
@@ -311,14 +305,6 @@ function StudentRow({ student }: { student: TeacherAdvisoryStudentItem }) {
       <Avatar text={student.avatar_initial || student.full_name} />
       <span className="min-w-0 flex-1">
         <span className="block truncate font-semibold">{student.full_name}</span>
-        <span className="block text-[11px] font-medium text-black/60">
-          {student.gender}
-          {student.student_lrn ? ` | LRN ${student.student_lrn}` : ""}
-        </span>
-        <span className="block truncate text-[11px] font-medium text-black/60">
-          {student.email || "No email"}
-          {student.account_status ? ` | ${student.account_status}` : ""}
-        </span>
       </span>
     </div>
   );

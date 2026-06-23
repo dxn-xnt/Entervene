@@ -548,17 +548,6 @@ function StudentsTab({
         <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <h3 className="text-lg font-bold">Students</h3>
-            <p className="text-xs font-semibold text-black/65">{studentData?.summary.total_students ?? 0} Students</p>
-            <div className="mt-1 flex flex-wrap gap-2 text-xs font-semibold text-black/70">
-              <span className="rounded-full border border-black/30 bg-white px-2 py-0.5">Male: {studentData?.summary.gender_counts.male ?? 0}</span>
-              <span className="rounded-full border border-black/30 bg-white px-2 py-0.5">Female: {studentData?.summary.gender_counts.female ?? 0}</span>
-              {!!studentData && studentData.summary.gender_counts.other > 0 && (
-                <span className="rounded-full border border-black/30 bg-white px-2 py-0.5">Other: {studentData.summary.gender_counts.other}</span>
-              )}
-              {!!studentData && studentData.summary.gender_counts.unspecified > 0 && (
-                <span className="rounded-full border border-black/30 bg-white px-2 py-0.5">Unspecified: {studentData.summary.gender_counts.unspecified}</span>
-              )}
-            </div>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <input
@@ -576,7 +565,7 @@ function StudentsTab({
         </div>
         {success && <div className="mb-2 rounded-md border border-black bg-[#d8efca] p-2 text-xs font-bold">{success}</div>}
         {editError && <div className="mb-2 rounded-md border border-red-700 bg-red-50 p-2 text-xs font-bold text-red-800">{editError}</div>}
-        <div className="max-h-[520px] overflow-y-auto rounded-lg border border-black bg-[#fffdf5] p-4 shadow-[3px_3px_0_#000]">
+        <div className="max-h-[520px] overflow-y-auto rounded-xl border-2 border-black bg-[#fffdf5] p-5 shadow-[4px_4px_0_#000]">
           {isLoading ? (
             <StateInline message="Loading students..." />
           ) : error ? (
@@ -588,13 +577,13 @@ function StudentsTab({
           ) : !filteredStudents.length ? (
             <StateInline message="No students match your search." />
           ) : (
-            <div className="grid items-start gap-3 lg:grid-cols-2">
+            <div className="grid items-start gap-3">
               {groupedStudents.map(([gender, group]) => (
-                <details key={gender} open className="group overflow-hidden rounded-lg border-2 border-black bg-[#fffdf5] shadow-[3px_3px_0_#000]">
-                  <summary className="flex cursor-pointer list-none items-center justify-between bg-[#f7e9aa] px-4 py-3 text-sm font-black">
+                <details key={gender} open className="group overflow-hidden rounded-xl border-2 border-black bg-[#fffdf5] shadow-[4px_4px_0_#000]">
+                  <summary className="flex cursor-pointer list-none items-center justify-between bg-[#f7e9aa] px-5 py-4 text-base font-black">
                     <span>{gender.toUpperCase()}</span>
                     <span className="flex items-center gap-2">
-                      <span className="rounded-full border border-black/30 bg-white px-2 py-0.5 text-[10px]">
+                      <span className="rounded-full border border-black/30 bg-white px-3 py-0.5 text-[10px]">
                         {group.length} student{group.length !== 1 ? "s" : ""}
                       </span>
                       <ChevronDown className="size-4 rotate-180 transition-transform group-open:rotate-180" />
@@ -602,9 +591,11 @@ function StudentsTab({
                   </summary>
                   <div>
                     {group.map((student) => (
-                      <div key={student.student_id} className="flex min-h-11 items-center gap-3 border-b border-black/10 bg-white px-3 py-2 text-sm last:border-b-0">
-                        <Avatar text={student.avatar_initial || student.full_name} />
-                        <span className="truncate font-semibold">{student.full_name}</span>
+                      <div key={student.student_id} className="flex min-h-14 items-center gap-4 border-b border-black/10 bg-white px-4 py-3 text-sm last:border-b-0">
+                        <RosterAvatar text={student.avatar_initial || student.full_name} />
+                        <span className="min-w-0">
+                          <span className="block truncate text-base font-black">{student.full_name}</span>
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -659,6 +650,14 @@ function Avatar({ text }: { text: string }) {
   return (
     <span className="grid size-7 shrink-0 place-items-center rounded-full border border-amber-700 bg-amber-200 text-[13px] font-semibold text-amber-900">
       {text.charAt(0)}
+    </span>
+  );
+}
+
+function RosterAvatar({ text }: { text: string }) {
+  return (
+    <span className="grid size-9 shrink-0 place-items-center rounded-full border border-[#d97706] bg-[#f7c76f] text-sm font-semibold text-[#7a3e00]">
+      {(text || "?").charAt(0).toLocaleUpperCase()}
     </span>
   );
 }

@@ -324,17 +324,19 @@ function EnrolledStudentsPanel({
           {selectMultiple ? "Exit Select Multiple" : "Select Multiple"}
         </button>
       </div>
-      <div className="min-h-0 overflow-y-auto rounded-lg border-2 border-black bg-[#fffdf5] p-3 shadow-[4px_4px_0_#000]">
+      <div className="min-h-0 overflow-y-auto bg-[#fffdf5]">
         {!visibleCount ? (
           <EmptyState message={search.trim() ? "No students match your search." : "No enrolled students found."} />
         ) : (
-          <div className="grid items-start gap-3 lg:grid-cols-2">
+          <div className="grid items-start gap-3">
             {groups.map(([gender, groupStudents]) => (
-              <details key={gender} open className="group overflow-hidden rounded-lg border-2 border-black bg-[#fffdf5] shadow-[3px_3px_0_#000]">
-                <summary className="sticky top-0 z-[1] flex cursor-pointer list-none items-center justify-between bg-[#f7e9aa] px-4 py-3 text-sm font-black">
+              <details key={gender} open className="group overflow-hidden rounded-xl border-2 border-black bg-[#fffdf5] shadow-[4px_4px_0_#000]">
+                <summary className="sticky top-0 z-[1] flex cursor-pointer list-none items-center justify-between bg-[#f7e9aa] px-5 py-4 text-base font-black">
                   <span>{gender.toUpperCase()}</span>
                   <span className="flex items-center gap-2">
-                    <CountBadge count={groupStudents.length} />
+                    <span className="rounded-full border border-black/30 bg-white px-3 py-0.5 text-[10px]">
+                      {groupStudents.length} student{groupStudents.length !== 1 ? "s" : ""}
+                    </span>
                     <ChevronDown className="size-4 rotate-180 transition-transform group-open:rotate-180" />
                   </span>
                 </summary>
@@ -462,9 +464,13 @@ function StudentActionRow({
       <div className="flex flex-wrap items-center gap-3">
         {selectMultiple && <input type="checkbox" checked={selected} onChange={onToggleSelected} />}
         <Avatar student={student} />
-        <span className="min-w-0 flex-1 truncate text-sm font-bold">{student.full_name}</span>
-        <button className={retroButton("bg-white text-[#9f1239]")} onClick={() => onAction({ type: "remove", studentId: student.student_id })}>Remove</button>
-        <button className={retroButton("bg-[#f7e9aa]")} onClick={() => onAction({ type: "transfer", studentId: student.student_id, targetClassId: "" })}>Transfer</button>
+        <span className="min-w-0 flex-1">
+          <span className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="truncate text-base font-black">{student.full_name}</span>
+          </span>
+        </span>
+        <button className={retroButton("min-h-12 bg-white px-4 text-base text-black")} onClick={() => onAction({ type: "remove", studentId: student.student_id })}>Remove</button>
+        <button className={retroButton("min-h-12 bg-white px-4 text-base")} onClick={() => onAction({ type: "transfer", studentId: student.student_id, targetClassId: "" })}>Transfer</button>
       </div>
       {isRemoving && (
         <div className="mt-2 rounded-md border border-red-700 bg-red-50 p-2 text-xs font-semibold text-red-800">
@@ -574,16 +580,16 @@ function EmptyState({ message }: { message: string }) {
 
 function Avatar({ student }: { student: ClassStudentListItem }) {
   return (
-    <span className="grid size-8 shrink-0 place-items-center rounded-full border border-amber-700 bg-amber-200 text-sm font-bold text-amber-900">
-      {student.avatar_initial || student.full_name.charAt(0)}
+    <span className="grid size-9 shrink-0 place-items-center rounded-full border border-[#d97706] bg-[#f7c76f] text-sm font-semibold text-[#7a3e00]">
+      {(student.avatar_initial || student.full_name || "?").charAt(0).toLocaleUpperCase()}
     </span>
   );
 }
 
 function AvailableAvatar({ student }: { student: ClassAssignmentStudent }) {
   return (
-    <span className="grid size-8 shrink-0 place-items-center rounded-full border border-amber-700 bg-amber-200 text-sm font-bold text-amber-900">
-      {student.first_name.charAt(0).toLocaleUpperCase()}
+    <span className="grid size-9 shrink-0 place-items-center rounded-full border border-[#d97706] bg-[#f7c76f] text-sm font-semibold text-[#7a3e00]">
+      {(student.first_name || "?").charAt(0).toLocaleUpperCase()}
     </span>
   );
 }
@@ -595,7 +601,7 @@ function groupStudents(students: ClassStudentListItem[]) {
   return groups.filter(([gender, group]) => gender === "Male" || gender === "Female" || group.length > 0);
 }
 
-function normalizedGender(gender: string) {
+function normalizedGender(gender: string | null | undefined) {
   if (gender === "Female" || gender === "Male" || gender === "Other") return gender;
   return "Unspecified";
 }
