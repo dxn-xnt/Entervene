@@ -21,171 +21,34 @@ import AppLayout from "@/layouts/app-layout";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { API_URL, apiFetch } from "@/lib/api";
-
-type ClassworkType = "READING" | "ACTIVITY" | "ASSIGNMENT" | "QUIZ" | string;
-type ClassworkKind = "READING" | "ACTIVITY" | "ASSIGNMENT" | "QUIZ";
-type TabId = "all" | "readings" | "activities" | "assignments" | "quizzes";
-type SortMode = "newest" | "oldest" | "title";
-type CreateStep = "type" | "details" | "assign";
-
-type ClassworkAttachment = {
-  classwork_attachment_id: number;
-  file_name: string;
-  file_type?: string;
-  file_size: number;
-  uploaded_at?: string | null;
-};
-
-type ClassworkAssignment = {
-  classwork_assignment_id: number;
-  classwork_id: number;
-  class_id: number;
-  title?: string | null;
-  due_date?: string | null;
-  lock_date?: string | null;
-  max_attempts?: number | null;
-  is_published: boolean;
-  is_locked?: boolean | null;
-};
-
-type TeacherClasswork = {
-  classwork_id: number;
-  title: string;
-  description?: string | null;
-  instructions?: string | null;
-  classwork_type: ClassworkType;
-  classwork_category?: string | null;
-  total_points?: number | null;
-  is_published: boolean;
-  is_locked: boolean;
-  is_archived: boolean;
-  subject_id: number;
-  subject_name?: string | null;
-  attachments: ClassworkAttachment[];
-  assignments?: ClassworkAssignment[] | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-};
-
-type TeacherClassLoad = {
-  subject_load_id: number;
-  subject_id: number;
-  subject_name: string;
-  subject_codename?: string | null;
-  class_id: number;
-  section_name: string;
-};
-
-type TeacherLesson = {
-  lesson_id: number;
-  title: string;
-  order_index?: number;
-  is_published: boolean;
-  is_draft: boolean;
-  subject_id: number;
-};
-
-type TrackingStudent = {
-  student_id: string;
-  student_name: string;
-  status: string;
-  submission_id?: number | null;
-  grade?: number | null;
-  attachment_count?: number;
-};
-
-type AssignmentTracking = {
-  classwork_assignment_id: number;
-  classwork_id: number;
-  classwork_title?: string | null;
-  total_students: number;
-  submitted_count: number;
-  missing_count: number;
-  submitted: TrackingStudent[];
-  missing: TrackingStudent[];
-};
-
-type SubmissionAttachment = {
-  submission_attachment_id: number;
-  file_name: string;
-  file_type?: string | null;
-  file_size: number;
-  uploaded_at?: string | null;
-};
-
-type TeacherSubmissionDetail = {
-  submission_id: number;
-  student_id: string;
-  student_name?: string | null;
-  classwork_assignment_id: number;
-  status: string;
-  grade?: number | null;
-  feedback?: string | null;
-  submitted_at?: string | null;
-  attachments: SubmissionAttachment[];
-  total_points?: number | null;
-};
-
-type CreateDraft = {
-  subject_id: string;
-  title: string;
-  description: string;
-  instructions: string;
-  classwork_category: string;
-  total_points: string;
-  due_date: string;
-  lock_date: string;
-  max_attempts: string;
-  is_published: boolean;
-};
-
-type EditDraft = {
-  title: string;
-  description: string;
-  instructions: string;
-  classwork_type: string;
-  classwork_category: string;
-  total_points: string;
-  due_date: string;
-  lock_date: string;
-  max_attempts: string;
-  is_published: boolean;
-};
-
-const emptyDraft: CreateDraft = {
-  subject_id: "",
-  title: "",
-  description: "",
-  instructions: "",
-  classwork_category: "WRITTEN_WORK",
-  total_points: "100",
-  due_date: "",
-  lock_date: "",
-  max_attempts: "1",
-  is_published: true,
-};
-
-const classworkToEditDraft = (item: TeacherClasswork): EditDraft => ({
-  // The global editor applies assignment settings to all assigned sections.
-  ...(() => {
-    const firstAssignment = item.assignments?.[0];
-    return {
-      due_date: toDateTimeLocal(firstAssignment?.due_date),
-      lock_date: toDateTimeLocal(firstAssignment?.lock_date),
-      max_attempts: firstAssignment?.max_attempts ? String(firstAssignment.max_attempts) : "1",
-      is_published: firstAssignment?.is_published ?? item.is_published,
-    };
-  })(),
-  title: item.title,
-  description: item.description ?? "",
-  instructions: item.instructions ?? "",
-  classwork_type: item.classwork_type,
-  classwork_category: item.classwork_category ?? "",
-  total_points: item.total_points !== null && item.total_points !== undefined ? String(item.total_points) : "",
-});
-
-const allowedMaterialExtensions = [".pdf", ".docx", ".pptx", ".jpg", ".jpeg", ".png"];
-const maxMaterialSize = 4 * 1024 * 1024;
+import {
+  allowedClassworkMaterialExtensions,
+  classworkToEditDraft,
+  emptyClassworkDraft,
+  fileExtension,
+  formatDate,
+  formatFileSize,
+  isQuizType,
+  isReadingType,
+  maxClassworkMaterialSize,
+  scoreBand,
+  submissionStatusLabel,
+} from "@/lib/classwork-utils";
+import type {
+  AssignmentTracking,
+  ClassworkAttachment,
+  ClassworkKind,
+  CreateDraft,
+  CreateStep,
+  EditDraft,
+  SortMode,
+  TabId,
+  TeacherClassLoad,
+  TeacherClasswork,
+  TeacherLesson,
+  TeacherSubmissionDetail,
+  TrackingStudent,
+} from "@/types/classwork";
 
 const tabs: Array<{ id: TabId; label: string; icon: LucideIcon }> = [
   { id: "all", label: "All", icon: ClipboardList },
@@ -241,54 +104,68 @@ const typeIcon: Record<string, LucideIcon> = {
   QUIZ: ClipboardList,
 };
 
-function formatDate(value?: string | null) {
-  if (!value) return "Date unavailable";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value));
-}
+type QuizQuestionType = "MULTIPLE_CHOICE" | "SHORT_ANSWER";
+type QuizDifficulty = "EASY" | "MEDIUM" | "HARD";
 
-function toDateTimeLocal(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toISOString().slice(0, 16);
-}
+type QuizOptionDraft = {
+  option_text: string;
+  is_correct: boolean;
+  option_order: number;
+};
 
-function formatFileSize(bytes: number) {
-  if (bytes === 0) return "0 bytes";
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-}
+type QuizQuestionDraft = {
+  id: string;
+  question_text: string;
+  question_type: QuizQuestionType;
+  points: string;
+  display_order: number;
+  difficulty_level: QuizDifficulty;
+  explanation: string;
+  options: QuizOptionDraft[];
+};
 
-function fileExtension(fileName: string) {
-  const suffix = fileName.split(".").pop()?.toLowerCase();
-  return suffix ? `.${suffix}` : "";
-}
+type QuizSettingsDraft = {
+  is_shuffle_questions: boolean;
+  enable_per_question_scoring: boolean;
+  enable_per_question_time_limits: boolean;
+  max_attempts: string;
+  show_correct_answers: boolean;
+  duration_minutes: string;
+};
 
-function scoreBand(points: number | null | undefined, ratio: number) {
-  if (!points) return "0 pts";
-  return `${Math.max(1, Math.round(points * ratio))} pts`;
-}
+const defaultQuizSettings: QuizSettingsDraft = {
+  is_shuffle_questions: false,
+  enable_per_question_scoring: true,
+  enable_per_question_time_limits: false,
+  max_attempts: "1",
+  show_correct_answers: false,
+  duration_minutes: "",
+};
 
-function isReadingType(value?: string | null) {
-  return value?.toUpperCase() === "READING";
-}
+const quizQuestionId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-function isQuizType(value?: string | null) {
-  return value?.toUpperCase() === "QUIZ";
-}
-
-function submissionStatusLabel(status?: string | null) {
-  if (status === "graded") return "Graded";
-  if (status === "late") return "Late submission";
-  if (status === "submitted") return "On-time submission";
-  if (status === "pending") return "Ungraded";
-  if (status === "not_submitted") return "Missing";
-  return "Ungraded";
-}
+const createEmptyQuizQuestion = (
+  displayOrder: number,
+  questionType: QuizQuestionType = "MULTIPLE_CHOICE",
+): QuizQuestionDraft => ({
+  id: quizQuestionId(),
+  question_text: "",
+  question_type: questionType,
+  points: "1",
+  display_order: displayOrder,
+  difficulty_level: "MEDIUM",
+  explanation: "",
+  options:
+    questionType === "MULTIPLE_CHOICE"
+      ? [
+          { option_text: "", is_correct: true, option_order: 1 },
+          { option_text: "", is_correct: false, option_order: 2 },
+        ]
+      : [],
+});
 
 function ClassworkCard({
   item,
@@ -351,8 +228,13 @@ export default function Classworks() {
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [createStep, setCreateStep] = useState<CreateStep>("type");
   const [selectedType, setSelectedType] = useState<ClassworkKind | null>(null);
-  const [draft, setDraft] = useState<CreateDraft>(emptyDraft);
+  const [draft, setDraft] = useState<CreateDraft>(emptyClassworkDraft);
   const [materials, setMaterials] = useState<File[]>([]);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestionDraft[]>([
+    createEmptyQuizQuestion(1),
+  ]);
+  const [quizSettings, setQuizSettings] =
+    useState<QuizSettingsDraft>(defaultQuizSettings);
   const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);
   const [availableLessons, setAvailableLessons] = useState<TeacherLesson[]>([]);
   const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>([]);
@@ -476,12 +358,17 @@ export default function Classworks() {
     setSelectedType(preferredType ?? null);
     setCreateStep(preferredType ? "details" : "type");
     setDraft({
-      ...emptyDraft,
+      ...emptyClassworkDraft,
       classwork_category:
         preferredType === "QUIZ" ? "PERIODICAL_EXAM" : "WRITTEN_WORK",
       subject_id: subjects[0] ? String(subjects[0].id) : "",
     });
     setMaterials([]);
+    setQuizQuestions([createEmptyQuizQuestion(1)]);
+    setQuizSettings({
+      ...defaultQuizSettings,
+      max_attempts: emptyClassworkDraft.max_attempts || "1",
+    });
     setSelectedClassIds([]);
     setAvailableLessons([]);
     setSelectedLessonIds([]);
@@ -494,8 +381,10 @@ export default function Classworks() {
     setShowCreateWizard(false);
     setCreateStep("type");
     setSelectedType(null);
-    setDraft(emptyDraft);
+    setDraft(emptyClassworkDraft);
     setMaterials([]);
+    setQuizQuestions([createEmptyQuizQuestion(1)]);
+    setQuizSettings(defaultQuizSettings);
     setSelectedClassIds([]);
     setAvailableLessons([]);
     setSelectedLessonIds([]);
@@ -508,6 +397,13 @@ export default function Classworks() {
       ...current,
       classwork_category: type === "QUIZ" ? "PERIODICAL_EXAM" : "WRITTEN_WORK",
     }));
+    if (type === "QUIZ") {
+      setQuizQuestions([createEmptyQuizQuestion(1)]);
+      setQuizSettings({
+        ...defaultQuizSettings,
+        max_attempts: draft.max_attempts || "1",
+      });
+    }
     setCreateStep("details");
     setCreateError("");
   };
@@ -516,7 +412,7 @@ export default function Classworks() {
     if (!files) return;
     const selectedFiles = Array.from(files);
     const invalid = selectedFiles.find(
-      (file) => !allowedMaterialExtensions.includes(fileExtension(file.name)),
+      (file) => !allowedClassworkMaterialExtensions.includes(fileExtension(file.name)),
     );
     if (invalid) {
       setCreateError(
@@ -524,7 +420,7 @@ export default function Classworks() {
       );
       return;
     }
-    const oversized = selectedFiles.find((file) => file.size > maxMaterialSize);
+    const oversized = selectedFiles.find((file) => file.size > maxClassworkMaterialSize);
     if (oversized) {
       setCreateError(`${oversized.name} is larger than the 4 MB limit.`);
       return;
@@ -543,15 +439,227 @@ export default function Classworks() {
     setMaterials((current) => current.filter((_, itemIndex) => itemIndex !== index));
   };
 
+  const quizPointTotal = useMemo(
+    () =>
+      quizQuestions.reduce((total, question) => {
+        const points = Number(question.points);
+        return total + (Number.isFinite(points) ? points : 0);
+      }, 0),
+    [quizQuestions],
+  );
+
+  const updateQuizQuestion = (
+    id: string,
+    patch: Partial<QuizQuestionDraft>,
+  ) => {
+    setQuizQuestions((current) =>
+      current.map((question) => {
+        if (question.id !== id) return question;
+        const next = { ...question, ...patch };
+        if (
+          patch.question_type &&
+          patch.question_type !== question.question_type
+        ) {
+          next.options =
+            patch.question_type === "MULTIPLE_CHOICE"
+              ? [
+                  { option_text: "", is_correct: true, option_order: 1 },
+                  { option_text: "", is_correct: false, option_order: 2 },
+                ]
+              : [];
+        }
+        return next;
+      }),
+    );
+  };
+
+  const addQuizQuestion = (questionType: QuizQuestionType) => {
+    setQuizQuestions((current) => [
+      ...current,
+      createEmptyQuizQuestion(current.length + 1, questionType),
+    ]);
+  };
+
+  const removeQuizQuestion = (id: string) => {
+    setQuizQuestions((current) =>
+      current.length === 1
+        ? current
+        : current
+            .filter((question) => question.id !== id)
+            .map((question, index) => ({
+              ...question,
+              display_order: index + 1,
+            })),
+    );
+  };
+
+  const updateQuizOption = (
+    questionId: string,
+    optionIndex: number,
+    optionText: string,
+  ) => {
+    setQuizQuestions((current) =>
+      current.map((question) =>
+        question.id === questionId
+          ? {
+              ...question,
+              options: question.options.map((option, index) =>
+                index === optionIndex
+                  ? { ...option, option_text: optionText }
+                  : option,
+              ),
+            }
+          : question,
+      ),
+    );
+  };
+
+  const markCorrectOption = (questionId: string, optionIndex: number) => {
+    setQuizQuestions((current) =>
+      current.map((question) =>
+        question.id === questionId
+          ? {
+              ...question,
+              options: question.options.map((option, index) => ({
+                ...option,
+                is_correct: index === optionIndex,
+              })),
+            }
+          : question,
+      ),
+    );
+  };
+
+  const addQuizOption = (questionId: string) => {
+    setQuizQuestions((current) =>
+      current.map((question) =>
+        question.id === questionId
+          ? {
+              ...question,
+              options: [
+                ...question.options,
+                {
+                  option_text: "",
+                  is_correct: false,
+                  option_order: question.options.length + 1,
+                },
+              ],
+            }
+          : question,
+      ),
+    );
+  };
+
+  const removeQuizOption = (questionId: string, optionIndex: number) => {
+    setQuizQuestions((current) =>
+      current.map((question) => {
+        if (question.id !== questionId || question.options.length <= 2) {
+          return question;
+        }
+        const nextOptions = question.options
+          .filter((_, index) => index !== optionIndex)
+          .map((option, index) => ({ ...option, option_order: index + 1 }));
+        if (!nextOptions.some((option) => option.is_correct)) {
+          nextOptions[0] = { ...nextOptions[0], is_correct: true };
+        }
+        return { ...question, options: nextOptions };
+      }),
+    );
+  };
+
+  const validateQuizBuilder = () => {
+    if (!isQuizType(selectedType)) return "";
+    if (quizQuestions.length === 0) return "Add at least one quiz question.";
+
+    const totalPoints = Number(draft.total_points);
+    if (!Number.isFinite(totalPoints) || totalPoints <= 0) {
+      return "Quiz total points must be greater than zero.";
+    }
+    if (Math.abs(quizPointTotal - totalPoints) > 0.001) {
+      return `Question points must total ${totalPoints} points. Current total is ${quizPointTotal}.`;
+    }
+
+    const duration = quizSettings.duration_minutes
+      ? Number(quizSettings.duration_minutes)
+      : null;
+    if (duration !== null && (!Number.isInteger(duration) || duration <= 0)) {
+      return "Quiz duration must be a positive whole number.";
+    }
+
+    const attempts = Number(quizSettings.max_attempts || draft.max_attempts);
+    if (!Number.isInteger(attempts) || attempts <= 0) {
+      return "Allowed quiz attempts must be a positive whole number.";
+    }
+
+    for (const [index, question] of quizQuestions.entries()) {
+      const questionNumber = index + 1;
+      if (!question.question_text.trim()) {
+        return `Question ${questionNumber} text is required.`;
+      }
+      const points = Number(question.points);
+      if (!Number.isFinite(points) || points <= 0) {
+        return `Question ${questionNumber} points must be greater than zero.`;
+      }
+      if (question.question_type === "MULTIPLE_CHOICE") {
+        const filledOptions = question.options.filter((option) =>
+          option.option_text.trim(),
+        );
+        const correctOptions = question.options.filter(
+          (option) => option.is_correct,
+        );
+        if (question.options.length < 2 || filledOptions.length < 2) {
+          return `Question ${questionNumber} needs at least two answer choices.`;
+        }
+        if (correctOptions.length !== 1) {
+          return `Question ${questionNumber} needs exactly one correct answer.`;
+        }
+      }
+    }
+
+    return "";
+  };
+
+  const buildQuizPayload = () => ({
+    duration_minutes: quizSettings.duration_minutes
+      ? Number(quizSettings.duration_minutes)
+      : null,
+    status: "READY",
+    settings: {
+      is_shuffle_questions: quizSettings.is_shuffle_questions,
+      enable_per_question_scoring: quizSettings.enable_per_question_scoring,
+      enable_per_question_time_limits:
+        quizSettings.enable_per_question_time_limits,
+      max_attempts: Number(quizSettings.max_attempts || draft.max_attempts),
+      show_correct_answers: quizSettings.show_correct_answers,
+    },
+    questions: quizQuestions.map((question, index) => ({
+      question_text: question.question_text.trim(),
+      question_type: question.question_type,
+      points: Number(question.points),
+      display_order: index + 1,
+      difficulty_level: question.difficulty_level,
+      explanation: question.explanation.trim() || null,
+      lesson_id: null,
+      options:
+        question.question_type === "MULTIPLE_CHOICE"
+          ? question.options.map((option, optionIndex) => ({
+              option_text: option.option_text.trim(),
+              is_correct: option.is_correct,
+              option_order: optionIndex + 1,
+            }))
+          : [],
+    })),
+  });
+
   const addEditMaterials = (files: FileList | null) => {
     if (!files) return;
     const selectedFiles = Array.from(files);
-    const invalid = selectedFiles.find((file) => !allowedMaterialExtensions.includes(fileExtension(file.name)));
+    const invalid = selectedFiles.find((file) => !allowedClassworkMaterialExtensions.includes(fileExtension(file.name)));
     if (invalid) {
       setDetailError(`${invalid.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`);
       return;
     }
-    const oversized = selectedFiles.find((file) => file.size > maxMaterialSize);
+    const oversized = selectedFiles.find((file) => file.size > maxClassworkMaterialSize);
     if (oversized) {
       setDetailError(`${oversized.name} is larger than the 4 MB limit.`);
       return;
@@ -609,6 +717,17 @@ export default function Classworks() {
     const validationError = validateDetails();
     if (validationError) {
       setCreateError(validationError);
+      return;
+    }
+    if (isQuizType(selectedType) && createStep === "details") {
+      setCreateError("");
+      setCreateStep("quiz");
+      return;
+    }
+    const quizValidationError = validateQuizBuilder();
+    if (quizValidationError) {
+      setCreateError(quizValidationError);
+      setCreateStep("quiz");
       return;
     }
     setSelectedClassIds((current) => {
@@ -699,6 +818,12 @@ export default function Classworks() {
       setCreateStep("details");
       return;
     }
+    const quizValidationError = validateQuizBuilder();
+    if (quizValidationError) {
+      setCreateError(quizValidationError);
+      setCreateStep("quiz");
+      return;
+    }
     if (selectedClassIds.length === 0) {
       setCreateError("Select at least one section to assign this classwork.");
       return;
@@ -755,6 +880,28 @@ export default function Classworks() {
       if (!createResponse.ok) {
         const body = await createResponse.json().catch(() => ({}));
         throw new Error(body.detail || "Unable to create classwork.");
+      }
+      const created = (await createResponse.json()) as TeacherClasswork;
+
+      if (isQuizType(selectedType)) {
+        const quizResponse = await apiFetch(
+          `/api/v1/quizzes/classwork/${created.classwork_id}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(buildQuizPayload()),
+          },
+        );
+        if (!quizResponse.ok) {
+          const body = await quizResponse.json().catch(() => ({}));
+          const detail = Array.isArray(body.detail)
+            ? body.detail.join(" ")
+            : body.detail;
+          throw new Error(
+            detail ||
+              "Classwork was created, but the quiz questions could not be saved.",
+          );
+        }
       }
 
       await loadClassworks();
@@ -1137,6 +1284,23 @@ export default function Classworks() {
   const selectedTypeOption = createOptions.find(
     (option) => option.type === selectedType,
   );
+  const createStepTotal = isQuizType(selectedType) ? 4 : 3;
+  const createStepNumber =
+    createStep === "type"
+      ? 1
+      : createStep === "details"
+        ? 2
+        : createStep === "quiz"
+          ? 3
+          : createStepTotal;
+  const createStepTitle =
+    createStep === "type"
+      ? "Create new classwork"
+      : createStep === "details"
+        ? `Create ${selectedTypeOption?.title.toLowerCase() || "classwork"}`
+        : createStep === "quiz"
+          ? "Build quiz questions"
+          : `Assign ${selectedTypeOption?.title.toLowerCase() || "classwork"}`;
   const selectedAssignment = selected?.assignments?.[0] ?? null;
   const trackingRows = useMemo(() => {
     const rows = [...(tracking?.submitted ?? []), ...(tracking?.missing ?? [])];
@@ -2024,20 +2188,10 @@ export default function Classworks() {
                 <div className="sticky top-0 z-10 flex items-center justify-between border-b border-black bg-[#7ABA78] px-5 py-4">
                   <div>
                     <h2 className="text-lg font-bold">
-                      {createStep === "type"
-                        ? "Create new classwork"
-                        : createStep === "details"
-                          ? `Create ${selectedTypeOption?.title.toLowerCase() || "classwork"}`
-                          : `Assign ${selectedTypeOption?.title.toLowerCase() || "classwork"}`}
+                      {createStepTitle}
                     </h2>
                     <p className="text-xs font-medium">
-                      Step{" "}
-                      {createStep === "type"
-                        ? 1
-                        : createStep === "details"
-                          ? 2
-                          : 3}{" "}
-                      of 3
+                      Step {createStepNumber} of {createStepTotal}
                     </p>
                   </div>
                   <button
@@ -2271,6 +2425,310 @@ export default function Classworks() {
                     </div>
                   )}
 
+                  {createStep === "quiz" && (
+                    <div className="space-y-4">
+                      <div className="rounded-lg border border-black bg-[#F8F6ED] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-lg font-bold">
+                              Manual quiz builder
+                            </h3>
+                            <p className="text-xs font-medium text-gray-600">
+                              Multiple-choice and short-answer questions only for this MVP.
+                            </p>
+                          </div>
+                          <span className="rounded-full border border-black bg-white px-3 py-1 text-xs font-bold">
+                            {quizPointTotal}/{draft.total_points || 0} pts
+                          </span>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          <label className="block text-xs font-bold">
+                            Duration
+                            <div className="mt-1 flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={quizSettings.duration_minutes}
+                                onChange={(event) =>
+                                  setQuizSettings((current) => ({
+                                    ...current,
+                                    duration_minutes: event.target.value,
+                                  }))
+                                }
+                                disabled={isCreating}
+                                className="w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                                placeholder="No time limit"
+                              />
+                              <span className="text-xs font-semibold">
+                                minutes
+                              </span>
+                            </div>
+                          </label>
+                          <label className="block text-xs font-bold">
+                            Attempts
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={quizSettings.max_attempts}
+                              onChange={(event) => {
+                                setQuizSettings((current) => ({
+                                  ...current,
+                                  max_attempts: event.target.value,
+                                }));
+                                setDraft((current) => ({
+                                  ...current,
+                                  max_attempts: event.target.value,
+                                }));
+                              }}
+                              disabled={isCreating}
+                              className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                            />
+                          </label>
+                        </div>
+
+                        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                          {[
+                            {
+                              key: "is_shuffle_questions",
+                              label: "Shuffle questions",
+                            },
+                            {
+                              key: "enable_per_question_scoring",
+                              label: "Enable per-question scoring",
+                            },
+                            {
+                              key: "enable_per_question_time_limits",
+                              label: "Enable individual question time limits",
+                            },
+                            {
+                              key: "show_correct_answers",
+                              label: "Show correct answers after submission",
+                            },
+                          ].map((setting) => {
+                            const key =
+                              setting.key as keyof Pick<
+                                QuizSettingsDraft,
+                                | "is_shuffle_questions"
+                                | "enable_per_question_scoring"
+                                | "enable_per_question_time_limits"
+                                | "show_correct_answers"
+                              >;
+                            const enabled = quizSettings[key];
+                            return (
+                              <button
+                                key={setting.key}
+                                type="button"
+                                onClick={() =>
+                                  setQuizSettings((current) => ({
+                                    ...current,
+                                    [key]: !current[key],
+                                  }))
+                                }
+                                disabled={isCreating}
+                                className="flex items-center justify-between rounded-lg border border-black bg-white px-3 py-2 text-left text-xs font-bold disabled:opacity-50"
+                              >
+                                <span>{setting.label}</span>
+                                <span
+                                  className={`rounded-full border border-black px-3 py-1 ${
+                                    enabled ? "bg-[#7ABA78]" : "bg-gray-100"
+                                  }`}
+                                >
+                                  {enabled ? "On" : "Off"}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        {quizQuestions.map((question, questionIndex) => (
+                          <div
+                            key={question.id}
+                            className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                          >
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                              <h3 className="text-base font-bold">
+                                Question {questionIndex + 1}
+                              </h3>
+                              <button
+                                type="button"
+                                onClick={() => removeQuizQuestion(question.id)}
+                                disabled={isCreating || quizQuestions.length === 1}
+                                className="rounded-lg border border-red-400 px-3 py-1 text-xs font-bold text-red-600 disabled:opacity-40"
+                              >
+                                Remove
+                              </button>
+                            </div>
+
+                            <div className="grid gap-3 sm:grid-cols-3">
+                              <label className="block text-xs font-bold sm:col-span-2">
+                                Question text
+                                <textarea
+                                  value={question.question_text}
+                                  onChange={(event) =>
+                                    updateQuizQuestion(question.id, {
+                                      question_text: event.target.value,
+                                    })
+                                  }
+                                  disabled={isCreating}
+                                  className="mt-1 min-h-20 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                                  placeholder="Which of the following is the primary function of a CPU?"
+                                />
+                              </label>
+                              <div className="grid gap-3">
+                                <label className="block text-xs font-bold">
+                                  Type
+                                  <select
+                                    value={question.question_type}
+                                    onChange={(event) =>
+                                      updateQuizQuestion(question.id, {
+                                        question_type: event.target
+                                          .value as QuizQuestionType,
+                                      })
+                                    }
+                                    disabled={isCreating}
+                                    className="mt-1 w-full rounded-lg border border-gray-700 bg-white px-3 py-2 text-sm"
+                                  >
+                                    <option value="MULTIPLE_CHOICE">
+                                      Multiple Choice
+                                    </option>
+                                    <option value="SHORT_ANSWER">
+                                      Short Answer
+                                    </option>
+                                  </select>
+                                </label>
+                                <label className="block text-xs font-bold">
+                                  Points
+                                  <input
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    value={question.points}
+                                    onChange={(event) =>
+                                      updateQuizQuestion(question.id, {
+                                        points: event.target.value,
+                                      })
+                                    }
+                                    disabled={isCreating}
+                                    className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                                  />
+                                </label>
+                              </div>
+                            </div>
+
+                            {question.question_type === "MULTIPLE_CHOICE" ? (
+                              <div className="mt-3 space-y-2">
+                                <p className="text-xs font-bold">
+                                  Choices
+                                </p>
+                                {question.options.map((option, optionIndex) => (
+                                  <div
+                                    key={`${question.id}-${option.option_order}`}
+                                    className="flex items-center gap-2"
+                                  >
+                                    <input
+                                      type="radio"
+                                      checked={option.is_correct}
+                                      onChange={() =>
+                                        markCorrectOption(
+                                          question.id,
+                                          optionIndex,
+                                        )
+                                      }
+                                      disabled={isCreating}
+                                      className="h-4 w-4"
+                                      aria-label={`Mark choice ${optionIndex + 1} correct`}
+                                    />
+                                    <input
+                                      value={option.option_text}
+                                      onChange={(event) =>
+                                        updateQuizOption(
+                                          question.id,
+                                          optionIndex,
+                                          event.target.value,
+                                        )
+                                      }
+                                      disabled={isCreating}
+                                      className="flex-1 rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                                      placeholder={`Choice ${optionIndex + 1}`}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        removeQuizOption(
+                                          question.id,
+                                          optionIndex,
+                                        )
+                                      }
+                                      disabled={
+                                        isCreating ||
+                                        question.options.length <= 2
+                                      }
+                                      className="rounded-lg border border-black px-2 py-2 text-xs font-bold disabled:opacity-40"
+                                      aria-label={`Remove choice ${optionIndex + 1}`}
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() => addQuizOption(question.id)}
+                                  disabled={isCreating}
+                                  className="rounded-lg border border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold"
+                                >
+                                  Add choice
+                                </button>
+                              </div>
+                            ) : (
+                              <p className="mt-3 rounded-lg border border-dashed border-gray-400 px-3 py-3 text-xs font-medium text-gray-600">
+                                Short-answer questions are manually graded after students submit.
+                              </p>
+                            )}
+
+                            <label className="mt-3 block text-xs font-bold">
+                              Explanation or answer guide
+                              <textarea
+                                value={question.explanation}
+                                onChange={(event) =>
+                                  updateQuizQuestion(question.id, {
+                                    explanation: event.target.value,
+                                  })
+                                }
+                                disabled={isCreating}
+                                className="mt-1 min-h-16 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                                placeholder="Optional guidance for review or grading"
+                              />
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => addQuizQuestion("MULTIPLE_CHOICE")}
+                          disabled={isCreating}
+                          className="rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-bold"
+                        >
+                          Add multiple choice
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => addQuizQuestion("SHORT_ANSWER")}
+                          disabled={isCreating}
+                          className="rounded-lg border border-black bg-white px-4 py-2 text-sm font-bold"
+                        >
+                          Add short answer
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {createStep === "assign" && (
                     <div className="space-y-4">
                       <div className="grid gap-3 sm:grid-cols-3">
@@ -2434,19 +2892,24 @@ export default function Classworks() {
                 <div className="flex items-center justify-between border-t border-black px-5 py-4">
                   <button
                     type="button"
-                    onClick={() =>
-                      createStep === "type"
-                        ? closeCreateWizard()
-                        : setCreateStep(
-                            createStep === "assign" ? "details" : "type",
-                          )
-                    }
+                    onClick={() => {
+                      if (createStep === "type") {
+                        closeCreateWizard();
+                        return;
+                      }
+                      if (createStep === "assign") {
+                        setCreateStep(isQuizType(selectedType) ? "quiz" : "details");
+                        return;
+                      }
+                      setCreateStep(createStep === "quiz" ? "details" : "type");
+                    }}
                     disabled={isCreating}
                     className="rounded-lg border border-black px-4 py-2 text-sm font-bold disabled:opacity-50"
                   >
                     {createStep === "type" ? "Cancel" : "Back"}
                   </button>
-                  {createStep === "type" ? null : createStep === "details" ? (
+                  {createStep === "type" ? null : createStep === "details" ||
+                    createStep === "quiz" ? (
                     <button
                       type="button"
                       onClick={goToAssignStep}
