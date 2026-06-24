@@ -9,11 +9,27 @@ from sqlalchemy.orm import Session
 from app.core.FileUpload import delete_file
 from app.models.academic.Lesson import Lesson
 from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 
 # SHARED CLASSWORK RULES
 # Routes call these helpers so schedule, ownership, and file-cleanup behavior
 # stays consistent across classwork and submission flows.
+
+READING_TYPE = "READING"
+QUIZ_TYPE = "QUIZ"
+
+
+def normalize_classwork_type(value: str) -> str:
+    return value.strip().upper()
+
+
+def is_reading_type(value: Optional[str]) -> bool:
+    return normalize_classwork_type(value or "") == READING_TYPE
+
+
+def is_quiz_type(value: Optional[str]) -> bool:
+    return normalize_classwork_type(value or "") == QUIZ_TYPE
 
 
 def normalize_uploaded_path(info: dict) -> dict:
@@ -123,3 +139,8 @@ def assignment_is_locked(ca: ClassworkAssignment, now: Optional[datetime] = None
     lock_date = aware_utc(ca.lock_date)
     now_value = now or datetime.now(timezone.utc)
     return bool(ca.is_locked or (lock_date and now_value < lock_date))
+
+
+def classwork_uses_attempt_limit(cw: Classwork) -> bool:
+    """Only quiz classwork should enforce a resubmission attempt cap."""
+    return is_quiz_type(cw.classwork_type)

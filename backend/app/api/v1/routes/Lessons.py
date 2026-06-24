@@ -5,7 +5,6 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
 from typing import List, Optional
-from pathlib import Path
 from datetime import datetime, timezone
 
 from app.db.Session import get_db
@@ -14,8 +13,6 @@ from app.core.FileUpload import save_file, delete_file
 from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAttachment import LessonAttachment
 from app.models.academic.LessonAssignment import LessonAssignment
-from app.models.academic.Subject import Subject
-from app.models.people.AcademicStaff import AcademicStaff
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.Classwork import Classwork
@@ -30,6 +27,14 @@ from app.services.lesson.LessonShared import (
     ensure_teacher_class_subject as _ensure_teacher_class_subject,
     ensure_teacher_subject as _ensure_teacher_subject,
     get_owned_lesson as _get_owned_lesson,
+)
+from app.services.lesson.LessonFileService import (
+    files_from_form as _files_from_form,
+    resolve_lesson_file_path as _resolve_lesson_file_path,
+)
+from app.services.lesson.LessonResponseService import (
+    build_lesson_attachment_response as _lesson_attachment_response,
+    build_lesson_response as _build_lesson_response,
 )
 
 router = APIRouter()
@@ -331,20 +336,6 @@ def assign_lesson(
     return {"message": f"Lesson assigned to {len(created)} class(es)", "class_ids": created}
 
 
-async def _files_from_form(request: Request, field_names: set[str]) -> list[StarletteUploadFile]:
-    """Read upload files from common multipart field names without causing 422s."""
-    try:
-        form = await request.form()
-    except Exception:
-        return []
-
-    uploads: list[StarletteUploadFile] = []
-    for key, value in form.multi_items():
-        if key in field_names and isinstance(value, StarletteUploadFile) and value.filename:
-            uploads.append(value)
-    return uploads
-
-
 @router.post("/{lesson_id}/attachments", response_model=LessonAttachmentResponse)
 async def upload_lesson_attachment(
     lesson_id: int,
@@ -375,13 +366,7 @@ async def upload_lesson_attachment(
         delete_file(file_info["file_path"])
         raise
 
-    return LessonAttachmentResponse(
-        lesson_attachment_id=attachment.lesson_attachment_id,
-        file_name=attachment.file_name,
-        file_type=attachment.file_type,
-        file_size=attachment.file_size,
-        uploaded_at=attachment.uploaded_at,
-    )
+    return _lesson_attachment_response(attachment)
 
 
 @router.delete("/{lesson_id}/attachments/{attachment_id}")
@@ -495,7 +480,7 @@ def download_lesson_attachment(
         raise HTTPException(status_code=404, detail="Lesson not found")
     _authorize_lesson_access(db, lesson, current_user)
 
-    file_path = Path(att.file_path)
+    file_path = _resolve_lesson_file_path(att.file_path)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on server")
 
@@ -571,40 +556,3 @@ def unlink_classwork_from_lesson(
         "lesson_id": lesson_id,
         "classwork_id": classwork_id,
     }
-
-
-# ──────────────────────────── HELPERS ──────────────────────────────────────
-
-
-def _build_lesson_response(lesson: Lesson, db: Session) -> LessonResponse:
-    """Build a LessonResponse from an ORM Lesson object."""
-    subject = db.query(Subject).filter(Subject.subject_id == lesson.subject_id).first()
-    staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == lesson.created_by_staff_id).first()
-
-    return LessonResponse(
-        lesson_id=lesson.lesson_id,
-        title=lesson.title,
-        description=lesson.description,
-        content=lesson.content,
-        order_index=lesson.order_index,
-        is_published=lesson.is_published,
-        is_draft=lesson.is_draft,
-        is_locked=lesson.is_locked,
-        is_archived=lesson.is_archived,
-        subject_id=lesson.subject_id,
-        subject_name=subject.subject_name if subject else None,
-        created_by_staff_id=lesson.created_by_staff_id,
-        teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
-        attachments=[
-            LessonAttachmentResponse(
-                lesson_attachment_id=a.lesson_attachment_id,
-                file_name=a.file_name,
-                file_type=a.file_type,
-                file_size=a.file_size,
-                uploaded_at=a.uploaded_at,
-            )
-            for a in lesson.attachments
-        ],
-        created_at=lesson.created_at,
-        updated_at=lesson.updated_at,
-    )

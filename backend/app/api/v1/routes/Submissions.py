@@ -30,16 +30,12 @@ from app.services.classwork.ClassworkShared import (
     assignment_is_available as _assignment_is_available,
     assignment_is_locked as _assignment_is_locked,
     aware_utc as _aware_utc,
+    classwork_uses_attempt_limit as _classwork_uses_attempt_limit,
     cleanup_saved_files as _cleanup_saved_files,
 )
 
 router = APIRouter()
 logger = logging.getLogger("app.submissions")
-
-
-def _uses_attempt_limit(cw: Classwork) -> bool:
-    """Only quiz classwork should enforce a resubmission attempt cap."""
-    return (cw.classwork_type or "").upper() == "QUIZ"
 
 
 def _user_id(current_user: dict):
@@ -191,7 +187,7 @@ async def submit_work(
 
     due_date = _aware_utc(ca.due_date)
     is_late = bool(due_date and now > due_date)
-    enforce_attempt_limit = _uses_attempt_limit(cw)
+    enforce_attempt_limit = _classwork_uses_attempt_limit(cw)
 
     saved_paths: list[str] = []
     if existing:

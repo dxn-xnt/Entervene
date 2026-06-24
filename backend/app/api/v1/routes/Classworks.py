@@ -3,9 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload, selectinload
 from typing import List, Optional, cast
-from pathlib import Path
 from datetime import datetime, timezone
-from uuid import UUID
 
 from app.db.Session import get_db
 from app.core.Dependencies import require_role, get_staff_id, get_student_record
@@ -22,11 +20,20 @@ from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Class_ import Class
 from app.models.people.AcademicStaff import AcademicStaff
-from app.models.people.Student import Student
 from app.schemas.Classwork import (
     ClassworkCreate, ClassworkUpdate, ClassworkResponse,
     ClassworkAttachmentResponse, ClassworkAssignRequest,
     ClassworkAssignmentResponse,
+)
+from app.services.classwork.ClassworkAccessService import (
+    authorize_assignment_access as _authorize_assignment_access,
+    authorize_classwork_access as _authorize_classwork_access,
+    classwork_has_submissions as _classwork_has_submissions,
+)
+from app.services.classwork.ClassworkResponseService import (
+    build_attachment_response as _att_resp,
+    build_classwork_response as _build_cw,
+    resolve_classwork_file_path as _resolve_file_path,
 )
 from app.services.classwork.ClassworkShared import (
     assignment_is_available as _assignment_is_available,
@@ -36,6 +43,9 @@ from app.services.classwork.ClassworkShared import (
     ensure_class_targets as _ensure_class_targets,
     ensure_lessons_owned as _ensure_lessons_owned,
     ensure_subject_owner as _ensure_subject_owner,
+    is_quiz_type as _is_quiz_type,
+    is_reading_type as _is_reading_type,
+    normalize_classwork_type as _normalize_classwork_type,
     normalize_uploaded_path as _normalize_uploaded_path,
     parse_id_list as _parse_id_list,
     validate_classwork_values as _validate_classwork_values,
@@ -43,191 +53,6 @@ from app.services.classwork.ClassworkShared import (
 )
 
 router = APIRouter()
-
-# Project root = 4 levels up from this file (app/api/v1/routes/Classworks.py)
-BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
-UPLOADS_DIR = BASE_DIR / "uploads"
-READING_TYPE = "READING"
-QUIZ_TYPE = "QUIZ"
-
-
-def _normalize_classwork_type(value: str) -> str:
-    return value.strip().upper()
-
-
-def _is_reading_type(value: Optional[str]) -> bool:
-    return _normalize_classwork_type(value or "") == READING_TYPE
-
-
-def _is_quiz_type(value: Optional[str]) -> bool:
-    return _normalize_classwork_type(value or "") == QUIZ_TYPE
-
-
-def _user_id(current_user: dict):
-    value = current_user.get("sub")
-    try:
-        return UUID(value) if isinstance(value, str) else value
-    except ValueError:
-        return value
-
-
-def _resolve_file_path(stored_path: str) -> Path:
-    """
-    Resolve a stored file_path to an actual Path on disk.
-    Handles both legacy Windows absolute paths and clean relative paths.
-    """
-    # First try the stored path as-is (works if already relative/correct)
-    p = Path(stored_path)
-    if p.exists():
-        return p
-
-    # Legacy: stored as Windows absolute path — extract just the filename
-    # and rebuild from the known uploads directory structure.
-    # e.g. C:\Users\...\backend\uploads\classworks\abc123.pdf
-    normalized = stored_path.replace("\\", "/")
-    parts = Path(normalized).parts
-
-    # Walk backwards to find "uploads" in the stored path, then rebuild from there
-    try:
-        uploads_idx = next(i for i, part in enumerate(parts) if part == "uploads")
-        relative = Path(*parts[uploads_idx:])  # e.g. uploads/classworks/abc123.pdf
-        p = BASE_DIR / relative
-        if p.exists():
-            return p
-    except StopIteration:
-        pass
-
-    # Last resort: assume filename lives in uploads/classworks/
-    filename = Path(normalized).name
-    p = UPLOADS_DIR / "classworks" / filename
-    return p  # Caller checks .exists()
-
-
-def _att_resp(a):
-    return ClassworkAttachmentResponse(
-        classwork_attachment_id=a.classwork_attachment_id,
-        file_name=a.file_name, file_type=a.file_type,
-        file_size=a.file_size, uploaded_at=a.uploaded_at,
-    )
-
-
-def _build_cw(cw, db):
-    subj = cw.subject
-    staff = cw.staff
-    
-    assignments_data = []
-    for a in cw.assignments:
-        cls = a.class_
-        assignments_data.append({
-            "classwork_assignment_id": a.classwork_assignment_id,
-            "classwork_id": a.classwork_id,
-            "class_id": a.class_id,
-            "title": cls.section_name if cls else "Unknown Section",
-            "classwork_type": cw.classwork_type,
-            "due_date": a.due_date,
-            "lock_date": a.lock_date,
-            "max_attempts": a.max_attempts,
-            "is_published": a.is_published,
-            "is_locked": _assignment_is_locked(a),
-        })
-
-    return ClassworkResponse(
-        classwork_id=cw.classwork_id, title=cw.title, description=cw.description,
-        instructions=cw.instructions, classwork_type=cw.classwork_type,
-        classwork_category=cw.classwork_category,
-        total_points=float(cw.total_points) if cw.total_points else None,
-        is_published=cw.is_published, is_locked=cw.is_locked,
-        is_archived=cw.is_archived,
-        subject_id=cw.subject_id, subject_name=subj.subject_name if subj else None,
-        created_by_staff_id=cw.created_by_staff_id,
-        teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
-        attachments=[_att_resp(a) for a in cw.attachments],
-        assignments=assignments_data,
-        created_at=cw.created_at, updated_at=cw.updated_at,
-    )
-
-
-def _authorize_classwork_access(
-    cw: Classwork,
-    current_user: dict,
-    db: Session,
-    class_id: Optional[int] = None,
-) -> None:
-    role = current_user.get("role")
-    user_id = _user_id(current_user)
-    if role == "admin":
-        return
-    if role == "teacher":
-        staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
-        if staff and cw.created_by_staff_id == staff.staff_id:
-            return
-    if cw.is_archived:
-        raise HTTPException(status_code=404, detail="Classwork not found")
-    if role == "student":
-        student = db.query(Student).filter(Student.user_id == user_id).first()
-        if student:
-            query = (
-                db.query(ClassworkAssignment)
-                .join(StudentClass, StudentClass.class_id == ClassworkAssignment.class_id)
-                .filter(
-                    ClassworkAssignment.classwork_id == cw.classwork_id,
-                    StudentClass.student_id == student.student_id,
-                    StudentClass.enrollment_status == "enrolled",
-                )
-            )
-            if class_id is not None:
-                query = query.filter(ClassworkAssignment.class_id == class_id)
-            if any(
-                _assignment_is_available(assignment)
-                and not _assignment_is_locked(assignment)
-                for assignment in query.all()
-            ):
-                return
-    raise HTTPException(status_code=403, detail="Access denied")
-
-
-def _authorize_assignment_access(
-    assignment: ClassworkAssignment,
-    cw: Classwork,
-    current_user: dict,
-    db: Session,
-) -> None:
-    role = current_user.get("role")
-    user_id = _user_id(current_user)
-    if role == "teacher":
-        staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
-        if staff and cw.created_by_staff_id == staff.staff_id:
-            return
-    if cw.is_archived:
-        raise HTTPException(status_code=404, detail="Classwork not found")
-    if role == "student" and _assignment_is_available(assignment):
-        student = db.query(Student).filter(Student.user_id == user_id).first()
-        if student and db.query(StudentClass).filter(
-            StudentClass.student_id == student.student_id,
-            StudentClass.class_id == assignment.class_id,
-            StudentClass.enrollment_status == "enrolled",
-        ).first():
-            if _assignment_is_locked(assignment):
-                raise HTTPException(status_code=403, detail="This assignment is locked")
-            return
-    raise HTTPException(status_code=403, detail="Access denied")
-
-
-def _classwork_has_submissions(db: Session, classwork_id: int) -> bool:
-    """Classwork can only be archived while no student work is turned in."""
-    return (
-        db.query(StudentSubmission)
-        .join(
-            ClassworkAssignment,
-            ClassworkAssignment.classwork_assignment_id == StudentSubmission.classwork_assignment_id,
-        )
-        .filter(
-            ClassworkAssignment.classwork_id == classwork_id,
-            StudentSubmission.status.in_(("submitted", "late", "graded")),
-        )
-        .first()
-        is not None
-    )
 
 
 @router.post("/", response_model=ClassworkResponse)
@@ -253,7 +78,7 @@ def create_classwork(body: ClassworkCreate, staff_id: str = Depends(get_staff_id
     except Exception:
         db.rollback()
         raise
-    return _build_cw(cw, db)
+    return _build_cw(cw)
 
 
 @router.post("/with-assignments", response_model=ClassworkResponse)
@@ -334,7 +159,7 @@ async def create_classwork_with_assignments(
 
         db.commit()
         db.refresh(cw)
-        return _build_cw(cw, db)
+        return _build_cw(cw)
     except Exception:
         db.rollback()
         _cleanup_saved_files(saved_paths)
@@ -358,7 +183,7 @@ def get_my_classworks(staff_id: str = Depends(get_staff_id), db: Session = Depen
         .order_by(Classwork.created_at.desc())
         .all()
     )
-    return [_build_cw(c, db) for c in cws]
+    return [_build_cw(c) for c in cws]
 
 @router.get("/classwork/{classwork_id}", response_model=ClassworkResponse)
 def get_classwork(
@@ -394,7 +219,7 @@ def get_classwork(
             due_date = assignment.due_date
     
     # Build response with due_date from assignment
-    result = _build_cw(cw, db)
+    result = _build_cw(cw)
     
     # Add due_date to the response (since ClassworkResponse might not have it)
     # You might need to create a custom response or modify ClassworkResponse schema
@@ -439,7 +264,7 @@ def update_classwork(classwork_id: int, body: ClassworkUpdate, staff_id: str = D
     except Exception:
         db.rollback()
         raise
-    return _build_cw(cw, db)
+    return _build_cw(cw)
 
 
 @router.delete("/classwork/{classwork_id}")
@@ -485,16 +310,6 @@ async def upload_cw_attachment(
     if not cw: raise HTTPException(status_code=404, detail="Classwork not found or not yours")
     if cw.is_archived: raise HTTPException(status_code=400, detail="Cannot attach files to archived classwork")
     info = _normalize_uploaded_path(await save_file(file, "classworks"))
-
-    # Normalize file_path to always store relative (e.g. uploads/classworks/abc123.pdf)
-    # so downloads work regardless of machine or OS.
-    raw_path = info.get("file_path", "")
-    normalized = raw_path.replace("\\", "/")
-    try:
-        uploads_idx = next(i for i, part in enumerate(Path(normalized).parts) if part == "uploads")
-        info["file_path"] = str(Path(*Path(normalized).parts[uploads_idx:]))
-    except StopIteration:
-        pass  # Already relative or unexpected format — keep as-is
 
     try:
         att = ClassworkAttachment(classwork_id=classwork_id, **info)
