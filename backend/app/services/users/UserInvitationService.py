@@ -19,6 +19,7 @@ from app.services.users.UserShared import (
     create_pending_account,
     normalize_lrn,
     resolve_academic_level_id,
+    validate_optional_date,
     sha256_token,
     validate_required_name,
 )
@@ -44,6 +45,7 @@ def invite_single_user(
         _validate_student_data(db, data)
     elif payload.role == "Teacher":
         validate_required_name(data)
+        validate_optional_date(data)
     else:
         validate_required_name(data)
 
@@ -62,6 +64,7 @@ def invite_single_user(
 
 def _validate_student_data(db: Session, data: dict) -> None:
     validate_required_name(data)
+    validate_optional_date(data)
     student_lrn = normalize_lrn(str(data.get("student_lrn") or ""))
     if not LRN_RE.fullmatch(student_lrn):
         raise HTTPException(status_code=400, detail="Student LRN must be exactly 12 digits")

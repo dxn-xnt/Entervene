@@ -61,6 +61,23 @@ export type UpdateUserPayload = {
   section?: string | null;
 };
 
+export type InviteUserPayload = {
+  first_name: string;
+  middle_name?: string;
+  last_name: string;
+  email: string;
+  role: "Teacher" | "Student" | "Admin";
+  suffix?: string;
+  dob?: string;
+  gender?: string;
+  contact_number?: string;
+  address?: string;
+  hired_date?: string;
+  employment_status?: string;
+  student_lrn?: string;
+  grade_level?: number | null;
+};
+
 export type UserAnalytics = {
   summary: Record<string, number | string | null> | null;
   subject_mastery: Array<Record<string, number | string>>;

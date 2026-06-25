@@ -3,7 +3,7 @@ import { Card as RetroCard } from "@/components/retroui/Card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { Text } from "@/components/retroui/Text";
-import { useParams, useLocation, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { OverviewCard } from "@/components/overview-cards";
 import ClassItemLine from "@/components/item-line/class";
 
@@ -24,14 +24,10 @@ export default function AdminSubjectView() {
   ];
 
   const { grade, subject } = useParams<{ grade: string; subject: string }>();
-  const location = useLocation();
   const navigate = useNavigate();
 
   const decodedGrade = decodeURIComponent(grade || "Grade 7");
   const decodedSubject = decodeURIComponent(subject || "Subject");
-
-  const state = location.state as { subject?: { title: string; count: string }; grade?: string } | null;
-  const subjectData = state?.subject || { title: decodedSubject, count: "Assigned since November 10, 2025" };
 
   return (
 

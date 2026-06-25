@@ -15,8 +15,10 @@ from app.services.users.UserShared import (
     attach_staff_profile,
     attach_student_profile,
     create_pending_account,
+    DOB_FIELDS,
     normalize_lrn,
     resolve_academic_level_id,
+    parse_optional_date,
     validate_required_name,
 )
 
@@ -49,6 +51,30 @@ def _import_error(row: int, field: str, value: Any, reason: str) -> dict[str, An
     return {"row": row, "field": field, "value": "" if value is None else str(value), "reason": reason}
 
 
+def _decode_csv_content(content: bytes) -> str:
+    try:
+        return content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            return content.decode("cp1252")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Unable to read CSV encoding. Save the file as CSV UTF-8 and try again.",
+            ) from exc
+
+
+def _validate_optional_dob(row: dict[str, Any], row_number: int, errors: list[dict[str, Any]]) -> None:
+    raw_value = next((row.get(field) for field in DOB_FIELDS if row.get(field) not in (None, "")), "")
+    if raw_value in (None, ""):
+        row["dob"] = None
+        return
+    try:
+        row["dob"] = parse_optional_date(row)
+    except HTTPException:
+        errors.append(_import_error(row_number, "dob", raw_value, "DOB must use YYYY-MM-DD format"))
+
+
 async def _read_import_rows(file: UploadFile) -> tuple[list[dict[str, str]], set[str]]:
     filename = (file.filename or "").lower()
     content = await file.read()
@@ -56,7 +82,7 @@ async def _read_import_rows(file: UploadFile) -> tuple[list[dict[str, str]], set
         raise HTTPException(status_code=400, detail=f"File too large. Maximum is {MAX_FILE_SIZE} bytes.")
 
     if filename.endswith(".csv"):
-        reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
+        reader = csv.DictReader(io.StringIO(_decode_csv_content(content)))
         fieldnames = {field.strip() for field in reader.fieldnames or []}
         return [_normalize_upload_row(row) for row in reader], fieldnames
 
@@ -92,6 +118,7 @@ def _validate_import_rows(
 
         normalized = {key: (value or "").strip() for key, value in row.items()}
         validate_required_name(normalized, errors, index, _import_error)
+        _validate_optional_dob(normalized, index, errors)
 
         raw_email = normalized.get("email", "")
         email = _normalize_email(raw_email)

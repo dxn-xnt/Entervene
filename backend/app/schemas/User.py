@@ -10,6 +10,8 @@ class InviteSingleUserRequest(BaseModel):
     role: Literal["Teacher", "Student", "Admin"]
     # Teacher fields
     suffix: str = ""
+    dob: str = ""
+    date_of_birth: str = ""
     gender: str = ""
     contact_number: str = ""
     address: str = ""
