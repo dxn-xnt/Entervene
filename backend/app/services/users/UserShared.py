@@ -2,6 +2,7 @@ import hashlib
 import re
 import secrets
 import uuid
+from datetime import date, datetime
 from typing import Any
 
 from fastapi import HTTPException
@@ -23,6 +24,7 @@ from app.models.people.Student import Student
 
 
 LRN_RE = re.compile(r"^\d{12}$")
+DOB_FIELDS = ("dob", "date_of_birth")
 
 
 def capitalize_name(value: Any) -> str:
@@ -45,6 +47,27 @@ def normalize_lrn(raw: str) -> str:
         except ValueError:
             pass
     return value
+
+
+def parse_optional_date(data: dict[str, Any], fields: tuple[str, ...] = DOB_FIELDS) -> date | None:
+    value = next((data.get(field) for field in fields if data.get(field) not in (None, "")), None)
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+
+    text = str(value).strip()
+    try:
+        return date.fromisoformat(text)
+    except ValueError as exc:
+        field_label = fields[0]
+        raise HTTPException(status_code=400, detail=f"{field_label} must use YYYY-MM-DD format") from exc
+
+
+def validate_optional_date(data: dict[str, Any], fields: tuple[str, ...] = DOB_FIELDS) -> None:
+    parse_optional_date(data, fields)
 
 
 def validate_required_name(
@@ -121,6 +144,7 @@ def attach_staff_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
         first_name=capitalize_name(data.get("first_name")),
         middle_name=capitalize_name(data.get("middle_name")),
         last_name=capitalize_name(data.get("last_name")),
+        dob=parse_optional_date(data),
         suffix=data.get("suffix", ""),
         gender=data.get("gender", ""),
         contact_number=data.get("contact_number", ""),
@@ -139,6 +163,7 @@ def attach_student_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
         first_name=capitalize_name(data.get("first_name")),
         middle_name=capitalize_name(data.get("middle_name")),
         last_name=capitalize_name(data.get("last_name")),
+        dob=parse_optional_date(data),
         suffix=data.get("suffix", ""),
         gender=data.get("gender", ""),
         contact_number=data.get("contact_number", ""),

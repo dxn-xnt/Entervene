@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, Integer, CheckConstraint, ForeignKey, Index
+from sqlalchemy import Column, String, Text, Integer, CheckConstraint, ForeignKey, Index, Date
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db.Base import Base
@@ -12,6 +12,7 @@ class Student(Base):
     first_name        = Column(String(100), nullable=False)
     middle_name       = Column(String(100))
     last_name         = Column(String(100), nullable=False)
+    dob               = Column(Date)
     suffix            = Column(String(10))
     gender            = Column(String(20))
     contact_number    = Column(String(20))

@@ -6,13 +6,10 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { ArrowUpRight } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { Dialog } from "@/components/retroui/Dialog";
-import AddAcademicPeriodModal from "./forms/add-academic-period";
 import ViewPreviousPeriodsModal from "./forms/view-previous-periods";
 
 export default function AdminAcademicPeriods() {
-  const navigate = useNavigate();
   const academicPeriods = [
     {
       id: "1",

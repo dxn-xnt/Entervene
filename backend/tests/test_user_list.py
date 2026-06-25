@@ -188,6 +188,16 @@ def test_list_users_batches_mixed_user_summaries_and_preserves_filters(client, d
     assert len(client.get("/api/v1/users?search=student0").json()) == 1
 
 
+def test_list_users_allows_null_profile_dob(client, db_and_engine):
+    db, _ = db_and_engine
+    seed_users(db)
+
+    response = client.get("/api/v1/users")
+
+    assert response.status_code == 200
+    assert any(item["email"] == "student0@example.com" for item in response.json())
+
+
 def test_list_users_query_count_stays_bounded_as_results_grow(client, db_and_engine):
     db, engine = db_and_engine
     seed_users(db, pairs=4)

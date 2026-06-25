@@ -3,7 +3,6 @@
 import { Button } from "@/components/retroui/Button";
 import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
-import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 
 export default function AddGradingComponentModal() {
