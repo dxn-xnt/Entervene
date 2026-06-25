@@ -158,6 +158,16 @@ function getStatusBadge(status?: string | null, dueDate?: string | null) {
   return { label: `Due in ${diffDays} days`, cls: "bg-[#7ABA78] text-white" };
 }
 
+function isCompletedClasswork(status?: string | null) {
+  return ["graded", "submitted"].includes(status ?? "");
+}
+
+function classworkGoalScore(cw: LessonClasswork) {
+  if (isCompletedClasswork(cw.submission_status)) return Number.MAX_SAFE_INTEGER;
+  if (!cw.due_date) return Number.MAX_SAFE_INTEGER - 1;
+  return new Date(cw.due_date).getTime();
+}
+
 function isReadingType(value?: string | null) {
   return value?.toUpperCase() === "READING";
 }
@@ -617,6 +627,14 @@ export default function SubjectLessonTab({
     return sortAsc ? da - db : db - da;
   });
 
+  const sortedGoalLessons = [...sortedLessons].sort((a, b) => {
+    const aClassworks = classworksByLesson[a.lesson_id] ?? [];
+    const bClassworks = classworksByLesson[b.lesson_id] ?? [];
+    const aScore = Math.min(...aClassworks.map(classworkGoalScore), Number.MAX_SAFE_INTEGER);
+    const bScore = Math.min(...bClassworks.map(classworkGoalScore), Number.MAX_SAFE_INTEGER);
+    return aScore - bScore;
+  });
+
   // ─── Loading skeleton ──────────────────────────────────────────────────
   if (isLoading) {
     return (
@@ -901,8 +919,9 @@ export default function SubjectLessonTab({
           <div className="w-72 shrink-0">
             <h3 className="text-xl font-bold mb-3">Weekly Goals</h3>
             <div className="rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-4 max-h-[70vh] overflow-y-auto space-y-5">
-              {sortedLessons.map((lesson) => {
+              {sortedGoalLessons.map((lesson) => {
                 const cws = classworksByLesson[lesson.lesson_id];
+                const orderedClassworks = cws ? [...cws].sort((a, b) => classworkGoalScore(a) - classworkGoalScore(b)) : [];
                 const isHighlighted = expandedId === lesson.lesson_id;
                 const isLoadingCws = cws === undefined;
 
@@ -931,22 +950,22 @@ export default function SubjectLessonTab({
                     ) : (
                       <div className="relative">
                         {/* Lesson Completion */}
-                        <TimelineItem isLast={cws.length === 0} dot="filled">
+                        <TimelineItem isLast={orderedClassworks.length === 0} dot="filled">
                           <div className="rounded border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 w-full">
                             Lesson Completion
                           </div>
                         </TimelineItem>
 
                         {/* Classwork items */}
-                        {cws.length === 0 ? (
+                        {orderedClassworks.length === 0 ? (
                           <p className="text-[11px] text-gray-400 pl-6 mt-1">No classworks linked</p>
                         ) : (
-                          cws.map((cw, idx) => {
+                          orderedClassworks.map((cw, idx) => {
                             const badge = getStatusBadge(cw.submission_status, cw.due_date);
                             return (
                               <TimelineItem
                                 key={cw.classwork_assignment_id}
-                                isLast={idx === cws.length - 1}
+                                isLast={idx === orderedClassworks.length - 1}
                                 dot="empty"
                               >
                                 <div className="flex items-center justify-between gap-2 w-full min-w-0">

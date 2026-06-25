@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowUpDown, BookOpen, ChevronDown, ChevronUp, ClipboardList, FileText, Search } from "lucide-react";
 import SubmissionForm from "@/components/SubmissionForm";
 import SubmissionViewer from "@/components/SubmissionViewer";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
+import { Alert } from "@/components/retroui/Alert";
 import { API_URL, apiFetch } from "@/lib/api";
 
 interface Attachment {
@@ -54,8 +55,49 @@ type SubjectClassworkTabProps = {
   subjectId?: number;
 };
 
+type SortMode = "due" | "newest" | "title";
+type Notice = {
+  status: "success" | "error";
+  title: string;
+  description: string;
+};
+
 function isReadingType(value?: string | null) {
   return value?.toUpperCase() === "READING";
+}
+
+function classworkIcon(type?: string | null) {
+  switch (type?.toUpperCase()) {
+    case "READING":
+      return BookOpen;
+    case "QUIZ":
+      return ClipboardList;
+    default:
+      return FileText;
+  }
+}
+
+function statusBadge(status?: string | null, dueDate?: string, locked?: boolean) {
+  if (locked) return { label: "Locked", cls: "bg-yellow-100 text-yellow-800 border-yellow-300" };
+  if (status === "graded") return { label: "Graded", cls: "bg-green-100 text-green-800 border-green-300" };
+  if (status === "submitted") return { label: "Submitted", cls: "bg-blue-100 text-blue-800 border-blue-300" };
+  if (status === "late") return { label: "Late", cls: "bg-red-100 text-red-800 border-red-300" };
+  if (dueDate && new Date() > new Date(dueDate)) return { label: "Missing", cls: "bg-red-100 text-red-800 border-red-300" };
+  return { label: "Pending", cls: "bg-orange-100 text-orange-800 border-orange-300" };
+}
+
+function dueBadge(dueDate?: string) {
+  if (!dueDate) return null;
+  const diffDays = Math.ceil((new Date(dueDate).getTime() - Date.now()) / 86_400_000);
+  if (diffDays < 0) return { label: `${Math.abs(diffDays)} days late`, cls: "bg-[#FF4B4B] text-white" };
+  if (diffDays === 0) return { label: "Due today", cls: "bg-orange-400 text-white" };
+  return { label: `Due in ${diffDays} days`, cls: "bg-[#7ABA78] text-white" };
+}
+
+function urgencyScore(cw: ClassworkAssignment, submission?: Submission) {
+  if (submission?.status === "graded" || submission?.status === "submitted") return Number.MAX_SAFE_INTEGER;
+  if (!cw.due_date) return Number.MAX_SAFE_INTEGER - 1;
+  return new Date(cw.due_date).getTime();
 }
 
 export default function SubjectClassworkTab({
@@ -69,6 +111,9 @@ export default function SubjectClassworkTab({
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>("due");
+  const [notice, setNotice] = useState<Notice | null>(null);
 
   const fetchClassworks = useCallback(async () => {
     // Load assigned classworks, then merge in the student's current submission state.
@@ -76,6 +121,7 @@ export default function SubjectClassworkTab({
 
     setIsLoading(true);
     setError("");
+    setNotice(null);
 
     try {
       const response = await apiFetch(
@@ -154,10 +200,17 @@ export default function SubjectClassworkTab({
         [assignmentId]: submission,
       });
 
-      // Show success message
-      alert("Assignment submitted successfully!");
+      setNotice({
+        status: "success",
+        title: "Assignment submitted",
+        description: "Your work was submitted successfully.",
+      });
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to submit assignment");
+      setNotice({
+        status: "error",
+        title: "Submission failed",
+        description: err instanceof Error ? err.message : "Failed to submit assignment",
+      });
     } finally {
       setSubmittingId(null);
     }
@@ -180,9 +233,17 @@ export default function SubjectClassworkTab({
       const newSubmissions = { ...submissions };
       delete newSubmissions[assignmentId];
       setSubmissions(newSubmissions);
-      alert("Submission deleted. You can now resubmit.");
+      setNotice({
+        status: "success",
+        title: "Submission deleted",
+        description: "You can now resubmit your work.",
+      });
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete submission");
+      setNotice({
+        status: "error",
+        title: "Delete failed",
+        description: err instanceof Error ? err.message : "Failed to delete submission",
+      });
     } finally {
       setDeletingId(null);
     }
@@ -198,10 +259,23 @@ export default function SubjectClassworkTab({
     return new Date(dateString).toLocaleString();
   };
 
-  const isOverdue = (dueDate?: string): boolean => {
-    if (!dueDate) return false;
-    return new Date() > new Date(dueDate);
-  };
+  const visibleClassworks = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return classworks
+      .filter((cw) => {
+        if (!term) return true;
+        return [cw.title, cw.description, cw.instructions, cw.classwork_type, cw.teacher_name]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(term));
+      })
+      .sort((a, b) => {
+        if (sortMode === "title") return a.title.localeCompare(b.title);
+        if (sortMode === "newest") return b.classwork_assignment_id - a.classwork_assignment_id;
+        const urgent = urgencyScore(a, submissions[a.classwork_assignment_id]) -
+          urgencyScore(b, submissions[b.classwork_assignment_id]);
+        return urgent || a.title.localeCompare(b.title);
+      });
+  }, [classworks, search, sortMode, submissions]);
 
   if (isLoading) {
     return (
@@ -225,91 +299,99 @@ export default function SubjectClassworkTab({
     );
   }
 
-  if (classworks.length === 0) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-gray-500">No classworks assigned yet</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
-      <h3 className="text-2xl font-semibold text-gray-900">Classworks</h3>
+      <div className="rounded-lg border border-black bg-[#F6E9B2] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <h3 className="text-2xl font-bold text-gray-900">Classworks</h3>
+        <p className="mt-1 text-sm font-medium text-gray-700">
+          Find assignments, readings, activities, and quizzes for this subject.
+        </p>
+      </div>
 
-      {classworks.map((cw) => {
+      {notice ? (
+        <Alert status={notice.status}>
+          <Alert.Title>{notice.title}</Alert.Title>
+          <Alert.Description>{notice.description}</Alert.Description>
+        </Alert>
+      ) : null}
+
+      <div className="flex flex-col gap-3 rounded-lg border border-black bg-white p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:flex-row sm:items-center">
+        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-gray-300 bg-[#FFFBEE] px-3 py-2">
+          <Search size={16} className="shrink-0 text-gray-500" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search classwork"
+            className="w-full bg-transparent text-sm outline-none"
+          />
+        </label>
+        <label className="flex items-center gap-2 rounded-lg border border-gray-300 bg-[#FFFBEE] px-3 py-2 text-sm font-semibold">
+          <ArrowUpDown size={15} />
+          <span>Sort</span>
+          <select
+            value={sortMode}
+            onChange={(event) => setSortMode(event.target.value as SortMode)}
+            className="bg-transparent text-sm font-semibold outline-none"
+          >
+            <option value="due">Nearest due</option>
+            <option value="newest">Newest</option>
+            <option value="title">Title</option>
+          </select>
+        </label>
+      </div>
+
+      {visibleClassworks.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-gray-300 bg-white px-5 py-10 text-center text-gray-500">
+          {classworks.length === 0 ? "No classworks assigned yet." : "No classworks match your search."}
+        </div>
+      ) : visibleClassworks.map((cw) => {
         const submission = submissions[cw.classwork_assignment_id];
         const isExpanded = expandedId === cw.classwork_assignment_id;
-        const overdue = isOverdue(cw.due_date);
+        const badge = statusBadge(submission?.status ?? cw.submission_status, cw.due_date, cw.is_locked);
+        const deadline = dueBadge(cw.due_date);
+        const Icon = classworkIcon(cw.classwork_type);
 
         return (
           <div
             key={cw.classwork_assignment_id}
-            className="border border-gray-200 rounded-lg overflow-hidden bg-white"
+            className="overflow-hidden rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
           >
-            {/* Header */}
             <button
               onClick={() =>
                 setExpandedId(
                   isExpanded ? null : cw.classwork_assignment_id
                 )
               }
-              className="w-full px-4 py-4 flex items-start justify-between hover:bg-gray-50 transition-colors"
+              className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-[#FFFBEE]"
             >
-              <div className="flex-1 text-left">
-                <div className="flex items-center gap-2 mb-2">
-                  <h4 className="font-semibold text-gray-900">{cw.title}</h4>
-                  {submission && (
-                    <span
-                      className={`text-xs px-2 py-1 rounded font-medium ${
-                        submission.status === "graded"
-                          ? "bg-green-100 text-green-800"
-                          : submission.status === "submitted" ||
-                            submission.status === "late"
-                          ? "bg-blue-100 text-blue-800"
-                          : "bg-gray-100 text-gray-800"
-                      }`}
-                    >
-                      {submission.status}
-                    </span>
-                  )}
-                  {!submission && (
-                    <span className="text-xs px-2 py-1 rounded font-medium bg-orange-100 text-orange-800">
-                      Not submitted
-                    </span>
-                  )}
-                  {overdue && (
-                    <span className="text-xs px-2 py-1 rounded font-medium bg-red-100 text-red-800">
-                      Overdue
-                    </span>
-                  )}
-                  {cw.is_locked && (
-                    <span className="text-xs px-2 py-1 rounded font-medium bg-yellow-100 text-yellow-800">
-                      Locked
-                    </span>
-                  )}
+              <div className="flex min-w-0 flex-1 gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-black bg-[#F6E9B2]">
+                  <Icon size={20} />
                 </div>
-
-                <div className="text-sm text-gray-600 space-y-1">
-                  {cw.classwork_type && (
-                    <p>
-                      <span className="font-medium">Type:</span> {cw.classwork_type}
-                    </p>
-                  )}
-                  <p>
-                    <span className="font-medium">Due:</span>{" "}
-                    {formatDate(cw.due_date)}
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="truncate text-lg font-bold text-gray-900">{cw.title}</h4>
+                    <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${badge.cls}`}>
+                      {badge.label}
+                    </span>
+                    {deadline && (
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${deadline.cls}`}>
+                        {deadline.label}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm font-medium text-gray-600">
+                    {[cw.classwork_type, formatDate(cw.due_date), cw.total_points ? `${cw.total_points} pts` : null]
+                      .filter(Boolean)
+                      .join(" | ")}
                   </p>
-                  {cw.total_points && (
-                    <p>
-                      <span className="font-medium">Points:</span>{" "}
-                      {cw.total_points}
-                    </p>
-                  )}
+                  {cw.description ? (
+                    <p className="mt-1 line-clamp-1 text-xs text-gray-500">{cw.description}</p>
+                  ) : null}
                 </div>
               </div>
 
-              <div className="ml-4">
+              <div className="pt-1">
                 {isExpanded ? (
                   <ChevronUp className="text-gray-500" />
                 ) : (
