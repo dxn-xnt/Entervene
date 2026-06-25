@@ -2,7 +2,7 @@ export type ClassworkType = "READING" | "ACTIVITY" | "ASSIGNMENT" | "QUIZ" | str
 export type ClassworkKind = "READING" | "ACTIVITY" | "ASSIGNMENT" | "QUIZ";
 export type TabId = "all" | "readings" | "activities" | "assignments" | "quizzes";
 export type SortMode = "newest" | "oldest" | "title";
-export type CreateStep = "type" | "details" | "quiz" | "assign";
+export type CreateStep = "type" | "quiz-source" | "details" | "quiz" | "assign";
 
 export type ClassworkAttachment = {
   classwork_attachment_id: number;

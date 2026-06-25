@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -95,6 +95,45 @@ interface Submission {
   }>;
 }
 
+interface QuizAttemptOption {
+  option_id: number;
+  option_text: string;
+  option_order: number;
+  is_correct?: boolean | null;
+}
+
+interface QuizAttemptQuestion {
+  quiz_question_id: number;
+  question_text: string;
+  question_type: "MULTIPLE_CHOICE" | "SHORT_ANSWER" | string;
+  points: number;
+  display_order: number;
+  options: QuizAttemptOption[];
+  answer_text?: string | null;
+  selected_option_id?: number | null;
+  points_awarded?: number | null;
+  is_correct?: boolean | null;
+}
+
+interface QuizAttempt {
+  quiz_id: number;
+  classwork_assignment_id: number;
+  classwork_id: number;
+  title: string;
+  instructions?: string | null;
+  total_points?: number | null;
+  duration_minutes?: number | null;
+  max_attempts: number;
+  attempt_count: number;
+  status: string;
+  started_at?: string | null;
+  server_time?: string | null;
+  submitted_at?: string | null;
+  grade?: number | null;
+  can_submit: boolean;
+  questions: QuizAttemptQuestion[];
+}
+
 type SubjectLessonTabProps = {
   classId?: number;
   subjectId?: number;
@@ -119,8 +158,22 @@ function getStatusBadge(status?: string | null, dueDate?: string | null) {
   return { label: `Due in ${diffDays} days`, cls: "bg-[#7ABA78] text-white" };
 }
 
+function isCompletedClasswork(status?: string | null) {
+  return ["graded", "submitted"].includes(status ?? "");
+}
+
+function classworkGoalScore(cw: LessonClasswork) {
+  if (isCompletedClasswork(cw.submission_status)) return Number.MAX_SAFE_INTEGER;
+  if (!cw.due_date) return Number.MAX_SAFE_INTEGER - 1;
+  return new Date(cw.due_date).getTime();
+}
+
 function isReadingType(value?: string | null) {
   return value?.toUpperCase() === "READING";
+}
+
+function isQuizType(value?: string | null) {
+  return value?.toUpperCase() === "QUIZ";
 }
 
 function ClassworkIcon({ type, size = 16 }: { type?: string | null; size?: number }) {
@@ -143,6 +196,13 @@ function statusLabel(s?: string | null) {
   return s.replace(/_/g, " ");
 }
 
+function formatExamTimer(seconds: number | null) {
+  if (seconds === null) return "No timer";
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────
 
 export default function SubjectLessonTab({
@@ -159,6 +219,15 @@ export default function SubjectLessonTab({
   const [classworkLoadingId, setClassworkLoadingId] = useState<number | null>(null);
   const [selectedClasswork, setSelectedClasswork] = useState<ClassworkDetail | null>(null);
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
+  const [selectedQuizAttempt, setSelectedQuizAttempt] = useState<QuizAttempt | null>(null);
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, { selected_option_id?: number; answer_text?: string }>>({});
+  const [isQuizLoading, setIsQuizLoading] = useState(false);
+  const [isQuizSubmitting, setIsQuizSubmitting] = useState(false);
+  const [quizError, setQuizError] = useState("");
+  const [isQuizFullscreen, setIsQuizFullscreen] = useState(false);
+  const [quizRemainingSeconds, setQuizRemainingSeconds] = useState<number | null>(null);
+  const autoSubmitRef = useRef(false);
+  const submitQuizAttemptRef = useRef<((autoSubmit?: boolean) => Promise<void>) | null>(null);
   const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -263,6 +332,140 @@ export default function SubjectLessonTab({
     return subs.find((s) => s.classwork_assignment_id === assignmentId) ?? null;
   };
 
+  const hydrateQuizAnswers = (attempt: QuizAttempt) => {
+    const next: Record<number, { selected_option_id?: number; answer_text?: string }> = {};
+    attempt.questions.forEach((question) => {
+      next[question.quiz_question_id] = {
+        selected_option_id: question.selected_option_id ?? undefined,
+        answer_text: question.answer_text ?? "",
+      };
+    });
+    setQuizAnswers(next);
+  };
+
+  const loadQuizAttempt = async (assignmentId: number) => {
+    setIsQuizLoading(true);
+    setQuizError("");
+    try {
+      const res = await apiFetch(`/api/v1/quizzes/assignment/${assignmentId}/attempt`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || "Unable to load quiz.");
+      }
+      const attempt = (await res.json()) as QuizAttempt;
+      setSelectedQuizAttempt(attempt);
+      hydrateQuizAnswers(attempt);
+    } catch (err) {
+      setQuizError(err instanceof Error ? err.message : "Unable to load quiz.");
+    } finally {
+      setIsQuizLoading(false);
+    }
+  };
+
+  const startQuizAttempt = async () => {
+    if (!selectedClasswork) return;
+    setIsQuizSubmitting(true);
+    setQuizError("");
+    try {
+      const res = await apiFetch(
+        `/api/v1/quizzes/assignment/${selectedClasswork.classwork_assignment_id}/start`,
+        { method: "POST" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || "Unable to start quiz.");
+      }
+      const attempt = (await res.json()) as QuizAttempt;
+      setSelectedQuizAttempt(attempt);
+      hydrateQuizAnswers(attempt);
+      autoSubmitRef.current = false;
+      setIsQuizFullscreen(attempt.status === "pending");
+      updateClassworkStatus(selectedClasswork.classwork_assignment_id, attempt.status);
+    } catch (err) {
+      setQuizError(err instanceof Error ? err.message : "Unable to start quiz.");
+    } finally {
+      setIsQuizSubmitting(false);
+    }
+  };
+
+  const submitQuizAttempt = async (autoSubmit = false) => {
+    if (!selectedClasswork || !selectedQuizAttempt) return;
+    if (autoSubmit && autoSubmitRef.current) return;
+    if (autoSubmit) autoSubmitRef.current = true;
+    setIsQuizSubmitting(true);
+    setQuizError(autoSubmit ? "Time is up. Submitting your current answers..." : "");
+    try {
+      const answers = selectedQuizAttempt.questions.map((question) => ({
+        quiz_question_id: question.quiz_question_id,
+        selected_option_id: quizAnswers[question.quiz_question_id]?.selected_option_id,
+        answer_text: quizAnswers[question.quiz_question_id]?.answer_text,
+      }));
+      const res = await apiFetch(
+        `/api/v1/quizzes/assignment/${selectedClasswork.classwork_assignment_id}/submit`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers }),
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || "Unable to submit quiz.");
+      }
+      const attempt = (await res.json()) as QuizAttempt;
+      setSelectedQuizAttempt(attempt);
+      hydrateQuizAnswers(attempt);
+      setIsQuizFullscreen(false);
+      setQuizError("");
+      autoSubmitRef.current = false;
+      updateClassworkStatus(selectedClasswork.classwork_assignment_id, attempt.status);
+    } catch (err) {
+      setQuizError(err instanceof Error ? err.message : "Unable to submit quiz.");
+      autoSubmitRef.current = false;
+    } finally {
+      setIsQuizSubmitting(false);
+    }
+  };
+  submitQuizAttemptRef.current = submitQuizAttempt;
+
+  useEffect(() => {
+    if (selectedQuizAttempt?.status !== "pending" || !selectedQuizAttempt.duration_minutes) {
+      setQuizRemainingSeconds(null);
+      return;
+    }
+
+    const startedAt = selectedQuizAttempt.started_at
+      ? new Date(selectedQuizAttempt.started_at).getTime()
+      : Date.now();
+    const serverNow = selectedQuizAttempt.server_time
+      ? new Date(selectedQuizAttempt.server_time).getTime()
+      : Date.now();
+    // Use server time to keep the countdown stable even if the device clock is off.
+    const clientServerOffset = serverNow - Date.now();
+    const totalSeconds = selectedQuizAttempt.duration_minutes * 60;
+
+    const tick = () => {
+      const now = Date.now() + clientServerOffset;
+      const elapsed = Math.max(0, Math.floor((now - startedAt) / 1000));
+      const remaining = Math.max(0, totalSeconds - elapsed);
+      setQuizRemainingSeconds(remaining);
+      if (remaining <= 0) {
+        void submitQuizAttemptRef.current?.(true);
+      }
+    };
+
+    tick();
+    const timerId = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timerId);
+  }, [
+    quizAnswers,
+    selectedClasswork?.classwork_assignment_id,
+    selectedQuizAttempt?.status,
+    selectedQuizAttempt?.started_at,
+    selectedQuizAttempt?.server_time,
+    selectedQuizAttempt?.duration_minutes,
+  ]);
+
   const openClassworkDetail = async (cw: LessonClasswork) => {
     setDetailLoadingId(cw.classwork_assignment_id);
     setDetailError("");
@@ -278,9 +481,18 @@ export default function SubjectLessonTab({
         );
       }
       const detail = (await res.json()) as ClassworkDetail;
-      const submission = await fetchSubmissionForAssignment(cw.classwork_assignment_id);
+      const submission = isQuizType(detail.classwork_type)
+        ? null
+        : await fetchSubmissionForAssignment(cw.classwork_assignment_id);
       setSelectedClasswork(detail);
       setSelectedSubmission(submission);
+      setSelectedQuizAttempt(null);
+      setQuizAnswers({});
+      setIsQuizFullscreen(false);
+      autoSubmitRef.current = false;
+      if (isQuizType(detail.classwork_type)) {
+        await loadQuizAttempt(cw.classwork_assignment_id);
+      }
     } catch (err) {
       setDetailError(err instanceof Error ? err.message : "Unable to load classwork details.");
     } finally {
@@ -291,6 +503,12 @@ export default function SubjectLessonTab({
   const closeClassworkDetail = () => {
     setSelectedClasswork(null);
     setSelectedSubmission(null);
+    setSelectedQuizAttempt(null);
+    setQuizAnswers({});
+    setIsQuizFullscreen(false);
+    setQuizRemainingSeconds(null);
+    autoSubmitRef.current = false;
+    setQuizError("");
     setDetailError("");
   };
 
@@ -333,6 +551,63 @@ export default function SubjectLessonTab({
     }
   };
 
+  const renderQuizQuestion = (question: QuizAttemptQuestion, index: number) => (
+    <div
+      key={question.quiz_question_id}
+      className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+    >
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <p className="text-base font-bold">
+          {index + 1}. {question.question_text}
+        </p>
+        <span className="shrink-0 text-sm font-bold">{question.points} pts</span>
+      </div>
+      {question.question_type === "MULTIPLE_CHOICE" ? (
+        <div className="space-y-2">
+          {question.options.map((option) => (
+            <label
+              key={option.option_id}
+              className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-300 bg-[#FFFBEE] px-4 py-3 text-sm hover:border-black"
+            >
+              <input
+                type="radio"
+                name={`quiz-question-${question.quiz_question_id}`}
+                checked={quizAnswers[question.quiz_question_id]?.selected_option_id === option.option_id}
+                onChange={() =>
+                  setQuizAnswers((current) => ({
+                    ...current,
+                    [question.quiz_question_id]: {
+                      ...current[question.quiz_question_id],
+                      selected_option_id: option.option_id,
+                    },
+                  }))
+                }
+                disabled={isQuizSubmitting}
+              />
+              <span>{option.option_text}</span>
+            </label>
+          ))}
+        </div>
+      ) : (
+        <textarea
+          value={quizAnswers[question.quiz_question_id]?.answer_text ?? ""}
+          onChange={(event) =>
+            setQuizAnswers((current) => ({
+              ...current,
+              [question.quiz_question_id]: {
+                ...current[question.quiz_question_id],
+                answer_text: event.target.value,
+              },
+            }))
+          }
+          disabled={isQuizSubmitting}
+          className="min-h-28 w-full rounded-lg border border-gray-700 bg-[#FFFBEE] px-3 py-2 text-sm"
+          placeholder="Type your answer here"
+        />
+      )}
+    </div>
+  );
+
   // Derived values
   const displaySubjectName = propSubjectName ?? subjectInfo?.subject_name ?? "—";
   const displayTeacherName = propTeacherName ?? subjectInfo?.teacher_name ?? "";
@@ -350,6 +625,14 @@ export default function SubjectLessonTab({
     const da = new Date(a.created_at ?? 0).getTime();
     const db = new Date(b.created_at ?? 0).getTime();
     return sortAsc ? da - db : db - da;
+  });
+
+  const sortedGoalLessons = [...sortedLessons].sort((a, b) => {
+    const aClassworks = classworksByLesson[a.lesson_id] ?? [];
+    const bClassworks = classworksByLesson[b.lesson_id] ?? [];
+    const aScore = Math.min(...aClassworks.map(classworkGoalScore), Number.MAX_SAFE_INTEGER);
+    const bScore = Math.min(...bClassworks.map(classworkGoalScore), Number.MAX_SAFE_INTEGER);
+    return aScore - bScore;
   });
 
   // ─── Loading skeleton ──────────────────────────────────────────────────
@@ -383,6 +666,63 @@ export default function SubjectLessonTab({
   // ─── Main render ───────────────────────────────────────────────────────
   return (
     <div className="space-y-3">
+      {isQuizFullscreen && selectedClasswork && selectedQuizAttempt ? (
+        <div className="fixed inset-0 z-[80] flex flex-col bg-[#F8F6ED]">
+          <header className="border-b border-black bg-[#F6E9B2] px-6 py-4 shadow-[0px_3px_0px_0px_rgba(0,0,0,1)]">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Exam mode</p>
+                <h2 className="text-2xl font-bold">{selectedQuizAttempt.title}</h2>
+                <p className="mt-1 text-sm font-semibold text-gray-700">
+                  Attempts {selectedQuizAttempt.attempt_count}/{selectedQuizAttempt.max_attempts}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg border border-black bg-white px-4 py-2 text-right">
+                  <p className="text-xs font-bold uppercase text-gray-600">Time left</p>
+                  <p className={`text-2xl font-black ${quizRemainingSeconds !== null && quizRemainingSeconds <= 60 ? "text-red-600" : ""}`}>
+                    {formatExamTimer(quizRemainingSeconds)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => submitQuizAttempt(false)}
+                  disabled={!selectedQuizAttempt.can_submit || isQuizSubmitting}
+                  className="rounded-lg border border-black bg-[#7ABA78] px-5 py-3 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isQuizSubmitting ? "Submitting..." : "Submit Exam"}
+                </button>
+              </div>
+            </div>
+            {quizError ? (
+              <p className="mt-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                {quizError}
+              </p>
+            ) : null}
+          </header>
+
+          <main className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
+            <div className="mx-auto max-w-5xl space-y-4">
+              <section className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-gray-700">
+                  <span>{selectedQuizAttempt.questions.length} questions</span>
+                  <span>{selectedQuizAttempt.total_points ?? selectedClasswork.total_points ?? 0} pts</span>
+                  {selectedQuizAttempt.duration_minutes ? (
+                    <span>{selectedQuizAttempt.duration_minutes} minutes</span>
+                  ) : null}
+                </div>
+                {selectedQuizAttempt.instructions ? (
+                  <p className="mt-3 whitespace-pre-wrap text-sm text-gray-700">
+                    {selectedQuizAttempt.instructions}
+                  </p>
+                ) : null}
+              </section>
+
+              {selectedQuizAttempt.questions.map((question, index) => renderQuizQuestion(question, index))}
+            </div>
+          </main>
+        </div>
+      ) : null}
       {/* ── Subject info card ── */}
       <div className="rounded-lg border border-black bg-[#F6E9B2] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-start justify-between">
         <div>
@@ -579,8 +919,9 @@ export default function SubjectLessonTab({
           <div className="w-72 shrink-0">
             <h3 className="text-xl font-bold mb-3">Weekly Goals</h3>
             <div className="rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-4 max-h-[70vh] overflow-y-auto space-y-5">
-              {sortedLessons.map((lesson) => {
+              {sortedGoalLessons.map((lesson) => {
                 const cws = classworksByLesson[lesson.lesson_id];
+                const orderedClassworks = cws ? [...cws].sort((a, b) => classworkGoalScore(a) - classworkGoalScore(b)) : [];
                 const isHighlighted = expandedId === lesson.lesson_id;
                 const isLoadingCws = cws === undefined;
 
@@ -609,22 +950,22 @@ export default function SubjectLessonTab({
                     ) : (
                       <div className="relative">
                         {/* Lesson Completion */}
-                        <TimelineItem isLast={cws.length === 0} dot="filled">
+                        <TimelineItem isLast={orderedClassworks.length === 0} dot="filled">
                           <div className="rounded border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 w-full">
                             Lesson Completion
                           </div>
                         </TimelineItem>
 
                         {/* Classwork items */}
-                        {cws.length === 0 ? (
+                        {orderedClassworks.length === 0 ? (
                           <p className="text-[11px] text-gray-400 pl-6 mt-1">No classworks linked</p>
                         ) : (
-                          cws.map((cw, idx) => {
+                          orderedClassworks.map((cw, idx) => {
                             const badge = getStatusBadge(cw.submission_status, cw.due_date);
                             return (
                               <TimelineItem
                                 key={cw.classwork_assignment_id}
-                                isLast={idx === cws.length - 1}
+                                isLast={idx === orderedClassworks.length - 1}
                                 dot="empty"
                               >
                                 <div className="flex items-center justify-between gap-2 w-full min-w-0">
@@ -697,7 +1038,11 @@ export default function SubjectLessonTab({
                         {selectedClasswork.classwork_type || "Classwork"}
                       </span>
                       <span className="rounded-full border border-gray-300 px-3 py-1 text-xs font-semibold capitalize">
-                        {statusLabel(selectedSubmission?.status ?? selectedClasswork.submission_status)}
+                        {statusLabel(
+                          selectedQuizAttempt?.status ??
+                            selectedSubmission?.status ??
+                            selectedClasswork.submission_status,
+                        )}
                       </span>
                     </div>
                     <h3 className="mt-4 text-3xl font-bold">{selectedClasswork.title}</h3>
@@ -764,14 +1109,22 @@ export default function SubjectLessonTab({
                   </div>
                 </div>
 
-                {/* Right: submission */}
+                {/* Right: submission or quiz attempt */}
                 <aside className="rounded-lg border border-black bg-[#F6E9B2] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                   <div className="mb-3 flex items-center gap-2">
-                    {selectedSubmission ? <FileText size={18} /> : <BookOpen size={18} />}
+                    {isQuizType(selectedClasswork.classwork_type) ? (
+                      <ClipboardList size={18} />
+                    ) : selectedSubmission ? (
+                      <FileText size={18} />
+                    ) : (
+                      <BookOpen size={18} />
+                    )}
                     <h3 className="font-bold">
                       {isReadingType(selectedClasswork.classwork_type)
                         ? "Reading Material"
-                        : selectedSubmission
+                        : isQuizType(selectedClasswork.classwork_type)
+                          ? "Take Quiz"
+                          : selectedSubmission
                           ? "Your Submission"
                           : "Submit Your Work"}
                     </h3>
@@ -780,6 +1133,75 @@ export default function SubjectLessonTab({
                     <p className="text-sm font-medium">
                       Review the content and reference files. No submission is required.
                     </p>
+                  ) : isQuizType(selectedClasswork.classwork_type) ? (
+                    <div className="space-y-3">
+                      {isQuizLoading ? (
+                        <p className="rounded-lg border border-dashed border-black bg-white px-4 py-6 text-center text-sm font-semibold">
+                          Loading quiz...
+                        </p>
+                      ) : quizError ? (
+                        <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                          {quizError}
+                        </div>
+                      ) : selectedQuizAttempt ? (
+                        <>
+                          <div className="rounded-lg border border-black bg-white p-3 text-sm">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-bold capitalize">
+                                {statusLabel(selectedQuizAttempt.status)}
+                              </span>
+                              <span className="font-semibold">
+                                Attempts {selectedQuizAttempt.attempt_count}/{selectedQuizAttempt.max_attempts}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-gray-600">
+                              <span>{selectedQuizAttempt.questions.length} questions</span>
+                              <span>{selectedQuizAttempt.total_points ?? selectedClasswork.total_points ?? 0} pts</span>
+                              {selectedQuizAttempt.duration_minutes ? (
+                                <span>{selectedQuizAttempt.duration_minutes} minutes</span>
+                              ) : null}
+                            </div>
+                            {selectedQuizAttempt.grade !== null && selectedQuizAttempt.grade !== undefined ? (
+                              <p className="mt-2 text-sm font-bold">
+                                Score: {selectedQuizAttempt.grade}/{selectedQuizAttempt.total_points ?? selectedClasswork.total_points ?? 0}
+                              </p>
+                            ) : null}
+                          </div>
+
+                          {selectedQuizAttempt.status !== "pending" ? (
+                            <button
+                              type="button"
+                              onClick={startQuizAttempt}
+                              disabled={!selectedQuizAttempt.can_submit || isQuizSubmitting}
+                              className="w-full rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {selectedQuizAttempt.status === "not_started" ? "Start Quiz" : "Retake Quiz"}
+                            </button>
+                          ) : (
+                            <>
+                              <div className="rounded-lg border border-black bg-white p-3 text-sm font-semibold">
+                                <p>Your quiz attempt is in progress.</p>
+                                <p className="mt-1 text-gray-600">
+                                  Time left: {formatExamTimer(quizRemainingSeconds)}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setIsQuizFullscreen(true)}
+                                disabled={!selectedQuizAttempt.can_submit || isQuizSubmitting}
+                                className="w-full rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Continue Exam
+                              </button>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <p className="rounded-lg border border-dashed border-black bg-white px-4 py-6 text-center text-sm font-semibold">
+                          Quiz details unavailable.
+                        </p>
+                      )}
+                    </div>
                   ) : selectedSubmission ? (
                     <SubmissionViewer
                       submission={selectedSubmission}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import LessonModal from "@/components/LessonModal";
+import { Alert } from "@/components/retroui/Alert";
 import AppLayout from "@/layouts/app-layout";
 
 interface DraftLesson {
@@ -20,6 +21,7 @@ export default function DraftLessons() {
   const [error, setError] = useState<string>("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSubjectId, setSelectedSubjectId] = useState(0);
+  const [lessonPendingDelete, setLessonPendingDelete] = useState<DraftLesson | null>(null);
 
   useEffect(() => {
     fetchDraftLessons();
@@ -56,12 +58,11 @@ export default function DraftLessons() {
     }
   };
 
-  const handleDeleteLesson = async (lessonId: number) => {
-    if (!confirm("Are you sure you want to delete this draft lesson?")) return;
-
+  const confirmDeleteLesson = async () => {
+    if (!lessonPendingDelete) return;
     try {
       const response = await fetch(
-        `http://localhost:8000/api/v1/lessons/${lessonId}`,
+        `http://localhost:8000/api/v1/lessons/${lessonPendingDelete.lesson_id}`,
         {
           method: "DELETE",
           credentials: "include",
@@ -72,7 +73,8 @@ export default function DraftLessons() {
         throw new Error("Failed to delete lesson");
       }
 
-      setDraftLessons(draftLessons.filter((l) => l.lesson_id !== lessonId));
+      setDraftLessons(draftLessons.filter((l) => l.lesson_id !== lessonPendingDelete.lesson_id));
+      setLessonPendingDelete(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete lesson");
     }
@@ -125,8 +127,11 @@ export default function DraftLessons() {
       </header>
 
       {error && (
-        <div className="mx-6 mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-          {error}
+        <div className="mx-6 mt-4">
+          <Alert status="error">
+            <Alert.Title>Draft lesson error</Alert.Title>
+            <Alert.Description>{error}</Alert.Description>
+          </Alert>
         </div>
       )}
 
@@ -187,7 +192,7 @@ export default function DraftLessons() {
                     Publish Now
                   </button>
                   <button
-                    onClick={() => handleDeleteLesson(lesson.lesson_id)}
+                    onClick={() => setLessonPendingDelete(lesson)}
                     className="px-4 py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-50 text-sm font-medium transition-colors"
                   >
                     Delete
@@ -220,6 +225,35 @@ export default function DraftLessons() {
         subjectId={selectedSubjectId}
         onLessonCreated={fetchDraftLessons}
       />
+
+      {lessonPendingDelete ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-lg border border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <Alert status="warning">
+              <Alert.Title>Delete draft lesson?</Alert.Title>
+              <Alert.Description>
+                This will delete "{lessonPendingDelete.title}". This action cannot be undone.
+              </Alert.Description>
+            </Alert>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setLessonPendingDelete(null)}
+                className="rounded-lg border border-black px-4 py-2 text-sm font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteLesson}
+                className="rounded-lg border border-red-600 bg-red-100 px-4 py-2 text-sm font-semibold text-red-700"
+              >
+                Delete Draft
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </AppLayout>
   );
 }
