@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FileText, FolderPlus, Trash2, Upload, X } from "lucide-react";
+import { FolderPlus, X } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { apiFetch } from "@/lib/api";
@@ -16,9 +16,6 @@ type TeacherClassLoad = {
 type LessonResponse = {
   lesson_id: number;
 };
-
-const allowedMaterialExtensions = [".pdf", ".docx", ".pptx", ".jpg", ".jpeg", ".png"];
-const maxMaterialSize = 4 * 1024 * 1024;
 
 async function responseError(response: Response, fallback: string) {
   const data: unknown = await response.json().catch(() => null);
@@ -41,7 +38,6 @@ export default function CreateLesson() {
   const [content, setContent] = useState("");
   const [orderIndex, setOrderIndex] = useState("1");
   const [isPublished, setIsPublished] = useState(false);
-  const [materials, setMaterials] = useState<File[]>([]);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -114,32 +110,6 @@ export default function CreateLesson() {
     );
   };
 
-  const addMaterials = (files: FileList | null) => {
-    if (!files) return;
-
-    const selected = Array.from(files);
-    const invalidType = selected.find((file) => {
-      const extension = `.${file.name.split(".").pop()?.toLowerCase()}`;
-      return !allowedMaterialExtensions.includes(extension);
-    });
-    if (invalidType) {
-      setError(`${invalidType.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`);
-      return;
-    }
-
-    const oversized = selected.find((file) => file.size > maxMaterialSize);
-    if (oversized) {
-      setError(`${oversized.name} is larger than the 4 MB file limit.`);
-      return;
-    }
-
-    setError("");
-    setMaterials((current) => {
-      const existing = new Set(current.map((file) => `${file.name}-${file.size}`));
-      return [...current, ...selected.filter((file) => !existing.has(`${file.name}-${file.size}`))];
-    });
-  };
-
   const submitLesson = async () => {
     setError("");
 
@@ -183,19 +153,6 @@ export default function CreateLesson() {
       }
 
       const created = (await response.json()) as LessonResponse;
-      for (const material of materials) {
-        const formData = new FormData();
-        formData.append("file", material);
-        const uploadResponse = await apiFetch(`/api/v1/lessons/${created.lesson_id}/attachments`, {
-          method: "POST",
-          body: formData,
-        });
-        if (!uploadResponse.ok) {
-          throw new Error(
-            await responseError(uploadResponse, `Lesson was created, but ${material.name} could not be uploaded.`)
-          );
-        }
-      }
 
       const assignResponse = await apiFetch(`/api/v1/lessons/${created.lesson_id}/assign`, {
         method: "POST",
@@ -330,57 +287,8 @@ export default function CreateLesson() {
               />
             </div>
 
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <label htmlFor="lesson-materials" className="block text-sm font-semibold">Lesson materials</label>
-                <span className="text-xs font-medium text-gray-500">PDF, DOCX, PPTX, JPG, PNG | 4 MB each</span>
-              </div>
-              <label
-                htmlFor="lesson-materials"
-                className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-5 text-sm font-semibold ${
-                  isSubmitting
-                    ? "cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400"
-                    : "border-gray-700 bg-gray-50 hover:bg-[#F6E9B2]"
-                }`}
-              >
-                <Upload size={18} />
-                Select material files
-              </label>
-              <input
-                id="lesson-materials"
-                type="file"
-                multiple
-                accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
-                className="hidden"
-                disabled={isSubmitting}
-                onChange={(event) => {
-                  addMaterials(event.target.files);
-                  event.target.value = "";
-                }}
-              />
-
-              {materials.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  {materials.map((material, index) => (
-                    <div key={`${material.name}-${material.size}`} className="flex items-center gap-3 rounded-lg border px-3 py-2">
-                      <FileText size={17} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold">{material.name}</p>
-                        <p className="text-xs text-gray-500">{(material.size / 1024 / 1024).toFixed(2)} MB</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setMaterials((current) => current.filter((_, currentIndex) => currentIndex !== index))}
-                        disabled={isSubmitting}
-                        className="rounded p-1 text-red-600 hover:bg-red-50"
-                        aria-label={`Remove ${material.name}`}
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="rounded-lg border border-black bg-[#F6E9B2] px-4 py-3 text-sm font-medium shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              Upload lesson materials as Reading classworks so they can be scheduled, locked, and tracked with student classwork.
             </div>
 
             <label className="flex items-center gap-3 rounded-lg border border-black bg-[#F6E9B2] px-4 py-3 text-sm font-semibold">

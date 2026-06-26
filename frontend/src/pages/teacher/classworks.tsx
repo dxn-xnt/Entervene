@@ -7,7 +7,6 @@ import {
   ClipboardList,
   FileText,
   Filter,
-  Link as LinkIcon,
   Pencil,
   Plus,
   Search,
@@ -21,12 +20,20 @@ import AppLayout from "@/layouts/app-layout";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { API_URL, apiFetch } from "@/lib/api";
+import ClassworkCard from "./classworks/ClassworkCard";
+import type {
+  QuizAnalysis,
+  QuizImportPreview,
+  QuizQuestionDraft,
+  QuizQuestionType,
+  QuizSettingsDraft,
+} from "./classworks/quiz-builder-types";
+import { createEmptyQuizQuestion, defaultQuizSettings } from "./classworks/quiz-builder-utils";
 import {
   allowedClassworkMaterialExtensions,
   classworkToEditDraft,
   emptyClassworkDraft,
   fileExtension,
-  formatDate,
   formatFileSize,
   isQuizType,
   isReadingType,
@@ -96,182 +103,6 @@ const tabType: Partial<Record<TabId, string>> = {
   assignments: "ASSIGNMENT",
   quizzes: "QUIZ",
 };
-
-const typeIcon: Record<string, LucideIcon> = {
-  READING: BookOpen,
-  ACTIVITY: CheckSquare,
-  ASSIGNMENT: FileText,
-  QUIZ: ClipboardList,
-};
-
-type QuizQuestionType = "MULTIPLE_CHOICE" | "SHORT_ANSWER";
-type QuizDifficulty = "EASY" | "MEDIUM" | "HARD";
-
-type QuizOptionDraft = {
-  option_text: string;
-  is_correct: boolean;
-  option_order: number;
-};
-
-type QuizQuestionDraft = {
-  id: string;
-  question_text: string;
-  question_type: QuizQuestionType;
-  points: string;
-  display_order: number;
-  difficulty_level: QuizDifficulty;
-  explanation: string;
-  options: QuizOptionDraft[];
-};
-
-type QuizSettingsDraft = {
-  is_shuffle_questions: boolean;
-  enable_per_question_scoring: boolean;
-  enable_per_question_time_limits: boolean;
-  max_attempts: string;
-  show_correct_answers: boolean;
-  duration_minutes: string;
-};
-
-type QuizQuestionAnalysis = {
-  quiz_question_id: number;
-  question_text: string;
-  question_type: string;
-  points: number;
-  answered_count: number;
-  correct_count: number;
-  accuracy_percent?: number | null;
-  needs_grading_count: number;
-  option_distribution: Array<{
-    option_id: number;
-    option_text: string;
-    is_correct: boolean;
-    selected_count: number;
-  }>;
-};
-
-type QuizStudentScore = {
-  student_id: string;
-  student_name: string;
-  status: string;
-  attempt_count: number;
-  grade?: number | null;
-  score_percent?: number | null;
-  submitted_at?: string | null;
-  needs_grading: boolean;
-};
-
-type QuizAnalysis = {
-  quiz_id: number;
-  classwork_id: number;
-  title: string;
-  total_points?: number | null;
-  total_students: number;
-  submitted_count: number;
-  missing_count: number;
-  graded_count: number;
-  needs_grading_count: number;
-  average_score?: number | null;
-  class_accuracy_percent?: number | null;
-  questions: QuizQuestionAnalysis[];
-  students: QuizStudentScore[];
-};
-
-type QuizImportPreview = {
-  title?: string | null;
-  instructions?: string | null;
-  questions: Array<{
-    question_text: string;
-    question_type: QuizQuestionType;
-    points: number;
-    display_order: number;
-    difficulty_level?: QuizDifficulty | null;
-    explanation?: string | null;
-    options: QuizOptionDraft[];
-  }>;
-  warnings: string[];
-};
-
-const defaultQuizSettings: QuizSettingsDraft = {
-  is_shuffle_questions: false,
-  enable_per_question_scoring: true,
-  enable_per_question_time_limits: false,
-  max_attempts: "1",
-  show_correct_answers: false,
-  duration_minutes: "",
-};
-
-const quizQuestionId = () =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-const createEmptyQuizQuestion = (
-  displayOrder: number,
-  questionType: QuizQuestionType = "MULTIPLE_CHOICE",
-): QuizQuestionDraft => ({
-  id: quizQuestionId(),
-  question_text: "",
-  question_type: questionType,
-  points: "1",
-  display_order: displayOrder,
-  difficulty_level: "MEDIUM",
-  explanation: "",
-  options:
-    questionType === "MULTIPLE_CHOICE"
-      ? [
-          { option_text: "", is_correct: true, option_order: 1 },
-          { option_text: "", is_correct: false, option_order: 2 },
-        ]
-      : [],
-});
-
-function ClassworkCard({
-  item,
-  onOpen,
-}: {
-  item: TeacherClasswork;
-  onOpen: (item: TeacherClasswork) => void;
-}) {
-  // Summary card for the global teacher Classworks page.
-  const Icon = typeIcon[item.classwork_type.toUpperCase()] || ClipboardList;
-  const assignmentCount = item.assignments?.length ?? 0;
-  const attachmentCount = item.attachments?.length ?? 0;
-
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(item)}
-      className="flex w-full items-center justify-between gap-4 rounded-lg border border-black bg-white px-4 py-3 text-left shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-[#F6E9B2]"
-    >
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <Icon size={19} className="shrink-0" />
-          <h2 className="truncate text-lg font-bold">{item.title}</h2>
-        </div>
-        <p className="mt-1 text-xs font-medium text-gray-600">
-          {[item.subject_name, `Created ${formatDate(item.created_at)}`]
-            .filter(Boolean)
-            .join(" | ")}
-        </p>
-      </div>
-      <div className="flex shrink-0 flex-wrap justify-end gap-2">
-        {assignmentCount > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[#7ABA78] px-3 py-1 text-xs font-semibold">
-            <LinkIcon size={12} />
-            Class {assignmentCount}
-          </span>
-        )}
-        {attachmentCount > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[#7ABA78] px-3 py-1 text-xs font-semibold">
-            <FileText size={12} />
-            File {attachmentCount}
-          </span>
-        )}
-      </div>
-    </button>
-  );
-}
 
 export default function Classworks() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -467,6 +298,7 @@ export default function Classworks() {
       classwork_category: type === "QUIZ" ? "PERIODICAL_EXAM" : "WRITTEN_WORK",
     }));
     if (type === "QUIZ") {
+      setMaterials([]);
       setQuizQuestions([createEmptyQuizQuestion(1)]);
       setQuizSettings({
         ...defaultQuizSettings,
@@ -571,23 +403,27 @@ export default function Classworks() {
         throw new Error(body.detail || "Unable to import quiz file.");
       }
       const preview = (await response.json()) as QuizImportPreview;
-      const importedQuestions = preview.questions.map((question, index) => ({
-        id: quizQuestionId(),
-        question_text: question.question_text,
-        question_type: question.question_type,
-        points: String(question.points || 1),
-        display_order: index + 1,
-        difficulty_level: question.difficulty_level || "MEDIUM",
-        explanation: question.explanation || "",
-        options:
-          question.question_type === "MULTIPLE_CHOICE"
-            ? question.options.map((option, optionIndex) => ({
-                option_text: option.option_text,
-                is_correct: option.is_correct,
-                option_order: optionIndex + 1,
-              }))
-            : [],
-      }));
+      const importedQuestions = preview.questions.map((question, index) => {
+        const draft = createEmptyQuizQuestion(index + 1, question.question_type);
+
+        return {
+          ...draft,
+          question_text: question.question_text,
+          question_type: question.question_type,
+          points: String(question.points || 1),
+          display_order: index + 1,
+          difficulty_level: question.difficulty_level || "MEDIUM",
+          explanation: question.explanation || "",
+          options:
+            question.question_type === "MULTIPLE_CHOICE"
+              ? question.options.map((option, optionIndex) => ({
+                  option_text: option.option_text,
+                  is_correct: option.is_correct,
+                  option_order: optionIndex + 1,
+                }))
+              : [],
+        };
+      });
       setQuizQuestions(importedQuestions.length > 0 ? importedQuestions : [createEmptyQuizQuestion(1)]);
       setQuizImportWarnings(preview.warnings);
       setDraft((current) => ({
@@ -991,7 +827,10 @@ export default function Classworks() {
       if (isQuizType(selectedType)) {
         formData.append("max_attempts", String(Number(draft.max_attempts)));
       }
-      materials.forEach((material) => formData.append("files", material));
+      // Quiz imports are parsed into questions, so generic attachments are skipped for quizzes.
+      if (!isQuizType(selectedType)) {
+        materials.forEach((material) => formData.append("files", material));
+      }
 
       const createResponse = await apiFetch(
         "/api/v1/classwork-assignments/with-assignments",
@@ -2716,54 +2555,56 @@ export default function Classworks() {
                         )}
                       </div>
 
-                      <div>
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <p className="text-xs font-bold">Upload material</p>
-                          <p className="text-xs text-gray-500">
-                            PDF, DOCX, PPTX, JPG, PNG | 4 MB each
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-3">
-                          {materials.map((material, index) => (
-                            <div
-                              key={`${material.name}-${material.size}`}
-                              className="relative flex h-28 w-24 flex-col justify-between rounded-lg border border-black bg-white p-2 text-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                            >
-                              <button
-                                type="button"
-                                onClick={() => removeMaterial(index)}
-                                disabled={isCreating}
-                                className="absolute right-1 top-1 rounded-full border border-black bg-white p-0.5"
+                      {!isQuizType(selectedType) && (
+                        <div>
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <p className="text-xs font-bold">Upload material</p>
+                            <p className="text-xs text-gray-500">
+                              PDF, DOCX, PPTX, JPG, PNG | 4 MB each
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-3">
+                            {materials.map((material, index) => (
+                              <div
+                                key={`${material.name}-${material.size}`}
+                                className="relative flex h-28 w-24 flex-col justify-between rounded-lg border border-black bg-white p-2 text-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                               >
-                                <Trash2 size={12} />
-                              </button>
-                              <FileText className="mx-auto mt-5" size={22} />
-                              <div className="min-w-0">
-                                <p className="truncate text-[10px] font-semibold">
-                                  {material.name}
-                                </p>
-                                <p className="text-[10px] text-gray-500">
-                                  {formatFileSize(material.size)}
-                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => removeMaterial(index)}
+                                  disabled={isCreating}
+                                  className="absolute right-1 top-1 rounded-full border border-black bg-white p-0.5"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                                <FileText className="mx-auto mt-5" size={22} />
+                                <div className="min-w-0">
+                                  <p className="truncate text-[10px] font-semibold">
+                                    {material.name}
+                                  </p>
+                                  <p className="text-[10px] text-gray-500">
+                                    {formatFileSize(material.size)}
+                                  </p>
+                                </div>
                               </div>
-                            </div>
-                          ))}
-                          <label className="flex h-28 w-24 cursor-pointer items-center justify-center rounded-lg border border-dashed border-black bg-[#F6E9B2] text-sm font-bold hover:bg-[#7ABA78]">
-                            <Plus size={20} />
-                            <input
-                              type="file"
-                              multiple
-                              accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
-                              onChange={(event) => {
-                                addMaterials(event.target.files);
-                                event.target.value = "";
-                              }}
-                              disabled={isCreating}
-                              className="hidden"
-                            />
-                          </label>
+                            ))}
+                            <label className="flex h-28 w-24 cursor-pointer items-center justify-center rounded-lg border border-dashed border-black bg-[#F6E9B2] text-sm font-bold hover:bg-[#7ABA78]">
+                              <Plus size={20} />
+                              <input
+                                type="file"
+                                multiple
+                                accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
+                                onChange={(event) => {
+                                  addMaterials(event.target.files);
+                                  event.target.value = "";
+                                }}
+                                disabled={isCreating}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   )}
 

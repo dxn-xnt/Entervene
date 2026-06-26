@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import LessonModal from "@/components/LessonModal";
 import { Alert } from "@/components/retroui/Alert";
+import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
 import AppLayout from "@/layouts/app-layout";
 
 interface DraftLesson {
@@ -227,32 +228,13 @@ export default function DraftLessons() {
       />
 
       {lessonPendingDelete ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-md rounded-lg border border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <Alert status="warning">
-              <Alert.Title>Delete draft lesson?</Alert.Title>
-              <Alert.Description>
-                This will delete "{lessonPendingDelete.title}". This action cannot be undone.
-              </Alert.Description>
-            </Alert>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setLessonPendingDelete(null)}
-                className="rounded-lg border border-black px-4 py-2 text-sm font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDeleteLesson}
-                className="rounded-lg border border-red-600 bg-red-100 px-4 py-2 text-sm font-semibold text-red-700"
-              >
-                Delete Draft
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmAlertDialog
+          title="Delete draft lesson?"
+          description={`This will delete "${lessonPendingDelete.title}". This action cannot be undone.`}
+          confirmLabel="Delete Draft"
+          onCancel={() => setLessonPendingDelete(null)}
+          onConfirm={confirmDeleteLesson}
+        />
       ) : null}
     </AppLayout>
   );
