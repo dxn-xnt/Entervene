@@ -69,3 +69,20 @@
   --destructive-foreground: #fff;
   --border: #5c5c5c;
 }
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: 'Space Grotesk', sans-serif;
+  scrollbar-gutter: auto !important;
+}
+
+body[data-scroll-locked] {
+  padding-right: 0 !important;
+  margin-right: 0 !important;
+}
