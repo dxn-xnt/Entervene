@@ -28,6 +28,9 @@ import type {
   StatusFilter,
 } from "@/types/adminClasses";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Button } from "@/components/retroui/Button";
+import { Dialog } from "@/components/retroui/Dialog";
+import AddSubjectLoadModal from "./forms/add-subject-load";
 
 export default function AdminClasses() {
   const [search, setSearch] = useState("");
@@ -189,12 +192,21 @@ export default function AdminClasses() {
                   </p> */}
                 </div>
               </div>
-              <button
-                className="flex items-center gap-1.5 rounded-lg border border-black bg-[#79bd80] px-4 py-2 text-sm font-semibold text-black shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000]"
-                onClick={() => setShowNewClass(true)}
-              >
-                <Plus className="size-4" /> New Class
-              </button>
+              <div className="flex flex-row gap-2">
+                <Button
+                  onClick={() => setShowNewClass(true)}
+                >
+                  <Plus className="size-4 mr-2" /> New Class
+                </Button>
+                <Dialog>
+                  <Dialog.Trigger>
+                    <Button variant={"outline"}>
+                      <Plus className="size-4 mr-2" /> Add Subject Load
+                    </Button>
+                  </Dialog.Trigger>
+                  <AddSubjectLoadModal />
+                </Dialog>
+              </div>
             </header>
 
             <div className="-mx-4 md:-mx-6 border-b border-black/40" />
@@ -272,8 +284,8 @@ export default function AdminClasses() {
                     key={grade}
                     onClick={() => setGradeFilter(grade)}
                     className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${gradeFilter === grade
-                        ? "border-black bg-black text-white"
-                        : "border-black/30 bg-transparent text-black/60 hover:border-black/60 hover:text-black"
+                      ? "border-black bg-black text-white"
+                      : "border-black/30 bg-transparent text-black/60 hover:border-black/60 hover:text-black"
                       }`}
                   >
                     {grade}
@@ -326,9 +338,8 @@ export default function AdminClasses() {
                       </span>
                     </div>
                     <div
-                      className={`grid gap-3 md:grid-cols-2 ${
-                        group.classes.length > 2 ? "xl:grid-cols-3" : ""
-                      }`}
+                      className={`grid gap-3 md:grid-cols-2 ${group.classes.length > 2 ? "xl:grid-cols-3" : ""
+                        }`}
                     >
                       {group.classes.map((item) => (
                         <ClassCard
