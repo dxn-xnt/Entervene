@@ -3,6 +3,7 @@ import { BookOpen, ChevronDown, ChevronRight, Users } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import Tabs from "@/components/Tabs";
 import AppLayout from "@/layouts/app-layout";
+import { ManualSuggestionPanel } from "@/components/teacher/suggestions/ManualSuggestionPanel";
 import { getTeacherAdvisoryClassDetail } from "@/lib/api";
 import type {
   TeacherAdvisoryClassDetailResponse,
@@ -248,7 +249,12 @@ function StudentsTab({ detail }: { detail: TeacherAdvisoryClassDetailResponse })
                   </summary>
                   <div>
                     {students.map((student) => (
-                      <StudentRow key={student.student_id} student={student} />
+                      <StudentRow
+                        key={student.student_id}
+                        student={student}
+                        classId={detail.class_id}
+                        subjectLoads={detail.subject_loads}
+                      />
                     ))}
                   </div>
                 </details>
@@ -299,13 +305,27 @@ function SubjectLoadTab({ detail }: { detail: TeacherAdvisoryClassDetailResponse
   );
 }
 
-function StudentRow({ student }: { student: TeacherAdvisoryStudentItem }) {
+function StudentRow({
+  student,
+  classId,
+  subjectLoads,
+}: {
+  student: TeacherAdvisoryStudentItem;
+  classId: number;
+  subjectLoads: TeacherAdvisoryClassDetailResponse["subject_loads"];
+}) {
   return (
-    <div className="flex min-h-16 items-center gap-3 border-b border-black/10 bg-white px-3 py-2 text-sm last:border-b-0">
-      <Avatar text={student.avatar_initial || student.full_name} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-semibold">{student.full_name}</span>
-      </span>
+    <div className="border-b border-black/10 bg-white px-3 py-2 text-sm last:border-b-0">
+      <div className="flex min-h-12 items-center gap-3">
+        <Avatar text={student.avatar_initial || student.full_name} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-semibold">{student.full_name}</span>
+          {student.student_lrn && (
+            <span className="block text-[10px] font-semibold text-black/55">LRN {student.student_lrn}</span>
+          )}
+        </span>
+      </div>
+      <ManualSuggestionPanel classId={classId} student={student} subjectLoads={subjectLoads} />
     </div>
   );
 }

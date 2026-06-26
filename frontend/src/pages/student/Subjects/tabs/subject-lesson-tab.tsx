@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   ChevronRight,
   ChevronDown,
+  ChevronLeft,
   ArrowUpDown,
   ClipboardList,
   BookOpen,
@@ -15,6 +17,7 @@ import AttachmentDisplay from "@/components/AttachmentDisplay";
 import SubmissionForm from "@/components/SubmissionForm";
 import SubmissionViewer from "@/components/SubmissionViewer";
 import { API_URL, apiFetch } from "@/lib/api";
+import SubjectSuggestionsTab from "./subject-suggestions-tab";
 
 const LOCKED_CLASSWORK_MESSAGE =
   "This classwork is not available yet. Please check back later or contact your teacher for more information.";
@@ -140,6 +143,7 @@ type SubjectLessonTabProps = {
   subject?: string;
   subjectName?: string;
   teacherName?: string;
+  onLessonSelect?: (lessonId: number) => void;
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -210,7 +214,9 @@ export default function SubjectLessonTab({
   subjectId,
   subjectName: propSubjectName,
   teacherName: propTeacherName,
+  onLessonSelect,
 }: SubjectLessonTabProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -234,6 +240,8 @@ export default function SubjectLessonTab({
   const [detailError, setDetailError] = useState("");
   const [subjectInfo, setSubjectInfo] = useState<{ subject_name: string; teacher_name: string } | null>(null);
   const [sortAsc, setSortAsc] = useState(false);
+  const [selectedLessonDetail, setSelectedLessonDetail] = useState<Lesson | null>(null);
+  const [lessonDetailTab, setLessonDetailTab] = useState<"classwork" | "suggestions">("classwork");
 
   useEffect(() => {
     if (classId && subjectId) {
@@ -243,6 +251,33 @@ export default function SubjectLessonTab({
       setIsLoading(false);
     }
   }, [classId, subjectId]);
+
+  useEffect(() => {
+    const targetId = Number(searchParams.get("lessonId"));
+    if (!targetId || lessons.length === 0) return;
+    const targetLesson = lessons.find((lesson) => lesson.lesson_id === targetId);
+    if (!targetLesson) return;
+    setExpandedId(targetId);
+    setSelectedLessonDetail(targetLesson);
+    setLessonDetailTab("classwork");
+    onLessonSelect?.(targetId);
+    if (classId && classworksByLesson[targetId] === undefined) {
+      void apiFetch(`/api/v1/lessons/${targetId}/classwork-assignments?class_id=${classId}`)
+        .then(async (res) => (res.ok ? ((await res.json()) as LessonClasswork[]) : []))
+        .then((data) => {
+          setClassworksByLesson((prev) => ({ ...prev, [targetId]: prev[targetId] ?? data }));
+        })
+        .catch(() => {
+          setClassworksByLesson((prev) => ({ ...prev, [targetId]: prev[targetId] ?? [] }));
+        });
+    }
+    window.setTimeout(() => {
+      document.getElementById(`student-lesson-${targetId}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 80);
+  }, [classId, classworksByLesson, lessons, onLessonSelect, searchParams]);
 
   const fetchSubjectInfo = async () => {
     try {
@@ -322,7 +357,27 @@ export default function SubjectLessonTab({
   const toggleLesson = async (lessonId: number) => {
     const next = expandedId === lessonId ? null : lessonId;
     setExpandedId(next);
+    if (next) onLessonSelect?.(lessonId);
     if (next) await fetchLessonClassworks(lessonId);
+  };
+
+  const openLessonDetail = async (lesson: Lesson) => {
+    setSelectedLessonDetail(lesson);
+    setLessonDetailTab("classwork");
+    onLessonSelect?.(lesson.lesson_id);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("lessonId", String(lesson.lesson_id));
+    nextParams.delete("classworkAssignmentId");
+    setSearchParams(nextParams, { replace: true });
+    await fetchLessonClassworks(lesson.lesson_id);
+  };
+
+  const closeLessonDetail = () => {
+    setSelectedLessonDetail(null);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("lessonId");
+    nextParams.delete("classworkAssignmentId");
+    setSearchParams(nextParams, { replace: true });
   };
 
   const fetchSubmissionForAssignment = async (assignmentId: number) => {
@@ -635,6 +690,141 @@ export default function SubjectLessonTab({
     return aScore - bScore;
   });
 
+  const renderLessonClassworkCards = (lesson: Lesson) => {
+    const classworks = classworksByLesson[lesson.lesson_id] ?? [];
+
+    if (classworkLoadingId === lesson.lesson_id) {
+      return <div className="text-center py-4 text-sm text-gray-400">Loading classworks...</div>;
+    }
+
+    if (classworks.length === 0) {
+      return (
+        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-400">
+          No classworks linked to this lesson.
+        </div>
+      );
+    }
+
+    return classworks.map((cw) => {
+      const badge = getStatusBadge(cw.submission_status, cw.due_date);
+      const isLoading = detailLoadingId === cw.classwork_assignment_id;
+      return (
+        <button
+          key={cw.classwork_assignment_id}
+          onClick={() => openClassworkDetail(cw)}
+          disabled={isLoading}
+          className="w-full rounded-lg border border-black bg-white px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-[#F6E9B2]">
+            <ClassworkIcon type={cw.classwork_type} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm truncate">{cw.title}</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {cw.due_date ? `Scheduled ${fmtDate(cw.due_date)}` : "No due date"}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {badge && (
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${badge.cls}`}>
+                {badge.label}
+              </span>
+            )}
+            {isLoading && (
+              <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+            )}
+          </div>
+        </button>
+      );
+    });
+  };
+
+  const renderLessonDetailScreen = (lesson: Lesson) => (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3 text-sm font-semibold">
+        <button
+          type="button"
+          onClick={closeLessonDetail}
+          className="flex items-center gap-1 rounded-md border border-black bg-white px-3 py-1.5 hover:bg-[#FFFBEE]"
+        >
+          <ChevronLeft size={16} />
+          Back to lessons
+        </button>
+        <span className="text-gray-500">{displaySubjectName}</span>
+        <ChevronRight size={15} className="text-gray-400" />
+        <span>{lesson.title}</span>
+      </div>
+
+      <section className="rounded-lg border border-black bg-[#F6E9B2] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <h2 className="text-2xl font-bold">{lesson.title}</h2>
+        <p className="mt-1 text-sm font-semibold text-gray-800">
+          {lesson.description || "No lesson description provided."}
+        </p>
+        {lesson.content ? (
+          <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-gray-800">{lesson.content}</p>
+        ) : null}
+        <p className="mt-2 text-xs font-semibold text-gray-600">
+          {lesson.updated_at
+            ? `Updated ${fmtDate(lesson.updated_at)}`
+            : lesson.created_at
+              ? `Created ${fmtDate(lesson.created_at)}`
+              : ""}
+        </p>
+      </section>
+
+      <div className="flex flex-wrap gap-2 border-b border-black">
+        <button
+          type="button"
+          onClick={() => setLessonDetailTab("classwork")}
+          className={`rounded-t-lg border border-b-0 border-black px-4 py-2 text-sm font-bold ${
+            lessonDetailTab === "classwork" ? "bg-white" : "bg-[#FFFBEE]"
+          }`}
+        >
+          Classwork
+        </button>
+        <button
+          type="button"
+          onClick={() => setLessonDetailTab("suggestions")}
+          className={`rounded-t-lg border border-b-0 border-black px-4 py-2 text-sm font-bold ${
+            lessonDetailTab === "suggestions" ? "bg-white" : "bg-[#FFFBEE]"
+          }`}
+        >
+          Recommended Materials
+        </button>
+      </div>
+
+      {lessonDetailTab === "classwork" ? (
+        <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+          <section className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-bold">Classwork</h3>
+              <span className="text-xs font-semibold text-gray-500">See all</span>
+            </div>
+            {renderLessonClassworkCards(lesson)}
+          </section>
+          <aside className="space-y-3">
+            <section className="rounded-lg border border-black bg-white p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              <h3 className="font-bold">Lesson Mastery</h3>
+              <p className="mt-2 text-xs text-gray-700">
+                Review the classwork and recommended materials for this lesson to strengthen mastery.
+              </p>
+            </section>
+            <section className="rounded-lg border border-black bg-white p-3 text-center text-sm font-semibold italic shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              Setting a goal is about achieving it and staying with that plan.
+            </section>
+          </aside>
+        </div>
+      ) : classId && subjectId ? (
+        <SubjectSuggestionsTab
+          classId={classId}
+          subjectId={subjectId}
+          selectedLessonId={lesson.lesson_id}
+          hideIntro
+        />
+      ) : null}
+    </div>
+  );
+
   // ─── Loading skeleton ──────────────────────────────────────────────────
   if (isLoading) {
     return (
@@ -724,6 +914,10 @@ export default function SubjectLessonTab({
         </div>
       ) : null}
       {/* ── Subject info card ── */}
+      {selectedLessonDetail ? (
+        renderLessonDetailScreen(selectedLessonDetail)
+      ) : (
+        <>
       <div className="rounded-lg border border-black bg-[#F6E9B2] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-start justify-between">
         <div>
           <h2 className="text-2xl font-bold">{displaySubjectName}</h2>
@@ -772,15 +966,16 @@ export default function SubjectLessonTab({
                 const classworks = classworksByLesson[lesson.lesson_id] ?? [];
 
                 return (
-                  <div key={lesson.lesson_id}>
+                  <div key={lesson.lesson_id} id={`student-lesson-${lesson.lesson_id}`}>
                     {/* ── Lesson card ── */}
-                    <button
-                      onClick={() => toggleLesson(lesson.lesson_id)}
-                      className="w-full rounded-lg border border-black bg-[#F6E9B2] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between hover:bg-[#f0e09a] transition-colors text-left"
-                    >
-                      <div className="min-w-0">
+                    <div className="w-full rounded-lg border border-black bg-[#F6E9B2] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between hover:bg-[#f0e09a] transition-colors text-left">
+                      <button
+                        type="button"
+                        onClick={() => openLessonDetail(lesson)}
+                        className="min-w-0 flex-1 text-left"
+                      >
                         <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="font-bold text-lg leading-tight">{lesson.title}</h4>
+                          <h4 className="font-bold text-lg leading-tight hover:underline">{lesson.title}</h4>
                           {lesson.attachments.length > 0 && (
                             <span className="rounded-full border border-black bg-[#7ABA78] px-2 py-0.5 text-[10px] font-bold">
                               {lesson.attachments.length} material{lesson.attachments.length === 1 ? "" : "s"}
@@ -795,13 +990,20 @@ export default function SubjectLessonTab({
                                 ? `Created ${fmtDate(lesson.created_at)}`
                                 : "")}
                         </p>
-                      </div>
-                      {isExpanded ? (
-                        <ChevronDown size={20} className="shrink-0 text-gray-700" />
-                      ) : (
-                        <ChevronRight size={20} className="shrink-0 text-gray-700" />
-                      )}
-                    </button>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleLesson(lesson.lesson_id)}
+                        className="ml-3 rounded-md p-2 text-gray-700 hover:bg-white/50"
+                        aria-label={isExpanded ? "Collapse lesson" : "Expand lesson"}
+                      >
+                        {isExpanded ? (
+                          <ChevronDown size={20} className="shrink-0" />
+                        ) : (
+                          <ChevronRight size={20} className="shrink-0" />
+                        )}
+                      </button>
+                    </div>
 
                     {/* ── Inline classwork items (expanded) ── */}
                     {isExpanded && (
@@ -998,6 +1200,9 @@ export default function SubjectLessonTab({
       )}
 
       {/* ════════════════ Classwork Detail Modal ════════════════ */}
+        </>
+      )}
+
       {(selectedClasswork || detailLoadingId !== null || detailError) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
           <section className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">

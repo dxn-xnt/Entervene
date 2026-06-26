@@ -1,138 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
-import { Archive, BookOpen, ChevronDown, ChevronRight, ClipboardList, Eye, FileText, Info, Paperclip, Pencil, Plus, Search, Trash2, Upload, Users, X } from "lucide-react";
+import { Archive, ChevronRight, Info, Paperclip, Plus, Trash2, Users, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { API_URL, apiFetch } from "@/lib/api";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
-
-const LOCKED_CLASSWORK_MESSAGE =
-  "This classwork is not available yet. Please check back later or contact your teacher for more information.";
-
-type TeacherClassLoad = {
-  subject_load_id: number;
-  subject_id: number;
-  subject_name: string;
-  subject_codename?: string | null;
-  class_id: number;
-  section_name: string;
-};
-
-type Lesson = {
-  lesson_id: number;
-  title: string;
-  description?: string | null;
-  content?: string | null;
-  order_index: number;
-  created_at?: string;
-  updated_at?: string;
-  is_published: boolean;
-  is_draft: boolean;
-  is_archived: boolean;
-  attachments: LessonAttachment[];
-};
-
-type LessonAttachment = {
-  lesson_attachment_id: number;
-  file_name: string;
-  file_type?: string;
-  file_size: number;
-  uploaded_at?: string;
-};
-
-type LessonDraft = {
-  title: string;
-  description: string;
-  content: string;
-  order_index: string;
-  is_published: boolean;
-};
-
-type LinkedClasswork = {
-  classwork_assignment_id: number;
-  classwork_id: number;
-  title: string;
-  classwork_type?: string | null;
-  due_date?: string | null;
-  attachment_count?: number;
-};
-
-type ClassworkAttachment = {
-  classwork_attachment_id: number;
-  file_name: string;
-  file_type?: string;
-  file_size: number;
-  uploaded_at?: string;
-};
-
-type ClassworkDetail = {
-  classwork_assignment_id: number;
-  classwork_id: number;
-  class_id: number;
-  section_name?: string | null;
-  title: string;
-  description?: string | null;
-  instructions?: string | null;
-  classwork_type?: string | null;
-  classwork_category?: string | null;
-  total_points?: number | null;
-  due_date?: string | null;
-  is_published: boolean;
-  is_locked?: boolean;
-  teacher_name?: string | null;
-  attachments: ClassworkAttachment[];
-};
-
-type TrackingStudent = {
-  student_id: string;
-  student_name: string;
-  status: string;
-  submitted_at?: string | null;
-  grade?: number | null;
-  attachment_count?: number;
-};
-
-type SubmissionTracking = {
-  total_students: number;
-  submitted_count: number;
-  missing_count: number;
-  submitted: TrackingStudent[];
-  missing: TrackingStudent[];
-};
-
-type ClassworkDraft = {
-  title: string;
-  description: string;
-  instructions: string;
-  classwork_type: string;
-  classwork_category: string;
-  total_points: string;
-  due_date: string;
-  is_published: boolean;
-};
-
-const emptyClassworkDraft: ClassworkDraft = {
-  title: "",
-  description: "",
-  instructions: "",
-  classwork_type: "ACTIVITY",
-  classwork_category: "WRITTEN_WORK",
-  total_points: "100",
-  due_date: "",
-  is_published: true,
-};
-
-const allowedMaterialExtensions = [".pdf", ".docx", ".pptx", ".jpg", ".jpeg", ".png"];
-const maxMaterialSize = 4 * 1024 * 1024;
-
-function MetricCard({ title, value, note }: { title: string; value: string; note: string }) {
-  return (
-    <div className="rounded-lg border border-black bg-[#F6E9B2] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-      <p className="font-semibold text-gray-900">{title}</p>
-      <p className="mt-2 text-4xl font-bold">{value}</p>
-      <p className="mt-1 text-xs font-medium text-gray-700">{note}</p>
-    </div>
-  );
-}
+import ClassworkFormModal from "./subject-details/ClassworkFormModal";
+import LessonClassworkList from "./subject-details/LessonClassworkList";
+import MetricCard from "./subject-details/MetricCard";
+import {
+  LOCKED_CLASSWORK_MESSAGE,
+  allowedMaterialExtensions,
+  emptyClassworkDraft,
+  maxMaterialSize,
+} from "./subject-details/constants";
+import type {
+  ClassworkDetail,
+  ClassworkDraft,
+  Lesson,
+  LessonDraft,
+  LinkedClasswork,
+  SubmissionTracking,
+  TeacherClassLoad,
+} from "./subject-details/types";
 
 export default function SubjectDetails() {
   const { classId, subjectId } = useParams<{ classId: string; subjectId: string }>();
@@ -142,7 +31,6 @@ export default function SubjectDetails() {
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [lessonDraft, setLessonDraft] = useState<LessonDraft | null>(null);
   const [lessonClassIds, setLessonClassIds] = useState<number[]>([]);
-  const [lessonMaterials, setLessonMaterials] = useState<File[]>([]);
   const [isSavingLesson, setIsSavingLesson] = useState(false);
   const [isArchivingLesson, setIsArchivingLesson] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
@@ -294,7 +182,6 @@ export default function SubjectDetails() {
       is_published: lesson.is_published,
     });
     setLessonClassIds(classId ? [Number(classId)] : []);
-    setLessonMaterials([]);
   };
 
   const closeLessonManager = () => {
@@ -302,35 +189,8 @@ export default function SubjectDetails() {
     setSelectedLesson(null);
     setLessonDraft(null);
     setLessonClassIds([]);
-    setLessonMaterials([]);
     setShowArchiveConfirm(false);
     setError("");
-  };
-
-  const addLessonMaterials = (files: FileList | null) => {
-    if (!files) return;
-
-    const selected = Array.from(files);
-    const invalidType = selected.find((file) => {
-      const extension = `.${file.name.split(".").pop()?.toLowerCase()}`;
-      return !allowedMaterialExtensions.includes(extension);
-    });
-    if (invalidType) {
-      setError(`${invalidType.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`);
-      return;
-    }
-
-    const oversized = selected.find((file) => file.size > maxMaterialSize);
-    if (oversized) {
-      setError(`${oversized.name} is larger than the 4 MB file limit.`);
-      return;
-    }
-
-    setError("");
-    setLessonMaterials((current) => {
-      const existing = new Set(current.map((file) => `${file.name}-${file.size}`));
-      return [...current, ...selected.filter((file) => !existing.has(`${file.name}-${file.size}`))];
-    });
   };
 
   const toggleLessonClass = (targetClassId: number) => {
@@ -391,18 +251,6 @@ export default function SubjectDetails() {
         throw new Error("Lesson details were saved, but section assignment failed.");
       }
 
-      for (const material of lessonMaterials) {
-        const formData = new FormData();
-        formData.append("file", material);
-        const uploadResponse = await apiFetch(`/api/v1/lessons/${selectedLesson.lesson_id}/attachments`, {
-          method: "POST",
-          body: formData,
-        });
-        if (!uploadResponse.ok) {
-          throw new Error(`Lesson details were saved, but ${material.name} could not be uploaded.`);
-        }
-      }
-
       if (lessonDraft.is_published) {
         const publishResponse = await apiFetch(`/api/v1/lessons/${selectedLesson.lesson_id}/publish`, {
           method: "PUT",
@@ -429,7 +277,6 @@ export default function SubjectDetails() {
         order_index: String(updatedLesson.order_index || 1),
         is_published: updatedLesson.is_published,
       });
-      setLessonMaterials([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update lesson.");
     } finally {
@@ -484,7 +331,6 @@ export default function SubjectDetails() {
       setSelectedLesson(null);
       setLessonDraft(null);
       setLessonClassIds([]);
-      setLessonMaterials([]);
       setShowArchiveConfirm(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to archive lesson.");
@@ -574,12 +420,15 @@ export default function SubjectDetails() {
     if (!classworkLesson || !classId || !subjectId) return;
 
     setError("");
+    const isReadingClasswork = classworkDraft.classwork_type === "READING";
+    // Quiz question files go through the quiz import flow, not classwork attachments.
+    const allowsMaterialUpload = classworkDraft.classwork_type !== "QUIZ";
     if (!classworkDraft.title.trim()) {
       setError("Classwork title is required.");
       return;
     }
     const totalPoints = Number(classworkDraft.total_points);
-    if (classworkDraft.total_points && Number.isNaN(totalPoints)) {
+    if (!isReadingClasswork && classworkDraft.total_points && Number.isNaN(totalPoints)) {
       setError("Total points must be a number.");
       return;
     }
@@ -595,7 +444,7 @@ export default function SubjectDetails() {
           instructions: classworkDraft.instructions.trim() || null,
           classwork_type: classworkDraft.classwork_type,
           classwork_category: classworkDraft.classwork_category || null,
-          total_points: classworkDraft.total_points ? totalPoints : null,
+          total_points: isReadingClasswork ? null : classworkDraft.total_points ? totalPoints : null,
           subject_id: Number(subjectId),
           is_published: classworkDraft.is_published,
           lesson_ids: [classworkLesson.lesson_id],
@@ -608,7 +457,7 @@ export default function SubjectDetails() {
 
       const created = (await createResponse.json()) as { classwork_id: number };
 
-      for (const material of classworkMaterials) {
+      for (const material of allowsMaterialUpload ? classworkMaterials : []) {
         const formData = new FormData();
         formData.append("file", material);
         const uploadResponse = await apiFetch(
@@ -708,165 +557,23 @@ export default function SubjectDetails() {
           </div>
         </section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 md:w-80">
-              <Search size={16} className="text-gray-500" />
-              <input
-                type="search"
-                value={lessonSearch}
-                onChange={(event) => setLessonSearch(event.target.value)}
-                className="w-full bg-transparent text-sm outline-none placeholder:text-gray-500"
-                placeholder="Search lessons"
-              />
-            </div>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 self-start rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium"
-            >
-              <ChevronDown size={16} />
-              Sort By
-            </button>
-          </div>
-
-          {isLoading ? (
-            <p className="py-8 text-center text-gray-500">Loading lessons...</p>
-          ) : filteredLessons.length > 0 ? (
-            filteredLessons.map((lesson) => {
-              const isExpanded = expandedLessonId === lesson.lesson_id;
-              const classworks = linkedClassworks[lesson.lesson_id] || [];
-
-              return (
-                <div key={lesson.lesson_id} className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2 rounded-lg border border-black bg-[#F6E9B2] px-4 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                    <button
-                      type="button"
-                      onClick={() => toggleLesson(lesson.lesson_id)}
-                      className="flex min-w-0 flex-1 items-center justify-between text-left"
-                    >
-                      <div className="min-w-0">
-                        <div className="mb-1 flex flex-wrap items-center gap-2">
-                          <p className="truncate text-2xl font-bold text-gray-950">{lesson.title}</p>
-                          <span className="rounded-full border border-black bg-white px-2 py-0.5 text-[10px] font-bold">
-                            {lesson.is_published ? "Published" : "Draft"}
-                          </span>
-                          {lesson.attachments.length > 0 && (
-                            <span className="rounded-full border border-black bg-[#7ABA78] px-2 py-0.5 text-[10px] font-bold">
-                              {lesson.attachments.length} material{lesson.attachments.length === 1 ? "" : "s"}
-                            </span>
-                          )}
-                        </div>
-                        <p className="truncate text-xs font-medium text-gray-700">
-                          {lesson.description ||
-                            (lesson.created_at
-                              ? `Created ${new Date(lesson.created_at).toLocaleDateString()}`
-                              : "Lesson folder")}
-                        </p>
-                      </div>
-                      {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openLessonManager(lesson)}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-black bg-white px-3 py-2 text-xs font-bold hover:bg-gray-50"
-                    >
-                      <Pencil size={14} />
-                      Manage
-                    </button>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="ml-3 flex flex-col gap-2 border-l-2 border-black pl-3">
-                      <div className="flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => openClassworkForm(lesson)}
-                          className="inline-flex items-center gap-2 rounded-lg border border-black bg-[#7ABA78] px-3 py-2 text-sm font-semibold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
-                        >
-                          <Plus size={16} />
-                          Add Classwork
-                        </button>
-                      </div>
-                      {loadingClassworkId === lesson.lesson_id ? (
-                        <div className="rounded-lg border border-black bg-white px-4 py-3 text-sm font-medium shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                          Loading classworks...
-                        </div>
-                      ) : classworks.length > 0 ? (
-                        classworks.map((classwork) => (
-                          <button
-                            type="button"
-                            key={classwork.classwork_assignment_id}
-                            onClick={() => openClassworkDetail(classwork)}
-                            className="flex w-full items-center justify-between rounded-lg border border-black bg-white px-4 py-3 text-left shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
-                          >
-                            <div className="flex items-center gap-3">
-                              <FileText size={20} />
-                              <div>
-                                <p className="text-lg font-bold">{classwork.title}</p>
-                                <p className="text-xs font-medium text-gray-700">
-                                  {classwork.classwork_type || "Classwork"}
-                                  {classwork.due_date ? ` | Due ${new Date(classwork.due_date).toLocaleDateString()}` : ""}
-                                </p>
-                              </div>
-                            </div>
-                            {classwork.attachment_count ? (
-                              <span className="rounded-full bg-[#7ABA78] px-3 py-1 text-xs font-semibold">
-                                File {classwork.attachment_count}
-                              </span>
-                            ) : null}
-                            <span className="ml-3 inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs font-semibold">
-                              <Eye size={14} />
-                              Details
-                            </span>
-                          </button>
-                        ))
-                      ) : (
-                        <div className="flex items-center justify-between rounded-lg border border-black bg-white px-4 py-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                          <div className="flex items-center gap-3">
-                            <ClipboardList size={20} />
-                            <div>
-                              <p className="text-lg font-bold">No classworks yet</p>
-                              <p className="text-xs font-medium">
-                                Readings, activities, assignments, and quizzes linked to this lesson will appear here.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          ) : lessons.length > 0 ? (
-            <div className="flex items-center justify-between rounded-lg border border-black bg-white px-4 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-              <div>
-                <p className="text-lg font-bold">No matching lessons</p>
-                <p className="text-xs font-medium">Try a different lesson name or description.</p>
-              </div>
-              <Search size={20} />
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between rounded-lg border border-black bg-[#F6E9B2] px-4 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                <div>
-                  <p className="text-2xl font-bold">No lessons yet</p>
-                  <p className="text-xs font-medium">Use Add Lesson to create the first lesson for this subject.</p>
-                </div>
-                <BookOpen size={20} />
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-black bg-white px-4 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                <div className="flex items-center gap-3">
-                  <ClipboardList size={20} />
-                  <div>
-                    <p className="text-lg font-bold">Classwork</p>
-                    <p className="text-xs font-medium">Assignments and activities for this subject appear here.</p>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-        </section>
+        {isLoading ? (
+          <p className="py-8 text-center text-gray-500">Loading lessons...</p>
+        ) : (
+          <LessonClassworkList
+            lessonSearch={lessonSearch}
+            setLessonSearch={setLessonSearch}
+            filteredLessons={filteredLessons}
+            totalLessons={lessons.length}
+            expandedLessonId={expandedLessonId}
+            linkedClassworks={linkedClassworks}
+            loadingClassworkId={loadingClassworkId}
+            toggleLesson={toggleLesson}
+            openLessonManager={openLessonManager}
+            openClassworkForm={openClassworkForm}
+            openClassworkDetail={openClassworkDetail}
+          />
+        )}
       </main>
 
       {selectedLesson && lessonDraft && (
@@ -986,59 +693,8 @@ export default function SubjectDetails() {
                   )}
                 </div>
 
-                <div className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <label htmlFor="manage-lesson-materials" className="block text-sm font-semibold">Add Materials</label>
-                    <span className="text-xs font-medium text-gray-500">PDF, DOCX, PPTX, JPG, PNG | 4 MB each</span>
-                  </div>
-                  <label
-                    htmlFor="manage-lesson-materials"
-                    className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-5 text-sm font-semibold ${
-                      isSavingLesson
-                        ? "cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400"
-                        : "border-gray-700 bg-gray-50 hover:bg-[#F6E9B2]"
-                    }`}
-                  >
-                    <Upload size={18} />
-                    Select material files
-                  </label>
-                  <input
-                    id="manage-lesson-materials"
-                    type="file"
-                    multiple
-                    accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
-                    className="hidden"
-                    disabled={isSavingLesson}
-                    onChange={(event) => {
-                      addLessonMaterials(event.target.files);
-                      event.target.value = "";
-                    }}
-                  />
-
-                  {lessonMaterials.length > 0 && (
-                    <div className="mt-3 space-y-2">
-                      {lessonMaterials.map((material, index) => (
-                        <div key={`${material.name}-${material.size}`} className="flex items-center gap-3 rounded-lg border px-3 py-2">
-                          <FileText size={17} />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold">{material.name}</p>
-                            <p className="text-xs text-gray-500">{(material.size / 1024 / 1024).toFixed(2)} MB</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setLessonMaterials((current) => current.filter((_, currentIndex) => currentIndex !== index))
-                            }
-                            disabled={isSavingLesson}
-                            className="rounded p-1 text-red-600 hover:bg-red-50"
-                            aria-label={`Remove ${material.name}`}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                <div className="rounded-lg border border-black bg-[#F6E9B2] p-4 text-sm font-medium shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                  Lesson file uploads now live under Reading classworks so materials can be scheduled, locked, and tracked like the rest of the classwork flow.
                 </div>
               </div>
 
@@ -1177,232 +833,18 @@ export default function SubjectDetails() {
       )}
 
       {classworkLesson && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
-          <section className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <div className="sticky top-0 flex items-center justify-between border-b border-black bg-[#7ABA78] px-5 py-4">
-              <div>
-                <h2 className="text-lg font-bold">Add Classwork</h2>
-                <p className="text-xs font-medium">Lesson: {classworkLesson.title}</p>
-              </div>
-              <button type="button" onClick={closeClassworkForm} className="rounded p-1 hover:bg-white/30">
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="space-y-4 p-5">
-              {error && (
-                <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-                  {error}
-                </div>
-              )}
-
-              <div>
-                <label htmlFor="classwork-title" className="mb-1 block text-sm font-semibold">Title</label>
-                <input
-                  id="classwork-title"
-                  value={classworkDraft.title}
-                  onChange={(event) =>
-                    setClassworkDraft((current) => ({ ...current, title: event.target.value }))
-                  }
-                  disabled={isCreatingClasswork}
-                  className="w-full rounded-lg border border-gray-700 px-3 py-2"
-                  placeholder="Activity 1"
-                />
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="classwork-type" className="mb-1 block text-sm font-semibold">Type</label>
-                  <select
-                    id="classwork-type"
-                    value={classworkDraft.classwork_type}
-                    onChange={(event) =>
-                      setClassworkDraft((current) => ({ ...current, classwork_type: event.target.value }))
-                    }
-                    disabled={isCreatingClasswork}
-                    className="w-full rounded-lg border border-gray-700 px-3 py-2"
-                  >
-                    <option value="READING">Reading</option>
-                    <option value="ACTIVITY">Activity</option>
-                    <option value="ASSIGNMENT">Assignment</option>
-                    <option value="QUIZ">Quiz</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="classwork-category" className="mb-1 block text-sm font-semibold">Category</label>
-                  <select
-                    id="classwork-category"
-                    value={classworkDraft.classwork_category}
-                    onChange={(event) =>
-                      setClassworkDraft((current) => ({ ...current, classwork_category: event.target.value }))
-                    }
-                    disabled={isCreatingClasswork}
-                    className="w-full rounded-lg border border-gray-700 px-3 py-2"
-                  >
-                    <option value="WRITTEN_WORK">Written Work</option>
-                    <option value="PERFORMANCE_TASK">Performance Task</option>
-                    <option value="PERIODICAL_EXAM">Periodical Exam</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="classwork-points" className="mb-1 block text-sm font-semibold">Total points</label>
-                  <input
-                    id="classwork-points"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={classworkDraft.total_points}
-                    onChange={(event) =>
-                      setClassworkDraft((current) => ({ ...current, total_points: event.target.value }))
-                    }
-                    disabled={isCreatingClasswork}
-                    className="w-full rounded-lg border border-gray-700 px-3 py-2"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="classwork-due" className="mb-1 block text-sm font-semibold">Due date</label>
-                  <input
-                    id="classwork-due"
-                    type="datetime-local"
-                    value={classworkDraft.due_date}
-                    onChange={(event) =>
-                      setClassworkDraft((current) => ({ ...current, due_date: event.target.value }))
-                    }
-                    disabled={isCreatingClasswork}
-                    className="w-full rounded-lg border border-gray-700 px-3 py-2"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="classwork-description" className="mb-1 block text-sm font-semibold">Description</label>
-                <textarea
-                  id="classwork-description"
-                  value={classworkDraft.description}
-                  onChange={(event) =>
-                    setClassworkDraft((current) => ({ ...current, description: event.target.value }))
-                  }
-                  disabled={isCreatingClasswork}
-                  className="min-h-20 w-full rounded-lg border border-gray-700 px-3 py-2"
-                  placeholder="Optional summary"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="classwork-instructions" className="mb-1 block text-sm font-semibold">Instructions</label>
-                <textarea
-                  id="classwork-instructions"
-                  value={classworkDraft.instructions}
-                  onChange={(event) =>
-                    setClassworkDraft((current) => ({ ...current, instructions: event.target.value }))
-                  }
-                  disabled={isCreatingClasswork}
-                  className="min-h-24 w-full rounded-lg border border-gray-700 px-3 py-2"
-                  placeholder="What students need to do"
-                />
-              </div>
-
-              <div>
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <label htmlFor="classwork-materials" className="block text-sm font-semibold">
-                    Upload Material
-                  </label>
-                  <span className="text-xs font-medium text-gray-500">
-                    PDF, DOCX, PPTX, JPG, PNG | 4 MB each
-                  </span>
-                </div>
-
-                <label
-                  htmlFor="classwork-materials"
-                  className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-5 text-sm font-semibold transition-colors ${
-                    isCreatingClasswork
-                      ? "cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400"
-                      : "border-gray-700 bg-gray-50 hover:bg-[#F6E9B2]"
-                  }`}
-                >
-                  <Upload size={18} />
-                  Select material files
-                </label>
-                <input
-                  id="classwork-materials"
-                  type="file"
-                  multiple
-                  accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
-                  onChange={(event) => {
-                    addClassworkMaterials(event.target.files);
-                    event.target.value = "";
-                  }}
-                  disabled={isCreatingClasswork}
-                  className="hidden"
-                />
-
-                {classworkMaterials.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    {classworkMaterials.map((material, index) => (
-                      <div
-                        key={`${material.name}-${material.size}`}
-                        className="flex items-center gap-3 rounded-lg border border-gray-300 bg-white px-3 py-2"
-                      >
-                        <FileText size={17} className="shrink-0 text-gray-700" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold">{material.name}</p>
-                          <p className="text-xs text-gray-500">
-                            {(material.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeClassworkMaterial(index)}
-                          disabled={isCreatingClasswork}
-                          className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
-                          aria-label={`Remove ${material.name}`}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium">
-                <input
-                  type="checkbox"
-                  checked={classworkDraft.is_published}
-                  onChange={(event) =>
-                    setClassworkDraft((current) => ({ ...current, is_published: event.target.checked }))
-                  }
-                  disabled={isCreatingClasswork}
-                />
-                Publish for this class
-              </label>
-            </div>
-
-            <div className="flex justify-end gap-3 border-t border-black px-5 py-4">
-              <button
-                type="button"
-                onClick={closeClassworkForm}
-                disabled={isCreatingClasswork}
-                className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={createClassworkForLesson}
-                disabled={isCreatingClasswork}
-                className="rounded-lg border border-gray-700 bg-[#7ABA78] px-4 py-2 text-sm font-semibold hover:brightness-95 disabled:opacity-60"
-              >
-                {isCreatingClasswork ? "Adding..." : "Add Classwork"}
-              </button>
-            </div>
-          </section>
-        </div>
+        <ClassworkFormModal
+          classworkLesson={classworkLesson}
+          classworkDraft={classworkDraft}
+          setClassworkDraft={setClassworkDraft}
+          classworkMaterials={classworkMaterials}
+          isCreatingClasswork={isCreatingClasswork}
+          error={error}
+          closeClassworkForm={closeClassworkForm}
+          addClassworkMaterials={addClassworkMaterials}
+          removeClassworkMaterial={removeClassworkMaterial}
+          createClassworkForLesson={createClassworkForLesson}
+        />
       )}
 
       {(selectedClasswork || detailLoadingId || detailError) && (

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ArrowUpDown, BookOpen, ChevronDown, ChevronUp, ClipboardList, FileText, Search } from "lucide-react";
 import SubmissionForm from "@/components/SubmissionForm";
 import SubmissionViewer from "@/components/SubmissionViewer";
@@ -104,6 +105,7 @@ export default function SubjectClassworkTab({
   classId,
   subjectId,
 }: SubjectClassworkTabProps) {
+  const [searchParams] = useSearchParams();
   const [classworks, setClassworks] = useState<ClassworkAssignment[]>([]);
   const [submissions, setSubmissions] = useState<Record<number, Submission>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -161,6 +163,19 @@ export default function SubjectClassworkTab({
       fetchClassworks();
     }
   }, [classId, subjectId, fetchClassworks]);
+
+  useEffect(() => {
+    const targetId = Number(searchParams.get("classworkAssignmentId"));
+    if (!targetId || classworks.length === 0) return;
+    if (!classworks.some((classwork) => classwork.classwork_assignment_id === targetId)) return;
+    setExpandedId(targetId);
+    window.setTimeout(() => {
+      document.getElementById(`student-classwork-${targetId}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 80);
+  }, [classworks, searchParams]);
 
   const fetchSubmission = async (
     assignmentId: number
@@ -354,6 +369,7 @@ export default function SubjectClassworkTab({
         return (
           <div
             key={cw.classwork_assignment_id}
+            id={`student-classwork-${cw.classwork_assignment_id}`}
             className="overflow-hidden rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
           >
             <button

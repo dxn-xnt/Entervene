@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { BookOpen, ClipboardList, Loader2 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import Tabs from "@/components/Tabs";
@@ -23,11 +23,21 @@ const tabs = [
 const StudentSubjectDetail = () => {
   const { classId, subjectId } = useParams<{ classId: string; subjectId: string }>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("lessons");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const activeTab = requestedTab === "classwork" ? "classwork" : "lessons";
+  const isLessonDetailScreen = activeTab === "lessons" && Boolean(searchParams.get("lessonId"));
   const [subjectInfo, setSubjectInfo] = useState<SubjectInfo | null>(null);
 
   const numericClassId = classId ? parseInt(classId, 10) : undefined;
   const numericSubjectId = subjectId ? parseInt(subjectId, 10) : undefined;
+
+  const handleTabChange = (tabId: string) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (tabId === "lessons") nextParams.delete("tab");
+    else nextParams.set("tab", tabId);
+    setSearchParams(nextParams, { replace: true });
+  };
 
   useEffect(() => {
     if (!numericClassId || !numericSubjectId) return;
@@ -62,6 +72,8 @@ const StudentSubjectDetail = () => {
   return (
     <AppLayout>
       {/* ── Page header: subject title ── */}
+      {!isLessonDetailScreen ? (
+        <>
       <header className="px-5 py-5 border-b border-gray-200">
         {subjectInfo ? (
           <h1 className="text-4xl font-bold">{subjectInfo.subject_name}</h1>
@@ -74,7 +86,9 @@ const StudentSubjectDetail = () => {
       </header>
 
       {/* ── Tab bar ── */}
-      <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+      <Tabs tabs={tabs} activeTab={activeTab} onChange={handleTabChange} />
+        </>
+      ) : null}
 
       {/* ── Tab content ── */}
       <main className="px-5 py-5">
