@@ -1,8 +1,22 @@
 import { useRef, useState } from "react";
+import { Download } from "lucide-react";
+import { Alert } from "@/components/retroui/Alert";
 import { apiFetch } from "@/lib/api";
+import type { InviteUserPayload } from "@/lib/api";
 
 type Step = "choose" | "import" | "manual";
 type Role = "Teacher" | "Student" | "Admin";
+type ImportRole = "Teacher" | "Student";
+type ImportErrorItem = { row: number; field: string; value: string; reason: string };
+type ImportResult = {
+  message?: string;
+  created?: number;
+  skipped?: number;
+  created_count?: number;
+  failed_count?: number;
+  skipped_emails?: string[];
+  errors?: ImportErrorItem[];
+};
 
 interface ManualFormData {
   firstName: string;
@@ -11,6 +25,7 @@ interface ManualFormData {
   email: string;
   role: Role;
   // Staff-specific
+  dob: string;
   gender: string;
   contactNumber: string;
   address: string;
@@ -28,6 +43,7 @@ const EMPTY_FORM: ManualFormData = {
   middleName: "",
   email: "",
   role: "Teacher",
+  dob: "",
   gender: "",
   contactNumber: "",
   address: "",
@@ -37,6 +53,243 @@ const EMPTY_FORM: ManualFormData = {
   suffix: "",
   gradeLevel: "",
 };
+
+const IMPORT_TEMPLATES: Record<
+  ImportRole,
+  { fileName: string; columns: string[]; sample: string[] }
+> = {
+  Student: {
+    fileName: "student_import_template.csv",
+    columns: [
+      "first_name",
+      "last_name",
+      "middle_name",
+      "email",
+      "student_lrn",
+      "gender",
+      "contact_number",
+      "address",
+      "grade_level",
+      "suffix",
+      "dob",
+    ],
+    sample: [
+      "Maria",
+      "Santos",
+      "Reyes",
+      "maria.santos@student.ph",
+      "123456789012",
+      "Female",
+      "09170000000",
+      "12 Marcos Highway, Antipolo City",
+      "7",
+      "",
+      "\t2008-04-15",
+    ],
+  },
+  Teacher: {
+    fileName: "teacher_import_template.csv",
+    columns: [
+      "first_name",
+      "last_name",
+      "middle_name",
+      "email",
+      "gender",
+      "contact_number",
+      "address",
+      "suffix",
+      "dob",
+      "hired_date",
+      "employment_status",
+    ],
+    sample: [
+      "Ana",
+      "Dela Cruz",
+      "Rivera",
+      "ana.delacruz@school.ph",
+      "Female",
+      "09170000000",
+      "Antipolo City",
+      "",
+      "\t1990-04-15",
+      "2024-06-01",
+      "Regular",
+    ],
+  },
+};
+
+function csvCell(value: string) {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+function downloadCsvTemplate(role: ImportRole) {
+  const template = IMPORT_TEMPLATES[role];
+  const csv = [template.columns, template.sample]
+    .map((row) => row.map(csvCell).join(","))
+    .join("\r\n");
+  const blob = new Blob([`${csv}\r\n`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = template.fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function parseCsvRows(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === "," && !inQuotes) {
+      row.push(cell);
+      cell = "";
+    } else if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell);
+      if (row.some((value) => value.trim())) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+
+  row.push(cell);
+  if (row.some((value) => value.trim())) rows.push(row);
+  return rows;
+}
+
+function isValidIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [yearText, monthText, dayText] = value.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function requiredColumnsForRole(role: ImportRole) {
+  return role === "Student"
+    ? ["first_name", "last_name", "email", "student_lrn"]
+    : ["first_name", "last_name", "email"];
+}
+
+async function validateCsvImportFile(file: File, role: ImportRole): Promise<ImportResult | null> {
+  if (!file.name.toLowerCase().endsWith(".csv")) return null;
+
+  const rows = parseCsvRows(await file.text());
+  const headers = rows[0]?.map((header, index) => index === 0 ? header.replace(/^\uFEFF/, "").trim() : header.trim()) ?? [];
+  const headerSet = new Set(headers);
+  const missingRequired = requiredColumnsForRole(role).filter((column) => !headerSet.has(column));
+  const hasStudentGradeColumn =
+    role !== "Student" ||
+    ["grade_level", "academic_level", "academic_level_id"].some((column) => headerSet.has(column));
+
+  if (missingRequired.length || !hasStudentGradeColumn) {
+    return {
+      message: `This file does not match the ${role} import template. Download the ${role} CSV template and try again.`,
+      failed_count: 1,
+      errors: [
+        {
+          row: 1,
+          field: "file",
+          value: "",
+          reason: missingRequired.length
+            ? `Missing required column(s): ${missingRequired.join(", ")}.`
+            : "Missing a student grade column: grade_level, academic_level, or academic_level_id.",
+        },
+      ],
+    };
+  }
+
+  const dobIndex = headers.findIndex((header) => header === "dob" || header === "date_of_birth");
+  if (dobIndex === -1) return null;
+
+  const errors: ImportErrorItem[] = [];
+  for (let index = 1; index < rows.length; index += 1) {
+    const value = (rows[index][dobIndex] ?? "").trim();
+    if (value && !isValidIsoDate(value)) {
+      errors.push({
+        row: index + 1,
+        field: headers[dobIndex],
+        value,
+        reason: `Invalid DOB "${value}". Use YYYY-MM-DD, example 2008-04-15.`,
+      });
+    }
+  }
+
+  if (!errors.length) return null;
+  return {
+    message: "CSV DOB validation failed.",
+    failed_count: errors.length,
+    errors,
+  };
+}
+
+function formatImportError(error: ImportErrorItem) {
+  const isDobError = error.field === "dob" || error.field === "date_of_birth";
+  if (isDobError) {
+    const value = error.value ? ` "${error.value}"` : "";
+    return `Row ${error.row}: Invalid DOB${value}. Use YYYY-MM-DD, example 2008-04-15.`;
+  }
+  return `Row ${error.row}, ${error.field}: ${error.reason}`;
+}
+
+function importSummary(result: ImportResult) {
+  if (result.errors?.length) {
+    return result.message ?? "Import failed. Please check the errors below.";
+  }
+  return `${result.message ? `${result.message}. ` : ""}Imported ${
+    result.created_count ?? result.created ?? 0
+  } user(s); failed ${result.failed_count ?? result.skipped ?? 0} user(s).`;
+}
+
+function backendImportResult(data: unknown, role: ImportRole): ImportResult {
+  if (!data || typeof data !== "object") {
+    return {
+      message: "Import failed. Please check the file and try again.",
+      failed_count: 1,
+      errors: [{ row: 1, field: "file", value: "", reason: "The server did not return a readable error." }],
+    };
+  }
+
+  if ("detail" in data && data.detail && typeof data.detail === "object") {
+    return data.detail as ImportResult;
+  }
+
+  if ("detail" in data && typeof data.detail === "string") {
+    const message = data.detail.includes("File missing")
+      ? `This file does not match the ${role} import template. Download the ${role} CSV template and try again.`
+      : data.detail;
+    return {
+      message,
+      failed_count: 1,
+      errors: [{ row: 1, field: "file", value: "", reason: data.detail }],
+    };
+  }
+
+  return data as ImportResult;
+}
 
 interface AddUserModalProps {
   open: boolean;
@@ -53,19 +306,9 @@ export default function AddUserModal({
   const [form, setForm] = useState<ManualFormData>(EMPTY_FORM);
   const [dragOver, setDragOver] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [importRole, setImportRole] = useState<"Teacher" | "Student">(
-    "Teacher",
-  );
+  const [importRole, setImportRole] = useState<ImportRole>("Teacher");
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{
-    message?: string;
-    created?: number;
-    skipped?: number;
-    created_count?: number;
-    failed_count?: number;
-    skipped_emails?: string[];
-    errors?: Array<{ row: number; field: string; value: string; reason: string }>;
-  } | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [manualSubmitting, setManualSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -84,6 +327,12 @@ export default function AddUserModal({
   const handleImportSubmit = async () => {
     if (!uploadedFile) return;
 
+    const validationResult = await validateCsvImportFile(uploadedFile, importRole);
+    if (validationResult) {
+      setImportResult(validationResult);
+      return;
+    }
+
     setImporting(true);
     setImportResult(null);
 
@@ -100,7 +349,7 @@ export default function AddUserModal({
       );
 
       const data = await res.json().catch(() => ({}));
-      setImportResult(res.ok ? data : data.detail ?? data);
+      setImportResult(res.ok ? data : backendImportResult(data, importRole));
 
       if (res.ok) {
         onUserAdded?.(form);
@@ -111,31 +360,47 @@ export default function AddUserModal({
   };
 
   const handleField = (field: keyof ManualFormData, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
+    setForm((prev) => {
+      if (field === "role" && value === "Admin") {
+        return { ...prev, role: value as Role, dob: "" };
+      }
+      return { ...prev, [field]: value };
+    });
   };
 
   const handleManualSubmit = async () => {
     if (manualSubmitting) return;
+    if (form.dob && !/^\d{4}-\d{2}-\d{2}$/.test(form.dob)) {
+      window.alert("DOB must use YYYY-MM-DD format.");
+      return;
+    }
+
     setManualSubmitting(true);
     try {
+      const payload: InviteUserPayload = {
+        first_name: form.firstName.trim(),
+        last_name: form.lastName.trim(),
+        middle_name: form.middleName.trim(),
+        email: form.email.trim().toLowerCase(),
+        role: form.role,
+        suffix: form.suffix.trim(),
+        gender: form.gender,
+        contact_number: form.contactNumber.trim(),
+        address: form.address.trim(),
+        hired_date: form.hiredDate,
+        employment_status: form.employmentStatus,
+        student_lrn: form.studentLrn.trim(),
+        grade_level: form.gradeLevel ? Number(form.gradeLevel) : null,
+      };
+
+      if (form.role !== "Admin") {
+        payload.dob = form.dob;
+      }
+
       const res = await apiFetch("/api/v1/users/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          first_name: form.firstName.trim(),
-          last_name: form.lastName.trim(),
-          middle_name: form.middleName.trim(),
-          email: form.email.trim().toLowerCase(),
-          role: form.role,
-          suffix: form.suffix.trim(),
-          gender: form.gender,
-          contact_number: form.contactNumber.trim(),
-          address: form.address.trim(),
-          hired_date: form.hiredDate,
-          employment_status: form.employmentStatus,
-          student_lrn: form.studentLrn.trim(),
-          grade_level: form.gradeLevel ? Number(form.gradeLevel) : null,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -160,11 +425,28 @@ export default function AddUserModal({
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) setUploadedFile(file);
+    if (file) void selectImportFile(file, importRole);
+  };
+
+  const selectImportFile = async (file: File, role: ImportRole) => {
+    setImportResult(null);
+    setUploadedFile(file);
+    const validationResult = await validateCsvImportFile(file, role);
+    if (validationResult) {
+      setImportResult(validationResult);
+      return;
+    }
+  };
+
+  const handleImportRoleChange = (role: ImportRole) => {
+    setImportRole(role);
+    setImportResult(null);
+    if (uploadedFile) void selectImportFile(uploadedFile, role);
   };
 
   const isStudent = form.role === "Student";
   const isAdmin = form.role === "Admin";
+  const hasImportErrors = Boolean(importResult?.errors?.length);
 
   return (
     <div
@@ -266,13 +548,29 @@ export default function AddUserModal({
                 <select
                   value={importRole}
                   onChange={(e) =>
-                    setImportRole(e.target.value as "Teacher" | "Student")
+                    handleImportRoleChange(e.target.value as ImportRole)
                   }
                   className="w-full border rounded-lg px-3 pr-8 py-1.5 text-sm bg-white cursor-pointer"
                 >
                   <option value="Teacher">Teacher</option>
                   <option value="Student">Student</option>
                 </select>
+              </div>
+
+              <div className="rounded-lg border bg-white px-3 py-2">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-gray-600">
+                    Use YYYY-MM-DD for DOB, for example 2008-04-15.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => downloadCsvTemplate(importRole)}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-gray-50 transition cursor-pointer"
+                  >
+                    <Download className="size-3.5" />
+                    Download {importRole} Template
+                  </button>
+                </div>
               </div>
 
               <div
@@ -286,8 +584,8 @@ export default function AddUserModal({
                 className="flex flex-col items-center justify-center gap-3 rounded-lg cursor-pointer transition-all"
                 style={{
                   minHeight: 140,
-                  border: `1px solid ${dragOver ? "#5c8f5c" : "black"}`,
-                  background: dragOver ? "#f0f7f0" : "#fff",
+                  border: `1px solid ${hasImportErrors ? "#991b1b" : dragOver ? "#5c8f5c" : "black"}`,
+                  background: hasImportErrors ? "#fff1f2" : dragOver ? "#f0f7f0" : "#fff",
                 }}
               >
                 {uploadedFile ? (
@@ -308,6 +606,15 @@ export default function AddUserModal({
                     <span className="text-xs text-gray-400">
                       {(uploadedFile.size / 1024).toFixed(1)} KB
                     </span>
+                    {hasImportErrors ? (
+                      <span className="text-xs font-medium text-red-800">
+                        Fix the file or choose a corrected CSV.
+                      </span>
+                    ) : (
+                      <span className="text-xs text-emerald-700">
+                        Ready to import
+                      </span>
+                    )}
                   </>
                 ) : (
                   <>
@@ -332,36 +639,42 @@ export default function AddUserModal({
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
-                  if (f) setUploadedFile(f);
+                  if (f) void selectImportFile(f, importRole);
                 }}
               />
+              <p className="text-xs text-gray-600">
+                DOB format for CSV import: YYYY-MM-DD, example 2008-04-15.
+              </p>
 
               {importResult && (
-                <div
-                  className={`rounded border px-3 py-2 text-xs ${
-                    importResult.errors?.length
-                      ? "border-red-200 bg-red-50 text-red-800"
-                      : "border-emerald-200 bg-emerald-50 text-emerald-800"
-                  }`}
+                <Alert
+                  status={importResult.errors?.length ? "error" : "success"}
+                  className="px-3 py-2 text-xs"
                 >
-                  <div>
-                    {importResult.message ? `${importResult.message}. ` : ""}
-                    Imported {importResult.created_count ?? importResult.created ?? 0} user(s); failed{" "}
-                    {importResult.failed_count ?? importResult.skipped ?? 0} user(s).
-                  </div>
+                  <Alert.Title className="text-sm">
+                    {importResult.errors?.length ? "Import needs attention" : "Import complete"}
+                  </Alert.Title>
+                  <Alert.Description>
+                    {importSummary(importResult)}
+                  </Alert.Description>
                   {importResult.skipped_emails?.length
                     ? ` Skipped: ${importResult.skipped_emails.join(", ")}`
                     : ""}
                   {importResult.errors?.length ? (
                     <ul className="mt-2 max-h-24 overflow-y-auto list-disc pl-4">
-                      {importResult.errors.map((error, index) => (
+                      {importResult.errors.slice(0, 5).map((error, index) => (
                         <li key={`${error.row}-${error.field}-${index}`}>
-                          Row {error.row}, {error.field}: {error.reason}
+                          {formatImportError(error)}
                         </li>
                       ))}
+                      {importResult.errors.length > 5 ? (
+                        <li>
+                          {importResult.errors.length - 5} more error(s). Fix the first errors and try again.
+                        </li>
+                      ) : null}
                     </ul>
                   ) : null}
-                </div>
+                </Alert>
               )}
             </div>
             <div
@@ -376,8 +689,8 @@ export default function AddUserModal({
                 Back
               </button>
               <button
-                disabled={!uploadedFile || importing}
-                className="px-4 py-1.5 rounded-lg border text-sm font-semibold transition cursor-pointer bg-[#7ABA78]"
+                disabled={!uploadedFile || importing || hasImportErrors}
+                className="px-4 py-1.5 rounded-lg border text-sm font-semibold transition cursor-pointer bg-[#7ABA78] disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={handleImportSubmit}
               >
                 {importing ? "Importing..." : "Import"}
@@ -501,6 +814,23 @@ export default function AddUserModal({
                     value={form.address}
                     onChange={(e) => handleField("address", e.target.value)}
                   />
+                </Field>
+              )}
+
+              {!isAdmin && (
+                <Field label="Date of Birth">
+                  <input
+                    type="date"
+                    className="w-full border rounded-lg px-3 py-1.5 text-sm"
+                    value={form.dob}
+                    onChange={(e) => handleField("dob", e.target.value)}
+                  />
+                  <p className="text-xs text-gray-500">
+                    Format: YYYY-MM-DD
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Example: 2008-04-15
+                  </p>
                 </Field>
               )}
 

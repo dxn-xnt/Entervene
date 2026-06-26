@@ -94,6 +94,7 @@ def invite(client, **overrides):
         "gender": "Female",
         "contact_number": "09170000000",
         "address": "Antipolo City",
+        "dob": "",
     }
     payload.update(overrides)
     return client.post("/api/v1/users/invite", json=payload)
@@ -114,6 +115,7 @@ def test_valid_manual_student_creation_creates_account_role_profile_and_invitati
     assert account.account_status == "pending"
     assert role == "Student"
     assert student.student_lrn == "123456789012"
+    assert student.dob is None
     assert student.middle_name == ""
     assert student.suffix == ""
     assert db.query(InvitationToken).filter(InvitationToken.user_id == account.user_id).count() == 1
@@ -159,6 +161,7 @@ def test_valid_manual_teacher_creation_creates_staff_profile(client, db):
         student_lrn="",
         grade_level=None,
         employment_status="Regular",
+        dob="1985-12-30",
     )
 
     assert response.status_code == 200
@@ -166,8 +169,26 @@ def test_valid_manual_teacher_creation_creates_staff_profile(client, db):
     staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == account.user_id).one()
     assert staff.staff_id.startswith(f"{date.today().year}-")
     assert (staff.first_name, staff.middle_name, staff.last_name) == ("Ada", "Byron", "Lovelace")
+    assert staff.dob == date(1985, 12, 30)
     assert staff.employment_status == "Regular"
     assert db.query(Student).count() == 0
+
+
+def test_valid_manual_student_creation_saves_dob(client, db):
+    response = invite(client, date_of_birth="2012-04-15")
+
+    assert response.status_code == 200
+    account = db.query(UserAccount).filter(UserAccount.email == "ada@example.com").one()
+    student = db.query(Student).filter(Student.user_id == account.user_id).one()
+    assert student.dob == date(2012, 4, 15)
+
+
+def test_manual_user_creation_rejects_invalid_dob(client, db):
+    response = invite(client, dob="04/15/2012")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "dob must use YYYY-MM-DD format"
+    assert db.query(UserAccount).count() == 0
 
 
 def test_fetched_name_formatting_capitalizes_first_letters():

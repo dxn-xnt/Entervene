@@ -7,7 +7,6 @@ import {
   ClipboardList,
   FileText,
   Filter,
-  Link as LinkIcon,
   Pencil,
   Plus,
   Search,
@@ -21,12 +20,20 @@ import AppLayout from "@/layouts/app-layout";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { API_URL, apiFetch } from "@/lib/api";
+import ClassworkCard from "./classworks/ClassworkCard";
+import type {
+  QuizAnalysis,
+  QuizImportPreview,
+  QuizQuestionDraft,
+  QuizQuestionType,
+  QuizSettingsDraft,
+} from "./classworks/quiz-builder-types";
+import { createEmptyQuizQuestion, defaultQuizSettings } from "./classworks/quiz-builder-utils";
 import {
   allowedClassworkMaterialExtensions,
   classworkToEditDraft,
   emptyClassworkDraft,
   fileExtension,
-  formatDate,
   formatFileSize,
   isQuizType,
   isReadingType,
@@ -97,123 +104,6 @@ const tabType: Partial<Record<TabId, string>> = {
   quizzes: "QUIZ",
 };
 
-const typeIcon: Record<string, LucideIcon> = {
-  READING: BookOpen,
-  ACTIVITY: CheckSquare,
-  ASSIGNMENT: FileText,
-  QUIZ: ClipboardList,
-};
-
-type QuizQuestionType = "MULTIPLE_CHOICE" | "SHORT_ANSWER";
-type QuizDifficulty = "EASY" | "MEDIUM" | "HARD";
-
-type QuizOptionDraft = {
-  option_text: string;
-  is_correct: boolean;
-  option_order: number;
-};
-
-type QuizQuestionDraft = {
-  id: string;
-  question_text: string;
-  question_type: QuizQuestionType;
-  points: string;
-  display_order: number;
-  difficulty_level: QuizDifficulty;
-  explanation: string;
-  options: QuizOptionDraft[];
-};
-
-type QuizSettingsDraft = {
-  is_shuffle_questions: boolean;
-  enable_per_question_scoring: boolean;
-  enable_per_question_time_limits: boolean;
-  max_attempts: string;
-  show_correct_answers: boolean;
-  duration_minutes: string;
-};
-
-const defaultQuizSettings: QuizSettingsDraft = {
-  is_shuffle_questions: false,
-  enable_per_question_scoring: true,
-  enable_per_question_time_limits: false,
-  max_attempts: "1",
-  show_correct_answers: false,
-  duration_minutes: "",
-};
-
-const quizQuestionId = () =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-const createEmptyQuizQuestion = (
-  displayOrder: number,
-  questionType: QuizQuestionType = "MULTIPLE_CHOICE",
-): QuizQuestionDraft => ({
-  id: quizQuestionId(),
-  question_text: "",
-  question_type: questionType,
-  points: "1",
-  display_order: displayOrder,
-  difficulty_level: "MEDIUM",
-  explanation: "",
-  options:
-    questionType === "MULTIPLE_CHOICE"
-      ? [
-          { option_text: "", is_correct: true, option_order: 1 },
-          { option_text: "", is_correct: false, option_order: 2 },
-        ]
-      : [],
-});
-
-function ClassworkCard({
-  item,
-  onOpen,
-}: {
-  item: TeacherClasswork;
-  onOpen: (item: TeacherClasswork) => void;
-}) {
-  // Summary card for the global teacher Classworks page.
-  const Icon = typeIcon[item.classwork_type.toUpperCase()] || ClipboardList;
-  const assignmentCount = item.assignments?.length ?? 0;
-  const attachmentCount = item.attachments?.length ?? 0;
-
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(item)}
-      className="flex w-full items-center justify-between gap-4 rounded-lg border border-black bg-white px-4 py-3 text-left shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-[#F6E9B2]"
-    >
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <Icon size={19} className="shrink-0" />
-          <h2 className="truncate text-lg font-bold">{item.title}</h2>
-        </div>
-        <p className="mt-1 text-xs font-medium text-gray-600">
-          {[item.subject_name, `Created ${formatDate(item.created_at)}`]
-            .filter(Boolean)
-            .join(" | ")}
-        </p>
-      </div>
-      <div className="flex shrink-0 flex-wrap justify-end gap-2">
-        {assignmentCount > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[#7ABA78] px-3 py-1 text-xs font-semibold">
-            <LinkIcon size={12} />
-            Class {assignmentCount}
-          </span>
-        )}
-        {attachmentCount > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[#7ABA78] px-3 py-1 text-xs font-semibold">
-            <FileText size={12} />
-            File {attachmentCount}
-          </span>
-        )}
-      </div>
-    </button>
-  );
-}
-
 export default function Classworks() {
   const [searchParams, setSearchParams] = useSearchParams();
   const suppressAutoOpenRef = useRef(false);
@@ -235,6 +125,8 @@ export default function Classworks() {
   ]);
   const [quizSettings, setQuizSettings] =
     useState<QuizSettingsDraft>(defaultQuizSettings);
+  const [quizImportWarnings, setQuizImportWarnings] = useState<string[]>([]);
+  const [isImportingQuiz, setIsImportingQuiz] = useState(false);
   const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);
   const [availableLessons, setAvailableLessons] = useState<TeacherLesson[]>([]);
   const [selectedLessonIds, setSelectedLessonIds] = useState<number[]>([]);
@@ -244,6 +136,9 @@ export default function Classworks() {
   const [selected, setSelected] = useState<TeacherClasswork | null>(null);
   const [tracking, setTracking] = useState<AssignmentTracking | null>(null);
   const [isTrackingLoading, setIsTrackingLoading] = useState(false);
+  const [quizAnalysis, setQuizAnalysis] = useState<QuizAnalysis | null>(null);
+  const [isQuizAnalysisLoading, setIsQuizAnalysisLoading] = useState(false);
+  const [quizAnalysisError, setQuizAnalysisError] = useState("");
   const [isArchiving, setIsArchiving] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -356,7 +251,9 @@ export default function Classworks() {
   const openCreateWizard = () => {
     const preferredType = tabType[activeTab] as ClassworkKind | undefined;
     setSelectedType(preferredType ?? null);
-    setCreateStep(preferredType ? "details" : "type");
+    setCreateStep(
+      preferredType === "QUIZ" ? "quiz-source" : preferredType ? "details" : "type",
+    );
     setDraft({
       ...emptyClassworkDraft,
       classwork_category:
@@ -369,6 +266,7 @@ export default function Classworks() {
       ...defaultQuizSettings,
       max_attempts: emptyClassworkDraft.max_attempts || "1",
     });
+    setQuizImportWarnings([]);
     setSelectedClassIds([]);
     setAvailableLessons([]);
     setSelectedLessonIds([]);
@@ -385,6 +283,8 @@ export default function Classworks() {
     setMaterials([]);
     setQuizQuestions([createEmptyQuizQuestion(1)]);
     setQuizSettings(defaultQuizSettings);
+    setQuizImportWarnings([]);
+    setIsImportingQuiz(false);
     setSelectedClassIds([]);
     setAvailableLessons([]);
     setSelectedLessonIds([]);
@@ -398,13 +298,14 @@ export default function Classworks() {
       classwork_category: type === "QUIZ" ? "PERIODICAL_EXAM" : "WRITTEN_WORK",
     }));
     if (type === "QUIZ") {
+      setMaterials([]);
       setQuizQuestions([createEmptyQuizQuestion(1)]);
       setQuizSettings({
         ...defaultQuizSettings,
         max_attempts: draft.max_attempts || "1",
       });
     }
-    setCreateStep("details");
+    setCreateStep(type === "QUIZ" ? "quiz-source" : "details");
     setCreateError("");
   };
 
@@ -478,6 +379,65 @@ export default function Classworks() {
       ...current,
       createEmptyQuizQuestion(current.length + 1, questionType),
     ]);
+  };
+
+  const useManualQuizBuilder = () => {
+    setQuizImportWarnings([]);
+    setCreateStep("details");
+  };
+
+  const importQuizFile = async (file: File | null) => {
+    if (!file) return;
+    setIsImportingQuiz(true);
+    setCreateError("");
+    setQuizImportWarnings([]);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await apiFetch("/api/v1/quizzes/import-preview", {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || "Unable to import quiz file.");
+      }
+      const preview = (await response.json()) as QuizImportPreview;
+      const importedQuestions = preview.questions.map((question, index) => {
+        const draft = createEmptyQuizQuestion(index + 1, question.question_type);
+
+        return {
+          ...draft,
+          question_text: question.question_text,
+          question_type: question.question_type,
+          points: String(question.points || 1),
+          display_order: index + 1,
+          difficulty_level: question.difficulty_level || "MEDIUM",
+          explanation: question.explanation || "",
+          options:
+            question.question_type === "MULTIPLE_CHOICE"
+              ? question.options.map((option, optionIndex) => ({
+                  option_text: option.option_text,
+                  is_correct: option.is_correct,
+                  option_order: optionIndex + 1,
+                }))
+              : [],
+        };
+      });
+      setQuizQuestions(importedQuestions.length > 0 ? importedQuestions : [createEmptyQuizQuestion(1)]);
+      setQuizImportWarnings(preview.warnings);
+      setDraft((current) => ({
+        ...current,
+        title: current.title || preview.title || "",
+        instructions: current.instructions,
+        total_points: String(importedQuestions.reduce((sum, question) => sum + Number(question.points || 0), 0) || current.total_points),
+      }));
+      setCreateStep("details");
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Unable to import quiz file.");
+    } finally {
+      setIsImportingQuiz(false);
+    }
   };
 
   const removeQuizQuestion = (id: string) => {
@@ -867,7 +827,10 @@ export default function Classworks() {
       if (isQuizType(selectedType)) {
         formData.append("max_attempts", String(Number(draft.max_attempts)));
       }
-      materials.forEach((material) => formData.append("files", material));
+      // Quiz imports are parsed into questions, so generic attachments are skipped for quizzes.
+      if (!isQuizType(selectedType)) {
+        materials.forEach((material) => formData.append("files", material));
+      }
 
       const createResponse = await apiFetch(
         "/api/v1/classwork-assignments/with-assignments",
@@ -919,6 +882,8 @@ export default function Classworks() {
     suppressAutoOpenRef.current = false;
     setSelected(item);
     setTracking(null);
+    setQuizAnalysis(null);
+    setQuizAnalysisError("");
     setDetailError("");
     setIsEditing(false);
     setEditDraft(classworkToEditDraft(item));
@@ -929,6 +894,9 @@ export default function Classworks() {
     if (!assignmentId) return;
 
     setIsTrackingLoading(true);
+    if (isQuizType(item.classwork_type)) {
+      setIsQuizAnalysisLoading(true);
+    }
     try {
       const response = await apiFetch(
         `/api/v1/submissions/assignment/${assignmentId}/tracking`,
@@ -937,14 +905,29 @@ export default function Classworks() {
         throw new Error("Unable to load student submissions.");
       }
       setTracking((await response.json()) as AssignmentTracking);
+      if (isQuizType(item.classwork_type)) {
+        const analysisResponse = await apiFetch(
+          `/api/v1/quizzes/classwork/${item.classwork_id}/analysis`,
+        );
+        if (!analysisResponse.ok) {
+          const body = await analysisResponse.json().catch(() => ({}));
+          throw new Error(body.detail || "Unable to load quiz analysis.");
+        }
+        setQuizAnalysis((await analysisResponse.json()) as QuizAnalysis);
+      }
     } catch (err) {
-      setDetailError(
+      const message =
         err instanceof Error
           ? err.message
-          : "Unable to load student submissions.",
-      );
+          : "Unable to load student submissions.";
+      if (isQuizType(item.classwork_type)) {
+        setQuizAnalysisError(message);
+      } else {
+        setDetailError(message);
+      }
     } finally {
       setIsTrackingLoading(false);
+      setIsQuizAnalysisLoading(false);
     }
   }, [setSearchParams]);
 
@@ -967,6 +950,9 @@ export default function Classworks() {
     suppressAutoOpenRef.current = true;
     setSelected(null);
     setTracking(null);
+    setQuizAnalysis(null);
+    setQuizAnalysisError("");
+    setIsQuizAnalysisLoading(false);
     setShowArchiveConfirm(false);
     setIsEditing(false);
     setEditDraft(null);
@@ -1284,18 +1270,24 @@ export default function Classworks() {
   const selectedTypeOption = createOptions.find(
     (option) => option.type === selectedType,
   );
-  const createStepTotal = isQuizType(selectedType) ? 4 : 3;
+  const createStepTotal = isQuizType(selectedType) ? 5 : 3;
   const createStepNumber =
     createStep === "type"
       ? 1
-      : createStep === "details"
+      : createStep === "quiz-source"
         ? 2
-        : createStep === "quiz"
+      : createStep === "details"
+        ? isQuizType(selectedType)
           ? 3
+          : 2
+        : createStep === "quiz"
+          ? 4
           : createStepTotal;
   const createStepTitle =
     createStep === "type"
       ? "Create new classwork"
+      : createStep === "quiz-source"
+        ? "Create quiz"
       : createStep === "details"
         ? `Create ${selectedTypeOption?.title.toLowerCase() || "classwork"}`
         : createStep === "quiz"
@@ -1836,6 +1828,146 @@ export default function Classworks() {
                   </div>
                 ) : (
                   <>
+                    {isQuizType(selected.classwork_type) && (
+                      <div className="rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <h2 className="text-xl font-bold">Quiz Analysis</h2>
+                            <p className="text-xs font-medium text-gray-600">
+                              Participation, accuracy, and question performance.
+                            </p>
+                          </div>
+                          {quizAnalysis?.class_accuracy_percent !== null &&
+                            quizAnalysis?.class_accuracy_percent !== undefined && (
+                              <span className="rounded-full border border-black bg-[#7ABA78] px-3 py-1 text-xs font-bold">
+                                Class accuracy {quizAnalysis.class_accuracy_percent}%
+                              </span>
+                            )}
+                        </div>
+
+                        {isQuizAnalysisLoading ? (
+                          <p className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-sm font-semibold text-gray-500">
+                            Loading quiz analysis...
+                          </p>
+                        ) : quizAnalysisError ? (
+                          <p className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                            {quizAnalysisError}
+                          </p>
+                        ) : quizAnalysis ? (
+                          <div className="space-y-4">
+                            <div className="grid gap-3 sm:grid-cols-5">
+                              {[
+                                ["Students", quizAnalysis.total_students],
+                                ["Submitted", quizAnalysis.submitted_count],
+                                ["Missing", quizAnalysis.missing_count],
+                                ["Needs grading", quizAnalysis.needs_grading_count],
+                                [
+                                  "Average",
+                                  quizAnalysis.average_score !== null &&
+                                  quizAnalysis.average_score !== undefined
+                                    ? `${quizAnalysis.average_score}/${quizAnalysis.total_points ?? selected.total_points ?? 0}`
+                                    : "N/A",
+                                ],
+                              ].map(([label, value]) => (
+                                <div
+                                  key={label}
+                                  className="rounded-lg border border-black bg-[#F8F6ED] p-3"
+                                >
+                                  <p className="text-xs font-semibold text-gray-600">
+                                    {label}
+                                  </p>
+                                  <p className="mt-1 text-xl font-bold">{value}</p>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="grid gap-3 lg:grid-cols-2">
+                              {quizAnalysis.questions.map((question, index) => (
+                                <div
+                                  key={question.quiz_question_id}
+                                  className="rounded-lg border border-black p-3"
+                                >
+                                  <div className="mb-2 flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-bold">
+                                        {index + 1}. {question.question_text}
+                                      </p>
+                                      <p className="text-xs font-medium text-gray-600">
+                                        {question.answered_count} answered | {question.points} pts
+                                      </p>
+                                    </div>
+                                    <span className="rounded-full border border-gray-300 px-2 py-1 text-xs font-bold">
+                                      {question.question_type === "MULTIPLE_CHOICE"
+                                        ? `${question.accuracy_percent ?? 0}%`
+                                        : `${question.needs_grading_count} to grade`}
+                                    </span>
+                                  </div>
+                                  {question.option_distribution.length > 0 ? (
+                                    <div className="space-y-2">
+                                      {question.option_distribution.map((option) => (
+                                        <div
+                                          key={option.option_id}
+                                          className={`flex items-center justify-between rounded border px-2 py-1 text-xs ${
+                                            option.is_correct
+                                              ? "border-green-400 bg-green-50"
+                                              : "border-gray-200"
+                                          }`}
+                                        >
+                                          <span className="font-semibold">
+                                            {option.option_text}
+                                          </span>
+                                          <span>{option.selected_count}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs font-medium text-gray-600">
+                                      Short-answer responses are counted for manual grading.
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="overflow-hidden rounded-lg border border-black">
+                              <div className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold">
+                                <span>Student</span>
+                                <span>Attempts</span>
+                                <span>Score</span>
+                              </div>
+                              {quizAnalysis.students.map((student) => (
+                                <div
+                                  key={student.student_id}
+                                  className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-black px-3 py-2 text-sm last:border-b-0"
+                                >
+                                  <div>
+                                    <p className="font-bold">{student.student_name}</p>
+                                    <p className="text-xs capitalize text-gray-600">
+                                      {submissionStatusLabel(student.status)}
+                                      {student.needs_grading ? " | Needs grading" : ""}
+                                    </p>
+                                  </div>
+                                  <span className="text-xs font-bold">
+                                    {student.attempt_count}
+                                  </span>
+                                  <span className="text-right text-xs font-bold">
+                                    {student.grade !== null &&
+                                    student.grade !== undefined
+                                      ? `${student.grade}/${quizAnalysis.total_points ?? selected.total_points ?? 0}`
+                                      : `0/${quizAnalysis.total_points ?? selected.total_points ?? 0}`}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-sm font-semibold text-gray-500">
+                            Quiz analysis is not available yet.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     <div className="rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
                       <div className="mb-3 flex items-center justify-between">
                         <h2 className="font-bold">Activity Score</h2>
@@ -2236,6 +2368,55 @@ export default function Classworks() {
                     </div>
                   )}
 
+                  {createStep === "quiz-source" && (
+                    <div className="space-y-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={useManualQuizBuilder}
+                          disabled={isCreating || isImportingQuiz}
+                          className="rounded-lg border border-black bg-[#7ABA78] p-4 text-left shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 disabled:opacity-50"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Pencil size={19} />
+                            <h3 className="text-lg font-bold">Create manually</h3>
+                          </div>
+                          <p className="mt-2 text-xs font-medium">
+                            Build multiple-choice and short-answer questions yourself.
+                          </p>
+                        </button>
+
+                        <div className="rounded-lg border border-black bg-[#7ABA78] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                          <div className="flex items-center gap-2">
+                            <FileText size={19} />
+                            <h3 className="text-lg font-bold">Import from file</h3>
+                          </div>
+                          <p className="mt-2 text-xs font-medium">
+                            Upload a structured quiz file, then review and edit the imported questions.
+                          </p>
+                          <label className="mt-4 flex cursor-pointer items-center justify-center rounded-lg border border-black bg-white px-3 py-2 text-sm font-bold hover:bg-[#F6E9B2]">
+                            {isImportingQuiz ? "Importing..." : "Choose quiz file"}
+                            <input
+                              type="file"
+                              accept=".txt,.md,.csv,.pdf,.doc,.docx"
+                              disabled={isCreating || isImportingQuiz}
+                              className="hidden"
+                              onChange={(event) => {
+                                void importQuizFile(event.target.files?.[0] ?? null);
+                                event.target.value = "";
+                              }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border border-gray-300 bg-[#F8F6ED] px-4 py-3 text-xs font-medium text-gray-700">
+                        Import reads numbered TXT/CSV/MD quizzes and text-based PDF/DOCX files with A-D options and optional answer keys.
+                        Scanned files still need OCR, which is deferred.
+                      </div>
+                    </div>
+                  )}
+
                   {createStep === "details" && (
                     <div className="space-y-4">
                       <label className="block text-xs font-bold">
@@ -2374,54 +2555,56 @@ export default function Classworks() {
                         )}
                       </div>
 
-                      <div>
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <p className="text-xs font-bold">Upload material</p>
-                          <p className="text-xs text-gray-500">
-                            PDF, DOCX, PPTX, JPG, PNG | 4 MB each
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-3">
-                          {materials.map((material, index) => (
-                            <div
-                              key={`${material.name}-${material.size}`}
-                              className="relative flex h-28 w-24 flex-col justify-between rounded-lg border border-black bg-white p-2 text-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                            >
-                              <button
-                                type="button"
-                                onClick={() => removeMaterial(index)}
-                                disabled={isCreating}
-                                className="absolute right-1 top-1 rounded-full border border-black bg-white p-0.5"
+                      {!isQuizType(selectedType) && (
+                        <div>
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <p className="text-xs font-bold">Upload material</p>
+                            <p className="text-xs text-gray-500">
+                              PDF, DOCX, PPTX, JPG, PNG | 4 MB each
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-3">
+                            {materials.map((material, index) => (
+                              <div
+                                key={`${material.name}-${material.size}`}
+                                className="relative flex h-28 w-24 flex-col justify-between rounded-lg border border-black bg-white p-2 text-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                               >
-                                <Trash2 size={12} />
-                              </button>
-                              <FileText className="mx-auto mt-5" size={22} />
-                              <div className="min-w-0">
-                                <p className="truncate text-[10px] font-semibold">
-                                  {material.name}
-                                </p>
-                                <p className="text-[10px] text-gray-500">
-                                  {formatFileSize(material.size)}
-                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => removeMaterial(index)}
+                                  disabled={isCreating}
+                                  className="absolute right-1 top-1 rounded-full border border-black bg-white p-0.5"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                                <FileText className="mx-auto mt-5" size={22} />
+                                <div className="min-w-0">
+                                  <p className="truncate text-[10px] font-semibold">
+                                    {material.name}
+                                  </p>
+                                  <p className="text-[10px] text-gray-500">
+                                    {formatFileSize(material.size)}
+                                  </p>
+                                </div>
                               </div>
-                            </div>
-                          ))}
-                          <label className="flex h-28 w-24 cursor-pointer items-center justify-center rounded-lg border border-dashed border-black bg-[#F6E9B2] text-sm font-bold hover:bg-[#7ABA78]">
-                            <Plus size={20} />
-                            <input
-                              type="file"
-                              multiple
-                              accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
-                              onChange={(event) => {
-                                addMaterials(event.target.files);
-                                event.target.value = "";
-                              }}
-                              disabled={isCreating}
-                              className="hidden"
-                            />
-                          </label>
+                            ))}
+                            <label className="flex h-28 w-24 cursor-pointer items-center justify-center rounded-lg border border-dashed border-black bg-[#F6E9B2] text-sm font-bold hover:bg-[#7ABA78]">
+                              <Plus size={20} />
+                              <input
+                                type="file"
+                                multiple
+                                accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
+                                onChange={(event) => {
+                                  addMaterials(event.target.files);
+                                  event.target.value = "";
+                                }}
+                                disabled={isCreating}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   )}
 
@@ -2441,6 +2624,16 @@ export default function Classworks() {
                             {quizPointTotal}/{draft.total_points || 0} pts
                           </span>
                         </div>
+                        {quizImportWarnings.length > 0 && (
+                          <div className="mt-3 rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs font-semibold text-yellow-800">
+                            <p className="font-bold">Import notes</p>
+                            <ul className="mt-1 list-disc pl-4">
+                              {quizImportWarnings.map((warning) => (
+                                <li key={warning}>{warning}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
 
                         <div className="mt-4 grid gap-3 sm:grid-cols-2">
                           <label className="block text-xs font-bold">
@@ -2901,14 +3094,22 @@ export default function Classworks() {
                         setCreateStep(isQuizType(selectedType) ? "quiz" : "details");
                         return;
                       }
-                      setCreateStep(createStep === "quiz" ? "details" : "type");
+                      if (createStep === "quiz") {
+                        setCreateStep("details");
+                        return;
+                      }
+                      if (createStep === "details" && isQuizType(selectedType)) {
+                        setCreateStep("quiz-source");
+                        return;
+                      }
+                      setCreateStep("type");
                     }}
                     disabled={isCreating}
                     className="rounded-lg border border-black px-4 py-2 text-sm font-bold disabled:opacity-50"
                   >
                     {createStep === "type" ? "Cancel" : "Back"}
                   </button>
-                  {createStep === "type" ? null : createStep === "details" ||
+                  {createStep === "type" || createStep === "quiz-source" ? null : createStep === "details" ||
                     createStep === "quiz" ? (
                     <button
                       type="button"

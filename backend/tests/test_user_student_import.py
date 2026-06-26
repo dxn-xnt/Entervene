@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 
 import pytest
 from fastapi import FastAPI
@@ -32,6 +33,8 @@ TABLES = [
 ]
 
 HEADER = "first_name,last_name,middle_name,email,student_lrn,gender,contact_number,address,grade_level,suffix"
+DOB_HEADER = HEADER + ",date_of_birth"
+TEACHER_HEADER = "first_name,last_name,middle_name,email,gender,contact_number,address,suffix,dob,employment_status"
 
 
 @pytest.fixture
@@ -93,14 +96,16 @@ def row(
     address="12 Marcos Highway, Antipolo City",
     grade="7",
     suffix="",
+    dob="",
 ):
-    return f'{first},{last},{middle},{email},{lrn},{gender},{contact},"{address}",{grade},{suffix}'
+    base = f'{first},{last},{middle},{email},{lrn},{gender},{contact},"{address}",{grade},{suffix}'
+    return f"{base},{dob}" if dob else base
 
 
-def upload(client, content: str | bytes, filename="students.csv"):
+def upload(client, content: str | bytes, filename="students.csv", role="Student"):
     raw = content.encode("utf-8") if isinstance(content, str) else content
     return client.post(
-        "/api/v1/admin/users/upload-csv?role=Student",
+        f"/api/v1/admin/users/upload-csv?role={role}",
         files={"file": (filename, raw, "text/csv")},
     )
 
@@ -133,6 +138,56 @@ def test_valid_csv_import_accepts_template_headers_and_apostrophe_lrn(client, db
     assert db.query(Student).filter(Student.student_lrn == "786966032787").count() == 1
     assert db.query(Student).filter(Student.student_lrn == "743341803726").count() == 1
     assert db.query(InvitationToken).count() == 2
+
+
+def test_student_csv_import_saves_dob(client, db):
+    response = upload(client, DOB_HEADER + "\n" + row(dob="2012-04-15"))
+
+    assert response.status_code == 200
+    student = db.query(Student).filter(Student.student_lrn == "786966032787").one()
+    assert student.dob == date(2012, 4, 15)
+
+
+def test_teacher_csv_import_saves_dob(client, db):
+    content = TEACHER_HEADER + "\n" + (
+        'Grace,Hopper,Murray,grace.hopper@example.com,Female,09170000000,Manila,,1906-12-09,Regular'
+    )
+
+    response = upload(client, content, filename="teachers.csv", role="Teacher")
+
+    assert response.status_code == 200
+    staff = db.query(AcademicStaff).filter(AcademicStaff.email == "grace.hopper@example.com").one()
+    assert staff.dob == date(1906, 12, 9)
+
+
+def test_teacher_csv_import_accepts_windows_1252_csv_from_excel(client, db):
+    content = (
+        TEACHER_HEADER + "\n" +
+        "Jose,Ni\xf1o,,jose.nino@example.com,Male,09170000000,Antipolo,,1990-04-15,Regular"
+    ).encode("cp1252")
+
+    response = upload(client, content, filename="teachers.csv", role="Teacher")
+
+    assert response.status_code == 200
+    staff = db.query(AcademicStaff).filter(AcademicStaff.email == "jose.nino@example.com").one()
+    assert staff.last_name == "Niño"
+    assert staff.dob == date(1990, 4, 15)
+
+
+def test_csv_import_rejects_unreadable_csv_encoding(client, db):
+    response = upload(client, b"first_name,last_name,email\nA,\x81,email@example.com", filename="teachers.csv", role="Teacher")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Unable to read CSV encoding. Save the file as CSV UTF-8 and try again."
+    assert db.query(UserAccount).count() == 0
+
+
+def test_csv_import_reports_invalid_dob(client, db):
+    response = upload(client, DOB_HEADER + "\n" + row(dob="04/15/2012"))
+
+    assert response.status_code == 422
+    assert "dob" in fields(response)
+    assert db.query(UserAccount).count() == 0
 
 
 def test_csv_import_preserves_leading_zero_lrn(client, db):

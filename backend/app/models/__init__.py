@@ -5,3 +5,4 @@ from . import classwork
 from . import submissions
 from . import quiz
 from . import ai
+from . import suggestion

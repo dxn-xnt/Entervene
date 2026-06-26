@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { Search } from "lucide-react";
 import LessonModal from "@/components/LessonModal";
+import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
+import { Alert } from "@/components/retroui/Alert";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import Tabs from "@/components/Tabs";
 import AppLayout from "@/layouts/app-layout";
@@ -35,6 +37,7 @@ export default function Lessons() {
   const [activeTab, setActiveTab] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [lessonPendingDelete, setLessonPendingDelete] = useState<Lesson | null>(null);
 
   useEffect(() => {
     fetchLessons();
@@ -91,11 +94,10 @@ export default function Lessons() {
     fetchLessons();
   };
 
-  const handleDeleteLesson = async (lessonId: number) => {
-    if (!confirm("Are you sure you want to delete this lesson?")) return;
-
+  const confirmDeleteLesson = async () => {
+    if (!lessonPendingDelete) return;
     try {
-      const response = await apiFetch(`/api/v1/lessons/${lessonId}`, {
+      const response = await apiFetch(`/api/v1/lessons/${lessonPendingDelete.lesson_id}`, {
         method: "DELETE",
       });
 
@@ -103,7 +105,8 @@ export default function Lessons() {
         throw new Error("Failed to delete lesson");
       }
 
-      setLessons(lessons.filter((l) => l.lesson_id !== lessonId));
+      setLessons(lessons.filter((l) => l.lesson_id !== lessonPendingDelete.lesson_id));
+      setLessonPendingDelete(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete lesson");
     }
@@ -157,9 +160,10 @@ export default function Lessons() {
             </div>
 
             {error && (
-              <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {error}
-              </div>
+              <Alert status="error">
+                <Alert.Title>Lesson error</Alert.Title>
+                <Alert.Description>{error}</Alert.Description>
+              </Alert>
             )}
 
             <div className="flex items-center gap-2 rounded-lg border border-black bg-white px-3 py-2 md:w-96 shadow-[2px_2px_0_#000]">
@@ -228,7 +232,7 @@ export default function Lessons() {
                         </button>
                       )}
                       <button
-                        onClick={() => handleDeleteLesson(lesson.lesson_id)}
+                        onClick={() => setLessonPendingDelete(lesson)}
                         className="px-4 py-1.5 text-sm font-semibold border border-red-400 text-red-600 rounded-lg shadow-[2px_2px_0_rgba(239,68,68,1)] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-none"
                       >
                         Delete
@@ -265,6 +269,16 @@ export default function Lessons() {
         subjectId={parseInt(subjectId || "0")}
         onLessonCreated={handleLessonCreated}
       />
+
+      {lessonPendingDelete ? (
+        <ConfirmAlertDialog
+          title="Delete lesson?"
+          description={`This will delete "${lessonPendingDelete.title}". This action cannot be undone.`}
+          confirmLabel="Delete Lesson"
+          onCancel={() => setLessonPendingDelete(null)}
+          onConfirm={confirmDeleteLesson}
+        />
+      ) : null}
     </AppLayout>
   );
 }

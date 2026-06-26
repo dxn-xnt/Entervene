@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import LessonModal from "@/components/LessonModal";
+import { Alert } from "@/components/retroui/Alert";
+import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
 import AppLayout from "@/layouts/app-layout";
 
 interface DraftLesson {
@@ -20,6 +22,7 @@ export default function DraftLessons() {
   const [error, setError] = useState<string>("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSubjectId, setSelectedSubjectId] = useState(0);
+  const [lessonPendingDelete, setLessonPendingDelete] = useState<DraftLesson | null>(null);
 
   useEffect(() => {
     fetchDraftLessons();
@@ -56,12 +59,11 @@ export default function DraftLessons() {
     }
   };
 
-  const handleDeleteLesson = async (lessonId: number) => {
-    if (!confirm("Are you sure you want to delete this draft lesson?")) return;
-
+  const confirmDeleteLesson = async () => {
+    if (!lessonPendingDelete) return;
     try {
       const response = await fetch(
-        `http://localhost:8000/api/v1/lessons/${lessonId}`,
+        `http://localhost:8000/api/v1/lessons/${lessonPendingDelete.lesson_id}`,
         {
           method: "DELETE",
           credentials: "include",
@@ -72,7 +74,8 @@ export default function DraftLessons() {
         throw new Error("Failed to delete lesson");
       }
 
-      setDraftLessons(draftLessons.filter((l) => l.lesson_id !== lessonId));
+      setDraftLessons(draftLessons.filter((l) => l.lesson_id !== lessonPendingDelete.lesson_id));
+      setLessonPendingDelete(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete lesson");
     }
@@ -125,8 +128,11 @@ export default function DraftLessons() {
       </header>
 
       {error && (
-        <div className="mx-6 mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-          {error}
+        <div className="mx-6 mt-4">
+          <Alert status="error">
+            <Alert.Title>Draft lesson error</Alert.Title>
+            <Alert.Description>{error}</Alert.Description>
+          </Alert>
         </div>
       )}
 
@@ -187,7 +193,7 @@ export default function DraftLessons() {
                     Publish Now
                   </button>
                   <button
-                    onClick={() => handleDeleteLesson(lesson.lesson_id)}
+                    onClick={() => setLessonPendingDelete(lesson)}
                     className="px-4 py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-50 text-sm font-medium transition-colors"
                   >
                     Delete
@@ -220,6 +226,16 @@ export default function DraftLessons() {
         subjectId={selectedSubjectId}
         onLessonCreated={fetchDraftLessons}
       />
+
+      {lessonPendingDelete ? (
+        <ConfirmAlertDialog
+          title="Delete draft lesson?"
+          description={`This will delete "${lessonPendingDelete.title}". This action cannot be undone.`}
+          confirmLabel="Delete Draft"
+          onCancel={() => setLessonPendingDelete(null)}
+          onConfirm={confirmDeleteLesson}
+        />
+      ) : null}
     </AppLayout>
   );
 }
