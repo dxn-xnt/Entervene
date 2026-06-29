@@ -38,6 +38,9 @@ def test_identity_and_leakage_columns_are_excluded():
         "student_lrn",
         "learner_name",
         "source_file_name",
+        "at_risk",
+        "final_result",
+        "date_unregistration",
         "final_grade",
         "grade_level",
         "subject_SCIENCE",
@@ -49,6 +52,9 @@ def test_identity_and_leakage_columns_are_excluded():
     assert features == ["grade_level", "subject_SCIENCE"]
     assert "student_id" in excluded
     assert "student_lrn" in excluded
+    assert "at_risk" in excluded
+    assert "final_result" in excluded
+    assert "date_unregistration" in excluded
     assert "target_next_period_grade" in excluded
 
 

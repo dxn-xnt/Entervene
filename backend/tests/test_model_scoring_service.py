@@ -162,6 +162,23 @@ def test_identity_and_student_id_are_not_included_in_model_features():
     assert any("student_lrn" in warning for warning in warnings)
 
 
+def test_classifier_targets_are_ignored_for_model_scoring():
+    frame, warnings = prepare_feature_row(
+        sample_input(
+            at_risk=1,
+            final_result="Fail",
+            date_unregistration=12,
+            actual_failure_target_below_75=1,
+        ),
+        feature_schema(),
+    )
+
+    assert "at_risk" not in frame.columns
+    assert "final_result" not in frame.columns
+    assert "date_unregistration" not in frame.columns
+    assert any("at_risk" in warning for warning in warnings)
+
+
 def test_missing_subject_one_hot_columns_default_to_zero():
     frame, warnings = prepare_feature_row(sample_input(), feature_schema())
 
