@@ -35,9 +35,13 @@ IDENTITY_OR_LEAKAGE_TERMS = (
     "roster_index",
     "target_next_period_grade",
     "next_period_grade",
+    "at_risk",
+    "final_result",
+    "date_unregistration",
     "final_grade",
     "final_period_grade",
     "prototype_monitoring_target_below_90",
+    "actual_failure_target_below_75",
 )
 
 
