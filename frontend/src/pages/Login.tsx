@@ -52,9 +52,9 @@ const Login = () => {
   return (
     <div className="flex flex-col items-center justify-center h-screen">
       <Card>
-        <Card.Header className="flex flex-col justify-center bg-accent">
+        <Card.Header className="flex flex-col justify-center">
           <Card.Title>
-            Sign In
+            Entervene
           </Card.Title>
           <Card.Description className="text-black text-sm">
             Welcome back! Enter your details to access your account.
@@ -98,7 +98,7 @@ const Login = () => {
               <Text as="p" className="text-center">Don't have an account?</Text>
               <Button variant="link" className="font-regular p-0"
                 onClick={() => navigate("/forgot-password")}>
-                Sign In
+                Sign Up
               </Button>
             </div>
 
