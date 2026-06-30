@@ -116,26 +116,61 @@ export default function AddSubjectLoadModal() {
                         <Text as="h5" className="font-sans text-md font-bold">(Step 1 of 4)</Text>
                     </div>
                 </Dialog.Header>
-                <section className="flex flex-col gap-4 p-4 max-h-[60vh] overflow-y-auto">
+                <section className="flex flex-col gap-4 p-4 max-h-[90vh] overflow-y-auto">
                     <section className="text-md">
                         <div className="flex flex-col gap-3">
-                            <div className="flex flex-col gap-1">
-                                <label htmlFor="grading-component-name" className="text-sm">Year Level</label>
-                                <Select value={yearLevel} onValueChange={setYearLevel}>
-                                    <Select.Trigger className="w-full">
-                                        <Select.Value placeholder="Select Year Level" />
-                                    </Select.Trigger>
-                                    <Select.Content>
-                                        <Select.Group>
-                                            <Select.Item value="g7">Grade 7</Select.Item>
-                                            <Select.Item value="g8">Grade 8</Select.Item>
-                                            <Select.Item value="g9">Grade 9</Select.Item>
-                                            <Select.Item value="g10">Grade 10</Select.Item>
-                                            <Select.Item value="g11">Grade 11</Select.Item>
-                                            <Select.Item value="g12">Grade 12</Select.Item>
-                                        </Select.Group>
-                                    </Select.Content>
-                                </Select>
+                            <div className="flex flex-row gap-2 w-full">
+                                <div className="flex flex-col gap-1 w-full">
+                                    <label htmlFor="grading-component-name" className="text-sm">Academic Year</label>
+                                    <Select value={yearLevel} onValueChange={setYearLevel}>
+                                        <Select.Trigger className="w-full">
+                                            <Select.Value placeholder="Select academic year" />
+                                        </Select.Trigger>
+                                        <Select.Content>
+                                            <Select.Group>
+                                                <Select.Item value="g7">2026-2027</Select.Item>
+                                                <Select.Item value="g8">2027-2028</Select.Item>
+                                                <Select.Item value="g9">2028-2029</Select.Item>
+                                                <Select.Item value="g10">2029-2030</Select.Item>
+                                                <Select.Item value="g11">2030-2031</Select.Item>
+                                                <Select.Item value="g12">2031-2032</Select.Item>
+                                            </Select.Group>
+                                        </Select.Content>
+                                    </Select>
+                                </div>
+                                <div className="flex flex-col gap-1 w-full">
+                                    <label htmlFor="grading-component-name" className="text-sm">Academic Period</label>
+                                    <Select value={yearLevel} onValueChange={setYearLevel}>
+                                        <Select.Trigger className="w-full">
+                                            <Select.Value placeholder="Select period" />
+                                        </Select.Trigger>
+                                        <Select.Content>
+                                            <Select.Group>
+                                                <Select.Item value="g7">Term 1</Select.Item>
+                                                <Select.Item value="g8">Term 2</Select.Item>
+                                                <Select.Item value="g9">Term 3</Select.Item>
+                                            </Select.Group>
+                                        </Select.Content>
+                                    </Select>
+                                </div>
+                                <div className="flex flex-col gap-1 w-full">
+                                    <label htmlFor="grading-component-name" className="text-sm">Year Level</label>
+                                    <Select value={yearLevel} onValueChange={setYearLevel}>
+                                        <Select.Trigger className="w-full">
+                                            <Select.Value placeholder="Select year level" />
+                                        </Select.Trigger>
+                                        <Select.Content>
+                                            <Select.Group>
+                                                <Select.Item value="g7">Grade 7</Select.Item>
+                                                <Select.Item value="g8">Grade 8</Select.Item>
+                                                <Select.Item value="g9">Grade 9</Select.Item>
+                                                <Select.Item value="g10">Grade 10</Select.Item>
+                                                <Select.Item value="g11">Grade 11</Select.Item>
+                                                <Select.Item value="g12">Grade 12</Select.Item>
+                                            </Select.Group>
+                                        </Select.Content>
+                                    </Select>
+                                </div>
                             </div>
                             <div className="flex flex-col gap-1">
                                 <label htmlFor="grading-weights" className="text-sm">Subjects</label>
