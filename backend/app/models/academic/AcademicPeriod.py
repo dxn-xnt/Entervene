@@ -9,10 +9,12 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    event,
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.Base import Base
+from app.services.AcademicPeriodService import normalize_academic_period_values
 
 
 class AcademicPeriod(Base):
@@ -35,10 +37,10 @@ class AcademicPeriod(Base):
 
     academic_period_id = Column(Integer, primary_key=True, autoincrement=True)
     period_name        = Column(String(100), nullable=False)
-    period_type        = Column(String(20), nullable=False)
+    period_type        = Column(String(20), nullable=False, default="TERM")
     period_sequence    = Column(Integer, nullable=False, default=1)
-    total_periods_in_year = Column(Integer, nullable=False, default=4)
-    period_progress_ratio = Column(Numeric(6, 4), nullable=False, default=0.25)
+    total_periods_in_year = Column(Integer, nullable=False, default=3)
+    period_progress_ratio = Column(Numeric(6, 4), nullable=False, default=0.3333)
     start_date         = Column(Date, nullable=False)
     end_date           = Column(Date, nullable=False)
     is_active          = Column(Boolean, default=False)
@@ -49,3 +51,9 @@ class AcademicPeriod(Base):
     academic_year = relationship("AcademicYear", back_populates="periods")
     subject_loads = relationship("SubjectLoad", back_populates="period")
     classes       = relationship("Class", back_populates="academic_period")
+
+
+@event.listens_for(AcademicPeriod, "before_insert")
+@event.listens_for(AcademicPeriod, "before_update")
+def _validate_academic_period(mapper, connection, target):
+    normalize_academic_period_values(target)

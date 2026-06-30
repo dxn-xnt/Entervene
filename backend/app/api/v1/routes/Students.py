@@ -162,7 +162,7 @@ def get_my_subjects(
 ):
     """
     Returns all subjects enrolled by the currently authenticated student,
-    including the assigned teacher and active quarter for each subject load.
+    including the assigned teacher and active period for each subject load.
 
     Reusable for both mobile and web clients.
     """
@@ -227,18 +227,25 @@ def get_my_subjects(
     ]
 
 
+@router.get("/me/active-period")
 @router.get("/me/active-quarter")
-def get_active_quarter(
+def get_active_period(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     user_id = current_user["sub"]
+    try:
+        parsed_user_id = uuid.UUID(str(user_id))
+    except (TypeError, ValueError):
+        parsed_user_id = None
 
-    student = (
-        db.query(Student)
-        .filter(Student.user_id == user_id)
-        .first()
-    )
+    student = None
+    if parsed_user_id is not None:
+        student = (
+            db.query(Student)
+            .filter(Student.user_id == parsed_user_id)
+            .first()
+        )
 
     row = None
 
@@ -248,6 +255,11 @@ def get_active_quarter(
             db.query(
                 AcademicPeriod.academic_period_id,
                 AcademicPeriod.period_name,
+                AcademicPeriod.period_type,
+                AcademicPeriod.period_sequence,
+                AcademicPeriod.total_periods_in_year,
+                AcademicPeriod.period_progress_ratio,
+                AcademicPeriod.is_active,
                 AcademicYear.year_label,
             )
             .select_from(Student)
@@ -270,6 +282,11 @@ def get_active_quarter(
             db.query(
                 AcademicPeriod.academic_period_id,
                 AcademicPeriod.period_name,
+                AcademicPeriod.period_type,
+                AcademicPeriod.period_sequence,
+                AcademicPeriod.total_periods_in_year,
+                AcademicPeriod.period_progress_ratio,
+                AcademicPeriod.is_active,
                 AcademicYear.year_label,
             )
             .select_from(AcademicPeriod)
@@ -279,10 +296,24 @@ def get_active_quarter(
         )
 
     if not row:
-        return {"period_id": None, "period_name": "No active quarter", "year_label": ""}
+        return {
+            "period_id": None,
+            "period_name": "No active period",
+            "period_type": None,
+            "period_sequence": None,
+            "total_periods_in_year": None,
+            "period_progress_ratio": None,
+            "is_active": False,
+            "year_label": "",
+        }
 
     return {
-        "period_id":   row.academic_period_id,
+        "period_id": row.academic_period_id,
         "period_name": row.period_name,
-        "year_label":  row.year_label,
+        "period_type": row.period_type,
+        "period_sequence": row.period_sequence,
+        "total_periods_in_year": row.total_periods_in_year,
+        "period_progress_ratio": str(row.period_progress_ratio),
+        "is_active": row.is_active,
+        "year_label": row.year_label,
     }

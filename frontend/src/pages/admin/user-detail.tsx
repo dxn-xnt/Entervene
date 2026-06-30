@@ -589,7 +589,7 @@ function TeacherAnalytics({ user, data }: { user: UserDetail; data: ReturnType<t
         <MetricCard label="Class Performance" value={valueNumber(summary.classPerformance)} suffix="%" note="8% increased from previous academic year" />
       </div>
       <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
-        <Panel title="Quarterly Class Performance" subtitle="Average student score across all handled subjects">
+        <Panel title="Period Class Performance" subtitle="Average student score across all handled subjects">
           <SmallLineChart data={data.quarterly_performance} xKey="quarter" />
         </Panel>
         <Panel title="Subject Breakdown" subtitle="Avg. score per subject handled">
