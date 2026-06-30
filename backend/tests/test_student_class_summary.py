@@ -220,6 +220,36 @@ def test_archived_class_is_ignored(client, db, identity):
     assert response.json()["detail"] == "Student class not found"
 
 
+def test_active_period_routes_return_active_term_one(client, db):
+    year = add_year(db)
+    period = AcademicPeriod(
+        period_name="Term 1",
+        period_type="TERM",
+        period_sequence=1,
+        total_periods_in_year=3,
+        academic_year_id=year.academic_year_id,
+        start_date=date(2025, 6, 1),
+        end_date=date(2025, 8, 31),
+        is_active=True,
+    )
+    db.add(period)
+    db.commit()
+
+    old_response = client.get("/api/v1/students/me/active-quarter")
+    new_response = client.get("/api/v1/students/me/active-period")
+
+    assert old_response.status_code == 200
+    assert new_response.status_code == 200
+    assert old_response.json() == new_response.json()
+    body = new_response.json()
+    assert body["period_name"] == "Term 1"
+    assert body["period_type"] == "TERM"
+    assert body["period_sequence"] == 1
+    assert body["total_periods_in_year"] == 3
+    assert body["period_progress_ratio"] == "0.3333"
+    assert body["is_active"] is True
+
+
 def test_non_student_cannot_fetch_student_class(client, identity):
     identity["role"] = "teacher"
 

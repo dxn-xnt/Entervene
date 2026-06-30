@@ -11,6 +11,7 @@ import { Select } from "@/components/retroui/Select";
 import { Carousel } from "@/components/retroui/Carousel";
 import { Card } from "@/components/retroui/Card";
 import { Calendar } from "@/components/retroui/Calendar";
+import { formatPeriodLabel, periodTotal } from "@/lib/academic-periods";
 
 
 interface DatePickerProps {
@@ -85,6 +86,7 @@ interface PeriodCardProps {
     maxStartDate?: Date;
     minEndDate?: Date;
     maxEndDate?: Date;
+    periodType: string;
 }
 
 function PeriodCard({
@@ -98,13 +100,16 @@ function PeriodCard({
     maxStartDate,
     minEndDate,
     maxEndDate,
+    periodType,
 }: PeriodCardProps) {
     return (
         <div className="p-1">
             <Card className="w-full block">
                 <Card.Content className="flex flex-col gap-4 p-2">
                     <div className="flex items-center justify-between border-b pb-2 border-border/40">
-                        <Text className="font-bold text-md">Term {index + 1}</Text>
+                        <Text className="font-bold text-md">
+                            {formatPeriodLabel({ period_type: periodType, period_sequence: index + 1 })}
+                        </Text>
                         <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-mono">
                             {index + 1} of {total}
                         </span>
@@ -141,23 +146,13 @@ function PeriodCard({
 
 export default function AddAcademicPeriodModal() {
     const [academicYear, setAcademicYear] = React.useState<string>("2026-2027");
-    const [periodType, setPeriodType] = React.useState<string>("quarterly");
+    const [periodType, setPeriodType] = React.useState<string>("TERM");
     const [level, setLevel] = React.useState<string>("junior-high");
 
-    const totalPeriods = React.useMemo(() => {
-        switch (periodType) {
-            case "semestral":
-                return 2;
-            case "trimestral":
-                return 3;
-            case "quarterly":
-            default:
-                return 4;
-        }
-    }, [periodType]);
+    const totalPeriods = React.useMemo(() => periodTotal(periodType), [periodType]);
 
     const [dates, setDates] = React.useState<{ startDate?: Date; endDate?: Date }[]>(() =>
-        Array.from({ length: 4 }).map(() => ({}))
+        Array.from({ length: 3 }).map(() => ({}))
     );
 
     // Reset/reinitialize dates when academicYear or periodType changes
@@ -294,9 +289,9 @@ export default function AddAcademicPeriodModal() {
                                 </Select.Trigger>
                                 <Select.Content>
                                     <Select.Group>
-                                        <Select.Item value="quarterly">Quarterly</Select.Item>
-                                        <Select.Item value="trimestral">Trimestral</Select.Item>
-                                        <Select.Item value="semestral">Semestral</Select.Item>
+                                        <Select.Item value="TERM">Term</Select.Item>
+                                        <Select.Item value="QUARTER">Quarter</Select.Item>
+                                        <Select.Item value="SEMESTER">Semester</Select.Item>
                                     </Select.Group>
                                 </Select.Content>
                             </Select>
@@ -316,6 +311,7 @@ export default function AddAcademicPeriodModal() {
                                             maxStartDate={getMaxStartDate(index)}
                                             minEndDate={getMinEndDate(index)}
                                             maxEndDate={getMaxEndDate(index)}
+                                            periodType={periodType}
                                         />
                                     </Carousel.Item>
                                 ))}

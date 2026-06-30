@@ -62,12 +62,12 @@ const Grades = () => {
                   </div>
                   <div className="flex flex-col gap-3">
                     <AnnouncementCard
-                      title="Second Quarter Exam"
+                      title="Term 2 Exam"
                       category="General"
                       dateTime="Nov. 25, 2026 - 11:45 PM"
                     />
                     <AnnouncementCard
-                      title="1st Quarter Grade Computing"
+                      title="Term 1 Grade Computing"
                       category="Teachers"
                       dateTime="Nov. 25, 2026 - 11:45 PM"
                     />

@@ -8,12 +8,13 @@ import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { ArrowUpRight } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
 import ViewPreviousPeriodsModal from "./forms/view-previous-periods";
+import { formatPeriodLabel } from "@/lib/academic-periods";
 
 export default function AdminAcademicPeriods() {
   const academicPeriods = [
     {
       id: "1",
-      period: "1st Quarter",
+      period: formatPeriodLabel({ period_type: "TERM", period_sequence: 1 }),
       academicyear: "2025-2026",
       startDate: "2025-06-01",
       endDate: "2025-08-30",
@@ -21,7 +22,7 @@ export default function AdminAcademicPeriods() {
     },
     {
       id: "2",
-      period: "2nd Quarter",
+      period: formatPeriodLabel({ period_type: "TERM", period_sequence: 2 }),
       academicyear: "2025-2026",
       startDate: "2025-09-01",
       endDate: "2025-11-30",
@@ -29,18 +30,10 @@ export default function AdminAcademicPeriods() {
     },
     {
       id: "3",
-      period: "3rd Quarter",
+      period: formatPeriodLabel({ period_type: "TERM", period_sequence: 3 }),
       academicyear: "2025-2026",
       startDate: "2025-12-01",
       endDate: "2026-02-28",
-      status: "Upcoming",
-    },
-    {
-      id: "4",
-      period: "4th Quarter",
-      academicyear: "2025-2026",
-      startDate: "2026-03-01",
-      endDate: "2026-05-30",
       status: "Upcoming",
     },
   ];

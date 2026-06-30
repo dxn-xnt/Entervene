@@ -388,20 +388,20 @@ function OverviewTab({ selectedClass, activeSince }: { selectedClass: ClassRecor
           {/* Performance chart */}
           <section className="rounded-lg border border-black bg-[#fffdf5] p-4 shadow-[3px_3px_0_#000]">
             <div className="mb-2">
-              <h4 className="text-lg font-bold">Quarterly Class Performance</h4>
+              <h4 className="text-lg font-bold">Period Class Performance</h4>
               <p className="text-[10px] font-semibold text-black/65">Average class mastery across all subjects</p>
             </div>
             <svg
               viewBox="0 0 620 170"
               className="h-40 w-full rounded-md bg-white"
               role="img"
-              aria-label="Quarterly class performance graph"
+              aria-label="Period class performance graph"
             >
               {[35, 65, 95, 125].map((y) => (
                 <line key={y} x1="38" x2="596" y1={y} y2={y} stroke="#dfd8bf" strokeWidth="1" />
               ))}
               <line x1="38" x2="596" y1="140" y2="140" stroke="#222" strokeWidth="1" opacity=".35" />
-              <polyline points="60,102 210,88 360,82 540,74" fill="none" stroke="#4f8b5f" strokeWidth="4" />
+              <polyline points="60,102 300,88 540,74" fill="none" stroke="#4f8b5f" strokeWidth="4" />
               <polyline
                 points="60,114 210,108 360,102 540,96"
                 fill="none"
@@ -411,10 +411,9 @@ function OverviewTab({ selectedClass, activeSince }: { selectedClass: ClassRecor
               />
               {(
                 [
-                  ["Q1", 58],
-                  ["Q2", 208],
-                  ["Q3", 358],
-                  ["Q4", 538],
+                  ["T1", 58],
+                  ["T2", 298],
+                  ["T3", 538],
                 ] as [string, number][]
               ).map(([label, x]) => (
                 <text key={label} x={x} y="158" fontSize="10" fontWeight="700" fill="#555">

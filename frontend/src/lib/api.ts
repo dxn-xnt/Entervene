@@ -112,6 +112,17 @@ export type StudentClassmatesResponse = {
   classmates: StudentClassmateItem[];
 };
 
+export type ActivePeriodResponse = {
+  period_id: number | null;
+  period_name: string;
+  period_type: "TERM" | "QUARTER" | "SEMESTER" | null;
+  period_sequence: number | null;
+  total_periods_in_year: number | null;
+  period_progress_ratio: string | null;
+  is_active: boolean;
+  year_label: string;
+};
+
 function getCookie(name: string): string | null {
   const value = document.cookie
     .split("; ")
@@ -230,6 +241,19 @@ export async function getMyClassmates(): Promise<StudentClassmatesResponse> {
 
   return (await response.json()) as StudentClassmatesResponse;
 }
+
+export async function getActivePeriod(): Promise<ActivePeriodResponse> {
+  const response = await apiFetch("/api/v1/students/me/active-period");
+
+  if (!response.ok) {
+    throw new Error("Unable to load active period. Please try again.");
+  }
+
+  return (await response.json()) as ActivePeriodResponse;
+}
+
+// Backward-compatible alias. Prefer getActivePeriod in new code.
+export const getActiveQuarter = getActivePeriod;
 
 export async function updateUser(userId: string, payload: UpdateUserPayload) {
   const response = await apiFetch(`/api/v1/users/${encodeURIComponent(userId)}`, {

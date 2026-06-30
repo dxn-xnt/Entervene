@@ -13,10 +13,9 @@ export const userAnalyticsMocks: Record<UserRole, MockAnalytics> = {
       classPerformance: 95,
     },
     quarterly_performance: [
-      { quarter: "Q1", score: 76 },
-      { quarter: "Q2", score: 82 },
-      { quarter: "Q3", score: 86 },
-      { quarter: "Q4", score: 88.4 },
+      { quarter: "T1", score: 76 },
+      { quarter: "T2", score: 82 },
+      { quarter: "T3", score: 88.4 },
     ],
     subject_breakdown: [
       { subject: "Science 9", value: 43 },

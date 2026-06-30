@@ -258,7 +258,7 @@ export default function CreateLesson() {
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 className="w-full rounded-lg border border-gray-700 px-3 py-2"
-                placeholder="Quarter 1: Variables and Expressions"
+                placeholder="Term 1: Variables and Expressions"
                 disabled={isSubmitting}
               />
             </div>

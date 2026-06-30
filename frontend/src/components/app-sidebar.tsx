@@ -15,12 +15,12 @@ import { CommandIcon } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { Select } from "./retroui/Select"
 import { SidebarConfigs } from "@/context/sidebar-config"
+import { formatPeriodLabel } from "@/lib/academic-periods"
 
-const quarters = [
-  "1st Quarter (2025-2026)",
-  "2nd Quarter (2025-2026)",
-  "3rd Quarter (2025-2026)",
-  "4th Quarter (2025-2026)",
+const periods = [
+  `${formatPeriodLabel({ period_type: "TERM", period_sequence: 1 })} (2025-2026)`,
+  `${formatPeriodLabel({ period_type: "TERM", period_sequence: 2 })} (2025-2026)`,
+  `${formatPeriodLabel({ period_type: "TERM", period_sequence: 3 })} (2025-2026)`,
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -46,15 +46,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
 
       <SidebarContent>
-        <Select defaultValue={quarters[0]}>
+        <Select defaultValue={periods[0]}>
           <Select.Trigger className="w-full border-x-background m-0 shadow-none mb-1">
             <Select.Value placeholder="Select Academic Year" />
           </Select.Trigger>
           <Select.Content>
             <Select.Group>
-              {quarters.map((quarter) => (
-                <Select.Item key={quarter} value={quarter}>
-                  {quarter}
+              {periods.map((period) => (
+                <Select.Item key={period} value={period}>
+                  {period}
                 </Select.Item>
               ))}
             </Select.Group>

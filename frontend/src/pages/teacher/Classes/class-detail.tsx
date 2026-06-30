@@ -154,7 +154,7 @@ function OverviewTab({ detail }: { detail: TeacherAdvisoryClassDetailResponse })
         </div>
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
           <EmptyDataCard
-            title="Quarterly Class Performance"
+            title="Period Class Performance"
             message="No performance data available yet."
           />
           <EmptyDataCard

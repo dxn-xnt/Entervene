@@ -16,8 +16,8 @@ import AddGradingComponentModal from "./forms/add-grading-component";
 
 export default function AdminSystemSettings() {
   const navigate = useNavigate();
-  const [juniorPeriod, setJuniorPeriod] = React.useState<string>("Q1");
-  const [seniorPeriod, setSeniorPeriod] = React.useState<string>("Sem1");
+  const [juniorPeriod, setJuniorPeriod] = React.useState<string>("T1");
+  const [seniorPeriod, setSeniorPeriod] = React.useState<string>("T1");
   const [pendingChange, setPendingChange] = React.useState<{
     level: "junior" | "senior";
     nextValue: string;
@@ -26,15 +26,15 @@ export default function AdminSystemSettings() {
   } | null>(null);
 
   const juniorLabels: Record<string, string> = {
-    Q1: "1st Quarter",
-    Q2: "2nd Quarter",
-    Q3: "3rd Quarter",
-    Q4: "4th Quarter",
+    T1: "Term 1",
+    T2: "Term 2",
+    T3: "Term 3",
   };
 
   const seniorLabels: Record<string, string> = {
-    Sem1: "1st Semester",
-    Sem2: "2nd Semester",
+    T1: "Term 1",
+    T2: "Term 2",
+    T3: "Term 3",
   };
 
   const handleJuniorChange = (value: string) => {
@@ -244,14 +244,13 @@ export default function AdminSystemSettings() {
                     </Text>
                     <Select value={juniorPeriod} onValueChange={handleJuniorChange}>
                       <Select.Trigger className="w-60">
-                        <Select.Value placeholder="1st Quarter" />
+                        <Select.Value placeholder="Term 1" />
                       </Select.Trigger>
                       <Select.Content>
                         <Select.Group>
-                          <Select.Item value="Q1">1st Quarter</Select.Item>
-                          <Select.Item value="Q2">2nd Quarter</Select.Item>
-                          <Select.Item value="Q3">3rd Quarter</Select.Item>
-                          <Select.Item value="Q4">4th Quarter</Select.Item>
+                          <Select.Item value="T1">Term 1</Select.Item>
+                          <Select.Item value="T2">Term 2</Select.Item>
+                          <Select.Item value="T3">Term 3</Select.Item>
                         </Select.Group>
                       </Select.Content>
                     </Select>
@@ -262,12 +261,13 @@ export default function AdminSystemSettings() {
                     </Text>
                     <Select value={seniorPeriod} onValueChange={handleSeniorChange}>
                       <Select.Trigger className="w-60">
-                        <Select.Value placeholder="1st Semester" />
+                        <Select.Value placeholder="Term 1" />
                       </Select.Trigger>
                       <Select.Content>
                         <Select.Group>
-                          <Select.Item value="Sem1">1st Semester</Select.Item>
-                          <Select.Item value="Sem2">2nd Semester</Select.Item>
+                          <Select.Item value="T1">Term 1</Select.Item>
+                          <Select.Item value="T2">Term 2</Select.Item>
+                          <Select.Item value="T3">Term 3</Select.Item>
                         </Select.Group>
                       </Select.Content>
                     </Select>
