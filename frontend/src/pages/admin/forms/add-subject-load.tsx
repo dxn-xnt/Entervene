@@ -113,7 +113,7 @@ export default function AddSubjectLoadModal() {
                 <Dialog.Header asChild>
                     <div className="flex items-center justify-between w-full">
                         <Text as="h5" className="font-sans text-xl font-bold">Add Subject Load</Text>
-                        <Text as="h5" className="font-sans text-md font-bold">(Step 1 of 2)</Text>
+                        <Text as="h5" className="font-sans text-md font-bold">(Step 1 of 4)</Text>
                     </div>
                 </Dialog.Header>
                 <section className="flex flex-col gap-4 p-4 max-h-[60vh] overflow-y-auto">
@@ -202,13 +202,200 @@ export default function AddSubjectLoadModal() {
         );
     }
 
+    if (step === 2) {
+        return (
+            <Dialog.Content size={"2xl"}>
+                <Dialog.Header asChild>
+                    <div className="flex items-center justify-between w-full">
+                        <Text as="h5" className="font-sans text-xl font-bold">Add Subject Load</Text>
+                        <Text as="h5" className="font-sans text-md font-bold">(Step 2 of 4)</Text>
+                    </div>
+                </Dialog.Header>
+                <section className="flex flex-col gap-4 p-4 max-h-[60vh] overflow-y-auto">
+                    <section className="text-md">
+                        <div className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-1">
+                                <label htmlFor="grading-component-name" className="text-sm">Year Level</label>
+                                <Select value={yearLevel} onValueChange={setYearLevel}>
+                                    <Select.Trigger className="w-full">
+                                        <Select.Value placeholder="Select Year Level" />
+                                    </Select.Trigger>
+                                    <Select.Content>
+                                        <Select.Group>
+                                            <Select.Item value="g7">Grade 7</Select.Item>
+                                            <Select.Item value="g8">Grade 8</Select.Item>
+                                            <Select.Item value="g9">Grade 9</Select.Item>
+                                            <Select.Item value="g10">Grade 10</Select.Item>
+                                            <Select.Item value="g11">Grade 11</Select.Item>
+                                            <Select.Item value="g12">Grade 12</Select.Item>
+                                        </Select.Group>
+                                    </Select.Content>
+                                </Select>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label htmlFor="grading-weights" className="text-sm">Subjects</label>
+                                <Table>
+                                    <Table.Header className="font-sans">
+                                        <Table.Row>
+                                            <Table.Head>Subject Name</Table.Head>
+                                            <Table.Head>Subject Code</Table.Head>
+                                            <Table.Head>Grading Component</Table.Head>
+                                            <Table.Head>Status</Table.Head>
+                                            <Table.Head></Table.Head>
+                                        </Table.Row>
+                                    </Table.Header>
+                                    <Table.Body>
+                                        {subjects.map((item) => (
+                                            <Table.Row key={item.id}>
+                                                <Table.Cell className="font-medium">{item.subjectName}</Table.Cell>
+                                                <Table.Cell className="font-medium">{item.subjectCode}</Table.Cell>
+                                                <Table.Cell className="font-medium">{item.gradingComponent}</Table.Cell>
+                                                <Table.Cell>
+                                                    <Badge
+                                                        variant={
+                                                            item.status === "Assigned"
+                                                                ? "surface"
+                                                                : "outline"
+                                                        }
+                                                        size="sm"
+                                                    >
+                                                        {item.status}
+                                                    </Badge>
+                                                </Table.Cell>
+                                                <Table.Cell className="w-[50px]">
+                                                    <Checkbox
+                                                        checked={selectedSubjects.has(item.id)}
+                                                        onCheckedChange={(checked) => handleSelectSubject(item.id, Boolean(checked))}
+                                                    />
+                                                </Table.Cell>
+                                            </Table.Row>
+                                        ))}
+                                    </Table.Body>
+                                </Table>
+                                <div className="flex justify-between">
+                                    <Text as="p" className="text-sm mt-1">Assign all or selected subjects to the subject load.</Text>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="mt-2 w-fit"
+                                        onClick={() => handleSelectAll(!isAllSelected)}
+                                    >
+                                        {isAllSelected ? "Deselect All" : "Select All"}
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </section>
+                <Dialog.Footer>
+                    <Button variant={"outline"} onClick={() => setStep(1)}>Back</Button>
+                    <Button variant={"default"} onClick={() => setStep(3)}>Next</Button>
+                </Dialog.Footer>
+            </Dialog.Content>
+        );
+    }
+
+    if (step === 3) {
+        return (
+            <Dialog.Content size={"2xl"}>
+                <Dialog.Header asChild>
+                    <div className="flex items-center justify-between w-full">
+                        <Text as="h5" className="font-sans text-xl font-bold">Add Subject Load</Text>
+                        <Text as="h5" className="font-sans text-md font-bold">(Step 3 of 4)</Text>
+                    </div>
+                </Dialog.Header>
+                <section className="flex flex-col gap-4 p-4 max-h-[60vh] overflow-y-auto">
+                    <section className="text-md">
+                        <div className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-1">
+                                <label htmlFor="grading-component-name" className="text-sm">Year Level</label>
+                                <Select value={yearLevel} onValueChange={setYearLevel}>
+                                    <Select.Trigger className="w-full">
+                                        <Select.Value placeholder="Select Year Level" />
+                                    </Select.Trigger>
+                                    <Select.Content>
+                                        <Select.Group>
+                                            <Select.Item value="g7">Grade 7</Select.Item>
+                                            <Select.Item value="g8">Grade 8</Select.Item>
+                                            <Select.Item value="g9">Grade 9</Select.Item>
+                                            <Select.Item value="g10">Grade 10</Select.Item>
+                                            <Select.Item value="g11">Grade 11</Select.Item>
+                                            <Select.Item value="g12">Grade 12</Select.Item>
+                                        </Select.Group>
+                                    </Select.Content>
+                                </Select>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label htmlFor="grading-weights" className="text-sm">Subjects</label>
+                                <Table>
+                                    <Table.Header className="font-sans">
+                                        <Table.Row>
+                                            <Table.Head>Subject Name</Table.Head>
+                                            <Table.Head>Subject Code</Table.Head>
+                                            <Table.Head>Grading Component</Table.Head>
+                                            <Table.Head>Status</Table.Head>
+                                            <Table.Head></Table.Head>
+                                        </Table.Row>
+                                    </Table.Header>
+                                    <Table.Body>
+                                        {subjects.map((item) => (
+                                            <Table.Row key={item.id}>
+                                                <Table.Cell className="font-medium">{item.subjectName}</Table.Cell>
+                                                <Table.Cell className="font-medium">{item.subjectCode}</Table.Cell>
+                                                <Table.Cell className="font-medium">{item.gradingComponent}</Table.Cell>
+                                                <Table.Cell>
+                                                    <Badge
+                                                        variant={
+                                                            item.status === "Assigned"
+                                                                ? "surface"
+                                                                : "outline"
+                                                        }
+                                                        size="sm"
+                                                    >
+                                                        {item.status}
+                                                    </Badge>
+                                                </Table.Cell>
+                                                <Table.Cell className="w-[50px]">
+                                                    <Checkbox
+                                                        checked={selectedSubjects.has(item.id)}
+                                                        onCheckedChange={(checked) => handleSelectSubject(item.id, Boolean(checked))}
+                                                    />
+                                                </Table.Cell>
+                                            </Table.Row>
+                                        ))}
+                                    </Table.Body>
+                                </Table>
+                                <div className="flex justify-between">
+                                    <Text as="p" className="text-sm mt-1">Assign all or selected subjects to the subject load.</Text>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="mt-2 w-fit"
+                                        onClick={() => handleSelectAll(!isAllSelected)}
+                                    >
+                                        {isAllSelected ? "Deselect All" : "Select All"}
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </section>
+                <Dialog.Footer>
+                    <Button variant={"outline"} onClick={() => setStep(2)}>Back</Button>
+                    <Button variant={"default"} onClick={() => setStep(4)}>Next</Button>
+                </Dialog.Footer>
+            </Dialog.Content>
+        );
+    }
+
+
     return (
         <Dialog.Content size={"2xl"}>
             <Dialog.Header asChild>
                 <div className="flex items-center justify-between w-full">
                     <div className="flex items-center justify-between w-full">
                         <Text as="h5" className="font-sans text-xl font-bold">Add Subject Load</Text>
-                        <Text as="h5" className="font-sans text-md font-bold">(Step 2 of 2)</Text>
+                        <Text as="h5" className="font-sans text-md font-bold">(Step 4 of 4)</Text>
                     </div>
                 </div>
             </Dialog.Header>
@@ -323,7 +510,7 @@ export default function AddSubjectLoadModal() {
                 </section>
             </section>
             <Dialog.Footer>
-                <Button variant={"outline"} onClick={() => setStep(1)}>Back</Button>
+                <Button variant={"outline"} onClick={() => setStep(3)}>Back</Button>
                 <Dialog.Trigger>
                     <Button variant={"default"}>Add Subject Load</Button>
                 </Dialog.Trigger>
