@@ -24,6 +24,8 @@ export type QuizSettingsDraft = {
   enable_per_question_time_limits: boolean;
   max_attempts: string;
   show_correct_answers: boolean;
+  summary_release_mode: "IMMEDIATE" | "SCHEDULED" | "AFTER_DUE_DATE" | "NEVER";
+  summary_release_at: string;
   duration_minutes: string;
 };
 
