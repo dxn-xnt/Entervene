@@ -10,6 +10,7 @@ from sqlalchemy.sql import func
 from app.db.Base import Base
 
 if TYPE_CHECKING:
+    from app.models.classwork.Classwork import Classwork
     from app.models.quiz.QuizQuestion import QuizQuestion
 
 
@@ -34,7 +35,7 @@ class Quiz(Base):
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="DRAFT")
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    classwork: Mapped[object] = relationship("Classwork", backref=backref("quiz", uselist=False))
+    classwork: Mapped["Classwork"] = relationship("Classwork", backref=backref("quiz", uselist=False))
     questions: Mapped[list["QuizQuestion"]] = relationship(
         "QuizQuestion",
         back_populates="quiz",

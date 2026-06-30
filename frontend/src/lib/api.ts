@@ -83,6 +83,7 @@ export type UserAnalytics = {
   subject_mastery: Array<Record<string, number | string>>;
   score_trend: Array<Record<string, number | string>>;
   historical_performance: Array<Record<string, number | string>>;
+  period_performance: Array<Record<string, number | string>>;
   quarterly_performance: Array<Record<string, number | string>>;
   subject_breakdown: Array<Record<string, number | string>>;
   activity_feed: Array<Record<string, string>>;

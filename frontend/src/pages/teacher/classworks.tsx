@@ -550,6 +550,12 @@ export default function Classworks() {
     if (!Number.isInteger(attempts) || attempts <= 0) {
       return "Allowed quiz attempts must be a positive whole number.";
     }
+    if (quizSettings.summary_release_mode === "SCHEDULED" && !quizSettings.summary_release_at) {
+      return "Choose when the quiz summary should be released.";
+    }
+    if (quizSettings.summary_release_mode === "AFTER_DUE_DATE" && !draft.due_date) {
+      return "Set a quiz due date before releasing the summary after the due date.";
+    }
 
     for (const [index, question] of quizQuestions.entries()) {
       const questionNumber = index + 1;
@@ -591,6 +597,11 @@ export default function Classworks() {
         quizSettings.enable_per_question_time_limits,
       max_attempts: Number(quizSettings.max_attempts || draft.max_attempts),
       show_correct_answers: quizSettings.show_correct_answers,
+      summary_release_mode: quizSettings.summary_release_mode,
+      summary_release_at:
+        quizSettings.summary_release_mode === "SCHEDULED" && quizSettings.summary_release_at
+          ? new Date(quizSettings.summary_release_at).toISOString()
+          : null,
     },
     questions: quizQuestions.map((question, index) => ({
       question_text: question.question_text.trim(),
@@ -826,6 +837,7 @@ export default function Classworks() {
       }
       if (isQuizType(selectedType)) {
         formData.append("max_attempts", String(Number(draft.max_attempts)));
+        formData.append("quiz_payload", JSON.stringify(buildQuizPayload()));
       }
       // Quiz imports are parsed into questions, so generic attachments are skipped for quizzes.
       if (!isQuizType(selectedType)) {
@@ -844,28 +856,7 @@ export default function Classworks() {
         const body = await createResponse.json().catch(() => ({}));
         throw new Error(body.detail || "Unable to create classwork.");
       }
-      const created = (await createResponse.json()) as TeacherClasswork;
-
-      if (isQuizType(selectedType)) {
-        const quizResponse = await apiFetch(
-          `/api/v1/quizzes/classwork/${created.classwork_id}`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(buildQuizPayload()),
-          },
-        );
-        if (!quizResponse.ok) {
-          const body = await quizResponse.json().catch(() => ({}));
-          const detail = Array.isArray(body.detail)
-            ? body.detail.join(" ")
-            : body.detail;
-          throw new Error(
-            detail ||
-              "Classwork was created, but the quiz questions could not be saved.",
-          );
-        }
-      }
+      await createResponse.json();
 
       await loadClassworks();
       closeCreateWizard();
@@ -2680,6 +2671,59 @@ export default function Classworks() {
                               className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
                             />
                           </label>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          <label className="block text-xs font-bold">
+                            Quiz Summary Availability
+                            <select
+                              value={quizSettings.summary_release_mode}
+                              onChange={(event) =>
+                                setQuizSettings((current) => ({
+                                  ...current,
+                                  summary_release_mode: event.target.value as QuizSettingsDraft["summary_release_mode"],
+                                  summary_release_at:
+                                    event.target.value === "SCHEDULED"
+                                      ? current.summary_release_at
+                                      : "",
+                                }))
+                              }
+                              disabled={isCreating}
+                              className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                            >
+                              <option value="IMMEDIATE">Immediately after submission</option>
+                              <option value="SCHEDULED">At a specific date & time</option>
+                              <option value="AFTER_DUE_DATE" disabled={!draft.due_date}>
+                                After the quiz due date
+                              </option>
+                              <option value="NEVER">Never</option>
+                            </select>
+                          </label>
+                          {quizSettings.summary_release_mode === "SCHEDULED" ? (
+                            <label className="block text-xs font-bold">
+                              Release Date & Time
+                              <input
+                                type="datetime-local"
+                                value={quizSettings.summary_release_at}
+                                onChange={(event) =>
+                                  setQuizSettings((current) => ({
+                                    ...current,
+                                    summary_release_at: event.target.value,
+                                  }))
+                                }
+                                disabled={isCreating}
+                                className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                              />
+                            </label>
+                          ) : (
+                            <div className="rounded-lg border border-dashed border-gray-300 bg-[#FFFBEE] px-3 py-2 text-xs text-gray-600">
+                              {quizSettings.summary_release_mode === "AFTER_DUE_DATE"
+                                ? "Summary unlocks automatically after the due date."
+                                : quizSettings.summary_release_mode === "NEVER"
+                                  ? "Students can see their score, but not the answer summary."
+                                  : "Students can view the summary right after submitting."}
+                            </div>
+                          )}
                         </div>
 
                         <div className="mt-4 grid gap-2 sm:grid-cols-2">

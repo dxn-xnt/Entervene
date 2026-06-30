@@ -27,6 +27,8 @@ class QuizSettingIn(BaseModel):
     enable_per_question_time_limits: bool = False
     max_attempts: Optional[int] = None
     show_correct_answers: bool = False
+    summary_release_mode: str = "IMMEDIATE"
+    summary_release_at: Optional[datetime] = None
 
 
 class QuizBuilderUpsert(BaseModel):
@@ -71,6 +73,8 @@ class QuizSettingOut(BaseModel):
     enable_per_question_time_limits: bool
     max_attempts: Optional[int] = None
     show_correct_answers: bool
+    summary_release_mode: str
+    summary_release_at: Optional[datetime] = None
 
 
 class QuizBuilderResponse(BaseModel):
@@ -132,6 +136,10 @@ class QuizAttemptResponse(BaseModel):
     submitted_at: Optional[datetime] = None
     grade: Optional[float] = None
     can_submit: bool
+    summary_available: bool = False
+    summary_release_mode: str = "IMMEDIATE"
+    summary_release_at: Optional[datetime] = None
+    summary_message: Optional[str] = None
     questions: list[QuizAttemptQuestionOut] = Field(default_factory=list)
 
 

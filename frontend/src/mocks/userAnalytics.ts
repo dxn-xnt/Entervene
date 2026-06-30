@@ -12,6 +12,11 @@ export const userAnalyticsMocks: Record<UserRole, MockAnalytics> = {
       subjectsHandled: 2,
       classPerformance: 95,
     },
+    period_performance: [
+      { period: "T1", score: 76 },
+      { period: "T2", score: 82 },
+      { period: "T3", score: 88.4 },
+    ],
     quarterly_performance: [
       { quarter: "T1", score: 76 },
       { quarter: "T2", score: 82 },
@@ -64,6 +69,7 @@ export const userAnalyticsMocks: Record<UserRole, MockAnalytics> = {
       { name: "Science Worksheet", type: "Activity", subject: "Science", status: "Late", score: "18/25" },
     ],
     quarterly_performance: [],
+    period_performance: [],
     subject_breakdown: [],
     historical_performance: [],
     activity_feed: [],
@@ -86,6 +92,7 @@ export const userAnalyticsMocks: Record<UserRole, MockAnalytics> = {
     subject_mastery: [],
     score_trend: [],
     historical_performance: [],
+    period_performance: [],
     quarterly_performance: [],
     classwork: [],
     lms_behavior: {},
@@ -96,6 +103,58 @@ export function mergeAnalytics(role: UserRole, analytics?: UserAnalytics | null)
   const fallback = userAnalyticsMocks[role];
 
   if (!analytics) return fallback;
+
+  const periodPerformance =
+    analytics.period_performance?.length > 0
+      ? analytics.period_performance
+      : analytics.quarterly_performance;
+
+  if (role === "student") {
+    const unavailableStudentFallback: MockAnalytics = {
+      summary: {
+        writtenWorksAverage: "Unavailable",
+        performanceAverage: "Unavailable",
+        completionRate: "Unavailable",
+        failureRisk: "Unavailable",
+        modelConfidence: "Unavailable",
+      },
+      lms_behavior: {
+        totalLogins: "Unavailable",
+        averageSession: "Unavailable",
+        missedActivities: 0,
+        onTimeSubmissions: "Unavailable",
+      },
+      subject_mastery: [],
+      score_trend: [],
+      historical_performance: [],
+      period_performance: [],
+      quarterly_performance: [],
+      subject_breakdown: [],
+      activity_feed: [],
+      classwork: [],
+    };
+
+    return {
+      ...unavailableStudentFallback,
+      ...analytics,
+      summary:
+        analytics.summary && Object.keys(analytics.summary).length > 0
+          ? { ...unavailableStudentFallback.summary, ...analytics.summary }
+          : unavailableStudentFallback.summary,
+      lms_behavior:
+        analytics.lms_behavior && Object.keys(analytics.lms_behavior).length > 0
+          ? { ...unavailableStudentFallback.lms_behavior, ...analytics.lms_behavior }
+          : unavailableStudentFallback.lms_behavior,
+      subject_mastery: analytics.subject_mastery,
+      score_trend: analytics.score_trend,
+      historical_performance: analytics.historical_performance,
+      period_performance: periodPerformance,
+      quarterly_performance: analytics.quarterly_performance,
+      subject_breakdown: analytics.subject_breakdown,
+      activity_feed: analytics.activity_feed,
+      classwork: analytics.classwork,
+    };
+  }
 
   return {
     ...fallback,
@@ -109,6 +168,8 @@ export function mergeAnalytics(role: UserRole, analytics?: UserAnalytics | null)
     score_trend: analytics.score_trend.length > 0 ? analytics.score_trend : fallback.score_trend,
     historical_performance:
       analytics.historical_performance.length > 0 ? analytics.historical_performance : fallback.historical_performance,
+    period_performance:
+      periodPerformance.length > 0 ? periodPerformance : fallback.period_performance,
     quarterly_performance:
       analytics.quarterly_performance.length > 0 ? analytics.quarterly_performance : fallback.quarterly_performance,
     subject_breakdown:

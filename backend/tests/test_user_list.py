@@ -18,6 +18,7 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.auth.Role import Role
@@ -46,6 +47,7 @@ TABLES = [
     Classwork.__table__,
     ClassworkAssignment.__table__,
     StudentSubmission.__table__,
+    StudentPeriodGrade.__table__,
 ]
 
 
@@ -186,6 +188,178 @@ def test_list_users_batches_mixed_user_summaries_and_preserves_filters(client, d
     assert set(student) == {"id", "name", "email", "role", "created_at", "account_status", "section", "grade_level", "average"}
     assert all(item["role"] == "teacher" for item in client.get("/api/v1/users?role=teacher").json())
     assert len(client.get("/api/v1/users?search=student0").json()) == 1
+
+
+def test_student_user_analytics_uses_real_records_and_labels_unavailable_data(client, db_and_engine):
+    db, _ = db_and_engine
+    roles = {
+        name: Role(role_id=index, role_name=name)
+        for index, name in enumerate(("Admin", "Teacher", "Student"), start=1)
+    }
+    year = AcademicYear(
+        year_label="2025-2026",
+        start_date=date(2025, 6, 1),
+        end_date=date(2026, 3, 31),
+        is_active=True,
+    )
+    level = AcademicLevel(level_name="Grade 7", grade_level=7)
+    db.add_all([*roles.values(), year, level])
+    db.flush()
+    period = AcademicPeriod(
+        period_name="Q1",
+        period_type="QUARTER",
+        period_sequence=1,
+        total_periods_in_year=4,
+        period_progress_ratio=0.25,
+        start_date=date(2025, 6, 1),
+        end_date=date(2025, 8, 31),
+        academic_year_id=year.academic_year_id,
+        is_active=True,
+    )
+    subject = Subject(subject_name="Computer Programming", academic_level_id=level.academic_level_id)
+    db.add_all([period, subject])
+    db.flush()
+    teacher_account = UserAccount(user_id=uuid.uuid4(), email="teacher.analytics@example.com", account_status="active")
+    student_account = UserAccount(user_id=uuid.uuid4(), email="student.analytics@example.com", account_status="active")
+    db.add_all([teacher_account, student_account])
+    db.flush()
+    db.add_all([
+        UserRoles(user_id=teacher_account.user_id, role_id=roles["Teacher"].role_id),
+        UserRoles(user_id=student_account.user_id, role_id=roles["Student"].role_id),
+    ])
+    staff = AcademicStaff(
+        staff_id="T-ANALYTICS",
+        first_name="Teacher",
+        last_name="Analytics",
+        user_id=teacher_account.user_id,
+    )
+    student = Student(
+        student_id=uuid.uuid4(),
+        student_lrn="123456789012",
+        first_name="Ana",
+        last_name="Gonzales",
+        academic_level_id=level.academic_level_id,
+        user_id=student_account.user_id,
+    )
+    class_ = Class(section_name="7-Sapphire", academic_year_id=year.academic_year_id, academic_level_id=level.academic_level_id)
+    db.add_all([staff, student, class_])
+    db.flush()
+    db.add_all([
+        StudentClass(
+            student_id=student.student_id,
+            class_id=class_.class_id,
+            academic_year_id=year.academic_year_id,
+            enrollment_status="enrolled",
+            enrolled_at=datetime.now(timezone.utc),
+        ),
+        SubjectLoad(
+            staff_id=staff.staff_id,
+            subject_id=subject.subject_id,
+            class_id=class_.class_id,
+            academic_period_id=period.academic_period_id,
+            status="active",
+        ),
+    ])
+    db.flush()
+
+    due = datetime(2025, 7, 15, 12, 0, tzinfo=timezone.utc)
+    written = Classwork(
+        title="Written 1",
+        classwork_type="ASSIGNMENT",
+        classwork_category="WRITTEN_WORK",
+        total_points=100,
+        subject_id=subject.subject_id,
+        created_by_staff_id=staff.staff_id,
+    )
+    performance = Classwork(
+        title="Performance 1",
+        classwork_type="ACTIVITY",
+        classwork_category="PERFORMANCE_TASK",
+        total_points=50,
+        subject_id=subject.subject_id,
+        created_by_staff_id=staff.staff_id,
+    )
+    missing = Classwork(
+        title="Missing Task",
+        classwork_type="ASSIGNMENT",
+        classwork_category="WRITTEN_WORK",
+        total_points=20,
+        subject_id=subject.subject_id,
+        created_by_staff_id=staff.staff_id,
+    )
+    reading = Classwork(
+        title="Reading",
+        classwork_type="READING",
+        total_points=None,
+        subject_id=subject.subject_id,
+        created_by_staff_id=staff.staff_id,
+    )
+    db.add_all([written, performance, missing, reading])
+    db.flush()
+    written_assignment = ClassworkAssignment(
+        classwork_id=written.classwork_id,
+        class_id=class_.class_id,
+        assigned_by_staff_id=staff.staff_id,
+        due_date=due,
+    )
+    performance_assignment = ClassworkAssignment(
+        classwork_id=performance.classwork_id,
+        class_id=class_.class_id,
+        assigned_by_staff_id=staff.staff_id,
+        due_date=due,
+    )
+    missing_assignment = ClassworkAssignment(
+        classwork_id=missing.classwork_id,
+        class_id=class_.class_id,
+        assigned_by_staff_id=staff.staff_id,
+        due_date=datetime(2025, 7, 10, tzinfo=timezone.utc),
+    )
+    reading_assignment = ClassworkAssignment(
+        classwork_id=reading.classwork_id,
+        class_id=class_.class_id,
+        assigned_by_staff_id=staff.staff_id,
+        due_date=due,
+    )
+    db.add_all([written_assignment, performance_assignment, missing_assignment, reading_assignment])
+    db.flush()
+    db.add_all([
+        StudentSubmission(
+            student_id=student.student_id,
+            classwork_assignment_id=written_assignment.classwork_assignment_id,
+            status="graded",
+            grade=80,
+            submitted_at=due,
+        ),
+        StudentSubmission(
+            student_id=student.student_id,
+            classwork_assignment_id=performance_assignment.classwork_assignment_id,
+            status="submitted",
+            submitted_at=datetime(2025, 7, 16, 12, 0, tzinfo=timezone.utc),
+        ),
+        StudentPeriodGrade(
+            student_id=student.student_id,
+            class_id=class_.class_id,
+            subject_id=subject.subject_id,
+            academic_period_id=period.academic_period_id,
+            final_period_grade=86.5,
+        ),
+    ])
+    db.commit()
+
+    response = client.get(f"/api/v1/users/{student_account.user_id}/analytics")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"]["writtenWorksAverage"] == 80
+    assert body["summary"]["performanceAverage"] is None
+    assert body["summary"]["completionRate"] == 66.67
+    assert body["summary"]["failureRisk"].startswith("Unavailable")
+    assert body["lms_behavior"]["totalLogins"] == "Unavailable"
+    assert body["lms_behavior"]["missedActivities"] == 1
+    assert body["lms_behavior"]["onTimeSubmissions"] == "50.0%"
+    assert body["subject_mastery"] == [{"subject": "Computer Programming", "value": 80}]
+    assert body["score_trend"] == [{"month": "Q1", "score": 86.5}]
+    assert [row["name"] for row in body["classwork"]] == ["Missing Task", "Written 1", "Performance 1"]
 
 
 def test_list_users_allows_null_profile_dob(client, db_and_engine):

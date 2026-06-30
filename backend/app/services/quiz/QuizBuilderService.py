@@ -28,6 +28,7 @@ from app.services.classwork.ClassworkShared import is_quiz_type
 QUESTION_MULTIPLE_CHOICE = "MULTIPLE_CHOICE"
 QUESTION_SHORT_ANSWER = "SHORT_ANSWER"
 QUIZ_STATUSES = {"DRAFT", "READY", "PUBLISHED", "ARCHIVED"}
+SUMMARY_RELEASE_MODES = {"IMMEDIATE", "SCHEDULED", "AFTER_DUE_DATE", "NEVER"}
 
 
 def get_teacher_quiz_classwork(db: Session, staff_id: str, classwork_id: int) -> Classwork:
@@ -118,6 +119,8 @@ def upsert_quiz_builder(
     setting.enable_per_question_time_limits = payload.settings.enable_per_question_time_limits
     setting.max_attempts = payload.settings.max_attempts
     setting.show_correct_answers = payload.settings.show_correct_answers
+    setting.summary_release_mode = payload.settings.summary_release_mode.strip().upper()
+    setting.summary_release_at = payload.settings.summary_release_at
 
     _replace_questions(db, quiz, payload.questions)
     db.flush()
@@ -207,6 +210,15 @@ def _builder_errors(db: Session, classwork: Classwork, payload: QuizBuilderUpser
         errors.append("Duration minutes must be greater than zero")
     if payload.settings.max_attempts is not None and payload.settings.max_attempts <= 0:
         errors.append("Max attempts must be greater than zero")
+    release_mode = payload.settings.summary_release_mode.strip().upper()
+    if release_mode not in SUMMARY_RELEASE_MODES:
+        errors.append("Quiz summary availability must be immediate, scheduled, after due date, or never")
+    if release_mode == "SCHEDULED" and payload.settings.summary_release_at is None:
+        errors.append("Quiz summary release date and time is required")
+    if release_mode != "SCHEDULED" and payload.settings.summary_release_at is not None:
+        errors.append("Quiz summary release date is only allowed for scheduled release")
+    if release_mode == "AFTER_DUE_DATE" and not _classwork_has_due_date(db, classwork.classwork_id):
+        errors.append("Set a quiz due date before releasing the summary after the due date")
 
     display_orders = [question.display_order for question in payload.questions]
     if len(display_orders) != len(set(display_orders)):
@@ -277,6 +289,13 @@ def _lesson_belongs_to_classwork(db: Session, classwork: Classwork, lesson_id: i
     ).first() is not None
 
 
+def _classwork_has_due_date(db: Session, classwork_id: int) -> bool:
+    return db.query(ClassworkAssignment).filter(
+        ClassworkAssignment.classwork_id == classwork_id,
+        ClassworkAssignment.due_date.isnot(None),
+    ).first() is not None
+
+
 def _setting_out(setting: QuizSetting) -> QuizSettingOut:
     return QuizSettingOut(
         quiz_setting_id=setting.quiz_setting_id,
@@ -285,6 +304,8 @@ def _setting_out(setting: QuizSetting) -> QuizSettingOut:
         enable_per_question_time_limits=setting.enable_per_question_time_limits,
         max_attempts=setting.max_attempts,
         show_correct_answers=setting.show_correct_answers,
+        summary_release_mode=setting.summary_release_mode,
+        summary_release_at=setting.summary_release_at,
     )
 
 

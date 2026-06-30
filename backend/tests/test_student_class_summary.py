@@ -18,6 +18,8 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
+from app.models.academic.Subject import Subject
+from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
@@ -31,8 +33,10 @@ TABLES = [
     AcademicStaff.__table__,
     AcademicPeriod.__table__,
     Student.__table__,
+    Subject.__table__,
     Class.__table__,
     StudentClass.__table__,
+    SubjectLoad.__table__,
 ]
 
 
@@ -248,6 +252,54 @@ def test_active_period_routes_return_active_term_one(client, db):
     assert body["total_periods_in_year"] == 3
     assert body["period_progress_ratio"] == "0.3333"
     assert body["is_active"] is True
+
+
+def test_student_subjects_return_current_period_alias(client, db, identity):
+    year = add_year(db)
+    level = add_level(db)
+    period = AcademicPeriod(
+        period_name="Term 1",
+        period_type="TERM",
+        period_sequence=1,
+        total_periods_in_year=3,
+        academic_year_id=year.academic_year_id,
+        start_date=date(2025, 6, 1),
+        end_date=date(2025, 8, 31),
+        is_active=True,
+    )
+    subject = Subject(subject_name="Computer Programming", academic_level_id=level.academic_level_id)
+    staff = add_staff(db)
+    class_ = Class(
+        section_name="Sapphire",
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    db.add_all([period, subject, class_])
+    db.flush()
+    account = add_account(db, "student@example.test")
+    identity["sub"] = account.user_id
+    student = add_student(db, level, "100000000001", "Alex", "Learner", user_id=account.user_id)
+    db.add_all(
+        [
+            build_student_class_assignment(student.student_id, class_),
+            SubjectLoad(
+                staff_id=staff.staff_id,
+                subject_id=subject.subject_id,
+                class_id=class_.class_id,
+                academic_period_id=period.academic_period_id,
+                status="active",
+            ),
+        ]
+    )
+    db.commit()
+
+    response = client.get("/api/v1/students/me/subjects")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body[0]["period_name"] == "Term 1"
+    assert body[0]["is_current_period"] is True
+    assert body[0]["is_current_quarter"] is True
 
 
 def test_non_student_cannot_fetch_student_class(client, identity):

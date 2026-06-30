@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
@@ -33,6 +34,12 @@ from app.models.classwork.ClassworkAttachment import ClassworkAttachment
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
+from app.models.quiz.Question import Question
+from app.models.quiz.QuestionOption import QuestionOption
+from app.models.quiz.Quiz import Quiz
+from app.models.quiz.QuizAnswer import QuizAnswer
+from app.models.quiz.QuizQuestion import QuizQuestion
+from app.models.quiz.QuizSetting import QuizSetting
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.submissions.SubmissionAttachment import SubmissionAttachment
 
@@ -53,7 +60,13 @@ TABLES = [
     ClassworkLesson.__table__,
     ClassworkAttachment.__table__,
     ClassworkAssignment.__table__,
+    Quiz.__table__,
+    QuizSetting.__table__,
+    Question.__table__,
+    QuestionOption.__table__,
+    QuizQuestion.__table__,
     StudentSubmission.__table__,
+    QuizAnswer.__table__,
     SubmissionAttachment.__table__,
 ]
 
@@ -253,6 +266,92 @@ def _act_as(context, account_name: str, role: str) -> None:
 def _bearer(context, account_name: str, role: str) -> dict[str, str]:
     token = create_access_token(str(context["accounts"][account_name].user_id), role)
     return {"Authorization": f"Bearer {token}"}
+
+
+def _valid_quiz_payload() -> dict:
+    return {
+        "duration_minutes": 30,
+        "status": "READY",
+        "settings": {
+            "is_shuffle_questions": False,
+            "enable_per_question_scoring": True,
+            "enable_per_question_time_limits": False,
+            "max_attempts": 1,
+            "show_correct_answers": False,
+            "summary_release_mode": "IMMEDIATE",
+            "summary_release_at": None,
+        },
+        "questions": [
+            {
+                "question_text": "Which is a variable?",
+                "question_type": "MULTIPLE_CHOICE",
+                "points": 10,
+                "display_order": 1,
+                "difficulty_level": "EASY",
+                "explanation": None,
+                "lesson_id": None,
+                "options": [
+                    {"option_text": "x", "is_correct": True, "option_order": 1},
+                    {"option_text": "print", "is_correct": False, "option_order": 2},
+                ],
+            }
+        ],
+    }
+
+
+def test_quiz_classwork_creation_saves_builder_atomically(authz_context):
+    c = authz_context
+    response = c["client"].post(
+        "/api/v1/classwork-assignments/with-assignments",
+        data={
+            "title": "Periodical Exam",
+            "classwork_type": "QUIZ",
+            "subject_id": str(c["subject"].subject_id),
+            "classwork_category": "PERIODICAL_EXAM",
+            "total_points": "10",
+            "is_published": "true",
+            "class_ids": json.dumps([c["allowed_class"].class_id]),
+            "lesson_ids": json.dumps([]),
+            "due_date": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+            "max_attempts": "1",
+            "quiz_payload": json.dumps(_valid_quiz_payload()),
+        },
+    )
+
+    assert response.status_code == 200
+    classwork_id = response.json()["classwork_id"]
+    quiz = c["db"].query(Quiz).filter(Quiz.classwork_id == classwork_id).one()
+    assert quiz.total_items == 1
+    assert c["db"].query(QuizQuestion).filter(QuizQuestion.quiz_id == quiz.quiz_id).count() == 1
+
+
+def test_quiz_classwork_creation_rolls_back_when_builder_fails(authz_context):
+    c = authz_context
+    before_classworks = c["db"].query(Classwork).count()
+    before_quizzes = c["db"].query(Quiz).count()
+    payload = _valid_quiz_payload()
+    payload["questions"][0]["options"][1]["is_correct"] = True
+
+    response = c["client"].post(
+        "/api/v1/classwork-assignments/with-assignments",
+        data={
+            "title": "Broken Periodical Exam",
+            "classwork_type": "QUIZ",
+            "subject_id": str(c["subject"].subject_id),
+            "classwork_category": "PERIODICAL_EXAM",
+            "total_points": "10",
+            "is_published": "true",
+            "class_ids": json.dumps([c["allowed_class"].class_id]),
+            "lesson_ids": json.dumps([]),
+            "due_date": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+            "max_attempts": "1",
+            "quiz_payload": json.dumps(payload),
+        },
+    )
+
+    assert response.status_code == 400
+    assert c["db"].query(Classwork).count() == before_classworks
+    assert c["db"].query(Quiz).count() == before_quizzes
 
 
 def test_classwork_and_assignment_direct_access_follow_access_matrix(authz_context):

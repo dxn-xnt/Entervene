@@ -239,6 +239,20 @@ def test_teacher_can_upsert_read_and_validate_quiz_builder(quiz_api_context):
     assert readiness.json()["is_publish_ready"] is True
 
 
+def test_quiz_builder_requires_due_date_for_after_due_summary_release(quiz_api_context):
+    c = quiz_api_context
+    classwork_id = c["quiz_classwork"].classwork_id
+    c["assignment"].due_date = None
+    c["db"].commit()
+    payload = _valid_payload(c["lesson"].lesson_id)
+    payload["settings"]["summary_release_mode"] = "AFTER_DUE_DATE"
+
+    response = c["client"].put(f"/api/v1/quizzes/classwork/{classwork_id}", json=payload)
+
+    assert response.status_code == 400
+    assert "Set a quiz due date" in response.json()["detail"][0]
+
+
 def test_quiz_builder_rejects_invalid_manual_questions(quiz_api_context):
     c = quiz_api_context
     payload = _valid_payload(c["lesson"].lesson_id)

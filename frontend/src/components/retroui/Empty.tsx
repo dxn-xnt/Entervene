@@ -1,7 +1,7 @@
 import { Text } from "@/components/retroui/Text";
 import { cn } from "@/lib/utils";
 import { Ghost } from "lucide-react";
-import { HTMLAttributes } from "react";
+import type { HTMLAttributes } from "react";
 
 interface IEmptyProps extends HTMLAttributes<HTMLDivElement> {
   className?: string;
