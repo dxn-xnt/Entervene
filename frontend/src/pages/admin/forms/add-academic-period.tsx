@@ -267,7 +267,7 @@ export default function AddAcademicPeriodModal() {
                                 </Select.Content>
                             </Select>
                         </div>
-                        <div className="flex flex-col gap-1">
+                        {/* <div className="flex flex-col gap-1">
                             <label htmlFor="year-level" className="text-sm">Year Level</label>
                             <Select value={level} onValueChange={setLevel}>
                                 <Select.Trigger className="w-full">
@@ -280,7 +280,7 @@ export default function AddAcademicPeriodModal() {
                                     </Select.Group>
                                 </Select.Content>
                             </Select>
-                        </div>
+                        </div> */}
                         <div className="flex flex-col gap-1">
                             <label htmlFor="end-date" className="text-sm">Period Type</label>
                             <Select value={periodType} onValueChange={setPeriodType}>
