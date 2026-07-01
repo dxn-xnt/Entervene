@@ -590,7 +590,7 @@ function TeacherAnalytics({ user, data }: { user: UserDetail; data: ReturnType<t
       </div>
       <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
         <Panel title="Period Class Performance" subtitle="Average student score across all handled subjects">
-          <SmallLineChart data={data.quarterly_performance} xKey="quarter" />
+          <SmallLineChart data={data.period_performance} xKey="period" />
         </Panel>
         <Panel title="Subject Breakdown" subtitle="Avg. score per subject handled">
           <SubjectBars rows={data.subject_breakdown} />
@@ -607,6 +607,9 @@ function TeacherAnalytics({ user, data }: { user: UserDetail; data: ReturnType<t
 function StudentAnalytics({ data }: { user: UserDetail; data: ReturnType<typeof mergeAnalytics> }) {
   const summary = data.summary;
   const lms = data.lms_behavior;
+  const weakSubjects = data.subject_mastery
+    .filter((row) => valueNumber(row.value, 100) < 75)
+    .map((row) => String(row.subject));
   return (
     <>
       <div className="grid gap-3 lg:grid-cols-[1fr_280px]">
@@ -619,9 +622,9 @@ function StudentAnalytics({ data }: { user: UserDetail; data: ReturnType<typeof 
             </div>
           </div>
           <div className="grid gap-3 md:grid-cols-3">
-            <MetricCard label="Written Works Average" value={valueNumber(summary.writtenWorksAverage)} note="out of 100" />
-            <MetricCard label="Performance Average" value={valueNumber(summary.performanceAverage)} note="out of 100" />
-            <MetricCard label="Completion Rate" value={valueNumber(summary.completionRate)} suffix="%" note="activities done" />
+            <MetricCard label="Written Works Average" value={displayMetric(summary.writtenWorksAverage)} note="out of 100" />
+            <MetricCard label="Performance Average" value={displayMetric(summary.performanceAverage)} note="out of 100" />
+            <MetricCard label="Completion Rate" value={displayMetric(summary.completionRate)} suffix={typeof summary.completionRate === "number" ? "%" : undefined} note="activities done" />
           </div>
         </div>
         <Panel title="LMS Behavior">
@@ -637,7 +640,10 @@ function StudentAnalytics({ data }: { user: UserDetail; data: ReturnType<typeof 
         <Panel title="Subject Mastery">
           <SubjectBars rows={data.subject_mastery} />
           <div className="mt-4 text-[10px]">
-            Weak Subjects: <span className="font-bold">Science and Filipino</span>
+            Weak Subjects:{" "}
+            <span className="font-bold">
+              {weakSubjects.length ? weakSubjects.join(", ") : "No weak subject data available"}
+            </span>
           </div>
         </Panel>
         <Panel title="Score Trend">
@@ -724,16 +730,32 @@ function ClassworkTable({ rows }: { rows: Array<Record<string, number | string |
           <span>Status</span>
           <span className="text-right">Score</span>
         </div>
-        {rows.map((row, index) => (
-          <div key={`${row.name}-${index}`} className="grid grid-cols-[minmax(150px,1fr)_80px_160px_100px_80px] gap-2 border-b border-black/10 px-3 py-2 text-xs last:border-0">
-            <span className="font-semibold">{row.name}</span>
-            <span>{row.type}</span>
-            <span className="font-semibold">{row.subject}</span>
-            <span>{row.status}</span>
-            <span className="text-right font-bold">{row.score}</span>
+        {rows.length > 0 ? (
+          rows.map((row, index) => (
+            <div key={`${row.name}-${index}`} className="grid grid-cols-[minmax(150px,1fr)_80px_160px_100px_80px] gap-2 border-b border-black/10 px-3 py-2 text-xs last:border-0">
+              <span className="font-semibold">{row.name}</span>
+              <span>{row.type}</span>
+              <span className="font-semibold">{row.subject}</span>
+              <span>{row.status}</span>
+              <span className="text-right font-bold">{row.score}</span>
+            </div>
+          ))
+        ) : (
+          <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+            No classwork records are available yet.
           </div>
-        ))}
+        )}
       </div>
     </section>
   );
+}
+
+function displayMetric(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Number(value.toFixed(2));
+  }
+  if (typeof value === "string" && value.trim()) {
+    return value;
+  }
+  return "Unavailable";
 }

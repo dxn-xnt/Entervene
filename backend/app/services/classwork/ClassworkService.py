@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, cast
 
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import ValidationError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.FileUpload import delete_file, save_file
@@ -25,6 +26,7 @@ from app.schemas.Classwork import (
     ClassworkResponse,
     ClassworkUpdate,
 )
+from app.schemas.Quiz import QuizBuilderUpsert
 from app.services.classwork.ClassworkAccessService import (
     authorize_assignment_access,
     authorize_classwork_access,
@@ -51,6 +53,7 @@ from app.services.classwork.ClassworkShared import (
     validate_classwork_values,
     validate_schedule,
 )
+from app.services.quiz.QuizBuilderService import upsert_quiz_builder
 
 
 def create_classwork_record(body: ClassworkCreate, staff_id: str, db: Session) -> ClassworkResponse:
@@ -102,6 +105,7 @@ async def create_classwork_wizard_record(
     due_date: Optional[datetime],
     lock_date: Optional[datetime],
     max_attempts: Optional[int],
+    quiz_payload: Optional[str],
     files: Optional[list[UploadFile]],
     staff_id: str,
     db: Session,
@@ -117,6 +121,7 @@ async def create_classwork_wizard_record(
     ensure_subject_owner(db, staff_id, subject_id)
     ensure_lessons_owned(db, staff_id, subject_id, selected_lesson_ids)
     ensure_class_targets(db, staff_id, subject_id, selected_class_ids)
+    quiz_builder = _parse_quiz_payload(quiz_payload, normalized_type)
 
     saved_paths: list[str] = []
     try:
@@ -163,6 +168,10 @@ async def create_classwork_wizard_record(
             for assignment in created_assignments:
                 assignment.max_attempts = None
 
+        if quiz_builder:
+            # Save quiz builder rows before committing so classwork+quiz creation is atomic.
+            upsert_quiz_builder(db, classwork, quiz_builder)
+
         db.commit()
         db.refresh(classwork)
         return build_classwork_response(classwork)
@@ -170,6 +179,22 @@ async def create_classwork_wizard_record(
         db.rollback()
         cleanup_saved_files(saved_paths)
         raise
+
+
+def _parse_quiz_payload(raw_payload: Optional[str], normalized_type: str) -> QuizBuilderUpsert | None:
+    if not is_quiz_type(normalized_type):
+        return None
+    if not raw_payload:
+        raise HTTPException(status_code=400, detail="Quiz questions are required for quiz classwork")
+    try:
+        return QuizBuilderUpsert.model_validate_json(raw_payload)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=[error["msg"] for error in exc.errors()],
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid quiz payload") from exc
 
 
 def teacher_classworks(staff_id: str, db: Session) -> list[ClassworkResponse]:
@@ -518,7 +543,7 @@ def teacher_classes(staff_id: str, db: Session) -> list[dict]:
             "subject_name": subject.subject_name,
             "subject_codename": subject.subject_codename,
             "class_id": class_.class_id,
-            "section_name": class_.section_name,
+            "section_name": _class_section_name(class_),
         }
         for subject_load, subject, class_ in rows
     ]
@@ -653,7 +678,7 @@ def _assignment_response(
         classwork_assignment_id=assignment.classwork_assignment_id,
         classwork_id=classwork.classwork_id,
         class_id=assignment.class_id,
-        section_name=class_.section_name if class_ else None,
+        section_name=_class_section_name(class_),
         title=classwork.title,
         description=classwork.description,
         instructions=classwork.instructions,
@@ -669,3 +694,9 @@ def _assignment_response(
         attachments=[build_attachment_response(attachment) for attachment in classwork.attachments],
         submission_status=submission_status,
     )
+
+
+def _class_section_name(class_: Class | None) -> str | None:
+    if not class_:
+        return None
+    return cast(str | None, class_.section_name)

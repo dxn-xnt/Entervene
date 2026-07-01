@@ -14,6 +14,7 @@ from app.api.v1.routes.Lessons import router as lessons_router
 from app.api.v1.routes.Submissions import router as submissions_router
 from app.api.v1.routes.Quizzes import router as quizzes_router
 from app.api.v1.routes.Suggestions import router as suggestions_router
+from app.api.v1.routes.StudentRecords import router as student_records_router
 from app.api.v1.routes.Users import router as users_router
 from app.api.v1.routes.Classes import router as classes_router
 from app.services.classes.ClassShared import ClassManagementError, class_management_error_handler
@@ -66,6 +67,7 @@ app.include_router(lessons_router,     prefix="/api/v1/lessons",               t
 app.include_router(submissions_router, prefix="/api/v1/submissions",           tags=["Submissions"])
 app.include_router(quizzes_router,     prefix="/api/v1/quizzes",               tags=["Quizzes"])
 app.include_router(suggestions_router, prefix="/api/v1/suggestions",           tags=["Suggestions"])
+app.include_router(student_records_router, prefix="/api/v1/student-records",    tags=["Student Records"])
 app.include_router(classes_router,     prefix="/api/v1/classes",               tags=["Classes"])
 
 @app.get("/health")

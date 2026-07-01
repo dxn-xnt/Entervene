@@ -8,6 +8,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.Base import Base
 
 if TYPE_CHECKING:
+    from app.models.quiz.Question import Question
+    from app.models.quiz.Quiz import Quiz
     from app.models.quiz.QuizAnswer import QuizAnswer
 
 
@@ -32,8 +34,8 @@ class QuizQuestion(Base):
     )
     display_order: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    quiz: Mapped[object] = relationship("Quiz", back_populates="questions")
-    question: Mapped[object] = relationship("Question", back_populates="quiz_links")
+    quiz: Mapped["Quiz"] = relationship("Quiz", back_populates="questions")
+    question: Mapped["Question"] = relationship("Question", back_populates="quiz_links")
     answers: Mapped[list["QuizAnswer"]] = relationship(
         "QuizAnswer",
         back_populates="quiz_question",

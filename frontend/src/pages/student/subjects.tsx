@@ -15,6 +15,7 @@ interface EnrolledSubject {
   subject_codename?: string;
   teacher_name: string;
   period_name: string;
+  is_current_period: boolean;
   is_current_quarter: boolean;
   section_name: string;
   year_label: string;

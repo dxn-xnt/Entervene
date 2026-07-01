@@ -6,6 +6,8 @@ export const defaultQuizSettings: QuizSettingsDraft = {
   enable_per_question_time_limits: false,
   max_attempts: "1",
   show_correct_answers: false,
+  summary_release_mode: "IMMEDIATE",
+  summary_release_at: "",
   duration_minutes: "",
 };
 

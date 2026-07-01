@@ -7,6 +7,7 @@ import AttachmentDisplay from "@/components/AttachmentDisplay";
 import ClassworkFormModal from "./subject-details/ClassworkFormModal";
 import LessonClassworkList from "./subject-details/LessonClassworkList";
 import MetricCard from "./subject-details/MetricCard";
+import StudentRecordsPanel from "./subject-details/StudentRecordsPanel";
 import {
   LOCKED_CLASSWORK_MESSAGE,
   allowedMaterialExtensions,
@@ -26,6 +27,7 @@ import type {
 export default function SubjectDetails() {
   const { classId, subjectId } = useParams<{ classId: string; subjectId: string }>();
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<"lessons" | "students">("lessons");
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
@@ -557,7 +559,30 @@ export default function SubjectDetails() {
           </div>
         </section>
 
-        {isLoading ? (
+        <div className="flex flex-wrap gap-2 border-b border-black">
+          <button
+            type="button"
+            onClick={() => setActiveTab("lessons")}
+            className={`rounded-t-lg border border-b-0 border-black px-4 py-2 font-semibold ${
+              activeTab === "lessons" ? "bg-white" : "bg-[#F6E9B2]"
+            }`}
+          >
+            Lessons & Classwork
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("students")}
+            className={`rounded-t-lg border border-b-0 border-black px-4 py-2 font-semibold ${
+              activeTab === "students" ? "bg-white" : "bg-[#F6E9B2]"
+            }`}
+          >
+            Students
+          </button>
+        </div>
+
+        {activeTab === "students" && classId && subjectId ? (
+          <StudentRecordsPanel classId={classId} subjectId={subjectId} />
+        ) : isLoading ? (
           <p className="py-8 text-center text-gray-500">Loading lessons...</p>
         ) : (
           <LessonClassworkList

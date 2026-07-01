@@ -199,6 +199,7 @@ def quiz_attempt_context():
             "other_student": other_student,
             "assignment": assignment,
             "classwork": classwork,
+            "setting": setting,
             "mc_link": mc_link,
             "short_link": short_link,
             "correct": correct,
@@ -275,6 +276,52 @@ def test_multiple_choice_only_quiz_is_auto_graded(quiz_attempt_context):
     assert response.status_code == 200
     assert response.json()["status"] == "graded"
     assert response.json()["grade"] == 0.0
+
+
+def test_quiz_summary_is_hidden_until_scheduled_release(quiz_attempt_context):
+    c = quiz_attempt_context
+    c["setting"].show_correct_answers = True
+    c["setting"].summary_release_mode = "SCHEDULED"
+    c["setting"].summary_release_at = datetime.now(timezone.utc) + timedelta(days=1)
+    c["db"].commit()
+
+    response = c["client"].post(
+        f"/api/v1/quizzes/assignment/{c['assignment'].classwork_assignment_id}/submit",
+        json={
+            "answers": [
+                {
+                    "quiz_question_id": c["mc_link"].quiz_question_id,
+                    "selected_option_id": c["correct"].option_id,
+                },
+                {
+                    "quiz_question_id": c["short_link"].quiz_question_id,
+                    "answer_text": "Variables store values.",
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary_available"] is False
+    assert body["summary_release_at"] is not None
+    assert "will be available" in body["summary_message"]
+    assert body["questions"][0]["selected_option_id"] is None
+    assert body["questions"][0]["options"][0]["is_correct"] is None
+    assert body["questions"][0]["points_awarded"] is None
+
+    c["setting"].summary_release_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    c["db"].commit()
+    released = c["client"].get(
+        f"/api/v1/quizzes/assignment/{c['assignment'].classwork_assignment_id}/attempt"
+    )
+
+    assert released.status_code == 200
+    released_body = released.json()
+    assert released_body["summary_available"] is True
+    assert released_body["questions"][0]["selected_option_id"] == c["correct"].option_id
+    assert released_body["questions"][0]["options"][0]["is_correct"] is True
+    assert released_body["questions"][0]["points_awarded"] == 6.0
 
 
 def test_quiz_submit_allows_unanswered_items_for_timed_autosubmit(quiz_attempt_context):

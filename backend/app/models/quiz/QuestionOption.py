@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.db.Base import Base
+
+if TYPE_CHECKING:
+    from app.models.quiz.Question import Question
 
 
 class QuestionOption(Base):
@@ -27,4 +31,4 @@ class QuestionOption(Base):
     option_order: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    question: Mapped[object] = relationship("Question", back_populates="options")
+    question: Mapped["Question"] = relationship("Question", back_populates="options")

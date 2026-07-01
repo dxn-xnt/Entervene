@@ -134,6 +134,10 @@ interface QuizAttempt {
   submitted_at?: string | null;
   grade?: number | null;
   can_submit: boolean;
+  summary_available: boolean;
+  summary_release_mode: "IMMEDIATE" | "SCHEDULED" | "AFTER_DUE_DATE" | "NEVER" | string;
+  summary_release_at?: string | null;
+  summary_message?: string | null;
   questions: QuizAttemptQuestion[];
 }
 
@@ -207,6 +211,11 @@ function formatExamTimer(seconds: number | null) {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
+function formatDateTime(dateStr?: string | null) {
+  if (!dateStr) return "";
+  return new Date(dateStr).toLocaleString();
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────
 
 export default function SubjectLessonTab({
@@ -231,6 +240,9 @@ export default function SubjectLessonTab({
   const [isQuizSubmitting, setIsQuizSubmitting] = useState(false);
   const [quizError, setQuizError] = useState("");
   const [isQuizFullscreen, setIsQuizFullscreen] = useState(false);
+  const [quizCurrentIndex, setQuizCurrentIndex] = useState(0);
+  const [quizReviewMode, setQuizReviewMode] = useState(false);
+  const [flaggedQuizQuestionIds, setFlaggedQuizQuestionIds] = useState<Set<number>>(new Set());
   const [quizRemainingSeconds, setQuizRemainingSeconds] = useState<number | null>(null);
   const autoSubmitRef = useRef(false);
   const submitQuizAttemptRef = useRef<((autoSubmit?: boolean) => Promise<void>) | null>(null);
@@ -434,6 +446,9 @@ export default function SubjectLessonTab({
       setSelectedQuizAttempt(attempt);
       hydrateQuizAnswers(attempt);
       autoSubmitRef.current = false;
+      setQuizCurrentIndex(0);
+      setQuizReviewMode(false);
+      setFlaggedQuizQuestionIds(new Set());
       setIsQuizFullscreen(attempt.status === "pending");
       updateClassworkStatus(selectedClasswork.classwork_assignment_id, attempt.status);
     } catch (err) {
@@ -471,6 +486,9 @@ export default function SubjectLessonTab({
       setSelectedQuizAttempt(attempt);
       hydrateQuizAnswers(attempt);
       setIsQuizFullscreen(false);
+      setQuizReviewMode(false);
+      setQuizCurrentIndex(0);
+      setFlaggedQuizQuestionIds(new Set());
       setQuizError("");
       autoSubmitRef.current = false;
       updateClassworkStatus(selectedClasswork.classwork_assignment_id, attempt.status);
@@ -544,6 +562,9 @@ export default function SubjectLessonTab({
       setSelectedQuizAttempt(null);
       setQuizAnswers({});
       setIsQuizFullscreen(false);
+      setQuizReviewMode(false);
+      setQuizCurrentIndex(0);
+      setFlaggedQuizQuestionIds(new Set());
       autoSubmitRef.current = false;
       if (isQuizType(detail.classwork_type)) {
         await loadQuizAttempt(cw.classwork_assignment_id);
@@ -561,6 +582,9 @@ export default function SubjectLessonTab({
     setSelectedQuizAttempt(null);
     setQuizAnswers({});
     setIsQuizFullscreen(false);
+    setQuizReviewMode(false);
+    setQuizCurrentIndex(0);
+    setFlaggedQuizQuestionIds(new Set());
     setQuizRemainingSeconds(null);
     autoSubmitRef.current = false;
     setQuizError("");
@@ -606,62 +630,220 @@ export default function SubjectLessonTab({
     }
   };
 
-  const renderQuizQuestion = (question: QuizAttemptQuestion, index: number) => (
-    <div
-      key={question.quiz_question_id}
-      className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
-    >
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <p className="text-base font-bold">
-          {index + 1}. {question.question_text}
-        </p>
-        <span className="shrink-0 text-sm font-bold">{question.points} pts</span>
-      </div>
-      {question.question_type === "MULTIPLE_CHOICE" ? (
-        <div className="space-y-2">
-          {question.options.map((option) => (
-            <label
-              key={option.option_id}
-              className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-300 bg-[#FFFBEE] px-4 py-3 text-sm hover:border-black"
+  const hasQuizAnswer = (question: QuizAttemptQuestion) => {
+    const answer = quizAnswers[question.quiz_question_id];
+    return Boolean(answer?.selected_option_id || answer?.answer_text?.trim());
+  };
+
+  const toggleQuizFlag = (questionId: number) => {
+    setFlaggedQuizQuestionIds((current) => {
+      const next = new Set(current);
+      if (next.has(questionId)) next.delete(questionId);
+      else next.add(questionId);
+      return next;
+    });
+  };
+
+  const renderFullscreenQuiz = () => {
+    if (!selectedQuizAttempt || !selectedClasswork) return null;
+    const questions = selectedQuizAttempt.questions;
+    const currentQuestion = questions[quizCurrentIndex] ?? questions[0];
+    const answeredCount = questions.filter(hasQuizAnswer).length;
+
+    return (
+      <div className="fixed inset-0 z-[80] flex flex-col bg-[#F8F6ED]">
+        <header className="border-b border-black px-4 py-3">
+          <div className="grid grid-cols-[auto_1fr_auto] items-start gap-3">
+            <button
+              type="button"
+              onClick={() => setIsQuizFullscreen(false)}
+              className="rounded p-1 hover:bg-black/5"
+              aria-label="Exit fullscreen quiz"
             >
-              <input
-                type="radio"
-                name={`quiz-question-${question.quiz_question_id}`}
-                checked={quizAnswers[question.quiz_question_id]?.selected_option_id === option.option_id}
-                onChange={() =>
-                  setQuizAnswers((current) => ({
-                    ...current,
-                    [question.quiz_question_id]: {
-                      ...current[question.quiz_question_id],
-                      selected_option_id: option.option_id,
-                    },
-                  }))
-                }
-                disabled={isQuizSubmitting}
-              />
-              <span>{option.option_text}</span>
-            </label>
-          ))}
-        </div>
-      ) : (
-        <textarea
-          value={quizAnswers[question.quiz_question_id]?.answer_text ?? ""}
-          onChange={(event) =>
-            setQuizAnswers((current) => ({
-              ...current,
-              [question.quiz_question_id]: {
-                ...current[question.quiz_question_id],
-                answer_text: event.target.value,
-              },
-            }))
-          }
-          disabled={isQuizSubmitting}
-          className="min-h-28 w-full rounded-lg border border-gray-700 bg-[#FFFBEE] px-3 py-2 text-sm"
-          placeholder="Type your answer here"
-        />
-      )}
-    </div>
-  );
+              <ChevronLeft size={22} />
+            </button>
+            <div className="text-center">
+              <p className="text-xl font-black leading-none">{formatExamTimer(quizRemainingSeconds)}</p>
+              <p className="text-xs font-semibold text-gray-700">time left</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setQuizReviewMode(true)}
+              className="rounded-lg border border-black bg-white px-4 py-1.5 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFFBEE]"
+            >
+              Finish Quiz
+            </button>
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto px-4 py-4">
+          <div className="mx-auto max-w-6xl space-y-4">
+            <section className="rounded-lg border border-black bg-white p-4 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <h1 className="text-2xl font-bold">{selectedQuizAttempt.title}</h1>
+              <p className="mt-1 text-sm font-semibold italic text-gray-700">
+                {selectedClasswork.description
+                  ? `Lessons: ${selectedClasswork.description}`
+                  : "Review each question carefully before submitting."}
+              </p>
+              {!quizReviewMode ? (
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  {questions.map((question, index) => (
+                    <button
+                      key={question.quiz_question_id}
+                      type="button"
+                      onClick={() => {
+                        setQuizCurrentIndex(index);
+                        setQuizReviewMode(false);
+                      }}
+                      className={`relative h-8 min-w-8 rounded border border-black px-2 text-xs font-bold ${
+                        index === quizCurrentIndex
+                          ? "bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                          : hasQuizAnswer(question)
+                            ? "bg-[#F6E9B2]"
+                            : "bg-white"
+                      }`}
+                    >
+                      {flaggedQuizQuestionIds.has(question.quiz_question_id) ? (
+                        <span className="absolute -top-2 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-red-500" />
+                      ) : null}
+                      {index + 1}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+
+            {quizError ? (
+              <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                {quizError}
+              </p>
+            ) : null}
+
+            {quizReviewMode ? (
+              <section className="mx-auto max-w-3xl">
+                <div className="mb-2 flex items-center justify-between">
+                  <h2 className="text-lg font-bold">Review answers</h2>
+                  <p className="text-sm font-semibold text-gray-600">
+                    {answeredCount}/{questions.length} answered
+                  </p>
+                </div>
+                <div className="overflow-hidden rounded-lg border border-black bg-white">
+                  {questions.map((question, index) => (
+                    <button
+                      key={question.quiz_question_id}
+                      type="button"
+                      onClick={() => {
+                        setQuizCurrentIndex(index);
+                        setQuizReviewMode(false);
+                      }}
+                      className="flex w-full items-center justify-between border-b border-gray-300 px-4 py-2 text-left last:border-b-0 hover:bg-[#FFFBEE]"
+                    >
+                      <span className="font-semibold">Question {index + 1}</span>
+                      <span className="rounded-full border border-gray-300 px-3 py-1 text-[11px] font-semibold">
+                        {hasQuizAnswer(question) ? "Answer Recorded" : "No Answer"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => submitQuizAttempt(false)}
+                  disabled={!selectedQuizAttempt.can_submit || isQuizSubmitting}
+                  className="mt-4 float-right rounded-lg border border-black bg-[#7ABA78] px-5 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isQuizSubmitting ? "Submitting..." : "Submit"}
+                </button>
+              </section>
+            ) : currentQuestion ? (
+              <section className="mx-auto max-w-3xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setQuizCurrentIndex((index) => Math.max(0, index - 1))}
+                    disabled={quizCurrentIndex === 0}
+                    className="rounded-full border border-black bg-white p-2 disabled:opacity-40"
+                    aria-label="Previous question"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleQuizFlag(currentQuestion.quiz_question_id)}
+                    className={`rounded-lg border border-black px-4 py-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                      flaggedQuizQuestionIds.has(currentQuestion.quiz_question_id)
+                        ? "bg-[#F6E9B2]"
+                        : "bg-white"
+                    }`}
+                  >
+                    Flag Question
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setQuizCurrentIndex((index) => Math.min(questions.length - 1, index + 1))
+                    }
+                    disabled={quizCurrentIndex === questions.length - 1}
+                    className="rounded-full border border-black bg-white p-2 disabled:opacity-40"
+                    aria-label="Next question"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+
+                <div className="rounded-lg border border-black bg-[#F6E9B2] px-6 py-12 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  <p className="text-lg font-bold">{currentQuestion.question_text}</p>
+                </div>
+
+                {currentQuestion.question_type === "MULTIPLE_CHOICE" ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {currentQuestion.options.map((option) => (
+                      <button
+                        key={option.option_id}
+                        type="button"
+                        onClick={() =>
+                          setQuizAnswers((current) => ({
+                            ...current,
+                            [currentQuestion.quiz_question_id]: {
+                              ...current[currentQuestion.quiz_question_id],
+                              selected_option_id: option.option_id,
+                            },
+                          }))
+                        }
+                        disabled={isQuizSubmitting}
+                        className={`min-h-24 rounded-lg border border-black px-4 py-3 text-lg font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                          quizAnswers[currentQuestion.quiz_question_id]?.selected_option_id === option.option_id
+                            ? "bg-[#F6E9B2]"
+                            : "bg-white"
+                        }`}
+                      >
+                        {option.option_text}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <textarea
+                    value={quizAnswers[currentQuestion.quiz_question_id]?.answer_text ?? ""}
+                    onChange={(event) =>
+                      setQuizAnswers((current) => ({
+                        ...current,
+                        [currentQuestion.quiz_question_id]: {
+                          ...current[currentQuestion.quiz_question_id],
+                          answer_text: event.target.value,
+                        },
+                      }))
+                    }
+                    disabled={isQuizSubmitting}
+                    className="min-h-32 w-full rounded-lg border border-black bg-white px-4 py-4 text-center text-lg font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    placeholder="Type answer"
+                  />
+                )}
+              </section>
+            ) : null}
+          </div>
+        </main>
+      </div>
+    );
+  };
 
   // Derived values
   const displaySubjectName = propSubjectName ?? subjectInfo?.subject_name ?? "—";
@@ -689,6 +871,26 @@ export default function SubjectLessonTab({
     const bScore = Math.min(...bClassworks.map(classworkGoalScore), Number.MAX_SAFE_INTEGER);
     return aScore - bScore;
   });
+
+  const classworkLessonCounts = allClassworks.reduce((counts, classwork) => {
+    counts.set(
+      classwork.classwork_assignment_id,
+      (counts.get(classwork.classwork_assignment_id) ?? 0) + 1,
+    );
+    return counts;
+  }, new Map<number, number>());
+
+  const multiLessonClassworks = Array.from(
+    new Map(
+      allClassworks
+        .filter(
+          (classwork) =>
+            isQuizType(classwork.classwork_type) &&
+            (classworkLessonCounts.get(classwork.classwork_assignment_id) ?? 0) > 1,
+        )
+        .map((classwork) => [classwork.classwork_assignment_id, classwork]),
+    ).values(),
+  );
 
   const renderLessonClassworkCards = (lesson: Lesson) => {
     const classworks = classworksByLesson[lesson.lesson_id] ?? [];
@@ -856,63 +1058,7 @@ export default function SubjectLessonTab({
   // ─── Main render ───────────────────────────────────────────────────────
   return (
     <div className="space-y-3">
-      {isQuizFullscreen && selectedClasswork && selectedQuizAttempt ? (
-        <div className="fixed inset-0 z-[80] flex flex-col bg-[#F8F6ED]">
-          <header className="border-b border-black bg-[#F6E9B2] px-6 py-4 shadow-[0px_3px_0px_0px_rgba(0,0,0,1)]">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Exam mode</p>
-                <h2 className="text-2xl font-bold">{selectedQuizAttempt.title}</h2>
-                <p className="mt-1 text-sm font-semibold text-gray-700">
-                  Attempts {selectedQuizAttempt.attempt_count}/{selectedQuizAttempt.max_attempts}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg border border-black bg-white px-4 py-2 text-right">
-                  <p className="text-xs font-bold uppercase text-gray-600">Time left</p>
-                  <p className={`text-2xl font-black ${quizRemainingSeconds !== null && quizRemainingSeconds <= 60 ? "text-red-600" : ""}`}>
-                    {formatExamTimer(quizRemainingSeconds)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => submitQuizAttempt(false)}
-                  disabled={!selectedQuizAttempt.can_submit || isQuizSubmitting}
-                  className="rounded-lg border border-black bg-[#7ABA78] px-5 py-3 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isQuizSubmitting ? "Submitting..." : "Submit Exam"}
-                </button>
-              </div>
-            </div>
-            {quizError ? (
-              <p className="mt-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-                {quizError}
-              </p>
-            ) : null}
-          </header>
-
-          <main className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
-            <div className="mx-auto max-w-5xl space-y-4">
-              <section className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-gray-700">
-                  <span>{selectedQuizAttempt.questions.length} questions</span>
-                  <span>{selectedQuizAttempt.total_points ?? selectedClasswork.total_points ?? 0} pts</span>
-                  {selectedQuizAttempt.duration_minutes ? (
-                    <span>{selectedQuizAttempt.duration_minutes} minutes</span>
-                  ) : null}
-                </div>
-                {selectedQuizAttempt.instructions ? (
-                  <p className="mt-3 whitespace-pre-wrap text-sm text-gray-700">
-                    {selectedQuizAttempt.instructions}
-                  </p>
-                ) : null}
-              </section>
-
-              {selectedQuizAttempt.questions.map((question, index) => renderQuizQuestion(question, index))}
-            </div>
-          </main>
-        </div>
-      ) : null}
+      {isQuizFullscreen && selectedClasswork && selectedQuizAttempt ? renderFullscreenQuiz() : null}
       {/* ── Subject info card ── */}
       {selectedLessonDetail ? (
         renderLessonDetailScreen(selectedLessonDetail)
@@ -961,9 +1107,46 @@ export default function SubjectLessonTab({
             </div>
 
             <div className="space-y-2">
+              {multiLessonClassworks.map((classwork) => {
+                const badge = getStatusBadge(classwork.submission_status, classwork.due_date);
+                const isLoading = detailLoadingId === classwork.classwork_assignment_id;
+                return (
+                  <button
+                    key={`multi-lesson-${classwork.classwork_assignment_id}`}
+                    type="button"
+                    onClick={() => openClassworkDetail(classwork)}
+                    disabled={isLoading}
+                    className="w-full rounded-lg border border-black bg-white px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center gap-3 hover:bg-[#FFFBEE] transition-colors text-left"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-[#F6E9B2]">
+                      <ClipboardList size={18} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="font-bold text-lg leading-tight">{classwork.title}</h4>
+                        <span className="rounded-full border border-black bg-[#7ABA78] px-2 py-0.5 text-[10px] font-bold">
+                          Multi-lesson exam
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-0.5">
+                        {classwork.due_date ? `Scheduled ${fmtDate(classwork.due_date)}` : "No due date"}
+                      </p>
+                    </div>
+                    {badge ? (
+                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${badge.cls}`}>
+                        {badge.label}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
               {sortedLessons.map((lesson) => {
                 const isExpanded = expandedId === lesson.lesson_id;
-                const classworks = classworksByLesson[lesson.lesson_id] ?? [];
+                const classworks = (classworksByLesson[lesson.lesson_id] ?? []).filter(
+                  (classwork) =>
+                    !isQuizType(classwork.classwork_type) ||
+                    (classworkLessonCounts.get(classwork.classwork_assignment_id) ?? 0) <= 1,
+                );
 
                 return (
                   <div key={lesson.lesson_id} id={`student-lesson-${lesson.lesson_id}`}>
@@ -1008,58 +1191,6 @@ export default function SubjectLessonTab({
                     {/* ── Inline classwork items (expanded) ── */}
                     {isExpanded && (
                       <div className="mt-2 space-y-2 pl-3">
-                        <section className="rounded-lg border border-black bg-white p-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                          <div className="flex items-start gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-[#F6E9B2]">
-                              <BookOpen size={19} />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <h5 className="font-bold">Lesson Overview</h5>
-                              {lesson.description ? (
-                                <p className="mt-1 text-sm text-gray-700">{lesson.description}</p>
-                              ) : (
-                                <p className="mt-1 text-sm text-gray-500">No lesson description provided.</p>
-                              )}
-                            </div>
-                          </div>
-
-                          {lesson.content ? (
-                            <div className="mt-4 rounded-lg border border-gray-200 bg-[#FFFBEE] p-4">
-                              <h5 className="mb-2 text-sm font-bold">Lesson Content</h5>
-                              <p className="whitespace-pre-wrap text-sm leading-6 text-gray-800">
-                                {lesson.content}
-                              </p>
-                            </div>
-                          ) : (
-                            <p className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">
-                              This lesson has no written content yet.
-                            </p>
-                          )}
-                        </section>
-
-                        <section className="rounded-lg border border-black bg-white p-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                          <div className="mb-3 flex items-center gap-2">
-                            <Paperclip size={18} />
-                            <div>
-                              <h5 className="font-bold">Lesson Materials</h5>
-                              <p className="text-xs text-gray-500">Open or download the teacher-provided study files.</p>
-                            </div>
-                          </div>
-                          {lesson.attachments.length > 0 ? (
-                            <AttachmentDisplay
-                              attachments={lesson.attachments}
-                              type="lesson"
-                              downloadUrl={(attachmentId) =>
-                                `${API_URL}/api/v1/lessons/${lesson.lesson_id}/attachments/${attachmentId}/download`
-                              }
-                            />
-                          ) : (
-                            <p className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-500">
-                              No lesson materials attached.
-                            </p>
-                          )}
-                        </section>
-
                         <div className="flex items-center gap-2 px-1 pt-2">
                           <ClipboardList size={17} />
                           <h5 className="font-bold">Linked Classwork</h5>
@@ -1374,14 +1505,41 @@ export default function SubjectLessonTab({
                           </div>
 
                           {selectedQuizAttempt.status !== "pending" ? (
-                            <button
-                              type="button"
-                              onClick={startQuizAttempt}
-                              disabled={!selectedQuizAttempt.can_submit || isQuizSubmitting}
-                              className="w-full rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {selectedQuizAttempt.status === "not_started" ? "Start Quiz" : "Retake Quiz"}
-                            </button>
+                            <div className="space-y-2">
+                              {selectedQuizAttempt.summary_message ? (
+                                <div className="rounded-lg border border-black bg-white px-3 py-2 text-xs font-semibold text-gray-700">
+                                  {selectedQuizAttempt.summary_release_at
+                                    ? `Your quiz has been submitted successfully. Your quiz summary will be available on ${formatDateTime(selectedQuizAttempt.summary_release_at)}.`
+                                    : selectedQuizAttempt.summary_message}
+                                </div>
+                              ) : null}
+                              {selectedQuizAttempt.status !== "not_started" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setQuizReviewMode(true);
+                                    setQuizCurrentIndex(0);
+                                    setIsQuizFullscreen(true);
+                                  }}
+                                  disabled={!selectedQuizAttempt.summary_available}
+                                  className="w-full rounded-lg border border-black bg-white px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {selectedQuizAttempt.summary_available
+                                    ? "View Summary"
+                                    : selectedQuizAttempt.summary_release_mode === "NEVER"
+                                      ? "Summary Not Available"
+                                      : "Summary Scheduled"}
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={startQuizAttempt}
+                                disabled={!selectedQuizAttempt.can_submit || isQuizSubmitting}
+                                className="w-full rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {selectedQuizAttempt.status === "not_started" ? "Start Quiz" : "Retake Quiz"}
+                              </button>
+                            </div>
                           ) : (
                             <>
                               <div className="rounded-lg border border-black bg-white p-3 text-sm font-semibold">
@@ -1473,3 +1631,4 @@ function TimelineItem({
     </div>
   );
 }
+
