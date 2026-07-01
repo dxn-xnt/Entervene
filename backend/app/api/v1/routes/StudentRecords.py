@@ -22,11 +22,13 @@ router = APIRouter()
 
 @router.get("/teacher/periods", response_model=StudentRecordPeriodOptionsResponse)
 def get_teacher_record_periods(
+    class_id: int | None = Query(None),
+    subject_id: int | None = Query(None),
     _teacher: dict = Depends(require_role("teacher")),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    return teacher_period_options(db, staff_id)
+    return teacher_period_options(db, staff_id, class_id, subject_id)
 
 
 @router.get(

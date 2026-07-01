@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { API_URL, apiFetch } from "@/lib/api";
 import AttachmentDisplay from "@/components/AttachmentDisplay";
+import { getTeacherRecordPeriods, getTeacherStudentRoster } from "@/lib/student-record-api";
 import ClassworkFormModal from "./subject-details/ClassworkFormModal";
 import LessonClassworkList from "./subject-details/LessonClassworkList";
 import MetricCard from "./subject-details/MetricCard";
@@ -30,6 +31,9 @@ export default function SubjectDetails() {
   const [activeTab, setActiveTab] = useState<"lessons" | "students">("lessons");
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [classworkCount, setClassworkCount] = useState<number | null>(null);
+  const [overviewMastery, setOverviewMastery] = useState<number>(0);
+  const [overviewCompletion, setOverviewCompletion] = useState<number>(0);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [lessonDraft, setLessonDraft] = useState<LessonDraft | null>(null);
   const [lessonClassIds, setLessonClassIds] = useState<number[]>([]);
@@ -49,6 +53,7 @@ export default function SubjectDetails() {
   const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
   const [detailError, setDetailError] = useState("");
   const [lessonSearch, setLessonSearch] = useState("");
+  const [lessonSort, setLessonSort] = useState<"order" | "newest" | "oldest" | "title">("order");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -58,10 +63,13 @@ export default function SubjectDetails() {
       setError("");
 
       try {
-        const [classesResponse, lessonsResponse] = await Promise.all([
+        const [classesResponse, lessonsResponse, assignmentsResponse] = await Promise.all([
           apiFetch("/api/v1/classwork-assignments/teacher/classes"),
           classId && subjectId
             ? apiFetch(`/api/v1/lessons/my-class/${classId}/subject/${subjectId}`)
+            : Promise.resolve(null),
+          classId && subjectId
+            ? apiFetch(`/api/v1/classwork-assignments/teacher/class/${classId}/subject/${subjectId}/assignments`)
             : Promise.resolve(null),
         ]);
 
@@ -77,6 +85,27 @@ export default function SubjectDetails() {
           }
           const lessonData = (await lessonsResponse.json()) as Lesson[];
           setLessons(lessonData.filter((lesson) => !lesson.is_archived));
+        }
+
+        if (assignmentsResponse) {
+          if (!assignmentsResponse.ok) {
+            throw new Error("Unable to load classwork overview.");
+          }
+          const assignments = (await assignmentsResponse.json()) as unknown[];
+          setClassworkCount(assignments.length);
+        }
+
+        if (classId && subjectId) {
+          const periods = await getTeacherRecordPeriods(classId, subjectId);
+          const periodId = periods.default_academic_period_id || periods.periods[0]?.academic_period_id;
+          if (periodId) {
+            const roster = await getTeacherStudentRoster(classId, subjectId, periodId);
+            setOverviewMastery(averageRosterMetric(roster.students, "running_classwork_percentage"));
+            setOverviewCompletion(averageRosterMetric(roster.students, "completion_rate"));
+          } else {
+            setOverviewMastery(0);
+            setOverviewCompletion(0);
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load subject details.");
@@ -104,14 +133,25 @@ export default function SubjectDetails() {
   }, [loads, subjectId]);
   const filteredLessons = useMemo(() => {
     const query = lessonSearch.trim().toLowerCase();
-    if (!query) return lessons;
-
-    return lessons.filter((lesson) =>
-      [lesson.title, lesson.description]
+    const visibleLessons = query
+      ? lessons.filter((lesson) =>
+        [lesson.title, lesson.description]
         .filter(Boolean)
         .some((value) => value?.toLowerCase().includes(query))
-    );
-  }, [lessonSearch, lessons]);
+      )
+      : lessons;
+
+    return [...visibleLessons].sort((a, b) => {
+      if (lessonSort === "title") return a.title.localeCompare(b.title);
+      if (lessonSort === "newest") {
+        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+      }
+      if (lessonSort === "oldest") {
+        return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+      }
+      return (a.order_index || 0) - (b.order_index || 0) || a.title.localeCompare(b.title);
+    });
+  }, [lessonSearch, lessonSort, lessons]);
 
   const toggleLesson = async (lessonId: number) => {
     if (expandedLessonId === lessonId) {
@@ -484,6 +524,7 @@ export default function SubjectDetails() {
         body: JSON.stringify({
           class_ids: [Number(classId)],
           due_date: classworkDraft.due_date ? new Date(classworkDraft.due_date).toISOString() : null,
+          allow_late_submissions: classworkDraft.allow_late_submissions,
           is_published: classworkDraft.is_published,
         }),
       });
@@ -553,9 +594,9 @@ export default function SubjectDetails() {
         <section>
           <h2 className="mb-3 text-xl font-bold">Subject Overview</h2>
           <div className="grid gap-4 md:grid-cols-3">
-            <MetricCard title="Lesson Mastery" value="98%" note="12% increased from last month" />
-            <MetricCard title="Classwork Assigned" value="23" note="12% increased from last month" />
-            <MetricCard title="Completion Percentage" value="20%" note="12% increased from last month" />
+            <MetricCard title="Lesson Mastery" value={`${overviewMastery}%`} note="Average graded classwork performance" />
+            <MetricCard title="Classwork Assigned" value={String(classworkCount ?? 0)} note="Active classworks in this subject" />
+            <MetricCard title="Completion Percentage" value={`${overviewCompletion}%`} note="Average submitted classwork completion" />
           </div>
         </section>
 
@@ -588,6 +629,8 @@ export default function SubjectDetails() {
           <LessonClassworkList
             lessonSearch={lessonSearch}
             setLessonSearch={setLessonSearch}
+            lessonSort={lessonSort}
+            setLessonSort={setLessonSort}
             filteredLessons={filteredLessons}
             totalLessons={lessons.length}
             expandedLessonId={expandedLessonId}
@@ -1047,4 +1090,13 @@ export default function SubjectDetails() {
       )}
     </AppLayout>
   );
+}
+
+function averageRosterMetric<T extends Record<string, unknown>>(rows: T[], key: keyof T) {
+  if (!rows.length) return 0;
+  const total = rows.reduce((sum, row) => {
+    const value = row[key];
+    return sum + (typeof value === "number" && Number.isFinite(value) ? value : 0);
+  }, 0);
+  return Number((total / rows.length).toFixed(2));
 }

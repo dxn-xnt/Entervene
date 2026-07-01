@@ -97,5 +97,6 @@ export type ClassworkDraft = {
   classwork_category: string;
   total_points: string;
   due_date: string;
+  allow_late_submissions: boolean;
   is_published: boolean;
 };

@@ -25,6 +25,7 @@ class ClassworkAssignment(Base):
     lock_date: Mapped[datetime | None] = Column(DateTime(timezone=True))
     is_published: Mapped[bool] = Column(Boolean, default=False)
     is_locked: Mapped[bool] = Column(Boolean, default=False)
+    allow_late_submissions: Mapped[bool] = Column(Boolean, default=False, nullable=False)
     max_attempts: Mapped[int | None] = mapped_column(Integer, default=1, nullable=True)
     assigned_at: Mapped[datetime | None] = Column(DateTime(timezone=True), server_default=func.now())
     created_at: Mapped[datetime | None] = Column(DateTime(timezone=True), server_default=func.now())

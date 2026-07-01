@@ -116,7 +116,8 @@ export default function ClassworkFormModal({
                   id="classwork-points"
                   type="number"
                   min="0"
-                  step="0.01"
+                  step="1"
+                  inputMode="decimal"
                   value={classworkDraft.total_points}
                   onChange={(event) =>
                     setClassworkDraft((current) => ({ ...current, total_points: event.target.value }))
@@ -141,6 +142,29 @@ export default function ClassworkFormModal({
               />
             </div>
           </div>
+
+          {!isReadingDraft && classworkDraft.due_date && (
+            <label className="flex items-start gap-3 rounded-lg border border-black bg-[#F6E9B2] px-4 py-3 text-sm font-semibold">
+              <input
+                type="checkbox"
+                checked={classworkDraft.allow_late_submissions}
+                onChange={(event) =>
+                  setClassworkDraft((current) => ({
+                    ...current,
+                    allow_late_submissions: event.target.checked,
+                  }))
+                }
+                disabled={isCreatingClasswork}
+                className="mt-1"
+              />
+              <span>
+                Allow submissions/resubmissions after the due date
+                <span className="block text-xs font-medium text-gray-700">
+                  Late work will be accepted but marked as late.
+                </span>
+              </span>
+            </label>
+          )}
 
           <div>
             <label htmlFor="classwork-description" className="mb-1 block text-sm font-semibold">Description</label>

@@ -9,6 +9,7 @@ export const emptyClassworkDraft: CreateDraft = {
   total_points: "100",
   due_date: "",
   lock_date: "",
+  allow_late_submissions: false,
   max_attempts: "1",
   is_published: true,
 };
@@ -72,6 +73,7 @@ export const classworkToEditDraft = (item: TeacherClasswork): EditDraft => ({
     return {
       due_date: toDateTimeLocal(firstAssignment?.due_date),
       lock_date: toDateTimeLocal(firstAssignment?.lock_date),
+      allow_late_submissions: firstAssignment?.allow_late_submissions ?? false,
       max_attempts: firstAssignment?.max_attempts ? String(firstAssignment.max_attempts) : "1",
       is_published: firstAssignment?.is_published ?? item.is_published,
     };

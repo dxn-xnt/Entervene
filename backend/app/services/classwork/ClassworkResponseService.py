@@ -58,6 +58,7 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
             "classwork_type": cw.classwork_type,
             "due_date": assignment.due_date,
             "lock_date": assignment.lock_date,
+            "allow_late_submissions": assignment.allow_late_submissions,
             "max_attempts": assignment.max_attempts,
             "is_published": assignment.is_published,
             "is_locked": assignment_is_locked(assignment),

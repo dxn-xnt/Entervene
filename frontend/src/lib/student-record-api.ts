@@ -92,8 +92,17 @@ async function readStudentRecordResponse<T>(response: Response, fallback: string
   return (await response.json()) as T;
 }
 
-export async function getTeacherRecordPeriods(): Promise<StudentRecordPeriodOptionsResponse> {
-  const response = await apiFetch("/api/v1/student-records/teacher/periods");
+export async function getTeacherRecordPeriods(
+  classId?: string | number | null,
+  subjectId?: string | number | null
+): Promise<StudentRecordPeriodOptionsResponse> {
+  const query = new URLSearchParams();
+  if (classId) query.set("class_id", String(classId));
+  if (subjectId) query.set("subject_id", String(subjectId));
+  const response = await apiFetch(
+    "/api/v1/student-records/teacher/periods"
+      + (query.toString() ? `?${query.toString()}` : "")
+  );
   return readStudentRecordResponse(response, "Unable to load record periods.");
 }
 

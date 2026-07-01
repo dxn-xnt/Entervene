@@ -170,7 +170,7 @@ def submit_student_quiz_attempt(
         submission.graded_at = now
     db.commit()
     db.refresh(submission)
-    return _attempt_response(db, assignment, classwork, quiz, submission, reveal_answers=True)
+    return _attempt_response(db, assignment, classwork, quiz, submission)
 
 
 def _student_quiz_scope(
@@ -261,13 +261,27 @@ def _attempt_response(
     reveal_answers: bool = False,
 ) -> QuizAttemptResponse:
     setting = db.query(QuizSetting).filter(QuizSetting.classwork_id == classwork.classwork_id).first()
+    summary_available, release_at, summary_message = _summary_release_state(setting, assignment, submission)
     should_reveal = reveal_answers or bool(
-        setting and setting.show_correct_answers and submission and submission.status in {"submitted", "late", "graded"}
+        setting
+        and setting.show_correct_answers
+        and submission
+        and submission.status in {"submitted", "late", "graded"}
+        and summary_available
     )
     answers = {
         answer.quiz_question_id: answer
         for answer in (getattr(submission, "quiz_answers", []) if submission else [])
     }
+    # Summary release controls when students can see their own recorded answers.
+    # Correct-answer visibility remains controlled separately by show_correct_answers.
+    include_student_answers = bool(
+        submission
+        and (
+            submission.status == "pending"
+            or (submission.status in {"submitted", "late", "graded"} and summary_available)
+        )
+    )
     return QuizAttemptResponse(
         quiz_id=quiz.quiz_id,
         classwork_assignment_id=assignment.classwork_assignment_id,
@@ -284,10 +298,47 @@ def _attempt_response(
         submitted_at=submission.submitted_at if submission else None,
         grade=float(submission.grade) if submission and submission.grade is not None else None,
         can_submit=_can_submit(db, assignment, classwork, submission),
+        summary_available=summary_available,
+        summary_release_mode=setting.summary_release_mode if setting else "IMMEDIATE",
+        summary_release_at=release_at,
+        summary_message=summary_message,
         questions=[
-            _attempt_question_out(link, answers.get(link.quiz_question_id), should_reveal)
+            _attempt_question_out(link, answers.get(link.quiz_question_id), should_reveal, include_student_answers)
             for link in _ordered_quiz_questions(quiz)
         ],
+    )
+
+
+def _summary_release_state(
+    setting: QuizSetting | None,
+    assignment: ClassworkAssignment,
+    submission: StudentSubmission | None,
+) -> tuple[bool, datetime | None, str | None]:
+    if not submission or submission.status not in {"submitted", "late", "graded"}:
+        return False, None, None
+    mode = (setting.summary_release_mode if setting else "IMMEDIATE").upper()
+    now = datetime.now(timezone.utc)
+    if mode == "NEVER":
+        return False, None, "Your quiz has been submitted successfully. Your quiz summary is not available."
+    if mode == "AFTER_DUE_DATE":
+        release_at = aware_utc(assignment.due_date)
+        if not release_at:
+            return True, None, None
+        if now >= release_at:
+            return True, release_at, None
+        return False, release_at, _summary_release_message(release_at)
+    if mode == "SCHEDULED":
+        release_at = aware_utc(setting.summary_release_at if setting else None)
+        if release_at and now < release_at:
+            return False, release_at, _summary_release_message(release_at)
+        return True, release_at, None
+    return True, None, None
+
+
+def _summary_release_message(release_at: datetime) -> str:
+    return (
+        "Your quiz has been submitted successfully. "
+        f"Your quiz summary will be available on {release_at.isoformat()}."
     )
 
 
@@ -310,10 +361,11 @@ def _attempt_question_out(
     link: QuizQuestion,
     answer: QuizAnswer | None,
     reveal_answers: bool,
+    include_student_answer: bool,
 ) -> QuizAttemptQuestionOut:
     question = link.question
     selected_option_id = None
-    if answer and question.question_type == "MULTIPLE_CHOICE":
+    if answer and include_student_answer and question.question_type == "MULTIPLE_CHOICE":
         selected = next(
             (option.option_id for option in question.options if option.option_text == answer.answer_text),
             None,
@@ -334,8 +386,8 @@ def _attempt_question_out(
             )
             for option in sorted(question.options, key=lambda item: item.option_order)
         ],
-        answer_text=answer.answer_text if answer else None,
+        answer_text=answer.answer_text if answer and include_student_answer else None,
         selected_option_id=selected_option_id,
-        points_awarded=float(answer.points_awarded) if answer and answer.points_awarded is not None else None,
-        is_correct=answer.is_correct if answer else None,
+        points_awarded=float(answer.points_awarded) if answer and include_student_answer and answer.points_awarded is not None else None,
+        is_correct=answer.is_correct if answer and include_student_answer else None,
     )

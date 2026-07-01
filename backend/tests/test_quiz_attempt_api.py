@@ -324,6 +324,37 @@ def test_quiz_summary_is_hidden_until_scheduled_release(quiz_attempt_context):
     assert released_body["questions"][0]["points_awarded"] == 6.0
 
 
+def test_released_summary_includes_student_answers_without_revealing_correct_key(quiz_attempt_context):
+    c = quiz_attempt_context
+    c["setting"].show_correct_answers = False
+    c["setting"].summary_release_mode = "IMMEDIATE"
+    c["db"].commit()
+
+    response = c["client"].post(
+        f"/api/v1/quizzes/assignment/{c['assignment'].classwork_assignment_id}/submit",
+        json={
+            "answers": [
+                {
+                    "quiz_question_id": c["mc_link"].quiz_question_id,
+                    "selected_option_id": c["wrong"].option_id,
+                },
+                {
+                    "quiz_question_id": c["short_link"].quiz_question_id,
+                    "answer_text": "Variables store values.",
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary_available"] is True
+    assert body["questions"][0]["selected_option_id"] == c["wrong"].option_id
+    assert body["questions"][0]["points_awarded"] == 0.0
+    assert body["questions"][0]["options"][0]["is_correct"] is None
+    assert body["questions"][1]["answer_text"] == "Variables store values."
+
+
 def test_quiz_submit_allows_unanswered_items_for_timed_autosubmit(quiz_attempt_context):
     c = quiz_attempt_context
 

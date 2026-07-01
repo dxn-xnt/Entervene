@@ -24,6 +24,7 @@ interface SubmissionViewerProps {
   maxAttempts?: number;
   dueDate?: string;
   isLocked?: boolean;
+  allowLateSubmissions?: boolean;
   onResubmit?: () => void;
   onDeleteSubmission?: (submissionId: number) => Promise<void>;
   isDeleting?: boolean;
@@ -44,10 +45,10 @@ function getStatusColor(status: string): string {
   }
 }
 
-function canResubmit(dueDate?: string, isLocked?: boolean): boolean {
+function canResubmit(dueDate?: string, isLocked?: boolean, allowLateSubmissions?: boolean): boolean {
   if (isLocked) return false;
   if (!dueDate) return true;
-  return new Date() < new Date(dueDate);
+  return allowLateSubmissions || new Date() < new Date(dueDate);
 }
 
 export default function SubmissionViewer({
@@ -55,13 +56,14 @@ export default function SubmissionViewer({
   maxAttempts,
   dueDate,
   isLocked = false,
+  allowLateSubmissions = false,
   onResubmit,
   onDeleteSubmission,
   isDeleting = false,
 }: SubmissionViewerProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const allowResubmit = canResubmit(dueDate, isLocked);
+  const allowResubmit = canResubmit(dueDate, isLocked, allowLateSubmissions);
   const statusColor = getStatusColor(submission.status);
   const submittedDate = submission.submitted_at
     ? new Date(submission.submitted_at).toLocaleString()
@@ -149,8 +151,9 @@ export default function SubmissionViewer({
                 Resubmit Assignment
               </h3>
               <p className="text-sm text-gray-600">
-                You can delete your current submission and resubmit before the
-                due date
+                {dueDate && new Date() > new Date(dueDate) && allowLateSubmissions
+                  ? "You can resubmit after the due date, but the new submission will be marked late."
+                  : "You can delete your current submission and resubmit before the due date."}
               </p>
             </div>
             {!showDeleteConfirm ? (
