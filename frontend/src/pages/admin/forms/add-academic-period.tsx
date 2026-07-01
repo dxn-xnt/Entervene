@@ -147,7 +147,6 @@ function PeriodCard({
 export default function AddAcademicPeriodModal() {
     const [academicYear, setAcademicYear] = React.useState<string>("2026-2027");
     const [periodType, setPeriodType] = React.useState<string>("TERM");
-    const [level, setLevel] = React.useState<string>("junior-high");
 
     const totalPeriods = React.useMemo(() => periodTotal(periodType), [periodType]);
 

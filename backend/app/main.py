@@ -17,6 +17,9 @@ from app.api.v1.routes.Suggestions import router as suggestions_router
 from app.api.v1.routes.StudentRecords import router as student_records_router
 from app.api.v1.routes.Users import router as users_router
 from app.api.v1.routes.Classes import router as classes_router
+from app.api.v1.routes.Subjects import router as subjects_router
+from app.api.v1.routes.SubjectOfferings import router as subject_offerings_router
+from app.api.v1.routes.GradingTemplates import router as grading_templates_router
 from app.services.classes.ClassShared import ClassManagementError, class_management_error_handler
 
 app = FastAPI(
@@ -69,6 +72,9 @@ app.include_router(quizzes_router,     prefix="/api/v1/quizzes",               t
 app.include_router(suggestions_router, prefix="/api/v1/suggestions",           tags=["Suggestions"])
 app.include_router(student_records_router, prefix="/api/v1/student-records",    tags=["Student Records"])
 app.include_router(classes_router,     prefix="/api/v1/classes",               tags=["Classes"])
+app.include_router(subjects_router,    prefix="/api/v1/subjects",              tags=["Subjects"])
+app.include_router(subject_offerings_router, prefix="/api/v1/subject-offerings", tags=["Subject Offerings"])
+app.include_router(grading_templates_router, prefix="/api/v1/grading-templates", tags=["Grading Templates"])
 
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
