@@ -160,7 +160,7 @@ def assert_student_can_modify_submission(
     if assignment_is_locked(assignment, now):
         raise HTTPException(status_code=403, detail="This assignment is locked")
     due_date = aware_utc(assignment.due_date)
-    if due_date and now > due_date:
+    if due_date and now > due_date and not assignment.allow_late_submissions:
         raise HTTPException(status_code=403, detail="Cannot modify submission after due date")
     submission = db.query(StudentSubmission).filter(
         StudentSubmission.classwork_assignment_id == assignment_id,
@@ -214,6 +214,8 @@ async def submit_student_work(
 
     due_date = aware_utc(assignment.due_date)
     is_late = bool(due_date and now > due_date)
+    if is_late and not assignment.allow_late_submissions:
+        raise HTTPException(status_code=403, detail="Cannot submit after due date")
     enforce_attempt_limit = classwork_uses_attempt_limit(classwork)
 
     saved_paths: list[str] = []

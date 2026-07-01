@@ -60,6 +60,7 @@ interface LessonClasswork {
   classwork_type?: string | null;
   total_points?: number | null;
   due_date?: string | null;
+  allow_late_submissions?: boolean;
   submission_status?: string | null;
 }
 
@@ -73,6 +74,7 @@ interface ClassworkDetail {
   classwork_category?: string | null;
   total_points?: number | null;
   due_date?: string | null;
+  allow_late_submissions?: boolean;
   is_published: boolean;
   is_locked?: boolean;
   max_attempts?: number;
@@ -539,6 +541,15 @@ export default function SubjectLessonTab({
     selectedQuizAttempt?.duration_minutes,
   ]);
 
+  useEffect(() => {
+    if (!isQuizFullscreen && !selectedClasswork) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isQuizFullscreen, selectedClasswork]);
+
   const openClassworkDetail = async (cw: LessonClasswork) => {
     setDetailLoadingId(cw.classwork_assignment_id);
     setDetailError("");
@@ -649,6 +660,8 @@ export default function SubjectLessonTab({
     const questions = selectedQuizAttempt.questions;
     const currentQuestion = questions[quizCurrentIndex] ?? questions[0];
     const answeredCount = questions.filter(hasQuizAnswer).length;
+    const isSummaryMode = selectedQuizAttempt.status !== "pending" && selectedQuizAttempt.summary_available;
+    const totalPoints = selectedQuizAttempt.total_points ?? selectedClasswork.total_points ?? 0;
 
     return (
       <div className="fixed inset-0 z-[80] flex flex-col bg-[#F8F6ED]">
@@ -656,23 +669,40 @@ export default function SubjectLessonTab({
           <div className="grid grid-cols-[auto_1fr_auto] items-start gap-3">
             <button
               type="button"
-              onClick={() => setIsQuizFullscreen(false)}
+              onClick={() => {
+                setIsQuizFullscreen(false);
+                setQuizReviewMode(false);
+              }}
               className="rounded p-1 hover:bg-black/5"
               aria-label="Exit fullscreen quiz"
             >
               <ChevronLeft size={22} />
             </button>
             <div className="text-center">
-              <p className="text-xl font-black leading-none">{formatExamTimer(quizRemainingSeconds)}</p>
-              <p className="text-xs font-semibold text-gray-700">time left</p>
+              <p className="text-xl font-black leading-none">
+                {isSummaryMode ? `${selectedQuizAttempt.grade ?? 0}/${totalPoints}` : formatExamTimer(quizRemainingSeconds)}
+              </p>
+              <p className="text-xs font-semibold text-gray-700">
+                {isSummaryMode ? "score" : "time left"}
+              </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setQuizReviewMode(true)}
-              className="rounded-lg border border-black bg-white px-4 py-1.5 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFFBEE]"
-            >
-              Finish Quiz
-            </button>
+            {isSummaryMode ? (
+              <button
+                type="button"
+                onClick={() => setIsQuizFullscreen(false)}
+                className="rounded-lg border border-black bg-white px-4 py-1.5 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFFBEE]"
+              >
+                Close Summary
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setQuizReviewMode(true)}
+                className="rounded-lg border border-black bg-white px-4 py-1.5 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFFBEE]"
+              >
+                Finish Quiz
+              </button>
+            )}
           </div>
         </header>
 
@@ -685,7 +715,16 @@ export default function SubjectLessonTab({
                   ? `Lessons: ${selectedClasswork.description}`
                   : "Review each question carefully before submitting."}
               </p>
-              {!quizReviewMode ? (
+              {isSummaryMode ? (
+                <div className="mt-4">
+                  <p className="text-sm font-semibold">
+                    Quiz Summary
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    Review your recorded answers and item scores.
+                  </p>
+                </div>
+              ) : !quizReviewMode ? (
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
                   {questions.map((question, index) => (
                     <button
@@ -719,7 +758,92 @@ export default function SubjectLessonTab({
               </p>
             ) : null}
 
-            {quizReviewMode ? (
+            {isSummaryMode ? (
+              <section className="mx-auto max-w-4xl space-y-3">
+                {questions.map((question, index) => {
+                  const selectedOption = question.options.find(
+                    (option) => option.option_id === question.selected_option_id,
+                  );
+                  const correctOption = question.options.find((option) => option.is_correct);
+                  const revealsCorrectKey = question.options.some(
+                    (option) => option.is_correct !== null && option.is_correct !== undefined,
+                  );
+                  return (
+                    <article
+                      key={question.quiz_question_id}
+                      className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <h2 className="min-w-0 flex-1 break-words text-base font-bold">
+                          {index + 1}. {question.question_text}
+                        </h2>
+                        <span className="shrink-0 rounded-full border border-gray-300 px-3 py-1 text-xs font-bold">
+                          {question.points_awarded ?? 0}/{question.points} pts
+                        </span>
+                      </div>
+                      {question.question_type === "MULTIPLE_CHOICE" ? (
+                        <div className="mt-3 grid gap-2">
+                          {question.options.map((option) => {
+                            const isSelected = option.option_id === question.selected_option_id;
+                            const isCorrect = option.is_correct === true;
+                            const isKnownWrongSelection = revealsCorrectKey && isSelected && !isCorrect;
+                            return (
+                              <div
+                                key={option.option_id}
+                                className={`rounded-lg border px-3 py-2 text-sm ${
+                                  isCorrect
+                                    ? "border-green-500 bg-green-50"
+                                    : isKnownWrongSelection
+                                      ? "border-red-400 bg-red-50"
+                                      : isSelected
+                                        ? "border-[#E0C15A] bg-[#FFFBEE]"
+                                      : "border-gray-200 bg-white"
+                                }`}
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span className="min-w-0 break-words">{option.option_text}</span>
+                                  <span className="text-xs font-bold">
+                                    {isCorrect && isSelected
+                                      ? "Your answer / Correct answer"
+                                      : isCorrect
+                                        ? "Correct answer"
+                                        : isSelected
+                                          ? "Your answer"
+                                          : ""}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {!selectedOption && (
+                            <p className="text-xs font-semibold text-red-700">No answer recorded.</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="mt-3 space-y-2 text-sm">
+                          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                            <p className="text-xs font-bold uppercase text-gray-500">Your answer</p>
+                            <p className="mt-1 whitespace-pre-wrap break-words">
+                              {question.answer_text?.trim() || "No answer recorded."}
+                            </p>
+                          </div>
+                          {correctOption ? (
+                            <p className="rounded-lg border border-green-500 bg-green-50 px-3 py-2 font-semibold">
+                              Expected answer: {correctOption.option_text}
+                            </p>
+                          ) : null}
+                          {question.is_correct !== null && question.is_correct !== undefined ? (
+                            <p className={question.is_correct ? "font-bold text-green-700" : "font-bold text-red-700"}>
+                              {question.is_correct ? "Marked correct" : "Needs review"}
+                            </p>
+                          ) : null}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </section>
+            ) : quizReviewMode ? (
               <section className="mx-auto max-w-3xl">
                 <div className="mb-2 flex items-center justify-between">
                   <h2 className="text-lg font-bold">Review answers</h2>
@@ -1335,8 +1459,8 @@ export default function SubjectLessonTab({
       )}
 
       {(selectedClasswork || detailLoadingId !== null || detailError) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
-          <section className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/50 px-4 py-6">
+          <section className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             {/* Modal header */}
             <div className="sticky top-0 flex items-center justify-between border-b border-black bg-[#F6E9B2] px-5 py-4">
               <div>
@@ -1364,9 +1488,9 @@ export default function SubjectLessonTab({
                 {detailError}
               </div>
             ) : selectedClasswork ? (
-              <div className="grid gap-5 p-5 lg:grid-cols-[1.2fr_1fr]">
+              <div className="grid max-h-[calc(90vh-88px)] min-w-0 gap-5 overflow-y-auto overflow-x-hidden p-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,1fr)]">
                 {/* Left: details */}
-                <div className="space-y-4">
+                <div className="min-w-0 space-y-4">
                   {/* Status + title card */}
                   <div className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1381,7 +1505,7 @@ export default function SubjectLessonTab({
                         )}
                       </span>
                     </div>
-                    <h3 className="mt-4 text-3xl font-bold">{selectedClasswork.title}</h3>
+                    <h3 className="mt-4 break-words text-3xl font-bold">{selectedClasswork.title}</h3>
                     <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
                       <div className="rounded-lg bg-gray-50 p-3">
                         <div className="mb-1 flex items-center gap-1 font-semibold text-gray-600">
@@ -1411,13 +1535,13 @@ export default function SubjectLessonTab({
                       {selectedClasswork.description && (
                         <div>
                           <h4 className="font-bold">Description</h4>
-                          <p className="mt-1 text-sm text-gray-700">{selectedClasswork.description}</p>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">{selectedClasswork.description}</p>
                         </div>
                       )}
                       {selectedClasswork.instructions && (
                         <div className="mt-4">
                           <h4 className="font-bold">Instructions</h4>
-                          <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
+                          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-700">
                             {selectedClasswork.instructions}
                           </p>
                         </div>
@@ -1446,7 +1570,7 @@ export default function SubjectLessonTab({
                 </div>
 
                 {/* Right: submission or quiz attempt */}
-                <aside className="rounded-lg border border-black bg-[#F6E9B2] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                <aside className="min-w-0 rounded-lg border border-black bg-[#F6E9B2] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                   <div className="mb-3 flex items-center gap-2">
                     {isQuizType(selectedClasswork.classwork_type) ? (
                       <ClipboardList size={18} />
@@ -1570,6 +1694,7 @@ export default function SubjectLessonTab({
                       submission={selectedSubmission}
                       dueDate={selectedClasswork.due_date ?? undefined}
                       isLocked={selectedClasswork.is_locked}
+                      allowLateSubmissions={selectedClasswork.allow_late_submissions}
                       maxAttempts={selectedClasswork.max_attempts}
                       onDeleteSubmission={() =>
                         handleDeleteSubmission(selectedClasswork.classwork_assignment_id)

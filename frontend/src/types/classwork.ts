@@ -19,6 +19,7 @@ export type ClassworkAssignment = {
   title?: string | null;
   due_date?: string | null;
   lock_date?: string | null;
+  allow_late_submissions?: boolean;
   max_attempts?: number | null;
   is_published: boolean;
   is_locked?: boolean | null;
@@ -111,6 +112,7 @@ export type CreateDraft = {
   total_points: string;
   due_date: string;
   lock_date: string;
+  allow_late_submissions: boolean;
   max_attempts: string;
   is_published: boolean;
 };
@@ -124,6 +126,7 @@ export type EditDraft = {
   total_points: string;
   due_date: string;
   lock_date: string;
+  allow_late_submissions: boolean;
   max_attempts: string;
   is_published: boolean;
 };

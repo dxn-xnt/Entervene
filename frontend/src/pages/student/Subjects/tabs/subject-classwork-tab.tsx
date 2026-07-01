@@ -43,6 +43,7 @@ interface ClassworkAssignment {
   total_points?: number;
   due_date?: string;
   lock_date?: string;
+  allow_late_submissions?: boolean;
   is_published: boolean;
   is_locked?: boolean;
   max_attempts?: number;
@@ -480,6 +481,7 @@ export default function SubjectClassworkTab({
                       submission={submission}
                       dueDate={cw.due_date}
                       isLocked={cw.is_locked}
+                      allowLateSubmissions={cw.allow_late_submissions}
                       maxAttempts={cw.max_attempts}
                       onDeleteSubmission={() =>
                         handleDeleteSubmission(

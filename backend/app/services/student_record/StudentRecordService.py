@@ -60,15 +60,24 @@ class Metrics:
     ungraded_count: int
 
 
-def teacher_period_options(db: Session, staff_id: str) -> StudentRecordPeriodOptionsResponse:
-    rows = (
+def teacher_period_options(
+    db: Session,
+    staff_id: str,
+    class_id: int | None = None,
+    subject_id: int | None = None,
+) -> StudentRecordPeriodOptionsResponse:
+    query = (
         db.query(AcademicPeriod, AcademicYear)
         .join(SubjectLoad, SubjectLoad.academic_period_id == AcademicPeriod.academic_period_id)
         .join(AcademicYear, AcademicYear.academic_year_id == AcademicPeriod.academic_year_id)
         .filter(SubjectLoad.staff_id == staff_id, SubjectLoad.status == "active")
-        .order_by(AcademicPeriod.is_active.desc(), AcademicPeriod.end_date.desc())
-        .all()
     )
+    if class_id is not None:
+        query = query.filter(SubjectLoad.class_id == class_id)
+    if subject_id is not None:
+        query = query.filter(SubjectLoad.subject_id == subject_id)
+
+    rows = query.order_by(AcademicPeriod.is_active.desc(), AcademicPeriod.end_date.desc()).all()
     options = [
         StudentRecordPeriodOption(
             academic_year_id=year.academic_year_id,
@@ -232,7 +241,10 @@ def _classwork_assignments(db: Session, scope: TeacherRecordScope) -> list[Class
         .order_by(ClassworkAssignment.due_date.asc().nullslast(), Classwork.created_at.asc())
         .all()
     )
-    return [assignment for assignment in rows if _assignment_in_period(assignment, scope.period)]
+    # Classwork assignments do not have academic_period_id yet. Due-date based
+    # filtering can hide overdue/missing work when configured dates drift, so
+    # use all class/subject assignments until the schema can filter directly.
+    return rows
 
 
 def _assignment_in_period(assignment: ClassworkAssignment, period: AcademicPeriod) -> bool:
@@ -287,18 +299,23 @@ def _metrics_for_student(
     for assignment in assignments:
         submission = submissions.get(assignment.classwork_assignment_id)
         status = _status_for_assignment(assignment, submission, now)
+        has_score = (
+            submission is not None
+            and submission.grade is not None
+            and assignment.classwork.total_points is not None
+        )
         if status in COMPLETED_STATUSES:
             submitted_count += 1
         if status == "missing":
             missing_count += 1
         if status == "late":
             late_count += 1
-        if status == GRADED_STATUS:
+        # Quiz submissions can be auto-scored before their status is marked as graded.
+        if has_score:
             graded_count += 1
-            if submission and submission.grade is not None and assignment.classwork.total_points is not None:
-                earned += Decimal(str(submission.grade))
-                possible += Decimal(str(assignment.classwork.total_points))
-        elif status in {"submitted", "late"}:
+            earned += Decimal(str(submission.grade))
+            possible += Decimal(str(assignment.classwork.total_points))
+        elif status in {"submitted", "late", GRADED_STATUS}:
             ungraded_count += 1
 
     return Metrics(

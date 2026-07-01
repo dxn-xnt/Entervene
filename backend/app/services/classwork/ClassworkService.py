@@ -104,6 +104,7 @@ async def create_classwork_wizard_record(
     lesson_ids: Optional[str],
     due_date: Optional[datetime],
     lock_date: Optional[datetime],
+    allow_late_submissions: bool,
     max_attempts: Optional[int],
     quiz_payload: Optional[str],
     files: Optional[list[UploadFile]],
@@ -151,6 +152,7 @@ async def create_classwork_wizard_record(
                 publish_date=None,
                 due_date=due_date,
                 lock_date=lock_date,
+                allow_late_submissions=allow_late_submissions,
                 max_attempts=max_attempts,
                 is_published=is_published,
             )
@@ -439,6 +441,7 @@ def assign_classwork_to_classes(
                 existing.publish_date = None
                 existing.due_date = body.due_date
                 existing.lock_date = body.lock_date
+                existing.allow_late_submissions = bool(body.allow_late_submissions)
                 existing.max_attempts = max_attempts
                 existing.is_published = bool(body.is_published)
                 existing.is_locked = False
@@ -451,6 +454,7 @@ def assign_classwork_to_classes(
                 publish_date=None,
                 due_date=body.due_date,
                 lock_date=body.lock_date,
+                allow_late_submissions=bool(body.allow_late_submissions),
                 max_attempts=max_attempts,
                 is_published=body.is_published,
             )
@@ -628,6 +632,7 @@ def student_assignments(student, db: Session) -> dict:
             "publish_date": assignment.publish_date.isoformat() if assignment.publish_date else None,
             "due_date": assignment.due_date.isoformat() if assignment.due_date else None,
             "lock_date": assignment.lock_date.isoformat() if assignment.lock_date else None,
+            "allow_late_submissions": assignment.allow_late_submissions,
             "is_published": assignment.is_published,
             "is_locked": assignment_is_locked(assignment),
             "max_attempts": assignment.max_attempts,
@@ -687,6 +692,7 @@ def _assignment_response(
         total_points=float(classwork.total_points) if classwork.total_points else None,
         due_date=assignment.due_date,
         lock_date=assignment.lock_date,
+        allow_late_submissions=assignment.allow_late_submissions,
         is_published=assignment.is_published,
         is_locked=assignment_is_locked(assignment),
         max_attempts=assignment.max_attempts,

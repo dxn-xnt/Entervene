@@ -220,16 +220,16 @@ export default function AttachmentDisplay({
               return (
                 <div
                   key={idx}
-                  className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex min-w-0 flex-col gap-3 rounded-lg border border-gray-200 p-3 transition-colors hover:bg-gray-50 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
                     {isPdfFile ? (
                       <FileText className="text-red-500 flex-shrink-0" size={20} />
                     ) : (
                       <File className="text-blue-500 flex-shrink-0" size={20} />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">
+                      <p className="truncate text-sm font-medium" title={attachment.file_name}>
                         {attachment.file_name}
                       </p>
                       <p className="text-xs text-gray-500">
@@ -238,7 +238,7 @@ export default function AttachmentDisplay({
                     </div>
                   </div>
 
-                  <div className="flex gap-2 ml-2">
+                  <div className="flex shrink-0 flex-wrap gap-2 sm:ml-2 sm:justify-end">
                     {(isPdfFile || isImageFile) && url && (
                       <button
                         onClick={() =>

@@ -679,6 +679,48 @@ def test_assignment_resubmit_is_unlimited_until_deadline(authz_context):
     assert c["submission"].attempt_count == 2
 
 
+def test_late_resubmission_requires_teacher_opt_in(authz_context):
+    c = authz_context
+    c["assignment"].due_date = datetime.now(timezone.utc) - timedelta(days=1)
+    c["assignment"].allow_late_submissions = False
+    c["db"].commit()
+    _act_as(c, "student", "student")
+
+    url = f"/api/v1/submissions/assignment/{c['assignment'].classwork_assignment_id}/submit"
+
+    blocked_clear = c["client"].delete(url)
+    blocked_submit = c["client"].post(
+        url,
+        files=[("files", ("late.pdf", b"%PDF", "application/pdf"))],
+    )
+
+    assert blocked_clear.status_code == 403
+    assert blocked_submit.status_code == 403
+    assert blocked_submit.json()["detail"] == "Cannot submit after due date"
+
+
+def test_late_resubmission_is_marked_late_when_allowed(authz_context):
+    c = authz_context
+    c["assignment"].due_date = datetime.now(timezone.utc) - timedelta(days=1)
+    c["assignment"].allow_late_submissions = True
+    c["db"].commit()
+    _act_as(c, "student", "student")
+
+    url = f"/api/v1/submissions/assignment/{c['assignment'].classwork_assignment_id}/submit"
+
+    cleared = c["client"].delete(url)
+    resubmit = c["client"].post(
+        url,
+        files=[("files", ("late.pdf", b"%PDF", "application/pdf"))],
+    )
+
+    assert cleared.status_code == 200
+    assert resubmit.status_code == 200
+    assert resubmit.json()["status"] == "late"
+    c["db"].refresh(c["submission"])
+    assert c["submission"].status == "late"
+
+
 def test_quiz_resubmit_respects_attempt_limit(authz_context):
     c = authz_context
     c["classwork"].classwork_type = "QUIZ"

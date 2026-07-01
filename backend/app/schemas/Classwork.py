@@ -43,6 +43,7 @@ class CwAssignmentRow(BaseModel):
     classwork_type: Optional[str] = None
     due_date: Optional[datetime] = None
     lock_date: Optional[datetime] = None
+    allow_late_submissions: bool = False
     max_attempts: Optional[int] = 1
     is_published: bool
     is_locked: Optional[bool] = False
@@ -74,6 +75,7 @@ class ClassworkAssignRequest(BaseModel):
     publish_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
     lock_date: Optional[datetime] = None
+    allow_late_submissions: Optional[bool] = False
     max_attempts: Optional[int] = 1
     is_published: Optional[bool] = True
 
@@ -92,6 +94,7 @@ class ClassworkAssignmentResponse(BaseModel):
     total_points: Optional[float]
     due_date: Optional[datetime]
     lock_date: Optional[datetime] = None
+    allow_late_submissions: bool = False
     is_published: bool
     is_locked: Optional[bool] = False
     max_attempts: Optional[int] = 1

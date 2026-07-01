@@ -11,6 +11,7 @@ export const emptyClassworkDraft: ClassworkDraft = {
   classwork_category: "WRITTEN_WORK",
   total_points: "100",
   due_date: "",
+  allow_late_submissions: false,
   is_published: true,
 };
 

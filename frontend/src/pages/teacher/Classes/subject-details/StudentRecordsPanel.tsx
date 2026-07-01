@@ -15,9 +15,14 @@ type StudentRecordsPanelProps = {
   subjectId: string;
 };
 
-function formatMetric(value?: number | null, suffix = "%") {
-  if (value === null || value === undefined) return "No data";
+function formatMetric(value?: number | null, suffix = "%", emptyValue = "0") {
+  if (value === null || value === undefined) return `${emptyValue}${suffix}`;
   return `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}${suffix}`;
+}
+
+function formatOfficialGrade(value?: number | null) {
+  if (value === null || value === undefined) return "Not encoded";
+  return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 function formatDateTime(value?: string | null) {
@@ -46,7 +51,7 @@ export default function StudentRecordsPanel({ classId, subjectId }: StudentRecor
     const loadPeriods = async () => {
       setError("");
       try {
-        const data = await getTeacherRecordPeriods();
+        const data = await getTeacherRecordPeriods(classId, subjectId);
         if (!isMounted) return;
         setPeriods(data.periods);
         setSelectedPeriodId(String(data.default_academic_period_id || data.periods[0]?.academic_period_id || ""));
@@ -59,10 +64,13 @@ export default function StudentRecordsPanel({ classId, subjectId }: StudentRecor
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [classId, subjectId]);
 
   useEffect(() => {
-    if (!selectedPeriodId) return;
+    if (!selectedPeriodId) {
+      setRoster(null);
+      return;
+    }
     let isMounted = true;
 
     const loadRoster = async () => {
@@ -98,11 +106,9 @@ export default function StudentRecordsPanel({ classId, subjectId }: StudentRecor
   }, [roster, search]);
 
   const classAverage = useMemo(() => {
-    const values = (roster?.students || [])
-      .map((student) => student.running_classwork_percentage)
-      .filter((value): value is number => typeof value === "number");
-    if (!values.length) return null;
-    return values.reduce((sum, value) => sum + value, 0) / values.length;
+    const students = roster?.students || [];
+    if (!students.length) return 0;
+    return students.reduce((sum, student) => sum + (student.running_classwork_percentage ?? 0), 0) / students.length;
   }, [roster]);
 
   const openStudent = async (student: StudentRecordRosterRow) => {
@@ -165,14 +171,24 @@ export default function StudentRecordsPanel({ classId, subjectId }: StudentRecor
             onChange={(event) => setSelectedPeriodId(event.target.value)}
             className="mt-1 block rounded-lg border border-black bg-white px-3 py-2"
           >
-            {periods.map((period) => (
-              <option key={period.academic_period_id} value={period.academic_period_id}>
-                {period.period_name} ({period.year_label})
-              </option>
-            ))}
+            {periods.length ? (
+              periods.map((period) => (
+                <option key={period.academic_period_id} value={period.academic_period_id}>
+                  {period.period_name} ({period.year_label})
+                </option>
+              ))
+            ) : (
+              <option value="">No periods available</option>
+            )}
           </select>
         </label>
       </div>
+
+      {!periods.length && !error && (
+        <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+          No academic period is assigned to this class and subject yet.
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -221,7 +237,7 @@ export default function StudentRecordsPanel({ classId, subjectId }: StudentRecor
                     <p className="text-xs text-gray-600">LRN {student.lrn}</p>
                   </div>
                 </div>
-                <SmallMetric label="Official" value={formatMetric(student.official_period_grade, "")} />
+                <SmallMetric label="Official" value={formatOfficialGrade(student.official_period_grade)} />
                 <SmallMetric label="Running" value={formatMetric(student.running_classwork_percentage)} />
                 <SmallMetric label="Complete" value={formatMetric(student.completion_rate)} />
                 <SmallMetric label="Flags" value={`${student.missing_count} missing / ${student.late_count} late`} />
@@ -253,7 +269,7 @@ function StudentRecordDetail({ detail }: { detail: StudentRecordDetailResponse }
       </section>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <RecordMetric title="Official Grade" value={formatMetric(detail.summary.official_period_grade, "")} note="Encoded period grade" />
+        <RecordMetric title="Official Grade" value={formatOfficialGrade(detail.summary.official_period_grade)} note="Encoded period grade" />
         <RecordMetric title="Running Average" value={formatMetric(detail.summary.running_classwork_percentage)} note="Classwork only" />
         <RecordMetric title="Completion" value={formatMetric(detail.summary.completion_rate)} note={`${detail.summary.submitted_count}/${detail.summary.assigned_count} done`} />
         <RecordMetric title="Needs Attention" value={`${detail.summary.missing_count + detail.summary.ungraded_count}`} note="Missing or ungraded" />

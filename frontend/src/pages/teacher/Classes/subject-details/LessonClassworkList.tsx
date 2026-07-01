@@ -4,6 +4,8 @@ import type { Lesson, LinkedClasswork } from "./types";
 type LessonClassworkListProps = {
   lessonSearch: string;
   setLessonSearch: (value: string) => void;
+  lessonSort: "order" | "newest" | "oldest" | "title";
+  setLessonSort: (value: "order" | "newest" | "oldest" | "title") => void;
   filteredLessons: Lesson[];
   totalLessons: number;
   expandedLessonId: number | null;
@@ -18,6 +20,8 @@ type LessonClassworkListProps = {
 export default function LessonClassworkList({
   lessonSearch,
   setLessonSearch,
+  lessonSort,
+  setLessonSort,
   filteredLessons,
   totalLessons,
   expandedLessonId,
@@ -41,13 +45,21 @@ export default function LessonClassworkList({
             placeholder="Search lessons"
           />
         </div>
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 self-start rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium"
-        >
+        <label className="inline-flex items-center gap-2 self-start rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium">
           <ChevronDown size={16} />
-          Sort By
-        </button>
+          <span>Sort By</span>
+          <select
+            value={lessonSort}
+            onChange={(event) => setLessonSort(event.target.value as LessonClassworkListProps["lessonSort"])}
+            className="bg-transparent text-sm font-semibold outline-none"
+            aria-label="Sort lessons"
+          >
+            <option value="order">Lesson order</option>
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="title">Title A-Z</option>
+          </select>
+        </label>
       </div>
 
       {filteredLessons.length > 0 ? (

@@ -832,6 +832,7 @@ export default function Classworks() {
       if (draft.due_date) {
         formData.append("due_date", new Date(draft.due_date).toISOString());
       }
+      formData.append("allow_late_submissions", String(draft.allow_late_submissions));
       if (draft.lock_date) {
         formData.append("lock_date", new Date(draft.lock_date).toISOString());
       }
@@ -1009,6 +1010,7 @@ export default function Classworks() {
               class_ids: assignedClassIds,
               due_date: editDraft.due_date ? new Date(editDraft.due_date).toISOString() : null,
               lock_date: editDraft.lock_date ? new Date(editDraft.lock_date).toISOString() : null,
+              allow_late_submissions: editDraft.allow_late_submissions,
               max_attempts: isQuizType(editDraft.classwork_type) ? attempts : null,
               is_published: editDraft.is_published,
             }),
@@ -1607,7 +1609,8 @@ export default function Classworks() {
                       <input
                         type="number"
                         min="1"
-                        step="0.01"
+                        step="1"
+                        inputMode="decimal"
                         value={editDraft.total_points}
                         onChange={(event) =>
                           setEditDraft((current) => current ? { ...current, total_points: event.target.value } : current)
@@ -1679,6 +1682,27 @@ export default function Classworks() {
                   <p className="mt-2 text-xs font-medium text-gray-600">
                     Published classwork is visible to students. A future lock date keeps it visible but blocks access until that time; clear it to unlock now.
                   </p>
+                  {editDraft.due_date && !isReadingType(editDraft.classwork_type) && (
+                    <label className="mt-3 flex items-start gap-3 rounded-lg border border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold">
+                      <input
+                        type="checkbox"
+                        checked={editDraft.allow_late_submissions}
+                        onChange={(event) =>
+                          setEditDraft((current) =>
+                            current ? { ...current, allow_late_submissions: event.target.checked } : current,
+                          )
+                        }
+                        disabled={isSavingEdit}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        Allow submissions/resubmissions after the due date
+                        <span className="block font-medium text-gray-700">
+                          Accepted work will be marked late.
+                        </span>
+                      </span>
+                    </label>
+                  )}
                 </div>
 
                 <label className="block text-xs font-bold">
@@ -2511,7 +2535,8 @@ export default function Classworks() {
                               <input
                                 type="number"
                                 min="1"
-                                step="0.01"
+                                step="1"
+                                inputMode="decimal"
                                 value={draft.total_points}
                                 onChange={(event) =>
                                   setDraft((current) => ({
@@ -2843,7 +2868,8 @@ export default function Classworks() {
                                   <input
                                     type="number"
                                     min="0.01"
-                                    step="0.01"
+                                    step="1"
+                                    inputMode="decimal"
                                     value={question.points}
                                     onChange={(event) =>
                                       updateQuizQuestion(question.id, {
@@ -3023,6 +3049,28 @@ export default function Classworks() {
                       <p className="text-xs font-medium text-gray-600">
                         Published work appears to students. Add a future lock date if they should see it but wait before opening, downloading, or submitting.
                       </p>
+                      {draft.due_date && !isReadingType(selectedType) && (
+                        <label className="flex items-start gap-3 rounded-lg border border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold">
+                          <input
+                            type="checkbox"
+                            checked={draft.allow_late_submissions}
+                            onChange={(event) =>
+                              setDraft((current) => ({
+                                ...current,
+                                allow_late_submissions: event.target.checked,
+                              }))
+                            }
+                            disabled={isCreating}
+                            className="mt-0.5"
+                          />
+                          <span>
+                            Allow submissions/resubmissions after the due date
+                            <span className="block font-medium text-gray-700">
+                              Accepted work will be marked late.
+                            </span>
+                          </span>
+                        </label>
+                      )}
 
                       <div>
                         <div className="mb-2 flex items-center justify-between">

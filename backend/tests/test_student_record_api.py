@@ -275,7 +275,9 @@ def student_record_context():
 
     return {
         "client": TestClient(test_app),
+        "db": db,
         "identity": identity,
+        "owner": owner,
         "owner_account": owner_account,
         "other_account": other_account,
         "class": class_,
@@ -365,3 +367,127 @@ def test_teacher_period_options_defaults_to_active_period(student_record_context
     body = response.json()
     assert body["default_academic_period_id"] == student_record_context["period"].academic_period_id
     assert [item["period_name"] for item in body["periods"]] == ["Term 1"]
+
+
+def test_teacher_period_options_can_be_scoped_to_class_subject(student_record_context):
+    ctx = student_record_context
+    ctx["db"].add(
+        SubjectLoad(
+            staff_id=ctx["owner"].staff_id,
+            subject_id=ctx["subject"].subject_id,
+            class_id=ctx["other_class"].class_id,
+            academic_period_id=ctx["old_period"].academic_period_id,
+            status="active",
+        )
+    )
+    ctx["db"].commit()
+
+    unscoped = ctx["client"].get("/api/v1/student-records/teacher/periods")
+    scoped = ctx["client"].get(
+        "/api/v1/student-records/teacher/periods",
+        params={
+            "class_id": ctx["class"].class_id,
+            "subject_id": ctx["subject"].subject_id,
+        },
+    )
+
+    assert unscoped.status_code == 200
+    assert scoped.status_code == 200
+    assert [item["period_name"] for item in unscoped.json()["periods"]] == ["Term 1", "Term 2"]
+    assert [item["period_name"] for item in scoped.json()["periods"]] == ["Term 1"]
+
+
+def test_student_record_falls_back_to_class_subject_work_when_period_dates_miss(student_record_context):
+    ctx = student_record_context
+    ctx["db"].add(
+        SubjectLoad(
+            staff_id=ctx["owner"].staff_id,
+            subject_id=ctx["subject"].subject_id,
+            class_id=ctx["class"].class_id,
+            academic_period_id=ctx["old_period"].academic_period_id,
+            status="active",
+        )
+    )
+    ctx["db"].commit()
+
+    response = ctx["client"].get(
+        f"/api/v1/student-records/teacher/classes/{ctx['class'].class_id}"
+        f"/subjects/{ctx['subject'].subject_id}/students/{ctx['students'][0].student_id}",
+        params={"academic_period_id": ctx["old_period"].academic_period_id},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["scope"]["period_name"] == "Term 2"
+    assert len(body["classwork_results"]) == 3
+    assert body["summary"]["assigned_count"] == 3
+
+
+def test_student_record_keeps_overdue_work_outside_period_date_window(student_record_context):
+    ctx = student_record_context
+    outside_period_work = Classwork(
+        title="Late Project",
+        classwork_type="ASSIGNMENT",
+        classwork_category="PERFORMANCE_TASK",
+        total_points=50,
+        subject_id=ctx["subject"].subject_id,
+        created_by_staff_id=ctx["owner"].staff_id,
+        is_published=True,
+    )
+    ctx["db"].add(outside_period_work)
+    ctx["db"].flush()
+    ctx["db"].add(
+        ClassworkAssignment(
+            classwork_id=outside_period_work.classwork_id,
+            class_id=ctx["class"].class_id,
+            assigned_by_staff_id=ctx["owner"].staff_id,
+            due_date=datetime(2025, 10, 1, 12, 0, tzinfo=timezone.utc),
+            is_published=True,
+        )
+    )
+    ctx["db"].commit()
+
+    response = ctx["client"].get(
+        f"/api/v1/student-records/teacher/classes/{ctx['class'].class_id}"
+        f"/subjects/{ctx['subject'].subject_id}/students/{ctx['students'][0].student_id}",
+        params={"academic_period_id": ctx["period"].academic_period_id},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "Late Project" in [item["title"] for item in body["classwork_results"]]
+    assert body["summary"]["assigned_count"] == 4
+    assert body["summary"]["missing_count"] == 2
+
+
+def test_roster_counts_scored_submissions_even_before_graded_status(student_record_context):
+    ctx = student_record_context
+    quiz_assignment = (
+        ctx["db"]
+        .query(ClassworkAssignment)
+        .join(Classwork)
+        .filter(Classwork.title == "Assignment 2")
+        .one()
+    )
+    ctx["db"].add(
+        StudentSubmission(
+            student_id=ctx["students"][0].student_id,
+            classwork_assignment_id=quiz_assignment.classwork_assignment_id,
+            status="submitted",
+            submitted_at=quiz_assignment.due_date - timedelta(hours=1),
+            grade=18,
+            attempt_count=1,
+        )
+    )
+    ctx["db"].commit()
+
+    response = ctx["client"].get(
+        f"/api/v1/student-records/teacher/classes/{ctx['class'].class_id}"
+        f"/subjects/{ctx['subject'].subject_id}/roster",
+        params={"academic_period_id": ctx["period"].academic_period_id},
+    )
+
+    assert response.status_code == 200
+    ana = response.json()["students"][0]
+    assert ana["running_classwork_percentage"] == pytest.approx(81.67)
+    assert ana["ungraded_count"] == 1
