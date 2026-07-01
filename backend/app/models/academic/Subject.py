@@ -14,6 +14,9 @@ class Subject(Base):
     subject_id: Mapped[int] = Column(Integer, primary_key=True, autoincrement=True)
     subject_name: Mapped[str] = Column(String(150), nullable=False)
     subject_codename: Mapped[str | None] = Column(String(50))
+    subject_group: Mapped[str | None] = Column(String(50))
+    hours: Mapped[int | None] = Column(Integer)
+    default_grading_template: Mapped[str | None] = Column(String(100))
     description: Mapped[str | None] = Column(Text)
     status: Mapped[str] = Column(String(20), default="active")
     academic_level_id: Mapped[int] = Column(Integer, ForeignKey("academic_level.academic_level_id"), nullable=False)
@@ -22,3 +25,5 @@ class Subject(Base):
 
     academic_level: Mapped[object] = relationship("AcademicLevel", back_populates="subjects")
     subject_loads: Mapped[list[object]] = relationship("SubjectLoad", back_populates="subject")
+    subject_offerings: Mapped[list[object]] = relationship("SubjectOffering", back_populates="subject")
+    grading_templates: Mapped[list[object]] = relationship("GradingTemplate", back_populates="subject")

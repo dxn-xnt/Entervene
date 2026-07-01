@@ -51,6 +51,7 @@ class AcademicPeriod(Base):
     academic_year = relationship("AcademicYear", back_populates="periods")
     subject_loads = relationship("SubjectLoad", back_populates="period")
     classes       = relationship("Class", back_populates="academic_period")
+    subject_offerings = relationship("SubjectOffering", back_populates="academic_period")
 
 
 @event.listens_for(AcademicPeriod, "before_insert")
