@@ -15,6 +15,9 @@ SHS_PATHWAYS = {"both", "stem_medical", "stem_engineering"}
 ALLOWED_PATHWAYS = [GENERAL_PATHWAY, "both", "stem_medical", "stem_engineering"]
 ALLOWED_OFFERING_STATUSES = ["active", "archived"]
 DEFAULT_OFFERING_STATUS = "active"
+INACTIVE_ACADEMIC_YEAR_READ_ONLY_MESSAGE = (
+    "Subject offerings for inactive academic years are read-only to protect historical records."
+)
 
 
 def readable_text(value: Any) -> str:
@@ -67,6 +70,11 @@ def get_academic_year_or_404(db: Session, academic_year_id: int) -> AcademicYear
     if academic_year is None:
         raise HTTPException(status_code=404, detail="Academic year not found.")
     return academic_year
+
+
+def ensure_academic_year_is_active(academic_year: AcademicYear) -> None:
+    if not academic_year.is_active:
+        raise HTTPException(status_code=409, detail=INACTIVE_ACADEMIC_YEAR_READ_ONLY_MESSAGE)
 
 
 def get_academic_level_or_404(db: Session, academic_level_id: int) -> AcademicLevel:

@@ -233,6 +233,23 @@ export type SubjectOfferingImportResult = {
   error_count: number;
   errors: Array<{ row: number | null; message: string }>;
 };
+export type SubjectOfferingCopyAcademicYearPayload = {
+  source_academic_year_id: number;
+  target_academic_year_id: number;
+  overwrite_existing?: boolean;
+};
+export type SubjectOfferingCopyAcademicYearResult = {
+  source_academic_year_id: number;
+  target_academic_year_id: number;
+  created_count: number;
+  updated_count: number;
+  skipped_count: number;
+  skipped: Array<{
+    subject_id: number | null;
+    source_subject_offering_id: number | null;
+    reason: string;
+  }>;
+};
 export type SubjectOfferingCreatePayload = {
   subject_id: number;
   academic_year_id: number;
@@ -718,6 +735,21 @@ export async function uploadSubjectOfferingImportCsv(file: File): Promise<Subjec
     throw new ApiRequestError(apiErrorMessage(data, "Unable to import subject offerings."), response.status, data);
   }
   return (await response.json()) as SubjectOfferingImportResult;
+}
+
+export async function copySubjectOfferingsFromAcademicYear(
+  payload: SubjectOfferingCopyAcademicYearPayload
+): Promise<SubjectOfferingCopyAcademicYearResult> {
+  const response = await apiFetch("/api/v1/subject-offerings/copy-academic-year", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(apiErrorMessage(data, "Unable to copy previous year setup."), response.status, data);
+  }
+  return (await response.json()) as SubjectOfferingCopyAcademicYearResult;
 }
 
 export async function getGradingTemplateFormOptions(): Promise<GradingTemplateFormOptions> {

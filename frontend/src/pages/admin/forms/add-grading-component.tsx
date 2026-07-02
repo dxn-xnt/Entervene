@@ -7,6 +7,7 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
 import { Plus, Trash2 } from "lucide-react";
+import { TemplateSubjectPicker } from "@/pages/admin/subjects/components";
 import {
   createGradingTemplate,
   updateGradingTemplate,
@@ -37,6 +38,8 @@ type FormState = {
 type AddGradingComponentModalProps = {
   options: GradingTemplateFormOptions | null;
   template?: GradingTemplateListItem | null;
+  readOnly?: boolean;
+  readOnlyReason?: string;
   onClose: () => void;
   onSaved?: () => void | Promise<void>;
 };
@@ -98,6 +101,8 @@ function initialForm(options: GradingTemplateFormOptions | null, template?: Grad
 export default function AddGradingComponentModal({
   options,
   template,
+  readOnly = false,
+  readOnlyReason,
   onClose,
   onSaved,
 }: AddGradingComponentModalProps) {
@@ -182,6 +187,10 @@ export default function AddGradingComponentModal({
 
   const handleSubmit = async () => {
     setError(null);
+    if (readOnly) {
+      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
+      return;
+    }
     if (!form.template_name.trim()) {
       setError("Template name is required.");
       return;
@@ -224,6 +233,15 @@ export default function AddGradingComponentModal({
         </Text>
       </Dialog.Header>
       <section className="flex max-h-[75vh] flex-col gap-4 overflow-y-auto p-4">
+        {readOnly ? (
+          <section className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
+            <p className="font-bold">Read-only academic year</p>
+            <p className="text-black/70">{readOnlyReason}</p>
+            <p className="text-xs text-black/70">
+              Grading templates are not academic-year scoped in the current backend, but edits are disabled from this historical setup view.
+            </p>
+          </section>
+        ) : null}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="flex flex-col gap-1">
             <label htmlFor="grading-template-name" className="text-sm">Template Name</label>
@@ -268,23 +286,22 @@ export default function AddGradingComponentModal({
               </Select.Content>
             </Select>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="grading-template-subject" className="text-sm">Subject Scope</label>
-            <Select value={form.subject_id} onValueChange={handleSubjectChange}>
-              <Select.Trigger id="grading-template-subject" className="w-full">
-                <Select.Value placeholder="Any subject" />
-              </Select.Trigger>
-              <Select.Content position="item-aligned" className="max-h-72 overflow-y-auto">
-                <Select.Group>
-                  <Select.Item value={NONE_VALUE}>Any subject</Select.Item>
-                  {subjectOptions.map((subject) => (
-                    <Select.Item key={subject.subject_id} value={String(subject.subject_id)}>
-                      {subject.subject_name} ({subject.subject_codename || "No code"})
-                    </Select.Item>
-                  ))}
-                </Select.Group>
-              </Select.Content>
-            </Select>
+          <div className="flex flex-col gap-2 md:col-span-2">
+            <div>
+              <label className="text-sm font-semibold">Subject Scope</label>
+              <p className="text-xs text-black/70">
+                Optional. Leave empty for a general/default template.
+              </p>
+            </div>
+            <TemplateSubjectPicker
+              subjects={subjectOptions}
+              academicLevels={options?.academic_levels ?? []}
+              selectedSubjectId={form.subject_id}
+              onChange={handleSubjectChange}
+              allowClear
+              disabled={!options || isSaving}
+              placeholder="Search subject name, code, or grade"
+            />
           </div>
           <div className="flex flex-col gap-1 md:col-span-2">
             <label htmlFor="grading-template-description" className="text-sm">Description</label>
@@ -297,6 +314,13 @@ export default function AddGradingComponentModal({
             />
           </div>
         </div>
+
+        <section className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
+          <p className="font-bold">Completed year caution</p>
+          <p className="text-black/70">
+            If this template has already been used for a completed academic year, clone it for the new year instead of editing it.
+          </p>
+        </section>
 
         <section className="rounded-lg border-2 border-black p-3 shadow-[3px_3px_0_#000]">
           <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -356,7 +380,7 @@ export default function AddGradingComponentModal({
       </section>
       <Dialog.Footer>
         <Button variant="outline" onClick={onClose} disabled={isSaving}>Cancel</Button>
-        <Button onClick={handleSubmit} disabled={isSaving || !options}>
+        <Button onClick={handleSubmit} disabled={isSaving || !options || readOnly} title={readOnly ? readOnlyReason : undefined}>
           {isSaving ? "Saving..." : "Save Template"}
         </Button>
       </Dialog.Footer>

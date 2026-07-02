@@ -29,6 +29,7 @@ TABLES = [
 ]
 
 HEADER = "academic_year,grade_level,pathway,term,subject_code"
+READ_ONLY_DETAIL = "Subject offerings for inactive academic years are read-only to protect historical records."
 
 
 @pytest.fixture
@@ -202,6 +203,23 @@ def test_subject_offering_import_enforces_grade_pathway_rules(client, db, offeri
     messages = [error["message"] for error in body["errors"]]
     assert any("Grade 7 to Grade 10" in message for message in messages)
     assert any("Grade 11 and Grade 12" in message for message in messages)
+
+
+def test_subject_offering_import_rejects_inactive_academic_year(client, db, offering_data):
+    content = "\n".join([
+        HEADER,
+        "2027-2028,11,both,Term 1,GENBIO1",
+    ])
+
+    response = upload(client, content)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["created_count"] == 0
+    assert body["skipped_count"] == 1
+    assert body["error_count"] == 1
+    assert body["errors"][0]["message"] == READ_ONLY_DETAIL
+    assert db.query(SubjectOffering).count() == 0
 
 
 def test_subject_offering_import_rejects_existing_both_conflict(client, db, offering_data):
