@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.core.Dependencies import require_role
 from app.db.Session import get_db
 from app.schemas.SubjectOffering import (
+    SubjectOfferingCopyAcademicYearRequest,
+    SubjectOfferingCopyAcademicYearResponse,
     SubjectOfferingCreate,
     SubjectOfferingFormOptions,
     SubjectOfferingImportResponse,
@@ -23,6 +25,7 @@ from app.services.subject_offerings.SubjectOfferingQueryService import (
 )
 from app.services.subject_offerings.SubjectOfferingService import (
     archive_subject_offering_record,
+    copy_subject_offerings_between_academic_years,
     create_subject_offering_record,
     restore_subject_offering_record,
     update_subject_offering_record,
@@ -80,6 +83,15 @@ async def import_subject_offerings(
     db: Session = Depends(get_db),
 ):
     return await import_subject_offering_csv(db=db, file=file)
+
+
+@router.post("/copy-academic-year", response_model=SubjectOfferingCopyAcademicYearResponse)
+def copy_subject_offerings_from_academic_year(
+    payload: SubjectOfferingCopyAcademicYearRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    return copy_subject_offerings_between_academic_years(db=db, payload=payload)
 
 
 @router.get("/{subject_offering_id}", response_model=SubjectOfferingResponse)

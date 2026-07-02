@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
@@ -11,11 +11,12 @@ import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
+import { formatPeriodLabel } from "@/lib/academic-periods";
 import {
   Archive,
   ArrowUpRight,
+  Copy,
   DownloadIcon,
-  Filter,
   Pencil,
   Plus,
   RotateCcw,
@@ -26,10 +27,23 @@ import { useNavigate } from "react-router-dom";
 import AddSubjectModal from "./forms/add-subject";
 import AddGradingComponentModal from "./forms/add-grading-component";
 import {
+  CurriculumFilters,
+  CurriculumPlanTable,
+  EmptyStateCard,
+  SubjectContextBanner,
+  SubjectPicker,
+  SubjectModuleTabs,
+  type CurriculumGradeValue,
+  type CurriculumPathwayValue,
+  type CurriculumStatusValue,
+  type SubjectModuleTabId,
+} from "./subjects/components";
+import {
   ApiRequestError,
   archiveGradingTemplate,
   archiveSubject,
   archiveSubjectOffering,
+  copySubjectOfferingsFromAcademicYear,
   createSubjectOffering,
   downloadSubjectImportTemplate,
   downloadSubjectOfferingImportTemplate,
@@ -48,6 +62,7 @@ import {
   type GradingTemplateFormOptions,
   type GradingTemplateListItem,
   type SubjectImportResult,
+  type SubjectOfferingCopyAcademicYearResult,
   type SubjectOfferingImportResult,
   type SubjectListItem,
   type SubjectOfferingFormOptions,
@@ -60,8 +75,31 @@ const TARGET_GRADES = new Set([7, 8, 9, 10, 11, 12]);
 const ALL_VALUE = "all";
 const SHS_PATHWAYS: SubjectOfferingPathway[] = ["both", "stem_medical", "stem_engineering"];
 const JHS_PATHWAYS: SubjectOfferingPathway[] = ["general"];
+const FALLBACK_PERIODS: SubjectOfferingListItem["academic_period"][] = [
+  {
+    academic_period_id: -1,
+    period_name: "Term 1",
+    period_type: "TERM",
+    period_sequence: 1,
+    academic_year_id: -1,
+  },
+  {
+    academic_period_id: -2,
+    period_name: "Term 2",
+    period_type: "TERM",
+    period_sequence: 2,
+    academic_year_id: -1,
+  },
+  {
+    academic_period_id: -3,
+    period_name: "Term 3",
+    period_type: "TERM",
+    period_sequence: 3,
+    academic_year_id: -1,
+  },
+];
 
-type AdminSubjectSection = "catalog" | "offerings" | "grading" | "archived";
+type AdminSubjectSection = SubjectModuleTabId;
 
 type GradeGroup = {
   academicLevelId: number;
@@ -72,10 +110,9 @@ type GradeGroup = {
 
 type OfferingFilters = {
   academic_year_id: string;
-  academic_level_id: string;
-  academic_period_id: string;
-  pathway: SubjectOfferingPathway | typeof ALL_VALUE;
-  status: SubjectStatus | typeof ALL_VALUE;
+  grade: CurriculumGradeValue;
+  pathway: CurriculumPathwayValue;
+  status: CurriculumStatusValue;
   search: string;
 };
 
@@ -94,57 +131,6 @@ type OfferingFormState = {
   pathway: SubjectOfferingPathway;
   status: SubjectStatus;
 };
-
-type OfferingGroup = {
-  key: string;
-  academicYear: SubjectOfferingListItem["academic_year"];
-  academicLevel: SubjectOfferingListItem["academic_level"];
-  pathway: SubjectOfferingPathway;
-  offerings: SubjectOfferingListItem[];
-};
-
-type OfferingTermGroup = {
-  academicPeriod: SubjectOfferingListItem["academic_period"];
-  offerings: SubjectOfferingListItem[];
-};
-
-type SubjectTab = {
-  id: AdminSubjectSection;
-  label: string;
-};
-
-function SubjectTabs({
-  tabs,
-  activeTab,
-  onChange,
-}: {
-  tabs: SubjectTab[];
-  activeTab: AdminSubjectSection;
-  onChange: (tab: AdminSubjectSection) => void;
-}) {
-  return (
-    <div className="-mx-4 md:-mx-6 border-b border-black/40 px-4 md:px-6">
-      <div className="flex flex-wrap gap-2 pt-2">
-        {tabs.map((tab) => {
-          const isActive = tab.id === activeTab;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => onChange(tab.id)}
-              className={`min-h-10 border-2 border-b-0 px-4 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors ${isActive
-                ? "bg-primary text-primary-foreground"
-                : "bg-background text-foreground hover:bg-muted"
-                }`}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function friendlyErrorMessage(message: string) {
   if (message.trim().toLowerCase() === "not found") {
@@ -175,6 +161,21 @@ function statusBadge(status: SubjectStatus) {
 function targetLevels(levels: SubjectAcademicLevel[]) {
   const filtered = levels.filter((level) => TARGET_GRADES.has(level.grade_level));
   return filtered.length ? filtered : levels;
+}
+
+function gradeValueForLevel(level: SubjectAcademicLevel | null | undefined): CurriculumGradeValue {
+  if (!level || !TARGET_GRADES.has(level.grade_level)) return ALL_VALUE;
+  return String(level.grade_level) as CurriculumGradeValue;
+}
+
+function defaultPathwayForGrade(grade: CurriculumGradeValue): CurriculumPathwayValue {
+  if (grade === "7" || grade === "8" || grade === "9" || grade === "10") return "general";
+  if (grade === "11" || grade === "12") return "both";
+  return ALL_VALUE;
+}
+
+function gradeLabel(grade: CurriculumGradeValue) {
+  return grade === ALL_VALUE ? "All Grades" : `Grade ${grade}`;
 }
 
 function pathwaysForGrade(gradeLevel: number | null | undefined, allowed: SubjectOfferingPathway[] = []) {
@@ -216,28 +217,6 @@ function LoadingCard({ label }: { label: string }) {
     <RetroCard className="flex w-full items-center gap-3 p-4 text-sm">
       <Loader size="sm" />
       <span>{label}</span>
-    </RetroCard>
-  );
-}
-
-function EmptyState({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children?: ReactNode;
-}) {
-  return (
-    <RetroCard className="w-full p-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="font-bold">{title}</p>
-          <p className="text-sm text-black/70">{description}</p>
-        </div>
-        {children ? <div className="flex flex-wrap gap-2">{children}</div> : null}
-      </div>
     </RetroCard>
   );
 }
@@ -381,11 +360,15 @@ function OfferingRow({
   onEdit,
   onArchive,
   onRestore,
+  readOnly = false,
+  readOnlyReason,
 }: {
   offering: SubjectOfferingListItem;
   onEdit?: (offering: SubjectOfferingListItem) => void;
   onArchive?: (offering: SubjectOfferingListItem) => void;
   onRestore?: (offering: SubjectOfferingListItem) => void;
+  readOnly?: boolean;
+  readOnlyReason?: string;
 }) {
   return (
     <RetroCard className="p-3">
@@ -405,126 +388,39 @@ function OfferingRow({
         </div>
         <div className="flex shrink-0 gap-2">
           {onEdit ? (
-            <Button size="sm" variant="outline" onClick={() => onEdit(offering)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onEdit(offering)}
+              disabled={readOnly}
+              title={readOnly ? readOnlyReason : "Edit offering"}
+            >
               <Pencil className="size-4 mr-2" /> Edit
             </Button>
           ) : null}
           {offering.status === "active" && onArchive ? (
-            <Button size="sm" variant="outline" onClick={() => onArchive(offering)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onArchive(offering)}
+              disabled={readOnly}
+              title={readOnly ? readOnlyReason : "Archive offering"}
+            >
               <Archive className="size-4 mr-2" /> Archive
             </Button>
           ) : null}
           {offering.status === "archived" && onRestore ? (
-            <Button size="sm" variant="outline" onClick={() => onRestore(offering)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onRestore(offering)}
+              disabled={readOnly}
+              title={readOnly ? readOnlyReason : "Restore offering"}
+            >
               <RotateCcw className="size-4 mr-2" /> Restore
             </Button>
           ) : null}
         </div>
-      </div>
-    </RetroCard>
-  );
-}
-
-function OfferingGroupCard({
-  group,
-  subjectHours,
-  onEdit,
-  onArchive,
-  onRestore,
-}: {
-  group: OfferingGroup;
-  subjectHours: Map<number, number | null>;
-  onEdit: (offering: SubjectOfferingListItem) => void;
-  onArchive: (offering: SubjectOfferingListItem) => void;
-  onRestore: (offering: SubjectOfferingListItem) => void;
-}) {
-  const termGroups = useMemo<OfferingTermGroup[]>(() => {
-    const grouped = new Map<number, OfferingTermGroup>();
-    for (const offering of group.offerings) {
-      const termId = offering.academic_period.academic_period_id;
-      if (!grouped.has(termId)) {
-        grouped.set(termId, {
-          academicPeriod: offering.academic_period,
-          offerings: [],
-        });
-      }
-      grouped.get(termId)?.offerings.push(offering);
-    }
-
-    return [...grouped.values()]
-      .map((item) => ({
-        ...item,
-        offerings: [...item.offerings].sort((a, b) => a.subject.subject_name.localeCompare(b.subject.subject_name)),
-      }))
-      .sort((a, b) => a.academicPeriod.period_sequence - b.academicPeriod.period_sequence);
-  }, [group.offerings]);
-
-  return (
-    <RetroCard className="overflow-hidden p-0">
-      <div className="border-b-2 border-black bg-[#fff1b8] p-3">
-        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h3 className="text-lg font-bold">
-              {group.academicLevel.level_name} &bull; {pathwayLabel(group.pathway)} &bull; {group.academicYear.year_label}
-            </h3>
-            <p className="text-sm font-semibold">
-              {group.offerings.length} subject-term offerings across {termGroups.length} term{termGroups.length === 1 ? "" : "s"}
-            </p>
-          </div>
-          <Badge size="sm" variant="outline">
-            {group.academicYear.is_active ? "Active year" : "School year"}
-          </Badge>
-        </div>
-      </div>
-      <div className="flex flex-col gap-3 p-3">
-        {termGroups.map((termGroup) => (
-          <div key={termGroup.academicPeriod.academic_period_id} className="rounded-md border-2 border-black bg-background">
-            <div className="border-b-2 border-black px-3 py-2">
-              <p className="font-bold">{termGroup.academicPeriod.period_name}</p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="border-b border-black/30 bg-[#fff7d6]">
-                  <tr>
-                    <th className="px-3 py-2 font-bold">Subject</th>
-                    <th className="px-3 py-2 font-bold">Code</th>
-                    <th className="px-3 py-2 font-bold">Group</th>
-                    <th className="px-3 py-2 font-bold">Hours</th>
-                    <th className="px-3 py-2 font-bold">Status</th>
-                    <th className="px-3 py-2 text-right font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {termGroup.offerings.map((offering) => (
-                    <tr key={offering.subject_offering_id} className="border-b border-black/20 last:border-b-0">
-                      <td className="px-3 py-2 font-semibold">{offering.subject.subject_name}</td>
-                      <td className="px-3 py-2">{subjectCode(offering.subject)}</td>
-                      <td className="px-3 py-2">{offering.subject.subject_group || "Ungrouped"}</td>
-                      <td className="px-3 py-2">{subjectHours.get(offering.subject.subject_id) ?? "-"}</td>
-                      <td className="px-3 py-2">{statusBadge(offering.status)}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex justify-end gap-2">
-                          <Button size="sm" variant="outline" className="h-8" onClick={() => onEdit(offering)}>
-                            <Pencil className="mr-1 size-4" /> Edit
-                          </Button>
-                          {offering.status === "active" ? (
-                            <Button size="sm" variant="outline" className="h-8" onClick={() => onArchive(offering)}>
-                              <Archive className="mr-1 size-4" /> Archive
-                            </Button>
-                          ) : (
-                            <Button size="sm" variant="outline" className="h-8" onClick={() => onRestore(offering)}>
-                              <RotateCcw className="mr-1 size-4" /> Restore
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ))}
       </div>
     </RetroCard>
   );
@@ -541,11 +437,15 @@ function GradingTemplateRow({
   onEdit,
   onArchive,
   onRestore,
+  readOnly = false,
+  readOnlyReason,
 }: {
   template: GradingTemplateListItem;
   onEdit?: (template: GradingTemplateListItem) => void;
   onArchive?: (template: GradingTemplateListItem) => void;
   onRestore?: (template: GradingTemplateListItem) => void;
+  readOnly?: boolean;
+  readOnlyReason?: string;
 }) {
   return (
     <RetroCard className="p-3">
@@ -576,17 +476,35 @@ function GradingTemplateRow({
         </div>
         <div className="flex shrink-0 gap-2">
           {onEdit ? (
-            <Button size="sm" variant="outline" onClick={() => onEdit(template)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onEdit(template)}
+              disabled={readOnly}
+              title={readOnly ? readOnlyReason : "Edit grading template"}
+            >
               <Pencil className="size-4 mr-2" /> Edit
             </Button>
           ) : null}
           {template.status === "active" && onArchive ? (
-            <Button size="sm" variant="outline" onClick={() => onArchive(template)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onArchive(template)}
+              disabled={readOnly}
+              title={readOnly ? readOnlyReason : "Archive grading template"}
+            >
               <Archive className="size-4 mr-2" /> Archive
             </Button>
           ) : null}
           {template.status === "archived" && onRestore ? (
-            <Button size="sm" variant="outline" onClick={() => onRestore(template)}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onRestore(template)}
+              disabled={readOnly}
+              title={readOnly ? readOnlyReason : "Restore grading template"}
+            >
               <RotateCcw className="size-4 mr-2" /> Restore
             </Button>
           ) : null}
@@ -602,6 +520,8 @@ function OfferingModal({
   options,
   offering,
   catalogSubjects,
+  readOnly = false,
+  readOnlyReason,
   onSaved,
 }: {
   open: boolean;
@@ -609,6 +529,8 @@ function OfferingModal({
   options: SubjectOfferingFormOptions | null;
   offering: SubjectOfferingListItem | null;
   catalogSubjects: SubjectListItem[];
+  readOnly?: boolean;
+  readOnlyReason?: string;
   onSaved: (message?: string) => Promise<void>;
 }) {
   const [form, setForm] = useState<OfferingFormState>({
@@ -623,11 +545,13 @@ function OfferingModal({
   });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAdvancedYear, setShowAdvancedYear] = useState(false);
 
   const gradeLevels = useMemo(() => targetLevels(options?.academic_levels ?? []), [options]);
   const selectedYearId = Number(form.academic_year_id);
   const selectedLevelId = Number(form.academic_level_id);
   const selectedLevel = gradeLevels.find((level) => level.academic_level_id === selectedLevelId);
+  const selectedYear = options?.academic_years.find((year) => year.academic_year_id === selectedYearId);
   const availablePathways = useMemo(
     () => pathwaysForGrade(selectedLevel?.grade_level, options?.pathways),
     [options?.pathways, selectedLevel?.grade_level]
@@ -636,21 +560,27 @@ function OfferingModal({
     () => (options?.academic_periods ?? []).filter((period) => period.academic_year_id === selectedYearId),
     [options, selectedYearId]
   );
+  const visiblePeriods = periods.length ? periods : FALLBACK_PERIODS;
   const subjects = useMemo(
     () => catalogSubjects.filter((subject) => subject.academic_level.academic_level_id === selectedLevelId && subject.status === "active"),
     [catalogSubjects, selectedLevelId]
   );
-  const selectedSubjectIds = new Set(form.subject_ids);
   const selectedPeriodIds = new Set(form.academic_period_ids);
   const isCreateMode = !offering;
-  const allSubjectsSelected = subjects.length > 0 && subjects.every((subject) => selectedSubjectIds.has(String(subject.subject_id)));
   const allTermsSelected = periods.length > 0 && periods.every((period) => selectedPeriodIds.has(String(period.academic_period_id)));
   const isJhsSelection = isJuniorHighGrade(selectedLevel?.grade_level);
   const isShsSelection = isSeniorHighGrade(selectedLevel?.grade_level);
+  const contextPeriod = periods.find((period) => form.academic_period_ids.includes(String(period.academic_period_id)))
+    ?? periods.find((period) => String(period.academic_period_id) === form.academic_period_id)
+    ?? periods[0];
+  const contextLabel = selectedYear?.year_label && contextPeriod
+    ? `${selectedYear.year_label} - ${formatPeriodLabel(contextPeriod)}`
+    : selectedYear?.year_label ?? "Current setup context unavailable";
 
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setShowAdvancedYear(false);
     if (offering) {
       setForm({
         subject_id: String(offering.subject.subject_id),
@@ -670,13 +600,9 @@ function OfferingModal({
     const initialPeriods = (options?.academic_periods ?? []).filter(
       (period) => period.academic_year_id === activeYear?.academic_year_id
     );
-    const initialSubject = (options?.active_subjects ?? []).find(
-      (subject) => subject.academic_level_id === level?.academic_level_id
-    );
-
     setForm({
-      subject_id: initialSubject ? String(initialSubject.subject_id) : "",
-      subject_ids: initialSubject ? [String(initialSubject.subject_id)] : [],
+      subject_id: "",
+      subject_ids: [],
       academic_year_id: activeYear ? String(activeYear.academic_year_id) : "",
       academic_level_id: level ? String(level.academic_level_id) : "",
       academic_period_id: initialPeriods[0] ? String(initialPeriods[0].academic_period_id) : "",
@@ -707,17 +633,14 @@ function OfferingModal({
   const handleLevelChange = (value: string) => {
     const nextLevel = gradeLevels.find((level) => String(level.academic_level_id) === value);
     const nextPathways = pathwaysForGrade(nextLevel?.grade_level, options?.pathways);
-    const nextSubject = (options?.active_subjects ?? []).find(
-      (subject) => subject.academic_level_id === Number(value)
-    );
     const nextPeriods = (options?.academic_periods ?? []).filter(
       (period) => period.academic_year_id === Number(form.academic_year_id)
     );
     setForm((current) => ({
       ...current,
       academic_level_id: value,
-      subject_id: nextSubject ? String(nextSubject.subject_id) : "",
-      subject_ids: nextSubject ? [String(nextSubject.subject_id)] : [],
+      subject_id: "",
+      subject_ids: [],
       academic_period_ids: isJuniorHighGrade(nextLevel?.grade_level)
         ? nextPeriods.map((period) => String(period.academic_period_id))
         : [],
@@ -725,35 +648,24 @@ function OfferingModal({
     }));
   };
 
-  const toggleSubject = (subjectId: string) => {
-    setForm((current) => {
-      const currentIds = new Set(current.subject_ids);
-      if (currentIds.has(subjectId)) {
-        currentIds.delete(subjectId);
-      } else {
-        currentIds.add(subjectId);
-      }
-      const nextIds = [...currentIds];
-      return {
-        ...current,
-        subject_ids: nextIds,
-        subject_id: nextIds[0] ?? "",
-      };
-    });
-  };
-
-  const toggleAllSubjects = () => {
-    setForm((current) => {
-      const nextIds = allSubjectsSelected ? [] : subjects.map((subject) => String(subject.subject_id));
-      return {
-        ...current,
-        subject_ids: nextIds,
-        subject_id: nextIds[0] ?? "",
-      };
-    });
+  const handleSubjectSelectionChange = (subjectIds: string[]) => {
+    setForm((current) => ({
+      ...current,
+      subject_ids: subjectIds,
+      subject_id: subjectIds[0] ?? "",
+    }));
   };
 
   const toggleTerm = (periodId: string) => {
+    if (!isCreateMode) {
+      setForm((current) => ({
+        ...current,
+        academic_period_id: periodId,
+        academic_period_ids: [periodId],
+      }));
+      return;
+    }
+
     setForm((current) => {
       const currentIds = new Set(current.academic_period_ids);
       if (currentIds.has(periodId)) {
@@ -794,10 +706,22 @@ function OfferingModal({
 
   const handleSubmit = async () => {
     setError(null);
+    if (readOnly) {
+      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
+      return;
+    }
     const selectedIds = isCreateMode ? form.subject_ids : [form.subject_id].filter(Boolean);
     const selectedTermIds = isCreateMode ? form.academic_period_ids : [form.academic_period_id].filter(Boolean);
     if (!selectedIds.length || !selectedTermIds.length || !form.academic_year_id || !form.academic_level_id) {
       setError(isCreateMode ? "Select setup details, at least one term, and at least one subject." : "Select a subject, academic year, grade level, and term.");
+      return;
+    }
+    if (selectedTermIds.some((periodId) => Number(periodId) <= 0)) {
+      setError("No valid academic terms are available for the selected academic year.");
+      return;
+    }
+    if (!availablePathways.includes(form.pathway)) {
+      setError("Select a valid pathway for the selected grade level.");
       return;
     }
 
@@ -869,26 +793,23 @@ function OfferingModal({
         </Dialog.Header>
         <section className="max-h-[calc(90vh-7rem)] overflow-y-auto p-4">
           <div className="flex flex-col gap-4">
+            <div className="rounded-lg border-2 border-black bg-[#fff1b8] p-3 shadow-[3px_3px_0_#000]">
+              <p className="text-sm font-semibold text-black/70">Current setup context</p>
+              <p className="text-lg font-bold">{contextLabel}</p>
+              <p className="text-xs text-black/70">
+                This offering will be added to the current active academic year. Change active year or active term in System Settings.
+              </p>
+            </div>
+            {readOnly ? (
+              <div className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
+                <p className="font-bold">Read-only academic year</p>
+                <p className="text-black/70">{readOnlyReason}</p>
+              </div>
+            ) : null}
+
             <div className="rounded-lg border-2 border-black p-3 shadow-[3px_3px_0_#000]">
               <h6 className="mb-3 font-bold">Offering Setup</h6>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div className="flex flex-col gap-1">
-                  <label className="text-sm" htmlFor="offering-year">Academic Year</label>
-                  <Select value={form.academic_year_id} onValueChange={handleYearChange}>
-                    <Select.Trigger id="offering-year" className="w-full">
-                      <Select.Value placeholder="Select year" />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Group>
-                        {options?.academic_years.map((year) => (
-                          <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
-                            {year.year_label}
-                          </Select.Item>
-                        ))}
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>
-                </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-sm" htmlFor="offering-level">Grade Level</label>
                   <Select value={form.academic_level_id} onValueChange={handleLevelChange}>
@@ -908,7 +829,11 @@ function OfferingModal({
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-sm" htmlFor="offering-pathway">Pathway</label>
-                  <Select value={form.pathway} onValueChange={(value) => setField("pathway", value as SubjectOfferingPathway)}>
+                  <Select
+                    value={form.pathway}
+                    onValueChange={(value) => setField("pathway", value as SubjectOfferingPathway)}
+                    disabled={isJhsSelection}
+                  >
                     <Select.Trigger id="offering-pathway" className="w-full">
                       <Select.Value placeholder="Select pathway" />
                     </Select.Trigger>
@@ -927,9 +852,43 @@ function OfferingModal({
                   ) : null}
                 </div>
                 <div className="flex flex-col gap-2 md:col-span-2">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-md border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[2px_2px_0_#000]">
+                    <Checkbox
+                      checked={showAdvancedYear}
+                      onCheckedChange={(checked) => setShowAdvancedYear(checked === true)}
+                      className="mt-1 shrink-0"
+                    />
+                    <span>
+                      <span className="block font-bold">Add to a different academic year</span>
+                      <span className="text-xs text-black/70">
+                        Keep this off unless you are copying or correcting offerings outside the active setup.
+                      </span>
+                    </span>
+                  </label>
+                  {showAdvancedYear ? (
+                    <div className="flex flex-col gap-1">
+                      <label className="text-sm" htmlFor="offering-year">Academic Year</label>
+                      <Select value={form.academic_year_id} onValueChange={handleYearChange}>
+                        <Select.Trigger id="offering-year" className="w-full">
+                          <Select.Value placeholder="Select year" />
+                        </Select.Trigger>
+                        <Select.Content>
+                          <Select.Group>
+                            {options?.academic_years.map((year) => (
+                              <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
+                                {year.year_label}
+                              </Select.Item>
+                            ))}
+                          </Select.Group>
+                        </Select.Content>
+                      </Select>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="flex flex-col gap-2 md:col-span-2">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <p className="text-sm font-semibold">Multiple Terms</p>
+                      <p className="text-sm font-semibold">{isCreateMode ? "Term(s)" : "Term"}</p>
                       {isJhsSelection ? (
                         <p className="text-xs text-black/70">Junior High subjects usually continue across terms. Adjust if needed.</p>
                       ) : null}
@@ -943,45 +902,30 @@ function OfferingModal({
                       </Button>
                     ) : null}
                   </div>
-                  {isCreateMode ? (
-                    periods.length === 0 ? (
-                      <p className="text-sm">No terms found for this academic year.</p>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                        {periods.map((period) => {
-                          const periodId = String(period.academic_period_id);
-                          return (
-                            <label
-                              key={period.academic_period_id}
-                              className="flex cursor-pointer items-center gap-3 rounded-md border-2 border-black bg-background p-3 shadow-[2px_2px_0_#000]"
-                            >
-                              <Checkbox
-                                checked={selectedPeriodIds.has(periodId)}
-                                onCheckedChange={() => toggleTerm(periodId)}
-                                className="shrink-0"
-                              />
-                              <span className="font-semibold">{period.period_name}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )
-                  ) : (
-                    <Select value={form.academic_period_id} onValueChange={(value) => setField("academic_period_id", value)}>
-                      <Select.Trigger id="offering-period" className="w-full">
-                        <Select.Value placeholder="Select term" />
-                      </Select.Trigger>
-                      <Select.Content>
-                        <Select.Group>
-                          {periods.map((period) => (
-                            <Select.Item key={period.academic_period_id} value={String(period.academic_period_id)}>
-                              {period.period_name}
-                            </Select.Item>
-                          ))}
-                        </Select.Group>
-                      </Select.Content>
-                    </Select>
-                  )}
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                    {visiblePeriods.map((period) => {
+                      const periodId = String(period.academic_period_id);
+                      const isFallback = period.academic_period_id <= 0;
+                      return (
+                        <label
+                          key={period.academic_period_id}
+                          className={`flex items-center gap-3 rounded-md border-2 border-black p-3 shadow-[2px_2px_0_#000] ${isFallback ? "cursor-not-allowed bg-black/5 text-black/50" : "cursor-pointer bg-background"
+                            }`}
+                        >
+                          <Checkbox
+                            checked={selectedPeriodIds.has(periodId)}
+                            onCheckedChange={() => toggleTerm(periodId)}
+                            className="shrink-0"
+                            disabled={isFallback}
+                          />
+                          <span className="font-semibold">{formatPeriodLabel(period)}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {!periods.length ? (
+                    <p className="text-sm font-semibold text-amber-700">No terms found for this academic year.</p>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -992,60 +936,15 @@ function OfferingModal({
                   <h6 className="font-bold">Select Subjects</h6>
                   <p className="text-xs text-black/70">Catalog subjects are filtered by the selected grade level.</p>
                 </div>
-                {isCreateMode && subjects.length ? (
-                  <Button type="button" size="sm" variant="outline" onClick={toggleAllSubjects}>
-                    {allSubjectsSelected ? "Clear all" : "Select all available subjects"}
-                  </Button>
-                ) : null}
               </div>
 
-              {isCreateMode ? (
-                subjects.length === 0 ? (
-                  <p className="text-sm">No active catalog subjects found for this grade level.</p>
-                ) : (
-                  <div className="grid grid-cols-1 gap-2">
-                    {subjects.map((subject) => {
-                      const subjectId = String(subject.subject_id);
-                      return (
-                        <label
-                          key={subject.subject_id}
-                          className="flex cursor-pointer items-start gap-3 rounded-md border-2 border-black bg-background p-3 shadow-[2px_2px_0_#000]"
-                        >
-                          <Checkbox
-                            checked={selectedSubjectIds.has(subjectId)}
-                            onCheckedChange={() => toggleSubject(subjectId)}
-                            className="mt-1 shrink-0"
-                          />
-                          <span className="grid min-w-0 flex-1 grid-cols-1 gap-1 text-sm md:grid-cols-[1.5fr_120px_140px_80px]">
-                            <strong className="truncate">{subject.subject_name}</strong>
-                            <span>{subjectCode(subject)}</span>
-                            <span>{subject.subject_group || "Ungrouped"}</span>
-                            <span>{subject.hours ?? "-"} hrs</span>
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )
-              ) : (
-                <div className="flex flex-col gap-1">
-                  <label className="text-sm" htmlFor="offering-subject">Subject</label>
-                  <Select value={form.subject_id} onValueChange={(value) => setField("subject_id", value)}>
-                    <Select.Trigger id="offering-subject" className="w-full">
-                      <Select.Value placeholder="Select subject" />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Group>
-                        {subjects.map((subject) => (
-                          <Select.Item key={subject.subject_id} value={String(subject.subject_id)}>
-                            {subject.subject_name} ({subject.subject_codename || "No code"})
-                          </Select.Item>
-                        ))}
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>
-                </div>
-              )}
+              <SubjectPicker
+                subjects={subjects}
+                selectedSubjectIds={form.subject_ids}
+                onChange={handleSubjectSelectionChange}
+                singleSelect={!isCreateMode}
+                searchPlaceholder={isCreateMode ? "Search subjects for this grade" : "Search subject"}
+              />
             </div>
 
             {offering ? (
@@ -1073,8 +972,173 @@ function OfferingModal({
         </section>
         <Dialog.Footer>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={isSaving || !options}>
+          <Button onClick={handleSubmit} disabled={isSaving || !options || readOnly} title={readOnly ? readOnlyReason : undefined}>
             {isSaving ? "Saving..." : offering ? "Save Offering" : "Add Offerings"}
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
+  );
+}
+
+function CopyPreviousYearSetupModal({
+  open,
+  onOpenChange,
+  options,
+  defaultSourceAcademicYearId,
+  onCopied,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  options: SubjectOfferingFormOptions | null;
+  defaultSourceAcademicYearId?: number;
+  onCopied: (result: SubjectOfferingCopyAcademicYearResult) => Promise<void>;
+}) {
+  const [sourceAcademicYearId, setSourceAcademicYearId] = useState("");
+  const [targetAcademicYearId, setTargetAcademicYearId] = useState("");
+  const [overwriteExisting, setOverwriteExisting] = useState(false);
+  const [isCopying, setIsCopying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const activeYears = useMemo(
+    () => options?.academic_years.filter((year) => year.is_active) ?? [],
+    [options?.academic_years]
+  );
+  const targetYears = activeYears;
+  const selectedTargetYearId = Number(targetAcademicYearId);
+  const sourceYears = useMemo(() => {
+    const years = options?.academic_years ?? [];
+    const inactiveYears = years.filter((year) => !year.is_active && year.academic_year_id !== selectedTargetYearId);
+    return inactiveYears.length
+      ? inactiveYears
+      : years.filter((year) => year.academic_year_id !== selectedTargetYearId);
+  }, [options?.academic_years, selectedTargetYearId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const defaultTarget = activeYears[0];
+    const sourceCandidates = options?.academic_years.filter((year) =>
+      year.academic_year_id !== defaultTarget?.academic_year_id
+    ) ?? [];
+    const defaultSource = sourceCandidates.find((year) => year.academic_year_id === defaultSourceAcademicYearId)
+      ?? sourceCandidates.find((year) => !year.is_active)
+      ?? sourceCandidates[0];
+
+    setTargetAcademicYearId(defaultTarget ? String(defaultTarget.academic_year_id) : "");
+    setSourceAcademicYearId(defaultSource ? String(defaultSource.academic_year_id) : "");
+    setOverwriteExisting(false);
+    setError(null);
+  }, [activeYears, defaultSourceAcademicYearId, open, options?.academic_years]);
+
+  const handleCopy = async () => {
+    setError(null);
+    if (!sourceAcademicYearId || !targetAcademicYearId) {
+      setError("Select a source academic year and active target academic year.");
+      return;
+    }
+    if (sourceAcademicYearId === targetAcademicYearId) {
+      setError("Source and target academic years must be different.");
+      return;
+    }
+
+    setIsCopying(true);
+    try {
+      const result = await copySubjectOfferingsFromAcademicYear({
+        source_academic_year_id: Number(sourceAcademicYearId),
+        target_academic_year_id: Number(targetAcademicYearId),
+        overwrite_existing: overwriteExisting,
+      });
+      await onCopied(result);
+      onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to copy previous year setup.");
+    } finally {
+      setIsCopying(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog.Content size="2xl">
+        <Dialog.Header asChild>
+          <div className="flex w-full items-center justify-between">
+            <Text as="h5" className="font-sans text-xl font-bold">
+              Copy Previous Year Setup
+            </Text>
+          </div>
+        </Dialog.Header>
+        <section className="flex flex-col gap-4 p-4">
+          <div className="rounded-lg border-2 border-black bg-[#fff1b8] p-3 text-sm shadow-[3px_3px_0_#000]">
+            <p className="font-bold">This copies subject offerings only.</p>
+            <p className="text-black/70">
+              It does not copy teachers, classes, grades, submissions, or predictions.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-sm" htmlFor="copy-source-year">Source Academic Year</label>
+              <Select value={sourceAcademicYearId} onValueChange={setSourceAcademicYearId}>
+                <Select.Trigger id="copy-source-year" className="w-full">
+                  <Select.Value placeholder="Select previous year" />
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Group>
+                    {sourceYears.map((year) => (
+                      <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
+                        {year.year_label}{year.is_active ? " (active)" : ""}
+                      </Select.Item>
+                    ))}
+                  </Select.Group>
+                </Select.Content>
+              </Select>
+              <p className="text-xs text-black/70">Previous or inactive years are allowed as the copy source.</p>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-sm" htmlFor="copy-target-year">Target Academic Year</label>
+              <Select
+                value={targetAcademicYearId}
+                onValueChange={setTargetAcademicYearId}
+                disabled={targetYears.length <= 1}
+              >
+                <Select.Trigger id="copy-target-year" className="w-full">
+                  <Select.Value placeholder="Select active year" />
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Group>
+                    {targetYears.map((year) => (
+                      <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
+                        {year.year_label}
+                      </Select.Item>
+                    ))}
+                  </Select.Group>
+                </Select.Content>
+              </Select>
+              <p className="text-xs text-black/70">Target year must be active. Future terms remain editable.</p>
+            </div>
+          </div>
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-md border-2 border-black bg-background p-3 text-sm shadow-[2px_2px_0_#000]">
+            <Checkbox
+              checked={overwriteExisting}
+              onCheckedChange={(checked) => setOverwriteExisting(checked === true)}
+              className="mt-1 shrink-0"
+            />
+            <span>
+              <span className="block font-bold">Overwrite existing offerings</span>
+              <span className="text-xs text-black/70">
+                Updates exact matching target offerings. Extra target offerings are not deleted.
+              </span>
+            </span>
+          </label>
+
+          {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
+        </section>
+        <Dialog.Footer>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isCopying}>Cancel</Button>
+          <Button onClick={handleCopy} disabled={isCopying || !options || !sourceYears.length || !targetYears.length}>
+            {isCopying ? "Copying..." : "Copy Previous Year Setup"}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>
@@ -1097,8 +1161,7 @@ export default function AdminSubjects() {
   const [catalogSearch, setCatalogSearch] = useState("");
   const [offeringFilters, setOfferingFilters] = useState<OfferingFilters>({
     academic_year_id: ALL_VALUE,
-    academic_level_id: ALL_VALUE,
-    academic_period_id: ALL_VALUE,
+    grade: ALL_VALUE,
     pathway: ALL_VALUE,
     status: "active",
     search: "",
@@ -1111,13 +1174,14 @@ export default function AdminSubjects() {
   const [isImportingOfferings, setIsImportingOfferings] = useState(false);
   const [isDownloadingCatalogTemplate, setIsDownloadingCatalogTemplate] = useState(false);
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
-  const [showAcademicFilters, setShowAcademicFilters] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [catalogImportResult, setCatalogImportResult] = useState<SubjectImportResult | null>(null);
   const [offeringImportResult, setOfferingImportResult] = useState<SubjectOfferingImportResult | null>(null);
+  const [copyResult, setCopyResult] = useState<SubjectOfferingCopyAcademicYearResult | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [isOfferingModalOpen, setIsOfferingModalOpen] = useState(false);
+  const [isCopySetupModalOpen, setIsCopySetupModalOpen] = useState(false);
   const [editingOffering, setEditingOffering] = useState<SubjectOfferingListItem | null>(null);
   const [isGradingModalOpen, setIsGradingModalOpen] = useState(false);
   const [editingGradingTemplate, setEditingGradingTemplate] = useState<GradingTemplateListItem | null>(null);
@@ -1163,10 +1227,12 @@ export default function AdminSubjects() {
     setIsLoadingOfferings(true);
     setError(null);
     try {
+      const selectedLevel = offeringOptions?.academic_levels.find(
+        (level) => String(level.grade_level) === offeringFilters.grade
+      );
       const params = {
         academic_year_id: offeringFilters.academic_year_id !== ALL_VALUE ? Number(offeringFilters.academic_year_id) : undefined,
-        academic_level_id: offeringFilters.academic_level_id !== ALL_VALUE ? Number(offeringFilters.academic_level_id) : undefined,
-        academic_period_id: offeringFilters.academic_period_id !== ALL_VALUE ? Number(offeringFilters.academic_period_id) : undefined,
+        academic_level_id: selectedLevel?.academic_level_id,
         pathway: offeringFilters.pathway !== ALL_VALUE ? offeringFilters.pathway : undefined,
         status: offeringFilters.status !== ALL_VALUE ? offeringFilters.status : undefined,
         search: offeringFilters.search,
@@ -1182,7 +1248,7 @@ export default function AdminSubjects() {
     } finally {
       setIsLoadingOfferings(false);
     }
-  }, [offeringFilters]);
+  }, [offeringFilters, offeringOptions?.academic_levels]);
 
   const loadGradingTemplates = useCallback(async () => {
     setIsLoadingGradingTemplates(true);
@@ -1210,6 +1276,25 @@ export default function AdminSubjects() {
   useEffect(() => {
     void loadOfferings();
   }, [loadOfferings]);
+
+  useEffect(() => {
+    if (!offeringOptions) return;
+    setOfferingFilters((current) => {
+      if (current.academic_year_id !== ALL_VALUE && current.grade !== ALL_VALUE) return current;
+      const activeYear = offeringOptions.academic_years.find((year) => year.is_active)
+        ?? offeringOptions.academic_years[0];
+      const defaultLevel = targetLevels(offeringOptions.academic_levels)[0];
+      const defaultGrade = gradeValueForLevel(defaultLevel);
+      return {
+        ...current,
+        academic_year_id: current.academic_year_id !== ALL_VALUE
+          ? current.academic_year_id
+          : String(activeYear?.academic_year_id ?? ALL_VALUE),
+        grade: current.grade !== ALL_VALUE ? current.grade : defaultGrade,
+        pathway: current.pathway !== ALL_VALUE ? current.pathway : defaultPathwayForGrade(defaultGrade),
+      };
+    });
+  }, [offeringOptions]);
 
   const filteredCatalogSubjects = useMemo(() => {
     const query = catalogSearch.trim().toLowerCase();
@@ -1247,99 +1332,120 @@ export default function AdminSubjects() {
       .sort((a, b) => a.gradeLevel - b.gradeLevel);
   }, [filteredCatalogSubjects]);
 
-  const subjectHoursById = useMemo(() => {
-    const hours = new Map<number, number | null>();
-    for (const subject of [...subjects, ...archivedSubjects]) {
-      hours.set(subject.subject_id, subject.hours);
+  const selectedAcademicYear = useMemo(() => {
+    if (!offeringOptions) return null;
+    if (offeringFilters.academic_year_id === ALL_VALUE) {
+      return offeringOptions.academic_years.find((year) => year.is_active)
+        ?? offeringOptions.academic_years[0]
+        ?? null;
     }
-    return hours;
-  }, [archivedSubjects, subjects]);
+    return offeringOptions.academic_years.find(
+      (year) => year.academic_year_id === Number(offeringFilters.academic_year_id)
+    ) ?? null;
+  }, [offeringFilters.academic_year_id, offeringOptions]);
+  const activeAcademicYear = useMemo(
+    () => offeringOptions?.academic_years.find((year) => year.is_active) ?? null,
+    [offeringOptions]
+  );
+  const isViewingInactiveAcademicYear = selectedAcademicYear?.is_active === false;
+  const readOnlyReason = isViewingInactiveAcademicYear
+    ? `Viewing previous academic year: ${selectedAcademicYear?.year_label}. Curriculum and grading setup are read-only to protect historical grades and prediction records.`
+    : undefined;
+  const readOnlyHelper = activeAcademicYear
+    ? `Create or copy a setup into the active academic year (${activeAcademicYear.year_label}) before making changes.`
+    : "Create or copy a setup into the active academic year before making changes.";
 
-  const offeringGroups = useMemo<OfferingGroup[]>(() => {
-    const grouped = new Map<string, OfferingGroup>();
-    for (const offering of offerings) {
-      const key = [
-        offering.academic_year.academic_year_id,
-        offering.academic_level.academic_level_id,
-        offering.pathway,
-      ].join(":");
+  const selectedAcademicLevel = useMemo(() => {
+    if (!offeringOptions || offeringFilters.grade === ALL_VALUE) return null;
+    return offeringOptions.academic_levels.find(
+      (level) => String(level.grade_level) === offeringFilters.grade
+    ) ?? null;
+  }, [offeringFilters.grade, offeringOptions]);
 
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          key,
-          academicYear: offering.academic_year,
-          academicLevel: offering.academic_level,
-          pathway: offering.pathway,
-          offerings: [],
-        });
-      }
-      grouped.get(key)?.offerings.push(offering);
-    }
+  const curriculumPeriods = useMemo(() => {
+    if (!offeringOptions || !selectedAcademicYear) return [];
+    return offeringOptions.academic_periods
+      .filter((period) => period.academic_year_id === selectedAcademicYear.academic_year_id)
+      .sort((a, b) => a.period_sequence - b.period_sequence);
+  }, [offeringOptions, selectedAcademicYear]);
 
-    return [...grouped.values()].sort((a, b) => {
-      const yearOrder = b.academicYear.year_label.localeCompare(a.academicYear.year_label);
-      if (yearOrder) return yearOrder;
-      const gradeOrder = a.academicLevel.grade_level - b.academicLevel.grade_level;
-      if (gradeOrder) return gradeOrder;
-      return pathwayLabel(a.pathway).localeCompare(pathwayLabel(b.pathway));
-    });
-  }, [offerings]);
+  const catalogSubjectsForPlan = useMemo(
+    () => [...subjects, ...archivedSubjects],
+    [archivedSubjects, subjects]
+  );
 
   const activeCatalogCount = subjects.length;
   const activeOfferingCount = offerings.filter((offering) => offering.status === "active").length;
   const activeGradingTemplateCount = gradingTemplates.filter((template) => template.status === "active").length;
-  const subjectTabs: SubjectTab[] = [
-    { id: "catalog", label: `Subject Catalog (${activeCatalogCount})` },
-    { id: "offerings", label: `Subject Offerings (${activeOfferingCount})` },
-    { id: "grading", label: `Grading Setup (${activeGradingTemplateCount})` },
-    { id: "archived", label: `Archived (${archivedSubjects.length + archivedOfferings.length + archivedGradingTemplates.length})` },
-  ];
-  const activeAcademicFilterCount = [
-    offeringFilters.academic_year_id,
-    offeringFilters.academic_level_id,
-    offeringFilters.academic_period_id,
-  ].filter((value) => value !== ALL_VALUE).length;
-
-  const setFilter = <TKey extends keyof OfferingFilters>(key: TKey, value: OfferingFilters[TKey]) => {
-    setOfferingFilters((current) => {
-      const next = { ...current, [key]: value };
-      if (key === "academic_year_id") {
-        next.academic_period_id = ALL_VALUE;
-      }
-      return next;
-    });
+  const subjectTabCounts = {
+    catalog: activeCatalogCount,
+    offerings: activeOfferingCount,
+    grading: activeGradingTemplateCount,
+    archived: archivedSubjects.length + archivedOfferings.length + archivedGradingTemplates.length,
+  };
+  const setOfferingSearch = (value: string) => {
+    setOfferingFilters((current) => ({ ...current, search: value }));
   };
 
-  const filterPeriods = useMemo(() => {
-    if (!offeringOptions) return [];
-    if (offeringFilters.academic_year_id === ALL_VALUE) return offeringOptions.academic_periods;
-    return offeringOptions.academic_periods.filter(
-      (period) => period.academic_year_id === Number(offeringFilters.academic_year_id)
-    );
-  }, [offeringFilters.academic_year_id, offeringOptions]);
+  const setOfferingGrade = (value: CurriculumGradeValue) => {
+    setOfferingFilters((current) => ({
+      ...current,
+      grade: value,
+      pathway: defaultPathwayForGrade(value),
+    }));
+  };
+
+  const setOfferingPathway = (value: CurriculumPathwayValue) => {
+    setOfferingFilters((current) => ({ ...current, pathway: value }));
+  };
+
+  const setOfferingStatus = (value: CurriculumStatusValue) => {
+    setOfferingFilters((current) => ({ ...current, status: value }));
+  };
 
   const openCreateOffering = () => {
+    if (isViewingInactiveAcademicYear) {
+      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
+      return;
+    }
     setEditingOffering(null);
     setIsOfferingModalOpen(true);
   };
 
   const openEditOffering = (offering: SubjectOfferingListItem) => {
+    if (isViewingInactiveAcademicYear) {
+      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
+      return;
+    }
     setEditingOffering(offering);
     setIsOfferingModalOpen(true);
   };
 
   const openCreateGradingTemplate = () => {
+    if (isViewingInactiveAcademicYear) {
+      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
+      return;
+    }
     setEditingGradingTemplate(null);
     setIsGradingModalOpen(true);
   };
 
   const openEditGradingTemplate = (template: GradingTemplateListItem) => {
+    if (isViewingInactiveAcademicYear) {
+      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
+      return;
+    }
     setEditingGradingTemplate(template);
     setIsGradingModalOpen(true);
   };
 
   const handlePendingAction = async () => {
     if (!pendingAction) return;
+    if (isViewingInactiveAcademicYear && (pendingAction.kind === "offering" || pendingAction.kind === "grading")) {
+      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
+      setPendingAction(null);
+      return;
+    }
     try {
       if (pendingAction.kind === "subject") {
         if (pendingAction.action === "archive") {
@@ -1391,6 +1497,11 @@ export default function AdminSubjects() {
 
   const handleOfferingImport = async (file: File | undefined) => {
     if (!file) return;
+    if (isViewingInactiveAcademicYear) {
+      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
+      if (offeringImportInputRef.current) offeringImportInputRef.current.value = "";
+      return;
+    }
     setError(null);
     setOfferingImportResult(null);
     setIsImportingOfferings(true);
@@ -1409,12 +1520,28 @@ export default function AdminSubjects() {
     }
   };
 
+  const handleCopySetupComplete = async (result: SubjectOfferingCopyAcademicYearResult) => {
+    setCopyResult(result);
+    setNotice(
+      `Copy complete: ${result.created_count} created, ${result.updated_count} updated, ${result.skipped_count} skipped.`
+    );
+    setOfferingFilters((current) => ({
+      ...current,
+      academic_year_id: String(result.target_academic_year_id),
+      status: "active",
+    }));
+    await loadOfferings();
+  };
+
   const resetOfferingFilters = () => {
+    const activeYear = offeringOptions?.academic_years.find((year) => year.is_active)
+      ?? offeringOptions?.academic_years[0];
+    const defaultLevel = targetLevels(offeringOptions?.academic_levels ?? [])[0];
+    const defaultGrade = gradeValueForLevel(defaultLevel);
     setOfferingFilters({
-      academic_year_id: ALL_VALUE,
-      academic_level_id: ALL_VALUE,
-      academic_period_id: ALL_VALUE,
-      pathway: ALL_VALUE,
+      academic_year_id: String(activeYear?.academic_year_id ?? ALL_VALUE),
+      grade: defaultGrade,
+      pathway: defaultPathwayForGrade(defaultGrade),
       status: "active",
       search: "",
     });
@@ -1459,6 +1586,11 @@ export default function AdminSubjects() {
     grading: "Create reusable grading templates such as Written Works, Performance Tasks, and Term Assessment.",
     archived: "Restore catalog subjects, offerings, or grading templates that are no longer active.",
   }[activeSection];
+  const selectedGradeLabel = selectedAcademicLevel?.level_name ?? gradeLabel(offeringFilters.grade);
+  const selectedPathwayLabel = offeringFilters.pathway === ALL_VALUE
+    ? "All Pathways"
+    : pathwayLabel(offeringFilters.pathway);
+  const selectedYearLabel = selectedAcademicYear?.year_label ?? "Active year";
 
   return (
     <AppLayout>
@@ -1519,13 +1651,29 @@ export default function AdminSubjects() {
                       className="hidden"
                       onChange={(event) => void handleOfferingImport(event.target.files?.[0])}
                     />
-                    <Button onClick={openCreateOffering} disabled={isLoadingOptions}>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setError(null);
+                        setCopyResult(null);
+                        setIsCopySetupModalOpen(true);
+                      }}
+                      disabled={isLoadingOptions || !activeAcademicYear}
+                    >
+                      <Copy className="size-4 mr-2" /> Copy Previous Year Setup
+                    </Button>
+                    <Button
+                      onClick={openCreateOffering}
+                      disabled={isLoadingOptions || isViewingInactiveAcademicYear}
+                      title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
+                    >
                       <Plus className="size-4 mr-2" /> Add Offerings
                     </Button>
                     <Button
                       variant="outline"
                       onClick={() => offeringImportInputRef.current?.click()}
-                      disabled={isImportingOfferings}
+                      disabled={isImportingOfferings || isViewingInactiveAcademicYear}
+                      title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
                     >
                       <Upload className="size-4 mr-2" /> {isImportingOfferings ? "Importing..." : "Import Offering CSV"}
                     </Button>
@@ -1540,19 +1688,51 @@ export default function AdminSubjects() {
                   </>
                 ) : null}
                 {activeSection === "grading" ? (
-                  <Button onClick={openCreateGradingTemplate} disabled={isLoadingOptions}>
+                  <Button
+                    onClick={openCreateGradingTemplate}
+                    disabled={isLoadingOptions || isViewingInactiveAcademicYear}
+                    title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
+                  >
                     <Plus className="size-4 mr-2" /> New Grading Template
                   </Button>
                 ) : null}
               </div>
             </header>
-            {/* <RetroCard className="p-3">
+            <SubjectContextBanner
+              academicYears={offeringOptions?.academic_years}
+              academicPeriods={offeringOptions?.academic_periods}
+              academicYearId={selectedAcademicYear?.academic_year_id}
+              isLoading={isLoadingOptions}
+            />
+            <RetroCard className="p-3">
               <p className="text-sm font-semibold">
                 Start by adding subjects by grade level. Grading templates are optional and can be managed later.
               </p>
-            </RetroCard> */}
-            <SubjectTabs tabs={subjectTabs} activeTab={activeSection} onChange={setActiveSection} />
+            </RetroCard>
+            <SubjectModuleTabs activeTab={activeSection} onTabChange={setActiveSection} counts={subjectTabCounts} />
             <p className="text-sm text-black/70">{activeHelperText}</p>
+            {isViewingInactiveAcademicYear ? (
+              <div className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
+                <p className="font-bold">{readOnlyReason}</p>
+                <p className="text-black/70">
+                  {readOnlyHelper} Previous academic years are locked in the UI to protect historical grades and prediction records.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-3"
+                  disabled={isLoadingOptions || !activeAcademicYear}
+                  onClick={() => {
+                    setError(null);
+                    setCopyResult(null);
+                    setIsCopySetupModalOpen(true);
+                  }}
+                >
+                  Copy Previous Year Setup
+                </Button>
+              </div>
+            ) : null}
 
             {notice ? (
               <p className="border-2 border-black bg-[#bbf7d0] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">
@@ -1622,7 +1802,7 @@ export default function AdminSubjects() {
                 {isLoadingCatalog ? (
                   <LoadingCard label="Loading subjects..." />
                 ) : gradeGroups.length === 0 ? (
-                  <EmptyState
+                  <EmptyStateCard
                     title="No subjects exist yet."
                     description="Create catalog subjects first, then use offerings to place them in a year, grade, pathway, and term."
                   >
@@ -1645,7 +1825,7 @@ export default function AdminSubjects() {
                     >
                       Import Catalog CSV
                     </Button>
-                  </EmptyState>
+                  </EmptyStateCard>
                 ) : (
                   gradeGroups.map((item) => (
                     <SubjectGradeSection
@@ -1671,114 +1851,22 @@ export default function AdminSubjects() {
                   <div className="flex flex-col gap-4">
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div>
-                        <h2 className="text-xl font-semibold">Subject Offerings</h2>
+                        <h2 className="text-xl font-semibold">Curriculum Plan</h2>
                         <p className="text-sm">Set when subjects are available by academic year, grade, pathway, and term.</p>
                         <p className="text-xs text-black/70">Offering does not assign teachers or schedules. That happens later in Classes.</p>
                       </div>
                     </div>
-
-                    <div className="rounded-lg border-2 border-black p-3 shadow-[3px_3px_0_#000]">
-                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_220px_180px_auto_auto]">
-                        <label className="relative min-w-0">
-                          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
-                          <Input
-                            className="h-10 w-full pl-9"
-                            value={offeringFilters.search}
-                            onChange={(event) => setFilter("search", event.target.value)}
-                            placeholder="Search subject or code"
-                          />
-                        </label>
-                        <Select value={offeringFilters.pathway} onValueChange={(value) => setFilter("pathway", value as OfferingFilters["pathway"])}>
-                          <Select.Trigger className="h-10 w-full">
-                            <Select.Value placeholder="Pathway" />
-                          </Select.Trigger>
-                          <Select.Content>
-                            <Select.Group>
-                              <Select.Item value={ALL_VALUE}>All pathways</Select.Item>
-                              {(offeringOptions?.pathways ?? [...JHS_PATHWAYS, ...SHS_PATHWAYS]).map((pathway) => (
-                                <Select.Item key={pathway} value={pathway}>
-                                  {pathwayLabel(pathway)}
-                                </Select.Item>
-                              ))}
-                            </Select.Group>
-                          </Select.Content>
-                        </Select>
-                        <Select value={offeringFilters.status} onValueChange={(value) => setFilter("status", value as OfferingFilters["status"])}>
-                          <Select.Trigger className="h-10 w-full">
-                            <Select.Value placeholder="Status" />
-                          </Select.Trigger>
-                          <Select.Content>
-                            <Select.Group>
-                              <Select.Item value={ALL_VALUE}>All statuses</Select.Item>
-                              <Select.Item value="active">Active</Select.Item>
-                              <Select.Item value="archived">Archived</Select.Item>
-                            </Select.Group>
-                          </Select.Content>
-                        </Select>
-                        <Button
-                          type="button"
-                          variant={showAcademicFilters ? "default" : "outline"}
-                          onClick={() => setShowAcademicFilters((current) => !current)}
-                          className="h-10 whitespace-nowrap"
-                        >
-                          <Filter className="size-4 mr-2" />
-                          Academic filters{activeAcademicFilterCount ? ` (${activeAcademicFilterCount})` : ""}
-                        </Button>
-                        <Button type="button" className="h-10" variant="outline" onClick={resetOfferingFilters}>
-                          Reset
-                        </Button>
-                      </div>
-
-                      {showAcademicFilters ? (
-                        <div className="mt-3 grid grid-cols-1 gap-3 border-t border-black/10 pt-3 md:grid-cols-3">
-                          <Select value={offeringFilters.academic_year_id} onValueChange={(value) => setFilter("academic_year_id", value)}>
-                            <Select.Trigger className="h-10 w-full">
-                              <Select.Value placeholder="Academic year" />
-                            </Select.Trigger>
-                            <Select.Content>
-                              <Select.Group>
-                                <Select.Item value={ALL_VALUE}>All years</Select.Item>
-                                {offeringOptions?.academic_years.map((year) => (
-                                  <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
-                                    {year.year_label}
-                                  </Select.Item>
-                                ))}
-                              </Select.Group>
-                            </Select.Content>
-                          </Select>
-                          <Select value={offeringFilters.academic_level_id} onValueChange={(value) => setFilter("academic_level_id", value)}>
-                            <Select.Trigger className="h-10 w-full">
-                              <Select.Value placeholder="Grade level" />
-                            </Select.Trigger>
-                            <Select.Content>
-                              <Select.Group>
-                                <Select.Item value={ALL_VALUE}>All grades</Select.Item>
-                                {offeringOptions?.academic_levels.map((level) => (
-                                  <Select.Item key={level.academic_level_id} value={String(level.academic_level_id)}>
-                                    {level.level_name}
-                                  </Select.Item>
-                                ))}
-                              </Select.Group>
-                            </Select.Content>
-                          </Select>
-                          <Select value={offeringFilters.academic_period_id} onValueChange={(value) => setFilter("academic_period_id", value)}>
-                            <Select.Trigger className="h-10 w-full">
-                              <Select.Value placeholder="Term" />
-                            </Select.Trigger>
-                            <Select.Content>
-                              <Select.Group>
-                                <Select.Item value={ALL_VALUE}>All terms</Select.Item>
-                                {filterPeriods.map((period) => (
-                                  <Select.Item key={period.academic_period_id} value={String(period.academic_period_id)}>
-                                    {period.period_name}
-                                  </Select.Item>
-                                ))}
-                              </Select.Group>
-                            </Select.Content>
-                          </Select>
-                        </div>
-                      ) : null}
-                    </div>
+                    <CurriculumFilters
+                      search={offeringFilters.search}
+                      grade={offeringFilters.grade}
+                      pathway={offeringFilters.pathway}
+                      status={offeringFilters.status}
+                      onSearchChange={setOfferingSearch}
+                      onGradeChange={setOfferingGrade}
+                      onPathwayChange={setOfferingPathway}
+                      onStatusChange={setOfferingStatus}
+                      onReset={resetOfferingFilters}
+                    />
                   </div>
                 </RetroCard>
 
@@ -1800,52 +1888,90 @@ export default function AdminSubjects() {
                   </RetroCard>
                 ) : null}
 
+                {copyResult ? (
+                  <RetroCard className="p-3 text-sm">
+                    <p className="font-bold">Copy Previous Year Setup Summary</p>
+                    <p>
+                      {copyResult.created_count} created, {copyResult.updated_count} updated, {copyResult.skipped_count} skipped.
+                    </p>
+                    {copyResult.skipped.length ? (
+                      <div className="mt-2 max-h-32 overflow-y-auto">
+                        {copyResult.skipped.map((item, index) => (
+                          <p key={`${item.source_subject_offering_id ?? "offering"}-${index}`}>
+                            Subject {item.subject_id ?? "-"}: {item.reason}
+                          </p>
+                        ))}
+                      </div>
+                    ) : null}
+                  </RetroCard>
+                ) : null}
+
                 {isLoadingOfferings ? (
                   <LoadingCard label="Loading subject offerings..." />
-                ) : offeringGroups.length === 0 ? (
-                  <EmptyState
+                ) : offerings.length === 0 ? (
+                  <EmptyStateCard
                     title="No subjects have been offered for this setup yet."
-                    description="Click Add Offerings to choose subjects for a school year, term, grade, and pathway."
+                    description="Click Add Offerings to choose subjects for the selected year, grade, pathway, and term."
                   >
-                    <Button size="sm" onClick={openCreateOffering} disabled={isLoadingOptions}>
+                    <Button
+                      size="sm"
+                      onClick={openCreateOffering}
+                      disabled={isLoadingOptions || isViewingInactiveAcademicYear}
+                      title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
+                    >
                       Add Offerings
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
+                      onClick={() => {
+                        setError(null);
+                        setCopyResult(null);
+                        setIsCopySetupModalOpen(true);
+                      }}
+                      disabled={isLoadingOptions || !activeAcademicYear}
+                    >
+                      Copy Previous Year Setup
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() => offeringImportInputRef.current?.click()}
-                      disabled={isImportingOfferings}
+                      disabled={isImportingOfferings || isViewingInactiveAcademicYear}
+                      title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
                     >
                       Import Offering CSV
                     </Button>
-                  </EmptyState>
+                  </EmptyStateCard>
                 ) : (
-                  <div className="flex flex-col gap-3">
-                    {offeringGroups.map((group) => (
-                      <OfferingGroupCard
-                        key={group.key}
-                        group={group}
-                        subjectHours={subjectHoursById}
-                        onEdit={openEditOffering}
-                        onArchive={(itemToArchive) =>
-                          setPendingAction({
-                            kind: "offering",
-                            action: "archive",
-                            id: itemToArchive.subject_offering_id,
-                            label: itemToArchive.subject.subject_name,
-                          })
-                        }
-                        onRestore={(itemToRestore) =>
-                          setPendingAction({
-                            kind: "offering",
-                            action: "restore",
-                            id: itemToRestore.subject_offering_id,
-                            label: itemToRestore.subject.subject_name,
-                          })
-                        }
-                      />
-                    ))}
-                  </div>
+                  <CurriculumPlanTable
+                    offerings={offerings}
+                    periods={curriculumPeriods}
+                    catalogSubjects={catalogSubjectsForPlan}
+                    academicYearLabel={selectedYearLabel}
+                    gradeLabel={selectedGradeLabel}
+                    pathwayLabel={selectedPathwayLabel}
+                    pathway={offeringFilters.pathway}
+                    readOnly={isViewingInactiveAcademicYear}
+                    readOnlyReason={readOnlyReason}
+                    onEdit={openEditOffering}
+                    onArchive={(itemToArchive) =>
+                      setPendingAction({
+                        kind: "offering",
+                        action: "archive",
+                        id: itemToArchive.subject_offering_id,
+                        label: itemToArchive.subject.subject_name,
+                      })
+                    }
+                    onRestore={(itemToRestore) =>
+                      setPendingAction({
+                        kind: "offering",
+                        action: "restore",
+                        id: itemToRestore.subject_offering_id,
+                        label: itemToRestore.subject.subject_name,
+                      })
+                    }
+                  />
                 )}
               </section>
             ) : null}
@@ -1864,14 +1990,19 @@ export default function AdminSubjects() {
                 {isLoadingGradingTemplates ? (
                   <LoadingCard label="Loading grading templates..." />
                 ) : gradingTemplates.length === 0 ? (
-                  <EmptyState
+                  <EmptyStateCard
                     title="No grading templates yet."
                     description="Templates define the grading component weights reused by subjects."
                   >
-                    <Button size="sm" onClick={openCreateGradingTemplate} disabled={isLoadingOptions}>
+                    <Button
+                      size="sm"
+                      onClick={openCreateGradingTemplate}
+                      disabled={isLoadingOptions || isViewingInactiveAcademicYear}
+                      title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
+                    >
                       Create Grading Template
                     </Button>
-                  </EmptyState>
+                  </EmptyStateCard>
                 ) : (
                   <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                     {gradingTemplates.map((template) => (
@@ -1879,6 +2010,8 @@ export default function AdminSubjects() {
                         key={template.grading_template_id}
                         template={template}
                         onEdit={openEditGradingTemplate}
+                        readOnly={isViewingInactiveAcademicYear}
+                        readOnlyReason={readOnlyReason}
                         onArchive={(itemToArchive) =>
                           setPendingAction({
                             kind: "grading",
@@ -1936,6 +2069,8 @@ export default function AdminSubjects() {
                         <OfferingRow
                           key={offering.subject_offering_id}
                           offering={offering}
+                          readOnly={isViewingInactiveAcademicYear}
+                          readOnlyReason={readOnlyReason}
                           onRestore={(itemToRestore) =>
                             setPendingAction({
                               kind: "offering",
@@ -1963,6 +2098,8 @@ export default function AdminSubjects() {
                         <GradingTemplateRow
                           key={template.grading_template_id}
                           template={template}
+                          readOnly={isViewingInactiveAcademicYear}
+                          readOnlyReason={readOnlyReason}
                           onRestore={(itemToRestore) =>
                             setPendingAction({
                               kind: "grading",
@@ -1988,16 +2125,28 @@ export default function AdminSubjects() {
         options={offeringOptions}
         offering={editingOffering}
         catalogSubjects={subjects}
+        readOnly={isViewingInactiveAcademicYear}
+        readOnlyReason={readOnlyReason}
         onSaved={async (message) => {
           setNotice(message ?? (editingOffering ? "Subject offering updated." : "Offerings saved."));
           await loadOfferings();
         }}
       />
 
+      <CopyPreviousYearSetupModal
+        open={isCopySetupModalOpen}
+        onOpenChange={setIsCopySetupModalOpen}
+        options={offeringOptions}
+        defaultSourceAcademicYearId={isViewingInactiveAcademicYear ? selectedAcademicYear?.academic_year_id : undefined}
+        onCopied={handleCopySetupComplete}
+      />
+
       <Dialog open={isGradingModalOpen} onOpenChange={setIsGradingModalOpen}>
         <AddGradingComponentModal
           options={gradingOptions}
           template={editingGradingTemplate}
+          readOnly={isViewingInactiveAcademicYear}
+          readOnlyReason={readOnlyReason}
           onClose={() => setIsGradingModalOpen(false)}
           onSaved={async () => {
             setNotice(editingGradingTemplate ? "Grading template updated." : "Grading template created.");

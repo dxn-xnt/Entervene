@@ -48,6 +48,27 @@ class SubjectOfferingUpdate(BaseModel):
     status: str | None = None
 
 
+class SubjectOfferingCopyAcademicYearRequest(BaseModel):
+    source_academic_year_id: int
+    target_academic_year_id: int
+    overwrite_existing: bool = False
+
+
+class SubjectOfferingCopySkippedItem(BaseModel):
+    subject_id: int | None = None
+    source_subject_offering_id: int | None = None
+    reason: str
+
+
+class SubjectOfferingCopyAcademicYearResponse(BaseModel):
+    source_academic_year_id: int
+    target_academic_year_id: int
+    created_count: int
+    updated_count: int
+    skipped_count: int
+    skipped: list[SubjectOfferingCopySkippedItem]
+
+
 class SubjectOfferingListItem(BaseModel):
     subject_offering_id: int
     subject: SubjectOfferingSubject

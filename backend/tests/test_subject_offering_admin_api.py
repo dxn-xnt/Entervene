@@ -28,6 +28,8 @@ TABLES = [
     SubjectOffering.__table__,
 ]
 
+READ_ONLY_DETAIL = "Subject offerings for inactive academic years are read-only to protect historical records."
+
 
 @pytest.fixture
 def db():
@@ -198,6 +200,16 @@ def create_offering(db, ctx, **overrides):
     return offering
 
 
+def copy_academic_year_payload(ctx, **overrides):
+    payload = {
+        "source_academic_year_id": ctx["other_year"].academic_year_id,
+        "target_academic_year_id": ctx["year"].academic_year_id,
+        "overwrite_existing": False,
+    }
+    payload.update(overrides)
+    return payload
+
+
 def test_form_options_returns_usable_data(client, offering_context):
     response = client.get("/api/v1/subject-offerings/form-options")
 
@@ -222,6 +234,227 @@ def test_create_offering_works(client, db, offering_context):
     assert body["academic_period"]["period_name"] == "Term 1"
     assert body["pathway"] == "stem_medical"
     assert body["status"] == "active"
+    assert db.query(SubjectOffering).count() == 1
+
+
+def test_copy_source_inactive_year_to_active_target_year_succeeds(client, db, offering_context):
+    ctx = offering_context
+    source_offering = create_offering(
+        db,
+        ctx,
+        academic_year_id=ctx["other_year"].academic_year_id,
+        academic_period_id=ctx["other_year_term"].academic_period_id,
+        status="archived",
+    )
+    db.commit()
+
+    response = client.post("/api/v1/subject-offerings/copy-academic-year", json=copy_academic_year_payload(ctx))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["created_count"] == 1
+    assert body["updated_count"] == 0
+    assert body["skipped_count"] == 0
+    copied = (
+        db.query(SubjectOffering)
+        .filter(
+            SubjectOffering.subject_offering_id != source_offering.subject_offering_id,
+            SubjectOffering.academic_year_id == ctx["year"].academic_year_id,
+        )
+        .one()
+    )
+    assert copied.subject_id == source_offering.subject_id
+    assert copied.academic_level_id == source_offering.academic_level_id
+    assert copied.academic_period_id == ctx["term_1"].academic_period_id
+    assert copied.academic_period_id != ctx["other_year_term"].academic_period_id
+    assert copied.pathway == source_offering.pathway
+    assert copied.status == "archived"
+
+
+def test_copy_to_inactive_target_year_fails(client, db, offering_context):
+    ctx = offering_context
+    create_offering(db, ctx)
+    db.commit()
+
+    response = client.post(
+        "/api/v1/subject-offerings/copy-academic-year",
+        json=copy_academic_year_payload(
+            ctx,
+            source_academic_year_id=ctx["year"].academic_year_id,
+            target_academic_year_id=ctx["other_year"].academic_year_id,
+        ),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == READ_ONLY_DETAIL
+
+
+def test_copy_same_source_and_target_year_fails(client, offering_context):
+    ctx = offering_context
+
+    response = client.post(
+        "/api/v1/subject-offerings/copy-academic-year",
+        json=copy_academic_year_payload(
+            ctx,
+            source_academic_year_id=ctx["year"].academic_year_id,
+            target_academic_year_id=ctx["year"].academic_year_id,
+        ),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Source and target academic years must be different."
+
+
+def test_copy_skips_duplicate_target_offerings_without_overwrite(client, db, offering_context):
+    ctx = offering_context
+    create_offering(
+        db,
+        ctx,
+        academic_year_id=ctx["other_year"].academic_year_id,
+        academic_period_id=ctx["other_year_term"].academic_period_id,
+    )
+    create_offering(db, ctx)
+    db.commit()
+
+    response = client.post("/api/v1/subject-offerings/copy-academic-year", json=copy_academic_year_payload(ctx))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["created_count"] == 0
+    assert body["updated_count"] == 0
+    assert body["skipped_count"] == 1
+    assert body["skipped"][0]["reason"] == "Duplicate target subject offering already exists."
+    assert db.query(SubjectOffering).count() == 2
+
+
+def test_copy_overwrites_exact_existing_target_offerings_when_requested(client, db, offering_context):
+    ctx = offering_context
+    create_offering(
+        db,
+        ctx,
+        academic_year_id=ctx["other_year"].academic_year_id,
+        academic_period_id=ctx["other_year_term"].academic_period_id,
+        status="archived",
+    )
+    target = create_offering(db, ctx, status="active")
+    db.commit()
+
+    response = client.post(
+        "/api/v1/subject-offerings/copy-academic-year",
+        json=copy_academic_year_payload(ctx, overwrite_existing=True),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["created_count"] == 0
+    assert body["updated_count"] == 1
+    assert body["skipped_count"] == 0
+    db.refresh(target)
+    assert target.status == "archived"
+
+
+def test_copy_skips_missing_target_period_sequence(client, db, offering_context):
+    ctx = offering_context
+    source_term_3 = AcademicPeriod(
+        period_name="Term 3",
+        period_type="TERM",
+        period_sequence=3,
+        total_periods_in_year=3,
+        start_date=date(2028, 1, 1),
+        end_date=date(2028, 3, 31),
+        is_active=False,
+        academic_year_id=ctx["other_year"].academic_year_id,
+    )
+    db.add(source_term_3)
+    db.flush()
+    create_offering(
+        db,
+        ctx,
+        academic_year_id=ctx["other_year"].academic_year_id,
+        academic_period_id=source_term_3.academic_period_id,
+    )
+    db.commit()
+
+    response = client.post("/api/v1/subject-offerings/copy-academic-year", json=copy_academic_year_payload(ctx))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["created_count"] == 0
+    assert body["skipped_count"] == 1
+    assert body["skipped"][0]["reason"] == "Matching target period not found for period_sequence 3."
+
+
+def test_copy_only_creates_subject_offerings(client, db, offering_context):
+    ctx = offering_context
+    create_offering(
+        db,
+        ctx,
+        academic_year_id=ctx["other_year"].academic_year_id,
+        academic_period_id=ctx["other_year_term"].academic_period_id,
+    )
+    db.commit()
+    subject_count = db.query(Subject).count()
+    academic_year_count = db.query(AcademicYear).count()
+    academic_period_count = db.query(AcademicPeriod).count()
+    academic_level_count = db.query(AcademicLevel).count()
+
+    response = client.post("/api/v1/subject-offerings/copy-academic-year", json=copy_academic_year_payload(ctx))
+
+    assert response.status_code == 200
+    assert response.json()["created_count"] == 1
+    assert db.query(SubjectOffering).count() == 2
+    assert db.query(Subject).count() == subject_count
+    assert db.query(AcademicYear).count() == academic_year_count
+    assert db.query(AcademicPeriod).count() == academic_period_count
+    assert db.query(AcademicLevel).count() == academic_level_count
+
+
+def test_active_target_future_terms_remain_editable_after_copy(client, db, offering_context):
+    ctx = offering_context
+    create_offering(
+        db,
+        ctx,
+        academic_year_id=ctx["other_year"].academic_year_id,
+        academic_period_id=ctx["other_year_term"].academic_period_id,
+    )
+    db.commit()
+
+    copy_response = client.post("/api/v1/subject-offerings/copy-academic-year", json=copy_academic_year_payload(ctx))
+    create_future_term = client.post(
+        "/api/v1/subject-offerings",
+        json=offering_payload(ctx, academic_period_id=ctx["term_2"].academic_period_id),
+    )
+
+    assert copy_response.status_code == 200
+    assert create_future_term.status_code == 201
+    assert create_future_term.json()["academic_period"]["period_name"] == "Term 2"
+
+
+def test_create_offering_in_inactive_academic_year_fails(client, db, offering_context):
+    ctx = offering_context
+
+    response = client.post(
+        "/api/v1/subject-offerings",
+        json=offering_payload(
+            ctx,
+            academic_year_id=ctx["other_year"].academic_year_id,
+            academic_period_id=ctx["other_year_term"].academic_period_id,
+        ),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == READ_ONLY_DETAIL
+    assert db.query(SubjectOffering).count() == 0
+
+
+def test_create_offering_for_future_term_in_active_academic_year_works(client, db, offering_context):
+    response = client.post(
+        "/api/v1/subject-offerings",
+        json=offering_payload(offering_context, academic_period_id=offering_context["term_2"].academic_period_id),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["academic_period"]["period_name"] == "Term 2"
     assert db.query(SubjectOffering).count() == 1
 
 
@@ -331,6 +564,24 @@ def test_list_offerings_and_search_work(client, db, offering_context):
     assert [item["subject"]["subject_codename"] for item in body["subject_offerings"]] == ["GENBIO1"]
 
 
+def test_list_inactive_academic_year_offerings_still_works(client, db, offering_context):
+    ctx = offering_context
+    create_offering(
+        db,
+        ctx,
+        academic_year_id=ctx["other_year"].academic_year_id,
+        academic_period_id=ctx["other_year_term"].academic_period_id,
+    )
+    db.commit()
+
+    response = client.get(f"/api/v1/subject-offerings?academic_year_id={ctx['other_year'].academic_year_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"]["total_offerings"] == 1
+    assert body["subject_offerings"][0]["academic_year"]["is_active"] is False
+
+
 def test_filters_work(client, db, offering_context):
     create_offering(db, offering_context, pathway="stem_medical")
     create_offering(
@@ -400,6 +651,42 @@ def test_update_offering_works_and_revalidates_conflicts(client, db, offering_co
     assert body["pathway"] == "stem_engineering"
 
 
+def test_update_offering_in_inactive_academic_year_fails(client, db, offering_context):
+    ctx = offering_context
+    offering = create_offering(
+        db,
+        ctx,
+        academic_year_id=ctx["other_year"].academic_year_id,
+        academic_period_id=ctx["other_year_term"].academic_period_id,
+    )
+    db.commit()
+
+    response = client.patch(
+        f"/api/v1/subject-offerings/{offering.subject_offering_id}",
+        json={"pathway": "stem_engineering"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == READ_ONLY_DETAIL
+
+
+def test_update_offering_to_inactive_academic_year_fails(client, db, offering_context):
+    ctx = offering_context
+    offering = create_offering(db, ctx)
+    db.commit()
+
+    response = client.patch(
+        f"/api/v1/subject-offerings/{offering.subject_offering_id}",
+        json={
+            "academic_year_id": ctx["other_year"].academic_year_id,
+            "academic_period_id": ctx["other_year_term"].academic_period_id,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == READ_ONLY_DETAIL
+
+
 def test_archive_and_restore_offering_work(client, db, offering_context):
     offering = create_offering(db, offering_context)
     db.commit()
@@ -411,6 +698,34 @@ def test_archive_and_restore_offering_work(client, db, offering_context):
     restored = client.patch(f"/api/v1/subject-offerings/{offering.subject_offering_id}/restore")
     assert restored.status_code == 200
     assert restored.json()["status"] == "active"
+
+
+def test_archive_and_restore_offering_in_inactive_academic_year_fail(client, db, offering_context):
+    ctx = offering_context
+    active_offering = create_offering(
+        db,
+        ctx,
+        academic_year_id=ctx["other_year"].academic_year_id,
+        academic_period_id=ctx["other_year_term"].academic_period_id,
+    )
+    archived_offering = create_offering(
+        db,
+        ctx,
+        academic_year_id=ctx["other_year"].academic_year_id,
+        academic_period_id=ctx["other_year_term"].academic_period_id,
+        subject_id=ctx["precal"].subject_id,
+        pathway="stem_engineering",
+        status="archived",
+    )
+    db.commit()
+
+    archived = client.patch(f"/api/v1/subject-offerings/{active_offering.subject_offering_id}/archive")
+    restored = client.patch(f"/api/v1/subject-offerings/{archived_offering.subject_offering_id}/restore")
+
+    assert archived.status_code == 409
+    assert archived.json()["detail"] == READ_ONLY_DETAIL
+    assert restored.status_code == 409
+    assert restored.json()["detail"] == READ_ONLY_DETAIL
 
 
 def test_non_admin_cannot_create_update_or_archive(client, db, offering_context):
