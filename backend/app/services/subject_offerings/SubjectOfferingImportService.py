@@ -13,6 +13,7 @@ from app.models.academic.SubjectOffering import SubjectOffering
 from app.services.subject_offerings.SubjectOfferingShared import (
     ALLOWED_PATHWAYS,
     GENERAL_PATHWAY,
+    INACTIVE_ACADEMIC_YEAR_READ_ONLY_MESSAGE,
     normalize_pathway,
     normalized_text,
     validate_pathway_for_grade,
@@ -163,6 +164,8 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
         academic_year = years.get(year_label.casefold()) if year_label else None
         if academic_year is None:
             row_errors.append("academic_year must match an existing academic year.")
+        elif not academic_year.is_active:
+            row_errors.append(INACTIVE_ACADEMIC_YEAR_READ_ONLY_MESSAGE)
 
         academic_level = None
         if not grade_level_text:
