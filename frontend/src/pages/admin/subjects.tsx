@@ -1546,11 +1546,11 @@ export default function AdminSubjects() {
                 ) : null}
               </div>
             </header>
-            <RetroCard className="p-3">
+            {/* <RetroCard className="p-3">
               <p className="text-sm font-semibold">
                 Start by adding subjects by grade level. Grading templates are optional and can be managed later.
               </p>
-            </RetroCard>
+            </RetroCard> */}
             <SubjectTabs tabs={subjectTabs} activeTab={activeSection} onChange={setActiveSection} />
             <p className="text-sm text-black/70">{activeHelperText}</p>
 
