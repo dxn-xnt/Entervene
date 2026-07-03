@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -22,6 +23,7 @@ from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.schemas.StudentRecord import (
     StudentClassworkResult,
+    StudentPeriodGradeFinalizeResponse,
     StudentRecordDetailResponse,
     StudentRecordPeriodOption,
     StudentRecordPeriodOptionsResponse,
@@ -31,11 +33,19 @@ from app.schemas.StudentRecord import (
     StudentRecordScope,
     StudentRecordSummary,
 )
+from app.services.prediction.PredictionOutcomeService import evaluate_outcomes_for_finalized_period_grade
 
 
 COMPLETED_STATUSES = {"submitted", "graded", "late"}
 GRADED_STATUS = "graded"
 READING_TYPE = "READING"
+
+
+def _to_decimal(value: Any, field_name: str) -> Decimal:
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"{field_name} must be numeric.") from exc
 
 
 @dataclass(frozen=True)
@@ -150,6 +160,52 @@ def teacher_student_record_detail(
             _classwork_result(assignment, submissions.get(assignment.classwork_assignment_id))
             for assignment in assignments
         ],
+    )
+
+
+def finalize_student_period_grade(
+    db: Session,
+    period_grade_id: int,
+    final_period_grade: float | None = None,
+    finalized_by_staff_id: str | None = None,
+    passing_grade: float = 75.0,
+) -> StudentPeriodGradeFinalizeResponse:
+    period_grade = db.get(StudentPeriodGrade, period_grade_id)
+    if period_grade is None:
+        raise HTTPException(status_code=404, detail="Student period grade not found")
+
+    if final_period_grade is not None:
+        period_grade.final_period_grade = _to_decimal(final_period_grade, "final_period_grade")
+    if period_grade.final_period_grade is None:
+        raise HTTPException(status_code=400, detail="final_period_grade is required to finalize a period grade")
+
+    period_grade.is_finalized = True
+    period_grade.finalized_at = datetime.now(timezone.utc)
+    period_grade.finalized_by_staff_id = finalized_by_staff_id
+    db.flush()
+
+    outcome_summary = evaluate_outcomes_for_finalized_period_grade(
+        db,
+        period_grade.period_grade_id,
+        passing_grade=passing_grade,
+        commit=False,
+    )
+    db.commit()
+    db.refresh(period_grade)
+
+    return StudentPeriodGradeFinalizeResponse(
+        period_grade_id=period_grade.period_grade_id,
+        student_id=period_grade.student_id,
+        class_id=period_grade.class_id,
+        subject_id=period_grade.subject_id,
+        academic_period_id=period_grade.academic_period_id,
+        final_period_grade=float(period_grade.final_period_grade),
+        is_finalized=bool(period_grade.is_finalized),
+        finalized_at=period_grade.finalized_at,
+        finalized_by_staff_id=period_grade.finalized_by_staff_id,
+        prediction_outcomes_evaluated_count=outcome_summary["evaluated_count"],
+        prediction_outcomes_skipped_count=outcome_summary["skipped_count"],
+        prediction_outcomes_message=outcome_summary.get("reason"),
     )
 
 

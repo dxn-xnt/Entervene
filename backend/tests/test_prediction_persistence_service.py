@@ -8,7 +8,7 @@ from sqlalchemy import CheckConstraint, create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import app.services.PredictionPersistenceService as persistence_service
+import app.services.prediction.PredictionPersistenceService as persistence_service
 from app.db.Base import Base
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
@@ -21,7 +21,7 @@ from app.models.ai.AIPredictionFeature import AIPredictionFeature
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
-from app.services.PredictionPersistenceService import (
+from app.services.prediction.PredictionPersistenceService import (
     score_and_persist_prediction,
     validate_required_identifiers,
 )

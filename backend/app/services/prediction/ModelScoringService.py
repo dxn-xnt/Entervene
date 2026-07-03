@@ -8,7 +8,7 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.models.ai.AIModelVersion import AIModelVersion
-from app.services.RiskEngine import RiskEngineInput, evaluate_risk
+from app.services.prediction.RiskEngine import RiskEngineInput, evaluate_risk
 
 
 DEFAULT_MODEL_NAME = "entervene_next_period_grade_rf"
@@ -46,7 +46,7 @@ IDENTITY_OR_LEAKAGE_TERMS = (
 
 
 def backend_dir() -> Path:
-    return Path(__file__).resolve().parents[2]
+    return Path(__file__).resolve().parents[3]
 
 
 def get_active_model_version(

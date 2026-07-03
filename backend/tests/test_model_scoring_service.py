@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.Base import Base
 from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.RiskThreshold import RiskThreshold
-from app.services.ModelScoringService import (
+from app.services.prediction.ModelScoringService import (
     get_active_model_version,
     load_model_artifact,
     prepare_feature_row,

@@ -9,7 +9,7 @@ class TeacherRiskReview(Base):
     __tablename__ = "teacher_risk_review"
     __table_args__ = (
         CheckConstraint(
-            "review_decision IN ('NEEDS_INTERVENTION', 'CONTINUE_MONITORING', 'NOT_AT_RISK', 'INSUFFICIENT_DATA')",
+            "review_decision IN ('CONFIRMED_RISK', 'DISMISSED_RISK', 'NEEDS_MORE_DATA', 'INTERVENTION_ASSIGNED', 'ESCALATED')",
             name="ck_teacher_risk_review_decision",
         ),
         Index("ix_teacher_risk_review_prediction_id", "prediction_id"),

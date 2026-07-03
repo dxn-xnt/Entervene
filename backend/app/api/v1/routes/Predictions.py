@@ -6,30 +6,44 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.Dependencies import require_role
+from app.core.Dependencies import get_staff_id, require_role
 from app.db.Session import get_db
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
 from app.schemas.Prediction import (
+    ModelPerformanceSummaryResponse,
     PredictionBuildFeaturesRequest,
     PredictionBuiltFeaturesResponse,
+    PredictionDetailResponse,
     PredictionFeatureListResponse,
     PredictionFromRecordsPersistRequest,
     PredictionFromRecordsPreviewRequest,
     PredictionFromRecordsResponse,
+    PredictionOutcomeEvaluateRequest,
+    PredictionOutcomeResponse,
     PredictionPersistRequest,
     PredictionPersistResponse,
     PredictionListResponse,
     PredictionPreviewRequest,
     PredictionPreviewResponse,
     PredictionSummaryResponse,
+    PredictionTeacherReviewListResponse,
+    TeacherRiskReviewRequest,
+    TeacherRiskReviewResponse,
 )
-from app.services.ModelScoringService import DEFAULT_MODEL_NAME, score_student_prediction
-from app.services.PredictionFeatureBuilderService import (
+from app.services.prediction.ModelPerformanceService import get_model_performance_summary
+from app.services.prediction.ModelScoringService import DEFAULT_MODEL_NAME, score_student_prediction
+from app.services.prediction.PredictionFeatureBuilderService import (
     build_prediction_features_from_records,
     insufficient_prediction_response,
 )
-from app.services.PredictionPersistenceService import score_and_persist_prediction
+from app.services.prediction.PredictionOutcomeService import evaluate_prediction_outcome
+from app.services.prediction.PredictionPersistenceService import score_and_persist_prediction
+from app.services.prediction.PredictionReadService import (
+    get_prediction_detail,
+    get_teacher_reviews_for_prediction,
+)
+from app.services.prediction.TeacherRiskReviewService import review_prediction_risk
 
 router = APIRouter()
 
@@ -241,6 +255,93 @@ def list_class_risk_predictions(
         "limit": limit,
         "offset": offset,
     }
+
+
+@router.get("/model-performance", response_model=ModelPerformanceSummaryResponse)
+def get_model_performance(
+    model_version_id: int | None = None,
+    class_id: int | None = None,
+    subject_id: int | None = None,
+    academic_period_id: int | None = None,
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    db: Session = Depends(get_db),
+):
+    return get_model_performance_summary(
+        db,
+        model_version_id=model_version_id,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=academic_period_id,
+    )
+
+
+@router.post("/{prediction_id}/outcome/evaluate", response_model=PredictionOutcomeResponse)
+def evaluate_outcome(
+    prediction_id: int,
+    payload: PredictionOutcomeEvaluateRequest,
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return evaluate_prediction_outcome(
+            db,
+            prediction_id=prediction_id,
+            actual_period_grade=payload.actual_period_grade,
+            passing_grade=payload.passing_grade,
+        )
+    except (LookupError, ValueError) as exc:
+        raise _service_error(exc) from exc
+
+
+@router.get("/{prediction_id}/detail", response_model=PredictionDetailResponse)
+def read_prediction_detail(
+    prediction_id: int,
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    try:
+        return get_prediction_detail(db, prediction_id=prediction_id, staff_id=staff_id)
+    except LookupError as exc:
+        raise _service_error(exc) from exc
+
+
+@router.post("/{prediction_id}/teacher-review", response_model=TeacherRiskReviewResponse)
+def create_teacher_risk_review(
+    prediction_id: int,
+    payload: TeacherRiskReviewRequest,
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    try:
+        return review_prediction_risk(
+            db,
+            prediction_id=prediction_id,
+            staff_id=staff_id,
+            decision=payload.decision,
+            teacher_notes=payload.teacher_notes,
+        )
+    except (LookupError, ValueError) as exc:
+        raise _service_error(exc) from exc
+
+
+@router.get("/{prediction_id}/teacher-review", response_model=PredictionTeacherReviewListResponse)
+def read_teacher_risk_reviews(
+    prediction_id: int,
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    try:
+        return get_teacher_reviews_for_prediction(
+            db,
+            prediction_id=prediction_id,
+            staff_id=staff_id,
+            current_user_only=False,
+        )
+    except LookupError as exc:
+        raise _service_error(exc) from exc
 
 
 @router.get("/{prediction_id}/features", response_model=PredictionFeatureListResponse)
