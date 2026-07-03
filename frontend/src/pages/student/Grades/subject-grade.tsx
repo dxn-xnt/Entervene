@@ -1,5 +1,5 @@
 import AppLayout from "@/layouts/app-layout";
-import { ChevronRight, ChevronLeft } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
 type SubjectGradeProps = {
   subject: string;

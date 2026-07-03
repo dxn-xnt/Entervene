@@ -40,7 +40,7 @@ const Grades = () => {
             <div className="-mx-4 md:-mx-6 border-b border-gray-500" />
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              <div className="border border-black rounded-lg p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-white">
+              <div className="border-2 border-black rounded-lg p-4 shadow-md bg-card">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold">Performance Rate</h2>
                   <select className="border border-black rounded px-2 py-1 text-xs bg-white">
@@ -126,7 +126,7 @@ const Grades = () => {
                 </div>
               </div>
 
-              <div className="border border-black rounded-lg p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-white">
+              <div className="border-2 border-black rounded-lg p-4 shadow-md bg-card">
                 <h2 className="text-lg font-semibold mb-4">
                   Classwork Distribution
                 </h2>
@@ -199,7 +199,7 @@ const Grades = () => {
                 </div>
               </div>
 
-              <div className="border border-black rounded-lg p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-white">
+              <div className="border-2 border-black rounded-lg p-4 shadow-md bg-card">
                 <h2 className="text-lg font-semibold mb-3">
                   Subject Performance
                 </h2>
