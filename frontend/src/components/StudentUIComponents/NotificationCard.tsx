@@ -14,7 +14,7 @@ const NotificationCard = ({
   badge,
 }: NotificationProps) => {
   return (
-    <div className="flex flex-col gap-2 md:flex-row md:justify-between md:items-center px-4 py-3 border border-black rounded-lg shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+    <div className="flex flex-col gap-2 md:flex-row md:justify-between md:items-center px-4 py-3 border-2 border-black rounded-lg shadow-md">
       <div className="flex flex-col gap-1">
         <p className="font-semibold text-xl md:text-3xl">{title}</p>
         <p className="text-sm">{description}</p>

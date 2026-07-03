@@ -16,7 +16,7 @@ const SubjectCardHeader = ({
   return (
     <div
       onClick={onClick}
-      className="flex flex-row justify-between items-center px-4 py-3 border border-black rounded-lg bg-[#F6E9B2] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] cursor-pointer"
+      className="flex flex-row justify-between items-center px-4 py-3 border-2 border-black rounded-lg bg-[#F6E9B2] shadow-md hover:shadow-none transition-all cursor-pointer"
     >
       <div className="flex flex-col gap-2">
         <div className="flex flex-row gap-3 items-center">

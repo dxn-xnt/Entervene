@@ -8,7 +8,7 @@ type ListItemProps = {
 
 const ListItem = ({ title, subject, deadline }: ListItemProps) => {
   return (
-    <div className="flex items-center px-4 py-3 border border-black rounded-lg shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+    <div className="flex items-center px-4 py-3 border-2 border-black rounded-lg shadow-md hover:shadow-none transition-all cursor-pointer bg-card">
       <div className="flex flex-col gap-2">
         <div className="flex flex-row gap-3 items-center">
           <FileText size={24} className="shrink-0" />

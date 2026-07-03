@@ -1,5 +1,5 @@
 import AppLayout from "@/layouts/app-layout";
-import Card from "../../../components/StudentUIComponents/Card";
+import Card from "../../../components/StudentUIComponents/SubjectCard";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
 
