@@ -1,5 +1,5 @@
 import AppLayout from "@/layouts/app-layout";
-import { ChevronRight } from "lucide-react";
+import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 
 type SubjectGradeProps = {
   subject: string;
@@ -10,16 +10,22 @@ const SubjectGrade = ({ subject, onBack }: SubjectGradeProps) => {
   return (
     <AppLayout>
       <header className="px-5 py-5 flex items-center gap-3 border-b border-gray-500">
-        <h1 className="flex flex-wrap items-center gap-1.5 text-3xl font-bold tracking-tight">
-          <button
-            onClick={onBack}
-            className="text-black/50 hover:text-black hover:underline transition-colors cursor-pointer"
-          >
-            Grades
-          </button>
-          <ChevronRight className="size-5 text-black/30" />
-          <span className="text-2xl text-black">{subject}</span>
-        </h1>
+        <Breadcrumb>
+          <Breadcrumb.List>
+            <Breadcrumb.Item>
+              <Breadcrumb.Link
+                onClick={onBack}
+                className="text-3xl text-black/50 hover:text-black cursor-pointer"
+              >
+                Grades
+              </Breadcrumb.Link>
+            </Breadcrumb.Item>
+            <Breadcrumb.Separator />
+            <Breadcrumb.Item>
+              <Breadcrumb.Page className="text-2xl">{subject}</Breadcrumb.Page>
+            </Breadcrumb.Item>
+          </Breadcrumb.List>
+        </Breadcrumb>
       </header>
       <main className="px-5 py-5"></main>
     </AppLayout>
