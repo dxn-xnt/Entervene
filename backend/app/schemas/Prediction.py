@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.services.ModelScoringService import DEFAULT_MODEL_NAME
+from app.services.prediction.ModelScoringService import DEFAULT_MODEL_NAME
 
 
 class PredictionFeatureInput(BaseModel):
@@ -97,6 +97,131 @@ class PredictionFeatureResponse(BaseModel):
 class PredictionFeatureListResponse(BaseModel):
     prediction_id: int
     features: list[PredictionFeatureResponse] = Field(default_factory=list)
+
+
+class PredictionModelVersionRead(BaseModel):
+    model_version_id: int
+    model_name: str
+    model_type: str
+    algorithm: str
+    is_active: bool
+
+
+class PredictionOutcomeRead(BaseModel):
+    outcome_id: int
+    actual_period_grade: float | None = None
+    prediction_error: float | None = None
+    absolute_error: float | None = None
+    actual_passed: bool | None = None
+    actual_risk_label: str | None = None
+    outcome_status: str | None = None
+    evaluated_at: datetime | None = None
+
+
+class PredictionCauseRead(BaseModel):
+    code: str
+    label: str
+    value: str
+    severity: str
+    explanation: str
+
+
+class PredictionRecommendedActionRead(BaseModel):
+    action_code: str
+    action_type: str
+    title: str
+    description: str
+    priority: str
+    source: str
+
+
+class PredictionOutcomeEvaluateRequest(BaseModel):
+    actual_period_grade: float
+    passing_grade: float = 75.0
+
+
+class PredictionOutcomeResponse(BaseModel):
+    outcome_id: int
+    prediction_id: int
+    actual_period_grade: float
+    predicted_period_grade: float
+    prediction_error: float
+    absolute_error: float
+    actual_passed: bool
+    actual_risk_label: str
+    outcome_status: str
+    evaluated_at: datetime
+
+
+TeacherRiskReviewDecision = Literal[
+    "CONFIRMED_RISK",
+    "DISMISSED_RISK",
+    "NEEDS_MORE_DATA",
+    "INTERVENTION_ASSIGNED",
+    "ESCALATED",
+]
+
+
+class TeacherRiskReviewRequest(BaseModel):
+    decision: TeacherRiskReviewDecision
+    teacher_notes: str | None = None
+
+
+class TeacherRiskReviewResponse(BaseModel):
+    review_id: int
+    prediction_id: int
+    staff_id: str
+    decision: str
+    teacher_notes: str | None = None
+    reviewed_at: datetime
+
+
+class PredictionTeacherReviewListResponse(BaseModel):
+    prediction_id: int
+    teacher_reviews: list[TeacherRiskReviewResponse] = Field(default_factory=list)
+    current_user_review: TeacherRiskReviewResponse | None = None
+
+
+class PredictionDetailResponse(BaseModel):
+    prediction_id: int
+    student_id: UUID
+    class_id: int
+    subject_id: int
+    source_period_id: int
+    target_period_id: int
+    predicted_period_grade: float | None = None
+    risk_score: float | None = None
+    risk_level: str
+    data_status: str
+    generated_at: datetime | None = None
+    model_version: PredictionModelVersionRead | None = None
+    features: list[PredictionFeatureResponse] = Field(default_factory=list)
+    causes: list[PredictionCauseRead] = Field(default_factory=list)
+    recommended_actions: list[PredictionRecommendedActionRead] = Field(default_factory=list)
+    outcome: PredictionOutcomeRead | None = None
+    teacher_reviews: list[TeacherRiskReviewResponse] = Field(default_factory=list)
+    current_user_review: TeacherRiskReviewResponse | None = None
+
+
+class ModelPerformanceByVersionItem(BaseModel):
+    model_version_id: int | None = None
+    model_name: str | None = None
+    total_evaluated_predictions: int
+    mae: float | None = None
+    rmse: float | None = None
+    mean_prediction_error: float | None = None
+
+
+class ModelPerformanceSummaryResponse(BaseModel):
+    total_evaluated_predictions: int
+    mae: float | None = None
+    rmse: float | None = None
+    mean_prediction_error: float | None = None
+    min_absolute_error: float | None = None
+    max_absolute_error: float | None = None
+    actual_risk_label_counts: dict[str, int] = Field(default_factory=dict)
+    predicted_risk_level_counts: dict[str, int] = Field(default_factory=dict)
+    by_model_version: list[ModelPerformanceByVersionItem] = Field(default_factory=list)
 
 
 class PredictionBuildFeaturesRequest(BaseModel):

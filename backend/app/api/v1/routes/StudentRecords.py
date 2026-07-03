@@ -6,11 +6,14 @@ from sqlalchemy.orm import Session
 from app.core.Dependencies import get_staff_id, require_role
 from app.db.Session import get_db
 from app.schemas.StudentRecord import (
+    StudentPeriodGradeFinalizeRequest,
+    StudentPeriodGradeFinalizeResponse,
     StudentRecordDetailResponse,
     StudentRecordPeriodOptionsResponse,
     StudentRecordRosterResponse,
 )
 from app.services.student_record.StudentRecordService import (
+    finalize_student_period_grade,
     teacher_period_options,
     teacher_student_record_detail,
     teacher_student_roster,
@@ -18,6 +21,26 @@ from app.services.student_record.StudentRecordService import (
 
 
 router = APIRouter()
+
+
+@router.post(
+    "/period-grades/{period_grade_id}/finalize",
+    response_model=StudentPeriodGradeFinalizeResponse,
+)
+def finalize_period_grade(
+    period_grade_id: int,
+    payload: StudentPeriodGradeFinalizeRequest,
+    _staff: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return finalize_student_period_grade(
+        db,
+        period_grade_id=period_grade_id,
+        final_period_grade=payload.final_period_grade,
+        finalized_by_staff_id=staff_id,
+        passing_grade=payload.passing_grade,
+    )
 
 
 @router.get("/teacher/periods", response_model=StudentRecordPeriodOptionsResponse)

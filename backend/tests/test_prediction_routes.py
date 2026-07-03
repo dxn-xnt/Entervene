@@ -10,7 +10,7 @@ from sqlalchemy import CheckConstraint, create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import app.services.PredictionPersistenceService as persistence_service
+import app.services.prediction.PredictionPersistenceService as persistence_service
 import app.api.v1.routes.Predictions as predictions_route
 from app.api.v1.routes.Auth import get_current_user
 from app.api.v1.routes.Predictions import router as predictions_router
@@ -27,6 +27,7 @@ from app.models.academic.Subject import Subject
 from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
+from app.models.ai.PredictionOutcome import PredictionOutcome
 from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
@@ -53,6 +54,7 @@ TABLES = [
     AIModelVersion.__table__,
     AIPrediction.__table__,
     AIPredictionFeature.__table__,
+    PredictionOutcome.__table__,
 ]
 
 
@@ -512,6 +514,103 @@ def test_feature_endpoint_returns_saved_feature_rows(prediction_api_context):
         "source_period_grade",
         "assessment_completion_rate",
     ]
+
+
+def test_outcome_evaluate_endpoint_creates_outcome(prediction_api_context):
+    prediction = add_prediction(prediction_api_context, predicted_period_grade=82.5)
+    prediction_api_context["db"].commit()
+
+    response = prediction_api_context["client"].post(
+        f"/api/v1/predictions/{prediction.prediction_id}/outcome/evaluate",
+        json={"actual_period_grade": 86.5, "passing_grade": 75},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["prediction_id"] == prediction.prediction_id
+    assert body["outcome_id"] is not None
+    assert body["actual_period_grade"] == 86.5
+    assert body["predicted_period_grade"] == 82.5
+    assert body["outcome_status"] == "EVALUATED"
+    assert body["evaluated_at"] is not None
+    assert prediction_api_context["db"].query(PredictionOutcome).count() == 1
+
+
+def test_outcome_evaluate_endpoint_updates_existing_outcome(prediction_api_context):
+    prediction = add_prediction(prediction_api_context, predicted_period_grade=82.5)
+    prediction_api_context["db"].commit()
+    client = prediction_api_context["client"]
+    first = client.post(
+        f"/api/v1/predictions/{prediction.prediction_id}/outcome/evaluate",
+        json={"actual_period_grade": 86.5, "passing_grade": 75},
+    ).json()
+
+    second_response = client.post(
+        f"/api/v1/predictions/{prediction.prediction_id}/outcome/evaluate",
+        json={"actual_period_grade": 90.0, "passing_grade": 75},
+    )
+
+    assert second_response.status_code == 200
+    second = second_response.json()
+    assert second["outcome_id"] == first["outcome_id"]
+    assert second["actual_period_grade"] == 90.0
+    assert prediction_api_context["db"].query(PredictionOutcome).count() == 1
+
+
+def test_outcome_evaluate_endpoint_returns_404_for_missing_prediction(prediction_api_context):
+    response = prediction_api_context["client"].post(
+        "/api/v1/predictions/99999/outcome/evaluate",
+        json={"actual_period_grade": 86.5, "passing_grade": 75},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Prediction not found."
+    assert prediction_api_context["db"].query(PredictionOutcome).count() == 0
+
+
+def test_outcome_evaluate_endpoint_returns_error_values(prediction_api_context):
+    prediction = add_prediction(prediction_api_context, predicted_period_grade=82.5)
+    prediction_api_context["db"].commit()
+
+    response = prediction_api_context["client"].post(
+        f"/api/v1/predictions/{prediction.prediction_id}/outcome/evaluate",
+        json={"actual_period_grade": 78.0, "passing_grade": 75},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["prediction_error"] == -4.5
+    assert body["absolute_error"] == 4.5
+
+
+def test_outcome_evaluate_endpoint_marks_actual_passed_true(prediction_api_context):
+    prediction = add_prediction(prediction_api_context, predicted_period_grade=82.5)
+    prediction_api_context["db"].commit()
+
+    response = prediction_api_context["client"].post(
+        f"/api/v1/predictions/{prediction.prediction_id}/outcome/evaluate",
+        json={"actual_period_grade": 75.0, "passing_grade": 75},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["actual_passed"] is True
+    assert body["actual_risk_label"] == "LOW_RISK"
+
+
+def test_outcome_evaluate_endpoint_marks_actual_passed_false(prediction_api_context):
+    prediction = add_prediction(prediction_api_context, predicted_period_grade=82.5)
+    prediction_api_context["db"].commit()
+
+    response = prediction_api_context["client"].post(
+        f"/api/v1/predictions/{prediction.prediction_id}/outcome/evaluate",
+        json={"actual_period_grade": 74.99, "passing_grade": 75},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["actual_passed"] is False
+    assert body["actual_risk_label"] == "HIGH_RISK"
 
 
 def test_prediction_endpoints_reject_unauthenticated_access(prediction_api_context):

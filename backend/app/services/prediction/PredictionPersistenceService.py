@@ -12,7 +12,7 @@ from app.models.academic.Subject import Subject
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
 from app.models.people.Student import Student
-from app.services.ModelScoringService import DEFAULT_MODEL_NAME, score_student_prediction
+from app.services.prediction.ModelScoringService import DEFAULT_MODEL_NAME, score_student_prediction
 
 
 REQUIRED_IDENTIFIER_FIELDS = {
