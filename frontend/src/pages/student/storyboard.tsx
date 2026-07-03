@@ -148,7 +148,7 @@ const StoryBoard = () => {
                 )}
               </div>
 
-              <div className="lg:w-[35%] border rounded px-5 py-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <div className="lg:w-[35%] border-2 rounded-lg px-5 py-5 shadow-md transition-all hover:shadow-none bg-card">
                 <div className="flex flex-row justify-between items-center">
                   <h2 className="text-2xl md:text-3xl font-semibold">To do</h2>
                   <button
