@@ -1,6 +1,5 @@
 import AppLayout from "@/layouts/app-layout";
-import { ChevronRight } from "lucide-react";
-import { ChevronLeft } from "lucide-react";
+import { ChevronRight, ChevronLeft } from "lucide-react";
 
 type SubjectGradeProps = {
   subject: string;
@@ -11,26 +10,18 @@ const SubjectGrade = ({ subject, onBack }: SubjectGradeProps) => {
   return (
     <AppLayout>
       <header className="px-5 py-5 flex items-center gap-3 border-b border-gray-500">
-        <button
-          onClick={onBack}
-          className="text-4xl font-semibold cursor-pointer"
-        >
-          Grades
-        </button>
-        <ChevronRight size={40} />
-        <h1 className="text-3xl">{subject}</h1>
-      </header>
-      <main className="px-5 py-5">
-        <div>
+        <h1 className="flex flex-wrap items-center gap-1.5 text-3xl font-bold tracking-tight">
           <button
             onClick={onBack}
-            className="text-3xl font-semibold cursor-pointer flex flex-row"
+            className="text-black/50 hover:text-black hover:underline transition-colors cursor-pointer"
           >
-            <ChevronLeft size={40} />
             Grades
           </button>
-        </div>
-      </main>
+          <ChevronRight className="size-5 text-black/30" />
+          <span className="text-2xl text-black">{subject}</span>
+        </h1>
+      </header>
+      <main className="px-5 py-5"></main>
     </AppLayout>
   );
 };
