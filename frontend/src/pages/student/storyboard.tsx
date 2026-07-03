@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
-import Card from "../../components/StudentUIComponents/Card";
+import { SubjectCard } from "../../components/StudentUIComponents/SubjectCard";
 import { ArrowUpRight, Loader2, BookOpen, Search, X } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
@@ -30,7 +30,8 @@ const StoryBoard = () => {
   const [myClass, setMyClass] = useState<StudentMyClassSummary | null>(null);
   const [classError, setClassError] = useState("");
   const [isClassmatesOpen, setIsClassmatesOpen] = useState(false);
-  const [classmates, setClassmates] = useState<StudentClassmatesResponse | null>(null);
+  const [classmates, setClassmates] =
+    useState<StudentClassmatesResponse | null>(null);
   const [isClassmatesLoading, setIsClassmatesLoading] = useState(false);
   const [classmatesError, setClassmatesError] = useState("");
   const [classmatesSearch, setClassmatesSearch] = useState("");
@@ -44,7 +45,13 @@ const StoryBoard = () => {
 
     getMyClass()
       .then((data) => setMyClass(data))
-      .catch((error) => setClassError(error instanceof Error ? error.message : "Unable to load your section."));
+      .catch((error) =>
+        setClassError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load your section.",
+        ),
+      );
   }, []);
 
   const handleSubjectClick = (subject: EnrolledSubject) => {
@@ -62,7 +69,11 @@ const StoryBoard = () => {
     setClassmatesError("");
     getMyClassmates()
       .then((data) => setClassmates(data))
-      .catch((error) => setClassmatesError(error instanceof Error ? error.message : "Unable to load classmates."))
+      .catch((error) =>
+        setClassmatesError(
+          error instanceof Error ? error.message : "Unable to load classmates.",
+        ),
+      )
       .finally(() => setIsClassmatesLoading(false));
   };
 
@@ -73,8 +84,8 @@ const StoryBoard = () => {
           <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6 flex-1">
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
-              <h1 className="text-2xl md:text-4xl font-semibold">
-                Story Board
+              <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
+                Storyboard
               </h1>
             </header>
 
@@ -91,8 +102,11 @@ const StoryBoard = () => {
                       {myClass.grade_level} · {myClass.section_name}
                     </h2>
                     <p className="truncate text-sm">
-                      Adviser: {myClass.adviser_name || "Not assigned"} · {myClass.classmate_count}{" "}
-                      {myClass.classmate_count === 1 ? "classmate" : "classmates"}
+                      Adviser: {myClass.adviser_name || "Not assigned"} ·{" "}
+                      {myClass.classmate_count}{" "}
+                      {myClass.classmate_count === 1
+                        ? "classmate"
+                        : "classmates"}
                     </p>
                   </div>
                 </div>
@@ -121,7 +135,7 @@ const StoryBoard = () => {
                   </div>
                 ) : (
                   subjects.map((subject) => (
-                    <Card
+                    <SubjectCard
                       key={subject.subject_load_id}
                       title={subject.subject_name}
                       onClick={() => handleSubjectClick(subject)}
@@ -155,7 +169,9 @@ const StoryBoard = () => {
           isLoading={isClassmatesLoading}
           error={classmatesError}
           search={classmatesSearch}
-          sectionName={classmates?.section_name ?? myClass?.section_name ?? "Classmates"}
+          sectionName={
+            classmates?.section_name ?? myClass?.section_name ?? "Classmates"
+          }
           onSearchChange={setClassmatesSearch}
           onClose={() => setIsClassmatesOpen(false)}
         />
@@ -185,7 +201,10 @@ function ClassmatesModal({
 }) {
   const query = search.trim().toLocaleLowerCase();
   const filtered = classmates
-    .filter((student) => !query || student.full_name.toLocaleLowerCase().includes(query))
+    .filter(
+      (student) =>
+        !query || student.full_name.toLocaleLowerCase().includes(query),
+    )
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
   const groups = groupClassmates(filtered);
 
@@ -227,11 +246,16 @@ function ClassmatesModal({
           ) : error ? (
             <p className="py-10 text-center text-sm text-red-600">{error}</p>
           ) : filtered.length === 0 ? (
-            <p className="py-10 text-center text-sm text-gray-500">No classmates found.</p>
+            <p className="py-10 text-center text-sm text-gray-500">
+              No classmates found.
+            </p>
           ) : (
             <div className="grid gap-3">
               {groups.map(([label, students]) => (
-                <section key={label} className="overflow-hidden rounded-lg border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                <section
+                  key={label}
+                  className="overflow-hidden rounded-lg border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                >
                   <div className="flex items-center justify-between bg-[#f7e9aa] px-4 py-2 text-sm font-semibold uppercase">
                     <span>{label}</span>
                     <span className="rounded-full border border-black bg-white px-2 py-0.5 text-xs normal-case">
@@ -239,11 +263,18 @@ function ClassmatesModal({
                     </span>
                   </div>
                   {students.map((student) => (
-                    <div key={student.student_id} className="flex min-h-12 items-center gap-3 border-t border-black/15 px-4 py-2">
+                    <div
+                      key={student.student_id}
+                      className="flex min-h-12 items-center gap-3 border-t border-black/15 px-4 py-2"
+                    >
                       <div className="grid size-8 shrink-0 place-items-center rounded-full border border-[#c97900] bg-[#ffd27a] text-sm font-semibold">
-                        {(student.avatar_initial || student.full_name || "?").charAt(0).toUpperCase()}
+                        {(student.avatar_initial || student.full_name || "?")
+                          .charAt(0)
+                          .toUpperCase()}
                       </div>
-                      <p className="min-w-0 truncate text-sm font-semibold">{student.full_name}</p>
+                      <p className="min-w-0 truncate text-sm font-semibold">
+                        {student.full_name}
+                      </p>
                     </div>
                   ))}
                 </section>
@@ -256,7 +287,9 @@ function ClassmatesModal({
   );
 }
 
-function groupClassmates(students: StudentClassmateItem[]): Array<[string, StudentClassmateItem[]]> {
+function groupClassmates(
+  students: StudentClassmateItem[],
+): Array<[string, StudentClassmateItem[]]> {
   const groups: Array<[string, StudentClassmateItem[]]> = [
     ["Male", []],
     ["Female", []],
@@ -266,7 +299,8 @@ function groupClassmates(students: StudentClassmateItem[]): Array<[string, Stude
   students.forEach((student) => {
     const gender = (student.gender || "").trim().toLocaleLowerCase();
     if (["male", "m", "boy"].includes(gender)) groups[0][1].push(student);
-    else if (["female", "f", "girl"].includes(gender)) groups[1][1].push(student);
+    else if (["female", "f", "girl"].includes(gender))
+      groups[1][1].push(student);
     else groups[2][1].push(student);
   });
 
