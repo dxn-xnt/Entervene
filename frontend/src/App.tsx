@@ -40,6 +40,7 @@ import TeacherNotifications from "./pages/teacher/notifications";
 
 // // Student pages
 import StudentBoard from "./pages/student/storyboard";
+import StudentProfile from "./pages/student/student-profile";
 import StudentSubjects from "./pages/student/subjects";
 import StudentSubjectDetail from "./pages/student/student-subject-detail";
 // import StudentInterventions from "./pages/student/StudentInterventions";
@@ -111,6 +112,7 @@ const App = () => {
               element={<Navigate to={routes.student.board} replace />}
             />
             <Route path={routes.student.board} element={<StudentBoard />} />
+            <Route path={routes.student.profile} element={<StudentProfile />} />
             <Route
               path={routes.student.subjects}
               element={<StudentSubjects />}
