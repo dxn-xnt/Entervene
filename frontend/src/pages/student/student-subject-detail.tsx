@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { BookOpen, ClipboardList, Loader2 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import Tabs from "@/components/Tabs";
 import SubjectLessonTab from "./Subjects/tabs/subject-lesson-tab";
 import SubjectClassworkTab from "./Subjects/tabs/subject-classwork-tab";
@@ -71,42 +73,68 @@ const StudentSubjectDetail = () => {
 
   return (
     <AppLayout>
-      {/* ── Page header: subject title ── */}
-      {!isLessonDetailScreen ? (
-        <>
-      <header className="px-5 py-5 border-b border-gray-200">
-        {subjectInfo ? (
-          <h1 className="text-4xl font-bold">{subjectInfo.subject_name}</h1>
-        ) : (
-          <div className="flex items-center gap-3">
-            <Loader2 className="animate-spin text-gray-400" size={24} />
-            <span className="text-gray-400 text-xl">Loading subject...</span>
+      <div className="flex flex-1 flex-col overflow-x-hidden">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
+            {/* ── Page header: breadcrumb ── */}
+            {!isLessonDetailScreen ? (
+              <>
+                <header className="flex items-center gap-3">
+                  <SidebarTrigger className="md:hidden" />
+                  <Breadcrumb>
+                    <Breadcrumb.List>
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Link
+                          onClick={() => navigate(routes.student.subjects)}
+                          className="text-2xl md:text-4xl text-black/50 hover:text-black cursor-pointer"
+                        >
+                          Subjects
+                        </Breadcrumb.Link>
+                      </Breadcrumb.Item>
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item>
+                        {subjectInfo ? (
+                          <Breadcrumb.Page className="text-xl md:text-3xl">
+                            {subjectInfo.subject_name}
+                          </Breadcrumb.Page>
+                        ) : (
+                          <div className="flex items-center gap-3">
+                            <Loader2 className="animate-spin text-gray-400" size={20} />
+                            <span className="text-gray-400 text-lg">Loading subject...</span>
+                          </div>
+                        )}
+                      </Breadcrumb.Item>
+                    </Breadcrumb.List>
+                  </Breadcrumb>
+                </header>
+
+                {/* ── Tab bar ── */}
+                <div className="-mx-4 md:-mx-6">
+                  <Tabs tabs={tabs} activeTab={activeTab} onChange={handleTabChange} />
+                </div>
+              </>
+            ) : null}
+
+            {/* ── Tab content ── */}
+            <main>
+              {activeTab === "lessons" && (
+                <SubjectLessonTab
+                  classId={numericClassId}
+                  subjectId={numericSubjectId}
+                  subjectName={subjectInfo?.subject_name}
+                  teacherName={subjectInfo?.teacher_name}
+                />
+              )}
+              {activeTab === "classwork" && (
+                <SubjectClassworkTab
+                  classId={numericClassId}
+                  subjectId={numericSubjectId}
+                />
+              )}
+            </main>
           </div>
-        )}
-      </header>
-
-      {/* ── Tab bar ── */}
-      <Tabs tabs={tabs} activeTab={activeTab} onChange={handleTabChange} />
-        </>
-      ) : null}
-
-      {/* ── Tab content ── */}
-      <main className="px-5 py-5">
-        {activeTab === "lessons" && (
-          <SubjectLessonTab
-            classId={numericClassId}
-            subjectId={numericSubjectId}
-            subjectName={subjectInfo?.subject_name}
-            teacherName={subjectInfo?.teacher_name}
-          />
-        )}
-        {activeTab === "classwork" && (
-          <SubjectClassworkTab
-            classId={numericClassId}
-            subjectId={numericSubjectId}
-          />
-        )}
-      </main>
+        </div>
+      </div>
     </AppLayout>
   );
 };

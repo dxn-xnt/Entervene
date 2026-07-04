@@ -24,7 +24,7 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
-from app.services.PredictionFeatureBuilderService import (
+from app.services.prediction.PredictionFeatureBuilderService import (
     build_prediction_features_from_records,
     check_prediction_readiness,
 )

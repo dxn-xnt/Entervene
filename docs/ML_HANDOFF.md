@@ -4,7 +4,7 @@ This document is the ML-specific handoff for the next Codex session. It does not
 
 ## Current Status
 
-ML backend pipeline is complete through training, model registration, scoring, risk interpretation, persistence, prediction API endpoints, and automatic feature building from real Entervene records.
+ML backend pipeline is complete through training, model registration, scoring, risk interpretation, prediction persistence, prediction API endpoints, automatic feature building from real Entervene records, outcome tracking, finalized-grade evaluation, teacher risk review, model performance summary, prediction detail, and read-only causes/recommended actions.
 
 Completed:
 
@@ -16,15 +16,25 @@ Model scoring: complete
 Prediction persistence: complete
 Prediction API endpoints: complete
 Automatic feature builder from real records: complete
+Prediction outcome tracking: complete
+Finalized-grade outcome evaluation: complete
+Teacher risk review: complete
+Model performance summary: complete
+Prediction detail read endpoint: complete
+Read-only causes and recommended actions: complete
 ```
 
-Ready next:
+Ready next backend/ML work:
 
 ```text
-Task 10: Grading Component Integration for Classwork, Quiz, and Assessment Records
+Dashboard list/filter endpoint
+Grading component integration
+Persistent suggestion-to-prediction linking
+Frontend prediction dashboard
+Future classifier after real labels
 ```
 
-Task 10 is next because `PredictionFeatureBuilderService` can compute ML features from records, but real teacher-created classwork, quiz, activity, project, and exam records must be consistently mapped to DepEd grading components:
+Grading component integration is still important because `PredictionFeatureBuilderService` can compute ML features from records, but real teacher-created classwork, quiz, activity, project, and exam records must be consistently mapped to DepEd grading components:
 
 ```text
 WRITTEN_WORK
@@ -35,10 +45,12 @@ PERIODICAL_ASSESSMENT
 Not ready yet:
 
 ```text
-Frontend prediction dashboard
-Teacher/student suggestions generated from predictions
-Production classifier
-Accuracy/AUC/F1/Precision/Recall reporting
+Frontend prediction dashboard is not implemented yet.
+Persistent StudentSuggestion rows are not generated from predictions yet.
+Persistent suggestion-to-prediction linking is not implemented yet.
+Production classifier is not ready.
+Accuracy/AUC/F1/Precision/Recall reporting is not valid yet.
+Grading component integration is still needed for production-quality running-grade/component calculations.
 ```
 
 ## Core ML Approach
@@ -68,11 +80,16 @@ Current active flow:
 ```text
 E-Class Record / LMS academic records
 -> feature builder
+-> readiness check
 -> RandomForestRegressor
 -> predicted_period_grade
 -> RiskEngine
 -> risk_level / risk_score
 -> ai_prediction persistence
+-> prediction detail causes/actions
+-> teacher review
+-> finalized grade outcome evaluation
+-> model performance summary
 ```
 
 The current historical E-Class Record dataset contains **zero below-75 target examples**. Because of that:
@@ -292,7 +309,7 @@ Created:
 
 ```text
 backend/app/ml/RegisterModelVersion.py
-backend/app/services/ModelVersionService.py
+backend/app/services/prediction/ModelVersionService.py
 backend/tests/test_register_model_version.py
 ```
 
@@ -321,7 +338,7 @@ pytest -q: 189 passed, 5 warnings
 Created:
 
 ```text
-backend/app/services/RiskEngine.py
+backend/app/services/prediction/RiskEngine.py
 backend/tests/test_risk_engine.py
 ```
 
@@ -353,7 +370,7 @@ pytest -q: 203 passed, 5 warnings
 Created:
 
 ```text
-backend/app/services/ModelScoringService.py
+backend/app/services/prediction/ModelScoringService.py
 backend/app/ml/ScorePrediction.py
 backend/tests/test_model_scoring_service.py
 ```
@@ -382,7 +399,7 @@ pytest -q: 215 passed, 5 warnings
 Created:
 
 ```text
-backend/app/services/PredictionPersistenceService.py
+backend/app/services/prediction/PredictionPersistenceService.py
 backend/app/ml/SavePrediction.py
 backend/tests/test_prediction_persistence_service.py
 ```
@@ -460,7 +477,7 @@ full backend suite after Task 8: 282 passed, 5 warnings
 Created:
 
 ```text
-backend/app/services/PredictionFeatureBuilderService.py
+backend/app/services/prediction/PredictionFeatureBuilderService.py
 backend/tests/test_prediction_feature_builder_service.py
 ```
 
@@ -506,6 +523,359 @@ tests/test_prediction_feature_builder_service.py -q: 13 passed
 tests/test_prediction_routes.py -q: 18 passed
 related regression/risk tests: 37 passed
 full backend suite after Task 9: 301 passed, 5 warnings
+```
+
+## Post-Task 9 Backend Prediction/Outcome Polish
+
+### A. Prediction Outcome Evaluation
+
+Added/changed:
+
+```text
+backend/app/models/ai/PredictionOutcome.py
+backend/app/services/prediction/PredictionOutcomeService.py
+backend/migrations/versions/20260703_add_prediction_outcome_evaluation_fields.py
+backend/tests/test_prediction_outcome_service.py
+```
+
+Purpose:
+
+```text
+After a prediction is made, the system can later compare the predicted grade against the actual finalized grade.
+```
+
+Computed fields:
+
+```text
+prediction_error = actual_period_grade - predicted_period_grade
+absolute_error = abs(actual_period_grade - predicted_period_grade)
+actual_passed = actual_period_grade >= passing_grade
+actual_risk_label = LOW_RISK if passed, HIGH_RISK if below passing for now
+outcome_status = EVALUATED
+evaluated_at
+```
+
+This is regression-safe outcome tracking. It does not make classifier metrics valid yet. It only tracks how close the predicted grade was to the actual grade.
+
+### B. Manual Outcome Evaluation Endpoint
+
+Endpoint:
+
+```text
+POST /api/v1/predictions/{prediction_id}/outcome/evaluate
+```
+
+Request:
+
+```json
+{
+  "actual_period_grade": 86.5,
+  "passing_grade": 75
+}
+```
+
+Response includes:
+
+```text
+outcome_id
+prediction_id
+actual_period_grade
+predicted_period_grade
+prediction_error
+absolute_error
+actual_passed
+actual_risk_label
+outcome_status
+evaluated_at
+```
+
+Changed:
+
+```text
+backend/app/schemas/Prediction.py
+backend/app/api/v1/routes/Predictions.py
+backend/tests/test_prediction_routes.py
+```
+
+### C. Finalized Grade Outcome Helper
+
+Service helper:
+
+```text
+evaluate_outcomes_for_finalized_period_grade(...)
+```
+
+Purpose:
+
+```text
+When a StudentPeriodGrade is finalized, the system can find matching predictions and evaluate their outcomes.
+```
+
+Safe matching rule:
+
+```text
+student_id
+class_id
+subject_id
+AIPrediction.target_period_id == StudentPeriodGrade.academic_period_id
+```
+
+### D. StudentPeriodGrade Finalization Workflow
+
+Fields added to `StudentPeriodGrade`:
+
+```text
+is_finalized
+finalized_at
+finalized_by_staff_id
+```
+
+Migration:
+
+```text
+backend/migrations/versions/20260703_add_student_period_grade_finalization.py
+```
+
+Endpoint:
+
+```text
+POST /api/v1/student-records/period-grades/{period_grade_id}/finalize
+```
+
+Request:
+
+```json
+{
+  "final_period_grade": 86.5,
+  "passing_grade": 75
+}
+```
+
+Purpose:
+
+```text
+This finalizes an existing StudentPeriodGrade row and automatically triggers prediction outcome evaluation.
+```
+
+Important limitation: this finalizes existing `StudentPeriodGrade` rows only. It does not create period-grade rows from scratch or implement a full grading module.
+
+Changed:
+
+```text
+backend/app/models/academic/StudentPeriodGrade.py
+backend/app/schemas/StudentRecord.py
+backend/app/services/student_record/StudentRecordService.py
+backend/app/api/v1/routes/StudentRecords.py
+backend/tests/test_student_period_grade_finalization.py
+backend/tests/test_prediction_outcome_grade_finalization.py
+```
+
+### E. Teacher Risk Review Workflow
+
+Model already existed:
+
+```text
+backend/app/models/ai/TeacherRiskReview.py
+```
+
+Migration:
+
+```text
+backend/migrations/versions/20260703_update_teacher_risk_review_decisions.py
+```
+
+Allowed decisions:
+
+```text
+CONFIRMED_RISK
+DISMISSED_RISK
+NEEDS_MORE_DATA
+INTERVENTION_ASSIGNED
+ESCALATED
+```
+
+Service:
+
+```text
+backend/app/services/prediction/TeacherRiskReviewService.py
+```
+
+Endpoint:
+
+```text
+POST /api/v1/predictions/{prediction_id}/teacher-review
+```
+
+Request:
+
+```json
+{
+  "decision": "CONFIRMED_RISK",
+  "teacher_notes": "Student has missed multiple classworks and needs remediation."
+}
+```
+
+Purpose:
+
+```text
+The AI prediction remains decision support only. The teacher/admin records whether they confirm, dismiss, need more data, assigned intervention, or escalated the risk.
+```
+
+Idempotency rule:
+
+```text
+One review per prediction_id + staff_id. A repeated review by the same staff member updates the existing review instead of duplicating it.
+```
+
+### F. Model Performance Summary
+
+Service:
+
+```text
+backend/app/services/prediction/ModelPerformanceService.py
+```
+
+Endpoint:
+
+```text
+GET /api/v1/predictions/model-performance
+```
+
+Supported query params:
+
+```text
+model_version_id
+class_id
+subject_id
+academic_period_id mapped to AIPrediction.target_period_id
+```
+
+Response includes:
+
+```text
+total_evaluated_predictions
+mae
+rmse
+mean_prediction_error
+min_absolute_error
+max_absolute_error
+actual_risk_label_counts
+predicted_risk_level_counts
+by_model_version
+```
+
+Formulas:
+
+```text
+MAE = average(absolute_error)
+RMSE = sqrt(average(prediction_error^2))
+mean_prediction_error = average(prediction_error)
+```
+
+These are still regression-safe metrics. Do not describe this as production classifier accuracy. Risk-label counts are descriptive only, not precision/recall/F1/AUC.
+
+Changed:
+
+```text
+backend/app/services/prediction/ModelPerformanceService.py
+backend/app/schemas/Prediction.py
+backend/app/api/v1/routes/Predictions.py
+backend/tests/test_model_performance_summary.py
+```
+
+### G. Prediction Detail and Teacher Review Read Endpoints
+
+Service:
+
+```text
+backend/app/services/prediction/PredictionReadService.py
+```
+
+Endpoints:
+
+```text
+GET /api/v1/predictions/{prediction_id}/detail
+GET /api/v1/predictions/{prediction_id}/teacher-review
+```
+
+Prediction detail returns:
+
+```text
+prediction core fields
+model version
+features
+outcome if available
+teacher_reviews
+current_user_review
+```
+
+Teacher review read endpoint returns:
+
+```json
+{
+  "prediction_id": 1,
+  "teacher_reviews": [],
+  "current_user_review": null
+}
+```
+
+Changed:
+
+```text
+backend/app/services/prediction/PredictionReadService.py
+backend/app/schemas/Prediction.py
+backend/app/api/v1/routes/Predictions.py
+backend/tests/test_prediction_read_endpoints.py
+```
+
+### H. Prediction Causes and Recommended Actions
+
+Service:
+
+```text
+backend/app/services/prediction/PredictionExplanationService.py
+```
+
+Prediction detail now includes:
+
+```text
+causes: []
+recommended_actions: []
+```
+
+Sample causes:
+
+```text
+LOW_COMPLETION_RATE
+MISSING_WORK
+LOW_ASSESSMENT_AVERAGE
+DECLINING_TREND
+LOW_DATA_COVERAGE
+HIGH_RISK_SCORE
+PREDICTED_BELOW_PASSING
+INSUFFICIENT_DATA
+```
+
+Sample recommended actions:
+
+```text
+ASSIGN_REMEDIAL_ACTIVITY
+REVIEW_MISSING_CLASSWORKS
+SCHEDULE_TEACHER_FOLLOW_UP
+GIVE_TARGETED_PRACTICE
+MONITOR_NEXT_SUBMISSIONS
+COLLECT_MORE_DATA
+```
+
+These are read-only, system-derived recommendation previews. They do not create `StudentSuggestion` rows, assign interventions automatically, or link persistent suggestions to predictions yet.
+
+Changed:
+
+```text
+backend/app/services/prediction/PredictionExplanationService.py
+backend/app/services/prediction/PredictionReadService.py
+backend/app/schemas/Prediction.py
+backend/tests/test_prediction_detail_explanations.py
 ```
 
 ## Mathematical Explanation of the Prediction Pipeline
@@ -608,7 +978,7 @@ running_grade =
 + (periodical_assessment_percent * 0.20)
 ```
 
-Task 10 should align teacher-created records and component weights so production running-grade behavior can follow the correct grading policy. If one component is missing early in the quarter, the current implementation averages only the available component percentages and emits a warning that the source period grade was estimated from available assessment component percentages.
+A future grading component integration task should align teacher-created records and component weights so production running-grade behavior can follow the correct grading policy. If one component is missing early in the quarter, the current implementation averages only the available component percentages and emits a warning that the source period grade was estimated from available assessment component percentages.
 
 ### Completion, Missing, Late, and Coverage Formulas
 
@@ -887,16 +1257,41 @@ The risk score is not produced directly by the Random Forest. It is produced by 
 ## Current Full Backend ML Flow
 
 ```text
-1. Historical E-Class Record workbooks were converted into normalized CSVs.
-2. ML train/test matrices were created from the normalized grade data.
+1. Historical E-Class Record workbooks are converted into normalized CSVs.
+2. ML train/test matrices are created from normalized grade data.
 3. Train.py trains RandomForestRegressor to predict target_next_period_grade.
 4. RegisterModelVersion.py stores model metadata into ai_model_version.
-5. PredictionFeatureBuilderService.py can now build features from real Entervene records.
-6. Readiness logic checks whether the student has enough evidence.
-7. ModelScoringService.py loads the active model and predicts predicted_period_grade.
-8. RiskEngine.py interprets predicted grade and academic evidence into risk_level and risk_score.
-9. PredictionPersistenceService.py saves ai_prediction and ai_prediction_feature rows.
-10. Predictions.py exposes preview, save, latest, class risk list, feature evidence, and from-records endpoints.
+5. PredictionFeatureBuilderService builds features from real Entervene records.
+6. Readiness logic checks data coverage, completion rate, and source grade.
+7. ModelScoringService loads the active model and predicts predicted_period_grade.
+8. RiskEngine converts predicted grade + academic evidence into risk_level and risk_score.
+9. PredictionPersistenceService saves ai_prediction and ai_prediction_feature rows.
+10. Prediction detail can show feature evidence.
+11. PredictionExplanationService derives user-friendly causes and recommended actions.
+12. Teacher/admin can review the prediction through TeacherRiskReview.
+13. StudentPeriodGrade can be finalized.
+14. Finalized grades trigger PredictionOutcome evaluation.
+15. PredictionOutcome stores prediction_error, absolute_error, actual_passed, and actual_risk_label.
+16. ModelPerformanceService summarizes MAE, RMSE, mean error, risk counts, and performance by model version.
+17. Predictions.py exposes scoring, saving, from-records prediction, latest prediction, class risk list, feature evidence, outcome evaluation, teacher review, model performance, and detail endpoints.
+```
+
+Text flow diagram:
+
+```text
+Academic records
+-> feature builder
+-> readiness check
+-> RandomForestRegressor
+-> predicted_period_grade
+-> RiskEngine
+-> risk_level/risk_score
+-> save prediction + features
+-> prediction detail shows causes/actions
+-> teacher review
+-> grade finalization
+-> outcome evaluation
+-> model performance summary
 ```
 
 ## Important Commands
@@ -946,16 +1341,28 @@ cd backend
 backend/.venv/Scripts/python.exe -m pytest tests/test_prediction_feature_builder_service.py -q
 backend/.venv/Scripts/python.exe -m pytest tests/test_prediction_routes.py -q
 backend/.venv/Scripts/python.exe -m pytest tests/test_model_scoring_service.py tests/test_prediction_persistence_service.py tests/test_risk_engine.py -q
+backend/.venv/Scripts/python.exe -m pytest tests/test_prediction_outcome_service.py -q
+backend/.venv/Scripts/python.exe -m pytest tests/test_prediction_outcome_grade_finalization.py -q
+backend/.venv/Scripts/python.exe -m pytest tests/test_student_period_grade_finalization.py -q
+backend/.venv/Scripts/python.exe -m pytest tests/test_teacher_risk_review.py -q
+backend/.venv/Scripts/python.exe -m pytest tests/test_model_performance_summary.py -q
+backend/.venv/Scripts/python.exe -m pytest tests/test_prediction_read_endpoints.py -q
+backend/.venv/Scripts/python.exe -m pytest tests/test_prediction_detail_explanations.py -q
 backend/.venv/Scripts/python.exe -m pytest -q
 ```
 
 Latest known results:
 
 ```text
-tests/test_prediction_feature_builder_service.py -q: 13 passed
-tests/test_prediction_routes.py -q: 18 passed
-related regression/risk tests: 37 passed
-full backend suite: 301 passed, 5 warnings
+Task 1 outcome service: focused tests passed
+Task 2 outcome route: focused tests passed
+Task 3 grade-finalized helper: focused tests passed
+Task 3.5 student period grade finalization: focused tests passed
+Task 4 teacher risk review: focused tests passed
+Task 5 model performance summary: focused tests passed
+Task 6 prediction read endpoints: focused tests passed
+Task 7 prediction detail explanations: focused tests passed
+Full backend suite after Task 7 backend polish: 454 passed, 5 warnings
 ```
 
 Warnings are existing SQLAlchemy/Pydantic deprecation warnings.
@@ -963,36 +1370,70 @@ Warnings are existing SQLAlchemy/Pydantic deprecation warnings.
 ## Current Limitations
 
 ```text
-1. The model is regression-only.
+1. The active ML model is still regression-only.
 2. It is not a validated at-risk classifier.
-3. No below-75 target examples exist in the current dataset.
-4. Accuracy/AUC/F1/Precision/Recall are not valid yet.
-5. Current model predicts grade, while RiskEngine interprets risk.
-6. Feature builder exists, but real production accuracy depends on consistent grading component mapping.
-7. Classwork/quiz/activity records must be reliably mapped to WRITTEN_WORK, PERFORMANCE_TASK, or PERIODICAL_ASSESSMENT.
-8. Synthetic names/LRNs remain development placeholders only.
-9. Current model artifacts/datasets are ignored by Git.
-10. Frontend prediction dashboard is not implemented yet.
-11. Teacher/student suggestions are not generated yet from prediction output.
+3. The historical dataset has zero below-75 target examples.
+4. Accuracy/AUC/F1/Precision/Recall are still not valid.
+5. The model predicts grade; RiskEngine interprets risk.
+6. actual_risk_label in PredictionOutcome is currently pass/fail-derived using the passing threshold.
+7. Recommended actions in prediction detail are read-only previews and do not create StudentSuggestion records.
+8. TeacherRiskReview records teacher/admin judgment but does not automatically create interventions.
+9. Persistent intervention assignment and completion tracking from predictions are still future work.
+10. Production reliability still depends on consistent grading component mapping.
+11. Frontend dashboard is not yet implemented.
+12. Synthetic names/LRNs remain development placeholders only.
+13. Current model artifacts/datasets are ignored by Git.
 ```
 
-## Next Recommended Task
+## Next Recommended Backend/ML Tasks
 
-The next task should be:
+### 1. Backend Dashboard List/Filter Endpoint for Prediction Dashboard
 
 ```text
-Task 10: Grading Component Integration for Classwork, Quiz, and Assessment Records
+Purpose:
+Let frontend load at-risk students by class, subject, target period, risk level, model version, and review status.
 ```
 
-Task 10 should ensure teacher-created records store or map to the correct DepEd grading component, because `PredictionFeatureBuilderService` relies on component-level scores to compute:
+### 2. Grading Component Integration for Classwork, Quiz, and Assessment Records
 
 ```text
-written_work_percent
-performance_task_percent
-periodical_assessment_percent
+Purpose:
+Ensure teacher-created records consistently map to:
+- WRITTEN_WORK
+- PERFORMANCE_TASK
+- PERIODICAL_ASSESSMENT
 ```
 
-Task 10 should also decide how active grading component weights should be stored/applied for running-grade projections.
+### 3. Persistent Suggestion-to-Prediction Linking
+
+```text
+Purpose:
+Connect predictions to generated StudentSuggestion / SuggestionClasswork records later.
+```
+
+### 4. Frontend Prediction Dashboard
+
+```text
+Purpose:
+Show risk list, prediction detail, causes, recommended actions, teacher review, outcome, and model-performance summary.
+```
+
+### 5. Future Classifier Only After Real Labels
+
+```text
+Purpose:
+Train classifier only after enough real below-75 or teacher-confirmed at-risk outcomes exist.
+```
+
+## Defense Explanation
+
+The Random Forest model predicts a future grade number. It does not directly decide whether a learner is at risk.
+
+`RiskEngine` converts that predicted grade plus academic evidence into a risk level and risk score. Prediction features explain what evidence was used. Prediction causes convert raw feature evidence into teacher-friendly reasons. Recommended actions are read-only system suggestions.
+
+`TeacherRiskReview` records the teacher/admin decision. `PredictionOutcome` compares the predicted grade to the actual finalized grade. `ModelPerformanceService` summarizes how close the model was using MAE, RMSE, and mean error.
+
+The system does not claim classifier accuracy yet because the current dataset has no below-75 examples.
 
 ## Worktree Note
 
@@ -1003,17 +1444,17 @@ Task 10 should also decide how active grading component weights should be stored
 Current status:
 
 ```text
-ML backend pipeline is complete through scoring, database persistence, prediction API endpoints, and automatic feature building/readiness checks from real Entervene records.
+ML backend pipeline is complete through training, model registration, scoring, risk interpretation, prediction persistence, automatic feature building/readiness checks from real Entervene records, outcome tracking, finalized-grade evaluation, teacher risk review, model performance summary, prediction detail, and read-only causes/recommended actions.
 ```
 
 Ready next:
 
 ```text
-Task 10: Grading Component Integration for Classwork, Quiz, and Assessment Records.
+Backend dashboard list/filter endpoint, grading component integration, persistent suggestion-to-prediction linking, frontend prediction dashboard, and future classifier work only after real labels.
 ```
 
 Not ready yet:
 
 ```text
-Frontend prediction dashboard, teacher/student suggestions generated from predictions, production classifier, Accuracy/AUC/F1/Precision/Recall reporting.
+Frontend prediction dashboard, persistent StudentSuggestion generation/linking from predictions, production classifier, Accuracy/AUC/F1/Precision/Recall reporting, and production-quality grading component integration.
 ```

@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.Base import Base
 from app.models.ai.AIModelVersion import AIModelVersion
-from app.services.ModelVersionService import (
+from app.services.prediction.ModelVersionService import (
     count_active_versions,
     load_feature_schema,
     load_training_report,
