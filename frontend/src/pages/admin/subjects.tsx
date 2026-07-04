@@ -909,9 +909,8 @@ function OfferingModal({
                       return (
                         <label
                           key={period.academic_period_id}
-                          className={`flex items-center gap-3 rounded-md border-2 border-black p-3 shadow-[2px_2px_0_#000] ${
-                            isFallback ? "cursor-not-allowed bg-black/5 text-black/50" : "cursor-pointer bg-background"
-                          }`}
+                          className={`flex items-center gap-3 rounded-md border-2 border-black p-3 shadow-[2px_2px_0_#000] ${isFallback ? "cursor-not-allowed bg-black/5 text-black/50" : "cursor-pointer bg-background"
+                            }`}
                         >
                           <Checkbox
                             checked={selectedPeriodIds.has(periodId)}
@@ -1705,13 +1704,7 @@ export default function AdminSubjects() {
               academicYearId={selectedAcademicYear?.academic_year_id}
               isLoading={isLoadingOptions}
             />
-            <RetroCard className="p-3">
-              <p className="text-sm font-semibold">
-                Start by adding subjects by grade level. Grading templates are optional and can be managed later.
-              </p>
-            </RetroCard>
             <SubjectModuleTabs activeTab={activeSection} onTabChange={setActiveSection} counts={subjectTabCounts} />
-            <p className="text-sm text-black/70">{activeHelperText}</p>
             {isViewingInactiveAcademicYear ? (
               <div className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
                 <p className="font-bold">{readOnlyReason}</p>

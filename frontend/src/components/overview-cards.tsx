@@ -23,7 +23,7 @@ import { Card } from "@/components/retroui/Card";
 type OverviewCardProps = {
   title: string;
   count: string;
-  stat: string;
+  stat?: string;
   className?: string;
 };
 
@@ -35,9 +35,11 @@ export function OverviewCard({ title, count, stat, className }: OverviewCardProp
       </Card.Header>
       <Card.Content>
         <Card.Title className="text-4xl font-bold">{count}</Card.Title>
-        <p className="text-sm">
-          <span className="font-semibold">+{stat}</span> increase from last month
-        </p>
+        {stat && (
+          <p className="text-sm">
+            <span className="font-semibold">+{stat}</span> increase from last month
+          </p>
+        )}
       </Card.Content>
     </Card>
   );

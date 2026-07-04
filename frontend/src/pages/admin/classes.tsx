@@ -31,6 +31,10 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import AddSubjectLoadModal from "./forms/add-subject-load";
+import { OverviewCard } from "@/components/overview-cards";
+import { Input } from "@/components/retroui/Input";
+import { Select } from "@/components/retroui/Select";
+import { Card } from "@/components/retroui/Card";
 
 export default function AdminClasses() {
   const [search, setSearch] = useState("");
@@ -218,89 +222,91 @@ export default function AdminClasses() {
             )}
 
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <SummaryCard
-                label="Total Classes"
-                value={summary.total_classes}
-                icon={<BookOpen className="size-5" />}
+              <OverviewCard
+                title={"Total Classes"}
+                count={String(summary.total_classes)}
               />
-              <SummaryCard
-                label="Active Classes"
-                value={summary.active_classes}
-                icon={<CheckCircle2 className="size-5" />}
+              <OverviewCard
+                title={"Active Classes"}
+                count={String(summary.active_classes)}
               />
-              <SummaryCard
-                label="Archived Classes"
-                value={summary.archived_classes}
-                icon={<Archive className="size-5" />}
+              <OverviewCard
+                title={"Archived Classes"}
+                count={String(summary.archived_classes)}
               />
-              <SummaryCard
-                label="Students Assigned"
-                value={summary.students_assigned}
-                icon={<Users className="size-5" />}
+              <OverviewCard
+                title={"Students Assigned"}
+                count={String(summary.students_assigned)}
               />
             </section>
 
-            <section className="rounded-lg border-2 border-black p-4 shadow-[3px_3px_0_#000]">
-              <div className="grid gap-3 md:grid-cols-[1fr_160px_140px]">
+            <Card>
+              <div className="grid gap-3 md:grid-cols-[1fr_160px_160px]">
                 <label className="relative">
                   <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
-                  <input
+                  <Input
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="Search class or adviser..."
-                    className="h-10 w-full rounded-md border border-black pl-9 pr-3 text-sm outline-none"
+                    className="h-10 w-full shadow-none border-black pl-9 pr-3"
                   />
                 </label>
-                <select
-                  value={yearFilter}
-                  onChange={(event) => setYearFilter(event.target.value)}
-                  className="h-10 rounded-md border border-black px-3 text-sm outline-none"
-                >
-                  {yearOptions.map((year) => (
-                    <option key={year}>{year}</option>
-                  ))}
-                </select>
-                <select
-                  value={statusFilter}
-                  onChange={(event) =>
-                    setStatusFilter(event.target.value as StatusFilter)
-                  }
-                  className="h-10 rounded-md border border-black px-3 text-sm outline-none"
-                >
-                  <option value="All">All Statuses</option>
-                  <option value="Active">Active</option>
-                  <option value="Archived">Archived</option>
-                </select>
+                <Select value={yearFilter}
+                  onChange={(event) => setYearFilter(event.target.value)}>
+                  <Select.Trigger className="w-full shadow-none">
+                    <Select.Value placeholder="" />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Group>
+                      {yearOptions.map((year) => (
+                        <Select.Item key={year} value={year}>{year}</Select.Item>
+                      ))}
+                    </Select.Group>
+                  </Select.Content>
+                </Select>
+
+                <Select value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
+                  <Select.Trigger className="w-full shadow-none">
+                    <Select.Value placeholder="" />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Group>
+                      <Select.Item value={"All"}>All Statuses</Select.Item>
+                      <Select.Item value={"Active"}>Active</Select.Item>
+                      <Select.Item value={"Archived"}>Archived</Select.Item>
+                    </Select.Group>
+                  </Select.Content>
+                </Select>
               </div>
 
               <div className="my-3 border-t border-black/10" />
 
               <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                <span className="shrink-0 text-xs font-semibold text-black/50">
+                <span className="shrink-0 text-sm font-regular text-muted-foreground">
                   Grade:
                 </span>
                 {gradeOptions.map((grade) => (
-                  <button
+                  <Button
                     key={grade}
+                    variant={gradeFilter === grade ? "default" : "outline"}
+                    size="sm"
                     onClick={() => setGradeFilter(grade)}
-                    className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${gradeFilter === grade
-                      ? "border-black bg-black text-white"
-                      : "border-black/30 bg-transparent text-black/60 hover:border-black/60 hover:text-black"
-                      }`}
+                    className="shrink-0 border-black shadow-none"
                   >
                     {grade}
-                  </button>
+                  </Button>
                 ))}
                 <div className="ml-auto flex shrink-0 items-center gap-3 text-xs">
-                  <button className="flex items-center gap-1.5 font-semibold text-black/70 hover:text-black">
+                  {/* <button className="flex items-center gap-1.5 font-semibold text-black/70 hover:text-black">
                     <Filter className="size-4" /> Add Filter
                   </button>
                   <button className="flex items-center gap-1.5 font-semibold text-black/70 hover:text-black">
                     <ArrowDownUp className="size-4" /> Sort By
-                  </button>
+                  </button> */}
                 </div>
               </div>
-            </section>
+            </Card>
 
             <section className="grid gap-4">
               {isLoading ? (

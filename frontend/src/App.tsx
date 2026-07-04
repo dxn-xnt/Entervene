@@ -48,6 +48,7 @@ import StudentGrades from "./pages/student/Grades/grades";
 import StudentTodo from "./pages/student/todo";
 import StudentTodoView from "./pages/student/todo-view";
 import StudentNotifications from "./pages/student/notifications";
+import AdminStudentView from "./pages/admin/student-view";
 
 // // Layouts
 // import TeacherLayout from "./pages/teacher/TeacherLayout";
@@ -63,10 +64,7 @@ const App = () => {
 
           {/* Admin */}
           <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
-            <Route
-              index
-              element={<Navigate to={routes.admin.dashboard} replace />}
-            />
+            <Route index element={<Navigate to={routes.admin.dashboard} replace />} />
             <Route path={routes.admin.dashboard} element={<AdminDashboard />} />
             <Route path={routes.admin.subjects} element={<AdminSubjects />} />
             <Route path={routes.admin.subjectLevel} element={<AdminSubjectLevel />} />
@@ -75,14 +73,9 @@ const App = () => {
             <Route path={routes.admin.classDetail} element={<AdminClassDetail />} />
             <Route path={routes.admin.users} element={<AdminUsers />} />
             <Route path={routes.admin.userDetail} element={<AdminUserDetail />} />
-            <Route
-              path={routes.admin.interventions}
-              element={<AdminInterventions />}
-            />
-            <Route
-              path={routes.admin.notifications}
-              element={<AdminNotifications />}
-            />
+            <Route path={routes.admin.interventions} element={<AdminInterventions />} />
+            <Route path={routes.admin.studentView} element={<AdminStudentView />} />
+            <Route path={routes.admin.notifications} element={<AdminNotifications />} />
             <Route path={routes.admin.settings} element={<AdminSettings />} />
             <Route path={routes.admin.academicPeriods} element={<AcademicPeriods />} />
           </Route>

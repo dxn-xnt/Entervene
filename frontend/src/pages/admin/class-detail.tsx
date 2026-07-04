@@ -303,9 +303,8 @@ function ActionButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-lg border-2 border-black ${
-        secondary ? "bg-background" : "bg-[#79bd80]"
-      } px-4 py-2 text-sm font-semibold shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000]`}
+      className={`flex items-center gap-1.5 rounded-lg border-2 border-black ${secondary ? "bg-background" : "bg-[#79bd80]"
+        } px-4 py-2 text-sm font-semibold shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000]`}
     >
       {children}
     </button>
@@ -523,7 +522,9 @@ function StudentsTab({
   onRetry: () => void;
   onEdit: () => void;
 }) {
+  const { classId } = useParams();
   const [search, setSearch] = useState("");
+  const navigate = useNavigate();
   const students = studentData?.students ?? [];
   const searchTerm = search.trim().toLocaleLowerCase();
   const filteredStudents = students
@@ -590,7 +591,9 @@ function StudentsTab({
                   </summary>
                   <div>
                     {group.map((student) => (
-                      <div key={student.student_id} className="flex min-h-14 items-center gap-4 border-b border-black/10 bg-white px-4 py-3 text-sm last:border-b-0">
+
+                      <div key={student.student_id} className="flex min-h-14 items-center gap-4 border-b border-black/10 bg-white px-4 py-3 text-sm last:border-b-0 cursor-pointer hover:bg-black/[0.02] transition-colors"
+                        onClick={() => navigate(`/admin/classes/${classId}/students/${student.student_id}`)}>
                         <RosterAvatar text={student.avatar_initial || student.full_name} />
                         <span className="min-w-0">
                           <span className="block truncate text-base font-black">{student.full_name}</span>
