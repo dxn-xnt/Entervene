@@ -301,19 +301,19 @@ export default function SubjectClassworkTab({
     );
   }
 
-  if (error) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-red-500 mb-4">{error}</p>
-        <button
-          onClick={fetchClassworks}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
+  // if (error) {
+  //   return (
+  //     <div className="text-center py-10">
+  //       <p className="text-red-500 mb-4">{error}</p>
+  //       <button
+  //         onClick={fetchClassworks}
+  //         className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-semibold"
+  //       >
+  //         Retry
+  //       </button>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="space-y-4">
