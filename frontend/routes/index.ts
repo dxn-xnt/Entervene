@@ -13,6 +13,7 @@ export const routes = {
     subjectView: "/admin/subjects/:grade/:subject",
     classes: "/admin/classes",
     classDetail: "/admin/classes/:classId",
+    studentView: "/admin/classes/:classId/students/:studentId",
     users: "/admin/users",
     userDetail: "/admin/users/:role/:userId",
     interventions: "/admin/interventions",
