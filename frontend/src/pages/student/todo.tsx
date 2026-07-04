@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Tabs from "../../components/Tabs";
 import ToDoItem from "../../components/StudentUIComponents/ListCardItems/ToDoItem";
 import AppLayout from "@/layouts/app-layout";
@@ -69,6 +70,15 @@ const completedItems = [
 
 export default function ToDo() {
   const [activeTab, setActiveTab] = useState("pending");
+  const navigate = useNavigate();
+
+  const openTodo = (item: { title: string; subject: string }) => {
+    navigate(
+      `/student/todo/${encodeURIComponent(item.subject)}/${encodeURIComponent(
+        item.title,
+      )}`,
+    );
+  };
 
   return (
     <AppLayout>
@@ -97,7 +107,11 @@ export default function ToDo() {
                     Intervention
                   </h3>
                   {interventionItems.map((item, index) => (
-                    <ToDoItem key={index} {...item} />
+                    <ToDoItem
+                      key={index}
+                      {...item}
+                      onClick={() => openTodo(item)}
+                    />
                   ))}
                 </section>
 
@@ -106,7 +120,11 @@ export default function ToDo() {
                     Past Due
                   </h3>
                   {pastDueItems.map((item, index) => (
-                    <ToDoItem key={index} {...item} />
+                    <ToDoItem
+                      key={index}
+                      {...item}
+                      onClick={() => openTodo(item)}
+                    />
                   ))}
                 </section>
 
@@ -115,7 +133,11 @@ export default function ToDo() {
                     Upcoming
                   </h3>
                   {upcomingItems.map((item, index) => (
-                    <ToDoItem key={index} {...item} />
+                    <ToDoItem
+                      key={index}
+                      {...item}
+                      onClick={() => openTodo(item)}
+                    />
                   ))}
                 </section>
               </>
@@ -125,7 +147,11 @@ export default function ToDo() {
               <section className="flex flex-col gap-4">
                 <h3 className="text-xl md:text-3xl font-semibold">Past Due</h3>
                 {pastDueItems.map((item, index) => (
-                  <ToDoItem key={index} {...item} />
+                  <ToDoItem
+                    key={index}
+                    {...item}
+                    onClick={() => openTodo(item)}
+                  />
                 ))}
               </section>
             )}
@@ -134,7 +160,11 @@ export default function ToDo() {
               <section className="flex flex-col gap-4">
                 <h3 className="text-xl md:text-3xl font-semibold">Completed</h3>
                 {completedItems.map((item, index) => (
-                  <ToDoItem key={index} {...item} />
+                  <ToDoItem
+                    key={index}
+                    {...item}
+                    onClick={() => openTodo(item)}
+                  />
                 ))}
               </section>
             )}

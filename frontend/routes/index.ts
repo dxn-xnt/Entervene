@@ -54,6 +54,7 @@ export const routes = {
     interventions: "/student/interventions",
     grades: "/student/grades",
     todo: "/student/todo",
+    todoView: "/student/todo/:subject/:quizTitle",
     notifications: "/student/notifications",
   },
 

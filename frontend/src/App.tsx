@@ -46,6 +46,7 @@ import StudentSubjectDetail from "./pages/student/student-subject-detail";
 // import StudentInterventions from "./pages/student/StudentInterventions";
 import StudentGrades from "./pages/student/Grades/grades";
 import StudentTodo from "./pages/student/todo";
+import StudentTodoView from "./pages/student/todo-view";
 import StudentNotifications from "./pages/student/notifications";
 
 // // Layouts
@@ -131,6 +132,7 @@ const App = () => {
             />
             <Route path={routes.student.grades} element={<StudentGrades />} />
             <Route path={routes.student.todo} element={<StudentTodo />} />
+            <Route path={routes.student.todoView} element={<StudentTodoView />} />
             <Route
               path={routes.student.notifications}
               element={<StudentNotifications />}
