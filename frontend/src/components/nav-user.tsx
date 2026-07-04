@@ -24,6 +24,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { routes } from "@/../routes";
 
 export function NavUser() {
   const { user, logout } = useAuth();
@@ -111,7 +112,14 @@ export function NavUser() {
             <DropdownMenuSeparator />
 
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  if (user?.role === "student") {
+                    navigate(routes.student.profile);
+                  }
+                }}
+                disabled={user?.role !== "student"}
+              >
                 <CircleUserRoundIcon />
                 Account
               </DropdownMenuItem>

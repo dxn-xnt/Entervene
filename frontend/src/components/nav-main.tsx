@@ -1,22 +1,22 @@
-import { Link, useLocation } from "react-router-dom"
+import { Link, useLocation } from "react-router-dom";
 import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
 
 export function NavMain({
   items,
 }: {
   items: {
-    title: string
-    url: string
-    icon?: React.ReactNode
-  }[]
+    title: string;
+    url: string;
+    icon?: React.ReactNode;
+  }[];
 }) {
-  const { pathname } = useLocation()
+  const { pathname } = useLocation();
 
   return (
     <SidebarGroup>
@@ -26,7 +26,12 @@ export function NavMain({
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 tooltip={item.title}
-                isActive={pathname === item.url}
+                isActive={
+                  item.url === "/"
+                    ? pathname === item.url
+                    : pathname === item.url ||
+                      pathname.startsWith(item.url + "/")
+                }
                 asChild
               >
                 <Link to={item.url}>
@@ -39,5 +44,5 @@ export function NavMain({
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
-  )
+  );
 }
