@@ -1,5 +1,5 @@
 import { useState } from "react";
-import SubjectCardHeader from "../../../components/StudentUIComponents/SubjectCardHeader";
+import SubjectCardHeader from "../../../components/SubjectCardHeader";
 import SubjectGrade from "./subject-grade";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Tabs from "../../components/Tabs";
-import ToDoItem from "../../components/StudentUIComponents/ListCardItems/ToDoItem";
+import ToDoItem from "../../components/ToDoItem";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 

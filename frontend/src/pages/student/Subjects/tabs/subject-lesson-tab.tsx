@@ -18,6 +18,7 @@ import SubmissionForm from "@/components/SubmissionForm";
 import SubmissionViewer from "@/components/SubmissionViewer";
 import { API_URL, apiFetch } from "@/lib/api";
 import SubjectSuggestionsTab from "./subject-suggestions-tab";
+import { Card } from "@/components/retroui/Card";
 
 const LOCKED_CLASSWORK_MESSAGE =
   "This classwork is not available yet. Please check back later or contact your teacher for more information.";
@@ -1188,7 +1189,8 @@ export default function SubjectLessonTab({
         renderLessonDetailScreen(selectedLessonDetail)
       ) : (
         <>
-      <div className="rounded-lg border border-black bg-[#F6E9B2] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-start justify-between">
+        {/* tungtungsahur */}
+      <Card className="rounded-lg border border-black flex justify-between bg-[#F6E9B2]">
         <div>
           <h2 className="text-2xl font-bold">{displaySubjectName}</h2>
           <p className="text-sm text-gray-600 mt-0.5">{displayTeacherName}</p>
@@ -1196,7 +1198,7 @@ export default function SubjectLessonTab({
         <button className="text-gray-500 hover:text-gray-800 transition-colors mt-0.5">
           <Info size={18} />
         </button>
-      </div>
+      </Card>
 
       {/* ── Activity overdue banner ── */}
       {hasOverdue && (
