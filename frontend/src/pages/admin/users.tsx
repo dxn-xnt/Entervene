@@ -1,6 +1,7 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AddUserModal from "../../components/admin/AddUserModal";
 import { Badge } from "../../components/retroui/Badge";
+import { Table } from "../../components/retroui/Table";
 import { Input } from "../../components/retroui/Input";
 import { Loader } from "../../components/retroui/Loader";
 import Tabs from "../../components/Tabs";
@@ -391,11 +392,10 @@ export default function AdminUsers() {
                       <button
                         key={g}
                         onClick={() => setGradeFilter(g)}
-                        className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                          gradeFilter === g
+                        className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${gradeFilter === g
                             ? "border-black bg-black text-white"
                             : "border-black/30 bg-background text-muted-foreground hover:border-black/60 hover:text-foreground"
-                        }`}
+                          }`}
                       >
                         {g === "all" ? "All" : `Grade ${g}`}
                       </button>
@@ -461,22 +461,40 @@ export default function AdminUsers() {
 
               {!loading && activeTab !== "student" && (
                 <>
-                  {users.length > 0 && <TableHeader activeTab={activeTab} />}
-                  <div className="overflow-hidden rounded-xl border border-black bg-background shadow-[4px_5px_0_#000]">
-                    {users.length === 0 && (
-                      <div className="py-12 text-center text-sm text-muted-foreground">
-                        {emptyText}
-                      </div>
-                    )}
-                    {users.map((user) => (
-                      <UserRow
-                        key={user.id}
-                        user={user}
-                        activeTab={activeTab}
-                        onOpenUser={openUser}
-                      />
-                    ))}
-                  </div>
+                  {users.length === 0 ? (
+                    <div className="rounded-xl border border-black bg-background py-12 text-center text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+                      {emptyText}
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden rounded-xl border border-black bg-background shadow-[4px_5px_0_#000]">
+                      <Table className="border-none shadow-none">
+                        <Table.Header className="font-sans">
+                          <Table.Row>
+                            <Table.Head>Name / Email</Table.Head>
+                            <Table.Head className="text-center">Status</Table.Head>
+                            {activeTab === "teacher" ? (
+                              <>
+                                <Table.Head className="text-center">Subjects</Table.Head>
+                                <Table.Head className="text-right">Classes</Table.Head>
+                              </>
+                            ) : (
+                              <Table.Head className="text-right">Joined</Table.Head>
+                            )}
+                          </Table.Row>
+                        </Table.Header>
+                        <Table.Body>
+                          {users.map((user) => (
+                            <UserRow
+                              key={user.id}
+                              user={user}
+                              activeTab={activeTab}
+                              onOpenUser={openUser}
+                            />
+                          ))}
+                        </Table.Body>
+                      </Table>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -565,17 +583,15 @@ function SectionGroup({
 
   return (
     <div
-      className={`overflow-hidden rounded-xl border shadow-[3px_4px_0_#000] ${
-        isUnassigned ? "border-amber-400" : "border-black"
-      }`}
+      className={`overflow-hidden rounded-xl border shadow-[3px_4px_0_#000] ${isUnassigned ? "border-amber-400" : "border-black"
+        }`}
     >
       <button
         onClick={onToggle}
-        className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors ${
-          isUnassigned
+        className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors ${isUnassigned
             ? "bg-amber-50 hover:bg-accent hover:text-sidebar-accent-foreground"
             : "bg-background hover:bg-accent hover:text-sidebar-accent-foreground"
-        }`}
+          }`}
         aria-expanded={!collapsed}
       >
         {isUnassigned ? (
@@ -591,11 +607,10 @@ function SectionGroup({
         </span>
 
         <span
-          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-            isUnassigned
+          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${isUnassigned
               ? "border-amber-300 bg-amber-100 text-amber-700"
               : "border-black/20 bg-muted/50 text-muted-foreground"
-          }`}
+            }`}
         >
           {users.length} student{users.length !== 1 ? "s" : ""}
         </span>
@@ -608,31 +623,28 @@ function SectionGroup({
       </button>
 
       {!collapsed && (
-        <div className="bg-background">
-          <div
-            className={`grid gap-3 border-t px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ${
-              isUnassigned
-                ? "border-amber-300 bg-amber-50/60"
-                : "border-black/20 bg-muted/30"
-            } ${isUnassigned ? "grid-cols-[minmax(0,1fr)_120px_120px_90px]" : "grid-cols-[minmax(0,1fr)_120px_150px_90px]"}`}
-          >
-            <span>Name</span>
-            <span className="text-center">Status</span>
-            <span className="text-center">
-              {isUnassigned ? "Grade level" : "Section"}
-            </span>
-            <span className="text-right">Average</span>
-          </div>
-
-          {users.map((user) => (
-            <StudentRow
-              key={user.id}
-              user={user}
-              showGrade={isUnassigned}
-              onOpenUser={onOpenUser}
-            />
-          ))}
-        </div>
+        <Table className="border-t border-none shadow-none">
+          <Table.Header className="font-sans">
+            <Table.Row>
+              <Table.Head>Name</Table.Head>
+              <Table.Head className="text-center">Status</Table.Head>
+              <Table.Head className="text-center">
+                {isUnassigned ? "Grade level" : "Section"}
+              </Table.Head>
+              <Table.Head className="text-right">Average</Table.Head>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {users.map((user) => (
+              <StudentRow
+                key={user.id}
+                user={user}
+                showGrade={isUnassigned}
+                onOpenUser={onOpenUser}
+              />
+            ))}
+          </Table.Body>
+        </Table>
       )}
     </div>
   );
@@ -652,86 +664,69 @@ function StudentRow({
   const sectionName = getSectionDisplayName(user.section);
 
   return (
-    <button
-      type="button"
+    <Table.Row
       onClick={() => onOpenUser(user)}
-      className={`grid w-full items-center gap-3 border-t border-black/10 px-4 py-2.5 last:border-b-0 ${
-        showGrade
-          ? "grid-cols-[minmax(0,1fr)_120px_120px_90px]"
-          : "grid-cols-[minmax(0,1fr)_120px_150px_90px]"
-      } text-left transition-colors ${USER_ROW_HOVER}`}
+      className="cursor-pointer"
     >
-      <NameCell name={user.name} subtitle={user.email} />
+      <Table.Cell>
+        <NameCell name={user.name} subtitle={user.email} />
+      </Table.Cell>
 
-      <span
-        className={`justify-self-center ${STATUS_BADGE_BASE} ${status.badge}`}
-      >
-        <span className={`size-1.5 rounded-full ${status.dot}`} />
-        {status.label}
-      </span>
+      <Table.Cell className="text-center">
+        <span
+          className={`${STATUS_BADGE_BASE} ${status.badge} inline-flex items-center gap-1.5`}
+        >
+          <span className={`size-1.5 rounded-full ${status.dot}`} />
+          {status.label}
+        </span>
+      </Table.Cell>
 
-      <div className="flex justify-center">
-        {showGrade ? (
-          gradeLevel ? (
-            <span className="rounded-md border border-black/20 bg-muted/40 px-2 py-0.5 text-[11px] font-medium">
-              Grade {gradeLevel}
-            </span>
+      <Table.Cell className="text-center">
+        <div className="flex justify-center">
+          {showGrade ? (
+            gradeLevel ? (
+              <span className="rounded-md border border-black/20 bg-muted/40 px-2 py-0.5 text-[11px] font-medium">
+                Grade {gradeLevel}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">—</span>
+            )
+          ) : sectionName ? (
+            <Badge
+              variant="outline"
+              size="sm"
+              className="bg-background text-[10px] font-medium"
+            >
+              {sectionName}
+            </Badge>
           ) : (
-            <span className="text-xs text-muted-foreground">—</span>
-          )
-        ) : sectionName ? (
-          <Badge
-            variant="outline"
-            size="sm"
-            className="bg-background text-[10px] font-medium"
-          >
-            {sectionName}
-          </Badge>
-        ) : (
-          <span className="text-xs text-muted-foreground">No section</span>
-        )}
-      </div>
+            <span className="text-xs text-muted-foreground">No section</span>
+          )}
+        </div>
+      </Table.Cell>
 
-      <div className="justify-self-end text-right font-black leading-none">
-        {user.average != null ? (
-          <>
-            <span className="text-lg">{user.average}</span>
-            <span className="text-xs font-semibold">%</span>
-          </>
-        ) : (
-          <span className="text-sm font-normal text-muted-foreground">—</span>
-        )}
-      </div>
-    </button>
+      <Table.Cell className="text-right">
+        <div className="justify-self-end text-right font-black leading-none">
+          {user.average != null ? (
+            <>
+              <span className="text-lg">{user.average}</span>
+              <span className="text-xs font-semibold">%</span>
+            </>
+          ) : (
+            <span className="text-sm font-normal text-muted-foreground">—</span>
+          )}
+        </div>
+      </Table.Cell>
+    </Table.Row>
   );
 }
 
 // ─── Teacher / Admin components (unchanged) ───────────────────────────────────
 
-function TableHeader({ activeTab }: { activeTab: TabId }) {
-  if (activeTab === "teacher") {
-    return (
-      <div className="hidden grid-cols-[minmax(220px,1fr)_120px_minmax(180px,1fr)_110px] gap-3 px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:grid">
-        <span>Name</span>
-        <span>Status</span>
-        <span className="text-center">Subjects</span>
-        <span className="text-right">Classes</span>
-      </div>
-    );
-  }
-  return (
-    <div className="hidden grid-cols-[minmax(200px,1fr)_120px_minmax(160px,1fr)] gap-3 px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:grid">
-      <span>Name / Email</span>
-      <span>Status</span>
-      <span className="text-right">Joined</span>
-    </div>
-  );
-}
-
 function StatusBadge({ status }: { status: string | undefined | null }) {
   const style = getStatusStyle(status);
   return (
-    <span className={`${STATUS_BADGE_BASE} ${style.badge}`}>
+    <span className={`${STATUS_BADGE_BASE} ${style.badge} inline-flex items-center gap-1.5`}>
       <span className={`size-1.5 rounded-full ${style.dot}`} />
       {style.label}
     </span>
@@ -751,63 +746,71 @@ function UserRow({
 
   if (activeTab === "teacher") {
     return (
-      <button
-        type="button"
+      <Table.Row
         onClick={() => onOpenUser(user)}
-        className={`grid min-h-12 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-black/50 px-3 py-2.5 text-left transition-colors last:border-b-0 md:grid-cols-[minmax(220px,1fr)_120px_minmax(180px,1fr)_110px] ${USER_ROW_HOVER}`}
+        className="cursor-pointer"
       >
-        <NameCell name={user.name} />
-        <div className="hidden justify-self-center md:block">
+        <Table.Cell>
+          <NameCell name={user.name} subtitle={user.email} />
+        </Table.Cell>
+        <Table.Cell className="text-center">
           <StatusBadge status={user.account_status} />
-        </div>
-        <div className="hidden flex-wrap justify-center gap-1.5 md:flex">
-          {shown.length > 0 ? (
-            shown.map((subject) => (
+        </Table.Cell>
+        <Table.Cell className="text-center">
+          <div className="flex flex-wrap justify-center gap-1.5">
+            {shown.length > 0 ? (
+              shown.map((subject) => (
+                <Badge
+                  key={subject}
+                  variant="outline"
+                  size="sm"
+                  className="bg-background text-[10px] font-medium"
+                >
+                  {subject}
+                </Badge>
+              ))
+            ) : (
+              <span className="text-xs text-muted-foreground">No subjects</span>
+            )}
+            {extra > 0 && (
               <Badge
-                key={subject}
                 variant="outline"
                 size="sm"
                 className="bg-background text-[10px] font-medium"
               >
-                {subject}
+                +{extra}
               </Badge>
-            ))
-          ) : (
-            <span className="text-xs text-muted-foreground">No subjects</span>
-          )}
-          {extra > 0 && (
-            <Badge
-              variant="outline"
-              size="sm"
-              className="bg-background text-[10px] font-medium"
-            >
-              +{extra}
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center justify-end gap-1 text-xs font-semibold">
-          <School className="size-3.5" />
-          {user.class_count ?? 0}
-        </div>
-      </button>
+            )}
+          </div>
+        </Table.Cell>
+        <Table.Cell className="text-right">
+          <div className="flex items-center justify-end gap-1 text-xs font-semibold">
+            <School className="size-3.5" />
+            {user.class_count ?? 0}
+          </div>
+        </Table.Cell>
+      </Table.Row>
     );
   }
 
   return (
-    <button
-      type="button"
+    <Table.Row
       onClick={() => onOpenUser(user)}
-      className={`grid min-h-12 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-black/50 px-3 py-2.5 text-left transition-colors last:border-b-0 md:grid-cols-[minmax(200px,1fr)_120px_minmax(160px,1fr)] ${USER_ROW_HOVER}`}
+      className="cursor-pointer"
     >
-      <NameCell name={user.name} subtitle={user.email} />
-      <div className="hidden justify-self-center md:block">
+      <Table.Cell>
+        <NameCell name={user.name} subtitle={user.email} />
+      </Table.Cell>
+      <Table.Cell className="text-center">
         <StatusBadge status={user.account_status} />
-      </div>
-      <div className="hidden items-center justify-end gap-1.5 text-xs text-muted-foreground md:flex">
-        <UsersRound className="size-3.5" />
-        {user.created_at || "—"}
-      </div>
-    </button>
+      </Table.Cell>
+      <Table.Cell className="text-right">
+        <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+          <UsersRound className="size-3.5" />
+          {user.created_at || "—"}
+        </div>
+      </Table.Cell>
+    </Table.Row>
   );
 }
 
