@@ -15,36 +15,16 @@ import {
 import AttachmentDisplay from "@/components/AttachmentDisplay";
 import SubmissionForm from "@/components/SubmissionForm";
 import SubmissionViewer from "@/components/SubmissionViewer";
+import { StudentLessonDetailScreen } from "@/components/StudentLessonDetailScreen";
 import { API_URL, apiFetch } from "@/lib/api";
-import SubjectSuggestionsTab from "./subject-suggestions-tab";
 import { Card } from "@/components/retroui/Card";
 import { SortButton } from "@/components/SortButton";
+import type { StudentLesson as Lesson } from "@/types/student-subject";
 
 const LOCKED_CLASSWORK_MESSAGE =
   "This classwork is not available yet. Please check back later or contact your teacher for more information.";
 
 // ─── Interfaces ────────────────────────────────────────────────────────────
-
-interface LessonAttachment {
-  lesson_attachment_id: number;
-  file_name: string;
-  file_type?: string;
-  file_size: number;
-  uploaded_at?: string;
-}
-
-interface Lesson {
-  lesson_id: number;
-  title: string;
-  description?: string | null;
-  content?: string | null;
-  subject_name?: string;
-  teacher_name?: string;
-  is_published: boolean;
-  created_at?: string;
-  updated_at?: string;
-  attachments: LessonAttachment[];
-}
 
 interface ClassworkAttachment {
   classwork_attachment_id: number;
@@ -803,7 +783,7 @@ export default function SubjectLessonTab({
               <button
                 type="button"
                 onClick={() => setIsQuizFullscreen(false)}
-                className="rounded-lg border border-black bg-white px-4 py-1.5 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFFBEE]"
+                className="rounded-lg border border-black bg-white px-4 py-1.5 text-sm font-bold shadow-md hover:bg-[#FFFBEE]"
               >
                 Close Summary
               </button>
@@ -811,7 +791,7 @@ export default function SubjectLessonTab({
               <button
                 type="button"
                 onClick={() => setQuizReviewMode(true)}
-                className="rounded-lg border border-black bg-white px-4 py-1.5 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFFBEE]"
+                className="rounded-lg border border-black bg-white px-4 py-1.5 text-sm font-bold shadow-md hover:bg-[#FFFBEE]"
               >
                 Finish Quiz
               </button>
@@ -821,7 +801,7 @@ export default function SubjectLessonTab({
 
         <main className="flex-1 overflow-y-auto px-4 py-4">
           <div className="mx-auto max-w-6xl space-y-4">
-            <section className="rounded-lg border border-black bg-white p-4 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <section className="rounded-lg border border-black bg-white p-4 text-center shadow-md">
               <h1 className="text-2xl font-bold">
                 {selectedQuizAttempt.title}
               </h1>
@@ -849,7 +829,7 @@ export default function SubjectLessonTab({
                       }}
                       className={`relative h-8 min-w-8 rounded border border-black px-2 text-xs font-bold ${
                         index === quizCurrentIndex
-                          ? "bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                          ? "bg-white shadow-md"
                           : hasQuizAnswer(question)
                             ? "bg-[#F6E9B2]"
                             : "bg-white"
@@ -889,7 +869,7 @@ export default function SubjectLessonTab({
                   return (
                     <article
                       key={question.quiz_question_id}
-                      className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                      className="rounded-lg border border-black bg-white p-4 shadow-md"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <h2 className="min-w-0 flex-1 break-words text-base font-bold">
@@ -1037,7 +1017,7 @@ export default function SubjectLessonTab({
                     onClick={() =>
                       toggleQuizFlag(currentQuestion.quiz_question_id)
                     }
-                    className={`rounded-lg border border-black px-4 py-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                    className={`rounded-lg border border-black px-4 py-2 text-xs font-bold shadow-md ${
                       flaggedQuizQuestionIds.has(
                         currentQuestion.quiz_question_id,
                       )
@@ -1062,7 +1042,7 @@ export default function SubjectLessonTab({
                   </button>
                 </div>
 
-                <div className="rounded-lg border border-black bg-[#F6E9B2] px-6 py-12 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <div className="rounded-lg border border-black bg-[#F6E9B2] px-6 py-12 text-center shadow-md">
                   <p className="text-lg font-bold">
                     {currentQuestion.question_text}
                   </p>
@@ -1084,7 +1064,7 @@ export default function SubjectLessonTab({
                           }))
                         }
                         disabled={isQuizSubmitting}
-                        className={`min-h-24 rounded-lg border border-black px-4 py-3 text-lg font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                        className={`min-h-24 rounded-lg border border-black px-4 py-3 text-lg font-bold shadow-md ${
                           quizAnswers[currentQuestion.quiz_question_id]
                             ?.selected_option_id === option.option_id
                             ? "bg-[#F6E9B2]"
@@ -1111,7 +1091,7 @@ export default function SubjectLessonTab({
                       }))
                     }
                     disabled={isQuizSubmitting}
-                    className="min-h-32 w-full rounded-lg border border-black bg-white px-4 py-4 text-center text-lg font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    className="min-h-32 w-full rounded-lg border border-black bg-white px-4 py-4 text-center text-lg font-bold shadow-md"
                     placeholder="Type answer"
                   />
                 )}
@@ -1205,7 +1185,7 @@ export default function SubjectLessonTab({
           key={cw.classwork_assignment_id}
           onClick={() => openClassworkDetail(cw)}
           disabled={isLoading}
-          className="w-full rounded-lg border border-black bg-white px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+          className="w-full rounded-lg border border-black bg-white px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left shadow-md"
         >
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-[#F6E9B2]">
             <ClassworkIcon type={cw.classwork_type} />
@@ -1235,107 +1215,16 @@ export default function SubjectLessonTab({
     });
   };
 
-  const renderLessonDetailScreen = (lesson: Lesson) => (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3 text-sm font-semibold">
-        <button
-          type="button"
-          onClick={closeLessonDetail}
-          className="flex items-center gap-1 rounded-md border border-black bg-white px-3 py-1.5 hover:bg-[#FFFBEE]"
-        >
-          <ChevronLeft size={16} />
-          Back to lessons
-        </button>
-        <span className="text-gray-500">{displaySubjectName}</span>
-        <ChevronRight size={15} className="text-gray-400" />
-        <span>{lesson.title}</span>
-      </div>
-
-      <section className="rounded-lg border border-black bg-[#F6E9B2] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-        <h2 className="text-2xl font-bold">{lesson.title}</h2>
-        <p className="mt-1 text-sm font-semibold text-gray-800">
-          {lesson.description || "No lesson description provided."}
-        </p>
-        {lesson.content ? (
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-gray-800">
-            {lesson.content}
-          </p>
-        ) : null}
-        <p className="mt-2 text-xs font-semibold text-gray-600">
-          {lesson.updated_at
-            ? `Updated ${fmtDate(lesson.updated_at)}`
-            : lesson.created_at
-              ? `Created ${fmtDate(lesson.created_at)}`
-              : ""}
-        </p>
-      </section>
-
-      <div className="flex flex-wrap gap-2 border-b border-black">
-        <button
-          type="button"
-          onClick={() => setLessonDetailTab("classwork")}
-          className={`rounded-t-lg border border-b-0 border-black px-4 py-2 text-sm font-bold ${
-            lessonDetailTab === "classwork" ? "bg-white" : "bg-[#FFFBEE]"
-          }`}
-        >
-          Classwork
-        </button>
-        <button
-          type="button"
-          onClick={() => setLessonDetailTab("suggestions")}
-          className={`rounded-t-lg border border-b-0 border-black px-4 py-2 text-sm font-bold ${
-            lessonDetailTab === "suggestions" ? "bg-white" : "bg-[#FFFBEE]"
-          }`}
-        >
-          Recommended Materials
-        </button>
-      </div>
-
-      {lessonDetailTab === "classwork" ? (
-        <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-          <section className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold">Classwork</h3>
-              <span className="text-xs font-semibold text-gray-500">
-                See all
-              </span>
-            </div>
-            {renderLessonClassworkCards(lesson)}
-          </section>
-          <aside className="space-y-3">
-            <section className="rounded-lg border border-black bg-white p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-              <h3 className="font-bold">Lesson Mastery</h3>
-              <p className="mt-2 text-xs text-gray-700">
-                Review the classwork and recommended materials for this lesson
-                to strengthen mastery.
-              </p>
-            </section>
-            <section className="rounded-lg border border-black bg-white p-3 text-center text-sm font-semibold italic shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-              Setting a goal is about achieving it and staying with that plan.
-            </section>
-          </aside>
-        </div>
-      ) : classId && subjectId ? (
-        <SubjectSuggestionsTab
-          classId={classId}
-          subjectId={subjectId}
-          selectedLessonId={lesson.lesson_id}
-          hideIntro
-        />
-      ) : null}
-    </div>
-  );
-
   // ─── Loading skeleton ──────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="space-y-3 animate-pulse">
-        <div className="h-20 rounded-lg border border-black bg-[#F6E9B2] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" />
-        <div className="h-12 rounded-lg border border-black bg-pink-100 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" />
+        <div className="h-20 rounded-lg border border-black bg-[#F6E9B2] shadow-md" />
+        <div className="h-12 rounded-lg border border-black bg-pink-100 shadow-md" />
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-16 rounded-lg border border-black bg-[#F6E9B2] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+            className="h-16 rounded-lg border border-black bg-[#F6E9B2] shadow-md"
           />
         ))}
       </div>
@@ -1365,7 +1254,17 @@ export default function SubjectLessonTab({
         : null}
       {/* ── Subject info card ── */}
       {selectedLessonDetail ? (
-        renderLessonDetailScreen(selectedLessonDetail)
+        <StudentLessonDetailScreen
+          lesson={selectedLessonDetail}
+          displaySubjectName={displaySubjectName}
+          closeLessonDetail={closeLessonDetail}
+          lessonDetailTab={lessonDetailTab}
+          setLessonDetailTab={setLessonDetailTab}
+          renderLessonClassworkCards={renderLessonClassworkCards}
+          classId={classId}
+          subjectId={subjectId}
+          fmtDate={fmtDate}
+        />
       ) : (
         <>
           <Card className="flex justify-between bg-[#F6E9B2]">
@@ -1423,7 +1322,7 @@ export default function SubjectLessonTab({
                         type="button"
                         onClick={() => openClassworkDetail(classwork)}
                         disabled={isLoading}
-                        className="w-full rounded-lg border border-black bg-white px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center gap-3 hover:bg-[#FFFBEE] transition-colors text-left"
+                        className="w-full rounded-lg border border-black bg-white px-5 py-4 shadow-md flex items-center gap-3 hover:bg-[#FFFBEE] transition-colors text-left"
                       >
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-[#F6E9B2]">
                           <ClipboardList size={18} />
