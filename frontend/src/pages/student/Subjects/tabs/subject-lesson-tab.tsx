@@ -20,6 +20,7 @@ import SubmissionViewer from "@/components/SubmissionViewer";
 import { API_URL, apiFetch } from "@/lib/api";
 import SubjectSuggestionsTab from "./subject-suggestions-tab";
 import { Card } from "@/components/retroui/Card";
+import { SortButton } from "@/components/SortButton";
 
 const LOCKED_CLASSWORK_MESSAGE =
   "This classwork is not available yet. Please check back later or contact your teacher for more information.";
@@ -1405,13 +1406,10 @@ export default function SubjectLessonTab({
                 {/* Lessons header row */}
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xl font-bold tracking-tight">Lessons</h3>
-                  <button
-                    onClick={() => setSortAsc((v) => !v)}
-                    className="flex items-center gap-2 text-sm px-3"
-                  >
-                    <ChevronsUpDown size={14} />
-                    Sort By
-                  </button>
+                  <SortButton
+                    sortAsc={sortAsc}
+                    onToggle={() => setSortAsc((prev) => !prev)}
+                  />
                 </div>
 
                 <div className="space-y-2">

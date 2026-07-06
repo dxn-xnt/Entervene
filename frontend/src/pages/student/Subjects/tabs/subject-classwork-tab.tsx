@@ -301,29 +301,22 @@ export default function SubjectClassworkTab({
     );
   }
 
-  // if (error) {
-  //   return (
-  //     <div className="text-center py-10">
-  //       <p className="text-red-500 mb-4">{error}</p>
-  //       <button
-  //         onClick={fetchClassworks}
-  //         className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-semibold"
-  //       >
-  //         Retry
-  //       </button>
-  //     </div>
-  //   );
-  // }
+  if (error) {
+    return (
+      <div className="text-center py-10">
+        <p className="text-red-500 mb-4">{error}</p>
+        <button
+          onClick={fetchClassworks}
+          className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-semibold"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-black bg-[#F6E9B2] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-        <h3 className="text-2xl font-bold text-gray-900">Classworks</h3>
-        <p className="mt-1 text-sm font-medium text-gray-700">
-          Find assignments, readings, activities, and quizzes for this subject.
-        </p>
-      </div>
-
       {notice ? (
         <Alert status={notice.status}>
           <Alert.Title>{notice.title}</Alert.Title>
@@ -331,9 +324,9 @@ export default function SubjectClassworkTab({
         </Alert>
       ) : null}
 
-      <div className="flex flex-col gap-3 rounded-lg border border-black bg-white p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:flex-row sm:items-center">
-        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-gray-300 bg-[#FFFBEE] px-3 py-2">
-          <Search size={16} className="shrink-0 text-gray-500" />
+      <div className="flex">
+        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border px-3 py-2">
+          <Search size={16}/>
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
