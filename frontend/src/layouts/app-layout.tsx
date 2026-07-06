@@ -4,6 +4,7 @@ import type { CSSProperties, PropsWithChildren } from 'react';
 import { AppContent } from './app-content';
 import type { BreadcrumbItem } from '@/types';
 
+
 export default function AppLayout({
     children,
 }: PropsWithChildren<{ breadcrumbs?: BreadcrumbItem[] }>) {
@@ -16,6 +17,7 @@ export default function AppLayout({
         } as CSSProperties
       }
     >
+
       <AppSidebar variant="inset" />
       <SidebarInset>
         <AppContent>
