@@ -157,7 +157,7 @@ export default function SubmissionForm({
 
       {/* Submission Info */}
       {maxAttempts && (
-        <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+        <div className="text-xs">
           Submission {currentAttempt + 1} of {maxAttempts}
         </div>
       )}
