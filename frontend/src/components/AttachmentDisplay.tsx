@@ -247,7 +247,7 @@ export default function AttachmentDisplay({
                             : handleOpenImage(attachment)
                         }
                         disabled={imageLoadingName === attachment.file_name}
-                        className="px-3 py-1 text-sm bg-red-50 text-red-700 border border-red-200 rounded hover:bg-red-100 transition-colors"
+                        className="px-4 py-2 text-sm border rounded-lg cursor-pointer"
                       >
                         {imageLoadingName === attachment.file_name ? "Loading..." : "View"}
                       </button>
@@ -257,7 +257,7 @@ export default function AttachmentDisplay({
                         type="button"
                         onClick={() => handleDownload(attachment)}
                         disabled={downloadLoadingName === attachment.file_name}
-                        className="px-3 py-1 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 transition-colors flex items-center gap-1"
+                        className="flex items-center gap-1.5 rounded-lg border border-black bg-[#7ABA78] px-2 py-2 text-sm cursor-pointer"
                       >
                         <Download size={14} />
                         {downloadLoadingName === attachment.file_name ? "Downloading..." : "Download"}
