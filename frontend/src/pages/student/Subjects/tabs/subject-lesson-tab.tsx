@@ -4,8 +4,6 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronLeft,
-  ChevronsUpDown,
-  ArrowUpDown,
   ClipboardList,
   BookOpen,
   FileText,
@@ -1406,9 +1404,7 @@ export default function SubjectLessonTab({
                 {/* Lessons header row */}
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xl font-bold tracking-tight">Lessons</h3>
-                  <SortButton
-                    onClick={() => setSortAsc((v) => !v)}
-                  >
+                  <SortButton onClick={() => setSortAsc((v) => !v)}>
                     Sort By
                   </SortButton>
                 </div>
@@ -1520,8 +1516,7 @@ export default function SubjectLessonTab({
                         {/* ── Inline classwork items (expanded) ── */}
                         {isExpanded && (
                           <div className="mt-2 space-y-2 pl-3">
-                            <div className="flex items-center gap-2 px-1 pt-2">
-                              <ClipboardList size={17} />
+                            <div className="flex items-center">
                               <h5 className="font-bold">Linked Classwork</h5>
                             </div>
                             {classworkLoadingId === lesson.lesson_id ? (
@@ -1549,15 +1544,20 @@ export default function SubjectLessonTab({
                                     className="w-full rounded-lg border-2 border-black bg-white p-4 flex items-center text-left gap-3 shadow-md transition-all hover:shadow-none"
                                   >
                                     {/* Icon */}
-                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-[#F6E9B2]">
-                                      <ClassworkIcon type={cw.classwork_type} />
-                                    </div>
-                                    {/* Title + date */}
                                     <div className="flex-1 min-w-0">
-                                      <p className="font-semibold text-sm truncate">
-                                        {cw.title}
-                                      </p>
-                                      <p className="text-xs text-gray-500 mt-0.5">
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center min-w-0">
+                                          <div className="flex h-9 w-9 items-center justify-center">
+                                            <ClassworkIcon
+                                              type={cw.classwork_type}
+                                            />
+                                          </div>
+                                          <p className="font-semibold text-lg truncate">
+                                            {cw.title}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <p className="text-xs ">
                                         {cw.due_date
                                           ? `Scheduled ${fmtDate(cw.due_date)}`
                                           : "No due date"}
@@ -1688,11 +1688,11 @@ export default function SubjectLessonTab({
 
       {(selectedClasswork || detailLoadingId !== null || detailError) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/50 px-4 py-6">
-          <section className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <Card className="block w-full p-0">
             {/* Modal header */}
-            <div className="sticky top-0 flex items-center justify-between border-b border-black bg-[#F6E9B2] px-5 py-4">
+            <div className="sticky top-0 flex items-center justify-between rounded-t-lg border-b border-black bg-[#F6E9B2] px-5 py-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-700">
+                <p className="text-xs">
                   Student classwork detail
                 </p>
                 <h2 className="text-xl font-bold">
@@ -1702,7 +1702,7 @@ export default function SubjectLessonTab({
               <button
                 type="button"
                 onClick={closeClassworkDetail}
-                className="rounded p-1 hover:bg-white/60"
+                className="cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -1722,7 +1722,7 @@ export default function SubjectLessonTab({
                 {/* Left: details */}
                 <div className="min-w-0 space-y-4">
                   {/* Status + title card */}
-                  <div className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                  <Card className="block w-full shadow-none">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full border border-black bg-[#7ABA78] px-3 py-1 text-xs font-bold">
                         {selectedClasswork.classwork_type || "Classwork"}
@@ -1765,12 +1765,12 @@ export default function SubjectLessonTab({
                         </p>
                       </div>
                     </div>
-                  </div>
+                  </Card>
 
                   {/* Description + instructions */}
                   {(selectedClasswork.description ||
                     selectedClasswork.instructions) && (
-                    <div className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <Card className="block w-full shadow-none">
                       {selectedClasswork.description && (
                         <div>
                           <h4 className="font-bold">Description</h4>
@@ -1787,11 +1787,11 @@ export default function SubjectLessonTab({
                           </p>
                         </div>
                       )}
-                    </div>
+                    </Card>
                   )}
 
                   {/* Attachments */}
-                  <div className="rounded-lg border border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                  <Card className="block w-full shadow-none">
                     <div className="mb-3 flex items-center gap-2">
                       <Paperclip size={18} />
                       <h4 className="font-bold">Reference Files</h4>
@@ -1809,11 +1809,11 @@ export default function SubjectLessonTab({
                         No reference files attached.
                       </p>
                     )}
-                  </div>
+                  </Card>
                 </div>
 
                 {/* Right: submission or quiz attempt */}
-                <aside className="min-w-0 rounded-lg border border-black bg-[#F6E9B2] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                <Card className="block w-full shadow-none">
                   <div className="mb-3 flex items-center gap-2">
                     {isQuizType(selectedClasswork.classwork_type) ? (
                       <ClipboardList size={18} />
@@ -2000,10 +2000,10 @@ export default function SubjectLessonTab({
                       }
                     />
                   )}
-                </aside>
+                </Card>
               </div>
             ) : null}
-          </section>
+          </Card>
         </div>
       )}
     </div>
