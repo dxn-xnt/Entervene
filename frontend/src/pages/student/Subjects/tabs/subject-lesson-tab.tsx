@@ -1372,10 +1372,10 @@ export default function SubjectLessonTab({
         <>
           <Card className="flex justify-between bg-[#F6E9B2]">
             <div>
-              <Card.Title className="text-2xl font-bold">{displaySubjectName}</Card.Title>
-              <p className="text-sm">
-                {displayTeacherName}
-              </p>
+              <Card.Title className="text-2xl font-bold">
+                {displaySubjectName}
+              </Card.Title>
+              <p className="text-sm">{displayTeacherName}</p>
             </div>
             <button className="hover:text-gray-800 transition-colors">
               <Info size={18} />
@@ -1407,9 +1407,10 @@ export default function SubjectLessonTab({
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xl font-bold tracking-tight">Lessons</h3>
                   <SortButton
-                    sortAsc={sortAsc}
-                    onToggle={() => setSortAsc((prev) => !prev)}
-                  />
+                    onClick={() => setSortAsc((v) => !v)}
+                  >
+                    Sort By
+                  </SortButton>
                 </div>
 
                 <div className="space-y-2">
@@ -1603,11 +1604,12 @@ export default function SubjectLessonTab({
                     const isLoadingCws = cws === undefined;
 
                     return (
-                      <div key={lesson.lesson_id} className="flex flex-col gap-4">
+                      <div
+                        key={lesson.lesson_id}
+                        className="flex flex-col gap-4"
+                      >
                         {/* Lesson header - plain text, no box */}
-                        <Card.Description>
-                          {lesson.title}
-                        </Card.Description>
+                        <Card.Description>{lesson.title}</Card.Description>
 
                         {/* Timeline */}
                         {isLoadingCws ? (
@@ -1624,7 +1626,6 @@ export default function SubjectLessonTab({
                             >
                               <div className="rounded-sm text-center border px-3 py-2">
                                 <p className="text-md">Lesson Completion</p>
-                                
                               </div>
                             </TimelineItem>
 

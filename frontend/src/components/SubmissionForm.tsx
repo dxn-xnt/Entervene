@@ -117,7 +117,7 @@ export default function SubmissionForm({
         />
         <label
           htmlFor="file-input"
-          className="inline-block px-4 py-2 bg-blue-500 text-white rounded cursor-pointer hover:bg-blue-600 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          className="items-center gap-1.5 rounded-lg border-2 border-black bg-[#7ABA78] px-4 py-2 text-sm font-semibold shadow-md hover:shadow-none transition-all cursor-pointer"
         >
           Select Files
         </label>
@@ -166,7 +166,7 @@ export default function SubmissionForm({
       <button
         type="submit"
         disabled={isLoading || !canSubmitMore || files.length === 0}
-        className="w-full px-4 py-2 bg-green-600 text-white rounded font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="flex w-full items-center justify-center gap-1.5 rounded-lg border-2 border-black bg-[#7ABA78] px-4 py-2 text-sm font-semibold shadow-md transition-all hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isLoading ? "Submitting..." : "Submit Assignment"}
       </button>
