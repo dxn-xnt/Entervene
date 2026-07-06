@@ -178,7 +178,7 @@ function getStatusBadge(status?: string | null, dueDate?: string | null) {
   if (diffDays < 0)
     return {
       label: `${Math.abs(diffDays)} days late`,
-      cls: "bg-[#FF4B4B] text-white",
+      cls: "bg-[#E47171] text-black",
     };
   if (diffDays === 0)
     return { label: "Due today", cls: "bg-orange-400 text-white" };
@@ -1401,7 +1401,7 @@ export default function SubjectLessonTab({
           ) : (
             <div className="flex gap-4 items-start">
               {/* ════════════════ LEFT: Lessons list ════════════════ */}
-              <div className="flex-[2] min-w-0">
+              <div className="flex-2 min-w-0">
                 {/* Lessons header row */}
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xl font-bold tracking-tight">Lessons</h3>

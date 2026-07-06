@@ -1,5 +1,5 @@
 import { Badge } from "@/components/retroui/Badge";
-
+import { Card } from "@/components/retroui/Card";
 type NotificationProps = {
   title: string;
   description: string;
@@ -14,7 +14,7 @@ const NotificationCard = ({
   badge,
 }: NotificationProps) => {
   return (
-    <div className="flex flex-col gap-2 md:flex-row md:justify-between md:items-center px-4 py-3 border-2 border-black rounded-lg shadow-md">
+    <Card className="flex items-center justify-between">
       <div className="flex flex-col gap-1">
         <p className="font-semibold text-xl md:text-3xl">{title}</p>
         <p className="text-sm">{description}</p>
@@ -23,7 +23,7 @@ const NotificationCard = ({
       <div className="w-fit">
         <Badge variant={"surface"}>{badge}</Badge>
       </div>
-    </div>
+    </Card>
   );
 };
 
