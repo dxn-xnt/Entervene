@@ -14,6 +14,7 @@ import type {
   UnassignedClassStudentsResponse,
   ValidateClassImportResponse,
 } from "@/types/adminClasses";
+import { startProgress, doneProgress } from "@/hooks/use-navigation-progress";
 
 export const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
@@ -361,14 +362,23 @@ async function refreshAccessToken(): Promise<boolean> {
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}) {
-  const response = await request(path, init);
-  const isAuthRequest = path.startsWith("/api/v1/auth/");
+  startProgress();
+  try {
+    const response = await request(path, init);
+    const isAuthRequest = path.startsWith("/api/v1/auth/");
 
-  if (response.status === 401 && !isAuthRequest && await refreshAccessToken()) {
-    return request(path, init);
+    if (response.status === 401 && !isAuthRequest && await refreshAccessToken()) {
+      const retryResponse = await request(path, init);
+      doneProgress();
+      return retryResponse;
+    }
+
+    doneProgress();
+    return response;
+  } catch (error) {
+    doneProgress();
+    throw error;
   }
-
-  return response;
 }
 
 export async function getUsers(params: { role?: UserRole; search?: string; status?: string } = {}) {

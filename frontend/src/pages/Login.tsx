@@ -92,7 +92,7 @@ const Login = () => {
               onClick={handleLogin}
               disabled={loading}
             >
-              {loading ? "Signing in..." : "Sign In"}
+              Sign In
             </Button>
             <div className="flex flex-row items-center gap-1">
               <Text as="p" className="text-center">Don't have an account?</Text>
