@@ -65,7 +65,16 @@ const StudentQuizView = () => {
                 <FileEdit size={20} />
                 <h1 className="text-xl font-bold">{quizInfo.quizTitle}</h1>
               </div>
-              <Button className="hover:shadow-none transition-all">
+              <Button
+                onClick={() =>
+                  navigate(
+                    routes.student.quizTake
+                      .replace(":subject", "computer-programming")
+                      .replace(":quizTitle", "summative-test"),
+                  )
+                }
+                className="hover:shadow-none transition-all"
+              >
                 Take Quiz
               </Button>
             </div>

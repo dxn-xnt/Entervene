@@ -57,6 +57,8 @@ export const routes = {
     todo: "/student/todo",
     todoView: "/student/todo/:subject/:quizTitle",
     notifications: "/student/notifications",
+
+    quizTake: "/student/quiz/:subject/:quizTitle/take", 
   },
 
   setupPassword: {
