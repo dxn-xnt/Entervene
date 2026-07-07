@@ -55,6 +55,9 @@ import AdminStudentView from "./pages/admin/student-view";
 // import TeacherLayout from "./pages/teacher/TeacherLayout";
 // import StudentLayout from "./pages/student/StudentLayout";
 
+// TEMP
+import StudentQuizView from "./pages/student/quiz-view";
+
 const App = () => {
   return (
     <AuthProvider>
@@ -63,6 +66,7 @@ const App = () => {
         <Routes>
           <Route path={routes.auth.login} element={<Login />} />
           <Route path="/setup-password" element={<SetupPassword />} />
+          <Route path="/dev/preview" element={<StudentQuizView />} />
 
           {/* Admin */}
           <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
