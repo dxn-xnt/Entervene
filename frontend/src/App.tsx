@@ -4,6 +4,7 @@ import ProtectedRoute from "./components/protected-route";
 import Login from "./pages/Login";
 import { routes } from "@/../routes";
 import SetupPassword from "./pages/SetupPassword";
+import { NavigationProgress } from "./components/navigation-progress";
 
 // import StudentApp from "./pages/StudentInterfaces/StudentApp";
 // import TeacherApp from "./pages/teacher/TeacherApp";
@@ -58,6 +59,7 @@ const App = () => {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <NavigationProgress />
         <Routes>
           <Route path={routes.auth.login} element={<Login />} />
           <Route path="/setup-password" element={<SetupPassword />} />

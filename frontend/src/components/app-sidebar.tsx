@@ -31,14 +31,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar collapsible="offcanvas" className="no-scrollbar" {...props}>
       <SidebarHeader>
         <SidebarMenu>
-          <SidebarMenuItem className="border-b-2 mb-2">
+          <SidebarMenuItem className="border-b-2 py-2.5 mb-2">
             <SidebarMenuButton
               asChild
               className="hover:border-background! data-[slot=sidebar-menu-button]:p-6!"
             >
-              <a href="#">
-                <CommandIcon className="size-5!" />
-                <span className="text-base font-semibold">Entervene</span>
+              <a href="#" className="gap-2">
+                <CommandIcon className="size-6!" />
+                <span className="text-base text-2xl! font-bold ">Entervene</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
