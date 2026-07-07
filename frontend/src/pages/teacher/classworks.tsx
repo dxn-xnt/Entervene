@@ -17,7 +17,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
-import AttachmentDisplay from "@/components/AttachmentDisplay";
+import AttachmentDisplay from "@/components/attachment-display";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { API_URL, apiFetch } from "@/lib/api";
 import ClassworkCard from "./classworks/ClassworkCard";

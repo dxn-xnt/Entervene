@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
-import { SubjectCard } from "../../components/SubjectCard";
+import { SubjectCard } from "../../components/subject-card";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
 import { apiFetch } from "@/lib/api";

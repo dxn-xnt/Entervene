@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { BookOpen, ChevronDown, ChevronRight, Users } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import Tabs from "@/components/Tabs";
+import Tabs from "@/components/tabs";
 import AppLayout from "@/layouts/app-layout";
 import { ManualSuggestionPanel } from "@/components/teacher/suggestions/ManualSuggestionPanel";
 import { getTeacherAdvisoryClassDetail } from "@/lib/api";

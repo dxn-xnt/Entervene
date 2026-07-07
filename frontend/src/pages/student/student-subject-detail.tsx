@@ -4,7 +4,7 @@ import { BookOpen, ClipboardList, Loader2 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
-import Tabs from "@/components/Tabs";
+import Tabs from "@/components/tabs";
 import SubjectLessonTab from "./Subjects/tabs/subject-lesson-tab";
 import SubjectClassworkTab from "./Subjects/tabs/subject-classwork-tab";
 import { routes } from "@/../routes";

@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { BookOpen, ChevronDown, ChevronRight, Pencil, Plus, Users } from "lucide-react";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import Tabs from "@/components/Tabs";
+import Tabs from "@/components/tabs";
 import EditClassModal from "@/components/admin/classes/modals/EditClassModal";
 import EditStudentListModal from "@/components/admin/classes/modals/EditStudentListModal";
 import AppLayout from "@/layouts/app-layout";

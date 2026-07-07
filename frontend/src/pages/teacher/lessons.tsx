@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { Search } from "lucide-react";
-import LessonModal from "@/components/LessonModal";
+import LessonModal from "@/components/lesson-modal";
 import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
 import { Alert } from "@/components/retroui/Alert";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import Tabs from "@/components/Tabs";
+import Tabs from "@/components/tabs";
 import AppLayout from "@/layouts/app-layout";
 import { apiFetch } from "@/lib/api";
 

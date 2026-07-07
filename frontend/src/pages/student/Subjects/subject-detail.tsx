@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
-import Tabs from "../../../components/Tabs";
+import Tabs from "../../../components/tabs";
 import SubjectLessonTab from "./tabs/subject-lesson-tab";
 import SubjectClassworkTab from "./tabs/subject-classwork-tab";
 import AppLayout from "@/layouts/app-layout";

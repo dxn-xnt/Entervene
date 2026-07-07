@@ -3,7 +3,7 @@ import { BookOpen, ClipboardList } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
-import Tabs from "@/components/Tabs";
+import Tabs from "@/components/tabs";
 import SubjectSuggestionsTab from "@/pages/student/Subjects/tabs/subject-suggestions-tab";
 import { routes } from "@/../routes";
 import type { StudentLesson } from "@/types/student-subject";

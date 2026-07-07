@@ -9,10 +9,10 @@ import {
   FileText,
   Search,
 } from "lucide-react";
-import SubmissionForm from "@/components/SubmissionForm";
-import SubmissionViewer from "@/components/SubmissionViewer";
-import AttachmentDisplay from "@/components/AttachmentDisplay";
-import { SortButton } from "@/components/SortButton";
+import SubmissionForm from "@/components/submission-form";
+import SubmissionViewer from "@/components/submission-viewer";
+import AttachmentDisplay from "@/components/attachment-display";
+import { SortButton } from "@/components/sort-button";
 import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";
 import { API_URL, apiFetch } from "@/lib/api";

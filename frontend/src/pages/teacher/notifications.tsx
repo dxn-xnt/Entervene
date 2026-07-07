@@ -1,5 +1,5 @@
 import { useState } from "react";
-import Tabs from "../../components/Tabs";
+import Tabs from "../../components/tabs";
 import NotificationCard from "../../components/NotificationCard";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";

@@ -29,5 +29,5 @@
     "forceConsistentCasingInFileNames": true,
     "ignoreDeprecations": "5.0"
   },
-  "include": ["src"]
+  "include": ["src", "src/components/student-lesson-detail-screen.tsx"]
 }

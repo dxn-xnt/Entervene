@@ -1,5 +1,5 @@
 import { useState } from "react";
-import LessonForm, { type LessonFormData } from "@/components/LessonForm";
+import LessonForm, { type LessonFormData } from "@/components/lesson-form";
 
 interface LessonModalProps {
   isOpen: boolean;

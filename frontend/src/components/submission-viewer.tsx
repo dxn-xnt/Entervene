@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Trash2, AlertCircle } from "lucide-react";
-import AttachmentDisplay from "./AttachmentDisplay";
+import AttachmentDisplay from "./attachment-display";
 import { API_URL } from "@/lib/api";
 
 interface SubmissionAttachment {
