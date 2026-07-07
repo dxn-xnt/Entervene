@@ -12,7 +12,6 @@ import {
 import SubmissionForm from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
 import AttachmentDisplay from "@/components/attachment-display";
-import { SortButton } from "@/components/sort-button";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
