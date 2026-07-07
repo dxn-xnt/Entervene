@@ -13,6 +13,8 @@ import SubmissionForm from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
 import AttachmentDisplay from "@/components/attachment-display";
 import { SortButton } from "@/components/sort-button";
+import { Input } from "@/components/retroui/Input";
+import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";
 import { API_URL, apiFetch } from "@/lib/api";
@@ -393,31 +395,33 @@ export default function SubjectClassworkTab({
         </Alert>
       ) : null}
 
-      <div className="flex justify-between">
-        <label className="flex w-72 items-center gap-2 rounded-lg border px-3 py-2">
-          <Search size={16} />
-          <input
+      <Card className="flex w-full items-center justify-between gap-3">
+        <label className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+          <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search classwork"
-            className="w-full bg-transparent text-sm outline-none"
+            placeholder="Search classwork..."
+            className="h-10 w-full shadow-none border-black pl-9 pr-3"
           />
         </label>
-        <SortButton>
-          <select
-            value={sortMode}
-            onChange={(event) => setSortMode(event.target.value as SortMode)}
-            className="appearance-none bg-transparent text-sm font-medium outline-none cursor-pointer"
-          >
-            <option value="" disabled hidden>
-              Sort By
-            </option>
-            <option value="due">Nearest due</option>
-            <option value="newest">Newest</option>
-            <option value="title">Title</option>
-          </select>
-        </SortButton>
-      </div>
+
+        <Select
+          value={sortMode}
+          onValueChange={(value) => setSortMode(value as SortMode)}
+        >
+          <Select.Trigger className="w-40 shadow-none">
+            <Select.Value placeholder="Sort By" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Group>
+              <Select.Item value="due">Nearest due</Select.Item>
+              <Select.Item value="newest">Newest</Select.Item>
+              <Select.Item value="title">Title</Select.Item>
+            </Select.Group>
+          </Select.Content>
+        </Select>
+      </Card>
 
       {visibleClassworks.length === 0 ? (
         <div className="rounded-lg border border-dashed border-gray-300 bg-white px-5 py-10 text-center text-gray-500">
@@ -503,9 +507,7 @@ export default function SubjectClassworkTab({
                         <div className="space-y-3">
                           {cw.description && (
                             <div>
-                              <h5 className="font-medium">
-                                Description
-                              </h5>
+                              <h5 className="font-medium">Description</h5>
                               <p className="text-sm text-gray-700">
                                 {cw.description}
                               </p>
@@ -513,9 +515,7 @@ export default function SubjectClassworkTab({
                           )}
                           {cw.instructions && (
                             <div>
-                              <h5 className="font-medium">
-                                Instructions
-                              </h5>
+                              <h5 className="font-medium">Instructions</h5>
                               <p className="text-sm text-gray-700 whitespace-pre-wrap">
                                 {cw.instructions}
                               </p>
@@ -527,9 +527,7 @@ export default function SubjectClassworkTab({
                       {/* Attachments */}
                       {cw.attachments && cw.attachments.length > 0 && (
                         <div>
-                          <h5 className="font-medium">
-                            Attachments
-                          </h5>
+                          <h5 className="font-medium">Attachments</h5>
                           <AttachmentDisplay
                             attachments={cw.attachments}
                             type="classwork"
@@ -570,9 +568,7 @@ export default function SubjectClassworkTab({
                         </div>
                       ) : (
                         <div>
-                          <h5 className="font-medium py-2">
-                            Submit Your Work
-                          </h5>
+                          <h5 className="font-medium py-2">Submit Your Work</h5>
                           <SubmissionForm
                             assignmentId={cw.classwork_assignment_id}
                             maxAttempts={cw.max_attempts}
