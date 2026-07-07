@@ -15,7 +15,7 @@ import {
 import AttachmentDisplay from "@/components/attachment-display";
 import SubmissionForm from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
-import { StudentLessonDetailScreen } from "@/components/StudentLessonDetailScreen";
+import { StudentLessonDetailScreen } from "@/components/student-lesson-detail-screen";
 import { API_URL, apiFetch } from "@/lib/api";
 import { Card } from "@/components/retroui/Card";
 import { SortButton } from "@/components/sort-button";
