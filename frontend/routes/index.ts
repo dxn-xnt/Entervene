@@ -44,6 +44,7 @@ export const routes = {
     lessons: "/teacher/lessons",
     interventions: "/teacher/interventions",
     grades: "/teacher/grades",
+    gradeView: "/teacher/grades/:section/:subject",
     notifications: "/teacher/notifications",
   },
 
