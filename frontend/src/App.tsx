@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/protected-route";
-import Login from "./pages/Login";
+import Login from "./pages/login";
 import { routes } from "@/../routes";
 import SetupPassword from "./pages/SetupPassword";
 import { NavigationProgress } from "./components/navigation-progress";
@@ -37,6 +37,7 @@ import TeacherLessons from "./pages/teacher/lessons";
 // import TeacherInterventions from "./pages/teacher/interventions";
 import CreateLesson from "./pages/teacher/create-lesson";
 import TeacherGrades from "./pages/teacher/grades";
+import TeacherGradeView from "./pages/teacher/grade-view";
 import TeacherNotifications from "./pages/teacher/notifications";
 
 // // Student pages
@@ -153,6 +154,7 @@ const App = () => {
             <Route path={routes.teacher.lessons} element={<TeacherLessons />} />
             {/* <Route path={routes.teacher.interventions} element={<TeacherInterventions />} /> */}
             <Route path={routes.teacher.grades} element={<TeacherGrades />} />
+            <Route path={routes.teacher.gradeView} element={<TeacherGradeView />} />
             <Route
               path={routes.teacher.notifications}
               element={<TeacherNotifications />}
@@ -194,7 +196,7 @@ const App = () => {
               element={<StudentNotifications />}
             />
           </Route>
-          
+
           {/* TEMP  */}
           <Route path={routes.student.quizTake} element={<StudentQuizTake />} />
 
