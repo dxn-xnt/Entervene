@@ -4,7 +4,7 @@ import { Badge } from "../../components/retroui/Badge";
 import { Table } from "../../components/retroui/Table";
 import { Input } from "../../components/retroui/Input";
 import { Loader } from "../../components/retroui/Loader";
-import Tabs from "../../components/Tabs";
+import Tabs from "../../components/tabs";
 import AppLayout from "../../layouts/app-layout";
 import { getUsers, type User, type UserRole } from "../../lib/api";
 import {

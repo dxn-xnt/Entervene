@@ -12,13 +12,13 @@ import {
   CalendarDays,
   Paperclip,
 } from "lucide-react";
-import AttachmentDisplay from "@/components/AttachmentDisplay";
-import SubmissionForm from "@/components/SubmissionForm";
-import SubmissionViewer from "@/components/SubmissionViewer";
-import { StudentLessonDetailScreen } from "@/components/StudentLessonDetailScreen";
+import AttachmentDisplay from "@/components/attachment-display";
+import SubmissionForm from "@/components/submission-form";
+import SubmissionViewer from "@/components/submission-viewer";
+import { StudentLessonDetailScreen } from "@/components/student-lesson-detail-screen";
 import { API_URL, apiFetch } from "@/lib/api";
 import { Card } from "@/components/retroui/Card";
-import { SortButton } from "@/components/SortButton";
+import { SortButton } from "@/components/sort-button";
 import type { StudentLesson as Lesson } from "@/types/student-subject";
 
 const LOCKED_CLASSWORK_MESSAGE =

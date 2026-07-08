@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
-import { SubjectCard } from "../../components/SubjectCard";
+import { SubjectCard } from "../../components/subject-card";
 import { ArrowUpRight, Loader2, BookOpen, Search, X } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";

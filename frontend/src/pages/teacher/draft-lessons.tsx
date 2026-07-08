@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import LessonModal from "@/components/LessonModal";
+import LessonModal from "@/components/lesson-modal";
 import { Alert } from "@/components/retroui/Alert";
 import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
 import AppLayout from "@/layouts/app-layout";

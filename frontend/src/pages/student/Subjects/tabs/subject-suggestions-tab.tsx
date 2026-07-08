@@ -4,8 +4,15 @@ import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
 import { Alert } from "@/components/retroui/Alert";
 import StudySuggestionCard from "@/components/student/suggestions/StudySuggestionCard";
-import { completeSuggestion, getMySuggestions, markSuggestionViewed } from "@/lib/suggestion-api";
+import {
+  completeSuggestion,
+  getMySuggestions,
+  markSuggestionViewed,
+} from "@/lib/suggestion-api";
 import type { SuggestionResponse } from "@/types/suggestion";
+import { Input } from "@/components/retroui/Input";
+import { Select } from "@/components/retroui/Select";
+import { Card } from "@/components/retroui/Card";
 
 type Notice = {
   status: "success" | "error" | "info";
@@ -29,12 +36,21 @@ const priorityRank = {
   LOW: 3,
 };
 
-function resourceRoute(classId: number, subjectId: number, suggestion: SuggestionResponse) {
-  const tab = suggestion.resource.resource_type === "CLASSWORK" ? "classwork" : "lessons";
+function resourceRoute(
+  classId: number,
+  subjectId: number,
+  suggestion: SuggestionResponse,
+) {
+  const tab =
+    suggestion.resource.resource_type === "CLASSWORK" ? "classwork" : "lessons";
   const params = new URLSearchParams({ tab });
-  if (suggestion.resource.lesson_id) params.set("lessonId", String(suggestion.resource.lesson_id));
+  if (suggestion.resource.lesson_id)
+    params.set("lessonId", String(suggestion.resource.lesson_id));
   if (suggestion.resource.classwork_assignment_id) {
-    params.set("classworkAssignmentId", String(suggestion.resource.classwork_assignment_id));
+    params.set(
+      "classworkAssignmentId",
+      String(suggestion.resource.classwork_assignment_id),
+    );
   }
   return `${routes.student.subjectDetail
     .replace(":classId", String(classId))
@@ -83,7 +99,9 @@ export default function SubjectSuggestionsTab({
   const updateSuggestion = (updated: SuggestionResponse) => {
     setSuggestions((current) =>
       current.map((suggestion) =>
-        suggestion.student_suggestion_id === updated.student_suggestion_id ? updated : suggestion,
+        suggestion.student_suggestion_id === updated.student_suggestion_id
+          ? updated
+          : suggestion,
       ),
     );
   };
@@ -110,7 +128,9 @@ export default function SubjectSuggestionsTab({
   const handleComplete = async (suggestion: SuggestionResponse) => {
     setBusyId(suggestion.student_suggestion_id);
     try {
-      const updated = await completeSuggestion(suggestion.student_suggestion_id);
+      const updated = await completeSuggestion(
+        suggestion.student_suggestion_id,
+      );
       updateSuggestion(updated);
       setNotice({
         status: "success",
@@ -149,11 +169,18 @@ export default function SubjectSuggestionsTab({
           .some((value) => String(value).toLowerCase().includes(term));
       })
       .sort((a, b) => {
-        if (sortMode === "resource") return a.resource.title.localeCompare(b.resource.title);
+        if (sortMode === "resource")
+          return a.resource.title.localeCompare(b.resource.title);
         if (sortMode === "newest") {
-          return new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime();
+          return (
+            new Date(b.created_at ?? 0).getTime() -
+            new Date(a.created_at ?? 0).getTime()
+          );
         }
-        return priorityRank[a.priority] - priorityRank[b.priority] || a.title.localeCompare(b.title);
+        return (
+          priorityRank[a.priority] - priorityRank[b.priority] ||
+          a.title.localeCompare(b.title)
+        );
       });
   }, [search, selectedLessonId, sortMode, subjectId, suggestions]);
 
@@ -174,39 +201,41 @@ export default function SubjectSuggestionsTab({
           </div>
         </section>
       ) : null}
-
       {notice ? (
         <Alert status={notice.status}>
           <Alert.Title>{notice.title}</Alert.Title>
           <Alert.Description>{notice.description}</Alert.Description>
         </Alert>
       ) : null}
-
-      <div className="flex flex-col gap-3 rounded-lg border border-black bg-white p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] lg:flex-row lg:items-center">
-        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-gray-300 bg-[#FFFBEE] px-3 py-2">
-          <Search size={16} className="shrink-0 text-gray-500" />
-          <input
+      {/* typescriptreact */}
+      <Card className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <label className="relative min-w-0 flex-1">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+          <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search suggested materials"
-            className="w-full bg-transparent text-sm outline-none"
+            className="h-10 w-full shadow-none border-black pl-9 pr-3"
           />
         </label>
-        <label className="flex items-center gap-2 rounded-lg border border-gray-300 bg-[#FFFBEE] px-3 py-2 text-sm font-bold">
-          <ArrowUpDown size={15} />
-          <span>Sort</span>
-          <select
-            value={sortMode}
-            onChange={(event) => setSortMode(event.target.value as SortMode)}
-            className="bg-transparent text-sm font-bold outline-none"
-          >
-            <option value="priority">Priority</option>
-            <option value="newest">Newest</option>
-            <option value="resource">Resource</option>
-          </select>
-        </label>
-      </div>
 
+        <Select
+          value={sortMode}
+          onValueChange={(value) => setSortMode(value as SortMode)}
+        >
+          <Select.Trigger className="w-full shadow-none lg:w-45">
+            <ArrowUpDown size={15} className="mr-1" />
+            <Select.Value placeholder="Sort" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Group>
+              <Select.Item value="priority">Priority</Select.Item>
+              <Select.Item value="newest">Newest</Select.Item>
+              <Select.Item value="resource">Resource</Select.Item>
+            </Select.Group>
+          </Select.Content>
+        </Select>
+      </Card>
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="animate-spin text-gray-400" size={36} />

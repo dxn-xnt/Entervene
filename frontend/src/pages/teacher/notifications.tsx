@@ -1,6 +1,6 @@
 import { useState } from "react";
-import Tabs from "../../components/Tabs";
-import NotificationCard from "../../components/NotificationCard";
+import Tabs from "../../components/tabs";
+// import NotificationCard from "../../components/NotificationCard";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 
@@ -83,7 +83,7 @@ const Notifications = () => {
               </div>
             </div>
 
-            <div className="flex flex-col gap-5">
+            {/* <div className="flex flex-col gap-5">
               {(activeTab === "all" || activeTab === "classworks") && (
                 <section className="flex flex-col gap-3">
                   <h2 className="text-xl md:text-3xl font-semibold">
@@ -105,7 +105,7 @@ const Notifications = () => {
                   ))}
                 </section>
               )}
-            </div>
+            </div> */}
           </div>
         </div>
       </div>

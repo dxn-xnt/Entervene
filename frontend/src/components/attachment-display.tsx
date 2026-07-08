@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Download, FileText, File, X } from "lucide-react";
-import PDFViewer from "./PDFViewer";
+import PDFViewer from "./pdf-viewer";
 import { apiFetch } from "@/lib/api";
 
 interface Attachment {
