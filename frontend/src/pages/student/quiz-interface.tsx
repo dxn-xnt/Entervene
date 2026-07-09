@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ChevronLeft, SkipBack, SkipForward, Flag } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
+import { routes } from "@/../routes";
 
 // TEMP mock data — replace with real fetch
 const quizData = {
@@ -37,7 +38,16 @@ const StudentQuizTake = () => {
           <p className="text-2xl font-bold">{quizData.timeLeft}</p>
           <p className="text-xs text-black/60">minutes left</p>
         </div>
-        <Button className="hover:shadow-none transition-all">
+        <Button
+          onClick={() =>
+            navigate(
+              routes.student.quizResult
+                .replace(":subject", "computer-programming")
+                .replace(":quizTitle", "summative-test"),
+            )
+          }
+          className="hover:shadow-none transition-all"
+        >
           Finish Quiz
         </Button>
       </div>

@@ -55,6 +55,7 @@ import AdminStudentView from "./pages/admin/student-view";
 // TEMP
 import StudentQuizTake from "./pages/student/quiz-interface";
 import StudentQuizView from "./pages/student/quiz-view";
+import StudentQuizResult from "./pages/student/quiz-result";
 
 // // Layouts
 // import TeacherLayout from "./pages/teacher/TeacherLayout";
@@ -199,6 +200,8 @@ const App = () => {
 
           {/* TEMP  */}
           <Route path={routes.student.quizTake} element={<StudentQuizTake />} />
+          <Route path={routes.student.quizResult} element={<StudentQuizResult />} />
+          
 
           <Route
             path="*"
