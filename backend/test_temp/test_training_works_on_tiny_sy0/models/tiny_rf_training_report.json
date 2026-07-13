@@ -1,0 +1,52 @@
+{
+  "algorithm": "RandomForestRegressor",
+  "artifact_paths": {
+    "feature_importance": "C:\\Users\\Roy Adrian Rondina\\Desktop\\3rd Year\\2nd Sem\\Entervene\\Entervene\\backend\\test_temp\\test_training_works_on_tiny_sy0\\models\\tiny_rf_feature_importance.csv",
+    "feature_schema": "C:\\Users\\Roy Adrian Rondina\\Desktop\\3rd Year\\2nd Sem\\Entervene\\Entervene\\backend\\test_temp\\test_training_works_on_tiny_sy0\\models\\tiny_rf_feature_schema.json",
+    "model": "C:\\Users\\Roy Adrian Rondina\\Desktop\\3rd Year\\2nd Sem\\Entervene\\Entervene\\backend\\test_temp\\test_training_works_on_tiny_sy0\\models\\tiny_rf.joblib",
+    "training_report": "C:\\Users\\Roy Adrian Rondina\\Desktop\\3rd Year\\2nd Sem\\Entervene\\Entervene\\backend\\test_temp\\test_training_works_on_tiny_sy0\\models\\tiny_rf_training_report.json"
+  },
+  "classifier_warning": "The current dataset contains zero below-75 target examples, so this model is a regression prototype and not a validated at-risk classifier.",
+  "column_mappings": {
+    "quarterly_assessment_percent": "periodical_assessment_percent"
+  },
+  "created_at": "2026-07-13T04:04:27.660200+00:00",
+  "dataset_warning": "The current dataset uses synthetic learner identities for development traceability only. It must not be treated as verified production learner data.",
+  "excluded_columns": [
+    "row_id",
+    "student_id",
+    "split",
+    "student_lrn",
+    "target_next_period_grade"
+  ],
+  "feature_columns": [
+    "grade_level",
+    "period_sequence",
+    "has_previous_period",
+    "written_work_percent",
+    "performance_task_percent",
+    "periodical_assessment_percent",
+    "assessment_completion_rate",
+    "source_period_grade",
+    "grade_trend_vs_previous_period",
+    "cumulative_period_grade_avg",
+    "subject_SCIENCE"
+  ],
+  "feature_count": 11,
+  "mae": 0.878582671957691,
+  "model_name": "tiny_rf",
+  "model_type": "REGRESSOR",
+  "r2_score": 0.26121637779313533,
+  "random_state": 42,
+  "ready_for_task_4": true,
+  "rmse": 0.9609784221087282,
+  "student_overlap_count": 0,
+  "target_column": "target_next_period_grade",
+  "test_file": "C:\\Users\\Roy Adrian Rondina\\Desktop\\3rd Year\\2nd Sem\\Entervene\\Entervene\\backend\\test_temp\\test_training_works_on_tiny_sy0\\ml\\04_random_forest_regression_test.csv",
+  "test_row_count": 4,
+  "test_unique_students": 4,
+  "three_term_readiness_warning": "The current ML pack is quarter-based. Future three-term data should include period_type, total_periods_in_year, and period_progress_ratio.",
+  "train_file": "C:\\Users\\Roy Adrian Rondina\\Desktop\\3rd Year\\2nd Sem\\Entervene\\Entervene\\backend\\test_temp\\test_training_works_on_tiny_sy0\\ml\\03_random_forest_regression_train.csv",
+  "train_unique_students": 12,
+  "training_row_count": 12
+}

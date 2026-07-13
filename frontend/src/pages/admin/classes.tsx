@@ -6,18 +6,11 @@ import {
   type ReactNode,
 } from "react";
 import {
-  Archive,
-  ArrowDownUp,
-  BookOpen,
-  CheckCircle2,
-  Filter,
   Plus,
   Search,
-  Users,
 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import ClassCard from "@/components/admin/classes/ClassCard";
-import SummaryCard from "@/components/admin/classes/SummaryCard";
 import AddClassModal from "@/components/admin/classes/modals/AddClassModal";
 import ArchiveClassModal from "@/components/admin/classes/modals/ArchiveClassModal";
 import EditClassModal from "@/components/admin/classes/modals/EditClassModal";

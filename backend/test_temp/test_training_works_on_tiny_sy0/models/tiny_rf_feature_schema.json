@@ -1,0 +1,39 @@
+{
+  "column_mappings": {
+    "quarterly_assessment_percent": "periodical_assessment_percent"
+  },
+  "excluded_columns": [
+    "row_id",
+    "student_id",
+    "split",
+    "student_lrn",
+    "target_next_period_grade"
+  ],
+  "feature_columns": [
+    "grade_level",
+    "period_sequence",
+    "has_previous_period",
+    "written_work_percent",
+    "performance_task_percent",
+    "periodical_assessment_percent",
+    "assessment_completion_rate",
+    "source_period_grade",
+    "grade_trend_vs_previous_period",
+    "cumulative_period_grade_avg",
+    "subject_SCIENCE"
+  ],
+  "required_runtime_columns": [
+    "grade_level",
+    "period_sequence",
+    "has_previous_period",
+    "written_work_percent",
+    "performance_task_percent",
+    "quarterly_assessment_percent",
+    "assessment_completion_rate",
+    "source_period_grade",
+    "grade_trend_vs_previous_period",
+    "cumulative_period_grade_avg",
+    "subject_SCIENCE"
+  ],
+  "target_column": "target_next_period_grade"
+}

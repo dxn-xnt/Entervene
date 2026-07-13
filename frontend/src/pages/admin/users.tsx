@@ -67,8 +67,6 @@ function visibleSubjects(subjects: string[] | undefined) {
 }
 
 type StatusStyle = { badge: string; dot: string; label: string };
-const USER_ROW_HOVER =
-  "hover:bg-accent hover:text-sidebar-accent-foreground hover:border-y hover:border-border";
 const STATUS_BADGE_BASE =
   "inline-flex h-6 w-28 items-center justify-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold";
 

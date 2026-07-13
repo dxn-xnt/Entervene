@@ -1,0 +1,1 @@
+{"feature_columns": ["grade_level", "periodical_assessment_percent"], "target_column": "target_next_period_grade", "excluded_columns": ["student_id", "target_next_period_grade"], "column_mappings": {"quarterly_assessment_percent": "periodical_assessment_percent"}, "required_runtime_columns": ["grade_level", "quarterly_assessment_percent"]}
