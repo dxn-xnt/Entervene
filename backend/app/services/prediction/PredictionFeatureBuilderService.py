@@ -327,9 +327,20 @@ def build_prediction_features_from_records(
     has_previous = previous_grade is not None
     trend = round(source_period_grade - previous_grade, 2) if source_period_grade is not None and previous_grade is not None else None
 
+    # Normalise period_sequence to a 4-quarter-equivalent scale so the model
+    # (which was trained on quarter data where sequence 4 == 100% of year) receives
+    # a semantically consistent value regardless of whether the source period is a
+    # TERM, QUARTER, or SEMESTER.  For 4-quarter data this is an identity:
+    #   (3 / 4) * 4 = 3.0  (unchanged)
+    # For 3-term data it rescales correctly:
+    #   (2 / 3) * 4 ≈ 2.6667  (Term 2 now means ~67% of year, not 50%)
+    # The feature key stays "period_sequence" so the .joblib model schema is not broken.
+    _normalised_period_sequence = round(
+        (source_period.period_sequence / source_period.total_periods_in_year) * 4, 4
+    )
     features: dict[str, Any] = {
         "grade_level": getattr(student.academic_level, "grade_level", None),
-        "period_sequence": source_period.period_sequence,
+        "period_sequence": _normalised_period_sequence,
         "source_period_grade": source_period_grade,
         "written_work_percent": component_features["written_work_percent"],
         "performance_task_percent": component_features["performance_task_percent"],
@@ -341,13 +352,25 @@ def build_prediction_features_from_records(
         "grade_trend_vs_previous_period": trend,
         "has_previous_period": has_previous,
     }
+    # FIX: previously filtered by academic_period_id <= source_period_id, which
+    # relied on PK integer ordering.  That breaks when two period types coexist
+    # (e.g. old QUARTER rows and new TERM rows) because IDs are simply auto-incremented
+    # in insertion order, not by academic sequence.  Instead, join AcademicPeriod and
+    # restrict by year, type, and sequence so only periods of the same type and year
+    # that came before (or at) the source period are included.
     previous_grades = (
         db.query(StudentPeriodGrade)
+        .join(
+            AcademicPeriod,
+            AcademicPeriod.academic_period_id == StudentPeriodGrade.academic_period_id,
+        )
         .filter(
             StudentPeriodGrade.student_id == student_id,
             StudentPeriodGrade.class_id == class_id,
             StudentPeriodGrade.subject_id == subject_id,
-            StudentPeriodGrade.academic_period_id <= source_period_id,
+            AcademicPeriod.academic_year_id == source_period.academic_year_id,
+            AcademicPeriod.period_type == source_period.period_type,
+            AcademicPeriod.period_sequence <= source_period.period_sequence,
             StudentPeriodGrade.final_period_grade.isnot(None),
         )
         .all()
