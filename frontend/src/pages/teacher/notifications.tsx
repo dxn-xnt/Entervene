@@ -11,6 +11,7 @@ const tabs = [
   { id: "interventions", label: "Interventions" },
 ];
 
+/*
 const announcementCards = [
   {
     title: "No Classes - Nov 30",
@@ -51,6 +52,7 @@ const submissionCard = [
     badge: "Due in 2 days",
   },
 ];
+*/
 
 const Notifications = () => {
   const [activeTab, setActiveTab] = useState("all");

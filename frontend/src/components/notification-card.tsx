@@ -15,9 +15,9 @@ type NotificationCardProps = {
     className?: string;
 };
 
-export function NotificationCard({ title, description, date, user, badge, isRead, className }: NotificationCardProps) {
+export function NotificationCard({ title, description, date, user, badge, className }: NotificationCardProps) {
     return (
-        <Card className={cn("@container/card", className = "p-3")}>
+        <Card className={cn("@container/card p-3", className)}>
             <Card.Header>
                 <div className="flex flex-row justify-between">
                     <Card.Description className="text-lg font-medium -mb-3">{title}</Card.Description>

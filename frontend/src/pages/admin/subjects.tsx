@@ -1580,12 +1580,6 @@ export default function AdminSubjects() {
     }
   };
 
-  const activeHelperText = {
-    catalog: "Add and manage subjects by grade level. Teacher and schedule setup is done later in Classes.",
-    offerings: "Set when subjects are available by academic year, grade, pathway, and term.",
-    grading: "Create reusable grading templates such as Written Works, Performance Tasks, and Term Assessment.",
-    archived: "Restore catalog subjects, offerings, or grading templates that are no longer active.",
-  }[activeSection];
   const selectedGradeLabel = selectedAcademicLevel?.level_name ?? gradeLabel(offeringFilters.grade);
   const selectedPathwayLabel = offeringFilters.pathway === ALL_VALUE
     ? "All Pathways"
