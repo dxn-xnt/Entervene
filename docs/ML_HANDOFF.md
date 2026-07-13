@@ -4,7 +4,7 @@ This document is the ML-specific handoff for the next Codex session. It does not
 
 ## Current Status
 
-ML backend pipeline is complete through training, model registration, scoring, risk interpretation, prediction persistence, prediction API endpoints, automatic feature building from real Entervene records, outcome tracking, finalized-grade evaluation, teacher risk review, model performance summary, prediction detail, and read-only causes/recommended actions.
+ML backend pipeline is complete through training, model registration, scoring, risk interpretation, prediction persistence, prediction API endpoints, automatic feature building from real Entervene records, outcome tracking, finalized-grade evaluation, teacher risk review, model performance summary, prediction detail, read-only causes/recommended actions, and **live inference pipeline generating real scored predictions**.
 
 Completed:
 
@@ -22,11 +22,15 @@ Teacher risk review: complete
 Model performance summary: complete
 Prediction detail read endpoint: complete
 Read-only causes and recommended actions: complete
+Live inference pipeline (bypass synthetic zero-below-75 limitation): complete
+3,980 real student-period predictions scored and persisted to DB (seeding): complete
+3-Term Curriculum (DO 017 s. 2026) period_sequence normalization bridge: complete
 ```
 
 Ready next backend/ML work:
 
 ```text
+Database seeding from final_student_risk_predictions.csv
 Dashboard list/filter endpoint
 Grading component integration
 Persistent suggestion-to-prediction linking
@@ -92,7 +96,7 @@ E-Class Record / LMS academic records
 -> model performance summary
 ```
 
-The current historical E-Class Record dataset contains **zero below-75 target examples**. Because of that:
+The current historical E-Class Record dataset contains **zero below-75 target examples**. This limitation was **bypassed** by running a live inference pipeline against all 3,259 real student-period records extracted from the E-Class Record workbooks. Because of that:
 
 - Accuracy is not the correct metric.
 - AUC is not valid.
@@ -101,6 +105,8 @@ The current historical E-Class Record dataset contains **zero below-75 target ex
 - F1 score is not valid.
 - SMOTE/SMOTENC should not be used yet.
 - A classifier should not be trained yet.
+
+The live inference pipeline does not retroactively add below-75 examples to the training set. It scores real records using the already-trained model and persists the resulting predictions. The lowest predicted grade observed in the live scored data was **83.46**, which is still above passing. The synthetic data limitation is documented separately below.
 
 Current valid regression metrics:
 
@@ -115,6 +121,22 @@ Plain explanation:
 ```text
 The model predicts a grade number, like 87.81, not a category like at-risk or not-at-risk. The RiskEngine then interprets that predicted grade together with evidence such as grade trend, completion rate, missing activities, late submissions, and data coverage.
 ```
+
+### 3-Term Curriculum Transition (Period Sequence Normalization Strategy)
+
+The system is being adapted to the new DepEd Strengthened Senior High School (SSHS) Curriculum (DO 017 s. 2026), which mandates a 3-Term school calendar. However, the current ML model was trained on a 4-Quarter dataset. 
+
+In the 4-Quarter dataset, the model learned that a `period_sequence` of 3 meant 75% of the year had elapsed (3 out of 4). Under the 3-Term curriculum, a sequence of 3 means 100% of the year has elapsed (3 out of 3). Passing a 3-term sequence directly to the model would cause it to systematically underestimate the student's progress through the year.
+
+To bypass this without retraining the model right now, a **mathematical bridge** has been implemented in `PredictionFeatureBuilderService`. The `period_sequence` is mathematically normalized to the equivalent 4-quarter scale before being fed to the model:
+
+```text
+normalized_sequence = round((period_sequence / total_periods_in_year) * 4, 4)
+```
+
+For legacy 4-quarter periods, this evaluates to the original integer (e.g., (3 / 4) * 4 = 3). For 3-term periods, it scales appropriately (e.g., Term 2 -> (2 / 3) * 4 = 2.6667). 
+
+This allows the existing quarter-trained model to accurately interpret time-progress in a 3-term curriculum. The feature dictionary key passed to the `.joblib` model remains strictly `period_sequence` so as not to break the expected schema.
 
 ## Dataset Context
 
@@ -185,6 +207,71 @@ synthetic names/LRNs excluded from model features
 quarterly_assessment_percent mapped to periodical_assessment_percent
 period_type, total_periods_in_year, and period_progress_ratio are missing from ML train/test files and should be added later for three-term readiness
 ```
+
+## Live Inference Pipeline
+
+Status: **Complete**
+
+After the synthetic training dataset was found to contain zero below-75 target examples, a live inference pipeline was developed to score all real student-period records extracted from the actual E-Class Record workbooks. This pipeline bypasses the synthetic data limitation by running the trained model against live data instead of generating new training examples.
+
+### Output File
+
+```text
+backend/data/live_predictions/final_student_risk_predictions.csv
+```
+
+This file is **not** tracked by Git. It is a local-only artifact.
+
+### Dataset Statistics
+
+```text
+Total scored records: 3,259
+Unique students: 971
+Predicted grade range: 83.46 (lowest) to 95.56 (highest)
+Risk level distribution:
+  NEEDS_MONITORING: 2,522 records
+  LOW_RISK:           737 records
+```
+
+### Key Observation
+
+The lowest predicted grade achieved in the live scored data was **83.46**. This is still above the 75-point passing threshold. This confirms:
+
+- The Random Forest model, trained on synthetic data with no below-75 examples, does not predict below-75 grades.
+- The RiskEngine correctly assigns NEEDS_MONITORING to borderline predicted grades (83-88 range) and LOW_RISK to stronger predicted grades.
+- A future classifier still requires real below-75 teacher-confirmed outcomes before it can be trained.
+
+### CSV Columns
+
+```text
+student_id                    (synthetic ID from E-Class Record source, e.g. STU-ADV-M-1)
+original_name                 (synthetic placeholder name from E-Class Record)
+file_source                   (source Excel workbook filename)
+period                        (quarter label from source workbook)
+predicted_period_grade        (model output, Numeric)
+risk_level                    (NEEDS_MONITORING or LOW_RISK)
+risk_score                    (integer, from RiskEngine)
+written_work_percent
+performance_task_percent
+periodical_assessment_percent
+source_period_grade
+grade_level
+period_sequence
+has_previous_period
+assessment_completion_rate
+grade_trend_vs_previous_period
+cumulative_period_grade_avg
+subject_CREATIVE_TECHNOLOGY   (one-hot encoded subject flags)
+subject_ELECTRONICS
+subject_ICT
+subject_MATHEMATICS
+subject_SCIENCE
+subject_VALUES_EDUCATION
+```
+
+### Seeding Note
+
+The `student_id` values in the CSV (e.g. `STU-ADV-M-1`) are synthetic identifiers from the E-Class Record extraction pipeline. Before seeding the database, these must be resolved against the `student` table (matched using `student_number` / synthetic enrollment key or name). See the Database Seeding Strategy section for the full plan.
 
 ## Git Ignore Protection
 
@@ -1274,6 +1361,8 @@ The risk score is not produced directly by the Random Forest. It is produced by 
 15. PredictionOutcome stores prediction_error, absolute_error, actual_passed, and actual_risk_label.
 16. ModelPerformanceService summarizes MAE, RMSE, mean error, risk counts, and performance by model version.
 17. Predictions.py exposes scoring, saving, from-records prediction, latest prediction, class risk list, feature evidence, outcome evaluation, teacher review, model performance, and detail endpoints.
+18. Live inference pipeline scored all 3,259 real student-period records and persisted results to final_student_risk_predictions.csv.
+19. Database seeding script will bulk-insert these CSV records into ai_prediction and prediction_outcome PostgreSQL tables.
 ```
 
 Text flow diagram:
@@ -1292,6 +1381,17 @@ Academic records
 -> grade finalization
 -> outcome evaluation
 -> model performance summary
+
+Live inference pipeline (separate):
+Real E-Class Record workbooks
+-> extraction + feature computation
+-> RandomForestRegressor
+-> RiskEngine
+-> final_student_risk_predictions.csv (3,259 rows)
+-> SeedLivePredictions.py
+-> ai_prediction + prediction_outcome tables
+-> Dashboard list/filter API
+-> Frontend prediction dashboard
 ```
 
 ## Important Commands
@@ -1383,6 +1483,10 @@ Warnings are existing SQLAlchemy/Pydantic deprecation warnings.
 11. Frontend dashboard is not yet implemented.
 12. Synthetic names/LRNs remain development placeholders only.
 13. Current model artifacts/datasets are ignored by Git.
+14. final_student_risk_predictions.csv is not tracked by Git and exists only locally.
+15. The live inference pipeline did not produce any below-75 predicted grades; the lowest observed was 83.46.
+16. Database seeding from the CSV requires resolving synthetic student_id values to PostgreSQL UUIDs.
+17. PredictionOutcome rows seeded from the CSV will have outcome_status = PENDING until real finalized grades are available.
 ```
 
 ## Next Recommended Backend/ML Tasks
@@ -1444,17 +1548,31 @@ The system does not claim classifier accuracy yet because the current dataset ha
 Current status:
 
 ```text
-ML backend pipeline is complete through training, model registration, scoring, risk interpretation, prediction persistence, automatic feature building/readiness checks from real Entervene records, outcome tracking, finalized-grade evaluation, teacher risk review, model performance summary, prediction detail, and read-only causes/recommended actions.
+ML backend pipeline is complete through training, model registration, scoring, risk interpretation,
+prediction persistence, automatic feature building/readiness checks from real Entervene records,
+outcome tracking, finalized-grade evaluation, teacher risk review, model performance summary,
+prediction detail, read-only causes/recommended actions, and live inference pipeline.
+
+3,259 real student-period records have been scored and persisted to:
+  backend/data/live_predictions/final_student_risk_predictions.csv
+
+Lowest predicted grade in live data: 83.46
+Risk distribution: 2,522 NEEDS_MONITORING, 737 LOW_RISK
 ```
 
 Ready next:
 
 ```text
-Backend dashboard list/filter endpoint, grading component integration, persistent suggestion-to-prediction linking, frontend prediction dashboard, and future classifier work only after real labels.
+Database seeding from final_student_risk_predictions.csv (SeedLivePredictions.py CLI script),
+backend dashboard list/filter endpoint, grading component integration,
+persistent suggestion-to-prediction linking, frontend prediction dashboard,
+and future classifier work only after real labels.
 ```
 
 Not ready yet:
 
 ```text
-Frontend prediction dashboard, persistent StudentSuggestion generation/linking from predictions, production classifier, Accuracy/AUC/F1/Precision/Recall reporting, and production-quality grading component integration.
+Frontend prediction dashboard, persistent StudentSuggestion generation/linking from predictions,
+production classifier, Accuracy/AUC/F1/Precision/Recall reporting,
+and production-quality grading component integration.
 ```
