@@ -33,12 +33,15 @@ function userFromAuthResponse(data: {
   avatar?: string;
 }): AuthUser {
   const storedAvatar = localStorage.getItem(`avatar_${data.user_id}`);
+  const defaultAvatar = data.role === "student"
+    ? "/avatars/student-avatars/1.svg"
+    : "/avatars/teacher-avatars/12.svg";
   return {
     role: data.role,
     userId: data.user_id,
     fullName: data.full_name?.trim() || data.email?.split("@")[0] || "User",
     email: data.email ?? "",
-    avatar: storedAvatar || data.avatar || "/avatars/teacher-avatars/12.svg",
+    avatar: storedAvatar || data.avatar || defaultAvatar,
   };
 }
 

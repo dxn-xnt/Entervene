@@ -157,8 +157,11 @@ const StudentProfile = () => {
             </header>
 
             <Card className="flex flex-row items-center gap-4 p-4 md:p-6">
-              <Avatar className="h-12 w-12 border-2 border-black rounded-full overflow-hidden shrink-0 bg-amber-100">
-                <Avatar.Image src={user?.avatar || "/avatars/teacher-avatars/12.svg"} alt={user?.fullName || "User"} />
+              <Avatar
+                variant="student"
+                className="h-12 w-12 shrink-0 bg-amber-100"
+              >
+                <Avatar.Image src={user?.avatar || "/avatars/student-avatars/1.svg"} alt={user?.fullName || "User"} />
                 <Avatar.Fallback>{user?.fullName?.charAt(0) || "U"}</Avatar.Fallback>
               </Avatar>
               <div className="flex flex-col">

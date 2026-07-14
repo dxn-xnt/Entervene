@@ -194,7 +194,7 @@ export default function AdminProfile() {
 
               <Card className="flex flex-row items-center gap-4 p-2 md:p-4">
                 <Avatar
-                  className="cursor-pointer relative group h-20 w-20 rounded-full overflow-hidden border-2 border-black transition-transform hover:scale-105 shrink-0"
+                  className="cursor-pointer relative group h-16 w-16 rounded-full overflow-hidden border-2 border-black transition-transform hover:scale-105 shrink-0"
                   onClick={openModal}
                   title="Click to change avatar"
                 >
