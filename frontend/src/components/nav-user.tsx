@@ -40,15 +40,15 @@ export function NavUser() {
 
   const initials = user?.fullName
     ? user.fullName
-        .split(" ")
-        .filter((part) => part.length > 0)
-        .map((part, index, array) => {
-          if (index === 0) return part[0];
-          if (index === array.length - 1) return part[0];
-          return "";
-        })
-        .join("")
-        .toUpperCase()
+      .split(" ")
+      .filter((part) => part.length > 0)
+      .map((part, index, array) => {
+        if (index === 0) return part[0];
+        if (index === array.length - 1) return part[0];
+        return "";
+      })
+      .join("")
+      .toUpperCase()
     : "?";
 
   return (
@@ -60,12 +60,12 @@ export function NavUser() {
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground border-t-2 border-border p-6 py-8"
             >
-              <Avatar className="h-8 w-8 rounded-lg grayscale">
+              <Avatar className="h-10 w-10">
                 <AvatarImage
                   src={user?.avatar ?? ""}
                   alt={user?.fullName ?? ""}
                 />
-                <AvatarFallback className="rounded-lg">
+                <AvatarFallback className="rounded-full">
                   {initials}
                 </AvatarFallback>
               </Avatar>
@@ -82,19 +82,19 @@ export function NavUser() {
           </DropdownMenuTrigger>
 
           <DropdownMenuContent
-            className="min-w-56"
+            className="min-w-56 border-2 border-border mb-2"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}
           >
-            <DropdownMenuLabel className="p-0 font-normal">
-              <div className="flex items-center gap-2 px-1 py-1.5 text-left">
-                <Avatar className="h-8 w-8 rounded-lg">
+            <DropdownMenuLabel className="p-1 font-normal">
+              <div className="flex items-center gap-2 px-1 py-1.5 text-left text-foreground">
+                <Avatar className="h-8 w-8 rounded-full">
                   <AvatarImage
                     src={user?.avatar ?? ""}
                     alt={user?.fullName ?? ""}
                   />
-                  <AvatarFallback className="rounded-lg">
+                  <AvatarFallback className="rounded-full">
                     {initials}
                   </AvatarFallback>
                 </Avatar>
@@ -102,7 +102,7 @@ export function NavUser() {
                   <span className="truncate text-sm font-semibold">
                     {user?.fullName || "Loading…"}
                   </span>
-                  <span className="truncate text-xs text-muted-foreground">
+                  <span className="truncate text-xs">
                     {user?.email || ""}
                   </span>
                 </div>
@@ -112,18 +112,21 @@ export function NavUser() {
             <DropdownMenuSeparator />
 
             <DropdownMenuGroup>
-              <DropdownMenuItem
+              <DropdownMenuItem className="p-2"
                 onClick={() => {
                   if (user?.role === "student") {
                     navigate(routes.student.profile);
+                  } else if (user?.role === "teacher") {
+                    navigate(routes.teacher.profile);
+                  } else if (user?.role === "admin") {
+                    navigate(routes.admin.profile);
                   }
                 }}
-                disabled={user?.role !== "student"}
               >
                 <CircleUserRoundIcon />
                 Account
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem className="p-2">
                 <BellIcon />
                 Notifications
               </DropdownMenuItem>
@@ -134,14 +137,14 @@ export function NavUser() {
             <DropdownMenuItem
               onClick={handleLogout}
               disabled={loggingOut}
-              className="text-destructive focus:text-destructive"
+              className="p-2 text-destructive focus:text-destructive"
             >
               {loggingOut ? (
                 <Loader2Icon className="animate-spin" />
               ) : (
                 <LogOutIcon />
               )}
-              {loggingOut ? "Logging out…" : "Log out"}
+              Log out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

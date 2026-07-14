@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  --font-head: 'Archivo Black', sans-serif;
+  --font-head: 'Space Grotesk', sans-serif;
   --font-sans: 'Space Grotesk', sans-serif;
   --radius: var(--radius);
 
@@ -28,7 +28,11 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
+}
+
+@utility font-head {
+  font-family: var(--font-head);
+  font-weight: 700;
 }
 
 :root {

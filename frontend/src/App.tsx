@@ -22,10 +22,12 @@ import AdminInterventions from "./pages/admin/interventions";
 import AdminNotifications from "./pages/admin/notifications";
 import AdminSettings from "./pages/admin/system-settings";
 import AcademicPeriods from "./pages/admin/academic-periods";
+import AdminProfile from "./pages/admin/profile-view";
 // import AppLayout from "./layouts/app-layout";
 
 // Teacher pages
 import TeacherDashboard from "./pages/teacher/dashboard";
+import TeacherProfile from "./pages/teacher/profile-view";
 // import TeacherClasses from "./pages/teacher/Classworks";
 import ClassesPage from "./pages/teacher/Classes/classes-page";
 import TeacherClassDetail from "./pages/teacher/Classes/class-detail";
@@ -75,133 +77,72 @@ const App = () => {
 
           {/* Admin */}
           <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
-            <Route
-              index
-              element={<Navigate to={routes.admin.dashboard} replace />}
-            />
+            <Route index element={<Navigate to={routes.admin.dashboard} replace />} />
             <Route path={routes.admin.dashboard} element={<AdminDashboard />} />
             <Route path={routes.admin.subjects} element={<AdminSubjects />} />
-            <Route
-              path={routes.admin.subjectLevel}
-              element={<AdminSubjectLevel />}
-            />
-            <Route
-              path={routes.admin.subjectView}
-              element={<AdminSubjectView />}
-            />
+            <Route path={routes.admin.subjectLevel} element={<AdminSubjectLevel />} />
+            <Route path={routes.admin.subjectView} element={<AdminSubjectView />} />
             <Route path={routes.admin.classes} element={<AdminClasses />} />
-            <Route
-              path={routes.admin.classDetail}
-              element={<AdminClassDetail />}
-            />
+            <Route path={routes.admin.classDetail} element={<AdminClassDetail />} />
             <Route path={routes.admin.users} element={<AdminUsers />} />
-            <Route
-              path={routes.admin.userDetail}
-              element={<AdminUserDetail />}
-            />
-            <Route
-              path={routes.admin.interventions}
-              element={<AdminInterventions />}
-            />
-            <Route
-              path={routes.admin.studentView}
-              element={<AdminStudentView />}
-            />
-            <Route
-              path={routes.admin.notifications}
-              element={<AdminNotifications />}
-            />
+            <Route path={routes.admin.userDetail} element={<AdminUserDetail />} />
+            <Route path={routes.admin.interventions} element={<AdminInterventions />} />
+            <Route path={routes.admin.studentView} element={<AdminStudentView />} />
+            <Route path={routes.admin.notifications} element={<AdminNotifications />} />
             <Route path={routes.admin.settings} element={<AdminSettings />} />
-            <Route
-              path={routes.admin.academicPeriods}
-              element={<AcademicPeriods />}
-            />
+            <Route path={routes.admin.academicPeriods} element={<AcademicPeriods />} />
+            <Route path={routes.admin.profile} element={<AdminProfile />} />
           </Route>
 
           {/* Teacher */}
           <Route element={<ProtectedRoute allowedRoles={["teacher"]} />}>
-            <Route
-              index
-              element={<Navigate to={routes.teacher.dashboard} replace />}
-            />
-            <Route
-              path={routes.teacher.dashboard}
-              element={<TeacherDashboard />}
-            />
+            <Route index element={<Navigate to={routes.teacher.dashboard} replace />} />
+            <Route path={routes.teacher.dashboard} element={<TeacherDashboard />} />
             {/* <Route path={routes.teacher.classes} element={<TeacherClasses />} /> */}
             <Route path={routes.teacher.classes} element={<ClassesPage />} />
-            <Route
-              path={routes.teacher.classSections}
-              element={<ClassSections />}
-            />
+            <Route path={routes.teacher.classSections} element={<ClassSections />} />
             <Route path={routes.teacher.subjects} element={<Subjects />} />
-            <Route
-              path={routes.teacher.classDetail}
-              element={<TeacherClassDetail />}
-            />
+            <Route path={routes.teacher.classDetail} element={<TeacherClassDetail />} />
             <Route path={routes.teacher.classSubjects} element={<Subjects />} />
-            <Route
-              path={routes.teacher.subjectDetail}
-              element={<SubjectDetails />}
-            />
-            <Route
-              path={routes.teacher.classworks}
-              element={<TeacherClassworks />}
-            />
-            <Route
-              path={routes.teacher.createLesson}
-              element={<CreateLesson />}
-            />
+            <Route path={routes.teacher.subjectDetail} element={<SubjectDetails />} />
+            <Route path={routes.teacher.classworks} element={<TeacherClassworks />} />
+            <Route path={routes.teacher.createLesson} element={<CreateLesson />} />
             <Route path={routes.teacher.lessons} element={<TeacherLessons />} />
+            <Route path={routes.teacher.grades} element={<TeacherGrades />} />
+            <Route path={routes.teacher.gradeView} element={<TeacherGradeView />} />
+            <Route path={routes.teacher.notifications} element={<TeacherNotifications />} />
+            <Route path={routes.teacher.classworks} element={<TeacherClassworks />} />
+            <Route path={routes.teacher.createLesson} element={<CreateLesson />} />
+            <Route path={routes.teacher.lessons} element={<TeacherLessons />} />
+            <Route path={routes.teacher.profile} element={<TeacherProfile />} />
             {/* <Route path={routes.teacher.interventions} element={<TeacherInterventions />} /> */}
             <Route path={routes.teacher.grades} element={<TeacherGrades />} />
             <Route path={routes.teacher.gradeView} element={<TeacherGradeView />} />
-            <Route
-              path={routes.teacher.notifications}
-              element={<TeacherNotifications />}
-            />
+            <Route path={routes.teacher.notifications} element={<TeacherNotifications />} />
           </Route>
 
           {/* Student */}
           <Route element={<ProtectedRoute allowedRoles={["student"]} />}>
-            <Route
-              index
-              element={<Navigate to={routes.student.board} replace />}
-            />
+            <Route index element={<Navigate to={routes.student.board} replace />} />
             <Route path={routes.student.board} element={<StudentBoard />} />
             <Route path={routes.student.profile} element={<StudentProfile />} />
-            <Route
-              path={routes.student.subjects}
-              element={<StudentSubjects />}
-            />
-            <Route
-              path={routes.student.subjectDetail}
-              element={<StudentSubjectDetail />}
-            />
-            <Route
-              path={routes.student.interventions}
-              element={
-                <div className="p-5">
-                  <h1 className="text-3xl font-semibold">Interventions</h1>
-                </div>
-              }
-            />
+            <Route path={routes.student.subjects} element={<StudentSubjects />} />
+            <Route path={routes.student.subjectDetail} element={<StudentSubjectDetail />} />
+            <Route path={routes.student.interventions} element={
+              <div className="p-5">
+                <h1 className="text-3xl font-semibold">Interventions</h1>
+              </div>
+            } />
             <Route path={routes.student.grades} element={<StudentGrades />} />
             <Route path={routes.student.todo} element={<StudentTodo />} />
-            <Route
-              path={routes.student.todoView}
-              element={<StudentTodoView />}
-            />
-            <Route
-              path={routes.student.notifications}
-              element={<StudentNotifications />}
-            />
+            <Route path={routes.student.todoView} element={<StudentTodoView />} />
+            <Route path={routes.student.notifications} element={<StudentNotifications />} />
           </Route>
 
           {/* TEMP  */}
           <Route path={routes.student.quizTake} element={<StudentQuizTake />} />
           <Route path={routes.student.quizResult} element={<StudentQuizResult />} />
-          
+
 
           <Route
             path="*"

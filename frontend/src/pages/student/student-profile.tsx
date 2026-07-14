@@ -3,6 +3,7 @@ import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
 import { Table } from "@/components/retroui/Table";
 import { useAuth } from "@/context/AuthContext";
+import { Avatar } from "@/components/retroui/Avatar";
 
 type ScheduleRow =
   | {
@@ -156,9 +157,10 @@ const StudentProfile = () => {
             </header>
 
             <Card className="flex flex-row items-center gap-4 p-4 md:p-6">
-              <div className="flex size-12 items-center justify-center rounded-full border-2 bg-yellow-400 text-xl">
-                🧑
-              </div>
+              <Avatar className="h-12 w-12 border-2 border-black rounded-full overflow-hidden shrink-0 bg-amber-100">
+                <Avatar.Image src={user?.avatar || "/avatars/teacher-avatars/12.svg"} alt={user?.fullName || "User"} />
+                <Avatar.Fallback>{user?.fullName?.charAt(0) || "U"}</Avatar.Fallback>
+              </Avatar>
               <div className="flex flex-col">
                 <p className="text-lg font-bold">
                   {user?.fullName ?? "John Doe"}
