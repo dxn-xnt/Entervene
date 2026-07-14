@@ -52,15 +52,13 @@ function Toggle({
       type="button"
       disabled={disabled}
       onClick={onChange}
-      className={`relative h-7 w-12 rounded-full border-2 border-black shrink-0 transition-colors ${
-        checked ? "bg-yellow-300" : "bg-neutral-200"
-      } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+      className={`relative h-7 w-12 rounded-full border-2 border-black shrink-0 transition-colors ${checked ? "bg-yellow-300" : "bg-neutral-200"
+        } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
       style={{ boxShadow: "2px 2px 0 #000" }}
     >
       <span
-        className={`absolute top-0.5 h-4 w-4 rounded-full border-2 border-black bg-white transition-all ${
-          checked ? "right-0.5" : "left-0.5"
-        }`}
+        className={`absolute top-0.5 h-4 w-4 rounded-full border-2 border-black bg-white transition-all ${checked ? "right-0.5" : "left-0.5"
+          }`}
       />
     </button>
   );
