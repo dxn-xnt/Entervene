@@ -20,16 +20,8 @@ export const routes = {
     notifications: "/admin/notifications",
     settings: "/admin/settings",
     academicPeriods: "/admin/academic-periods",
+    profile: "/admin/profile",
   },
-
-  // teacher: {
-  //   dashboard: "/teacher/dashboard",
-  //   classes: "/teacher/classes",
-  //   classworks: "/teacher/classworks",
-  //   interventions: "/teacher/interventions",
-  //   grades: "/teacher/grades",
-  //   notifications: "/teacher/notifications"
-  // },
 
   teacher: {
     dashboard: "/teacher/dashboard",
@@ -46,6 +38,7 @@ export const routes = {
     grades: "/teacher/grades",
     gradeView: "/teacher/grades/:section/:subject",
     notifications: "/teacher/notifications",
+    profile: "/teacher/profile",
   },
 
   student: {
@@ -60,7 +53,7 @@ export const routes = {
     notifications: "/student/notifications",
 
     // TEMP 
-    quizTake: "/student/quiz/:subject/:quizTitle/take", 
+    quizTake: "/student/quiz/:subject/:quizTitle/take",
     quizResult: "/student/quiz/:subject/:quizTitle/result",
   },
 
