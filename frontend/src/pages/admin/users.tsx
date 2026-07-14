@@ -1,20 +1,16 @@
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import AppLayout from "../../layouts/app-layout";
 import AddUserModal from "../../components/admin/AddUserModal";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "../../components/retroui/Badge";
 import { Table } from "../../components/retroui/Table";
 import { Input } from "../../components/retroui/Input";
 import { Loader } from "../../components/retroui/Loader";
 import { Avatar } from "../../components/retroui/Avatar";
 import { Tabs, type TabItem } from "../../components/retroui/Tabs";
-import AppLayout from "../../layouts/app-layout";
 import { getUsers, type User, type UserRole } from "../../lib/api";
 import {
   AlertTriangle,
-  ArrowDownUp,
   BookOpen,
-  ChevronDown,
-  ChevronRight,
-  Filter,
   GraduationCap,
   Plus,
   School,
@@ -23,10 +19,12 @@ import {
   Users,
   UsersRound,
 } from "lucide-react";
-import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/retroui/Button";
+import { Select } from "@/components/retroui/Select";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/retroui/Accordion";
+import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,11 +50,7 @@ const GRADE_LEVELS: GradeFilter[] = ["all", 7, 8, 9, 10, 11, 12];
 const tabs: TabItem<TabId>[] = [
   { id: "admin", label: "Admin", icon: UserCog },
   { id: "teacher", label: "Teachers", icon: BookOpen },
-  {
-    id: "student",
-    label: "Students",
-    icon: GraduationCap,
-  },
+  { id: "student", label: "Students", icon: GraduationCap },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -69,8 +63,6 @@ function visibleSubjects(subjects: string[] | undefined) {
 }
 
 type StatusStyle = { badge: string; dot: string; label: string };
-const USER_ROW_HOVER =
-  "hover:bg-accent hover:text-sidebar-accent-foreground hover:border-y hover:border-border";
 const STATUS_BADGE_BASE =
   "inline-flex h-6 w-28 items-center justify-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold";
 
@@ -273,32 +265,9 @@ export default function AdminUsers() {
 
   const studentGroups = useMemo(
     () =>
-      activeTab === "student" ? groupStudents(filteredStudents) : new Map(),
+      activeTab === "student" ? groupStudents(filteredStudents) : new Map<string, User[]>(),
     [activeTab, filteredStudents],
   );
-
-  const studentStats = useMemo(() => {
-    if (activeTab !== "student") return null;
-    return {
-      total: users.length,
-      active: users.filter(
-        (u) => (u.account_status ?? "").toLowerCase() === "active",
-      ).length,
-      pending: users.filter(
-        (u) => (u.account_status ?? "").toLowerCase() === "pending",
-      ).length,
-      unassigned: users.filter((u) => !u.section).length,
-    };
-  }, [users, activeTab]);
-
-  function toggleSection(key: string) {
-    setCollapsedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
 
   function openUser(user: User) {
     navigate(`/admin/users/${user.role}/${user.id}`);
@@ -330,98 +299,118 @@ export default function AdminUsers() {
             />
 
             <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="relative max-w-md flex-1">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <div className="grid gap-3 md:grid-cols-[1fr_160px_160px] py-2">
+                <label className="relative shadow-md hover:shadow-none transition-shadow">
+                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                   <Input
-                    aria-label="Search users"
-                    className="h-9 rounded-md border border-black/70 pl-9 shadow-none"
-                    placeholder="Search user"
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search class or adviser..."
+                    className="h-10 w-full shadow-none border-black pl-9 pr-3"
                   />
-                </div>
-                <div className="flex items-center gap-5 text-xs">
-                  <button className="flex items-center gap-1.5">
-                    <Filter className="size-4" />
-                    Add Filter
-                  </button>
-                  <button className="flex items-center gap-1.5">
-                    <ArrowDownUp className="size-4" />
-                    Sort By
-                  </button>
-                </div>
+                </label>
+
+                {activeTab === "student" ? (
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(val) =>
+                      setStatusFilter(val as StatusFilter)
+                    }
+                  >
+                    <Select.Trigger>
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Group>
+                        <Select.Item value="all">All Statuses</Select.Item>
+                        <Select.Item value="active">Active</Select.Item>
+                        <Select.Item value="pending">Pending</Select.Item>
+                        <Select.Item value="inactive">Inactive</Select.Item>
+                        <Select.Item value="suspended">Suspended</Select.Item>
+                        <Select.Item value="archived">Archived</Select.Item>
+                        <Select.Item value="graduated">Graduated</Select.Item>
+                        <Select.Item value="transferred">Transferred</Select.Item>
+                        <Select.Item value="dropped">Dropped</Select.Item>
+                        <Select.Item value="no section assigned">
+                          No Section Assigned
+                        </Select.Item>
+                      </Select.Group>
+                    </Select.Content>
+                  </Select>
+                ) : (
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(val) =>
+                      setStatusFilter(val as StatusFilter)
+                    }
+                  >
+                    <Select.Trigger>
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Group>
+                        <Select.Item value="all">All Statuses</Select.Item>
+                        <Select.Item value="active">Active</Select.Item>
+                        <Select.Item value="inactive">Inactive</Select.Item>
+                        <Select.Item value="suspended">Suspended</Select.Item>
+                        <Select.Item value="archived">Archived</Select.Item>
+                      </Select.Group>
+                    </Select.Content>
+                  </Select>
+                )}
+
+                <Select>
+                  <Select.Trigger className="w-full">
+                    <Select.Value placeholder="Sort By" />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Group>
+                      <Select.Item value={"A-Z"}>A-Z</Select.Item>
+                      <Select.Item value={"Z-A"}>Z-A</Select.Item>
+                    </Select.Group>
+                  </Select.Content>
+                </Select>
               </div>
 
               {activeTab === "student" && (
                 <>
-                  {studentStats && !loading && (
+                  {/* {studentStats && !loading && (
                     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                      <StatCard
-                        label="Total Students"
-                        value={studentStats.total}
-                        icon={<Users className="size-5 text-black" />}
+                      <OverviewCard
+                        title="Total Students"
+                        count={String(studentStats.total)}
                       />
-                      <StatCard
-                        label="Active"
-                        value={studentStats.active}
-                        icon={<GraduationCap className="size-5 text-black" />}
+                      <OverviewCard
+                        title="Active"
+                        count={String(studentStats.active)}
                       />
-                      <StatCard
-                        label="Pending"
-                        value={studentStats.pending}
-                        color={studentStats.pending > 0 ? "amber" : undefined}
-                        icon={<School className="size-5 text-black" />}
+                      <OverviewCard
+                        title="Pending"
+                        count={String(studentStats.pending)}
                       />
-                      <StatCard
-                        label="Unassigned"
-                        value={studentStats.unassigned}
-                        color={
-                          studentStats.unassigned > 0 ? "amber" : undefined
-                        }
-                        icon={<AlertTriangle className="size-5 text-black" />}
+                      <OverviewCard
+                        title="Unassigned"
+                        count={String(studentStats.unassigned)}
                       />
                     </div>
-                  )}
+                  )} */}
 
                   <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                    <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                    <span className="shrink-0 text-sm font-regular text-muted-foreground">
                       Grade:
                     </span>
                     {GRADE_LEVELS.map((g) => (
-                      <button
+                      <Button
                         key={g}
                         onClick={() => setGradeFilter(g)}
-                        className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${gradeFilter === g
-                          ? "border-black bg-black text-white"
-                          : "border-black/30 bg-background text-muted-foreground hover:border-black/60 hover:text-foreground"
-                          }`}
+                        variant={gradeFilter === g ? "default" : "outline"}
+                        size="sm"
+                        className="shrink-0 border-black shadow-none"
                       >
                         {g === "all" ? "All" : `Grade ${g}`}
-                      </button>
+                      </Button>
+
                     ))}
-                    <div className="ml-auto shrink-0">
-                      <select
-                        value={statusFilter}
-                        onChange={(e) =>
-                          setStatusFilter(e.target.value as StatusFilter)
-                        }
-                        className="h-7 rounded-md border border-black/30 bg-background px-2 text-xs font-medium text-muted-foreground hover:border-black/60"
-                      >
-                        <option value="all">All Statuses</option>
-                        <option value="active">Active</option>
-                        <option value="pending">Pending</option>
-                        <option value="inactive">Inactive</option>
-                        <option value="suspended">Suspended</option>
-                        <option value="archived">Archived</option>
-                        <option value="graduated">Graduated</option>
-                        <option value="transferred">Transferred</option>
-                        <option value="dropped">Dropped</option>
-                        <option value="no section assigned">
-                          No Section Assigned
-                        </option>
-                      </select>
-                    </div>
                   </div>
                 </>
               )}
@@ -446,16 +435,100 @@ export default function AdminUsers() {
                       {emptyText}
                     </div>
                   )}
-                  {[...studentGroups.entries()].map(([key, groupUsers]) => (
-                    <SectionGroup
-                      key={key}
-                      sectionKey={key}
-                      users={groupUsers}
-                      collapsed={collapsedSections.has(key)}
-                      onToggle={() => toggleSection(key)}
-                      onOpenUser={openUser}
-                    />
-                  ))}
+                  <Accordion
+                    multiple
+                    value={[...studentGroups.keys()].filter((k) => !collapsedSections.has(k))}
+                    onValueChange={(values) => {
+                      const collapsed = [...studentGroups.keys()].filter(
+                        (k) => !values.includes(k)
+                      );
+                      setCollapsedSections(new Set(collapsed));
+                    }}
+                    className="flex flex-col gap-3"
+                  >
+                    {[...studentGroups.entries()].map(([key, groupUsers]) => {
+                      const isUnassigned = key === UNASSIGNED_KEY;
+                      const info = isUnassigned ? null : parseSectionInfo(key);
+
+                      const headerLabel = isUnassigned
+                        ? "Unassigned — awaiting section"
+                        : info
+                          ? info.grade > 0
+                            ? `Grade ${info.grade} — ${info.sectionName}`
+                            : info.sectionName
+                          : key;
+
+                      return (
+                        <AccordionItem
+                          key={key}
+                          value={key}
+                          className={isUnassigned ? "border-amber-400" : ""}
+                        >
+                          <AccordionTrigger
+                            className={cn(
+                              "items-center py-2.5 text-sm font-semibold transition-colors",
+                              isUnassigned
+                                ? "bg-amber-50 hover:bg-accent hover:text-sidebar-accent-foreground"
+                                : "bg-background hover:bg-accent hover:text-sidebar-accent-foreground"
+                            )}
+                          >
+                            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                              {isUnassigned ? (
+                                <AlertTriangle className="size-4 shrink-0 text-amber-600" />
+                              ) : (
+                                <Users className="size-4 shrink-0 text-muted-foreground" />
+                              )}
+
+                              <span
+                                className={cn(
+                                  "truncate flex-1 text-sm font-semibold text-left",
+                                  isUnassigned ? "text-amber-800" : ""
+                                )}
+                              >
+                                {headerLabel}
+                              </span>
+
+                              <span
+                                className={cn(
+                                  "rounded-full border px-2 py-0.5 text-[10px] font-semibold shrink-0 mr-2",
+                                  isUnassigned
+                                    ? "border-amber-300 bg-amber-100 text-amber-700"
+                                    : "border-black/20 bg-muted/50 text-muted-foreground"
+                                )}
+                              >
+                                {groupUsers.length} student{groupUsers.length !== 1 ? "s" : ""}
+                              </span>
+                            </div>
+                          </AccordionTrigger>
+
+                          <AccordionContent className="p-0 border-t border-black/10">
+                            <Table className="border-none shadow-none" wrapperClassName="overflow-hidden">
+                              <Table.Header className="font-sans">
+                                <Table.Row>
+                                  <Table.Head>Name</Table.Head>
+                                  <Table.Head className="text-center">Status</Table.Head>
+                                  <Table.Head className="text-center">
+                                    {isUnassigned ? "Grade level" : "Section"}
+                                  </Table.Head>
+                                  <Table.Head className="text-right">Average</Table.Head>
+                                </Table.Row>
+                              </Table.Header>
+                              <Table.Body>
+                                {groupUsers.map((user) => (
+                                  <StudentRow
+                                    key={user.id}
+                                    user={user}
+                                    showGrade={isUnassigned}
+                                    onOpenUser={openUser}
+                                  />
+                                ))}
+                              </Table.Body>
+                            </Table>
+                          </AccordionContent>
+                        </AccordionItem>
+                      );
+                    })}
+                  </Accordion>
                 </>
               )}
 
@@ -524,131 +597,10 @@ export default function AdminUsers() {
  * - value as text-3xl font-black
  * - color variants applied to the value only
  */
-function StatCard({
-  label,
-  value,
-  color,
-  icon,
-}: {
-  label: string;
-  value: number;
-  color?: "green" | "amber" | "red";
-  icon?: ReactNode;
-}) {
-  const valueColor =
-    color === "green"
-      ? "text-emerald-700"
-      : color === "amber"
-        ? "text-amber-700"
-        : color === "red"
-          ? "text-red-600"
-          : "";
-
-  return (
-    <div className="rounded-lg border border-black bg-accent! p-4 shadow-[3px_3px_0_#000]">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-bold">{label}</p>
-        {icon && <span className="text-muted-foreground">{icon}</span>}
-      </div>
-      <p className={`mt-3 text-3xl font-black ${valueColor}`}>{value}</p>
-    </div>
-  );
-}
 
 const UNASSIGNED_KEY = "__unassigned__";
 
-function SectionGroup({
-  sectionKey,
-  users,
-  collapsed,
-  onToggle,
-  onOpenUser,
-}: {
-  sectionKey: string;
-  users: User[];
-  collapsed: boolean;
-  onToggle: () => void;
-  onOpenUser: (user: User) => void;
-}) {
-  const isUnassigned = sectionKey === UNASSIGNED_KEY;
-  const info = isUnassigned ? null : parseSectionInfo(sectionKey);
 
-  const headerLabel = isUnassigned
-    ? "Unassigned — awaiting section"
-    : info
-      ? info.grade > 0
-        ? `Grade ${info.grade} — ${info.sectionName}`
-        : info.sectionName
-      : sectionKey;
-
-  return (
-    <div
-      className={`overflow-hidden rounded-xl border shadow-[3px_4px_0_#000] ${isUnassigned ? "border-amber-400" : "border-black"
-        }`}
-    >
-      <button
-        onClick={onToggle}
-        className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors ${isUnassigned
-          ? "bg-amber-50 hover:bg-accent hover:text-sidebar-accent-foreground"
-          : "bg-background hover:bg-accent hover:text-sidebar-accent-foreground"
-          }`}
-        aria-expanded={!collapsed}
-      >
-        {isUnassigned ? (
-          <AlertTriangle className="size-4 shrink-0 text-amber-600" />
-        ) : (
-          <Users className="size-4 shrink-0 text-muted-foreground" />
-        )}
-
-        <span
-          className={`flex-1 text-sm font-semibold ${isUnassigned ? "text-amber-800" : ""}`}
-        >
-          {headerLabel}
-        </span>
-
-        <span
-          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${isUnassigned
-            ? "border-amber-300 bg-amber-100 text-amber-700"
-            : "border-black/20 bg-muted/50 text-muted-foreground"
-            }`}
-        >
-          {users.length} student{users.length !== 1 ? "s" : ""}
-        </span>
-
-        {collapsed ? (
-          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-        )}
-      </button>
-
-      {!collapsed && (
-        <Table className="border-t border-none shadow-none">
-          <Table.Header className="font-sans">
-            <Table.Row>
-              <Table.Head>Name</Table.Head>
-              <Table.Head className="text-center">Status</Table.Head>
-              <Table.Head className="text-center">
-                {isUnassigned ? "Grade level" : "Section"}
-              </Table.Head>
-              <Table.Head className="text-right">Average</Table.Head>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {users.map((user) => (
-              <StudentRow
-                key={user.id}
-                user={user}
-                showGrade={isUnassigned}
-                onOpenUser={onOpenUser}
-              />
-            ))}
-          </Table.Body>
-        </Table>
-      )}
-    </div>
-  );
-}
 
 function StudentRow({
   user,
