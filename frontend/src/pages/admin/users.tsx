@@ -4,7 +4,8 @@ import { Badge } from "../../components/retroui/Badge";
 import { Table } from "../../components/retroui/Table";
 import { Input } from "../../components/retroui/Input";
 import { Loader } from "../../components/retroui/Loader";
-import Tabs from "../../components/tabs";
+import { Avatar } from "../../components/retroui/Avatar";
+import { Tabs, type TabItem } from "../../components/retroui/Tabs";
 import AppLayout from "../../layouts/app-layout";
 import { getUsers, type User, type UserRole } from "../../lib/api";
 import {
@@ -25,6 +26,7 @@ import {
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/retroui/Button";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,13 +49,13 @@ type StatusFilter =
 
 const GRADE_LEVELS: GradeFilter[] = ["all", 7, 8, 9, 10, 11, 12];
 
-const tabs: { id: TabId; label: string; icon: ReactNode }[] = [
-  { id: "admin", label: "Admin", icon: <UserCog className="size-3.5" /> },
-  { id: "teacher", label: "Teachers", icon: <BookOpen className="size-3.5" /> },
+const tabs: TabItem<TabId>[] = [
+  { id: "admin", label: "Admin", icon: UserCog },
+  { id: "teacher", label: "Teachers", icon: BookOpen },
   {
     id: "student",
     label: "Students",
-    icon: <GraduationCap className="size-3.5" />,
+    icon: GraduationCap,
   },
 ];
 
@@ -310,22 +312,20 @@ export default function AdminUsers() {
                 <SidebarTrigger className="md:hidden" />
                 <h1 className="text-2xl md:text-4xl font-bold tracking-tight">User Management</h1>
               </div>
-              <button
+              <Button
+                className="gap-2"
                 onClick={() => setModalOpen(true)}
-                className="flex items-center gap-1.5 rounded-lg border border-black bg-[#79bd80] px-4 py-2 text-sm font-semibold text-black shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000]"
               >
                 <Plus className="size-4" />
                 New User
-              </button>
+              </Button>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-black/40">
-              <Tabs
-                tabs={tabs}
-                activeTab={activeTab}
-                onChange={(id) => setActiveTab(id as TabId)}
-              />
-            </div>
+            <Tabs
+              tabs={tabs}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+            />
 
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -391,8 +391,8 @@ export default function AdminUsers() {
                         key={g}
                         onClick={() => setGradeFilter(g)}
                         className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${gradeFilter === g
-                            ? "border-black bg-black text-white"
-                            : "border-black/30 bg-background text-muted-foreground hover:border-black/60 hover:text-foreground"
+                          ? "border-black bg-black text-white"
+                          : "border-black/30 bg-background text-muted-foreground hover:border-black/60 hover:text-foreground"
                           }`}
                       >
                         {g === "all" ? "All" : `Grade ${g}`}
@@ -464,11 +464,11 @@ export default function AdminUsers() {
                       {emptyText}
                     </div>
                   ) : (
-                    <div className="overflow-hidden rounded-xl border border-black bg-background shadow-[4px_5px_0_#000]">
+                    <div className="overflow-hidden border border-black bg-background shadow-[4px_5px_0_#000]">
                       <Table className="border-none shadow-none">
                         <Table.Header className="font-sans">
                           <Table.Row>
-                            <Table.Head>Name / Email</Table.Head>
+                            <Table.Head>Name</Table.Head>
                             <Table.Head className="text-center">Status</Table.Head>
                             {activeTab === "teacher" ? (
                               <>
@@ -587,8 +587,8 @@ function SectionGroup({
       <button
         onClick={onToggle}
         className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors ${isUnassigned
-            ? "bg-amber-50 hover:bg-accent hover:text-sidebar-accent-foreground"
-            : "bg-background hover:bg-accent hover:text-sidebar-accent-foreground"
+          ? "bg-amber-50 hover:bg-accent hover:text-sidebar-accent-foreground"
+          : "bg-background hover:bg-accent hover:text-sidebar-accent-foreground"
           }`}
         aria-expanded={!collapsed}
       >
@@ -606,8 +606,8 @@ function SectionGroup({
 
         <span
           className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${isUnassigned
-              ? "border-amber-300 bg-amber-100 text-amber-700"
-              : "border-black/20 bg-muted/50 text-muted-foreground"
+            ? "border-amber-300 bg-amber-100 text-amber-700"
+            : "border-black/20 bg-muted/50 text-muted-foreground"
             }`}
         >
           {users.length} student{users.length !== 1 ? "s" : ""}
@@ -667,16 +667,17 @@ function StudentRow({
       className="cursor-pointer"
     >
       <Table.Cell>
-        <NameCell name={user.name} subtitle={user.email} />
+        <NameCell name={user.name} subtitle={user.email} role={user.role} />
       </Table.Cell>
 
       <Table.Cell className="text-center">
-        <span
+        <Badge
+          size="sm"
           className={`${STATUS_BADGE_BASE} ${status.badge} inline-flex items-center gap-1.5`}
         >
           <span className={`size-1.5 rounded-full ${status.dot}`} />
           {status.label}
-        </span>
+        </Badge>
       </Table.Cell>
 
       <Table.Cell className="text-center">
@@ -724,10 +725,13 @@ function StudentRow({
 function StatusBadge({ status }: { status: string | undefined | null }) {
   const style = getStatusStyle(status);
   return (
-    <span className={`${STATUS_BADGE_BASE} ${style.badge} inline-flex items-center gap-1.5`}>
+    <Badge
+      size="sm"
+      className={`${STATUS_BADGE_BASE} ${style.badge} inline-flex items-center gap-1.5`}
+    >
       <span className={`size-1.5 rounded-full ${style.dot}`} />
       {style.label}
-    </span>
+    </Badge>
   );
 }
 
@@ -749,7 +753,7 @@ function UserRow({
         className="cursor-pointer"
       >
         <Table.Cell>
-          <NameCell name={user.name} subtitle={user.email} />
+          <NameCell name={user.name} subtitle={user.email} role={user.role} />
         </Table.Cell>
         <Table.Cell className="text-center">
           <StatusBadge status={user.account_status} />
@@ -797,7 +801,7 @@ function UserRow({
       className="cursor-pointer"
     >
       <Table.Cell>
-        <NameCell name={user.name} subtitle={user.email} />
+        <NameCell name={user.name} subtitle={user.email} role={user.role} />
       </Table.Cell>
       <Table.Cell className="text-center">
         <StatusBadge status={user.account_status} />
@@ -812,12 +816,29 @@ function UserRow({
   );
 }
 
-function NameCell({ name, subtitle }: { name: string; subtitle?: string }) {
+function NameCell({
+  name,
+  subtitle,
+  role,
+}: {
+  name: string;
+  subtitle?: string;
+  role: "admin" | "teacher" | "student";
+}) {
+  const defaultAvatar =
+    role === "student"
+      ? "/avatars/student-avatars/1.svg"
+      : "/avatars/teacher-avatars/12.svg";
+
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <div className="grid size-7 shrink-0 place-items-center rounded-full border border-amber-700 bg-amber-200 text-[13px] font-semibold text-amber-900">
-        {name.charAt(0).toUpperCase()}
-      </div>
+      <Avatar
+        variant={role === "student" ? "student" : "teacher"}
+        className="size-10 shrink-0"
+      >
+        <Avatar.Image src={defaultAvatar} alt={name} />
+        <Avatar.Fallback>{name.charAt(0).toUpperCase()}</Avatar.Fallback>
+      </Avatar>
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold">{name}</div>
         {subtitle && (

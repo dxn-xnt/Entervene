@@ -1,4 +1,3 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +24,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { routes } from "@/../routes";
+import { Avatar } from "./retroui/Avatar";
 
 export function NavUser() {
   const { user, logout } = useAuth();
@@ -60,14 +60,14 @@ export function NavUser() {
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground border-t-2 border-border p-6 py-8"
             >
-              <Avatar className="h-10 w-10">
-                <AvatarImage
+              <Avatar className="h-10 w-10 p-0" variant="student">
+                <Avatar.Image
                   src={user?.avatar ?? ""}
                   alt={user?.fullName ?? ""}
                 />
-                <AvatarFallback className="rounded-full">
+                <Avatar.Fallback className="rounded-full">
                   {initials}
-                </AvatarFallback>
+                </Avatar.Fallback>
               </Avatar>
               <div className="grid flex-1 text-left leading-tight">
                 <span className="truncate text-sm font-semibold">
@@ -89,14 +89,14 @@ export function NavUser() {
           >
             <DropdownMenuLabel className="p-1 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-foreground">
-                <Avatar className="h-8 w-8 rounded-full">
-                  <AvatarImage
+                <Avatar className="h-8 w-8" variant="student">
+                  <Avatar.Image
                     src={user?.avatar ?? ""}
                     alt={user?.fullName ?? ""}
                   />
-                  <AvatarFallback className="rounded-full">
+                  <Avatar.Fallback className="rounded-full">
                     {initials}
-                  </AvatarFallback>
+                  </Avatar.Fallback>
                 </Avatar>
                 <div className="grid flex-1 text-left leading-tight">
                   <span className="truncate text-sm font-semibold">
@@ -109,7 +109,7 @@ export function NavUser() {
               </div>
             </DropdownMenuLabel>
 
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator className="bg-black" />
 
             <DropdownMenuGroup>
               <DropdownMenuItem className="p-2"
@@ -132,7 +132,7 @@ export function NavUser() {
               </DropdownMenuItem>
             </DropdownMenuGroup>
 
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator className="bg-black" />
 
             <DropdownMenuItem
               onClick={handleLogout}
