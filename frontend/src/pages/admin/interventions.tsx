@@ -150,50 +150,48 @@ export default function AdminInterventions() {
                   </div>
 
                   <div className="flex flex-col gap-4">
-                    <Card>
-                      <div className="grid gap-3 md:grid-cols-[1fr_160px_160px]">
-                        <label className="relative">
-                          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
-                          <Input
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Search learner name or subject..."
-                            className="h-10 w-full shadow-none border-black pl-9 pr-3"
-                          />
-                        </label>
-                        <Select value={classFilter} onValueChange={setClassFilter}>
-                          <Select.Trigger className="w-full shadow-none">
-                            <Select.Value placeholder="Class" />
-                          </Select.Trigger>
-                          <Select.Content>
-                            <Select.Group>
-                              <Select.Item value="All">All Classes</Select.Item>
-                              {uniqueClasses.map((className) => (
-                                <Select.Item key={className} value={className}>
-                                  {className}
-                                </Select.Item>
-                              ))}
-                            </Select.Group>
-                          </Select.Content>
-                        </Select>
+                    <div className="grid gap-3 md:grid-cols-[1fr_160px_160px]">
+                      <label className="relative shadow-md hover:shadow-none transition-shadow">
+                        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+                        <Input
+                          value={search}
+                          onChange={(event) => setSearch(event.target.value)}
+                          placeholder="Search learner name or subject..."
+                          className="h-10 w-full shadow-none border-black pl-9 pr-3"
+                        />
+                      </label>
+                      <Select value={classFilter} onValueChange={setClassFilter}>
+                        <Select.Trigger className="w-full">
+                          <Select.Value placeholder="Class" />
+                        </Select.Trigger>
+                        <Select.Content>
+                          <Select.Group>
+                            <Select.Item value="All">All Classes</Select.Item>
+                            {uniqueClasses.map((className) => (
+                              <Select.Item key={className} value={className}>
+                                {className}
+                              </Select.Item>
+                            ))}
+                          </Select.Group>
+                        </Select.Content>
+                      </Select>
 
-                        <Select value={statusFilter} onValueChange={setStatusFilter}>
-                          <Select.Trigger className="w-full shadow-none">
-                            <Select.Value placeholder="Status" />
-                          </Select.Trigger>
-                          <Select.Content>
-                            <Select.Group>
-                              <Select.Item value="All">All Statuses</Select.Item>
-                              {uniqueStatuses.map((status) => (
-                                <Select.Item key={status} value={status}>
-                                  {status}
-                                </Select.Item>
-                              ))}
-                            </Select.Group>
-                          </Select.Content>
-                        </Select>
-                      </div>
-                    </Card>
+                      <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <Select.Trigger className="w-full">
+                          <Select.Value placeholder="Status" />
+                        </Select.Trigger>
+                        <Select.Content>
+                          <Select.Group>
+                            <Select.Item value="All">All Statuses</Select.Item>
+                            {uniqueStatuses.map((status) => (
+                              <Select.Item key={status} value={status}>
+                                {status}
+                              </Select.Item>
+                            ))}
+                          </Select.Group>
+                        </Select.Content>
+                      </Select>
+                    </div>
 
                     <Card className="p-0 shadow-md rounded-none border-none">
                       <div className="overflow-x-auto">

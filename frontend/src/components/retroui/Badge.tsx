@@ -6,7 +6,7 @@ const badgeVariants = cva("font-semibold rounded", {
   variants: {
     variant: {
       default: "bg-muted text-muted-foreground",
-      outline: "outline-2 outline-foreground text-foreground",
+      outline: "outline-2 outline-foreground text-foreground bg-background",
       solid: "bg-foreground text-background",
       surface: "outline-2 bg-primary text-primary-foreground",
     },
@@ -24,7 +24,7 @@ const badgeVariants = cva("font-semibold rounded", {
 
 interface ButtonProps
   extends HTMLAttributes<HTMLSpanElement>,
-    VariantProps<typeof badgeVariants> {}
+  VariantProps<typeof badgeVariants> { }
 
 export function Badge({
   children,

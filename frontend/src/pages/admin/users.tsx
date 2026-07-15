@@ -13,6 +13,7 @@ import {
   BookOpen,
   GraduationCap,
   Plus,
+  PlusIcon,
   School,
   Search,
   UserCog,
@@ -25,6 +26,7 @@ import { Button } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/retroui/Accordion";
 import { cn } from "@/lib/utils";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -431,8 +433,44 @@ export default function AdminUsers() {
               {!loading && activeTab === "student" && (
                 <>
                   {studentGroups.size === 0 && (
-                    <div className="rounded-xl border border-black bg-background py-12 text-center text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
-                      {emptyText}
+                    <div className="">
+                      <Empty className="shadow-md hover:shadow-none transition-shadow">
+                        <EmptyHeader>
+                          <EmptyMedia>
+                            <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background *:data-[slot=avatar]:grayscale">
+                              <Avatar variant="student" >
+                                <Avatar.Image
+                                  src="/avatars/student-avatars/3.svg"
+                                  alt="@shadcn" />
+                                <Avatar.Fallback>CN</Avatar.Fallback>
+                              </Avatar>
+                              <Avatar variant="student" >
+                                <Avatar.Image
+                                  src="/avatars/student-avatars/2.svg"
+                                  alt="@maxleiter"
+                                />
+                                <Avatar.Fallback>LR</Avatar.Fallback>
+                              </Avatar>
+                              <Avatar variant="student" >
+                                <Avatar.Image
+                                  src="/avatars/student-avatars/1.svg"
+                                  alt="@evilrabbit"
+                                />
+                                <Avatar.Fallback>ER</Avatar.Fallback>
+                              </Avatar>
+                            </div>
+                          </EmptyMedia>
+                          <EmptyTitle>No Student Enrolled</EmptyTitle>
+                          <EmptyDescription className="text-center whitespace-nowrap">
+                            Students will appear here once they are enrolled in a section.
+                          </EmptyDescription>
+                        </EmptyHeader>
+                        <EmptyContent>
+                          <Button size="sm" variant="default">
+                            Enroll Student
+                          </Button>
+                        </EmptyContent>
+                      </Empty>
                     </div>
                   )}
                   <Accordion
@@ -540,7 +578,7 @@ export default function AdminUsers() {
                     </div>
                   ) : (
                     <div className="overflow-hidden border border-black bg-background shadow-[4px_5px_0_#000]">
-                      <Table className="border-none shadow-none">
+                      <Table className="border-1 shadow-none">
                         <Table.Header className="font-sans">
                           <Table.Row>
                             <Table.Head>Name</Table.Head>

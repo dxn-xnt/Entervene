@@ -38,6 +38,8 @@ class ClassListItem(BaseModel):
     adviser: AdviserOption | None
     student_count: int
     subject_count: int
+    male_count: int
+    female_count: int
 
 
 class ClassListSummary(BaseModel):

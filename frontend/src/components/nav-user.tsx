@@ -51,6 +51,13 @@ export function NavUser() {
       .toUpperCase()
     : "?";
 
+  const avatarVariant =
+    user?.role === "teacher"
+      ? "teacher"
+      : user?.role === "student"
+        ? "student"
+        : "default";
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -60,7 +67,7 @@ export function NavUser() {
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground border-t-2 border-border p-6 py-8"
             >
-              <Avatar className="h-10 w-10 p-0" variant="student">
+              <Avatar className="h-10 w-10 p-0" variant={avatarVariant}>
                 <Avatar.Image
                   src={user?.avatar ?? ""}
                   alt={user?.fullName ?? ""}
@@ -89,7 +96,7 @@ export function NavUser() {
           >
             <DropdownMenuLabel className="p-1 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-foreground">
-                <Avatar className="h-8 w-8" variant="student">
+                <Avatar className="h-8 w-8" variant={avatarVariant}>
                   <Avatar.Image
                     src={user?.avatar ?? ""}
                     alt={user?.fullName ?? ""}

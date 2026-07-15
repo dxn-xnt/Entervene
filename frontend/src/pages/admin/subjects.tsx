@@ -30,7 +30,7 @@ import {
   CurriculumFilters,
   CurriculumPlanTable,
   EmptyStateCard,
-  SubjectContextBanner,
+  // SubjectContextBanner,
   SubjectPicker,
   SubjectModuleTabs,
   type CurriculumGradeValue,
@@ -1692,12 +1692,12 @@ export default function AdminSubjects() {
                 ) : null}
               </div>
             </header>
-            <SubjectContextBanner
+            {/* <SubjectContextBanner
               academicYears={offeringOptions?.academic_years}
               academicPeriods={offeringOptions?.academic_periods}
               academicYearId={selectedAcademicYear?.academic_year_id}
               isLoading={isLoadingOptions}
-            />
+            /> */}
             <SubjectModuleTabs activeTab={activeSection} onTabChange={setActiveSection} counts={subjectTabCounts} />
             {isViewingInactiveAcademicYear ? (
               <div className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
