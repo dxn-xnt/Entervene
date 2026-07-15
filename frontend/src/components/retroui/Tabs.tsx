@@ -22,7 +22,7 @@ export function Tabs<T extends string = string>({
   className = "",
 }: TabsProps<T>) {
   return (
-    <div className={`-mx-4 border-b border-black/40 px-4 md:-mx-6 md:px-6 ${className}`}>
+    <div className={`-mx-4 border-b-2 border-border px-4 md:-mx-6 md:px-6 ${className}`}>
       <div className="flex flex-wrap gap-2 pt-2">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTab;

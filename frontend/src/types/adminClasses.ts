@@ -68,6 +68,8 @@ export type ClassListItem = {
   adviser: ClassListAdviser | null;
   student_count: number;
   subject_count: number;
+  male_count: number;
+  female_count: number;
 };
 
 export type ClassListSummary = {
