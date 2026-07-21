@@ -38,7 +38,11 @@ export default function ManualCreation() {
             <View>
               <Text style={styles.label}>Subject</Text>
               <FormDropdown
-                options={["Computer Programming", "Mathematics", "Science"]}
+                options={[
+                  { label: "Computer Programming", value: "Computer Programming" },
+                  { label: "Mathematics", value: "Mathematics" },
+                  { label: "Science", value: "Science" },
+                ]}
                 value={subject}
                 onChange={setSubject}
               />
