@@ -215,7 +215,7 @@ export default function AdminClasses() {
               </div>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b border-black/40" />
+            <div className="-mx-4 md:-mx-6 border-b-2 border-border" />
 
             {notice && (
               <p className="border-2 border-black bg-[#bbf7d0] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">
@@ -223,7 +223,7 @@ export default function AdminClasses() {
               </p>
             )}
 
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <section className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <OverviewCard
                 title={"Total Classes"}
                 count={String(summary.total_classes)}
