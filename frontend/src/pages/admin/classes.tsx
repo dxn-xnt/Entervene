@@ -11,9 +11,9 @@ import {
 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import ClassCard from "@/components/admin/classes/ClassCard";
-import AddClassModal from "@/components/admin/classes/modals/AddClassModal";
-import ArchiveClassModal from "@/components/admin/classes/modals/ArchiveClassModal";
-import EditClassModal from "@/components/admin/classes/modals/EditClassModal";
+import AddClassModal from "./forms/add-class";
+import ArchiveClassModal from "@/pages/admin/forms/classes/archive-class";
+import EditClassModal from "@/pages/admin/forms/classes/edit-class";
 import { archiveClass, getClasses } from "@/lib/api";
 import type {
   ClassListItem,
@@ -192,11 +192,17 @@ export default function AdminClasses() {
                 </div>
               </div>
               <div className="flex flex-row gap-2">
-                <Button
-                  onClick={() => setShowNewClass(true)}
-                >
-                  <Plus className="size-4 mr-2" /> New Class
-                </Button>
+                <Dialog open={showNewClass} onOpenChange={setShowNewClass}>
+                  <Dialog.Trigger>
+                    <Button>
+                      <Plus className="size-4 mr-2" /> New Class
+                    </Button>
+                  </Dialog.Trigger>
+                  <AddClassModal
+                    onClose={() => setShowNewClass(false)}
+                    onClassesCreated={() => void refreshClasses()}
+                  />
+                </Dialog>
                 <Dialog>
                   <Dialog.Trigger>
                     <Button variant={"outline"}>
@@ -364,14 +370,6 @@ export default function AdminClasses() {
           </div>
         </div>
       </div>
-
-      {showNewClass && (
-        <AddClassModal
-          onClose={() => setShowNewClass(false)}
-          onClassesCreated={() => void refreshClasses()}
-        />
-      )}
-
       {editTarget && (
         <EditClassModal
           classId={editTarget.class_id}

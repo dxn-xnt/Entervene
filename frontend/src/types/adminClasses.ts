@@ -223,9 +223,9 @@ export type PendingStudentTransfer = {
 };
 
 export type UpdateClassStudentListRequest = {
-  additions: PendingStudentAddition[];
-  removals: PendingStudentRemoval[];
-  transfers: PendingStudentTransfer[];
+  additions?: PendingStudentAddition[];
+  removals?: PendingStudentRemoval[];
+  transfers?: PendingStudentTransfer[];
 };
 
 export type ManualSectionDraft = {

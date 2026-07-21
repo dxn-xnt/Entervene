@@ -1,10 +1,15 @@
+"use client";
+
 import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getClassFormOptions } from "@/lib/api";
 import type { AdviserOption, ClassFormOptions, ManualClassSetup, ManualSectionDraft } from "@/types/adminClasses";
-import Field from "../fields/Field";
-import SelectField from "../fields/SelectField";
-import { retroButton } from "../utils";
+import Field from "@/components/admin/classes/fields/Field";
+import { Button } from "@/components/retroui/Button";
+import { Input } from "@/components/retroui/Input";
+import { Select } from "@/components/retroui/Select";
+import { Dialog } from "@/components/retroui/Dialog";
+import { Text } from "@/components/retroui/Text";
 
 type SetupErrors = {
   academicLevel?: string;
@@ -117,8 +122,8 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
   if (loadError) {
     return (
       <StatePanel message="Unable to load class options." detail={loadError}>
-        <button className={retroButton("bg-[#79bd80]")} onClick={retryLoading}>Retry</button>
-        <button className={retroButton()} onClick={onBack}>Back</button>
+        <Button variant={"default"} onClick={retryLoading}>Retry</Button>
+        <Button variant={"outline"} onClick={onBack}>Back</Button>
       </StatePanel>
     );
   }
@@ -131,24 +136,38 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
     <div className="grid gap-4">
       <div className="grid gap-3">
         <Field label="Active Academic Year">
-          <input readOnly value={options.academic_year.year_label} className="h-10 rounded-md border border-black bg-black/5 px-3 text-sm text-black/70" />
+          <Input readOnly value={options.academic_year.year_label} className="bg-muted/50 text-muted-foreground" />
         </Field>
         <Field label="Academic Level">
-          <SelectField disabled={noLevels} value={academicLevelId} onChange={setAcademicLevelId}>
-            {!academicLevelId && <option value="">Select academic level</option>}
-            {options.academic_levels.map((level) => <option key={level.academic_level_id} value={level.academic_level_id}>{level.level_name}</option>)}
-          </SelectField>
+          <Select
+            disabled={noLevels}
+            value={academicLevelId}
+            onChange={(e) => setAcademicLevelId(e.target.value)}
+          >
+            <Select.Trigger className="w-full">
+              <Select.Value placeholder="Select academic level" />
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Group>
+                {options.academic_levels.map((level) => (
+                  <Select.Item key={level.academic_level_id} value={String(level.academic_level_id)}>
+                    {level.level_name}
+                  </Select.Item>
+                ))}
+              </Select.Group>
+            </Select.Content>
+          </Select>
           {errors.academicLevel && <InlineError message={errors.academicLevel} />}
           {noLevels && <InlineError message="No academic levels are available." />}
         </Field>
         <Field label="Number of Sections">
-          <input readOnly value={sections.length} className="h-10 rounded-md border border-black bg-black/5 px-3 text-sm text-black/70" />
+          <Input readOnly value={String(sections.length)} className="bg-muted/50 text-muted-foreground" />
         </Field>
       </div>
 
       <section className="grid gap-2">
         <div>
-          <h3 className="font-bold">Sections</h3>
+          <Text as="h6" className="font-bold">Sections</Text>
           {noAdvisers && <InlineError message="No eligible class advisers are available." />}
           {errors.sections && <InlineError message={errors.sections} />}
         </div>
@@ -166,44 +185,80 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
           return (
             <div key={section.localId} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px] items-start gap-2">
               <div>
-                <input value={section.sectionName} onChange={(event) => updateSection(section.localId, { sectionName: event.target.value })} placeholder="Sapphire" className="h-10 w-full rounded-md border border-black bg-[#fffdf5] px-3 text-sm" />
+                <Input
+                  value={section.sectionName}
+                  onChange={(event) => updateSection(section.localId, { sectionName: event.target.value })}
+                  placeholder="e.g. Sapphire"
+                />
                 {rowErrors?.sectionName && <InlineError message={rowErrors.sectionName} />}
               </div>
               <div>
-                <SelectField disabled={noAdvisers} value={section.adviserStaffId} onChange={(value) => updateSection(section.localId, { adviserStaffId: value })}>
-                  <option value="">Select adviser</option>
-                  {options.eligible_advisers
-                    .filter((adviser) => adviser.staff_id === section.adviserStaffId || !selectedByOtherRows.has(adviser.staff_id))
-                    .map((adviser) => <option key={adviser.staff_id} value={adviser.staff_id}>{adviserName(adviser)}</option>)}
-                </SelectField>
+                <Select
+                  disabled={noAdvisers}
+                  value={section.adviserStaffId}
+                  onChange={(e) => updateSection(section.localId, { adviserStaffId: e.target.value })}
+                >
+                  <Select.Trigger className="w-full">
+                    <Select.Value placeholder="Select adviser" />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Group>
+                      {options.eligible_advisers
+                        .filter((adviser) => adviser.staff_id === section.adviserStaffId || !selectedByOtherRows.has(adviser.staff_id))
+                        .map((adviser) => (
+                          <Select.Item key={adviser.staff_id} value={adviser.staff_id}>
+                            {adviserName(adviser)}
+                          </Select.Item>
+                        ))}
+                    </Select.Group>
+                  </Select.Content>
+                </Select>
                 {rowErrors?.adviserStaffId && <InlineError message={rowErrors.adviserStaffId} />}
               </div>
-              <button aria-label="Remove section" disabled={sections.length === 1} className="grid size-9 place-items-center rounded-md border border-black bg-white disabled:cursor-not-allowed disabled:opacity-40" onClick={() => setSections((current) => current.filter((item) => item.localId !== section.localId))}>
-                <Trash2 className="size-4" />
-              </button>
+              <Button
+                aria-label="Remove section"
+                variant={"outline"}
+                size={"icon"}
+                disabled={sections.length === 1}
+                onClick={() => setSections((current) => current.filter((item) => item.localId !== section.localId))}
+              >
+                <Trash2 className="size-4 text-destructive" />
+              </Button>
             </div>
           );
         })}
-        <button className={retroButton("w-fit")} onClick={() => setSections((current) => [...current, createSectionDraft()])}><Plus className="size-4" />Add Another Section</button>
+        <Button
+          variant={"outline"}
+          className="w-fit mt-1"
+          onClick={() => setSections((current) => [...current, createSectionDraft()])}
+        >
+          <Plus className="size-4 mr-2" />Add Another Section
+        </Button>
       </section>
 
-      <div className="flex justify-between">
-        <button className={retroButton()} onClick={onBack}>Back</button>
-        <button disabled={noLevels || noAdvisers} className={retroButton("bg-[#79bd80] disabled:cursor-not-allowed disabled:opacity-50")} onClick={continueToStudents}>Continue to Add Students</button>
-      </div>
+      <Dialog.Footer className="px-0 border-t-0 pt-3">
+        <Button variant={"outline"} onClick={onBack}>Back</Button>
+        <Button
+          variant={"default"}
+          disabled={noLevels || noAdvisers}
+          onClick={continueToStudents}
+        >
+          Next
+        </Button>
+      </Dialog.Footer>
     </div>
   );
 }
 
 function InlineError({ message }: { message: string }) {
-  return <p className="mt-1 text-[11px] font-semibold text-red-700">{message}</p>;
+  return <p className="mt-1 text-xs font-semibold text-destructive">{message}</p>;
 }
 
 function StatePanel({ message, detail, children }: { message: string; detail?: string; children?: React.ReactNode }) {
   return (
-    <div className="grid gap-3 rounded-md border border-black bg-[#fff8d7] p-5 text-sm">
+    <div className="grid gap-3 rounded-md border-2 border-border bg-card p-5 text-sm">
       <p className="font-bold">{message}</p>
-      {detail && detail !== message && <p className="text-xs text-black/70">{detail}</p>}
+      {detail && detail !== message && <p className="text-xs text-muted-foreground">{detail}</p>}
       {children && <div className="flex gap-2">{children}</div>}
     </div>
   );
