@@ -39,7 +39,7 @@ export default function ArchiveClass({ classRecord, isArchiving, error, onClose,
             Cancel
           </Button>
           <Button
-            variant={"destructive"}
+            variant={"secondary"}
             disabled={isArchiving}
             onClick={() => void onConfirm()}
           >

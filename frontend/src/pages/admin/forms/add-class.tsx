@@ -18,7 +18,6 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import { Text } from "@/components/retroui/Text";
 import { Card } from "@/components/retroui/Card";
-import { Badge } from "@/components/retroui/Badge";
 
 type AddClassModalProps = {
   onClose?: () => void;
@@ -260,7 +259,7 @@ function sameImportedSetup(current: ManualClassSetup, next: ManualClassSetup) {
     });
 }
 
-function ManualReview({ setup, assignmentState, onBack, onSaved }: {
+function ManualReview({ setup, assignmentState, onSaved }: {
   setup: ManualClassSetup;
   assignmentState: ManualAssignmentWorkspaceState;
   onBack: () => void;

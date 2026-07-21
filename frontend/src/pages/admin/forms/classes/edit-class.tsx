@@ -25,7 +25,7 @@ export default function EditClass({
   const [classDetail, setClassDetail] = useState<ClassDetailResponse | null>(initialClass ?? null);
   const [options, setOptions] = useState<ClassFormOptions | null>(null);
   const [sectionName, setSectionName] = useState(initialClass?.section_name ?? "");
-  const [adviserStaffId, setAdviserStaffId] = useState(initialClass?.adviser?.staff_id ?? "");
+  const [adviserStaffId, setAdviserStaffId] = useState(initialClass?.adviser?.staff_id || "__none__");
   const [loading, setLoading] = useState(!initialClass);
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -47,7 +47,7 @@ export default function EditClass({
         setClassDetail(detail);
         setOptions(formOptions);
         setSectionName(detail.section_name);
-        setAdviserStaffId(detail.adviser?.staff_id ?? "");
+        setAdviserStaffId(detail.adviser?.staff_id || "__none__");
       } catch (error: unknown) {
         if (!cancelled) {
           setLoadError(error instanceof Error ? error.message : "Unable to load class details.");
@@ -81,8 +81,8 @@ export default function EditClass({
 
     const payload: UpdateClassRequest = {};
     if (trimmedSectionName !== classDetail.section_name) payload.section_name = trimmedSectionName;
-    const currentAdviserId = classDetail.adviser?.staff_id ?? "";
-    if (adviserStaffId !== currentAdviserId) payload.adviser_staff_id = adviserStaffId || null;
+    const currentAdviserId = classDetail.adviser?.staff_id || "__none__";
+    if (adviserStaffId !== currentAdviserId) payload.adviser_staff_id = adviserStaffId === "__none__" ? null : adviserStaffId;
 
     if (!Object.keys(payload).length) {
       setSaveError("No changes to save.");
@@ -96,7 +96,7 @@ export default function EditClass({
       const updatedClass = await updateClass(classDetail.class_id, payload);
       setClassDetail(updatedClass);
       setSectionName(updatedClass.section_name);
-      setAdviserStaffId(updatedClass.adviser?.staff_id ?? "");
+      setAdviserStaffId(updatedClass.adviser?.staff_id || "__none__");
       setSaveSuccess("Class updated successfully.");
       onSaved(updatedClass);
     } catch (error: unknown) {
@@ -121,7 +121,7 @@ export default function EditClass({
               <Input
                 readOnly
                 value={classDetail.academic_year.year_label}
-                className="bg-muted/50 text-muted-foreground"
+                className="bg-muted/50 text-muted-foreground text-base"
               />
             </Field>
 
@@ -129,12 +129,13 @@ export default function EditClass({
               <Input
                 readOnly
                 value={classDetail.academic_level.level_name}
-                className="bg-muted/50 text-muted-foreground"
+                className="bg-muted/50 text-muted-foreground text-base"
               />
             </Field>
 
             <Field label="Section Name">
               <Input
+                className="text-base"
                 value={sectionName}
                 onChange={(event) => {
                   setSectionName(event.target.value);
@@ -147,6 +148,7 @@ export default function EditClass({
 
             <Field label="Class Adviser">
               <Select
+                className="text-base"
                 value={adviserStaffId}
                 onChange={(event) => {
                   setAdviserStaffId(event.target.value);
@@ -154,12 +156,12 @@ export default function EditClass({
                   setSaveSuccess("");
                 }}
               >
-                <Select.Trigger className="w-full">
+                <Select.Trigger className="w-full text-base">
                   <Select.Value placeholder="Select class adviser..." />
                 </Select.Trigger>
                 <Select.Content>
                   <Select.Group>
-                    <Select.Item value="">No adviser assigned</Select.Item>
+                    <Select.Item value="__none__">No adviser assigned</Select.Item>
                     {adviserOptions.map((adviser) => (
                       <Select.Item key={adviser.staff_id} value={adviser.staff_id}>
                         {adviserName(adviser)}

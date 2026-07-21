@@ -29,7 +29,6 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
-import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AdminClasses() {
   const [search, setSearch] = useState("");
@@ -354,7 +353,7 @@ export default function AdminClasses() {
                         <ClassCard
                           key={item.class_id}
                           item={item}
-                          onEdit={() => setEditTarget(item)}
+                          onEdit={() => setTimeout(() => setEditTarget(item), 0)}
                           onArchive={() => {
                             setArchiveError("");
                             setNotice("");
