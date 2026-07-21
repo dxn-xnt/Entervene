@@ -119,7 +119,7 @@ export default function AddSubjectLoadModal() {
                 <Dialog.Header asChild>
                     <div className="flex items-center justify-between w-full">
                         <Text as="h5" className="font-sans text-xl font-bold">Add Subject Load</Text>
-                        <Text as="h5" className="font-sans text-md font-bold">(Step 1 of 4)</Text>
+                        <Text as="h5" className="font-sans text-md font-bold">(Step 1 of 3)</Text>
                     </div>
                 </Dialog.Header>
                 <section className="flex flex-col gap-4 p-4 max-h-[90vh] overflow-y-auto">
@@ -249,7 +249,7 @@ export default function AddSubjectLoadModal() {
                 <Dialog.Header asChild>
                     <div className="flex items-center justify-between w-full">
                         <Text as="h5" className="font-sans text-xl font-bold">Add Teacher & Schedule</Text>
-                        <Text as="h5" className="font-sans text-md font-bold">(Step 2 of 4)</Text>
+                        <Text as="h5" className="font-sans text-md font-bold">(Step 2 of 3)</Text>
                     </div>
                 </Dialog.Header>
                 <section className="flex flex-col gap-4 p-4 max-h-[80vh] overflow-y-auto">

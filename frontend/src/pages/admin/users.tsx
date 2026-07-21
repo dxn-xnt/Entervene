@@ -13,7 +13,6 @@ import {
   BookOpen,
   GraduationCap,
   Plus,
-  PlusIcon,
   School,
   Search,
   UserCog,

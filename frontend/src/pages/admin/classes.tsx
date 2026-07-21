@@ -11,9 +11,9 @@ import {
 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import ClassCard from "@/components/admin/classes/ClassCard";
-import AddClassModal from "@/components/admin/classes/modals/AddClassModal";
-import ArchiveClassModal from "@/components/admin/classes/modals/ArchiveClassModal";
-import EditClassModal from "@/components/admin/classes/modals/EditClassModal";
+import AddClassModal from "./forms/add-class";
+import ArchiveClassModal from "@/pages/admin/forms/classes/archive-class";
+import EditClassModal from "@/pages/admin/forms/classes/edit-class";
 import { archiveClass, getClasses } from "@/lib/api";
 import type {
   ClassListItem,
@@ -29,7 +29,6 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
-import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AdminClasses() {
   const [search, setSearch] = useState("");
@@ -192,11 +191,17 @@ export default function AdminClasses() {
                 </div>
               </div>
               <div className="flex flex-row gap-2">
-                <Button
-                  onClick={() => setShowNewClass(true)}
-                >
-                  <Plus className="size-4 mr-2" /> New Class
-                </Button>
+                <Dialog open={showNewClass} onOpenChange={setShowNewClass}>
+                  <Dialog.Trigger>
+                    <Button>
+                      <Plus className="size-4 mr-2" /> New Class
+                    </Button>
+                  </Dialog.Trigger>
+                  <AddClassModal
+                    onClose={() => setShowNewClass(false)}
+                    onClassesCreated={() => void refreshClasses()}
+                  />
+                </Dialog>
                 <Dialog>
                   <Dialog.Trigger>
                     <Button variant={"outline"}>
@@ -208,7 +213,7 @@ export default function AdminClasses() {
               </div>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b border-black/40" />
+            <div className="-mx-4 md:-mx-6 border-b-2 border-border" />
 
             {notice && (
               <p className="border-2 border-black bg-[#bbf7d0] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">
@@ -216,7 +221,7 @@ export default function AdminClasses() {
               </p>
             )}
 
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <section className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <OverviewCard
                 title={"Total Classes"}
                 count={String(summary.total_classes)}
@@ -348,7 +353,7 @@ export default function AdminClasses() {
                         <ClassCard
                           key={item.class_id}
                           item={item}
-                          onEdit={() => setEditTarget(item)}
+                          onEdit={() => setTimeout(() => setEditTarget(item), 0)}
                           onArchive={() => {
                             setArchiveError("");
                             setNotice("");
@@ -364,14 +369,6 @@ export default function AdminClasses() {
           </div>
         </div>
       </div>
-
-      {showNewClass && (
-        <AddClassModal
-          onClose={() => setShowNewClass(false)}
-          onClassesCreated={() => void refreshClasses()}
-        />
-      )}
-
       {editTarget && (
         <EditClassModal
           classId={editTarget.class_id}

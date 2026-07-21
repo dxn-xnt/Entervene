@@ -1,3 +1,5 @@
+"use client";
+
 import { CheckCircle2, Download, FileText, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { ApiRequestError, getClassFormOptions, validateClassImport } from "@/lib/api";
@@ -12,9 +14,13 @@ import type {
   ValidateClassImportResponse,
   ValidatedImportAdviser,
 } from "@/types/adminClasses";
-import Field from "../fields/Field";
-import SelectField from "../fields/SelectField";
-import { retroButton } from "../utils";
+import Field from "@/components/admin/classes/fields/Field";
+import { Button } from "@/components/retroui/Button";
+import { Input } from "@/components/retroui/Input";
+import { Select } from "@/components/retroui/Select";
+import { Text } from "@/components/retroui/Text";
+import { Card } from "@/components/retroui/Card";
+import { Dialog } from "@/components/retroui/Dialog";
 
 const CLASS_IMPORT_TEMPLATE_HEADERS = [
   "section_name",
@@ -98,23 +104,18 @@ export default function ImportClassWizard({ onContinue, onValidationStale }: {
     if (!file) return;
     if (!file.name.toLocaleLowerCase().endsWith(".csv")) {
       setSelectedFile(null);
-      setFileError(file.type === "text/csv" ? "Please upload a valid CSV file." : "Only CSV files are supported.");
-      clearFileInput();
-      return;
-    }
-    if (file.size === 0) {
-      setSelectedFile(null);
-      setFileError("The selected CSV file is empty.");
+      setFileError("Only .csv files are supported.");
       clearFileInput();
       return;
     }
 
-    setSelectedFile(file);
     setFileError("");
+    setSelectedFile(file);
   }
 
   function downloadTemplate() {
-    const blob = new Blob([`${CLASS_IMPORT_TEMPLATE_HEADER_ROW}\r\n`], { type: "text/csv;charset=utf-8" });
+    const content = `${CLASS_IMPORT_TEMPLATE_HEADER_ROW}\nGrade 7 - Sapphire,7,STF-2026-001,John,A,Doe,109876543201,Alice,M,Smith,Female\n`;
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -164,7 +165,7 @@ export default function ImportClassWizard({ onContinue, onValidationStale }: {
   if (loadError) {
     return (
       <StatePanel message="Unable to load class options." detail={loadError}>
-        <button className={retroButton("bg-[#79bd80]")} onClick={retryLoading}>Retry</button>
+        <Button variant={"default"} onClick={retryLoading}>Retry</Button>
       </StatePanel>
     );
   }
@@ -178,65 +179,79 @@ export default function ImportClassWizard({ onContinue, onValidationStale }: {
     <div className="grid gap-4">
       <div className="grid gap-3">
         <Field label="Academic Year">
-          <input readOnly value={options.academic_year.year_label} className="h-10 rounded-md border border-black bg-black/5 px-3 text-sm text-black/70" />
+          <Input readOnly value={options.academic_year.year_label} className="bg-muted/50 text-muted-foreground" />
         </Field>
         <Field label="Academic Level">
-          <SelectField disabled={noLevels || isValidating} value={selectedAcademicLevelId} onChange={(value) => {
-            setSelectedAcademicLevelId(value);
-            clearValidationState();
-          }}>
-            {!selectedAcademicLevelId && <option value="">Select academic level</option>}
-            {options.academic_levels.map((level) => <option key={level.academic_level_id} value={level.academic_level_id}>{level.level_name}</option>)}
-          </SelectField>
+          <Select
+            disabled={noLevels || isValidating}
+            value={selectedAcademicLevelId}
+            onChange={(e) => {
+              setSelectedAcademicLevelId(e.target.value);
+              clearValidationState();
+            }}
+          >
+            <Select.Trigger className="w-full">
+              <Select.Value placeholder="Select academic level" />
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Group>
+                {options.academic_levels.map((level) => (
+                  <Select.Item key={level.academic_level_id} value={String(level.academic_level_id)}>
+                    {level.level_name}
+                  </Select.Item>
+                ))}
+              </Select.Group>
+            </Select.Content>
+          </Select>
           {noLevels && <InlineError message="No academic levels are available." />}
-          {selectedLevel && <p className="mt-1 text-[11px] font-semibold text-black/60">Selected: {selectedLevel.level_name}</p>}
+          {selectedLevel && <Text as="p" className="mt-1 text-xs text-muted-foreground font-semibold">Selected: {selectedLevel.level_name}</Text>}
         </Field>
       </div>
 
-      <section className="grid gap-3 rounded-md border border-black bg-[#fffdf5] p-4">
+      <Card className="grid gap-3 p-4">
         <div>
-          <h3 className="font-bold">Upload CSV file</h3>
-          <p className="text-xs text-black/65">Choose a CSV file that follows the required class-import template.</p>
-          <p className="mt-1 text-xs font-semibold text-black/70">Important: Keep student_lrn values as complete 12-digit numbers. When editing in spreadsheet software, format the student_lrn column as Text before pasting LRNs.</p>
+          <Text as="h6" className="font-bold">Upload CSV file</Text>
+          <Text as="p" className="text-xs text-muted-foreground">Choose a CSV file that follows the required class-import template.</Text>
+          <Text as="p" className="mt-1 text-xs font-semibold text-muted-foreground">Important: Keep student_lrn values as complete 12-digit numbers.</Text>
         </div>
         <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileChange} />
         {!selectedFile ? (
-          <button disabled={isValidating} className={retroButton("w-fit bg-[#79bd80] disabled:cursor-not-allowed disabled:opacity-50")} onClick={openFilePicker}>
-            <Upload className="size-4" /> Choose CSV File
-          </button>
+          <Button disabled={isValidating} className="w-fit" onClick={openFilePicker}>
+            <Upload className="size-4 mr-2" /> Choose CSV File
+          </Button>
         ) : (
-          <div className="grid gap-3 rounded-md border border-black bg-white p-3">
+          <Card className="grid gap-3 p-3 bg-muted/20">
             <div className="flex items-start gap-2">
               <FileText className="mt-0.5 size-4 shrink-0" />
               <div className="min-w-0">
-                <p className="text-xs font-bold uppercase text-black/55">Selected CSV file</p>
-                <p className="break-words text-sm font-bold">{selectedFile.name}</p>
-                <p className="text-xs text-black/65">{readableFileSize(selectedFile.size)}</p>
+                <Text as="p" className="text-xs font-bold uppercase text-muted-foreground">Selected CSV file</Text>
+                <Text as="p" className="break-words text-sm font-bold">{selectedFile.name}</Text>
+                <Text as="p" className="text-xs text-muted-foreground">{readableFileSize(selectedFile.size)}</Text>
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button disabled={isValidating} className={retroButton("px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50")} onClick={openFilePicker}>Replace file</button>
-              <button disabled={isValidating} className={retroButton("px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50")} onClick={removeFile}><X className="size-3" />Remove</button>
+              <Button size="sm" variant={"outline"} disabled={isValidating} onClick={openFilePicker}>Replace file</Button>
+              <Button size="sm" variant={"outline"} disabled={isValidating} onClick={removeFile}><X className="size-3 mr-1" />Remove</Button>
             </div>
-          </div>
+          </Card>
         )}
         {fileError && <InlineError message={fileError} />}
-      </section>
+      </Card>
 
-      <div className="grid gap-2 rounded-md border border-black bg-[#fff8d7] p-3 text-sm">
-        <div className="flex items-center gap-2 font-bold"><CheckCircle2 className="size-4" /> CSV validation</div>
-        {isValidating ? <p className="text-xs font-semibold text-black/70">Uploading and validating CSV...</p> : <p className="text-xs text-black/70">Validate the selected CSV against existing class advisers and student accounts.</p>}
-      </div>
+      <Card className="grid gap-2 p-3 text-sm bg-muted/20">
+        <div className="flex items-center gap-2 font-bold"><CheckCircle2 className="size-4 text-primary" /> CSV validation</div>
+        {isValidating ? <p className="text-xs font-semibold text-muted-foreground">Uploading and validating CSV...</p> : <p className="text-xs text-muted-foreground">Validate the selected CSV against existing class advisers and student accounts.</p>}
+      </Card>
 
       {validationError && <ValidationErrorPanel error={validationError} onDownloadTemplate={downloadTemplate} />}
       {validationResult && <ValidationSuccessPanel result={validationResult} canContinue={canContinueToAssignments(validationResult) && !isValidating && !validationError} onContinue={continueToAssignments} />}
 
-      <div className="flex flex-wrap justify-between gap-2">
-        <button className={retroButton()} onClick={downloadTemplate}><Download className="size-4" /> Download Template</button>
-        <button disabled={!canValidate} className={retroButton("bg-[#79bd80] disabled:cursor-not-allowed disabled:opacity-50")} onClick={validateCsv}>
-          {isValidating ? "Uploading and validating CSV..." : "Validate CSV"}
-        </button>
-      </div>
+      <Dialog.Footer className="px-0 border-t-0 pt-2 flex justify-between w-full">
+        <Button variant={"outline"} onClick={downloadTemplate}><Download className="size-4 mr-2" /> Download Template</Button>
+        <Button disabled={!canValidate} onClick={validateCsv}>
+          {isValidating ? "Validating CSV..." : "Validate CSV"}
+        </Button>
+      </Dialog.Footer>
     </div>
   );
 }
@@ -248,7 +263,7 @@ function readableFileSize(size: number) {
 }
 
 function InlineError({ message }: { message: string }) {
-  return <p className="text-[11px] font-semibold text-red-700">{message}</p>;
+  return <p className="text-xs font-semibold text-destructive">{message}</p>;
 }
 
 type ImportValidationErrorState = {
@@ -272,26 +287,26 @@ function ValidationSuccessPanel({ result, canContinue, onContinue }: {
   onContinue: () => void;
 }) {
   return (
-    <section className="grid gap-3 rounded-md border border-black bg-[#d8efca] p-4 text-sm">
+    <Card className="grid gap-3 border-primary bg-primary/10 p-4 text-sm">
       <div>
-        <h3 className="font-bold">CSV validated successfully</h3>
-        <p>Academic Year: {result.academic_year.year_label}</p>
-        <p>Academic Level: {result.academic_level.level_name}</p>
-        <p>Sections detected: {result.summary.section_count}</p>
-        <p>Students resolved: {result.summary.student_count}</p>
+        <Text as="h6" className="font-bold text-primary">CSV validated successfully</Text>
+        <Text as="p" className="text-xs">Academic Year: {result.academic_year.year_label}</Text>
+        <Text as="p" className="text-xs">Academic Level: {result.academic_level.level_name}</Text>
+        <Text as="p" className="text-xs">Sections detected: {result.summary.section_count}</Text>
+        <Text as="p" className="text-xs">Students resolved: {result.summary.student_count}</Text>
       </div>
       <div className="grid gap-2">
-        <h4 className="font-bold">Sections</h4>
+        <Text as="h6" className="font-bold text-xs">Sections</Text>
         {result.sections.map((section) => (
-          <div key={`${section.section_name}-${section.adviser.staff_id}`} className="rounded-md border border-black bg-white p-3">
+          <Card key={`${section.section_name}-${section.adviser.staff_id}`} className="p-3">
             <p className="font-bold">{section.section_name}</p>
             <p className="text-xs">Adviser: {adviserName(section.adviser)} - {section.adviser.staff_id}</p>
             <p className="text-xs">Students: {section.students.length}</p>
-          </div>
+          </Card>
         ))}
       </div>
-      <button disabled={!canContinue} className={retroButton("w-fit bg-[#79bd80] disabled:cursor-not-allowed disabled:opacity-50")} onClick={onContinue}>Continue to Assign Students</button>
-    </section>
+      <Button disabled={!canContinue} className="w-fit" onClick={onContinue}>Next: Assign Students</Button>
+    </Card>
   );
 }
 
@@ -343,157 +358,118 @@ function ValidationErrorPanel({ error, onDownloadTemplate }: { error: ImportVali
   const showGeneralMessage = error.message.trim().toLocaleLowerCase() !== "csv validation failed.";
 
   return (
-    <section className="grid gap-2 rounded-md border border-red-700 bg-red-50 p-4 text-sm text-red-800">
-      <h3 className="font-bold">CSV validation failed.</h3>
+    <Card className="grid gap-2 border-destructive bg-destructive/10 p-4 text-sm text-destructive">
+      <Text as="h6" className="font-bold">CSV validation failed.</Text>
       {showGeneralMessage && <p>{error.message}</p>}
       {hasHeaderError && (
-        <div className="grid gap-2 rounded border border-red-700/40 bg-white/70 p-3">
-          <p>The uploaded CSV headers do not match the required Class Management template.</p>
-          <div className="grid gap-1">
-            <p className="text-xs font-bold">Expected ordered headers:</p>
-            <p className="break-words rounded border border-red-700/30 bg-white px-2 py-1 font-mono text-xs">{CLASS_IMPORT_TEMPLATE_HEADER_ROW}</p>
-          </div>
-          <p className="text-xs font-semibold">Make sure you uploaded the Class Management template, not a Student-account import file.</p>
-          <button className={retroButton("w-fit bg-[#79bd80] text-black")} onClick={onDownloadTemplate}>
-            <Download className="size-4" /> Download Class Import Template
-          </button>
+        <div className="grid gap-2 rounded border border-destructive/40 bg-card p-3">
+          <p className="font-bold text-xs">Required Header Template:</p>
+          <code className="break-all rounded bg-muted p-2 text-[11px] font-mono">{CLASS_IMPORT_TEMPLATE_HEADER_ROW}</code>
+          <Button size="sm" variant={"outline"} className="w-fit" onClick={onDownloadTemplate}>
+            <Download className="size-3 mr-1" /> Download Header Template
+          </Button>
         </div>
       )}
       {!!error.details.length && (
-        <div className="grid gap-2">
-          {error.details.map((detail, index) => (
-            <div key={`${detail.row ?? "file"}-${detail.field ?? "field"}-${detail.code}-${index}`} className="rounded border border-red-700/40 bg-white/70 p-2">
-              <p className="text-xs font-bold">{errorLocation(detail)}</p>
-              <p>{mappedImportMessage(detail)}</p>
-              {detail.code === "student_not_found" && <p className="mt-1 text-xs font-semibold">Add this student through User Management, then validate the CSV again.</p>}
-              <p className="mt-1 text-[11px] text-red-700/75">Code: {detail.code}</p>
-            </div>
+        <ul className="grid gap-1 text-xs">
+          {error.details.map((item, index) => (
+            <li key={`${item.code}-${index}`}>- {item.message}</li>
           ))}
-        </div>
+        </ul>
       )}
-    </section>
+    </Card>
   );
-}
-
-function adviserName(adviser: ValidatedImportAdviser) {
-  return [adviser.first_name, adviser.middle_name, adviser.last_name, adviser.suffix].filter(Boolean).join(" ");
-}
-
-function errorLocation(detail: ClassImportValidationErrorItem) {
-  const row = detail.row ? `Row ${detail.row}` : "File";
-  return detail.field ? `${row} - ${detail.field}` : row;
-}
-
-function mappedImportMessage(detail: ClassImportValidationErrorItem) {
-  if (detail.code === "student_not_found") {
-    const lrn = detail.message.match(/\b\d{12}\b/)?.[0];
-    return lrn ? `Student account not found for LRN ${lrn}.` : detail.message;
-  }
-  if (detail.code === "student_lrn_scientific_notation") {
-    return "Student LRN was converted to scientific notation by spreadsheet software. Use the complete 12-digit LRN and format the student_lrn column as Text before saving the CSV. Copy the original LRN directly from the Student account record, then upload the corrected CSV again.";
-  }
-  return detail.message || importCodeMessage(detail.code);
 }
 
 async function preflightClassImportCsv(file: File): Promise<ImportValidationErrorState | null> {
   const text = await file.text();
-  const parsed = parseCsvRows(text.replace(/^\uFEFF/, ""));
+  const parseResult = parseCsvRows(text);
+  if (parseResult.malformed) {
+    return { message: "The CSV file is malformed. Ensure fields with commas or quotes are properly escaped.", details: [] };
+  }
+  if (!parseResult.rows.length) {
+    return { message: "The selected CSV file is empty.", details: [] };
+  }
 
-  if (parsed.malformed) {
+  const headerValues = parseResult.rows[0].values.map((item) => item.trim());
+  const headerMatch = CLASS_IMPORT_TEMPLATE_HEADERS.length === headerValues.length
+    && CLASS_IMPORT_TEMPLATE_HEADERS.every((header, index) => header === headerValues[index]);
+  if (!headerMatch) {
     return {
-      message: "CSV validation failed.",
-      details: [{
-        row: null,
-        field: null,
-        code: "csv_parse_error",
-        message: "The CSV file could not be parsed. Check for malformed quoted values, then try again.",
-      }],
+      message: "CSV headers do not match the required template.",
+      details: [{ code: "invalid_headers", message: "Header row must match the required import format." }],
     };
   }
 
-  const [headerRow, ...dataRows] = parsed.rows;
-  if (!headerRow || headerRow.values.join(",") !== CLASS_IMPORT_TEMPLATE_HEADER_ROW) {
-    return {
-      message: "CSV validation failed.",
-      details: [{
-        row: null,
-        field: null,
-        code: "invalid_headers",
-        message: "CSV headers must exactly match the required ordered header list.",
-      }],
-    };
-  }
+  const details: ClassImportValidationErrorItem[] = [];
+  const lrnOccurrences = new Map<string, number[]>();
 
-  const studentLrnIndex = CLASS_IMPORT_TEMPLATE_HEADERS.indexOf("student_lrn");
-  const details = dataRows.flatMap((row): ClassImportValidationErrorItem[] => {
-    if (row.values.every((value) => value.trim() === "")) return [];
-    const studentLrn = (row.values[studentLrnIndex] ?? "").trim();
-
-    if (isScientificNotation(studentLrn)) {
-      return [{
-        row: row.rowNumber,
-        field: "student_lrn",
+  parseResult.rows.slice(1).forEach(({ rowNumber, values }) => {
+    const rawLrn = (values[6] ?? "").trim();
+    if (!rawLrn) return;
+    if (isScientificNotation(rawLrn)) {
+      details.push({
         code: "student_lrn_scientific_notation",
-        message: "Student LRN was converted to scientific notation by spreadsheet software. Use the complete 12-digit LRN and format the student_lrn column as Text before saving the CSV.",
-      }];
+        message: `Row ${rowNumber}: Student LRN "${rawLrn}" appears to be in scientific notation.`,
+      });
+      return;
     }
-
-    if (!/^\d{12}$/.test(studentLrn)) {
-      return [{
-        row: row.rowNumber,
-        field: "student_lrn",
-        code: "student_lrn_invalid_format",
-        message: "Student LRN must contain exactly 12 numeric characters.",
-      }];
-    }
-
-    return [];
+    const rows = lrnOccurrences.get(rawLrn) ?? [];
+    rows.push(rowNumber);
+    lrnOccurrences.set(rawLrn, rows);
   });
 
-  return details.length ? { message: "CSV validation failed.", details } : null;
+  lrnOccurrences.forEach((rows, lrn) => {
+    if (rows.length > 1) {
+      details.push({
+        code: "duplicate_student_lrn",
+        message: `Student LRN "${lrn}" is duplicated on rows ${rows.join(", ")}.`,
+      });
+    }
+  });
+
+  return details.length ? { message: "CSV preflight check failed.", details: details.slice(0, 10) } : null;
 }
 
 function parseCsvRows(text: string): CsvParseResult {
+  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   const rows: ParsedCsvRow[] = [];
   let row: string[] = [];
   let cell = "";
-  let rowNumber = 1;
   let inQuotes = false;
+  let rowNumber = 1;
   let malformed = false;
 
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    const nextChar = text[index + 1];
+  for (let index = 0; index < normalized.length; index += 1) {
+    const char = normalized[index];
+    const next = normalized[index + 1];
 
-    if (inQuotes) {
-      if (char === "\"") {
-        if (nextChar === "\"") {
-          cell += "\"";
-          index += 1;
-        } else {
-          inQuotes = false;
-        }
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        cell += '"';
+        index += 1;
       } else {
-        cell += char;
+        inQuotes = !inQuotes;
       }
       continue;
     }
 
-    if (char === "\"") {
-      if (cell.length === 0) inQuotes = true;
-      else malformed = true;
-    } else if (char === ",") {
+    if (char === "," && !inQuotes) {
       row.push(cell);
       cell = "";
-    } else if (char === "\n") {
+      continue;
+    }
+
+    if (char === "\n" && !inQuotes) {
       row.push(cell);
       rows.push({ rowNumber, values: row });
       row = [];
       cell = "";
       rowNumber += 1;
-    } else if (char !== "\r") {
-      cell += char;
+      continue;
     }
+
+    cell += char;
   }
 
   if (inQuotes) malformed = true;
@@ -580,10 +556,14 @@ function importCodeMessage(code: string, fallback?: string) {
 
 function StatePanel({ message, detail, children }: { message: string; detail?: string; children?: ReactNode }) {
   return (
-    <div className="grid gap-3 rounded-md border border-black bg-[#fff8d7] p-5 text-sm">
+    <div className="grid gap-3 rounded-md border-2 border-border bg-card p-5 text-sm">
       <p className="font-bold">{message}</p>
-      {detail && detail !== message && <p className="text-xs text-black/70">{detail}</p>}
+      {detail && detail !== message && <p className="text-xs text-muted-foreground">{detail}</p>}
       {children && <div className="flex gap-2">{children}</div>}
     </div>
   );
+}
+
+function adviserName(adviser: ValidatedImportAdviser) {
+  return [adviser.first_name, adviser.middle_name, adviser.last_name, adviser.suffix].filter(Boolean).join(" ");
 }

@@ -1,4 +1,7 @@
+"use client";
+
 import { useState } from "react";
+import { Download, UserPlus } from "lucide-react";
 import { ApiRequestError, createClassesBatch } from "@/lib/api";
 import type {
   BatchCreateClassesRequest,
@@ -7,15 +10,21 @@ import type {
   ManualClassSetup,
   WizardMode,
 } from "@/types/adminClasses";
-import StudentAssignmentWorkspace from "../assignment/StudentAssignmentWorkspace";
-import { sortAssignmentStudents } from "../assignment/studentSorting";
-import { retroButton } from "../utils";
-import AddClassMethodSelection from "./AddClassMethodSelection";
-import ImportClassWizard from "./ImportClassWizard";
-import ManualClassWizard from "./ManualClassWizard";
-import ModalShell from "./ModalShell";
+import StudentAssignmentWorkspace from "@/components/admin/classes/assignment/StudentAssignmentWorkspace";
+import { sortAssignmentStudents } from "@/components/admin/classes/assignment/studentSorting";
+import ImportClassWizard from "@/pages/admin/forms/classes/import-class-wizard";
+import ManualClassWizard from "@/pages/admin/forms/classes/manual-class-wizard";
+import { Dialog } from "@/components/retroui/Dialog";
+import { Button } from "@/components/retroui/Button";
+import { Text } from "@/components/retroui/Text";
+import { Card } from "@/components/retroui/Card";
 
-export default function AddClassModal({ onClose, onClassesCreated }: { onClose: () => void; onClassesCreated?: () => void }) {
+type AddClassModalProps = {
+  onClose?: () => void;
+  onClassesCreated?: () => void;
+};
+
+export default function AddClassModal({ onClose, onClassesCreated }: AddClassModalProps) {
   const [mode, setMode] = useState<WizardMode>("choice");
   const [manualSetup, setManualSetup] = useState<ManualClassSetup | null>(null);
   const [manualStep, setManualStep] = useState<"details" | "assignment" | "review">("details");
@@ -23,7 +32,15 @@ export default function AddClassModal({ onClose, onClassesCreated }: { onClose: 
   const [resetWarning, setResetWarning] = useState("");
   const [saveSuccess, setSaveSuccess] = useState<BatchCreateClassesResponse | null>(null);
 
-  if (mode === "choice") return <AddClassMethodSelection onClose={onClose} onSelect={setMode} />;
+  function handleClose() {
+    setMode("choice");
+    setManualSetup(null);
+    setManualStep("details");
+    setAssignmentState(null);
+    setResetWarning("");
+    setSaveSuccess(null);
+    onClose?.();
+  }
 
   function continueFromDetails(setup: ManualClassSetup) {
     setSaveSuccess(null);
@@ -80,77 +97,155 @@ export default function AddClassModal({ onClose, onClassesCreated }: { onClose: 
 
   const inAssignmentStep = manualStep === "assignment";
 
-  return (
-    <ModalShell
-      title={saveSuccess ? "Create Class - Success" : mode === "manual" ? `Create Class - ${manualStep === "details" ? "Class Details" : manualStep === "assignment" ? "Assign Students" : "Review"}` : `Import from file${manualStep === "assignment" ? " - Assign Students" : manualStep === "review" ? " - Review" : ""}`}
-      onClose={onClose}
-      wide={!saveSuccess && inAssignmentStep}
-      fullScreen={!saveSuccess && inAssignmentStep}
-    >
-      {saveSuccess ? (
-        <ManualSaveSuccess result={saveSuccess} onClose={() => {
-          onClose();
-          onClassesCreated?.();
-        }} />
-      ) : mode === "manual" ? (
-        <div className={`grid gap-4 ${manualStep === "assignment" ? "h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" : ""}`}>
-          <ManualStepIndicator current={manualStep} />
-          {manualStep === "details" ? (
-            <ManualClassWizard
-              initialSetup={manualSetup}
-              onComplete={continueFromDetails}
-              onBack={() => setMode("choice")}
-            />
-          ) : manualStep === "assignment" && manualSetup ? (
-            <StudentAssignmentWorkspace
-              setup={manualSetup}
-              state={assignmentState}
-              resetWarning={resetWarning}
-              onChange={setAssignmentState}
-              onBack={() => setManualStep("details")}
-              onReview={() => setManualStep("review")}
-            />
-          ) : manualSetup && assignmentState ? (
-            <ManualReview
-              setup={manualSetup}
-              assignmentState={assignmentState}
-              onBack={() => setManualStep("assignment")}
-              onSaved={(result) => {
-                resetManualState();
-                setSaveSuccess(result);
-              }}
-            />
-          ) : null}
-        </div>
-      ) : (
-        <div className={`grid gap-4 ${manualStep === "assignment" ? "h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" : ""}`}>
-          {manualStep !== "details" && <ManualStepIndicator current={manualStep} />}
-          <div className={manualStep === "details" ? "" : "hidden"}>
-            <ImportClassWizard onContinue={continueFromImport} onValidationStale={clearImportHydration} />
+  if (mode === "choice") {
+    return (
+      <Dialog.Content size="lg">
+        <Dialog.Header asChild>
+          <div className="flex items-center justify-between w-full">
+            <Text as="h5" className="font-sans text-xl font-bold">Add New Classes</Text>
           </div>
-          {manualStep === "assignment" && manualSetup ? (
-            <StudentAssignmentWorkspace
-              setup={manualSetup}
-              state={assignmentState}
-              resetWarning={resetWarning}
-              onChange={setAssignmentState}
-              onBack={() => setManualStep("details")}
-              onReview={() => setManualStep("review")}
-            />
-          ) : manualStep === "review" && manualSetup && assignmentState ? (
-            <ManualReview
-              setup={manualSetup}
-              assignmentState={assignmentState}
-              onBack={() => setManualStep("assignment")}
-              onSaved={(result) => {
-                resetManualState();
-                setSaveSuccess(result);
-              }}
-            />
-          ) : null}
+        </Dialog.Header>
+
+        <section className="grid gap-4 p-4 md:grid-cols-2">
+          <Card
+            className="cursor-pointer transition hover:bg-muted/50"
+            onClick={() => setMode("import")}
+          >
+            <div className="flex items-center gap-3 font-semibold mb-2">
+              <Download className="size-5 text-primary" />
+              <span>Import from File</span>
+            </div>
+            <Text as="p" className="text-sm text-muted-foreground">
+              Upload a CSV file to add multiple classes and student assignments at once.
+            </Text>
+          </Card>
+
+          <Card
+            className="cursor-pointer transition hover:bg-muted/50"
+            onClick={() => setMode("manual")}
+          >
+            <div className="flex items-center gap-3 font-semibold mb-2">
+              <UserPlus className="size-5 text-primary" />
+              <span>Create Manually</span>
+            </div>
+            <Text as="p" className="text-sm text-muted-foreground">
+              Add individual class sections, assign advisers, and manage students step by step.
+            </Text>
+          </Card>
+        </section>
+
+        <Dialog.Footer>
+          <Dialog.Close>
+            <Button variant={"outline"} onClick={handleClose}>Cancel</Button>
+          </Dialog.Close>
+        </Dialog.Footer>
+      </Dialog.Content>
+    );
+  }
+
+  const stepIndex = manualStep === "details" ? 1 : manualStep === "assignment" ? 2 : 3;
+
+  const dialogTitle = saveSuccess
+    ? "Class Created Successfully"
+    : manualStep === "details"
+      ? mode === "manual" ? "Add Class Details" : "Import Class Details"
+      : manualStep === "assignment"
+        ? "Assign Students"
+        : "Review Class Setup";
+
+  return (
+    <Dialog.Content size={!saveSuccess && inAssignmentStep ? "3xl" : "xl"}>
+      <Dialog.Header asChild>
+        <div className="flex items-center justify-between w-full">
+          <Text as="h5" className="font-sans text-xl font-bold">{dialogTitle}</Text>
+          {!saveSuccess && (
+            <Text as="h5" className="font-sans text-md font-bold">(Step {stepIndex} of 3)</Text>
+          )}
         </div>
+      </Dialog.Header>
+
+      <section className="flex flex-col gap-4 p-4 max-h-[80vh] overflow-y-auto">
+        {saveSuccess ? (
+          <ManualSaveSuccess
+            result={saveSuccess}
+            onDone={() => {
+              handleClose();
+              onClassesCreated?.();
+            }}
+          />
+        ) : mode === "manual" ? (
+          <div className={`grid gap-4 ${manualStep === "assignment" ? "h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" : ""}`}>
+            {manualStep === "details" ? (
+              <ManualClassWizard
+                initialSetup={manualSetup}
+                onComplete={continueFromDetails}
+                onBack={() => setMode("choice")}
+              />
+            ) : manualStep === "assignment" && manualSetup ? (
+              <StudentAssignmentWorkspace
+                setup={manualSetup}
+                state={assignmentState}
+                resetWarning={resetWarning}
+                onChange={setAssignmentState}
+                onBack={() => setManualStep("details")}
+                onReview={() => setManualStep("review")}
+              />
+            ) : manualSetup && assignmentState ? (
+              <ManualReview
+                setup={manualSetup}
+                assignmentState={assignmentState}
+                onBack={() => setManualStep("assignment")}
+                onSaved={(result) => {
+                  resetManualState();
+                  setSaveSuccess(result);
+                }}
+              />
+            ) : null}
+          </div>
+        ) : (
+          <div className={`grid gap-4 ${manualStep === "assignment" ? "h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" : ""}`}>
+            <div className={manualStep === "details" ? "" : "hidden"}>
+              <ImportClassWizard onContinue={continueFromImport} onValidationStale={clearImportHydration} />
+            </div>
+            {manualStep === "assignment" && manualSetup ? (
+              <StudentAssignmentWorkspace
+                setup={manualSetup}
+                state={assignmentState}
+                resetWarning={resetWarning}
+                onChange={setAssignmentState}
+                onBack={() => setManualStep("details")}
+                onReview={() => setManualStep("review")}
+              />
+            ) : manualStep === "review" && manualSetup && assignmentState ? (
+              <ManualReview
+                setup={manualSetup}
+                assignmentState={assignmentState}
+                onBack={() => setManualStep("assignment")}
+                onSaved={(result) => {
+                  resetManualState();
+                  setSaveSuccess(result);
+                }}
+              />
+            ) : null}
+          </div>
+        )}
+      </section>
+
+      {!saveSuccess && (
+        <Dialog.Footer>
+          {manualStep === "details" ? (
+            <Button variant={"outline"} onClick={() => setMode("choice")}>Back</Button>
+          ) : manualStep === "assignment" ? (
+            <>
+              <Button variant={"outline"} onClick={() => setManualStep("details")}>Back</Button>
+              <Button variant={"default"} onClick={() => setManualStep("review")}>Next</Button>
+            </>
+          ) : (
+            <Button variant={"outline"} onClick={() => setManualStep("assignment")}>Back</Button>
+          )}
+        </Dialog.Footer>
       )}
-    </ModalShell>
+    </Dialog.Content>
   );
 }
 
@@ -164,20 +259,7 @@ function sameImportedSetup(current: ManualClassSetup, next: ManualClassSetup) {
     });
 }
 
-function ManualStepIndicator({ current }: { current: "details" | "assignment" | "review" }) {
-  const steps = [
-    ["details", "1. Class Details"],
-    ["assignment", "2. Assign Students"],
-    ["review", "3. Review"],
-  ] as const;
-  return (
-    <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold">
-      {steps.map(([id, label]) => <span key={id} className={`rounded border border-black px-2 py-1 ${current === id ? "bg-[#79bd80]" : "bg-white"}`}>{label}</span>)}
-    </div>
-  );
-}
-
-function ManualReview({ setup, assignmentState, onBack, onSaved }: {
+function ManualReview({ setup, assignmentState, onSaved }: {
   setup: ManualClassSetup;
   assignmentState: ManualAssignmentWorkspaceState;
   onBack: () => void;
@@ -213,22 +295,26 @@ function ManualReview({ setup, assignmentState, onBack, onSaved }: {
   return (
     <div className="grid gap-4">
       <div>
-        <h2 className="text-lg font-bold">Review Classes</h2>
-        <p className="text-sm"><b>Academic Level:</b> {setup.academicLevelName}</p>
-        <p className="text-sm"><b>Academic Year:</b> {setup.academicYear.year_label}</p>
+        <Text as="p" className="text-sm"><b>Academic Level:</b> {setup.academicLevelName}</Text>
+        <Text as="p" className="text-sm"><b>Academic Year:</b> {setup.academicYear.year_label}</Text>
       </div>
+
       <div className="grid gap-3 sm:grid-cols-2">
         {setup.sections.map((section) => (
-          <section key={section.localId} className="rounded-md border border-black bg-white p-3">
+          <Card key={section.localId} className="p-3">
             <h3 className="font-bold">{section.sectionName}</h3>
             <p className="text-sm">Adviser: {section.adviserName || "Not available"}</p>
             <p className="text-sm">Assigned Students: {assignmentState.assignmentsBySection[section.localId]?.length ?? 0}</p>
-          </section>
+          </Card>
         ))}
       </div>
-      <p className="text-sm font-bold">Remaining Unassigned Students: {assignmentState.unassignedStudents.length}</p>
+
+      <Text as="p" className="text-sm font-bold">
+        Remaining Unassigned Students: {assignmentState.unassignedStudents.length}
+      </Text>
+
       {saveError && (
-        <div className="grid gap-2 rounded-md border border-red-700 bg-red-50 p-3 text-sm text-red-800">
+        <div className="grid gap-2 rounded-md border-2 border-destructive bg-destructive/10 p-3 text-sm text-destructive">
           <p className="font-bold">{saveError.message}</p>
           {saveError.backendMessage && saveError.backendMessage !== saveError.message && <p>{saveError.backendMessage}</p>}
           {!!saveError.details.length && (
@@ -238,11 +324,11 @@ function ManualReview({ setup, assignmentState, onBack, onSaved }: {
           )}
         </div>
       )}
-      <div className="flex justify-between">
-        <button disabled={isSaving} className={retroButton("disabled:cursor-not-allowed disabled:opacity-50")} onClick={onBack}>Back to Assign Students</button>
-        <button disabled={isSaving} className={retroButton("bg-[#79bd80] disabled:cursor-not-allowed disabled:opacity-50")} onClick={saveClasses}>
+
+      <div className="flex justify-end pt-2">
+        <Button variant={"default"} disabled={isSaving} onClick={saveClasses}>
           {isSaving ? "Saving classes..." : saveError?.retryable ? "Retry Save Classes" : "Save Classes"}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -255,26 +341,28 @@ type SaveErrorState = {
   retryable: boolean;
 };
 
-function ManualSaveSuccess({ result, onClose }: { result: BatchCreateClassesResponse; onClose: () => void }) {
+function ManualSaveSuccess({ result, onDone }: { result: BatchCreateClassesResponse; onDone: () => void }) {
   return (
     <div className="grid gap-4">
-      <div className="rounded-md border border-black bg-[#d8efca] p-4">
-        <h2 className="text-lg font-bold">Classes created successfully.</h2>
-        <p className="text-sm">{result.summary.class_count} class{result.summary.class_count !== 1 ? "es" : ""} created.</p>
-        <p className="text-sm">{result.summary.student_assignment_count} student{result.summary.student_assignment_count !== 1 ? "s" : ""} assigned.</p>
-      </div>
+      <Card className="bg-primary/10 border-primary p-4">
+        <Text as="h6" className="text-base font-bold text-primary">Classes created successfully.</Text>
+        <Text as="p" className="text-sm">{result.summary.class_count} class{result.summary.class_count !== 1 ? "es" : ""} created.</Text>
+        <Text as="p" className="text-sm">{result.summary.student_assignment_count} student{result.summary.student_assignment_count !== 1 ? "s" : ""} assigned.</Text>
+      </Card>
+
       {!!result.classes.length && (
         <div className="grid gap-2">
           {result.classes.map((item) => (
-            <section key={item.class_id} className="rounded-md border border-black bg-white p-3">
+            <Card key={item.class_id} className="p-3">
               <h3 className="font-bold">{item.section_name}</h3>
               <p className="text-sm">Assigned Students: {item.student_count}</p>
-            </section>
+            </Card>
           ))}
         </div>
       )}
-      <div className="flex justify-end">
-        <button className={retroButton("bg-[#79bd80]")} onClick={onClose}>Close</button>
+
+      <div className="flex justify-end pt-2">
+        <Button variant={"default"} onClick={onDone}>Done</Button>
       </div>
     </div>
   );
