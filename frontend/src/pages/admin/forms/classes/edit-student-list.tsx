@@ -31,7 +31,7 @@ type BulkAction =
   | null;
 
 export default function EditStudentList({
-  currentSectionId,
+  currentSectionId: _currentSectionId,
   currentSectionName,
   academicLevel,
   students,

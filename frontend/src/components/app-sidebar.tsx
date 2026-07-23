@@ -38,7 +38,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             >
               <a href="#" className="gap-2">
                 <CommandIcon className="size-6!" />
-                <span className="text-base text-2xl! font-bold ">Entervene</span>
+                <span className="text-2xl! font-bold ">Entervene</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>

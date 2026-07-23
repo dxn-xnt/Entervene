@@ -14,19 +14,22 @@ export default function ArchiveClass({ classRecord, isArchiving, error, onClose,
   onConfirm: () => Promise<void>;
 }) {
   return (
-    <ModalShell title="Archive Class" onClose={onClose}>
-      <div className="grid gap-4">
-        <Text as="p" className="font-bold text-base">
-          {classRecord.section_name} - {classRecord.academic_level.level_name}
-        </Text>
-        <Text as="p" className="text-sm">
-          Are you sure you want to archive <b>{classRecord.section_name}</b>?
-        </Text>
-        <Text as="p" className="text-sm text-muted-foreground">
-          This class will no longer appear in the active Classes list or as a
-          valid Student-transfer destination. Existing records and historical
-          data will be preserved.
-        </Text>
+    <ModalShell title={`Archive Class ${classRecord.section_name}`} onClose={onClose}>
+      <div className="flex flex-col">
+        <div className="flex flex-col gap-4 p-4">
+          <div className="flex flex-col gap-1">
+            <Text as="p" className="text-base">
+              Are you sure you want to archive <b>{classRecord.section_name}</b>?
+            </Text>
+            <Text as="p" className="text-base text-muted-foreground">
+              This class will no longer appear in the active Classes list or as a
+              valid Student-transfer destination. Existing records and historical
+              data will be preserved.
+            </Text>
+          </div>
+
+        </div>
+
 
         {error && (
           <p className="border-2 border-destructive bg-destructive/10 p-3 text-sm font-semibold text-destructive">
@@ -34,12 +37,12 @@ export default function ArchiveClass({ classRecord, isArchiving, error, onClose,
           </p>
         )}
 
-        <Dialog.Footer className="px-0 pt-2 border-t-0">
+        <Dialog.Footer>
           <Button variant={"outline"} disabled={isArchiving} onClick={onClose}>
             Cancel
           </Button>
           <Button
-            variant={"secondary"}
+            variant={"default"}
             disabled={isArchiving}
             onClick={() => void onConfirm()}
           >

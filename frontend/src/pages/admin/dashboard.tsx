@@ -43,7 +43,6 @@ export default function AdminDashboard() {
                   <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
                     Dashboard
                   </h1>
-                  <p>Good morning, Admin!</p>
                 </div>
               </div>
 
@@ -52,6 +51,8 @@ export default function AdminDashboard() {
                 <p>January 8, 2026</p>
               </div> */}
             </header>
+
+            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
               <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">

@@ -10,7 +10,7 @@ import {
   Search,
 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
-import ClassCard from "@/components/admin/classes/ClassCard";
+import ClassCard from "@/components/admin/classes/class-card";
 import AddClassModal from "./forms/add-class";
 import ArchiveClassModal from "@/pages/admin/forms/classes/archive-class";
 import EditClassModal from "@/pages/admin/forms/classes/edit-class";
@@ -213,7 +213,7 @@ export default function AdminClasses() {
               </div>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border" />
+            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
             {notice && (
               <p className="border-2 border-black bg-[#bbf7d0] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">

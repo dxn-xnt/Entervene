@@ -65,7 +65,7 @@ export function NavUser() {
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground border-t-2 border-border p-6 py-8"
+              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground border-t-2 border-b-0! border-border p-6 py-8"
             >
               <Avatar className="h-10 w-10 p-0" variant={avatarVariant}>
                 <Avatar.Image

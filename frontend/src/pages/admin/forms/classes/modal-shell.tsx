@@ -35,7 +35,7 @@ export default function ModalShell({
           </div>
         </Dialog.Header>
 
-        <section className="flex flex-col gap-4 p-4 max-h-[80vh] overflow-y-auto">
+        <section className="flex flex-col gap-4 max-h-[80vh] overflow-y-auto">
           {children}
         </section>
       </Dialog.Content>
