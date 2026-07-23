@@ -115,8 +115,8 @@ export default function EditClass({
           <Button variant={"outline"} onClick={onClose}>Back to Classes</Button>
         </StatePanel>
       ) : (
-        <div className="grid gap-4">
-          <div className="grid gap-3">
+        <div className="flex">
+          <div className="grid gap-3 p-4">
             <Field label="Academic Year">
               <Input
                 readOnly
@@ -193,7 +193,7 @@ export default function EditClass({
             </div>
           )}
 
-          <Dialog.Footer className="px-0 pt-2 border-t-0">
+          <Dialog.Footer>
             <Button variant={"outline"} disabled={saving} onClick={onClose}>
               Cancel
             </Button>
@@ -202,7 +202,7 @@ export default function EditClass({
               disabled={saving}
               onClick={saveClass}
             >
-              {saving ? "Saving changes..." : "Save Changes"}
+              Save Changes
             </Button>
           </Dialog.Footer>
         </div>

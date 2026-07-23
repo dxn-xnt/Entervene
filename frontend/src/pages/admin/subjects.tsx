@@ -1,50 +1,56 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
-import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card as RetroCard } from "@/components/retroui/Card";
-import { Checkbox } from "@/components/retroui/Checkbox";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Loader } from "@/components/retroui/Loader";
 import { Select } from "@/components/retroui/Select";
-import { Text } from "@/components/retroui/Text";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
-import { formatPeriodLabel } from "@/lib/academic-periods";
 import {
-  Archive,
-  ArrowUpRight,
   Copy,
   DownloadIcon,
-  Pencil,
   Plus,
-  RotateCcw,
   Search,
   Upload,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import AddSubjectModal from "./forms/add-subject";
 import AddGradingComponentModal from "./forms/add-grading-component";
 import {
+  ALL_VALUE,
+  CopyPreviousYearSetupModal,
   CurriculumFilters,
   CurriculumPlanTable,
   EmptyStateCard,
-  // SubjectContextBanner,
-  SubjectPicker,
+  GradingTemplateRow,
+  LoadingCard,
+  OfferingModal,
+  OfferingRow,
+  SubjectGradeSection,
   SubjectModuleTabs,
+  SubjectRow,
+  defaultPathwayForGrade,
+  downloadBlob,
+  friendlyErrorMessage,
+  gradeLabel,
+  gradeValueForLevel,
+  pathwayLabel,
+  targetLevels,
+  TARGET_GRADES,
+  type AdminSubjectSection,
   type CurriculumGradeValue,
   type CurriculumPathwayValue,
   type CurriculumStatusValue,
+  type GradeGroup,
+  type OfferingFilters,
+  type PendingAction,
   type SubjectModuleTabId,
 } from "./subjects/components";
 import {
-  ApiRequestError,
   archiveGradingTemplate,
   archiveSubject,
   archiveSubjectOffering,
-  copySubjectOfferingsFromAcademicYear,
-  createSubjectOffering,
   downloadSubjectImportTemplate,
   downloadSubjectOfferingImportTemplate,
   getSubjectOfferingFormOptions,
@@ -55,10 +61,8 @@ import {
   restoreGradingTemplate,
   restoreSubject,
   restoreSubjectOffering,
-  updateSubjectOffering,
   uploadSubjectImportCsv,
   uploadSubjectOfferingImportCsv,
-  type SubjectAcademicLevel,
   type GradingTemplateFormOptions,
   type GradingTemplateListItem,
   type SubjectImportResult,
@@ -67,1084 +71,7 @@ import {
   type SubjectListItem,
   type SubjectOfferingFormOptions,
   type SubjectOfferingListItem,
-  type SubjectOfferingPathway,
-  type SubjectStatus,
 } from "@/lib/api";
-
-const TARGET_GRADES = new Set([7, 8, 9, 10, 11, 12]);
-const ALL_VALUE = "all";
-const SHS_PATHWAYS: SubjectOfferingPathway[] = ["both", "stem_medical", "stem_engineering"];
-const JHS_PATHWAYS: SubjectOfferingPathway[] = ["general"];
-const FALLBACK_PERIODS: SubjectOfferingListItem["academic_period"][] = [
-  {
-    academic_period_id: -1,
-    period_name: "Term 1",
-    period_type: "TERM",
-    period_sequence: 1,
-    academic_year_id: -1,
-  },
-  {
-    academic_period_id: -2,
-    period_name: "Term 2",
-    period_type: "TERM",
-    period_sequence: 2,
-    academic_year_id: -1,
-  },
-  {
-    academic_period_id: -3,
-    period_name: "Term 3",
-    period_type: "TERM",
-    period_sequence: 3,
-    academic_year_id: -1,
-  },
-];
-
-type AdminSubjectSection = SubjectModuleTabId;
-
-type GradeGroup = {
-  academicLevelId: number;
-  grade: string;
-  gradeLevel: number;
-  subjects: SubjectListItem[];
-};
-
-type OfferingFilters = {
-  academic_year_id: string;
-  grade: CurriculumGradeValue;
-  pathway: CurriculumPathwayValue;
-  status: CurriculumStatusValue;
-  search: string;
-};
-
-type PendingAction =
-  | { kind: "subject"; action: "archive" | "restore"; id: number; label: string }
-  | { kind: "offering"; action: "archive" | "restore"; id: number; label: string }
-  | { kind: "grading"; action: "archive" | "restore"; id: number; label: string };
-
-type OfferingFormState = {
-  subject_id: string;
-  subject_ids: string[];
-  academic_year_id: string;
-  academic_level_id: string;
-  academic_period_id: string;
-  academic_period_ids: string[];
-  pathway: SubjectOfferingPathway;
-  status: SubjectStatus;
-};
-
-function friendlyErrorMessage(message: string) {
-  if (message.trim().toLowerCase() === "not found") {
-    return "The subject API endpoint was not found. Restart the backend and make sure the latest migrations/routes are loaded.";
-  }
-  return message;
-}
-
-function subjectCode(subject: SubjectListItem | SubjectOfferingListItem["subject"]) {
-  return subject.subject_codename || "No code";
-}
-
-function pathwayLabel(pathway: SubjectOfferingPathway) {
-  if (pathway === "general") return "General";
-  if (pathway === "stem_medical") return "STEM Medical";
-  if (pathway === "stem_engineering") return "STEM Engineering";
-  return "Shared / Both";
-}
-
-function statusBadge(status: SubjectStatus) {
-  return (
-    <Badge size="sm" variant={status === "active" ? "surface" : "outline"}>
-      {status}
-    </Badge>
-  );
-}
-
-function targetLevels(levels: SubjectAcademicLevel[]) {
-  const filtered = levels.filter((level) => TARGET_GRADES.has(level.grade_level));
-  return filtered.length ? filtered : levels;
-}
-
-function gradeValueForLevel(level: SubjectAcademicLevel | null | undefined): CurriculumGradeValue {
-  if (!level || !TARGET_GRADES.has(level.grade_level)) return ALL_VALUE;
-  return String(level.grade_level) as CurriculumGradeValue;
-}
-
-function defaultPathwayForGrade(grade: CurriculumGradeValue): CurriculumPathwayValue {
-  if (grade === "7" || grade === "8" || grade === "9" || grade === "10") return "general";
-  if (grade === "11" || grade === "12") return "both";
-  return ALL_VALUE;
-}
-
-function gradeLabel(grade: CurriculumGradeValue) {
-  return grade === ALL_VALUE ? "All Grades" : `Grade ${grade}`;
-}
-
-function pathwaysForGrade(gradeLevel: number | null | undefined, allowed: SubjectOfferingPathway[] = []) {
-  const source = allowed.length ? allowed : [...JHS_PATHWAYS, ...SHS_PATHWAYS];
-  if (gradeLevel != null && gradeLevel >= 7 && gradeLevel <= 10) {
-    return source.filter((pathway) => JHS_PATHWAYS.includes(pathway));
-  }
-  if (gradeLevel != null && gradeLevel >= 11 && gradeLevel <= 12) {
-    return source.filter((pathway) => SHS_PATHWAYS.includes(pathway));
-  }
-  return source;
-}
-
-function isJuniorHighGrade(gradeLevel: number | null | undefined) {
-  return gradeLevel != null && gradeLevel >= 7 && gradeLevel <= 10;
-}
-
-function isSeniorHighGrade(gradeLevel: number | null | undefined) {
-  return gradeLevel != null && gradeLevel >= 11 && gradeLevel <= 12;
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-function subjectRouteGrade(level: SubjectAcademicLevel) {
-  return level.level_name || `Grade ${level.grade_level}`;
-}
-
-function LoadingCard({ label }: { label: string }) {
-  return (
-    <RetroCard className="flex w-full items-center gap-3 p-4 text-sm">
-      <Loader size="sm" />
-      <span>{label}</span>
-    </RetroCard>
-  );
-}
-
-function SubjectRow({
-  subject,
-  onArchive,
-  onRestore,
-}: {
-  subject: SubjectListItem;
-  onArchive?: (subject: SubjectListItem) => void;
-  onRestore?: (subject: SubjectListItem) => void;
-}) {
-  const navigate = useNavigate();
-  const routeGrade = encodeURIComponent(subjectRouteGrade(subject.academic_level));
-
-  return (
-    <RetroCard className="p-3">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <button
-          type="button"
-          className="min-w-0 text-left"
-          onClick={() => navigate(`/admin/subjects/${routeGrade}/${subject.subject_id}`)}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-bold">{subject.subject_name}</p>
-            {statusBadge(subject.status)}
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm md:grid-cols-3">
-            <span><strong>Code:</strong> {subjectCode(subject)}</span>
-            <span><strong>Grade:</strong> {subject.academic_level.level_name}</span>
-            <span><strong>Group:</strong> {subject.subject_group || "Ungrouped"}</span>
-            <span><strong>Hours:</strong> {subject.hours ?? 0}</span>
-            <span className="col-span-2 md:col-span-2">
-              <strong>Default template:</strong> {subject.default_grading_template || "No grading template"}
-            </span>
-          </div>
-          {subject.description ? <p className="text-xs text-muted-foreground">{subject.description}</p> : null}
-        </button>
-        <div className="flex shrink-0 gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => navigate(`/admin/subjects/${routeGrade}/${subject.subject_id}`)}
-          >
-            <ArrowUpRight className="size-4 mr-2" /> View
-          </Button>
-          {subject.status === "active" && onArchive ? (
-            <Button size="sm" variant="outline" onClick={() => onArchive(subject)}>
-              <Archive className="size-4 mr-2" /> Archive
-            </Button>
-          ) : null}
-          {subject.status === "archived" && onRestore ? (
-            <Button size="sm" variant="outline" onClick={() => onRestore(subject)}>
-              <RotateCcw className="size-4 mr-2" /> Restore
-            </Button>
-          ) : null}
-        </div>
-      </div>
-    </RetroCard>
-  );
-}
-
-function SubjectCatalogCard({
-  subject,
-  onArchive,
-}: {
-  subject: SubjectListItem;
-  onArchive: (subject: SubjectListItem) => void;
-}) {
-  const navigate = useNavigate();
-  const routeGrade = encodeURIComponent(subjectRouteGrade(subject.academic_level));
-
-  return (
-    <RetroCard className="flex min-h-36 w-56 shrink-0 flex-col justify-between bg-[#fff1b8] p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="line-clamp-1 text-lg font-bold">{subject.subject_name}</p>
-          <p className="text-xs font-semibold">{subjectCode(subject)}</p>
-        </div>
-        {statusBadge(subject.status)}
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-        <span className="font-semibold">{subject.subject_group || "Ungrouped"}</span>
-        <span className="text-right font-semibold">{subject.hours ?? 0} hrs</span>
-        <span className="col-span-2 line-clamp-1">{subject.default_grading_template || "No template"}</span>
-      </div>
-      <div className="mt-3 flex gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-8 flex-1"
-          onClick={() => navigate(`/admin/subjects/${routeGrade}/${subject.subject_id}`)}
-        >
-          <ArrowUpRight className="mr-2 size-4" /> View
-        </Button>
-        <Button size="sm" variant="outline" className="h-8 flex-1" onClick={() => onArchive(subject)}>
-          <Archive className="mr-2 size-4" /> Archive
-        </Button>
-      </div>
-    </RetroCard>
-  );
-}
-
-function SubjectGradeSection({
-  group,
-  onArchive,
-}: {
-  group: GradeGroup;
-  onArchive: (subject: SubjectListItem) => void;
-}) {
-  const navigate = useNavigate();
-
-  return (
-    <RetroCard className="w-full p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold">{group.grade}</h2>
-          <p className="text-sm">{group.subjects.length} active subjects</p>
-        </div>
-        <button
-          className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-full border-2 border-black bg-background"
-          onClick={() => navigate(`/admin/subjects/${encodeURIComponent(group.grade)}`)}
-          type="button"
-          title={`View ${group.grade}`}
-        >
-          <ArrowUpRight className="size-4" />
-        </button>
-      </div>
-      <div className="flex gap-3 overflow-x-auto pb-2">
-        {group.subjects.map((subject) => (
-          <SubjectCatalogCard key={subject.subject_id} subject={subject} onArchive={onArchive} />
-        ))}
-      </div>
-    </RetroCard>
-  );
-}
-
-function OfferingRow({
-  offering,
-  onEdit,
-  onArchive,
-  onRestore,
-  readOnly = false,
-  readOnlyReason,
-}: {
-  offering: SubjectOfferingListItem;
-  onEdit?: (offering: SubjectOfferingListItem) => void;
-  onArchive?: (offering: SubjectOfferingListItem) => void;
-  onRestore?: (offering: SubjectOfferingListItem) => void;
-  readOnly?: boolean;
-  readOnlyReason?: string;
-}) {
-  return (
-    <RetroCard className="p-3">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-bold">{offering.subject.subject_name}</p>
-            {statusBadge(offering.status)}
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm md:grid-cols-3">
-            <span><strong>Code:</strong> {subjectCode(offering.subject)}</span>
-            <span><strong>Year:</strong> {offering.academic_year.year_label}</span>
-            <span><strong>Grade:</strong> {offering.academic_level.level_name}</span>
-            <span><strong>Term:</strong> {offering.academic_period.period_name}</span>
-            <span className="col-span-2"><strong>Pathway:</strong> {pathwayLabel(offering.pathway)}</span>
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          {onEdit ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onEdit(offering)}
-              disabled={readOnly}
-              title={readOnly ? readOnlyReason : "Edit offering"}
-            >
-              <Pencil className="size-4 mr-2" /> Edit
-            </Button>
-          ) : null}
-          {offering.status === "active" && onArchive ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onArchive(offering)}
-              disabled={readOnly}
-              title={readOnly ? readOnlyReason : "Archive offering"}
-            >
-              <Archive className="size-4 mr-2" /> Archive
-            </Button>
-          ) : null}
-          {offering.status === "archived" && onRestore ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onRestore(offering)}
-              disabled={readOnly}
-              title={readOnly ? readOnlyReason : "Restore offering"}
-            >
-              <RotateCcw className="size-4 mr-2" /> Restore
-            </Button>
-          ) : null}
-        </div>
-      </div>
-    </RetroCard>
-  );
-}
-
-function scopeLabel(template: GradingTemplateListItem) {
-  const level = template.academic_level?.level_name ?? "Any level";
-  const subject = template.subject?.subject_name ?? "Any subject";
-  return `${level} - ${subject}`;
-}
-
-function GradingTemplateRow({
-  template,
-  onEdit,
-  onArchive,
-  onRestore,
-  readOnly = false,
-  readOnlyReason,
-}: {
-  template: GradingTemplateListItem;
-  onEdit?: (template: GradingTemplateListItem) => void;
-  onArchive?: (template: GradingTemplateListItem) => void;
-  onRestore?: (template: GradingTemplateListItem) => void;
-  readOnly?: boolean;
-  readOnlyReason?: string;
-}) {
-  return (
-    <RetroCard className="p-3">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-bold">{template.template_name}</p>
-            {statusBadge(template.status)}
-          </div>
-          <div className="mt-2 grid grid-cols-1 gap-1 text-sm md:grid-cols-2">
-            <span><strong>Academic scope:</strong> {template.academic_level?.level_name ?? "Any level"}</span>
-            <span><strong>Subject scope:</strong> {template.subject?.subject_name ?? "Any subject"}</span>
-            <span><strong>Total weight:</strong> {template.total_weight}%</span>
-            <span><strong>Components:</strong> {template.component_count}</span>
-          </div>
-          <p className="sr-only">{scopeLabel(template)}</p>
-          {template.description ? <p className="text-xs text-muted-foreground">{template.description}</p> : null}
-          <div className="mt-2 flex flex-wrap gap-2">
-            {template.components.map((component) => (
-              <span
-                key={component.component_id}
-                className="rounded-full border border-black px-2 py-1 text-xs font-semibold"
-              >
-                {component.component_name}: {component.weight}%
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          {onEdit ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onEdit(template)}
-              disabled={readOnly}
-              title={readOnly ? readOnlyReason : "Edit grading template"}
-            >
-              <Pencil className="size-4 mr-2" /> Edit
-            </Button>
-          ) : null}
-          {template.status === "active" && onArchive ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onArchive(template)}
-              disabled={readOnly}
-              title={readOnly ? readOnlyReason : "Archive grading template"}
-            >
-              <Archive className="size-4 mr-2" /> Archive
-            </Button>
-          ) : null}
-          {template.status === "archived" && onRestore ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onRestore(template)}
-              disabled={readOnly}
-              title={readOnly ? readOnlyReason : "Restore grading template"}
-            >
-              <RotateCcw className="size-4 mr-2" /> Restore
-            </Button>
-          ) : null}
-        </div>
-      </div>
-    </RetroCard>
-  );
-}
-
-function OfferingModal({
-  open,
-  onOpenChange,
-  options,
-  offering,
-  catalogSubjects,
-  readOnly = false,
-  readOnlyReason,
-  onSaved,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  options: SubjectOfferingFormOptions | null;
-  offering: SubjectOfferingListItem | null;
-  catalogSubjects: SubjectListItem[];
-  readOnly?: boolean;
-  readOnlyReason?: string;
-  onSaved: (message?: string) => Promise<void>;
-}) {
-  const [form, setForm] = useState<OfferingFormState>({
-    subject_id: "",
-    subject_ids: [],
-    academic_year_id: "",
-    academic_level_id: "",
-    academic_period_id: "",
-    academic_period_ids: [],
-    pathway: "general",
-    status: "active",
-  });
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showAdvancedYear, setShowAdvancedYear] = useState(false);
-
-  const gradeLevels = useMemo(() => targetLevels(options?.academic_levels ?? []), [options]);
-  const selectedYearId = Number(form.academic_year_id);
-  const selectedLevelId = Number(form.academic_level_id);
-  const selectedLevel = gradeLevels.find((level) => level.academic_level_id === selectedLevelId);
-  const selectedYear = options?.academic_years.find((year) => year.academic_year_id === selectedYearId);
-  const availablePathways = useMemo(
-    () => pathwaysForGrade(selectedLevel?.grade_level, options?.pathways),
-    [options?.pathways, selectedLevel?.grade_level]
-  );
-  const periods = useMemo(
-    () => (options?.academic_periods ?? []).filter((period) => period.academic_year_id === selectedYearId),
-    [options, selectedYearId]
-  );
-  const visiblePeriods = periods.length ? periods : FALLBACK_PERIODS;
-  const subjects = useMemo(
-    () => catalogSubjects.filter((subject) => subject.academic_level.academic_level_id === selectedLevelId && subject.status === "active"),
-    [catalogSubjects, selectedLevelId]
-  );
-  const selectedPeriodIds = new Set(form.academic_period_ids);
-  const isCreateMode = !offering;
-  const allTermsSelected = periods.length > 0 && periods.every((period) => selectedPeriodIds.has(String(period.academic_period_id)));
-  const isJhsSelection = isJuniorHighGrade(selectedLevel?.grade_level);
-  const isShsSelection = isSeniorHighGrade(selectedLevel?.grade_level);
-  const contextPeriod = periods.find((period) => form.academic_period_ids.includes(String(period.academic_period_id)))
-    ?? periods.find((period) => String(period.academic_period_id) === form.academic_period_id)
-    ?? periods[0];
-  const contextLabel = selectedYear?.year_label && contextPeriod
-    ? `${selectedYear.year_label} - ${formatPeriodLabel(contextPeriod)}`
-    : selectedYear?.year_label ?? "Current setup context unavailable";
-
-  useEffect(() => {
-    if (!open) return;
-    setError(null);
-    setShowAdvancedYear(false);
-    if (offering) {
-      setForm({
-        subject_id: String(offering.subject.subject_id),
-        subject_ids: [String(offering.subject.subject_id)],
-        academic_year_id: String(offering.academic_year.academic_year_id),
-        academic_level_id: String(offering.academic_level.academic_level_id),
-        academic_period_id: String(offering.academic_period.academic_period_id),
-        academic_period_ids: [String(offering.academic_period.academic_period_id)],
-        pathway: offering.pathway,
-        status: offering.status,
-      });
-      return;
-    }
-
-    const activeYear = options?.academic_years.find((year) => year.is_active) ?? options?.academic_years[0];
-    const level = gradeLevels[0];
-    const initialPeriods = (options?.academic_periods ?? []).filter(
-      (period) => period.academic_year_id === activeYear?.academic_year_id
-    );
-    setForm({
-      subject_id: "",
-      subject_ids: [],
-      academic_year_id: activeYear ? String(activeYear.academic_year_id) : "",
-      academic_level_id: level ? String(level.academic_level_id) : "",
-      academic_period_id: initialPeriods[0] ? String(initialPeriods[0].academic_period_id) : "",
-      academic_period_ids: isJuniorHighGrade(level?.grade_level)
-        ? initialPeriods.map((period) => String(period.academic_period_id))
-        : [],
-      pathway: pathwaysForGrade(level?.grade_level, options?.pathways)[0] ?? "general",
-      status: options?.default_status ?? "active",
-    });
-  }, [gradeLevels, offering, open, options]);
-
-  const setField = <TKey extends keyof OfferingFormState>(key: TKey, value: OfferingFormState[TKey]) => {
-    setForm((current) => ({ ...current, [key]: value }));
-  };
-
-  const handleYearChange = (value: string) => {
-    const nextPeriods = (options?.academic_periods ?? []).filter(
-      (period) => period.academic_year_id === Number(value)
-    );
-    setForm((current) => ({
-      ...current,
-      academic_year_id: value,
-      academic_period_id: nextPeriods[0] ? String(nextPeriods[0].academic_period_id) : "",
-      academic_period_ids: isJhsSelection ? nextPeriods.map((period) => String(period.academic_period_id)) : [],
-    }));
-  };
-
-  const handleLevelChange = (value: string) => {
-    const nextLevel = gradeLevels.find((level) => String(level.academic_level_id) === value);
-    const nextPathways = pathwaysForGrade(nextLevel?.grade_level, options?.pathways);
-    const nextPeriods = (options?.academic_periods ?? []).filter(
-      (period) => period.academic_year_id === Number(form.academic_year_id)
-    );
-    setForm((current) => ({
-      ...current,
-      academic_level_id: value,
-      subject_id: "",
-      subject_ids: [],
-      academic_period_ids: isJuniorHighGrade(nextLevel?.grade_level)
-        ? nextPeriods.map((period) => String(period.academic_period_id))
-        : [],
-      pathway: nextPathways.includes(current.pathway) ? current.pathway : nextPathways[0] ?? "general",
-    }));
-  };
-
-  const handleSubjectSelectionChange = (subjectIds: string[]) => {
-    setForm((current) => ({
-      ...current,
-      subject_ids: subjectIds,
-      subject_id: subjectIds[0] ?? "",
-    }));
-  };
-
-  const toggleTerm = (periodId: string) => {
-    if (!isCreateMode) {
-      setForm((current) => ({
-        ...current,
-        academic_period_id: periodId,
-        academic_period_ids: [periodId],
-      }));
-      return;
-    }
-
-    setForm((current) => {
-      const currentIds = new Set(current.academic_period_ids);
-      if (currentIds.has(periodId)) {
-        currentIds.delete(periodId);
-      } else {
-        currentIds.add(periodId);
-      }
-      const nextIds = [...currentIds];
-      return {
-        ...current,
-        academic_period_ids: nextIds,
-        academic_period_id: nextIds[0] ?? current.academic_period_id,
-      };
-    });
-  };
-
-  const toggleAllTerms = () => {
-    setForm((current) => {
-      const nextIds = allTermsSelected ? [] : periods.map((period) => String(period.academic_period_id));
-      return {
-        ...current,
-        academic_period_ids: nextIds,
-        academic_period_id: nextIds[0] ?? current.academic_period_id,
-      };
-    });
-  };
-
-  const duplicateOfferingError = (err: unknown) => {
-    if (err instanceof ApiRequestError && err.status === 409) return true;
-    if (!(err instanceof Error)) return false;
-    const message = err.message.toLowerCase();
-    return message.includes("already exists") || message.includes("conflict");
-  };
-
-  const summaryMessage = (createdCount: number, skippedCount: number, errorCount = 0) => {
-    return `created_count: ${createdCount}, skipped_count: ${skippedCount}, error_count: ${errorCount}`;
-  };
-
-  const handleSubmit = async () => {
-    setError(null);
-    if (readOnly) {
-      setError(readOnlyReason ?? "Previous academic years are locked in the UI to protect historical records.");
-      return;
-    }
-    const selectedIds = isCreateMode ? form.subject_ids : [form.subject_id].filter(Boolean);
-    const selectedTermIds = isCreateMode ? form.academic_period_ids : [form.academic_period_id].filter(Boolean);
-    if (!selectedIds.length || !selectedTermIds.length || !form.academic_year_id || !form.academic_level_id) {
-      setError(isCreateMode ? "Select setup details, at least one term, and at least one subject." : "Select a subject, academic year, grade level, and term.");
-      return;
-    }
-    if (selectedTermIds.some((periodId) => Number(periodId) <= 0)) {
-      setError("No valid academic terms are available for the selected academic year.");
-      return;
-    }
-    if (!availablePathways.includes(form.pathway)) {
-      setError("Select a valid pathway for the selected grade level.");
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      if (offering) {
-        const payload = {
-          subject_id: Number(form.subject_id),
-          academic_year_id: Number(form.academic_year_id),
-          academic_level_id: Number(form.academic_level_id),
-          academic_period_id: Number(form.academic_period_id),
-          pathway: form.pathway,
-          status: form.status,
-        };
-        await updateSubjectOffering(offering.subject_offering_id, payload);
-        await onSaved("Subject offering updated.");
-        onOpenChange(false);
-      } else {
-        let createdCount = 0;
-        let skippedCount = 0;
-        const errors: string[] = [];
-
-        for (const subjectId of selectedIds) {
-          for (const periodId of selectedTermIds) {
-            try {
-              await createSubjectOffering({
-                subject_id: Number(subjectId),
-                academic_year_id: Number(form.academic_year_id),
-                academic_level_id: Number(form.academic_level_id),
-                academic_period_id: Number(periodId),
-                pathway: form.pathway,
-                status: form.status,
-              });
-              createdCount += 1;
-            } catch (err) {
-              if (duplicateOfferingError(err)) {
-                skippedCount += 1;
-              } else {
-                errors.push(err instanceof Error ? err.message : "Unable to create one offering.");
-              }
-            }
-          }
-        }
-
-        if (errors.length) {
-          await onSaved(summaryMessage(createdCount, skippedCount, errors.length));
-          setError(`${summaryMessage(createdCount, skippedCount, errors.length)}. ${errors[0]}`);
-        } else {
-          await onSaved(summaryMessage(createdCount, skippedCount, 0));
-          onOpenChange(false);
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save subject offering.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content size="3xl" className="max-h-[90vh]">
-        <Dialog.Header asChild>
-          <div className="flex items-center justify-between w-full">
-            <Text as="h5" className="font-sans text-xl font-bold">
-              {offering ? "Edit Subject Offering" : "Add Subject Offerings"}
-            </Text>
-          </div>
-        </Dialog.Header>
-        <section className="max-h-[calc(90vh-7rem)] overflow-y-auto p-4">
-          <div className="flex flex-col gap-4">
-            <div className="rounded-lg border-2 border-black bg-[#fff1b8] p-3 shadow-[3px_3px_0_#000]">
-              <p className="text-sm font-semibold text-black/70">Current setup context</p>
-              <p className="text-lg font-bold">{contextLabel}</p>
-              <p className="text-xs text-black/70">
-                This offering will be added to the current active academic year. Change active year or active term in System Settings.
-              </p>
-            </div>
-            {readOnly ? (
-              <div className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
-                <p className="font-bold">Read-only academic year</p>
-                <p className="text-black/70">{readOnlyReason}</p>
-              </div>
-            ) : null}
-
-            <div className="rounded-lg border-2 border-black p-3 shadow-[3px_3px_0_#000]">
-              <h6 className="mb-3 font-bold">Offering Setup</h6>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div className="flex flex-col gap-1">
-                  <label className="text-sm" htmlFor="offering-level">Grade Level</label>
-                  <Select value={form.academic_level_id} onValueChange={handleLevelChange}>
-                    <Select.Trigger id="offering-level" className="w-full">
-                      <Select.Value placeholder="Select grade" />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Group>
-                        {gradeLevels.map((level) => (
-                          <Select.Item key={level.academic_level_id} value={String(level.academic_level_id)}>
-                            {level.level_name}
-                          </Select.Item>
-                        ))}
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-sm" htmlFor="offering-pathway">Pathway</label>
-                  <Select
-                    value={form.pathway}
-                    onValueChange={(value) => setField("pathway", value as SubjectOfferingPathway)}
-                    disabled={isJhsSelection}
-                  >
-                    <Select.Trigger id="offering-pathway" className="w-full">
-                      <Select.Value placeholder="Select pathway" />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Group>
-                        {availablePathways.map((pathway) => (
-                          <Select.Item key={pathway} value={pathway}>
-                            {pathwayLabel(pathway)}
-                          </Select.Item>
-                        ))}
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>
-                  {isJhsSelection ? (
-                    <p className="text-xs text-black/70">Grade 7 to 10 offerings use General.</p>
-                  ) : null}
-                </div>
-                <div className="flex flex-col gap-2 md:col-span-2">
-                  <label className="flex cursor-pointer items-start gap-3 rounded-md border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[2px_2px_0_#000]">
-                    <Checkbox
-                      checked={showAdvancedYear}
-                      onCheckedChange={(checked) => setShowAdvancedYear(checked === true)}
-                      className="mt-1 shrink-0"
-                    />
-                    <span>
-                      <span className="block font-bold">Add to a different academic year</span>
-                      <span className="text-xs text-black/70">
-                        Keep this off unless you are copying or correcting offerings outside the active setup.
-                      </span>
-                    </span>
-                  </label>
-                  {showAdvancedYear ? (
-                    <div className="flex flex-col gap-1">
-                      <label className="text-sm" htmlFor="offering-year">Academic Year</label>
-                      <Select value={form.academic_year_id} onValueChange={handleYearChange}>
-                        <Select.Trigger id="offering-year" className="w-full">
-                          <Select.Value placeholder="Select year" />
-                        </Select.Trigger>
-                        <Select.Content>
-                          <Select.Group>
-                            {options?.academic_years.map((year) => (
-                              <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
-                                {year.year_label}
-                              </Select.Item>
-                            ))}
-                          </Select.Group>
-                        </Select.Content>
-                      </Select>
-                    </div>
-                  ) : null}
-                </div>
-                <div className="flex flex-col gap-2 md:col-span-2">
-                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold">{isCreateMode ? "Term(s)" : "Term"}</p>
-                      {isJhsSelection ? (
-                        <p className="text-xs text-black/70">Junior High subjects usually continue across terms. Adjust if needed.</p>
-                      ) : null}
-                      {isShsSelection ? (
-                        <p className="text-xs text-black/70">Senior High subjects may be offered in selected term(s) depending on hours and curriculum mapping.</p>
-                      ) : null}
-                    </div>
-                    {isCreateMode && periods.length ? (
-                      <Button type="button" size="sm" variant="outline" onClick={toggleAllTerms}>
-                        {allTermsSelected ? "Clear terms" : "Select all terms"}
-                      </Button>
-                    ) : null}
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                    {visiblePeriods.map((period) => {
-                      const periodId = String(period.academic_period_id);
-                      const isFallback = period.academic_period_id <= 0;
-                      return (
-                        <label
-                          key={period.academic_period_id}
-                          className={`flex items-center gap-3 rounded-md border-2 border-black p-3 shadow-[2px_2px_0_#000] ${isFallback ? "cursor-not-allowed bg-black/5 text-black/50" : "cursor-pointer bg-background"
-                            }`}
-                        >
-                          <Checkbox
-                            checked={selectedPeriodIds.has(periodId)}
-                            onCheckedChange={() => toggleTerm(periodId)}
-                            className="shrink-0"
-                            disabled={isFallback}
-                          />
-                          <span className="font-semibold">{formatPeriodLabel(period)}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  {!periods.length ? (
-                    <p className="text-sm font-semibold text-amber-700">No terms found for this academic year.</p>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border-2 border-black p-3 shadow-[3px_3px_0_#000]">
-              <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h6 className="font-bold">Select Subjects</h6>
-                  <p className="text-xs text-black/70">Catalog subjects are filtered by the selected grade level.</p>
-                </div>
-              </div>
-
-              <SubjectPicker
-                subjects={subjects}
-                selectedSubjectIds={form.subject_ids}
-                onChange={handleSubjectSelectionChange}
-                singleSelect={!isCreateMode}
-                searchPlaceholder={isCreateMode ? "Search subjects for this grade" : "Search subject"}
-              />
-            </div>
-
-            {offering ? (
-              <div className="flex flex-col gap-1">
-                <label className="text-sm" htmlFor="offering-status">Status</label>
-                <Select value={form.status} onValueChange={(value) => setField("status", value as SubjectStatus)}>
-                  <Select.Trigger id="offering-status" className="w-full">
-                    <Select.Value placeholder="Select status" />
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Group>
-                      {(options?.statuses ?? ["active", "archived"]).map((status) => (
-                        <Select.Item key={status} value={status}>
-                          {status}
-                        </Select.Item>
-                      ))}
-                    </Select.Group>
-                  </Select.Content>
-                </Select>
-              </div>
-            ) : null}
-
-            {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
-          </div>
-        </section>
-        <Dialog.Footer>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={isSaving || !options || readOnly} title={readOnly ? readOnlyReason : undefined}>
-            {isSaving ? "Saving..." : offering ? "Save Offering" : "Add Offerings"}
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
-  );
-}
-
-function CopyPreviousYearSetupModal({
-  open,
-  onOpenChange,
-  options,
-  defaultSourceAcademicYearId,
-  onCopied,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  options: SubjectOfferingFormOptions | null;
-  defaultSourceAcademicYearId?: number;
-  onCopied: (result: SubjectOfferingCopyAcademicYearResult) => Promise<void>;
-}) {
-  const [sourceAcademicYearId, setSourceAcademicYearId] = useState("");
-  const [targetAcademicYearId, setTargetAcademicYearId] = useState("");
-  const [overwriteExisting, setOverwriteExisting] = useState(false);
-  const [isCopying, setIsCopying] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const activeYears = useMemo(
-    () => options?.academic_years.filter((year) => year.is_active) ?? [],
-    [options?.academic_years]
-  );
-  const targetYears = activeYears;
-  const selectedTargetYearId = Number(targetAcademicYearId);
-  const sourceYears = useMemo(() => {
-    const years = options?.academic_years ?? [];
-    const inactiveYears = years.filter((year) => !year.is_active && year.academic_year_id !== selectedTargetYearId);
-    return inactiveYears.length
-      ? inactiveYears
-      : years.filter((year) => year.academic_year_id !== selectedTargetYearId);
-  }, [options?.academic_years, selectedTargetYearId]);
-
-  useEffect(() => {
-    if (!open) return;
-    const defaultTarget = activeYears[0];
-    const sourceCandidates = options?.academic_years.filter((year) =>
-      year.academic_year_id !== defaultTarget?.academic_year_id
-    ) ?? [];
-    const defaultSource = sourceCandidates.find((year) => year.academic_year_id === defaultSourceAcademicYearId)
-      ?? sourceCandidates.find((year) => !year.is_active)
-      ?? sourceCandidates[0];
-
-    setTargetAcademicYearId(defaultTarget ? String(defaultTarget.academic_year_id) : "");
-    setSourceAcademicYearId(defaultSource ? String(defaultSource.academic_year_id) : "");
-    setOverwriteExisting(false);
-    setError(null);
-  }, [activeYears, defaultSourceAcademicYearId, open, options?.academic_years]);
-
-  const handleCopy = async () => {
-    setError(null);
-    if (!sourceAcademicYearId || !targetAcademicYearId) {
-      setError("Select a source academic year and active target academic year.");
-      return;
-    }
-    if (sourceAcademicYearId === targetAcademicYearId) {
-      setError("Source and target academic years must be different.");
-      return;
-    }
-
-    setIsCopying(true);
-    try {
-      const result = await copySubjectOfferingsFromAcademicYear({
-        source_academic_year_id: Number(sourceAcademicYearId),
-        target_academic_year_id: Number(targetAcademicYearId),
-        overwrite_existing: overwriteExisting,
-      });
-      await onCopied(result);
-      onOpenChange(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to copy previous year setup.");
-    } finally {
-      setIsCopying(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content size="2xl">
-        <Dialog.Header asChild>
-          <div className="flex w-full items-center justify-between">
-            <Text as="h5" className="font-sans text-xl font-bold">
-              Copy Previous Year Setup
-            </Text>
-          </div>
-        </Dialog.Header>
-        <section className="flex flex-col gap-4 p-4">
-          <div className="rounded-lg border-2 border-black bg-[#fff1b8] p-3 text-sm shadow-[3px_3px_0_#000]">
-            <p className="font-bold">This copies subject offerings only.</p>
-            <p className="text-black/70">
-              It does not copy teachers, classes, grades, submissions, or predictions.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="flex flex-col gap-1">
-              <label className="text-sm" htmlFor="copy-source-year">Source Academic Year</label>
-              <Select value={sourceAcademicYearId} onValueChange={setSourceAcademicYearId}>
-                <Select.Trigger id="copy-source-year" className="w-full">
-                  <Select.Value placeholder="Select previous year" />
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Group>
-                    {sourceYears.map((year) => (
-                      <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
-                        {year.year_label}{year.is_active ? " (active)" : ""}
-                      </Select.Item>
-                    ))}
-                  </Select.Group>
-                </Select.Content>
-              </Select>
-              <p className="text-xs text-black/70">Previous or inactive years are allowed as the copy source.</p>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-sm" htmlFor="copy-target-year">Target Academic Year</label>
-              <Select
-                value={targetAcademicYearId}
-                onValueChange={setTargetAcademicYearId}
-                disabled={targetYears.length <= 1}
-              >
-                <Select.Trigger id="copy-target-year" className="w-full">
-                  <Select.Value placeholder="Select active year" />
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Group>
-                    {targetYears.map((year) => (
-                      <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
-                        {year.year_label}
-                      </Select.Item>
-                    ))}
-                  </Select.Group>
-                </Select.Content>
-              </Select>
-              <p className="text-xs text-black/70">Target year must be active. Future terms remain editable.</p>
-            </div>
-          </div>
-
-          <label className="flex cursor-pointer items-start gap-3 rounded-md border-2 border-black bg-background p-3 text-sm shadow-[2px_2px_0_#000]">
-            <Checkbox
-              checked={overwriteExisting}
-              onCheckedChange={(checked) => setOverwriteExisting(checked === true)}
-              className="mt-1 shrink-0"
-            />
-            <span>
-              <span className="block font-bold">Overwrite existing offerings</span>
-              <span className="text-xs text-black/70">
-                Updates exact matching target offerings. Extra target offerings are not deleted.
-              </span>
-            </span>
-          </label>
-
-          {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
-        </section>
-        <Dialog.Footer>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isCopying}>Cancel</Button>
-          <Button onClick={handleCopy} disabled={isCopying || !options || !sourceYears.length || !targetYears.length}>
-            {isCopying ? "Copying..." : "Copy Previous Year Setup"}
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
-  );
-}
 
 export default function AdminSubjects() {
   const catalogImportInputRef = useRef<HTMLInputElement | null>(null);
@@ -1624,7 +551,7 @@ export default function AdminSubjects() {
                       onClick={() => catalogImportInputRef.current?.click()}
                       disabled={isImportingCatalog}
                     >
-                      <Upload className="size-4 mr-2" /> {isImportingCatalog ? "Importing..." : "Import Catalog CSV"}
+                      <Upload className="size-4 mr-2" /> Import Catalog CSV
                     </Button>
                     <Button
                       variant="outline"
@@ -1632,7 +559,7 @@ export default function AdminSubjects() {
                       disabled={isDownloadingCatalogTemplate}
                     >
                       <DownloadIcon className="size-4 mr-2" />
-                      {isDownloadingCatalogTemplate ? "Downloading..." : "Download Catalog Template"}
+                      Download Catalog Template
                     </Button>
                   </>
                 ) : null}
@@ -1669,7 +596,7 @@ export default function AdminSubjects() {
                       disabled={isImportingOfferings || isViewingInactiveAcademicYear}
                       title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
                     >
-                      <Upload className="size-4 mr-2" /> {isImportingOfferings ? "Importing..." : "Import Offering CSV"}
+                      <Upload className="size-4 mr-2" /> Import Offering CSV
                     </Button>
                     <Button
                       variant="outline"
@@ -1677,7 +604,7 @@ export default function AdminSubjects() {
                       disabled={isDownloadingTemplate}
                     >
                       <DownloadIcon className="size-4 mr-2" />
-                      {isDownloadingTemplate ? "Downloading..." : "Download Offering Template"}
+                      Download Offering Template
                     </Button>
                   </>
                 ) : null}
@@ -1751,23 +678,43 @@ export default function AdminSubjects() {
 
             {activeSection === "catalog" ? (
               <section className="flex flex-col gap-4">
-                <RetroCard className="p-4">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <h2 className="text-xl font-semibold">Subject Catalog</h2>
-                      <p className="text-sm">Add and manage subjects by grade level. Teacher and schedule setup is done later in Classes.</p>
-                    </div>
-                    <div className="relative w-full md:w-80">
-                      <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2" />
-                      <Input
-                        className="w-full pl-9"
-                        value={catalogSearch}
-                        onChange={(event) => setCatalogSearch(event.target.value)}
-                        placeholder="Search name, code, group"
-                      />
-                    </div>
-                  </div>
-                </RetroCard>
+                <div className="grid gap-3 md:grid-cols-[1fr_160px_160px] py-2">
+
+                  <label className="relative shadow-md hover:shadow-none transition-shadow">
+                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+                    <Input
+                      value={catalogSearch}
+                      onChange={(event) => setCatalogSearch(event.target.value)}
+                      placeholder="Search name, code, group"
+                      className="h-10 w-full shadow-none border-black pl-9 pr-3"
+                    />
+                  </label>
+                  <Select value={""}>
+                    <Select.Trigger className="w-full">
+                      <Select.Value placeholder="Status" />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Group>
+                        <Select.Item value={"All"}>All Statuses</Select.Item>
+                        <Select.Item value={"Active"}>Active</Select.Item>
+                        <Select.Item value={"Archived"}>Archived</Select.Item>
+                      </Select.Group>
+                    </Select.Content>
+                  </Select>
+
+                  <Select value={""} >
+                    <Select.Trigger className="w-full">
+                      <Select.Value placeholder="Status" />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Group>
+                        <Select.Item value={"All"}>All Statuses</Select.Item>
+                        <Select.Item value={"Active"}>Active</Select.Item>
+                        <Select.Item value={"Archived"}>Archived</Select.Item>
+                      </Select.Group>
+                    </Select.Content>
+                  </Select>
+                </div>
 
                 {catalogImportResult ? (
                   <RetroCard className="p-3 text-sm">

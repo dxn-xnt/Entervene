@@ -132,7 +132,8 @@ export default function AdminInterventions() {
                 Interventions
               </h1>
             </header>
-            <div className="-mx-4 md:-mx-6 border-b border-black/40" />
+
+            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
             <div className="flex flex-col gap-4 py-2 md:gap-6 md:py-3">
               <div className="grid grid-cols-4 gap-4 items-start">

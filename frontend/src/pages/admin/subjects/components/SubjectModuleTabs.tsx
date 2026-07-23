@@ -22,7 +22,7 @@ export function SubjectModuleTabs({ activeTab, onTabChange, counts = {} }: Subje
       activeTab={activeTab}
       onTabChange={onTabChange}
       counts={counts}
-      className="border-b-2 border-black"
+      className="border-b-2 border-black -mt-1"
     />
   );
 }
