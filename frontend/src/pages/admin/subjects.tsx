@@ -45,7 +45,6 @@ import {
   type GradeGroup,
   type OfferingFilters,
   type PendingAction,
-  type SubjectModuleTabId,
 } from "./subjects/components";
 import {
   archiveGradingTemplate,
