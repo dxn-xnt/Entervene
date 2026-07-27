@@ -11,6 +11,8 @@ from app.db.Session import get_db
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
 from app.schemas.Prediction import (
+    DashboardAtRiskResponse,
+    DashboardFilterOptionsResponse,
     ModelPerformanceSummaryResponse,
     PredictionBuildFeaturesRequest,
     PredictionBuiltFeaturesResponse,
@@ -44,6 +46,8 @@ from app.services.prediction.PredictionReadService import (
     get_teacher_reviews_for_prediction,
 )
 from app.services.prediction.TeacherRiskReviewService import review_prediction_risk
+from app.services.prediction.DashboardPredictionService import get_dashboard_at_risk_predictions
+from app.services.prediction.DashboardFilterService import get_dashboard_filter_options
 
 router = APIRouter()
 
@@ -96,6 +100,52 @@ def _with_readiness(scoring_result: dict[str, Any], built: dict[str, Any]) -> di
         "evidence_summary": built["evidence_summary"],
         "warnings": [*built.get("warnings", []), *scoring_result.get("warnings", [])],
     }
+
+
+# ---------------------------------------------------------------------------
+# Dashboard endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard/at-risk", response_model=DashboardAtRiskResponse)
+def dashboard_at_risk(
+    class_id: int | None = None,
+    subject_id: int | None = None,
+    term: int | None = Query(None, ge=1, le=3),
+    risk_level: str | None = None,
+    search: str | None = None,
+    sort_by: str | None = None,
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
+    limit: int = Query(25, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    db: Session = Depends(get_db),
+):
+    return get_dashboard_at_risk_predictions(
+        db,
+        class_id=class_id,
+        subject_id=subject_id,
+        term=term,
+        risk_level=risk_level,
+        search=search,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/dashboard/filters", response_model=DashboardFilterOptionsResponse)
+def dashboard_filters(
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    db: Session = Depends(get_db),
+):
+    return get_dashboard_filter_options(db)
+
+
+# ---------------------------------------------------------------------------
+# Scoring / Feature / Persistence endpoints
+# ---------------------------------------------------------------------------
 
 
 @router.post("/preview", response_model=PredictionPreviewResponse)

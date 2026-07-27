@@ -289,3 +289,64 @@ class PredictionFromRecordsResponse(BaseModel):
     target_period_id: int | None = None
     feature_rows_created: int | None = None
     duplicate: bool | None = None
+
+
+# ---------------------------------------------------------------------------
+# Dashboard schemas
+# ---------------------------------------------------------------------------
+
+
+class DashboardPredictionItem(BaseModel):
+    prediction_id: int
+    student_id: UUID
+    student_name: str
+    student_lrn: str
+    class_name: str
+    subject_name: str
+    term_label: str
+    term_number: int
+    predicted_period_grade: float | None = None
+    risk_level: str
+    risk_score: float | None = None
+    data_status: str
+    generated_at: datetime | None = None
+
+
+class RiskSummary(BaseModel):
+    HIGH_RISK: int = 0
+    MODERATE_RISK: int = 0
+    NEEDS_MONITORING: int = 0
+    LOW_RISK: int = 0
+    INSUFFICIENT_DATA: int = 0
+    total: int = 0
+
+
+class DashboardAtRiskResponse(BaseModel):
+    items: list[DashboardPredictionItem] = Field(default_factory=list)
+    risk_summary: RiskSummary
+    total: int
+    limit: int
+    offset: int
+
+
+class DashboardClassOption(BaseModel):
+    class_id: int
+    section_name: str
+
+
+class DashboardSubjectOption(BaseModel):
+    subject_id: int
+    subject_name: str
+
+
+class DashboardTermOption(BaseModel):
+    term_number: int
+    term_label: str
+    academic_period_id: int
+
+
+class DashboardFilterOptionsResponse(BaseModel):
+    classes: list[DashboardClassOption] = Field(default_factory=list)
+    subjects: list[DashboardSubjectOption] = Field(default_factory=list)
+    terms: list[DashboardTermOption] = Field(default_factory=list)
+

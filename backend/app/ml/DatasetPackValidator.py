@@ -11,7 +11,7 @@ from typing import Any
 
 PRIVATE_IDENTITY_FILENAME = "PRIVATE_source_student_identity_map.csv"
 TARGET_COLUMN = "target_next_period_grade"
-PERIODICAL_COLUMN = "periodical_assessment_percent"
+
 QUARTERLY_COLUMN = "quarterly_assessment_percent"
 
 EXPECTED_ROW_COUNTS = {
@@ -31,7 +31,7 @@ EXPECTED_ROW_COUNTS = {
 ALLOWED_COMPONENT_TYPES = {
     "WRITTEN_WORK",
     "PERFORMANCE_TASK",
-    "PERIODICAL_ASSESSMENT",
+    "QUARTERLY_ASSESSMENT",
 }
 COMPONENT_TYPE_MAPPINGS = {
     "WW": "WRITTEN_WORK",
@@ -40,12 +40,12 @@ COMPONENT_TYPE_MAPPINGS = {
     "PT": "PERFORMANCE_TASK",
     "PERFORMANCE TASK": "PERFORMANCE_TASK",
     "PERFORMANCE_TASK": "PERFORMANCE_TASK",
-    "QA": "PERIODICAL_ASSESSMENT",
-    "QUARTERLY ASSESSMENT": "PERIODICAL_ASSESSMENT",
-    "QUARTERLY_ASSESSMENT": "PERIODICAL_ASSESSMENT",
-    "PERIODICAL ASSESSMENT": "PERIODICAL_ASSESSMENT",
-    "PERIODICAL_ASSESSMENT": "PERIODICAL_ASSESSMENT",
-    "EXAM": "PERIODICAL_ASSESSMENT",
+    "QA": "QUARTERLY_ASSESSMENT",
+    "QUARTERLY ASSESSMENT": "QUARTERLY_ASSESSMENT",
+    "QUARTERLY_ASSESSMENT": "QUARTERLY_ASSESSMENT",
+    "PERIODICAL ASSESSMENT": "QUARTERLY_ASSESSMENT",
+    "PERIODICAL_ASSESSMENT": "QUARTERLY_ASSESSMENT",
+    "EXAM": "QUARTERLY_ASSESSMENT",
 }
 
 ALLOWED_SCORE_STATUSES = {
@@ -324,8 +324,6 @@ def is_unsafe_identity_column(column: str) -> bool:
 
 
 def feature_name_mapping(columns: list[str]) -> dict[str, str]:
-    if QUARTERLY_COLUMN in columns and PERIODICAL_COLUMN not in columns:
-        return {QUARTERLY_COLUMN: PERIODICAL_COLUMN}
     return {}
 
 
@@ -380,7 +378,7 @@ def validate_ml_features(train_columns: list[str], train_rows: list[dict[str, st
         "has_previous_period",
         "written_work_percent",
         "performance_task_percent",
-        PERIODICAL_COLUMN,
+        QUARTERLY_COLUMN,
         "assessment_completion_rate",
         "source_period_grade",
         "grade_trend_vs_previous_period",
@@ -438,7 +436,7 @@ def decide_ready_for_task_3(
             not [
                 missing
                 for missing in ml_feature_validation.get("missing_feature_concepts", [])
-                if missing not in {"periodical_assessment_percent", "period_type", "total_periods_in_year", "period_progress_ratio"}
+                if missing not in {"quarterly_assessment_percent", "period_type", "total_periods_in_year", "period_progress_ratio"}
             ],
         ]
     )
