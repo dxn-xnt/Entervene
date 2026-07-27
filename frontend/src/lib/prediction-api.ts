@@ -180,3 +180,55 @@ export async function submitTeacherReview(
   if (!response.ok) throw new Error("Failed to submit teacher review.");
   return response.json();
 }
+
+export interface PredictionSuggestionItem {
+  student_suggestion_id: number;
+  suggestion_type: string;
+  resource_type: string;
+  title: string;
+  description?: string;
+  priority: string;
+  status: string;
+  created_at?: string;
+  lesson_id?: number;
+  lesson_title?: string;
+  classwork_assignment_id?: number;
+}
+
+export interface AssignInterventionPayload {
+  resource_type: "LESSON" | "CLASSWORK";
+  lesson_id?: number;
+  classwork_assignment_id?: number;
+  title: string;
+  description?: string;
+  priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+}
+
+export async function fetchPredictionSuggestions(
+  predictionId: number
+): Promise<PredictionSuggestionItem[]> {
+  const response = await apiFetch(
+    `/api/v1/predictions/${predictionId}/suggestions`
+  );
+  if (!response.ok) throw new Error("Failed to fetch prediction suggestions.");
+  return response.json();
+}
+
+export async function assignPredictionIntervention(
+  predictionId: number,
+  payload: AssignInterventionPayload
+): Promise<{ message: string; student_suggestion_id: number }> {
+  const response = await apiFetch(
+    `/api/v1/predictions/${predictionId}/assign-intervention`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to assign intervention.");
+  }
+  return response.json();
+}

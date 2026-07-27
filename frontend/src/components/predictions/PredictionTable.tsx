@@ -17,11 +17,11 @@ interface PredictionTableProps {
 }
 
 const RISK_BADGE_VARIANTS: Record<string, { bg: string; text: string }> = {
-  HIGH_RISK: { bg: "bg-red-500 text-white", text: "High Risk" },
-  MODERATE_RISK: { bg: "bg-amber-500 text-white", text: "Moderate" },
-  NEEDS_MONITORING: { bg: "bg-yellow-400 text-black", text: "Monitoring" },
-  LOW_RISK: { bg: "bg-emerald-500 text-white", text: "Low Risk" },
-  INSUFFICIENT_DATA: { bg: "bg-gray-400 text-white", text: "No Data" },
+  HIGH_RISK: { bg: "bg-red-500 text-white border-2 border-black font-extrabold", text: "High Risk" },
+  MODERATE_RISK: { bg: "bg-amber-500 text-white border-2 border-black font-extrabold", text: "Moderate" },
+  NEEDS_MONITORING: { bg: "bg-yellow-400 text-black border-2 border-black font-extrabold", text: "Monitoring" },
+  LOW_RISK: { bg: "bg-emerald-500 text-white border-2 border-black font-extrabold", text: "Low Risk" },
+  INSUFFICIENT_DATA: { bg: "bg-gray-300 text-black border-2 border-black font-extrabold", text: "No Data" },
 };
 
 function SortableHeader({
@@ -119,9 +119,17 @@ export default function PredictionTable({
             <Table.Row>
               <Table.Cell
                 colSpan={9}
-                className="text-center py-12 text-gray-500 font-semibold text-base"
+                className="text-center py-12"
               >
-                No predictions match the current filters.
+                <div className="flex flex-col items-center justify-center gap-2">
+                  <div className="size-12 rounded-full bg-yellow-300 border-2 border-black flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    <Eye className="size-6 text-black" />
+                  </div>
+                  <span className="font-extrabold text-sm text-black uppercase">No At-Risk Students Found</span>
+                  <span className="text-xs text-gray-600 font-semibold max-w-sm">
+                    No predictions match the selected filters. All students in this query scope are currently on track.
+                  </span>
+                </div>
               </Table.Cell>
             </Table.Row>
           ) : (
