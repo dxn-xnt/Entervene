@@ -6,11 +6,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.Dependencies import get_staff_id, require_role
+from app.core.Dependencies import get_current_user, get_optional_staff_id, get_staff_id, require_role
 from app.db.Session import get_db
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
 from app.schemas.Prediction import (
+    DashboardAtRiskResponse,
+    DashboardFilterOptionsResponse,
     ModelPerformanceSummaryResponse,
     PredictionBuildFeaturesRequest,
     PredictionBuiltFeaturesResponse,
@@ -37,6 +39,10 @@ from app.services.prediction.PredictionFeatureBuilderService import (
     build_prediction_features_from_records,
     insufficient_prediction_response,
 )
+from app.services.prediction.PredictionSuggestionService import (
+    assign_intervention_from_prediction,
+    get_suggestions_for_prediction,
+)
 from app.services.prediction.PredictionOutcomeService import evaluate_prediction_outcome
 from app.services.prediction.PredictionPersistenceService import score_and_persist_prediction
 from app.services.prediction.PredictionReadService import (
@@ -44,6 +50,8 @@ from app.services.prediction.PredictionReadService import (
     get_teacher_reviews_for_prediction,
 )
 from app.services.prediction.TeacherRiskReviewService import review_prediction_risk
+from app.services.prediction.DashboardPredictionService import get_dashboard_at_risk_predictions
+from app.services.prediction.DashboardFilterService import get_dashboard_filter_options
 
 router = APIRouter()
 
@@ -96,6 +104,56 @@ def _with_readiness(scoring_result: dict[str, Any], built: dict[str, Any]) -> di
         "evidence_summary": built["evidence_summary"],
         "warnings": [*built.get("warnings", []), *scoring_result.get("warnings", [])],
     }
+
+
+# ---------------------------------------------------------------------------
+# Dashboard endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard/at-risk", response_model=DashboardAtRiskResponse)
+def dashboard_at_risk(
+    class_id: int | None = None,
+    subject_id: int | None = None,
+    term: int | None = Query(None, ge=1, le=3),
+    risk_level: str | None = None,
+    search: str | None = None,
+    sort_by: str | None = None,
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
+    limit: int = Query(25, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
+    db: Session = Depends(get_db),
+):
+    is_admin = current_user.get("role") == "admin"
+    return get_dashboard_at_risk_predictions(
+        db,
+        class_id=class_id,
+        subject_id=subject_id,
+        term=term,
+        risk_level=risk_level,
+        search=search,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=limit,
+        offset=offset,
+        staff_id=staff_id,
+        is_admin=is_admin,
+    )
+
+
+@router.get("/dashboard/filters", response_model=DashboardFilterOptionsResponse)
+def dashboard_filters(
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    db: Session = Depends(get_db),
+):
+    return get_dashboard_filter_options(db)
+
+
+# ---------------------------------------------------------------------------
+# Scoring / Feature / Persistence endpoints
+# ---------------------------------------------------------------------------
 
 
 @router.post("/preview", response_model=PredictionPreviewResponse)
@@ -310,7 +368,7 @@ def read_prediction_detail(
 def create_teacher_risk_review(
     prediction_id: int,
     payload: TeacherRiskReviewRequest,
-    current_user: dict = Depends(require_role("admin", "teacher")),
+    current_user: dict = Depends(require_role("teacher")),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
@@ -375,3 +433,57 @@ def list_prediction_features(
             for row in rows
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Intervention Linking Endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{prediction_id}/assign-intervention")
+def assign_prediction_intervention(
+    prediction_id: int,
+    payload: dict[str, Any],
+    current_user: dict = Depends(require_role("teacher")),
+    staff_id: str | None = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    suggestion = assign_intervention_from_prediction(
+        db, prediction_id, staff_id=staff_id, payload=payload
+    )
+    return {
+        "message": "Intervention assigned successfully",
+        "student_suggestion_id": suggestion.student_suggestion_id,
+        "prediction_id": suggestion.prediction_id,
+        "status": suggestion.status,
+    }
+
+
+@router.get("/{prediction_id}/suggestions")
+def list_prediction_suggestions(
+    prediction_id: int,
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    db: Session = Depends(get_db),
+):
+    suggestions = get_suggestions_for_prediction(db, prediction_id)
+    return [
+        {
+            "student_suggestion_id": s.student_suggestion_id,
+            "suggestion_type": s.suggestion_type,
+            "resource_type": s.resource_type,
+            "title": s.title,
+            "description": s.description,
+            "priority": s.priority,
+            "status": s.status,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "lesson_id": s.lesson_id,
+            "lesson_title": s.lesson.title if s.lesson else None,
+            "classwork_assignment_id": (
+                s.classwork_link.classwork_assignment_id
+                if s.classwork_link
+                else None
+            ),
+        }
+        for s in suggestions
+    ]
+

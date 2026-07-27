@@ -31,16 +31,44 @@ def require_role(*allowed_roles: str):
     return _dependency
 
 
+import uuid as _uuid
+
 def get_staff_id(
     current_user: dict = Depends(require_role("teacher", "admin")),
     db: Session = Depends(get_db),
 ) -> str:
     """Resolve the staff_id from the JWT user_id."""
-    user_id = current_user["sub"]
+    raw_user_id = current_user.get("sub") or current_user.get("user_id")
+    if not raw_user_id:
+        raise HTTPException(status_code=404, detail="Staff profile not found")
+    
+    try:
+        user_id = _uuid.UUID(str(raw_user_id)) if isinstance(raw_user_id, str) else raw_user_id
+    except ValueError:
+        user_id = raw_user_id
+
     staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
     if not staff:
         raise HTTPException(status_code=404, detail="Staff profile not found")
     return staff.staff_id
+
+
+def get_optional_staff_id(
+    current_user: dict = Depends(require_role("teacher", "admin")),
+    db: Session = Depends(get_db),
+) -> str | None:
+    """Safely resolve staff_id if present, without failing for admin users without staff profile."""
+    raw_user_id = current_user.get("sub") or current_user.get("user_id")
+    if not raw_user_id:
+        return None
+
+    try:
+        user_id = _uuid.UUID(str(raw_user_id)) if isinstance(raw_user_id, str) else raw_user_id
+    except ValueError:
+        user_id = raw_user_id
+
+    staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
+    return staff.staff_id if staff else None
 
 
 def get_student_record(

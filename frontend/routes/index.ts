@@ -20,6 +20,7 @@ export const routes = {
     notifications: "/admin/notifications",
     settings: "/admin/settings",
     academicPeriods: "/admin/academic-periods",
+    predictions: "/admin/predictions",
     profile: "/admin/profile",
   },
 
@@ -38,6 +39,7 @@ export const routes = {
     grades: "/teacher/grades",
     gradeView: "/teacher/grades/:section/:subject",
     notifications: "/teacher/notifications",
+    predictions: "/teacher/predictions",
     profile: "/teacher/profile",
   },
 

@@ -51,7 +51,7 @@ def valid_report(**overrides):
         "rmse": 2.0984,
         "r2_score": 0.6227,
         "feature_count": 2,
-        "feature_columns": ["grade_level", "periodical_assessment_percent"],
+        "feature_columns": ["grade_level", "quarterly_assessment_percent"],
         "created_at": "2026-06-21T13:52:38.285103+00:00",
         "ready_for_task_4": True,
     }
@@ -61,10 +61,10 @@ def valid_report(**overrides):
 
 def valid_schema(**overrides):
     schema = {
-        "feature_columns": ["grade_level", "periodical_assessment_percent"],
+        "feature_columns": ["grade_level", "quarterly_assessment_percent"],
         "target_column": "target_next_period_grade",
         "excluded_columns": ["student_id", "target_next_period_grade"],
-        "column_mappings": {"quarterly_assessment_percent": "periodical_assessment_percent"},
+        "column_mappings": {"quarterly_assessment_percent": "quarterly_assessment_percent"},
         "required_runtime_columns": ["grade_level", "quarterly_assessment_percent"],
     }
     schema.update(overrides)

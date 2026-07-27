@@ -22,16 +22,6 @@ def test_target_column_detection_prefers_next_period_grade():
     assert detect_target_column(["student_id", "target_next_period_grade"]) == "target_next_period_grade"
 
 
-def test_quarterly_assessment_percent_maps_to_periodical():
-    df = pd.DataFrame({"quarterly_assessment_percent": [90], "target_next_period_grade": [91]})
-
-    mapped, mappings = apply_column_mappings(df)
-
-    assert "periodical_assessment_percent" in mapped.columns
-    assert "quarterly_assessment_percent" not in mapped.columns
-    assert mappings == {"quarterly_assessment_percent": "periodical_assessment_percent"}
-
-
 def test_identity_and_leakage_columns_are_excluded():
     columns = [
         "student_id",
@@ -129,8 +119,8 @@ def test_training_works_on_tiny_synthetic_csv_and_saves_artifacts(tmp_path: Path
     assert report["test_row_count"] == 4
     assert report["student_overlap_count"] == 0
     assert "student_id" not in report["feature_columns"]
-    assert "periodical_assessment_percent" in report["feature_columns"]
-    assert report["column_mappings"] == {"quarterly_assessment_percent": "periodical_assessment_percent"}
+    assert "quarterly_assessment_percent" in report["feature_columns"]
+    assert report["column_mappings"] == {}
 
     model_path = output_dir / "tiny_rf.joblib"
     report_path = output_dir / "tiny_rf_training_report.json"

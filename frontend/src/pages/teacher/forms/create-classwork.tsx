@@ -452,8 +452,8 @@ export default function CreateClassworkModal({
                       <Select.Item value="PERFORMANCE_TASK">
                         Performance Task
                       </Select.Item>
-                      <Select.Item value="PERIODICAL_EXAM">
-                        Periodical Exam
+                      <Select.Item value="QUARTERLY_ASSESSMENT">
+                        Quarterly Assessment
                       </Select.Item>
                     </Select.Group>
                   </Select.Content>

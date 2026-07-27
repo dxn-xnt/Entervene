@@ -25,9 +25,7 @@ TARGET_CANDIDATES = [
     "target_period_grade",
     "target_grade",
 ]
-COLUMN_MAPPINGS = {
-    "quarterly_assessment_percent": "periodical_assessment_percent",
-}
+COLUMN_MAPPINGS = {}
 RANDOM_STATE = 42
 
 DATASET_WARNING = (

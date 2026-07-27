@@ -28,7 +28,7 @@ class StudentPeriodGrade(Base):
     academic_period_id = Column(Integer, ForeignKey("academic_period.academic_period_id", ondelete="CASCADE"), nullable=False)
     written_work_percent = Column(Numeric(6, 2), nullable=True)
     performance_task_percent = Column(Numeric(6, 2), nullable=True)
-    periodical_assessment_percent = Column(Numeric(6, 2), nullable=True)
+    quarterly_assessment_percent = Column(Numeric(6, 2), nullable=True)
     initial_grade = Column(Numeric(6, 2), nullable=True)
     transmuted_grade = Column(Numeric(6, 2), nullable=True)
     final_period_grade = Column(Numeric(6, 2), nullable=True)

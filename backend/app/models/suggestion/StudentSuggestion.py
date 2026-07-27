@@ -78,11 +78,17 @@ class StudentSuggestion(Base):
         String(20),
         ForeignKey("academic_staff.staff_id", ondelete="SET NULL"),
     )
+    prediction_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("ai_prediction.prediction_id", ondelete="SET NULL"),
+        index=True,
+    )
 
     student: Mapped[object] = relationship("Student", backref=backref("study_suggestions"))
     subject: Mapped[object] = relationship("Subject", backref=backref("study_suggestions"))
     lesson: Mapped[object | None] = relationship("Lesson", backref=backref("study_suggestions"))
     created_by_staff: Mapped[object | None] = relationship("AcademicStaff", backref=backref("study_suggestions"))
+    prediction: Mapped[object | None] = relationship("AIPrediction", backref=backref("suggestions"))
     classwork_link: Mapped["SuggestionClasswork | None"] = relationship(
         "SuggestionClasswork",
         back_populates="suggestion",

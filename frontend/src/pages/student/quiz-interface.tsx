@@ -70,9 +70,9 @@ const StudentQuizTake = () => {
               <button
                 key={num}
                 onClick={() => setCurrentQuestion(num)}
-                className={`size-8 rounded-md border-2 border-black text-sm font-semibold transition-colors cursor-pointer ${
+                className={`size-8 border-2 border-black text-sm font-semibold transition-colors cursor-pointer ${
                   currentQuestion === num
-                    ? "bg-[#F6E9B2] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    ? "bg-[#F6E9B2] shadow-sm"
                     : "bg-white hover:bg-black/5"
                 }`}
               >
