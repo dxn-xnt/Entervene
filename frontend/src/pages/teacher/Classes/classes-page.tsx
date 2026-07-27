@@ -154,7 +154,7 @@ const ClassesPage = () => {
           <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
-              <h1 className="text-2xl md:text-4xl font-semibold">Classes</h1>
+              <h1 className="text-2xl md:text-4xl font-bold">Classes</h1>
             </header>
 
             <div className="-mx-4 md:-mx-6 border-b border-gray-500" />

@@ -1520,7 +1520,7 @@ export default function Classworks() {
             <header className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl md:text-4xl font-semibold">Classwork</h1>
+                <h1 className="text-2xl md:text-4xl font-bold">Classwork</h1>
               </div>
 
               <Button
