@@ -42,6 +42,7 @@ export type LinkedClasswork = {
   classwork_id: number;
   title: string;
   classwork_type?: string | null;
+  classwork_category?: string | null;
   due_date?: string | null;
   attachment_count?: number;
 };

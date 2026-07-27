@@ -1600,7 +1600,7 @@ export default function Classworks() {
                       <option value="">None</option>
                       <option value="WRITTEN_WORK">Written Works</option>
                       <option value="PERFORMANCE_TASK">Performance Task</option>
-                      <option value="PERIODICAL_EXAM">Periodical Exam</option>
+                      <option value="PERIODICAL_EXAM">Quarterly Assessment</option>
                     </select>
                   </label>
                   {!isReadingType(editDraft.classwork_type) && (
@@ -2524,7 +2524,7 @@ export default function Classworks() {
                               Performance Task
                             </option>
                             <option value="PERIODICAL_EXAM">
-                              Periodical Exam
+                              Quarterly Assessment
                             </option>
                           </select>
                         </label>

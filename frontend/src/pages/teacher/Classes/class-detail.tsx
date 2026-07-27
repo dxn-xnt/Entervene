@@ -167,9 +167,10 @@ function OverviewTab({ detail }: { detail: TeacherAdvisoryClassDetailResponse })
           <div className="grid gap-2">
             {detail.subject_loads.length ? (
               detail.subject_loads.map((load) => (
-                <div
+                <Link
                   key={load.subject_load_id}
-                  className="flex min-h-16 items-center justify-between gap-4 rounded-lg border border-black bg-[#fffdf5] px-4 py-3 shadow-[3px_3px_0_#000]"
+                  to={`/teacher/classes/${detail.class_id}/subjects/${load.subject_id}`}
+                  className="flex min-h-16 items-center justify-between gap-4 rounded-lg border border-black bg-[#fffdf5] px-4 py-3 shadow-[3px_3px_0_#000] transition-colors hover:bg-[#f7e9aa]"
                 >
                   <span>
                     <span className="block text-xl font-black">{load.subject_name}</span>
@@ -180,7 +181,7 @@ function OverviewTab({ detail }: { detail: TeacherAdvisoryClassDetailResponse })
                   <span className="text-right text-xs font-semibold">
                     {load.schedule || "No schedule"}
                   </span>
-                </div>
+                </Link>
               ))
             ) : (
               <EmptyInline message="No subject load assigned yet." />
@@ -284,11 +285,12 @@ function SubjectLoadTab({ detail }: { detail: TeacherAdvisoryClassDetailResponse
             <span>Status</span>
           </div>
           {detail.subject_loads.map((load) => (
-            <div
+            <Link
               key={load.subject_load_id}
-              className="grid min-h-12 grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_160px_120px] items-center border-b border-black/40 px-3 py-2 text-xs last:border-b-0"
+              to={`/teacher/classes/${detail.class_id}/subjects/${load.subject_id}`}
+              className="grid min-h-12 grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_160px_120px] items-center border-b border-black/40 px-3 py-2 text-xs transition-colors hover:bg-[#f7e9aa] last:border-b-0"
             >
-              <b>{load.subject_name}</b>
+              <b className="hover:underline">{load.subject_name}</b>
               <span className="flex items-center gap-2 font-semibold">
                 <Avatar text={load.teacher_name} />
                 {load.teacher_name}
@@ -297,7 +299,7 @@ function SubjectLoadTab({ detail }: { detail: TeacherAdvisoryClassDetailResponse
               <span className="w-fit rounded-full border border-black/30 bg-white px-2 py-0.5 font-bold">
                 {load.status || "N/A"}
               </span>
-            </div>
+            </Link>
           ))}
         </div>
       </div>
