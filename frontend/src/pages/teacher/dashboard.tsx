@@ -94,7 +94,7 @@ const Dashboard = () => {
             <div className="-mx-4 md:-mx-6 border-b border-black/40" />
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
-              <Card className="block w-full border-black">
+              <Card className="block w-full">
                 <Card.Header>
                   <Card.Description>Subjects</Card.Description>
                 </Card.Header>
@@ -107,7 +107,7 @@ const Dashboard = () => {
                 </Card.Content>
               </Card>
 
-              <Card className="block w-full border-black">
+              <Card className="block w-full">
                 <Card.Header>
                   <Card.Description>Classes</Card.Description>
                 </Card.Header>
@@ -120,7 +120,7 @@ const Dashboard = () => {
                 </Card.Content>
               </Card>
 
-              <Card className="block w-full border-black">
+              <Card className="block w-full">
                 <Card.Header>
                   <Card.Description>Students</Card.Description>
                 </Card.Header>
@@ -133,7 +133,7 @@ const Dashboard = () => {
                 </Card.Content>
               </Card>
 
-              <Card className="block w-full border-black">
+              <Card className="block w-full">
                 <Card.Header>
                   <Card.Description>Ungraded Classwork</Card.Description>
                 </Card.Header>
