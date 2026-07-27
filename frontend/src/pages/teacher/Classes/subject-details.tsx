@@ -32,6 +32,7 @@ export default function SubjectDetails() {
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [classworkCount, setClassworkCount] = useState<number | null>(null);
+  const [subjectAssignments, setSubjectAssignments] = useState<LinkedClasswork[]>([]);
   const [overviewMastery, setOverviewMastery] = useState<number>(0);
   const [overviewCompletion, setOverviewCompletion] = useState<number>(0);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
@@ -91,8 +92,9 @@ export default function SubjectDetails() {
           if (!assignmentsResponse.ok) {
             throw new Error("Unable to load classwork overview.");
           }
-          const assignments = (await assignmentsResponse.json()) as unknown[];
-          setClassworkCount(assignments.length);
+          const assignmentsData = (await assignmentsResponse.json()) as LinkedClasswork[];
+          setSubjectAssignments(assignmentsData);
+          setClassworkCount(assignmentsData.length);
         }
 
         if (classId && subjectId) {
@@ -211,6 +213,19 @@ export default function SubjectDetails() {
     setClassworkDraft(emptyClassworkDraft);
     setClassworkMaterials([]);
     setExpandedLessonId(lesson.lesson_id);
+  };
+
+  const openQuarterlyAssessmentForm = () => {
+    setError("");
+    const defaultLesson = lessons[0] || { lesson_id: 0, title: "Subject Level" };
+    setClassworkLesson(defaultLesson);
+    setClassworkDraft({
+      ...emptyClassworkDraft,
+      classwork_type: "QUIZ",
+      classwork_category: "PERIODICAL_EXAM",
+      title: "Quarterly Assessment",
+    });
+    setClassworkMaterials([]);
   };
 
   const openLessonManager = (lesson: Lesson) => {
@@ -640,6 +655,8 @@ export default function SubjectDetails() {
             openLessonManager={openLessonManager}
             openClassworkForm={openClassworkForm}
             openClassworkDetail={openClassworkDetail}
+            subjectAssignments={subjectAssignments}
+            openQuarterlyAssessmentForm={openQuarterlyAssessmentForm}
           />
         )}
       </main>

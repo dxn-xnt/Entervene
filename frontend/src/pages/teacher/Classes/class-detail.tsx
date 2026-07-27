@@ -202,26 +202,26 @@ function OverviewTab({
             </Card>
           </div>
         </div>
-        <aside className="flex flex-col gap-2">
-          <h3 className="text-lg font-bold">Recent Activity</h3>
-          <Card className="block w-full flex-1">
-            <Card.Content className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-black/60">
-              No recent activity available yet.
-            </Card.Content>
-          </Card>
-        </aside>
-      </div>
-
-      <section>
-        <h3 className="mb-2 text-lg font-bold">Subjects</h3>
-        <div className="grid gap-2">
-          {detail.subject_loads.length ? (
-            detail.subject_loads.map((load) => (
-              <Card
-                key={load.subject_load_id}
-                className="block w-full border-black transition-none hover:shadow-md"
-              >
-                <Card.Content className="flex min-h-16 items-center justify-between gap-4">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <aside className="flex flex-col gap-2">
+            <h3 className="text-lg font-bold">Recent Activity</h3>
+            <Card className="block w-full flex-1">
+              <Card.Content className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-black/60">
+                No recent activity available yet.
+              </Card.Content>
+            </Card>
+          </aside>
+        </div>
+        <section>
+          <h3 className="mb-1 text-lg font-bold">Subjects</h3>
+          <div className="grid gap-2">
+            {detail.subject_loads.length ? (
+              detail.subject_loads.map((load) => (
+                <Link
+                  key={load.subject_load_id}
+                  to={`/teacher/classes/${detail.class_id}/subjects/${load.subject_id}`}
+                  className="flex min-h-16 items-center justify-between gap-4 rounded-lg border border-black bg-[#fffdf5] px-4 py-3 shadow-[3px_3px_0_#000] transition-colors hover:bg-[#f7e9aa]"
+                >
                   <span>
                     <span className="block text-xl font-black">
                       {load.subject_name}
@@ -233,14 +233,20 @@ function OverviewTab({
                   <span className="text-right text-xs font-semibold">
                     {load.schedule || "No schedule"}
                   </span>
-                </Card.Content>
-              </Card>
-            ))
-          ) : (
-            <EmptyInline message="No subject load assigned yet." />
-          )}
+                </Link>
+              ))
+            ) : (
+              <EmptyInline message="No subject load assigned yet." />
+            )}
+          </div>
+        </section>
+      </div>
+      <aside>
+        <h3 className="mb-1 text-lg font-bold">Recent Activity</h3>
+        <div className="rounded-lg border border-black bg-[#fffdf5] p-6 text-center text-sm font-semibold text-black/60 shadow-[3px_3px_0_#000]">
+          No recent activity available yet.
         </div>
-      </section>
+      </aside>
     </div>
   );
 }
@@ -369,11 +375,12 @@ function SubjectLoadTab({
             <span>Status</span>
           </div>
           {detail.subject_loads.map((load) => (
-            <div
+            <Link
               key={load.subject_load_id}
-              className="grid min-h-12 grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_160px_120px] items-center border-b border-black/20 px-3 py-2 text-xs last:border-b-0"
+              to={`/teacher/classes/${detail.class_id}/subjects/${load.subject_id}`}
+              className="grid min-h-12 grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_160px_120px] items-center border-b border-black/40 px-3 py-2 text-xs transition-colors hover:bg-[#f7e9aa] last:border-b-0"
             >
-              <b>{load.subject_name}</b>
+              <b className="hover:underline">{load.subject_name}</b>
               <span className="flex items-center gap-2 font-semibold">
                 <Avatar text={load.teacher_name} />
                 {load.teacher_name}
@@ -382,7 +389,7 @@ function SubjectLoadTab({
               <span className="w-fit rounded-full border border-black/30 bg-white px-2 py-0.5 font-bold">
                 {load.status || "N/A"}
               </span>
-            </div>
+            </Link>
           ))}
         </div>
       </Card>

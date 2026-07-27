@@ -1,6 +1,6 @@
 import React from "react"
 import {
-  BarChart2, Bell, Book, BookOpen, CheckSquare,
+  BarChart2, Bell, Book, BookOpen, BookOpenCheck, CheckSquare,
   ClipboardList, LayoutDashboard, School, Settings, Shield, Users, Sparkles
 } from "lucide-react"
 import { routes } from "@/../routes"
@@ -23,14 +23,15 @@ export const SidebarConfigs: Record<string, NavItem[]> = {
       { title: "System Settings", url: routes.admin.settings,       icon: <Settings />        },
     ],
     teacher: [
-      { title: "Dashboard",     url: routes.teacher.dashboard,     icon: <LayoutDashboard /> },
-      { title: "Classes",       url: routes.teacher.classes,       icon: <School />          },
-      { title: "Classworks",    url: routes.teacher.classworks,    icon: <ClipboardList />   },
-      { title: "Lessons",       url: routes.teacher.lessons,       icon: <Book />            },
-      { title: "AI Predictions",url: routes.teacher.predictions,   icon: <Sparkles />        },
-      { title: "Interventions", url: routes.teacher.interventions, icon: <Shield />          },
-      { title: "Grades",        url: routes.teacher.grades,        icon: <BarChart2 />       },
-      { title: "Notifications", url: routes.teacher.notifications, icon: <Bell />            },
+      { title: "Dashboard",      url: routes.teacher.dashboard,     icon: <LayoutDashboard /> },
+      { title: "Classes",        url: routes.teacher.classes,       icon: <School />          },
+      { title: "Classworks",     url: routes.teacher.classworks,    icon: <ClipboardList />   },
+      { title: "Lessons",        url: routes.teacher.lessons,       icon: <Book />            },
+      { title: "Lesson Planner", url: routes.teacher.lessonPlanner, icon: <BookOpenCheck />   },
+      { title: "AI Predictions", url: routes.teacher.predictions,   icon: <Sparkles />        },
+      { title: "Interventions",  url: routes.teacher.interventions, icon: <Shield />          },
+      { title: "Grades",         url: routes.teacher.grades,        icon: <BarChart2 />       },
+      { title: "Notifications",  url: routes.teacher.notifications, icon: <Bell />            },
     ],
     student: [
       { title: "Study Board",   url: routes.student.board,          icon: <LayoutDashboard /> },
