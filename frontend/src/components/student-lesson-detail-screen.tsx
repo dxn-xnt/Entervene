@@ -3,7 +3,7 @@ import { BookOpen, ClipboardList } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
-import Tabs from "@/components/tabs";
+import { Tabs } from "@/components/retroui/Tabs";
 import SubjectSuggestionsTab from "@/pages/student/Subjects/tabs/subject-suggestions-tab";
 import { routes } from "@/../routes";
 import type { StudentLesson } from "@/types/student-subject";
@@ -33,11 +33,15 @@ export function StudentLessonDetailScreen({
 }: StudentLessonDetailScreenProps) {
   const navigate = useNavigate();
   const tabs = [
-    { id: "classwork", label: "Classwork", icon: <ClipboardList size={14} /> },
+    {
+      id: "classwork",
+      label: "Classwork",
+      icon: ClipboardList,
+    },
     {
       id: "suggestions",
       label: "Recommended Materials",
-      icon: <BookOpen size={14} />,
+      icon: BookOpen,
     },
   ];
 
@@ -92,17 +96,15 @@ export function StudentLessonDetailScreen({
         </p>
       </Card>
 
-      <div className="-mx-4 md:-mx-6">
-        <Tabs
-          tabs={tabs}
-          activeTab={lessonDetailTab}
-          onChange={(tab) =>
-            setLessonDetailTab(
-              tab === "suggestions" ? "suggestions" : "classwork",
-            )
-          }
-        />
-      </div>
+      <Tabs
+        tabs={tabs}
+        activeTab={lessonDetailTab}
+        onTabChange={(tab) =>
+          setLessonDetailTab(
+            tab === "suggestions" ? "suggestions" : "classwork",
+          )
+        }
+      />
 
       {lessonDetailTab === "classwork" ? (
         <div className="grid gap-4 lg:grid-cols-[1fr_280px]">

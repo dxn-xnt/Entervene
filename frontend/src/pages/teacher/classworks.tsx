@@ -21,6 +21,7 @@ import AttachmentDisplay from "@/components/attachment-display";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { API_URL, apiFetch } from "@/lib/api";
 import ClassworkCard from "./classworks/ClassworkCard";
+import { Badge } from "@/components/retroui/Badge";
 import type { QuizAnalysis } from "./classworks/quiz-builder-types";
 import {
   allowedClassworkMaterialExtensions,
@@ -67,31 +68,31 @@ const createOptions: Array<{
   description: string;
   icon: LucideIcon;
 }> = [
-    {
-      type: "READING",
-      title: "Reading",
-      description: "Create and publish class topics or resources for learners",
-      icon: BookOpen,
-    },
-    {
-      type: "QUIZ",
-      title: "Quiz",
-      description: "Build and assign quizzes to assess learner understanding",
-      icon: ClipboardList,
-    },
-    {
-      type: "ASSIGNMENT",
-      title: "Assignment",
-      description: "Post tasks or projects for students to complete and submit",
-      icon: FileText,
-    },
-    {
-      type: "ACTIVITY",
-      title: "Activity",
-      description: "Design interactive tasks to enhance learner engagement",
-      icon: CheckSquare,
-    },
-  ];
+  {
+    type: "READING",
+    title: "Reading",
+    description: "Create and publish class topics or resources for learners",
+    icon: BookOpen,
+  },
+  {
+    type: "QUIZ",
+    title: "Quiz",
+    description: "Build and assign quizzes to assess learner understanding",
+    icon: ClipboardList,
+  },
+  {
+    type: "ASSIGNMENT",
+    title: "Assignment",
+    description: "Post tasks or projects for students to complete and submit",
+    icon: FileText,
+  },
+  {
+    type: "ACTIVITY",
+    title: "Activity",
+    description: "Design interactive tasks to enhance learner engagement",
+    icon: CheckSquare,
+  },
+];
 
 const tabType: Partial<Record<TabId, string>> = {
   readings: "READING",
@@ -125,8 +126,11 @@ export default function Classworks() {
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editMaterials, setEditMaterials] = useState<File[]>([]);
-  const [removingAttachmentId, setRemovingAttachmentId] = useState<number | null>(null);
-  const [isUploadingEditMaterials, setIsUploadingEditMaterials] = useState(false);
+  const [removingAttachmentId, setRemovingAttachmentId] = useState<
+    number | null
+  >(null);
+  const [isUploadingEditMaterials, setIsUploadingEditMaterials] =
+    useState(false);
   const [detailError, setDetailError] = useState("");
   const [submissionSort, setSubmissionSort] = useState<"name" | "score">(
     "name",
@@ -160,7 +164,6 @@ export default function Classworks() {
       const loadData = (await loadsResponse.json()) as TeacherClassLoad[];
       setItems((await classworksResponse.json()) as TeacherClasswork[]);
       setLoads(loadData);
-
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Unable to load your classworks.",
@@ -227,82 +230,98 @@ export default function Classworks() {
   const addEditMaterials = (files: FileList | null) => {
     if (!files) return;
     const selectedFiles = Array.from(files);
-    const invalid = selectedFiles.find((file) => !allowedClassworkMaterialExtensions.includes(fileExtension(file.name)));
+    const invalid = selectedFiles.find(
+      (file) =>
+        !allowedClassworkMaterialExtensions.includes(fileExtension(file.name)),
+    );
     if (invalid) {
-      setDetailError(`${invalid.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`);
+      setDetailError(
+        `${invalid.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`,
+      );
       return;
     }
-    const oversized = selectedFiles.find((file) => file.size > maxClassworkMaterialSize);
+    const oversized = selectedFiles.find(
+      (file) => file.size > maxClassworkMaterialSize,
+    );
     if (oversized) {
       setDetailError(`${oversized.name} is larger than the 4 MB limit.`);
       return;
     }
     setDetailError("");
     setEditMaterials((current) => {
-      const existing = new Set(current.map((file) => `${file.name}-${file.size}`));
+      const existing = new Set(
+        current.map((file) => `${file.name}-${file.size}`),
+      );
       return [
         ...current,
-        ...selectedFiles.filter((file) => !existing.has(`${file.name}-${file.size}`)),
+        ...selectedFiles.filter(
+          (file) => !existing.has(`${file.name}-${file.size}`),
+        ),
       ];
     });
   };
 
   const removeEditMaterial = (index: number) => {
-    setEditMaterials((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    setEditMaterials((current) =>
+      current.filter((_, itemIndex) => itemIndex !== index),
+    );
   };
 
-  const openClassworkDetail = useCallback(async (item: TeacherClasswork) => {
-    suppressAutoOpenRef.current = false;
-    setSelected(item);
-    setTracking(null);
-    setQuizAnalysis(null);
-    setQuizAnalysisError("");
-    setDetailError("");
-    setIsEditing(false);
-    setEditDraft(classworkToEditDraft(item));
-    setEditMaterials([]);
-    setSearchParams({ classworkId: String(item.classwork_id) });
+  const openClassworkDetail = useCallback(
+    async (item: TeacherClasswork) => {
+      suppressAutoOpenRef.current = false;
+      setSelected(item);
+      setTracking(null);
+      setQuizAnalysis(null);
+      setQuizAnalysisError("");
+      setDetailError("");
+      setIsEditing(false);
+      setEditDraft(classworkToEditDraft(item));
+      setEditMaterials([]);
+      setSearchParams({ classworkId: String(item.classwork_id) });
 
-    const assignmentId = item.assignments?.[0]?.classwork_assignment_id;
-    if (!assignmentId) return;
+      const assignmentId = item.assignments?.[0]?.classwork_assignment_id;
+      if (!assignmentId) return;
 
-    setIsTrackingLoading(true);
-    if (isQuizType(item.classwork_type)) {
-      setIsQuizAnalysisLoading(true);
-    }
-    try {
-      const response = await apiFetch(
-        `/api/v1/submissions/assignment/${assignmentId}/tracking`,
-      );
-      if (!response.ok) {
-        throw new Error("Unable to load student submissions.");
-      }
-      setTracking((await response.json()) as AssignmentTracking);
+      setIsTrackingLoading(true);
       if (isQuizType(item.classwork_type)) {
-        const analysisResponse = await apiFetch(
-          `/api/v1/quizzes/classwork/${item.classwork_id}/analysis`,
+        setIsQuizAnalysisLoading(true);
+      }
+      try {
+        const response = await apiFetch(
+          `/api/v1/submissions/assignment/${assignmentId}/tracking`,
         );
-        if (!analysisResponse.ok) {
-          const body = await analysisResponse.json().catch(() => ({}));
-          throw new Error(body.detail || "Unable to load quiz analysis.");
+        if (!response.ok) {
+          throw new Error("Unable to load student submissions.");
         }
-        setQuizAnalysis((await analysisResponse.json()) as QuizAnalysis);
+        setTracking((await response.json()) as AssignmentTracking);
+        if (isQuizType(item.classwork_type)) {
+          const analysisResponse = await apiFetch(
+            `/api/v1/quizzes/classwork/${item.classwork_id}/analysis`,
+          );
+          if (!analysisResponse.ok) {
+            const body = await analysisResponse.json().catch(() => ({}));
+            throw new Error(body.detail || "Unable to load quiz analysis.");
+          }
+          setQuizAnalysis((await analysisResponse.json()) as QuizAnalysis);
+        }
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Unable to load student submissions.";
+        if (isQuizType(item.classwork_type)) {
+          setQuizAnalysisError(message);
+        } else {
+          setDetailError(message);
+        }
+      } finally {
+        setIsTrackingLoading(false);
+        setIsQuizAnalysisLoading(false);
       }
-    } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Unable to load student submissions.";
-      if (isQuizType(item.classwork_type)) {
-        setQuizAnalysisError(message);
-      } else {
-        setDetailError(message);
-      }
-    } finally {
-      setIsTrackingLoading(false);
-      setIsQuizAnalysisLoading(false);
-    }
-  }, [setSearchParams]);
+    },
+    [setSearchParams],
+  );
 
   useEffect(() => {
     const classworkId = Number(searchParams.get("classworkId"));
@@ -310,7 +329,8 @@ export default function Classworks() {
       suppressAutoOpenRef.current = false;
       return;
     }
-    if (suppressAutoOpenRef.current || selected?.classwork_id === classworkId) return;
+    if (suppressAutoOpenRef.current || selected?.classwork_id === classworkId)
+      return;
     const target = items.find((item) => item.classwork_id === classworkId);
     if (target) {
       void openClassworkDetail(target);
@@ -343,17 +363,26 @@ export default function Classworks() {
     if (!selected || !editDraft) return;
 
     const isReading = isReadingType(editDraft.classwork_type);
-    const totalPoints = !isReading && editDraft.total_points ? Number(editDraft.total_points) : null;
+    const totalPoints =
+      !isReading && editDraft.total_points
+        ? Number(editDraft.total_points)
+        : null;
     if (!editDraft.title.trim()) {
       setDetailError("Classwork title is required.");
       return;
     }
-    if (totalPoints !== null && (!Number.isFinite(totalPoints) || totalPoints <= 0)) {
+    if (
+      totalPoints !== null &&
+      (!Number.isFinite(totalPoints) || totalPoints <= 0)
+    ) {
       setDetailError("Total points must be greater than zero.");
       return;
     }
     const attempts = Number(editDraft.max_attempts);
-    if (isQuizType(editDraft.classwork_type) && (!Number.isInteger(attempts) || attempts <= 0)) {
+    if (
+      isQuizType(editDraft.classwork_type) &&
+      (!Number.isInteger(attempts) || attempts <= 0)
+    ) {
       setDetailError("Allowed attempts must be a positive whole number.");
       return;
     }
@@ -361,26 +390,30 @@ export default function Classworks() {
     setIsSavingEdit(true);
     setDetailError("");
     try {
-      const response = await apiFetch(`/api/v1/classwork-assignments/classwork/${selected.classwork_id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: editDraft.title.trim(),
-          description: editDraft.description.trim() || null,
-          instructions: editDraft.instructions.trim() || null,
-          classwork_type: editDraft.classwork_type,
-          classwork_category: editDraft.classwork_category || null,
-          total_points: totalPoints,
-          is_published: editDraft.is_published,
-        }),
-      });
+      const response = await apiFetch(
+        `/api/v1/classwork-assignments/classwork/${selected.classwork_id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: editDraft.title.trim(),
+            description: editDraft.description.trim() || null,
+            instructions: editDraft.instructions.trim() || null,
+            classwork_type: editDraft.classwork_type,
+            classwork_category: editDraft.classwork_category || null,
+            total_points: totalPoints,
+            is_published: editDraft.is_published,
+          }),
+        },
+      );
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error(body.detail || "Unable to update classwork.");
       }
 
       let updated = (await response.json()) as TeacherClasswork;
-      const assignedClassIds = selected.assignments?.map((assignment) => assignment.class_id) ?? [];
+      const assignedClassIds =
+        selected.assignments?.map((assignment) => assignment.class_id) ?? [];
       if (assignedClassIds.length > 0) {
         const assignResponse = await apiFetch(
           `/api/v1/classwork-assignments/classwork/${selected.classwork_id}/assign`,
@@ -389,17 +422,25 @@ export default function Classworks() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               class_ids: assignedClassIds,
-              due_date: editDraft.due_date ? new Date(editDraft.due_date).toISOString() : null,
-              lock_date: editDraft.lock_date ? new Date(editDraft.lock_date).toISOString() : null,
+              due_date: editDraft.due_date
+                ? new Date(editDraft.due_date).toISOString()
+                : null,
+              lock_date: editDraft.lock_date
+                ? new Date(editDraft.lock_date).toISOString()
+                : null,
               allow_late_submissions: editDraft.allow_late_submissions,
-              max_attempts: isQuizType(editDraft.classwork_type) ? attempts : null,
+              max_attempts: isQuizType(editDraft.classwork_type)
+                ? attempts
+                : null,
               is_published: editDraft.is_published,
             }),
           },
         );
         if (!assignResponse.ok) {
           const body = await assignResponse.json().catch(() => ({}));
-          throw new Error(body.detail || "Unable to update assignment settings.");
+          throw new Error(
+            body.detail || "Unable to update assignment settings.",
+          );
         }
         const refreshed = await apiFetch(
           `/api/v1/classwork-assignments/classwork/${selected.classwork_id}`,
@@ -409,13 +450,17 @@ export default function Classworks() {
         }
       }
       setItems((current) =>
-        current.map((item) => item.classwork_id === updated.classwork_id ? updated : item)
+        current.map((item) =>
+          item.classwork_id === updated.classwork_id ? updated : item,
+        ),
       );
       setSelected(updated);
       setEditDraft(classworkToEditDraft(updated));
       setIsEditing(false);
     } catch (err) {
-      setDetailError(err instanceof Error ? err.message : "Unable to update classwork.");
+      setDetailError(
+        err instanceof Error ? err.message : "Unable to update classwork.",
+      );
     } finally {
       setIsSavingEdit(false);
     }
@@ -433,7 +478,7 @@ export default function Classworks() {
         formData.append("file", material);
         const response = await apiFetch(
           `/api/v1/classwork-assignments/classwork/${selected.classwork_id}/attachments`,
-          { method: "POST", body: formData }
+          { method: "POST", body: formData },
         );
         if (!response.ok) {
           const body = await response.json().catch(() => ({}));
@@ -442,14 +487,23 @@ export default function Classworks() {
         uploaded.push((await response.json()) as ClassworkAttachment);
       }
 
-      const updated = { ...selected, attachments: [...selected.attachments, ...uploaded] };
+      const updated = {
+        ...selected,
+        attachments: [...selected.attachments, ...uploaded],
+      };
       setSelected(updated);
       setItems((current) =>
-        current.map((item) => item.classwork_id === updated.classwork_id ? updated : item)
+        current.map((item) =>
+          item.classwork_id === updated.classwork_id ? updated : item,
+        ),
       );
       setEditMaterials([]);
     } catch (err) {
-      setDetailError(err instanceof Error ? err.message : "Unable to upload classwork material.");
+      setDetailError(
+        err instanceof Error
+          ? err.message
+          : "Unable to upload classwork material.",
+      );
     } finally {
       setIsUploadingEditMaterials(false);
     }
@@ -463,7 +517,7 @@ export default function Classworks() {
     try {
       const response = await apiFetch(
         `/api/v1/classwork-assignments/classwork/${selected.classwork_id}/attachments/${attachmentId}`,
-        { method: "DELETE" }
+        { method: "DELETE" },
       );
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
@@ -473,15 +527,21 @@ export default function Classworks() {
       const updated = {
         ...selected,
         attachments: selected.attachments.filter(
-          (attachment) => attachment.classwork_attachment_id !== attachmentId
+          (attachment) => attachment.classwork_attachment_id !== attachmentId,
         ),
       };
       setSelected(updated);
       setItems((current) =>
-        current.map((item) => item.classwork_id === updated.classwork_id ? updated : item)
+        current.map((item) =>
+          item.classwork_id === updated.classwork_id ? updated : item,
+        ),
       );
     } catch (err) {
-      setDetailError(err instanceof Error ? err.message : "Unable to remove classwork material.");
+      setDetailError(
+        err instanceof Error
+          ? err.message
+          : "Unable to remove classwork material.",
+      );
     } finally {
       setRemovingAttachmentId(null);
     }
@@ -495,14 +555,16 @@ export default function Classworks() {
     try {
       const response = await apiFetch(
         `/api/v1/classwork-assignments/classwork/${selected.classwork_id}/archive`,
-        { method: "PUT" }
+        { method: "PUT" },
       );
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error(body.detail || "Unable to archive classwork.");
       }
 
-      setItems((current) => current.filter((item) => item.classwork_id !== selected.classwork_id));
+      setItems((current) =>
+        current.filter((item) => item.classwork_id !== selected.classwork_id),
+      );
       setShowArchiveConfirm(false);
       setSelected(null);
       setTracking(null);
@@ -510,7 +572,9 @@ export default function Classworks() {
       setSelectedSubmissionDetail(null);
       setSearchParams({});
     } catch (err) {
-      setDetailError(err instanceof Error ? err.message : "Unable to archive classwork.");
+      setDetailError(
+        err instanceof Error ? err.message : "Unable to archive classwork.",
+      );
     } finally {
       setIsArchiving(false);
     }
@@ -640,7 +704,6 @@ export default function Classworks() {
           : "newest",
     );
   };
-
 
   const selectedAssignment = selected?.assignments?.[0] ?? null;
   const trackingRows = useMemo(() => {
@@ -918,7 +981,11 @@ export default function Classworks() {
                         <input
                           value={editDraft.title}
                           onChange={(event) =>
-                            setEditDraft((current) => current ? { ...current, title: event.target.value } : current)
+                            setEditDraft((current) =>
+                              current
+                                ? { ...current, title: event.target.value }
+                                : current,
+                            )
                           }
                           disabled={isSavingEdit}
                           className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm font-semibold"
@@ -929,7 +996,14 @@ export default function Classworks() {
                         <select
                           value={editDraft.classwork_type}
                           onChange={(event) =>
-                            setEditDraft((current) => current ? { ...current, classwork_type: event.target.value } : current)
+                            setEditDraft((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    classwork_type: event.target.value,
+                                  }
+                                : current,
+                            )
                           }
                           disabled={isSavingEdit}
                           className="mt-1 w-full rounded-lg border border-gray-700 bg-white px-3 py-2 text-sm font-semibold"
@@ -942,21 +1016,34 @@ export default function Classworks() {
                       </label>
                     </div>
 
-                    <div className={`grid gap-3 ${isReadingType(editDraft.classwork_type) ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
+                    <div
+                      className={`grid gap-3 ${isReadingType(editDraft.classwork_type) ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}
+                    >
                       <label className="block text-xs font-bold">
                         Grading component
                         <select
                           value={editDraft.classwork_category}
                           onChange={(event) =>
-                            setEditDraft((current) => current ? { ...current, classwork_category: event.target.value } : current)
+                            setEditDraft((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    classwork_category: event.target.value,
+                                  }
+                                : current,
+                            )
                           }
                           disabled={isSavingEdit}
                           className="mt-1 w-full rounded-lg border border-gray-700 bg-white px-3 py-2 text-sm"
                         >
                           <option value="">None</option>
                           <option value="WRITTEN_WORK">Written Works</option>
-                          <option value="PERFORMANCE_TASK">Performance Task</option>
-                          <option value="QUARTERLY_ASSESSMENT">Quarterly Assessment</option>
+                          <option value="PERFORMANCE_TASK">
+                            Performance Task
+                          </option>
+                          <option value="QUARTERLY_ASSESSMENT">
+                            Quarterly Assessment
+                          </option>
                         </select>
                       </label>
                       {!isReadingType(editDraft.classwork_type) && (
@@ -969,7 +1056,14 @@ export default function Classworks() {
                             inputMode="decimal"
                             value={editDraft.total_points}
                             onChange={(event) =>
-                              setEditDraft((current) => current ? { ...current, total_points: event.target.value } : current)
+                              setEditDraft((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      total_points: event.target.value,
+                                    }
+                                  : current,
+                              )
                             }
                             disabled={isSavingEdit}
                             className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
@@ -981,7 +1075,14 @@ export default function Classworks() {
                           type="checkbox"
                           checked={editDraft.is_published}
                           onChange={(event) =>
-                            setEditDraft((current) => current ? { ...current, is_published: event.target.checked } : current)
+                            setEditDraft((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    is_published: event.target.checked,
+                                  }
+                                : current,
+                            )
                           }
                           disabled={isSavingEdit}
                         />
@@ -993,14 +1094,20 @@ export default function Classworks() {
                       <p className="mb-3 text-xs font-bold">
                         Assignment settings
                       </p>
-                      <div className={`grid gap-3 ${isQuizType(editDraft.classwork_type) ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+                      <div
+                        className={`grid gap-3 ${isQuizType(editDraft.classwork_type) ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}
+                      >
                         <label className="block text-xs font-bold">
                           Due date
                           <input
                             type="datetime-local"
                             value={editDraft.due_date}
                             onChange={(event) =>
-                              setEditDraft((current) => current ? { ...current, due_date: event.target.value } : current)
+                              setEditDraft((current) =>
+                                current
+                                  ? { ...current, due_date: event.target.value }
+                                  : current,
+                              )
                             }
                             disabled={isSavingEdit}
                             className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
@@ -1012,7 +1119,14 @@ export default function Classworks() {
                             type="datetime-local"
                             value={editDraft.lock_date}
                             onChange={(event) =>
-                              setEditDraft((current) => current ? { ...current, lock_date: event.target.value } : current)
+                              setEditDraft((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      lock_date: event.target.value,
+                                    }
+                                  : current,
+                              )
                             }
                             disabled={isSavingEdit || !editDraft.is_published}
                             className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm disabled:bg-gray-100"
@@ -1027,7 +1141,14 @@ export default function Classworks() {
                               step="1"
                               value={editDraft.max_attempts}
                               onChange={(event) =>
-                                setEditDraft((current) => current ? { ...current, max_attempts: event.target.value } : current)
+                                setEditDraft((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        max_attempts: event.target.value,
+                                      }
+                                    : current,
+                                )
                               }
                               disabled={isSavingEdit}
                               className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
@@ -1036,29 +1157,38 @@ export default function Classworks() {
                         )}
                       </div>
                       <p className="mt-2 text-xs font-medium text-gray-600">
-                        Published classwork is visible to students. A future lock date keeps it visible but blocks access until that time; clear it to unlock now.
+                        Published classwork is visible to students. A future
+                        lock date keeps it visible but blocks access until that
+                        time; clear it to unlock now.
                       </p>
-                      {editDraft.due_date && !isReadingType(editDraft.classwork_type) && (
-                        <label className="mt-3 flex items-start gap-3 rounded-lg border border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold">
-                          <input
-                            type="checkbox"
-                            checked={editDraft.allow_late_submissions}
-                            onChange={(event) =>
-                              setEditDraft((current) =>
-                                current ? { ...current, allow_late_submissions: event.target.checked } : current,
-                              )
-                            }
-                            disabled={isSavingEdit}
-                            className="mt-0.5"
-                          />
-                          <span>
-                            Allow submissions/resubmissions after the due date
-                            <span className="block font-medium text-gray-700">
-                              Accepted work will be marked late.
+                      {editDraft.due_date &&
+                        !isReadingType(editDraft.classwork_type) && (
+                          <label className="mt-3 flex items-start gap-3 rounded-lg border border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold">
+                            <input
+                              type="checkbox"
+                              checked={editDraft.allow_late_submissions}
+                              onChange={(event) =>
+                                setEditDraft((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        allow_late_submissions:
+                                          event.target.checked,
+                                      }
+                                    : current,
+                                )
+                              }
+                              disabled={isSavingEdit}
+                              className="mt-0.5"
+                            />
+                            <span>
+                              Allow submissions/resubmissions after the due date
+                              <span className="block font-medium text-gray-700">
+                                Accepted work will be marked late.
+                              </span>
                             </span>
-                          </span>
-                        </label>
-                      )}
+                          </label>
+                        )}
                     </div>
 
                     <label className="block text-xs font-bold">
@@ -1066,7 +1196,11 @@ export default function Classworks() {
                       <input
                         value={editDraft.description}
                         onChange={(event) =>
-                          setEditDraft((current) => current ? { ...current, description: event.target.value } : current)
+                          setEditDraft((current) =>
+                            current
+                              ? { ...current, description: event.target.value }
+                              : current,
+                          )
                         }
                         disabled={isSavingEdit}
                         className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
@@ -1078,7 +1212,11 @@ export default function Classworks() {
                       <textarea
                         value={editDraft.instructions}
                         onChange={(event) =>
-                          setEditDraft((current) => current ? { ...current, instructions: event.target.value } : current)
+                          setEditDraft((current) =>
+                            current
+                              ? { ...current, instructions: event.target.value }
+                              : current,
+                          )
                         }
                         disabled={isSavingEdit}
                         className="mt-1 min-h-24 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
@@ -1089,7 +1227,9 @@ export default function Classworks() {
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div>
                           <h3 className="text-sm font-bold">Materials</h3>
-                          <p className="text-xs text-gray-500">Add or remove files attached to this classwork.</p>
+                          <p className="text-xs text-gray-500">
+                            Add or remove files attached to this classwork.
+                          </p>
                         </div>
                         <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold hover:bg-[#7ABA78]">
                           <Plus size={14} />
@@ -1099,7 +1239,10 @@ export default function Classworks() {
                             multiple
                             accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
                             className="hidden"
-                            disabled={isUploadingEditMaterials || removingAttachmentId !== null}
+                            disabled={
+                              isUploadingEditMaterials ||
+                              removingAttachmentId !== null
+                            }
                             onChange={(event) => {
                               addEditMaterials(event.target.files);
                               event.target.value = "";
@@ -1116,11 +1259,21 @@ export default function Classworks() {
                               className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm"
                             >
                               <FileText size={16} />
-                              <span className="min-w-0 flex-1 truncate font-semibold">{attachment.file_name}</span>
+                              <span className="min-w-0 flex-1 truncate font-semibold">
+                                {attachment.file_name}
+                              </span>
                               <button
                                 type="button"
-                                onClick={() => removeSelectedAttachment(attachment.classwork_attachment_id)}
-                                disabled={removingAttachmentId === attachment.classwork_attachment_id || isUploadingEditMaterials}
+                                onClick={() =>
+                                  removeSelectedAttachment(
+                                    attachment.classwork_attachment_id,
+                                  )
+                                }
+                                disabled={
+                                  removingAttachmentId ===
+                                    attachment.classwork_attachment_id ||
+                                  isUploadingEditMaterials
+                                }
                                 className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
                                 aria-label={`Remove ${attachment.file_name}`}
                               >
@@ -1139,10 +1292,17 @@ export default function Classworks() {
                         <div className="mt-3 space-y-2">
                           <p className="text-xs font-bold">Pending uploads</p>
                           {editMaterials.map((material, index) => (
-                            <div key={`${material.name}-${material.size}`} className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm">
+                            <div
+                              key={`${material.name}-${material.size}`}
+                              className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm"
+                            >
                               <FileText size={16} />
-                              <span className="min-w-0 flex-1 truncate font-semibold">{material.name}</span>
-                              <span className="text-xs text-gray-500">{formatFileSize(material.size)}</span>
+                              <span className="min-w-0 flex-1 truncate font-semibold">
+                                {material.name}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                {formatFileSize(material.size)}
+                              </span>
                               <button
                                 type="button"
                                 onClick={() => removeEditMaterial(index)}
@@ -1159,7 +1319,9 @@ export default function Classworks() {
                             disabled={isUploadingEditMaterials}
                             className="rounded-lg border border-black bg-[#7ABA78] px-3 py-2 text-xs font-bold disabled:opacity-50"
                           >
-                            {isUploadingEditMaterials ? "Uploading..." : "Upload selected files"}
+                            {isUploadingEditMaterials
+                              ? "Uploading..."
+                              : "Upload selected files"}
                           </button>
                         </div>
                       )}
@@ -1167,7 +1329,9 @@ export default function Classworks() {
                   </div>
                 ) : (
                   <div className="rounded-lg border border-black bg-white p-4 text-sm font-semibold shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-                    {selected.instructions || selected.description || "No instructions provided."}
+                    {selected.instructions ||
+                      selected.description ||
+                      "No instructions provided."}
                   </div>
                 )}
 
@@ -1195,7 +1359,8 @@ export default function Classworks() {
 
                 {isReadingType(selected.classwork_type) ? (
                   <div className="rounded-lg border border-black bg-[#F6E9B2] p-4 text-sm font-semibold shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-                    This is a reading material, so scores, attempts, and student submissions are not required.
+                    This is a reading material, so scores, attempts, and student
+                    submissions are not required.
                   </div>
                 ) : (
                   <>
@@ -1209,9 +1374,11 @@ export default function Classworks() {
                             </p>
                           </div>
                           {quizAnalysis?.class_accuracy_percent !== null &&
-                            quizAnalysis?.class_accuracy_percent !== undefined && (
+                            quizAnalysis?.class_accuracy_percent !==
+                              undefined && (
                               <span className="rounded-full border border-black bg-[#7ABA78] px-3 py-1 text-xs font-bold">
-                                Class accuracy {quizAnalysis.class_accuracy_percent}%
+                                Class accuracy{" "}
+                                {quizAnalysis.class_accuracy_percent}%
                               </span>
                             )}
                         </div>
@@ -1231,11 +1398,14 @@ export default function Classworks() {
                                 ["Students", quizAnalysis.total_students],
                                 ["Submitted", quizAnalysis.submitted_count],
                                 ["Missing", quizAnalysis.missing_count],
-                                ["Needs grading", quizAnalysis.needs_grading_count],
+                                [
+                                  "Needs grading",
+                                  quizAnalysis.needs_grading_count,
+                                ],
                                 [
                                   "Average",
                                   quizAnalysis.average_score !== null &&
-                                    quizAnalysis.average_score !== undefined
+                                  quizAnalysis.average_score !== undefined
                                     ? `${quizAnalysis.average_score}/${quizAnalysis.total_points ?? selected.total_points ?? 0}`
                                     : "N/A",
                                 ],
@@ -1247,7 +1417,9 @@ export default function Classworks() {
                                   <p className="text-xs font-semibold text-gray-600">
                                     {label}
                                   </p>
-                                  <p className="mt-1 text-xl font-bold">{value}</p>
+                                  <p className="mt-1 text-xl font-bold">
+                                    {value}
+                                  </p>
                                 </div>
                               ))}
                             </div>
@@ -1264,35 +1436,41 @@ export default function Classworks() {
                                         {index + 1}. {question.question_text}
                                       </p>
                                       <p className="text-xs font-medium text-gray-600">
-                                        {question.answered_count} answered | {question.points} pts
+                                        {question.answered_count} answered |{" "}
+                                        {question.points} pts
                                       </p>
                                     </div>
                                     <span className="rounded-full border border-gray-300 px-2 py-1 text-xs font-bold">
-                                      {question.question_type === "MULTIPLE_CHOICE"
+                                      {question.question_type ===
+                                      "MULTIPLE_CHOICE"
                                         ? `${question.accuracy_percent ?? 0}%`
                                         : `${question.needs_grading_count} to grade`}
                                     </span>
                                   </div>
                                   {question.option_distribution.length > 0 ? (
                                     <div className="space-y-2">
-                                      {question.option_distribution.map((option) => (
-                                        <div
-                                          key={option.option_id}
-                                          className={`flex items-center justify-between rounded border px-2 py-1 text-xs ${option.is_correct
-                                            ? "border-green-400 bg-green-50"
-                                            : "border-gray-200"
+                                      {question.option_distribution.map(
+                                        (option) => (
+                                          <div
+                                            key={option.option_id}
+                                            className={`flex items-center justify-between rounded border px-2 py-1 text-xs ${
+                                              option.is_correct
+                                                ? "border-green-400 bg-green-50"
+                                                : "border-gray-200"
                                             }`}
-                                        >
-                                          <span className="font-semibold">
-                                            {option.option_text}
-                                          </span>
-                                          <span>{option.selected_count}</span>
-                                        </div>
-                                      ))}
+                                          >
+                                            <span className="font-semibold">
+                                              {option.option_text}
+                                            </span>
+                                            <span>{option.selected_count}</span>
+                                          </div>
+                                        ),
+                                      )}
                                     </div>
                                   ) : (
                                     <p className="text-xs font-medium text-gray-600">
-                                      Short-answer responses are counted for manual grading.
+                                      Short-answer responses are counted for
+                                      manual grading.
                                     </p>
                                   )}
                                 </div>
@@ -1311,10 +1489,14 @@ export default function Classworks() {
                                   className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-black px-3 py-2 text-sm last:border-b-0"
                                 >
                                   <div>
-                                    <p className="font-bold">{student.student_name}</p>
+                                    <p className="font-bold">
+                                      {student.student_name}
+                                    </p>
                                     <p className="text-xs capitalize text-gray-600">
                                       {submissionStatusLabel(student.status)}
-                                      {student.needs_grading ? " | Needs grading" : ""}
+                                      {student.needs_grading
+                                        ? " | Needs grading"
+                                        : ""}
                                     </p>
                                   </div>
                                   <span className="text-xs font-bold">
@@ -1322,7 +1504,7 @@ export default function Classworks() {
                                   </span>
                                   <span className="text-right text-xs font-bold">
                                     {student.grade !== null &&
-                                      student.grade !== undefined
+                                    student.grade !== undefined
                                       ? `${student.grade}/${quizAnalysis.total_points ?? selected.total_points ?? 0}`
                                       : `0/${quizAnalysis.total_points ?? selected.total_points ?? 0}`}
                                   </span>
@@ -1436,7 +1618,9 @@ export default function Classworks() {
                                   </div>
                                   <button
                                     type="button"
-                                    onClick={() => openStudentSubmission(student)}
+                                    onClick={() =>
+                                      openStudentSubmission(student)
+                                    }
                                     className="font-bold hover:underline"
                                   >
                                     {student.student_name}
@@ -1484,10 +1668,12 @@ export default function Classworks() {
                   </div>
                   <div className="space-y-3 p-5">
                     <p className="text-sm font-medium">
-                      Are you sure you want to archive <span className="font-bold">"{selected.title}"</span>?
+                      Are you sure you want to archive{" "}
+                      <span className="font-bold">"{selected.title}"</span>?
                     </p>
                     <p className="text-xs text-gray-600">
-                      This only works while no student work is turned in. If there are submissions, ask students to unsubmit first.
+                      This only works while no student work is turned in. If
+                      there are submissions, ask students to unsubmit first.
                       Linked lessons stay intact.
                     </p>
                   </div>
@@ -1535,7 +1721,7 @@ export default function Classworks() {
             </header>
           </div>
 
-          <div className="px-4 md:px-6 pb-6">
+          <div className="px-4 md:px-6">
             <Tabs
               tabs={tabs}
               activeTab={activeTab}
@@ -1550,65 +1736,70 @@ export default function Classworks() {
               </div>
             )}
 
-            <section className="flex flex-col gap-3 pb-3 md:flex-row md:items-center">
-              <label className="relative w-md">
+            <div className="grid gap-3 py-2 md:grid-cols-[1fr_auto_auto]">
+              <label className="relative shadow-md transition-shadow hover:shadow-none">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                 <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search classwork"
-                  className="h-10 w-full shadow-none border-black pl-9 pr-3"
+                  placeholder="Search classwork..."
+                  className="h-10 w-full border-black pl-9 pr-3 shadow-none"
                 />
               </label>
 
-              <div className="ml-auto flex flex-wrap items-center gap-2">
-                {subjectFilter !== "all" && (
-                  <button
-                    type="button"
-                    onClick={() => setSubjectFilter("all")}
-                    className="inline-flex items-center gap-2 rounded-full bg-[#F6E9B2] px-3 py-1.5 text-xs font-semibold"
-                  >
-                    {
-                      subjects.find(
-                        (subject) => subject.id === Number(subjectFilter),
-                      )?.name
-                    }
-                    <X size={13} />
-                  </button>
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => setShowFilters((current) => !current)}
+                className="gap-1.5"
+              >
+                <Filter size={15} />
+                Add Filter
+              </Button>
+
+              <Button
+                variant="outline"
+                size="md"
+                onClick={cycleSort}
+                className="gap-1.5"
+                title={`Current sort: ${sortMode}`}
+              >
+                {sortMode === "title" ? (
+                  <ArrowDownAZ size={15} />
+                ) : (
+                  <ArrowUpDown size={15} />
                 )}
-                {statusFilter !== "all" && (
-                  <button
-                    type="button"
-                    onClick={() => setStatusFilter("all")}
-                    className="inline-flex items-center gap-2 rounded-full bg-[#F6E9B2] px-3 py-1.5 text-xs font-semibold capitalize"
-                  >
-                    {statusFilter}
-                    <X size={13} />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setShowFilters((current) => !current)}
-                  className="inline-flex items-center gap-1.5 rounded px-2 py-1.5 text-sm font-medium hover:bg-gray-100"
+                Sort By
+              </Button>
+
+              {subjectFilter !== "all" && (
+                <Badge
+                  variant="secondary"
+                  size="sm"
+                  className="flex w-fit items-center gap-2"
+                  onClick={() => setSubjectFilter("all")}
                 >
-                  <Filter size={15} />
-                  Add Filter
-                </button>
-                <button
-                  type="button"
-                  onClick={cycleSort}
-                  className="inline-flex items-center gap-1.5 rounded px-2 py-1.5 text-sm font-medium hover:bg-gray-100"
-                  title={`Current sort: ${sortMode}`}
+                  {
+                    subjects.find(
+                      (subject) => subject.id === Number(subjectFilter),
+                    )?.name
+                  }
+                  <X size={13} />
+                </Badge>
+              )}
+
+              {statusFilter !== "all" && (
+                <Badge
+                  variant="secondary"
+                  size="sm"
+                  className="flex w-fit items-center gap-2 capitalize"
+                  onClick={() => setStatusFilter("all")}
                 >
-                  {sortMode === "title" ? (
-                    <ArrowDownAZ size={15} />
-                  ) : (
-                    <ArrowUpDown size={15} />
-                  )}
-                  Sort By
-                </button>
-              </div>
-            </section>
+                  {statusFilter}
+                  <X size={13} />
+                </Badge>
+              )}
+            </div>
 
             {showFilters && (
               <section className="grid gap-3 rounded-lg border border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:grid-cols-2">
@@ -1676,8 +1867,8 @@ export default function Classworks() {
               if (!open) closeCreateWizard();
             }}
           >
-            {showCreateWizard && (
-              selectedType === null ? (
+            {showCreateWizard &&
+              (selectedType === null ? (
                 <Dialog.Content size="lg">
                   <Dialog.Header position="fixed" asChild>
                     <div className="flex items-center justify-between w-full">
@@ -1752,8 +1943,7 @@ export default function Classworks() {
                   }}
                   onBack={() => setSelectedType(null)}
                 />
-              )
-            )}
+              ))}
           </Dialog>
         </>
       )}

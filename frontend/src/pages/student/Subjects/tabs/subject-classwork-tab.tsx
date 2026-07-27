@@ -393,33 +393,34 @@ export default function SubjectClassworkTab({
         </Alert>
       ) : null}
 
-      <Card className="flex w-full items-center justify-between gap-3">
-        <label className="relative flex-1">
+      <div className="grid gap-3 py-2 md:grid-cols-[1fr_160px]">
+        <label className="relative shadow-md transition-shadow hover:shadow-none">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search classwork..."
-            className="h-10 w-full shadow-none border-black pl-9 pr-3"
+            className="h-10 w-full border-black pl-9 pr-3 shadow-none"
           />
         </label>
-
-        <Select
-          value={sortMode}
-          onValueChange={(value) => setSortMode(value as SortMode)}
-        >
-          <Select.Trigger className="w-40 shadow-none">
-            <Select.Value placeholder="Sort By" />
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Group>
-              <Select.Item value="due">Nearest due</Select.Item>
-              <Select.Item value="newest">Newest</Select.Item>
-              <Select.Item value="title">Title</Select.Item>
-            </Select.Group>
-          </Select.Content>
-        </Select>
-      </Card>
+        <div className="shadow-md transition-shadow hover:shadow-none">
+          <Select
+            value={sortMode}
+            onValueChange={(value) => setSortMode(value as SortMode)}
+          >
+            <Select.Trigger className="w-full shadow-none">
+              <Select.Value placeholder="Sort By" />
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Group>
+                <Select.Item value="due">Nearest Due</Select.Item>
+                <Select.Item value="newest">Newest</Select.Item>
+                <Select.Item value="title">Title</Select.Item>
+              </Select.Group>
+            </Select.Content>
+          </Select>
+        </div>
+      </div>
 
       {visibleClassworks.length === 0 ? (
         <div className="rounded-lg border border-dashed border-gray-300 bg-white px-5 py-10 text-center text-gray-500">
