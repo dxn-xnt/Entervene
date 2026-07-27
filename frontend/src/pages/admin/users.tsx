@@ -63,73 +63,37 @@ function visibleSubjects(subjects: string[] | undefined) {
   };
 }
 
-type StatusStyle = { badge: string; dot: string; label: string };
-const STATUS_BADGE_BASE =
-  "inline-flex h-6 w-28 items-center justify-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold";
+type StatusStyle = {
+  label: string;
+  variant: "default" | "secondary" | "outline" | "solid" | "surface" | "ghost";
+};
 
 function getStatusStyle(status: string | undefined | null): StatusStyle {
   switch ((status || "").toLowerCase()) {
     case "active":
-      return {
-        badge: "bg-emerald-50 border-emerald-300 text-emerald-700",
-        dot: "bg-emerald-500",
-        label: "Active",
-      };
+      return { label: "Active", variant: "secondary" };
     case "pending":
-      return {
-        badge: "bg-amber-50 border-amber-300 text-amber-700",
-        dot: "bg-amber-400",
-        label: "Pending",
-      };
+      return { label: "Pending", variant: "outline" };
     case "inactive":
-      return {
-        badge: "bg-slate-100 border-slate-300 text-slate-500",
-        dot: "bg-slate-400",
-        label: "Inactive",
-      };
+      return { label: "Inactive", variant: "default" };
     case "suspended":
-      return {
-        badge: "bg-red-50 border-red-300 text-red-600",
-        dot: "bg-red-500",
-        label: "Suspended",
-      };
+      return { label: "Suspended", variant: "solid" };
     case "archived":
-      return {
-        badge: "bg-zinc-100 border-zinc-300 text-zinc-600",
-        dot: "bg-zinc-500",
-        label: "Archived",
-      };
+      return { label: "Archived", variant: "default" };
     case "graduated":
-      return {
-        badge: "bg-blue-50 border-blue-300 text-blue-700",
-        dot: "bg-blue-500",
-        label: "Graduated",
-      };
+      return { label: "Graduated", variant: "solid" };
     case "transferred":
-      return {
-        badge: "bg-violet-50 border-violet-300 text-violet-700",
-        dot: "bg-violet-500",
-        label: "Transferred",
-      };
+      return { label: "Transferred", variant: "solid" };
     case "dropped":
-      return {
-        badge: "bg-red-50 border-red-300 text-red-600",
-        dot: "bg-red-500",
-        label: "Dropped",
-      };
+      return { label: "Dropped", variant: "solid" };
     case "no section assigned":
-      return {
-        badge: "bg-amber-50 border-amber-300 text-amber-700",
-        dot: "bg-amber-400",
-        label: "No Section",
-      };
+      return { label: "No Section", variant: "outline" };
     default:
       return {
-        badge: "bg-slate-100 border-slate-200 text-slate-600",
-        dot: "bg-slate-400",
         label: status
           ? status.charAt(0).toUpperCase() + status.slice(1)
           : "Unknown",
+        variant: "default",
       };
   }
 }
@@ -504,41 +468,32 @@ export default function AdminUsers() {
                           <AccordionTrigger
                             className={cn(
                               "items-center py-2.5 text-sm font-semibold transition-colors",
-                              isUnassigned
-                                ? "bg-amber-50 hover:bg-accent hover:text-sidebar-accent-foreground"
-                                : "bg-background hover:bg-accent hover:text-sidebar-accent-foreground"
+                              // isUnassigned
+                              //   ? "bg-amber-50 hover:bg-accent hover:text-sidebar-accent-foreground"
+                              //   : "bg-background hover:bg-accent hover:text-sidebar-accent-foreground"
                             )}
                           >
                             <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                              {isUnassigned ? (
-                                <AlertTriangle className="size-4 shrink-0 text-amber-600" />
-                              ) : (
-                                <Users className="size-4 shrink-0 text-muted-foreground" />
-                              )}
-
                               <span
                                 className={cn(
-                                  "truncate flex-1 text-sm font-semibold text-left",
+                                  "truncate flex-1 text-lg font-bold text-left",
                                   isUnassigned ? "text-amber-800" : ""
                                 )}
                               >
                                 {headerLabel}
                               </span>
-
-                              <span
-                                className={cn(
-                                  "rounded-full border px-2 py-0.5 text-[10px] font-semibold shrink-0 mr-2",
-                                  isUnassigned
-                                    ? "border-amber-300 bg-amber-100 text-amber-700"
-                                    : "border-black/20 bg-muted/50 text-muted-foreground"
-                                )}
+                              <Badge
+                                variant="secondary"
+                                size="sm"
+                                className="mr-2"
                               >
                                 {groupUsers.length} student{groupUsers.length !== 1 ? "s" : ""}
-                              </span>
+                              </Badge>
                             </div>
+
                           </AccordionTrigger>
 
-                          <AccordionContent className="p-0 border-t border-black/10">
+                          <AccordionContent className="p-0 border-t-2 border-border">
                             <Table className="border-none shadow-none" wrapperClassName="overflow-hidden">
                               <Table.Header className="font-sans">
                                 <Table.Row>
@@ -648,7 +603,6 @@ function StudentRow({
   showGrade: boolean;
   onOpenUser: (user: User) => void;
 }) {
-  const status = getStatusStyle(user.account_status);
   const gradeLevel = getStudentGradeLevel(user);
   const sectionName = getSectionDisplayName(user.section);
 
@@ -662,22 +616,20 @@ function StudentRow({
       </Table.Cell>
 
       <Table.Cell className="text-center">
-        <Badge
-          size="sm"
-          className={`${STATUS_BADGE_BASE} ${status.badge} inline-flex items-center gap-1.5`}
-        >
-          <span className={`size-1.5 rounded-full ${status.dot}`} />
-          {status.label}
-        </Badge>
+        <StatusBadge status={user.account_status} />
       </Table.Cell>
 
       <Table.Cell className="text-center">
         <div className="flex justify-center">
           {showGrade ? (
             gradeLevel ? (
-              <span className="rounded-md border border-black/20 bg-muted/40 px-2 py-0.5 text-[11px] font-medium">
+              <Badge
+                variant="outline"
+                size="sm"
+                className="border-black/20 bg-muted/40 text-[11px] font-medium"
+              >
                 Grade {gradeLevel}
-              </span>
+              </Badge>
             ) : (
               <span className="text-xs text-muted-foreground">—</span>
             )
@@ -685,7 +637,6 @@ function StudentRow({
             <Badge
               variant="outline"
               size="sm"
-              className="bg-background text-[10px] font-medium"
             >
               {sectionName}
             </Badge>
@@ -718,9 +669,8 @@ function StatusBadge({ status }: { status: string | undefined | null }) {
   return (
     <Badge
       size="sm"
-      className={`${STATUS_BADGE_BASE} ${style.badge} inline-flex items-center gap-1.5`}
+      variant={style.variant}
     >
-      <span className={`size-1.5 rounded-full ${style.dot}`} />
       {style.label}
     </Badge>
   );

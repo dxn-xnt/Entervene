@@ -6,9 +6,11 @@ const badgeVariants = cva("font-semibold rounded", {
   variants: {
     variant: {
       default: "bg-muted text-muted-foreground",
+      secondary: "outline-2 bg-primary text-foreground ",
       outline: "outline-2 outline-foreground text-foreground bg-background",
       solid: "bg-foreground text-background",
       surface: "outline-2 bg-primary text-primary-foreground",
+      ghost: "bg-transparent text-muted-foreground border border-transparent",
     },
     size: {
       sm: "px-2 py-1 text-xs",
