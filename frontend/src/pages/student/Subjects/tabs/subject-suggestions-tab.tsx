@@ -208,34 +208,37 @@ export default function SubjectSuggestionsTab({
         </Alert>
       ) : null}
       {/* typescriptreact */}
-      <Card className="flex flex-col gap-3 lg:flex-row lg:items-center">
-        <label className="relative min-w-0 flex-1">
+      <div className="grid gap-3 py-2 md:grid-cols-[1fr_180px]">
+        <label className="relative shadow-md transition-shadow hover:shadow-none">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search suggested materials"
-            className="h-10 w-full shadow-none border-black pl-9 pr-3"
+            className="h-10 w-full border-black pl-9 pr-3 shadow-none"
           />
         </label>
 
-        <Select
-          value={sortMode}
-          onValueChange={(value) => setSortMode(value as SortMode)}
-        >
-          <Select.Trigger className="w-full shadow-none lg:w-45">
-            <ArrowUpDown size={15} className="mr-1" />
-            <Select.Value placeholder="Sort" />
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Group>
-              <Select.Item value="priority">Priority</Select.Item>
-              <Select.Item value="newest">Newest</Select.Item>
-              <Select.Item value="resource">Resource</Select.Item>
-            </Select.Group>
-          </Select.Content>
-        </Select>
-      </Card>
+        <div className="shadow-md transition-shadow hover:shadow-none">
+          <Select
+            value={sortMode}
+            onValueChange={(value) => setSortMode(value as SortMode)}
+          >
+            <Select.Trigger className="w-full shadow-none">
+              <ArrowUpDown size={15} className="mr-1" />
+              <Select.Value placeholder="Sort By" />
+            </Select.Trigger>
+
+            <Select.Content>
+              <Select.Group>
+                <Select.Item value="priority">Priority</Select.Item>
+                <Select.Item value="newest">Newest</Select.Item>
+                <Select.Item value="resource">Resource</Select.Item>
+              </Select.Group>
+            </Select.Content>
+          </Select>
+        </div>
+      </div>
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="animate-spin text-gray-400" size={36} />
