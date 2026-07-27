@@ -42,6 +42,8 @@ import TeacherGrades from "./pages/teacher/grades";
 import TeacherGradeView from "./pages/teacher/grade-view";
 import TeacherNotifications from "./pages/teacher/notifications";
 import PredictionsDashboard from "./pages/teacher/predictions";
+import LessonPlannerPage from "./pages/teacher/LessonPlanner/LessonPlannerPage";
+import LessonPlannerListPage from "./pages/teacher/LessonPlanner/LessonPlannerListPage";
 
 // // Student pages
 import StudentBoard from "./pages/student/storyboard";
@@ -100,7 +102,6 @@ const App = () => {
           <Route element={<ProtectedRoute allowedRoles={["teacher"]} />}>
             <Route index element={<Navigate to={routes.teacher.dashboard} replace />} />
             <Route path={routes.teacher.dashboard} element={<TeacherDashboard />} />
-            {/* <Route path={routes.teacher.classes} element={<TeacherClasses />} /> */}
             <Route path={routes.teacher.classes} element={<ClassesPage />} />
             <Route path={routes.teacher.classSections} element={<ClassSections />} />
             <Route path={routes.teacher.subjects} element={<Subjects />} />
@@ -110,18 +111,15 @@ const App = () => {
             <Route path={routes.teacher.classworks} element={<TeacherClassworks />} />
             <Route path={routes.teacher.createLesson} element={<CreateLesson />} />
             <Route path={routes.teacher.lessons} element={<TeacherLessons />} />
-            <Route path={routes.teacher.grades} element={<TeacherGrades />} />
-            <Route path={routes.teacher.gradeView} element={<TeacherGradeView />} />
-            <Route path={routes.teacher.notifications} element={<TeacherNotifications />} />
-            <Route path={routes.teacher.classworks} element={<TeacherClassworks />} />
-            <Route path={routes.teacher.createLesson} element={<CreateLesson />} />
-            <Route path={routes.teacher.lessons} element={<TeacherLessons />} />
             <Route path={routes.teacher.profile} element={<TeacherProfile />} />
             <Route path={routes.teacher.interventions} element={<AdminInterventions />} />
             <Route path={routes.teacher.grades} element={<TeacherGrades />} />
             <Route path={routes.teacher.gradeView} element={<TeacherGradeView />} />
             <Route path={routes.teacher.notifications} element={<TeacherNotifications />} />
             <Route path={routes.teacher.predictions} element={<PredictionsDashboard />} />
+            <Route path={routes.teacher.lessonPlanner} element={<LessonPlannerListPage />} />
+            <Route path={routes.teacher.lessonPlannerCreate} element={<LessonPlannerPage />} />
+            <Route path={routes.teacher.lessonPlannerEdit} element={<LessonPlannerPage />} />
           </Route>
 
           {/* Student */}

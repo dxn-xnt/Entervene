@@ -217,24 +217,27 @@ function OverviewTab({
         <div className="grid gap-2">
           {detail.subject_loads.length ? (
             detail.subject_loads.map((load) => (
-              <Card
+              <Link
                 key={load.subject_load_id}
-                className="block w-full border-black transition-none hover:shadow-md"
+                to={`/teacher/classes/${detail.class_id}/subjects/${load.subject_id}`}
+                className="block w-full"
               >
-                <Card.Content className="flex min-h-16 items-center justify-between gap-4">
-                  <span>
-                    <span className="block text-xl font-black">
-                      {load.subject_name}
+                <Card className="block w-full border-black transition-none hover:shadow-md cursor-pointer">
+                  <Card.Content className="flex min-h-16 items-center justify-between gap-4">
+                    <span>
+                      <span className="block text-xl font-black">
+                        {load.subject_name}
+                      </span>
+                      <span className="block text-[10px] font-semibold text-black/65">
+                        {load.teacher_name}
+                      </span>
                     </span>
-                    <span className="block text-[10px] font-semibold text-black/65">
-                      {load.teacher_name}
+                    <span className="text-right text-xs font-semibold">
+                      {load.schedule || "No schedule"}
                     </span>
-                  </span>
-                  <span className="text-right text-xs font-semibold">
-                    {load.schedule || "No schedule"}
-                  </span>
-                </Card.Content>
-              </Card>
+                  </Card.Content>
+                </Card>
+              </Link>
             ))
           ) : (
             <EmptyInline message="No subject load assigned yet." />
@@ -369,9 +372,10 @@ function SubjectLoadTab({
             <span>Status</span>
           </div>
           {detail.subject_loads.map((load) => (
-            <div
+            <Link
               key={load.subject_load_id}
-              className="grid min-h-12 grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_160px_120px] items-center border-b border-black/20 px-3 py-2 text-xs last:border-b-0"
+              to={`/teacher/classes/${detail.class_id}/subjects/${load.subject_id}`}
+              className="grid min-h-12 grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_160px_120px] items-center border-b border-black/20 px-3 py-2 text-xs last:border-b-0 hover:bg-[#f7e9aa] transition-colors cursor-pointer text-black"
             >
               <b>{load.subject_name}</b>
               <span className="flex items-center gap-2 font-semibold">
@@ -382,7 +386,7 @@ function SubjectLoadTab({
               <span className="w-fit rounded-full border border-black/30 bg-white px-2 py-0.5 font-bold">
                 {load.status || "N/A"}
               </span>
-            </div>
+            </Link>
           ))}
         </div>
       </Card>
