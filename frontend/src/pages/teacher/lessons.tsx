@@ -6,6 +6,8 @@ import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
 import { Alert } from "@/components/retroui/Alert";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Tabs } from "@/components/retroui/Tabs";
+import { Button } from "@/components/retroui/Button";
+import { Input } from "@/components/retroui/Input";
 import AppLayout from "@/layouts/app-layout";
 import { apiFetch } from "@/lib/api";
 
@@ -145,21 +147,21 @@ export default function Lessons() {
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <div>
-                  <h1 className="text-2xl md:text-4xl font-bold">
-                    Lessons
-                  </h1>
+                  <h1 className="text-2xl md:text-4xl font-bold">Lessons</h1>
                   {/* <p className="text-sm text-gray-500">
                     Manage lessons for your class and subject
                   </p> */}
                 </div>
               </div>
-              <button
+              <Button
+                variant="default"
+                size="md"
                 onClick={() => setIsModalOpen(true)}
-                className="flex items-center gap-1.5 rounded-lg border border-black bg-[#79bd80] px-4 py-2 text-sm font-semibold text-black shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000]"
+                className="gap-1.5"
               >
                 <span className="hidden sm:inline">+ New Lesson</span>
                 <span className="sm:hidden">+</span>
-              </button>
+              </Button>
             </header>
 
             <Tabs
@@ -175,16 +177,16 @@ export default function Lessons() {
               </Alert>
             )}
 
-            <div className="flex items-center gap-2 rounded-lg border border-black bg-white px-3 py-2 md:w-96 shadow-[2px_2px_0_#000]">
-              <Search size={16} className="text-gray-500 shrink-0" />
-              <input
+            <label className="relative w-full md:w-96 shadow-md transition-shadow hover:shadow-none">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+              <Input
                 type="search"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                className="w-full bg-transparent text-sm outline-none placeholder:text-gray-500"
                 placeholder="Search lessons"
+                className="h-10 w-full border-black pl-9 pr-3 shadow-none"
               />
-            </div>
+            </label>
 
             {isLoading ? (
               <p className="py-12 text-center text-gray-500">
