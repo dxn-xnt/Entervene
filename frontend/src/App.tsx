@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/protected-route";
-import Login from "./pages/login";
+import Login from "./pages/Login";
 import { routes } from "@/../routes";
 import SetupPassword from "./pages/SetupPassword";
 import { NavigationProgress } from "./components/navigation-progress";
@@ -41,13 +41,14 @@ import CreateLesson from "./pages/teacher/create-lesson";
 import TeacherGrades from "./pages/teacher/grades";
 import TeacherGradeView from "./pages/teacher/grade-view";
 import TeacherNotifications from "./pages/teacher/notifications";
+import PredictionsDashboard from "./pages/teacher/predictions";
 
 // // Student pages
 import StudentBoard from "./pages/student/storyboard";
 import StudentProfile from "./pages/student/student-profile";
 import StudentSubjects from "./pages/student/subjects";
 import StudentSubjectDetail from "./pages/student/student-subject-detail";
-// import StudentInterventions from "./pages/student/StudentInterventions";
+import StudentInterventions from "./pages/student/student-interventions";
 import StudentGrades from "./pages/student/Grades/grades";
 import StudentTodo from "./pages/student/todo";
 import StudentTodoView from "./pages/student/todo-view";
@@ -92,6 +93,7 @@ const App = () => {
             <Route path={routes.admin.settings} element={<AdminSettings />} />
             <Route path={routes.admin.academicPeriods} element={<AcademicPeriods />} />
             <Route path={routes.admin.profile} element={<AdminProfile />} />
+            <Route path={routes.admin.predictions} element={<PredictionsDashboard />} />
           </Route>
 
           {/* Teacher */}
@@ -115,10 +117,11 @@ const App = () => {
             <Route path={routes.teacher.createLesson} element={<CreateLesson />} />
             <Route path={routes.teacher.lessons} element={<TeacherLessons />} />
             <Route path={routes.teacher.profile} element={<TeacherProfile />} />
-            {/* <Route path={routes.teacher.interventions} element={<TeacherInterventions />} /> */}
+            <Route path={routes.teacher.interventions} element={<AdminInterventions />} />
             <Route path={routes.teacher.grades} element={<TeacherGrades />} />
             <Route path={routes.teacher.gradeView} element={<TeacherGradeView />} />
             <Route path={routes.teacher.notifications} element={<TeacherNotifications />} />
+            <Route path={routes.teacher.predictions} element={<PredictionsDashboard />} />
           </Route>
 
           {/* Student */}
@@ -128,11 +131,7 @@ const App = () => {
             <Route path={routes.student.profile} element={<StudentProfile />} />
             <Route path={routes.student.subjects} element={<StudentSubjects />} />
             <Route path={routes.student.subjectDetail} element={<StudentSubjectDetail />} />
-            <Route path={routes.student.interventions} element={
-              <div className="p-5">
-                <h1 className="text-3xl font-semibold">Interventions</h1>
-              </div>
-            } />
+            <Route path={routes.student.interventions} element={<StudentInterventions />} />
             <Route path={routes.student.grades} element={<StudentGrades />} />
             <Route path={routes.student.todo} element={<StudentTodo />} />
             <Route path={routes.student.todoView} element={<StudentTodoView />} />

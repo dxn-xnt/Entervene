@@ -103,7 +103,7 @@ export default function ClassworkFormModal({
               >
                 <option value="WRITTEN_WORK">Written Work</option>
                 <option value="PERFORMANCE_TASK">Performance Task</option>
-                <option value="PERIODICAL_EXAM">Periodical Exam</option>
+                <option value="QUARTERLY_ASSESSMENT">Quarterly Assessment</option>
               </select>
             </div>
           </div>

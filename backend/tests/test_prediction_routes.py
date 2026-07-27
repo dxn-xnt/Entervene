@@ -193,7 +193,7 @@ def fake_scoring_result(**overrides):
         "triggered_rules": ["predicted_grade_82_to_87"],
         "feature_columns_used": [
             "grade_level",
-            "periodical_assessment_percent",
+            "quarterly_assessment_percent",
             "source_period_grade",
             "assessment_completion_rate",
             "grade_trend_vs_previous_period",
@@ -208,7 +208,7 @@ def fake_scoring_result(**overrides):
 def prediction_payload(context, **overrides):
     features = {
         "grade_level": 8,
-        "periodical_assessment_percent": 84.0,
+        "quarterly_assessment_percent": 84.0,
         "source_period_grade": 87.0,
         "assessment_completion_rate": 0.95,
         "grade_trend_vs_previous_period": -2.0,
@@ -305,7 +305,7 @@ def seed_ready_record_features(context):
     add_period_grade(context, grade=86)
     add_assessment(context, "WRITTEN_WORK", 1, raw_score=84)
     add_assessment(context, "PERFORMANCE_TASK", 1, raw_score=88)
-    add_assessment(context, "PERIODICAL_ASSESSMENT", 1, raw_score=82)
+    add_assessment(context, "QUARTERLY_ASSESSMENT", 1, raw_score=82)
 
 
 def test_preview_endpoint_calls_scoring_and_returns_risk_fields(prediction_api_context, monkeypatch):
@@ -658,7 +658,7 @@ def test_build_features_endpoint_returns_computed_features_and_evidence(predicti
     assert body["features"]["source_period_grade"] == 86.0
     assert body["features"]["written_work_percent"] == 84.0
     assert body["features"]["performance_task_percent"] == 88.0
-    assert body["features"]["periodical_assessment_percent"] == 82.0
+    assert body["features"]["quarterly_assessment_percent"] == 82.0
     assert body["evidence_summary"]["expected_assessment_count"] == 3
 
 

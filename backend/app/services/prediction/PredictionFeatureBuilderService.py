@@ -23,9 +23,26 @@ from app.models.submissions.StudentSubmission import StudentSubmission
 COMPONENT_FEATURES = {
     "WRITTEN_WORK": "written_work_percent",
     "PERFORMANCE_TASK": "performance_task_percent",
-    "PERIODICAL_ASSESSMENT": "periodical_assessment_percent",
+    "QUARTERLY_ASSESSMENT": "quarterly_assessment_percent",
 }
 READINESS_ACTION = "Collect more graded evidence before generating a model-assisted risk decision."
+
+
+def map_classwork_category(classwork_type: str, classwork_category: str | None) -> str:
+    if classwork_category:
+        cat = classwork_category.upper()
+        if cat in {"PERIODICAL_EXAM", "PERIODICAL_ASSESSMENT", "QUARTERLY_ASSESSMENT"}:
+            return "QUARTERLY_ASSESSMENT"
+        if cat in {"WRITTEN_WORK", "PERFORMANCE_TASK"}:
+            return cat
+
+    t = (classwork_type or "").upper()
+    if t in {"EXAM", "PERIODICAL_EXAM", "QUARTERLY_EXAM"}:
+        return "QUARTERLY_ASSESSMENT"
+    elif t in {"ACTIVITY", "PROJECT"}:
+        return "PERFORMANCE_TASK"
+    else:
+        return "WRITTEN_WORK"
 
 
 def _to_float(value: Any) -> float | None:
@@ -115,8 +132,36 @@ def _assessment_rows(
     )
 
 
+def _classwork_rows(
+    db: Session,
+    student_id: UUID,
+    class_id: int,
+    subject_id: int,
+) -> list[tuple[Classwork, StudentSubmission | None]]:
+    from app.models.classwork.Classwork import Classwork
+    from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+    from app.models.submissions.StudentSubmission import StudentSubmission
+
+    return (
+        db.query(Classwork, StudentSubmission)
+        .join(ClassworkAssignment, ClassworkAssignment.classwork_id == Classwork.classwork_id)
+        .outerjoin(
+            StudentSubmission,
+            (StudentSubmission.classwork_assignment_id == ClassworkAssignment.classwork_assignment_id)
+            & (StudentSubmission.student_id == student_id),
+        )
+        .filter(
+            ClassworkAssignment.class_id == class_id,
+            Classwork.subject_id == subject_id,
+            Classwork.classwork_type != "READING",
+        )
+        .all()
+    )
+
+
 def _component_features(
     assessment_rows: list[tuple[AssessmentItem, StudentAssessmentScore | None]],
+    classwork_rows: list[tuple[Classwork, StudentSubmission | None]] | None = None,
 ) -> tuple[dict[str, float | None], dict[str, Any]]:
     earned_by_component = {component: Decimal("0") for component in COMPONENT_FEATURES}
     possible_by_component = {component: Decimal("0") for component in COMPONENT_FEATURES}
@@ -125,8 +170,12 @@ def _component_features(
     submitted_count = 0
     missing_count = 0
 
+    expected_count = len(assessment_rows) + (len(classwork_rows) if classwork_rows else 0)
+
     for assessment, score in assessment_rows:
         component = assessment.component_type
+        if component in {"PERIODICAL_EXAM", "PERIODICAL_ASSESSMENT"}:
+            component = "QUARTERLY_ASSESSMENT"
         if component not in COMPONENT_FEATURES:
             continue
         components_present.add(component)
@@ -139,12 +188,29 @@ def _component_features(
             recorded_count += 1
             submitted_count += 1
 
+    if classwork_rows:
+        for cw, sub in classwork_rows:
+            component = map_classwork_category(cw.classwork_type, cw.classwork_category)
+            if component not in COMPONENT_FEATURES:
+                continue
+            components_present.add(component)
+            if cw.total_points:
+                possible_by_component[component] += Decimal(str(cw.total_points))
+            if sub is None or sub.status not in {"graded", "submitted"}:
+                missing_count += 1
+                continue
+            if sub.status in {"graded", "submitted"}:
+                submitted_count += 1
+                if sub.status == "graded" and sub.grade is not None:
+                    earned_by_component[component] += Decimal(str(sub.grade))
+                    recorded_count += 1
+
     features = {
         feature_name: _component_percent(earned_by_component[component], possible_by_component[component])
         for component, feature_name in COMPONENT_FEATURES.items()
     }
     summary = {
-        "expected_assessment_count": len(assessment_rows),
+        "expected_assessment_count": expected_count,
         "recorded_assessment_count": recorded_count,
         "submitted_assessment_count": submitted_count,
         "missing_assessment_count": missing_count,
@@ -283,7 +349,8 @@ def build_prediction_features_from_records(
 
     warnings: list[str] = []
     rows = _assessment_rows(db, student_id, class_id, subject_id, source_period_id)
-    component_features, evidence_summary = _component_features(rows)
+    cw_rows = _classwork_rows(db, student_id, class_id, subject_id)
+    component_features, evidence_summary = _component_features(rows, cw_rows)
     late_count, late_warning = _late_submission_count(db, student_id, class_id, subject_id)
     if late_warning:
         warnings.append(late_warning)
@@ -305,8 +372,8 @@ def build_prediction_features_from_records(
             or _to_float(period_grade.transmuted_grade)
             or _to_float(period_grade.initial_grade)
         )
-        for column in ("written_work_percent", "performance_task_percent", "periodical_assessment_percent"):
-            if component_features[column] is None:
+        for column in ("written_work_percent", "performance_task_percent", "quarterly_assessment_percent"):
+            if component_features.get(column) is None:
                 component_features[column] = _to_float(getattr(period_grade, column))
 
     if source_period_grade is None:
@@ -344,7 +411,7 @@ def build_prediction_features_from_records(
         "source_period_grade": source_period_grade,
         "written_work_percent": component_features["written_work_percent"],
         "performance_task_percent": component_features["performance_task_percent"],
-        "periodical_assessment_percent": component_features["periodical_assessment_percent"],
+        "quarterly_assessment_percent": component_features["quarterly_assessment_percent"],
         "assessment_completion_rate": _round_or_none(completion_rate),
         "missing_activity_count": evidence_summary["missing_assessment_count"],
         "late_submission_count": late_count,

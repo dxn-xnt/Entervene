@@ -34,7 +34,7 @@ export function Tabs<T extends string = string>({
               onClick={() => onTabChange(tab.id)}
               className={`min-h-10 border-2 border-b-0 px-4 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors flex items-center justify-center gap-1.5 ${isActive
                 ? "bg-primary text-primary-foreground"
-                : "bg-background text-foreground hover:bg-muted"
+                : "bg-background text-foreground hover:bg-accent"
                 }`}
             >
               {tab.icon && <tab.icon size={16} className="shrink-0" />}

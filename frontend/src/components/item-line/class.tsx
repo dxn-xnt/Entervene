@@ -15,21 +15,25 @@ const ClassItemLine = ({ subject, date, time, schedule, onClick }: CardProps) =>
                 <div className="flex flex-row gap-3 items-center">
                     <p className="font-semibold text-2xl">{subject}</p>
                 </div>
-                <div className="flex flex-row gap-2 items-center text-sm">
+                <div className="flex flex-row gap-2 items-center text-sm text-black/70">
                     <p>
                         {date}
                     </p>
                 </div>
             </div>
             <div className="flex flex-col gap-1 items-end">
-                <div className="flex flex-row gap-3 items-center">
-                    <p className="font-normal text-lg">{time}</p>
-                </div>
-                <div className="flex flex-row gap-2 items-center text-sm">
-                    <p className="font-normal text-xs">
-                        ({schedule?.join(", ")})
-                    </p>
-                </div>
+                {time ? (
+                    <div className="flex flex-row gap-3 items-center">
+                        <p className="font-normal text-base md:text-lg">{time}</p>
+                    </div>
+                ) : null}
+                {schedule && schedule.length > 0 ? (
+                    <div className="flex flex-row gap-2 items-center text-sm text-black/60">
+                        <p className="font-normal text-xs">
+                            ({schedule.join(", ")})
+                        </p>
+                    </div>
+                ) : null}
             </div>
 
         </RetroCard>

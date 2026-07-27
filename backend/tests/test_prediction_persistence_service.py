@@ -142,7 +142,7 @@ def fake_scoring_result(**overrides):
         "triggered_rules": ["predicted_grade_82_to_87"],
         "feature_columns_used": [
             "grade_level",
-            "periodical_assessment_percent",
+            "quarterly_assessment_percent",
             "source_period_grade",
             "assessment_completion_rate",
             "grade_trend_vs_previous_period",
@@ -218,7 +218,7 @@ def test_feature_rows_are_saved_into_ai_prediction_feature(db, seeded, monkeypat
     rows = db.query(AIPredictionFeature).filter_by(prediction_id=result["prediction_id"]).all()
     names = {row.feature_name for row in rows}
     assert "grade_level" in names
-    assert "periodical_assessment_percent" in names
+    assert "quarterly_assessment_percent" in names
     assert result["feature_rows_created"] == len(rows)
 
 

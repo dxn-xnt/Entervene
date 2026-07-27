@@ -26,7 +26,7 @@ export default function ClassCard({ item, onEdit, onArchive }: {
     : "No adviser assigned";
 
   return (
-    <Card className={`group relative bg-background shadow-none hover:-translate-y-1 ${isArchived ? "opacity-60" : ""}`}>
+    <Card className={`group relative flex min-w-[340px] shrink-0 flex-col justify-between shadow-none p-3 hover:-translate-y-1 ${isArchived ? "opacity-60" : ""}`}>
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <Link
