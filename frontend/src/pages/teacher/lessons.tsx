@@ -5,7 +5,7 @@ import LessonModal from "@/components/lesson-modal";
 import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
 import { Alert } from "@/components/retroui/Alert";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import Tabs from "@/components/tabs";
+import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
 import { apiFetch } from "@/lib/api";
 
@@ -37,7 +37,9 @@ export default function Lessons() {
   const [activeTab, setActiveTab] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [lessonPendingDelete, setLessonPendingDelete] = useState<Lesson | null>(null);
+  const [lessonPendingDelete, setLessonPendingDelete] = useState<Lesson | null>(
+    null,
+  );
 
   useEffect(() => {
     fetchLessons();
@@ -97,15 +99,20 @@ export default function Lessons() {
   const confirmDeleteLesson = async () => {
     if (!lessonPendingDelete) return;
     try {
-      const response = await apiFetch(`/api/v1/lessons/${lessonPendingDelete.lesson_id}`, {
-        method: "DELETE",
-      });
+      const response = await apiFetch(
+        `/api/v1/lessons/${lessonPendingDelete.lesson_id}`,
+        {
+          method: "DELETE",
+        },
+      );
 
       if (!response.ok) {
         throw new Error("Failed to delete lesson");
       }
 
-      setLessons(lessons.filter((l) => l.lesson_id !== lessonPendingDelete.lesson_id));
+      setLessons(
+        lessons.filter((l) => l.lesson_id !== lessonPendingDelete.lesson_id),
+      );
       setLessonPendingDelete(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete lesson");
@@ -155,9 +162,11 @@ export default function Lessons() {
               </button>
             </header>
 
-            <div className="-mx-4 md:-mx-6">
-              <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-            </div>
+            <Tabs
+              tabs={tabs}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+            />
 
             {error && (
               <Alert status="error">

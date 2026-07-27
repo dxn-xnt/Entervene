@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { BookOpen, ChevronDown, ChevronRight, Users } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
-import Tabs from "@/components/tabs";
+import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
 import { ManualSuggestionPanel } from "@/components/teacher/suggestions/ManualSuggestionPanel";
@@ -117,29 +117,27 @@ export default function TeacherClassDetail() {
               </Breadcrumb>
             </header>
 
-            <div className="-mx-4 md:-mx-6 ">
-              <Tabs
-                tabs={[
-                  {
-                    id: "classes",
-                    label: "Classes",
-                    icon: <BookOpen className="size-3.5" />,
-                  },
-                  {
-                    id: "students",
-                    label: "Students",
-                    icon: <Users className="size-3.5" />,
-                  },
-                  {
-                    id: "subjects",
-                    label: "Subject Load",
-                    icon: <BookOpen className="size-3.5" />,
-                  },
-                ]}
-                activeTab={tab}
-                onChange={(id) => setTab(id as DetailTab)}
-              />
-            </div>
+            <Tabs<DetailTab>
+              tabs={[
+                {
+                  id: "classes",
+                  label: "Classes",
+                  icon: BookOpen,
+                },
+                {
+                  id: "students",
+                  label: "Students",
+                  icon: Users,
+                },
+                {
+                  id: "subjects",
+                  label: "Subject Load",
+                  icon: BookOpen,
+                },
+              ]}
+              activeTab={tab}
+              onTabChange={setTab}
+            />
 
             <Card className="block w-full border-black bg-[#F6E9B2] transition-none hover:shadow-md">
               <Card.Content>
