@@ -124,7 +124,7 @@ def add_period_grade(context, period, grade=86, **overrides):
         final_period_grade=grade,
         written_work_percent=overrides.pop("written_work_percent", None),
         performance_task_percent=overrides.pop("performance_task_percent", None),
-        periodical_assessment_percent=overrides.pop("periodical_assessment_percent", None),
+        quarterly_assessment_percent=overrides.pop("quarterly_assessment_percent", None),
         **overrides,
     )
     context["db"].add(row)
@@ -180,24 +180,24 @@ def test_builds_source_period_grade_from_student_period_grade(feature_context):
 def test_computes_component_percentages_from_assessment_scores(feature_context):
     add_assessment(feature_context, "WRITTEN_WORK", 1, max_score=50, raw_score=42)
     add_assessment(feature_context, "PERFORMANCE_TASK", 1, max_score=40, raw_score=35.2)
-    add_assessment(feature_context, "PERIODICAL_ASSESSMENT", 1, max_score=60, raw_score=49.2)
+    add_assessment(feature_context, "QUARTERLY_ASSESSMENT", 1, max_score=60, raw_score=49.2)
 
     result = build(feature_context)
 
     assert result["features"]["written_work_percent"] == 84.0
     assert result["features"]["performance_task_percent"] == 88.0
-    assert result["features"]["periodical_assessment_percent"] == 82.0
+    assert result["features"]["quarterly_assessment_percent"] == 82.0
 
 
-def test_handles_missing_periodical_assessment_during_early_projection(feature_context):
+def test_handles_missing_quarterly_assessment_during_early_projection(feature_context):
     add_assessment(feature_context, "WRITTEN_WORK", 1, raw_score=84)
     add_assessment(feature_context, "PERFORMANCE_TASK", 1, raw_score=88)
 
     result = build(feature_context, target=feature_context["periods"][1])
 
     assert result["prediction_mode"] == "CURRENT_PERIOD_PROJECTION"
-    assert result["features"]["periodical_assessment_percent"] is None
-    assert "PERIODICAL_ASSESSMENT" in result["evidence_summary"]["components_missing"]
+    assert result["features"]["quarterly_assessment_percent"] is None
+    assert "QUARTERLY_ASSESSMENT" in result["evidence_summary"]["components_missing"]
 
 
 def test_computes_completion_missing_and_coverage(feature_context):
@@ -205,7 +205,7 @@ def test_computes_completion_missing_and_coverage(feature_context):
     add_assessment(feature_context, "WRITTEN_WORK", 1, raw_score=80)
     add_assessment(feature_context, "WRITTEN_WORK", 2, raw_score=None, status="MISSING_NOT_ENCODED")
     add_assessment(feature_context, "PERFORMANCE_TASK", 1, raw_score=90)
-    add_assessment(feature_context, "PERIODICAL_ASSESSMENT", 1, raw_score=85)
+    add_assessment(feature_context, "QUARTERLY_ASSESSMENT", 1, raw_score=85)
 
     result = build(feature_context)
 
@@ -272,6 +272,45 @@ def test_has_previous_period_false_for_first_period(feature_context):
 
     assert result["features"]["has_previous_period"] is False
     assert result["features"]["grade_trend_vs_previous_period"] is None
+
+
+def test_includes_live_classwork_submissions_in_component_features(feature_context):
+    from app.models.classwork.Classwork import Classwork
+    from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+    from app.models.submissions.StudentSubmission import StudentSubmission
+
+    db = feature_context["db"]
+    cw = Classwork(
+        title="Term Quiz 1",
+        classwork_type="QUIZ",
+        classwork_category="WRITTEN_WORK",
+        total_points=50,
+        subject_id=feature_context["subject"].subject_id,
+        created_by_staff_id=feature_context["staff"].staff_id,
+    )
+    db.add(cw)
+    db.flush()
+
+    assign = ClassworkAssignment(
+        classwork_id=cw.classwork_id,
+        class_id=feature_context["class"].class_id,
+        assigned_by_staff_id=feature_context["staff"].staff_id,
+    )
+    db.add(assign)
+    db.flush()
+
+    sub = StudentSubmission(
+        classwork_assignment_id=assign.classwork_assignment_id,
+        student_id=feature_context["student"].student_id,
+        status="graded",
+        grade=45,
+    )
+    db.add(sub)
+    db.commit()
+
+    result = build(feature_context)
+
+    assert result["features"]["written_work_percent"] == 90.0
 
 
 @pytest.mark.parametrize(
@@ -435,7 +474,7 @@ def test_period_sequence_normalised_for_3_term_periods(three_term_context, term_
     period = ctx["term_periods"][term_sequence - 1]
     _add_term_assessment(ctx, period, "WRITTEN_WORK", 1, raw_score=85)
     _add_term_assessment(ctx, period, "PERFORMANCE_TASK", 1, raw_score=88)
-    _add_term_assessment(ctx, period, "PERIODICAL_ASSESSMENT", 1, raw_score=82)
+    _add_term_assessment(ctx, period, "QUARTERLY_ASSESSMENT", 1, raw_score=82)
 
     target = ctx["term_periods"][min(term_sequence, 2)]  # next term or same if last
     result = build_prediction_features_from_records(
@@ -466,7 +505,7 @@ def test_period_sequence_identity_for_4_quarter_periods(feature_context, quarter
     period = ctx["periods"][quarter_sequence - 1]
     add_assessment(ctx, "WRITTEN_WORK", 1, raw_score=85, period=period)
     add_assessment(ctx, "PERFORMANCE_TASK", 1, raw_score=88, period=period)
-    add_assessment(ctx, "PERIODICAL_ASSESSMENT", 1, raw_score=82, period=period)
+    add_assessment(ctx, "QUARTERLY_ASSESSMENT", 1, raw_score=82, period=period)
 
     target = ctx["periods"][min(quarter_sequence, 2)]
     result = build_prediction_features_from_records(
@@ -500,7 +539,7 @@ def test_cumulative_grade_avg_excludes_other_period_types(three_term_context):
     # Also add an assessment in Term 2 so the service finds enough data
     _add_term_assessment(ctx, term2, "WRITTEN_WORK", 1, raw_score=80)
     _add_term_assessment(ctx, term2, "PERFORMANCE_TASK", 1, raw_score=80)
-    _add_term_assessment(ctx, term2, "PERIODICAL_ASSESSMENT", 1, raw_score=80)
+    _add_term_assessment(ctx, term2, "QUARTERLY_ASSESSMENT", 1, raw_score=80)
 
     result = build_prediction_features_from_records(
         db,
@@ -526,7 +565,7 @@ def test_cumulative_grade_avg_excludes_future_terms(three_term_context):
 
     _add_term_assessment(ctx, term2, "WRITTEN_WORK", 1, raw_score=80)
     _add_term_assessment(ctx, term2, "PERFORMANCE_TASK", 1, raw_score=80)
-    _add_term_assessment(ctx, term2, "PERIODICAL_ASSESSMENT", 1, raw_score=80)
+    _add_term_assessment(ctx, term2, "QUARTERLY_ASSESSMENT", 1, raw_score=80)
 
     result = build_prediction_features_from_records(
         ctx["db"],

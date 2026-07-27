@@ -76,10 +76,7 @@ def test_grade_distribution_summary():
     assert result["missing_final_period_grades"] == 1
 
 
-def test_feature_name_mapping_from_quarterly_to_periodical():
-    result = feature_name_mapping(["grade_level", "quarterly_assessment_percent"])
 
-    assert result == {"quarterly_assessment_percent": "periodical_assessment_percent"}
 
 
 def test_assessment_component_mapping_accepts_quarterly_assessment_underscore():
@@ -98,7 +95,7 @@ def test_assessment_component_mapping_accepts_quarterly_assessment_underscore():
 
     result = validate_assessments(columns, rows)
 
-    assert result["component_types_found"] == ["PERIODICAL_ASSESSMENT"]
+    assert result["component_types_found"] == ["QUARTERLY_ASSESSMENT"]
     assert result["invalid_component_types"] == {}
 
 

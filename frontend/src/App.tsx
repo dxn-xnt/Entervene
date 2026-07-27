@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/protected-route";
-import Login from "./pages/login";
+import Login from "./pages/Login";
 import { routes } from "@/../routes";
 import SetupPassword from "./pages/SetupPassword";
 import { NavigationProgress } from "./components/navigation-progress";
@@ -41,6 +41,7 @@ import CreateLesson from "./pages/teacher/create-lesson";
 import TeacherGrades from "./pages/teacher/grades";
 import TeacherGradeView from "./pages/teacher/grade-view";
 import TeacherNotifications from "./pages/teacher/notifications";
+import PredictionsDashboard from "./pages/teacher/predictions";
 
 // // Student pages
 import StudentBoard from "./pages/student/storyboard";
@@ -92,6 +93,7 @@ const App = () => {
             <Route path={routes.admin.settings} element={<AdminSettings />} />
             <Route path={routes.admin.academicPeriods} element={<AcademicPeriods />} />
             <Route path={routes.admin.profile} element={<AdminProfile />} />
+            <Route path={routes.admin.predictions} element={<PredictionsDashboard />} />
           </Route>
 
           {/* Teacher */}
@@ -119,6 +121,7 @@ const App = () => {
             <Route path={routes.teacher.grades} element={<TeacherGrades />} />
             <Route path={routes.teacher.gradeView} element={<TeacherGradeView />} />
             <Route path={routes.teacher.notifications} element={<TeacherNotifications />} />
+            <Route path={routes.teacher.predictions} element={<PredictionsDashboard />} />
           </Route>
 
           {/* Student */}

@@ -131,12 +131,6 @@ def _feature_value_from_inputs(
         return scoring_result[feature_name]
     if feature_name in features:
         return features[feature_name]
-    mappings = {
-        "periodical_assessment_percent": "quarterly_assessment_percent",
-    }
-    source_name = mappings.get(feature_name)
-    if source_name and source_name in features:
-        return features[source_name]
     return None
 
 

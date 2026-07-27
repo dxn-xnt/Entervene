@@ -52,7 +52,7 @@ export default function CreateClassworkQuizModal({
 
     const [draft, setDraft] = useState<CreateDraft>({
         ...emptyClassworkDraft,
-        classwork_category: "PERIODICAL_EXAM",
+        classwork_category: "QUARTERLY_ASSESSMENT",
         subject_id: subjects[0] ? String(subjects[0].id) : "",
     });
 
@@ -797,8 +797,8 @@ export default function CreateClassworkQuizModal({
                                             <Select.Item value="PERFORMANCE_TASK">
                                                 Performance Task
                                             </Select.Item>
-                                            <Select.Item value="PERIODICAL_EXAM">
-                                                Periodical Exam
+                                            <Select.Item value="QUARTERLY_ASSESSMENT">
+                                                Quarterly Assessment
                                             </Select.Item>
                                         </Select.Group>
                                     </Select.Content>

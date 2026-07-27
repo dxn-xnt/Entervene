@@ -1,7 +1,5 @@
 {
-  "column_mappings": {
-    "quarterly_assessment_percent": "periodical_assessment_percent"
-  },
+  "column_mappings": {},
   "excluded_columns": [
     "row_id",
     "student_id",
@@ -15,7 +13,7 @@
     "has_previous_period",
     "written_work_percent",
     "performance_task_percent",
-    "periodical_assessment_percent",
+    "quarterly_assessment_percent",
     "assessment_completion_rate",
     "source_period_grade",
     "grade_trend_vs_previous_period",

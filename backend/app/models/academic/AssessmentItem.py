@@ -8,7 +8,7 @@ class AssessmentItem(Base):
     __tablename__ = "assessment_item"
     __table_args__ = (
         CheckConstraint(
-            "component_type IN ('WRITTEN_WORK', 'PERFORMANCE_TASK', 'PERIODICAL_ASSESSMENT')",
+            "component_type IN ('WRITTEN_WORK', 'PERFORMANCE_TASK', 'QUARTERLY_ASSESSMENT')",
             name="ck_assessment_item_component_type",
         ),
         CheckConstraint("max_score > 0", name="ck_assessment_item_max_score_positive"),
