@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.Base import Base
 from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.RiskThreshold import RiskThreshold
-from app.services.ModelScoringService import (
+from app.services.prediction.ModelScoringService import (
     get_active_model_version,
     load_model_artifact,
     prepare_feature_row,
@@ -52,7 +52,7 @@ def feature_schema():
     return {
         "feature_columns": [
             "grade_level",
-            "periodical_assessment_percent",
+            "quarterly_assessment_percent",
             "has_previous_period",
             "grade_trend_vs_previous_period",
             "source_period_grade",
@@ -61,7 +61,7 @@ def feature_schema():
         ],
         "target_column": "target_next_period_grade",
         "excluded_columns": ["student_id", "target_next_period_grade"],
-        "column_mappings": {"quarterly_assessment_percent": "periodical_assessment_percent"},
+        "column_mappings": {"quarterly_assessment_percent": "quarterly_assessment_percent"},
         "required_runtime_columns": [
             "grade_level",
             "quarterly_assessment_percent",
@@ -139,7 +139,7 @@ def test_feature_row_preparation_follows_schema_order():
     frame, warnings = prepare_feature_row(sample_input(), feature_schema())
 
     assert list(frame.columns) == feature_schema()["feature_columns"]
-    assert frame.iloc[0]["periodical_assessment_percent"] == 84.0
+    assert frame.iloc[0]["quarterly_assessment_percent"] == 84.0
     assert warnings
     assert any("student_id" in warning for warning in warnings)
 
@@ -147,8 +147,8 @@ def test_feature_row_preparation_follows_schema_order():
 def test_quarterly_assessment_percent_maps_to_periodical():
     frame, _ = prepare_feature_row(sample_input(), feature_schema())
 
-    assert "periodical_assessment_percent" in frame.columns
-    assert frame.iloc[0]["periodical_assessment_percent"] == 84.0
+    assert "quarterly_assessment_percent" in frame.columns
+    assert frame.iloc[0]["quarterly_assessment_percent"] == 84.0
 
 
 def test_identity_and_student_id_are_not_included_in_model_features():

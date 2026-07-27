@@ -1,6 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import { ArrowRight, FileText, Trash2, Upload, X } from "lucide-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { FileText, Trash2, Upload, X } from "lucide-react";
 import type { ClassworkDraft, Lesson } from "./types";
 
 type ClassworkFormModalProps = {
@@ -28,8 +27,6 @@ export default function ClassworkFormModal({
   removeClassworkMaterial,
   createClassworkForLesson,
 }: ClassworkFormModalProps) {
-  const navigate = useNavigate();
-  const location = useLocation();
   const isReadingDraft = classworkDraft.classwork_type === "READING";
   const isQuizDraft = classworkDraft.classwork_type === "QUIZ";
   const allowsClassworkMaterials = classworkDraft.classwork_type !== "QUIZ";
@@ -106,7 +103,7 @@ export default function ClassworkFormModal({
               >
                 <option value="WRITTEN_WORK">Written Work</option>
                 <option value="PERFORMANCE_TASK">Performance Task</option>
-                <option value="PERIODICAL_EXAM">Quarterly Assessment</option>
+                <option value="QUARTERLY_ASSESSMENT">Quarterly Assessment</option>
               </select>
             </div>
           </div>
@@ -197,41 +194,17 @@ export default function ClassworkFormModal({
             />
           </div>
 
-          <div className="flex flex-col gap-2 rounded-lg border border-black bg-[#F6E9B2] p-4 text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <p className="font-bold text-gray-900">Need full builder features?</p>
-                <p className="text-xs text-gray-700">
-                  Build advanced quizzes, import question files, and configure multi-file assignments directly in the Classworks Builder.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  navigate("/teacher/classworks", {
-                    state: {
-                      returnUrl: location.pathname,
-                      prefill: {
-                        title: classworkDraft.title,
-                        classwork_type: classworkDraft.classwork_type,
-                        classwork_category: classworkDraft.classwork_category,
-                        total_points: classworkDraft.total_points,
-                        due_date: classworkDraft.due_date,
-                        allow_late_submissions: classworkDraft.allow_late_submissions,
-                        description: classworkDraft.description,
-                        instructions: classworkDraft.instructions,
-                        lesson_id: classworkLesson.lesson_id,
-                      },
-                    },
-                  });
-                }}
-                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-black bg-white px-3 py-2 text-xs font-bold text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100 transition-colors"
-              >
-                Continue in Classworks Builder
-                <ArrowRight size={14} />
-              </button>
+          {isQuizDraft && (
+            <div className="rounded-lg border border-black bg-[#F6E9B2] px-4 py-3 text-sm font-medium shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              Save this quiz first, then open its details to manually build questions or import quiz questions from a file.
             </div>
-          </div>
+          )}
+
+          {isReadingDraft && (
+            <div className="rounded-lg border border-black bg-[#F6E9B2] px-4 py-3 text-sm font-medium shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              Add the reading file or notes here so students can see the lesson material inside the classwork timeline.
+            </div>
+          )}
 
           {allowsClassworkMaterials && (
             <div>
@@ -246,10 +219,11 @@ export default function ClassworkFormModal({
 
               <label
                 htmlFor="classwork-materials"
-                className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-5 text-sm font-semibold transition-colors ${isCreatingClasswork
+                className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-5 text-sm font-semibold transition-colors ${
+                  isCreatingClasswork
                     ? "cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400"
                     : "border-gray-700 bg-gray-50 hover:bg-[#F6E9B2]"
-                  }`}
+                }`}
               >
                 <Upload size={18} />
                 Select material files

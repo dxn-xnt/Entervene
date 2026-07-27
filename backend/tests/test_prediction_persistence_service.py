@@ -8,7 +8,7 @@ from sqlalchemy import CheckConstraint, create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import app.services.PredictionPersistenceService as persistence_service
+import app.services.prediction.PredictionPersistenceService as persistence_service
 from app.db.Base import Base
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
@@ -21,7 +21,7 @@ from app.models.ai.AIPredictionFeature import AIPredictionFeature
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
-from app.services.PredictionPersistenceService import (
+from app.services.prediction.PredictionPersistenceService import (
     score_and_persist_prediction,
     validate_required_identifiers,
 )
@@ -142,7 +142,7 @@ def fake_scoring_result(**overrides):
         "triggered_rules": ["predicted_grade_82_to_87"],
         "feature_columns_used": [
             "grade_level",
-            "periodical_assessment_percent",
+            "quarterly_assessment_percent",
             "source_period_grade",
             "assessment_completion_rate",
             "grade_trend_vs_previous_period",
@@ -218,7 +218,7 @@ def test_feature_rows_are_saved_into_ai_prediction_feature(db, seeded, monkeypat
     rows = db.query(AIPredictionFeature).filter_by(prediction_id=result["prediction_id"]).all()
     names = {row.feature_name for row in rows}
     assert "grade_level" in names
-    assert "periodical_assessment_percent" in names
+    assert "quarterly_assessment_percent" in names
     assert result["feature_rows_created"] == len(rows)
 
 

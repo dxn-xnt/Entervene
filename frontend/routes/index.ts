@@ -13,22 +13,16 @@ export const routes = {
     subjectView: "/admin/subjects/:grade/:subject",
     classes: "/admin/classes",
     classDetail: "/admin/classes/:classId",
+    studentView: "/admin/classes/:classId/students/:studentId",
     users: "/admin/users",
     userDetail: "/admin/users/:role/:userId",
     interventions: "/admin/interventions",
     notifications: "/admin/notifications",
     settings: "/admin/settings",
     academicPeriods: "/admin/academic-periods",
+    predictions: "/admin/predictions",
+    profile: "/admin/profile",
   },
-
-  // teacher: {
-  //   dashboard: "/teacher/dashboard",
-  //   classes: "/teacher/classes",
-  //   classworks: "/teacher/classworks",
-  //   interventions: "/teacher/interventions",
-  //   grades: "/teacher/grades",
-  //   notifications: "/teacher/notifications"
-  // },
 
   teacher: {
     dashboard: "/teacher/dashboard",
@@ -43,17 +37,26 @@ export const routes = {
     lessons: "/teacher/lessons",
     interventions: "/teacher/interventions",
     grades: "/teacher/grades",
+    gradeView: "/teacher/grades/:section/:subject",
     notifications: "/teacher/notifications",
+    predictions: "/teacher/predictions",
+    profile: "/teacher/profile",
   },
 
   student: {
     board: "/student/studyboard",
+    profile: "/student/profile",
     subjects: "/student/subjects",
     subjectDetail: "/student/subjects/:classId/:subjectId",
     interventions: "/student/interventions",
     grades: "/student/grades",
     todo: "/student/todo",
+    todoView: "/student/todo/:subject/:quizTitle",
     notifications: "/student/notifications",
+
+    // TEMP 
+    quizTake: "/student/quiz/:subject/:quizTitle/take",
+    quizResult: "/student/quiz/:subject/:quizTitle/result",
   },
 
   setupPassword: {

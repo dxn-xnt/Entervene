@@ -4,7 +4,29 @@ import { cn } from "@/lib/utils";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 
-const Select = SelectPrimitive.Root;
+interface CustomSelectProps extends SelectPrimitive.SelectProps {
+  onChange?: (event: { target: { value: string } }) => void;
+  className?: string;
+}
+
+const Select = ({
+  children,
+  onValueChange,
+  onChange,
+  className,
+  ...props
+}: CustomSelectProps) => {
+  const handleValueChange = (value: string) => {
+    onValueChange?.(value);
+    onChange?.({ target: { value } });
+  };
+
+  return (
+    <SelectPrimitive.Root onValueChange={handleValueChange} {...props}>
+      {children}
+    </SelectPrimitive.Root>
+  );
+};
 
 const SelectTrigger = ({
   className,

@@ -6,21 +6,14 @@ import {
   type ReactNode,
 } from "react";
 import {
-  Archive,
-  ArrowDownUp,
-  BookOpen,
-  CheckCircle2,
-  Filter,
   Plus,
   Search,
-  Users,
 } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
-import ClassCard from "@/components/admin/classes/ClassCard";
-import SummaryCard from "@/components/admin/classes/SummaryCard";
-import AddClassModal from "@/components/admin/classes/modals/AddClassModal";
-import ArchiveClassModal from "@/components/admin/classes/modals/ArchiveClassModal";
-import EditClassModal from "@/components/admin/classes/modals/EditClassModal";
+import ClassCard from "@/components/admin/classes/class-card";
+import AddClassModal from "./forms/add-class";
+import ArchiveClassModal from "@/pages/admin/forms/classes/archive-class";
+import EditClassModal from "@/pages/admin/forms/classes/edit-class";
 import { archiveClass, getClasses } from "@/lib/api";
 import type {
   ClassListItem,
@@ -31,6 +24,11 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import AddSubjectLoadModal from "./forms/add-subject-load";
+import { OverviewCard } from "@/components/overview-cards";
+import { Input } from "@/components/retroui/Input";
+import { Select } from "@/components/retroui/Select";
+import { Card } from "@/components/retroui/Card";
+import { Badge } from "@/components/retroui/Badge";
 
 export default function AdminClasses() {
   const [search, setSearch] = useState("");
@@ -193,11 +191,17 @@ export default function AdminClasses() {
                 </div>
               </div>
               <div className="flex flex-row gap-2">
-                <Button
-                  onClick={() => setShowNewClass(true)}
-                >
-                  <Plus className="size-4 mr-2" /> New Class
-                </Button>
+                <Dialog open={showNewClass} onOpenChange={setShowNewClass}>
+                  <Dialog.Trigger>
+                    <Button>
+                      <Plus className="size-4 mr-2" /> New Class
+                    </Button>
+                  </Dialog.Trigger>
+                  <AddClassModal
+                    onClose={() => setShowNewClass(false)}
+                    onClassesCreated={() => void refreshClasses()}
+                  />
+                </Dialog>
                 <Dialog>
                   <Dialog.Trigger>
                     <Button variant={"outline"}>
@@ -209,7 +213,7 @@ export default function AdminClasses() {
               </div>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b border-black/40" />
+            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
             {notice && (
               <p className="border-2 border-black bg-[#bbf7d0] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">
@@ -217,90 +221,87 @@ export default function AdminClasses() {
               </p>
             )}
 
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <SummaryCard
-                label="Total Classes"
-                value={summary.total_classes}
-                icon={<BookOpen className="size-5" />}
+            <section className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <OverviewCard
+                title={"Total Classes"}
+                count={String(summary.total_classes)}
               />
-              <SummaryCard
-                label="Active Classes"
-                value={summary.active_classes}
-                icon={<CheckCircle2 className="size-5" />}
+              <OverviewCard
+                title={"Active Classes"}
+                count={String(summary.active_classes)}
               />
-              <SummaryCard
-                label="Archived Classes"
-                value={summary.archived_classes}
-                icon={<Archive className="size-5" />}
+              <OverviewCard
+                title={"Archived Classes"}
+                count={String(summary.archived_classes)}
               />
-              <SummaryCard
-                label="Students Assigned"
-                value={summary.students_assigned}
-                icon={<Users className="size-5" />}
+              <OverviewCard
+                title={"Students Assigned"}
+                count={String(summary.students_assigned)}
               />
             </section>
 
-            <section className="rounded-lg border-2 border-black p-4 shadow-[3px_3px_0_#000]">
-              <div className="grid gap-3 md:grid-cols-[1fr_160px_140px]">
-                <label className="relative">
-                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
-                  <input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search class or adviser..."
-                    className="h-10 w-full rounded-md border border-black pl-9 pr-3 text-sm outline-none"
-                  />
-                </label>
-                <select
-                  value={yearFilter}
-                  onChange={(event) => setYearFilter(event.target.value)}
-                  className="h-10 rounded-md border border-black px-3 text-sm outline-none"
-                >
-                  {yearOptions.map((year) => (
-                    <option key={year}>{year}</option>
-                  ))}
-                </select>
-                <select
-                  value={statusFilter}
-                  onChange={(event) =>
-                    setStatusFilter(event.target.value as StatusFilter)
-                  }
-                  className="h-10 rounded-md border border-black px-3 text-sm outline-none"
-                >
-                  <option value="All">All Statuses</option>
-                  <option value="Active">Active</option>
-                  <option value="Archived">Archived</option>
-                </select>
-              </div>
+            <div className="grid gap-3 md:grid-cols-[1fr_160px_160px] py-2">
+              <label className="relative shadow-md hover:shadow-none transition-shadow">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search class or adviser..."
+                  className="h-10 w-full shadow-none border-black pl-9 pr-3"
+                />
+              </label>
+              <Select value={yearFilter}
+                onChange={(event) => setYearFilter(event.target.value)}>
+                <Select.Trigger className="w-full">
+                  <Select.Value placeholder="" />
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Group>
+                    {yearOptions.map((year) => (
+                      <Select.Item key={year} value={year}>{year}</Select.Item>
+                    ))}
+                  </Select.Group>
+                </Select.Content>
+              </Select>
 
-              <div className="my-3 border-t border-black/10" />
-
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                <span className="shrink-0 text-xs font-semibold text-black/50">
-                  Grade:
-                </span>
-                {gradeOptions.map((grade) => (
-                  <button
-                    key={grade}
-                    onClick={() => setGradeFilter(grade)}
-                    className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${gradeFilter === grade
-                      ? "border-black bg-black text-white"
-                      : "border-black/30 bg-transparent text-black/60 hover:border-black/60 hover:text-black"
-                      }`}
-                  >
-                    {grade}
-                  </button>
-                ))}
-                <div className="ml-auto flex shrink-0 items-center gap-3 text-xs">
-                  <button className="flex items-center gap-1.5 font-semibold text-black/70 hover:text-black">
+              <Select value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
+                <Select.Trigger className="w-full">
+                  <Select.Value placeholder="" />
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Group>
+                    <Select.Item value={"All"}>All Statuses</Select.Item>
+                    <Select.Item value={"Active"}>Active</Select.Item>
+                    <Select.Item value={"Archived"}>Archived</Select.Item>
+                  </Select.Group>
+                </Select.Content>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              <span className="shrink-0 text-sm font-regular text-muted-foreground">
+                Grade:
+              </span>
+              {gradeOptions.map((grade) => (
+                <Button
+                  key={grade}
+                  variant={gradeFilter === grade ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setGradeFilter(grade)}
+                  className="shrink-0 border-black shadow-none"
+                >
+                  {grade}
+                </Button>
+              ))}
+              <div className="ml-auto flex shrink-0 items-center gap-3 text-xs">
+                {/* <button className="flex items-center gap-1.5 font-semibold text-black/70 hover:text-black">
                     <Filter className="size-4" /> Add Filter
                   </button>
                   <button className="flex items-center gap-1.5 font-semibold text-black/70 hover:text-black">
                     <ArrowDownUp className="size-4" /> Sort By
-                  </button>
-                </div>
+                  </button> */}
               </div>
-            </section>
+            </div>
 
             <section className="grid gap-4">
               {isLoading ? (
@@ -326,26 +327,31 @@ export default function AdminClasses() {
                 <StatePanel message="No classes match the selected filters." />
               ) : (
                 grouped.map((group) => (
-                  <div
+                  <Card
                     key={group.levelName}
-                    className="rounded-lg border-2 border-black p-4 shadow-[4px_4px_0_#000]"
+                    className="flex flex-col bg-primary min-w-0 overflow-hidden"
                   >
-                    <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center justify-between">
                       <h2 className="text-xl font-bold">{group.levelName}</h2>
-                      <span className="rounded-full border border-black bg-[#f7e9aa] px-3 py-1 text-xs font-bold text-[#7a5c00]">
-                        {group.classes.length} section
-                        {group.classes.length !== 1 ? "s" : ""}
-                      </span>
+                      <div className="flex flex-row gap-3">
+                        <Badge variant={"outline"} className="border-border">
+                          {group.classes.length} subject
+                          {group.classes.length !== 1 ? "s" : ""}
+                        </Badge>
+                        <Badge variant={"outline"} className="border-border">
+                          {group.classes.length} section
+                          {group.classes.length !== 1 ? "s" : ""}
+                        </Badge>
+                      </div>
                     </div>
                     <div
-                      className={`grid gap-3 md:grid-cols-2 ${group.classes.length > 2 ? "xl:grid-cols-3" : ""
-                        }`}
+                      className="pt-3 flex gap-3 overflow-x-auto pb-2 w-full min-w-0"
                     >
                       {group.classes.map((item) => (
                         <ClassCard
                           key={item.class_id}
                           item={item}
-                          onEdit={() => setEditTarget(item)}
+                          onEdit={() => setTimeout(() => setEditTarget(item), 0)}
                           onArchive={() => {
                             setArchiveError("");
                             setNotice("");
@@ -354,21 +360,13 @@ export default function AdminClasses() {
                         />
                       ))}
                     </div>
-                  </div>
+                  </Card>
                 ))
               )}
             </section>
           </div>
         </div>
       </div>
-
-      {showNewClass && (
-        <AddClassModal
-          onClose={() => setShowNewClass(false)}
-          onClassesCreated={() => void refreshClasses()}
-        />
-      )}
-
       {editTarget && (
         <EditClassModal
           classId={editTarget.class_id}

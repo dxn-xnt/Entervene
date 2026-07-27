@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/retroui/Card";
 import { Text } from "@/components/retroui/Text";
 import AppLayout from "@/layouts/app-layout";
 import { useNavigate } from "react-router-dom";
@@ -9,6 +9,10 @@ import { Input } from "@/components/retroui/Input";
 import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Dialog } from "@/components/retroui/Dialog";
+import { Switch } from "@/components/retroui/Switch";
+import { Progress } from "@/components/retroui/Progress";
+import { Badge } from "@/components/retroui/Badge";
+import { Alert } from "@/components/retroui/Alert";
 import { ArrowUpRight, Lock, Pencil } from "lucide-react";
 import AddAcademicPeriodModal from "./forms/add-academic-period";
 
@@ -21,59 +25,25 @@ function Pill({
   tone?: "default" | "green" | "blue" | "yellow" | "gray";
   locked?: boolean;
 }) {
-  const tones: Record<string, string> = {
-    default: "bg-white",
-    green: "bg-green-100",
-    blue: "bg-blue-100",
-    yellow: "bg-yellow-300",
-    gray: "bg-neutral-100",
+  const variantMap: Record<
+    string,
+    "default" | "secondary" | "outline" | "solid" | "surface"
+  > = {
+    default: "outline",
+    green: "secondary",
+    blue: "surface",
+    yellow: "secondary",
+    gray: "default",
   };
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full border-2 border-black px-3 py-1 text-xs font-bold whitespace-nowrap ${tones[tone]}`}
+    <Badge
+      size="sm"
+      variant={variantMap[tone] || "default"}
+      className="inline-flex items-center gap-1"
     >
       {locked && <Lock className="w-3 h-3" />}
       {children}
-    </span>
-  );
-}
-
-function Toggle({
-  checked,
-  onChange,
-  disabled = false,
-}: {
-  checked: boolean;
-  onChange: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onChange}
-      className={`relative h-7 w-12 rounded-full border-2 border-black shrink-0 transition-colors ${
-        checked ? "bg-yellow-300" : "bg-neutral-200"
-      } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-      style={{ boxShadow: "2px 2px 0 #000" }}
-    >
-      <span
-        className={`absolute top-0.5 h-4 w-4 rounded-full border-2 border-black bg-white transition-all ${
-          checked ? "right-0.5" : "left-0.5"
-        }`}
-      />
-    </button>
-  );
-}
-
-function ProgressBar({ ratio }: { ratio: number }) {
-  return (
-    <div className="h-4 w-full border-2 border-black bg-white mt-2">
-      <div
-        className="h-full bg-yellow-300 border-r-2 border-black transition-all"
-        style={{ width: `${ratio * 100}%` }}
-      />
-    </div>
+    </Badge>
   );
 }
 
@@ -261,9 +231,9 @@ export default function AdminSystemSettings() {
             <div className="-mx-4 md:-mx-6 border-b border-black/40" />
 
             {/* Passing Grade Threshold */}
-            <Card className="@container/card">
-              <CardHeader>
-                <CardTitle className="flex flex-row justify-between w-full items-center">
+            <Card className="@container/card w-full">
+              <Card.Header>
+                <Card.Title className="flex flex-row justify-between w-full items-center">
                   Passing Grade Threshold
                   <Button
                     size="sm"
@@ -271,9 +241,9 @@ export default function AdminSystemSettings() {
                   >
                     Save Thresholds
                   </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                </Card.Title>
+              </Card.Header>
+              <Card.Content className="px-4 pt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-row justify-between w-full items-center">
                     <Text as="h6" className="font-sans font-medium">
@@ -322,13 +292,13 @@ export default function AdminSystemSettings() {
                     if the client confirms a different rule.
                   </Text>
                 </div>
-              </CardContent>
+              </Card.Content>
             </Card>
 
             {/* Academic Calendar */}
-            <Card className="@container/card">
-              <CardHeader>
-                <CardTitle className="flex flex-row justify-between w-full items-center">
+            <Card className="@container/card w-full">
+              <Card.Header>
+                <Card.Title className="flex flex-row justify-between w-full items-center">
                   Academic Calendar
                   <div className="flex items-center gap-4">
                     <Button
@@ -347,9 +317,9 @@ export default function AdminSystemSettings() {
                       <AddAcademicPeriodModal />
                     </Dialog>
                   </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pt-4 flex flex-col gap-4">
+                </Card.Title>
+              </Card.Header>
+              <Card.Content className="px-4 pt-4 flex flex-col gap-4">
                 <Text
                   as="p"
                   className="font-sans text-sm text-muted-foreground -mt-2"
@@ -419,15 +389,15 @@ export default function AdminSystemSettings() {
                     </Text>
                     <Pill tone="green">TERM</Pill>
                   </div>
-                  <ProgressBar ratio={ratio} />
+                  <Progress value={ratio * 100} className="mt-2" />
                 </div>
-              </CardContent>
+              </Card.Content>
             </Card>
 
             {/* School Curriculum Scope */}
-            <Card className="@container/card">
-              <CardHeader>
-                <CardTitle className="flex flex-row justify-between w-full items-center">
+            <Card className="@container/card w-full">
+              <Card.Header>
+                <Card.Title className="flex flex-row justify-between w-full items-center">
                   School Curriculum Scope
                   <Button
                     size="sm"
@@ -435,9 +405,9 @@ export default function AdminSystemSettings() {
                   >
                     Save Scope
                   </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pt-4 flex flex-col gap-4">
+                </Card.Title>
+              </Card.Header>
+              <Card.Content className="px-4 pt-4 flex flex-col gap-4">
                 <Text
                   as="p"
                   className="font-sans text-sm text-muted-foreground -mt-2"
@@ -454,18 +424,18 @@ export default function AdminSystemSettings() {
                       <Text as="p" className="font-sans font-medium">
                         Junior High School
                       </Text>
-                      <Toggle
+                      <Switch
                         checked={jhsEnabled}
-                        onChange={() => setJhsEnabled((v) => !v)}
+                        onCheckedChange={() => setJhsEnabled((v) => !v)}
                       />
                     </div>
                     <div className="flex items-center justify-between border-2 border-black rounded-md px-3 py-2">
                       <Text as="p" className="font-sans font-medium">
                         Senior High School
                       </Text>
-                      <Toggle
+                      <Switch
                         checked={shsEnabled}
-                        onChange={() => setShsEnabled((v) => !v)}
+                        onCheckedChange={() => setShsEnabled((v) => !v)}
                       />
                     </div>
                     <Text
@@ -489,9 +459,9 @@ export default function AdminSystemSettings() {
                       <Text as="p" className="font-sans font-medium">
                         Medical / Pre-Med Pathway
                       </Text>
-                      <Toggle
+                      <Switch
                         checked={medicalEnabled}
-                        onChange={() => setMedicalEnabled((v) => !v)}
+                        onCheckedChange={() => setMedicalEnabled((v) => !v)}
                         disabled={!shsEnabled}
                       />
                     </div>
@@ -499,9 +469,9 @@ export default function AdminSystemSettings() {
                       <Text as="p" className="font-sans font-medium">
                         Engineering Pathway
                       </Text>
-                      <Toggle
+                      <Switch
                         checked={engineeringEnabled}
-                        onChange={() => setEngineeringEnabled((v) => !v)}
+                        onCheckedChange={() => setEngineeringEnabled((v) => !v)}
                         disabled={!shsEnabled}
                       />
                     </div>
@@ -515,21 +485,21 @@ export default function AdminSystemSettings() {
                   </div>
                 </div>
 
-                <div className="border-2 border-dashed border-black bg-yellow-50 rounded-md p-3 text-sm">
+                <Alert status="warning" className="border-2 border-dashed border-black bg-yellow-50 text-foreground text-sm">
                   <strong>Design rule:</strong> Settings only says the school
                   offers STEM Medical and STEM Engineering. The different
                   subjects for each pathway should be configured in{" "}
                   <strong>Subjects → Subject Offerings</strong>, not here.
-                </div>
-              </CardContent>
+                </Alert>
+              </Card.Content>
             </Card>
 
             {/* Academic Levels */}
-            <Card className="@container/card">
-              <CardHeader>
-                <CardTitle>Academic Levels</CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pt-4">
+            <Card className="@container/card w-full">
+              <Card.Header>
+                <Card.Title>Academic Levels</Card.Title>
+              </Card.Header>
+              <Card.Content className="px-4 pt-4">
                 <Table>
                   <Table.Header>
                     <Table.Row>
@@ -573,13 +543,13 @@ export default function AdminSystemSettings() {
                     })}
                   </Table.Body>
                 </Table>
-              </CardContent>
+              </Card.Content>
             </Card>
 
             {/* Default Grading Templates */}
-            <Card className="@container/card">
-              <CardHeader>
-                <CardTitle className="flex flex-row justify-between w-full items-center">
+            <Card className="@container/card w-full">
+              <Card.Header>
+                <Card.Title className="flex flex-row justify-between w-full items-center">
                   Default Grading Templates
                   <Dialog
                     open={templateModalOpen}
@@ -660,9 +630,9 @@ export default function AdminSystemSettings() {
                           </div>
                         </div>
                         {tplError && (
-                          <div className="border-2 border-black bg-red-50 rounded-md p-2 text-sm">
+                          <Alert status="error" className="text-sm">
                             {tplError}
-                          </div>
+                          </Alert>
                         )}
                       </section>
                       <Dialog.Footer position="static">
@@ -676,9 +646,9 @@ export default function AdminSystemSettings() {
                       </Dialog.Footer>
                     </Dialog.Content>
                   </Dialog>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pt-4 flex flex-col gap-4">
+                </Card.Title>
+              </Card.Header>
+              <Card.Content className="px-4 pt-4 flex flex-col gap-4">
                 <Text
                   as="p"
                   className="font-sans text-sm text-muted-foreground -mt-2"
@@ -688,10 +658,7 @@ export default function AdminSystemSettings() {
                 </Text>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {templates.map((t, i) => (
-                    <div
-                      key={i}
-                      className="border-2 border-black rounded-md p-3 flex flex-col gap-3"
-                    >
+                    <Card key={i} className="p-3 flex flex-col gap-3 w-full">
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <Text as="h6" className="font-sans font-bold">
@@ -751,24 +718,24 @@ export default function AdminSystemSettings() {
                           </Text>
                         </div>
                       </div>
-                    </div>
+                    </Card>
                   ))}
                 </div>
-                <div className="border-2 border-dashed border-black bg-yellow-50 rounded-md p-3 text-sm">
+                <Alert status="warning" className="border-2 border-dashed border-black bg-yellow-50 text-foreground text-sm">
                   <strong>Important:</strong> Do not assign Medical or
                   Engineering subjects in Settings. Settings stores reusable
                   grade-weight templates only. Actual grading setup per subject
                   belongs in <strong>Subjects → Grading Setup</strong>.
-                </div>
-              </CardContent>
+                </Alert>
+              </Card.Content>
             </Card>
 
             {/* Module Responsibility Map */}
-            <Card className="@container/card">
-              <CardHeader>
-                <CardTitle>Module Responsibility Map</CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pt-4">
+            <Card className="@container/card w-full">
+              <Card.Header>
+                <Card.Title>Module Responsibility Map</Card.Title>
+              </Card.Header>
+              <Card.Content className="px-4 pt-4">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                   {[
                     {
@@ -792,14 +759,14 @@ export default function AdminSystemSettings() {
                       body: "Teacher assignment per subject, section, and term.",
                     },
                   ].map((s) => (
-                    <div
-                      key={s.n}
-                      className="border-2 border-black rounded-md p-3"
-                    >
+                    <Card key={s.n} className="p-3 w-full">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-yellow-300 border-2 border-black text-xs font-bold">
+                        <Badge
+                          variant="secondary"
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-yellow-300 border-2 border-black p-0 text-xs font-bold"
+                        >
                           {s.n}
-                        </span>
+                        </Badge>
                         <Text as="h6" className="font-sans font-bold">
                           {s.title}
                         </Text>
@@ -810,10 +777,10 @@ export default function AdminSystemSettings() {
                       >
                         {s.body}
                       </Text>
-                    </div>
+                    </Card>
                   ))}
                 </div>
-              </CardContent>
+              </Card.Content>
             </Card>
           </div>
         </div>

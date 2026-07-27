@@ -179,6 +179,7 @@ def get_class_form_options_data(db: Session) -> dict:
 
 def list_classes_data(db: Session, status: str) -> dict:
     requested_status = normalized_text(status)
+    from sqlalchemy import case
     # Load all statuses once because the summary describes the complete class
     # inventory while only the returned class list follows the status filter.
     class_rows = (
@@ -188,11 +189,14 @@ def list_classes_data(db: Session, status: str) -> dict:
             AcademicYear,
             AcademicStaff,
             func.count(StudentClass.student_class_id).label("student_count"),
+            func.sum(case((func.lower(Student.gender).in_(["male", "m", "boy"]), 1), else_=0)).label("male_count"),
+            func.sum(case((func.lower(Student.gender).in_(["female", "f", "girl"]), 1), else_=0)).label("female_count"),
         )
         .join(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
         .join(AcademicYear, Class.academic_year_id == AcademicYear.academic_year_id)
         .outerjoin(AcademicStaff, Class.adviser_staff_id == AcademicStaff.staff_id)
         .outerjoin(StudentClass, Class.class_id == StudentClass.class_id)
+        .outerjoin(Student, StudentClass.student_id == Student.student_id)
         .group_by(Class.class_id, AcademicLevel.academic_level_id, AcademicYear.academic_year_id, AcademicStaff.staff_id)
         .order_by(AcademicLevel.grade_level, func.lower(Class.section_name))
         .all()
@@ -202,7 +206,7 @@ def list_classes_data(db: Session, status: str) -> dict:
     total_students = 0
     active_classes = 0
     archived_classes = 0
-    for class_, academic_level, academic_year, adviser, student_count in class_rows:
+    for class_, academic_level, academic_year, adviser, student_count, male_count, female_count in class_rows:
         count = int(student_count or 0)
         total_students += count
         class_status = readable_text(class_.class_status) or "active"
@@ -222,6 +226,8 @@ def list_classes_data(db: Session, status: str) -> dict:
                 "adviser": _adviser_option(adviser),
                 "student_count": count,
                 "subject_count": 0,
+                "male_count": int(male_count or 0),
+                "female_count": int(female_count or 0),
             })
 
     return {

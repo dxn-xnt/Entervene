@@ -68,6 +68,8 @@ export type ClassListItem = {
   adviser: ClassListAdviser | null;
   student_count: number;
   subject_count: number;
+  male_count: number;
+  female_count: number;
 };
 
 export type ClassListSummary = {
@@ -221,9 +223,9 @@ export type PendingStudentTransfer = {
 };
 
 export type UpdateClassStudentListRequest = {
-  additions: PendingStudentAddition[];
-  removals: PendingStudentRemoval[];
-  transfers: PendingStudentTransfer[];
+  additions?: PendingStudentAddition[];
+  removals?: PendingStudentRemoval[];
+  transfers?: PendingStudentTransfer[];
 };
 
 export type ManualSectionDraft = {

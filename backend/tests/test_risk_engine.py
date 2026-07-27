@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.Base import Base
 from app.models.ai.RiskThreshold import RiskThreshold
-from app.services.RiskEngine import (
+from app.services.prediction.RiskEngine import (
     HIGH_RISK,
     INSUFFICIENT_DATA,
     LOW_RISK,

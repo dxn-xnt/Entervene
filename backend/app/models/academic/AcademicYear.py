@@ -16,3 +16,4 @@ class AcademicYear(Base):
 
     periods = relationship("AcademicPeriod", back_populates="academic_year")
     classes = relationship("Class", back_populates="academic_year")
+    subject_offerings = relationship("SubjectOffering", back_populates="academic_year")

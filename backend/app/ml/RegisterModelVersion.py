@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 from app.db.Session import SessionLocal
-from app.services.ModelVersionService import (
+from app.services.prediction.ModelVersionService import (
     count_active_versions,
     load_feature_schema,
     load_training_report,

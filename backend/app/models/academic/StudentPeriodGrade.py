@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -28,10 +28,13 @@ class StudentPeriodGrade(Base):
     academic_period_id = Column(Integer, ForeignKey("academic_period.academic_period_id", ondelete="CASCADE"), nullable=False)
     written_work_percent = Column(Numeric(6, 2), nullable=True)
     performance_task_percent = Column(Numeric(6, 2), nullable=True)
-    periodical_assessment_percent = Column(Numeric(6, 2), nullable=True)
+    quarterly_assessment_percent = Column(Numeric(6, 2), nullable=True)
     initial_grade = Column(Numeric(6, 2), nullable=True)
     transmuted_grade = Column(Numeric(6, 2), nullable=True)
     final_period_grade = Column(Numeric(6, 2), nullable=True)
+    is_finalized = Column(Boolean, default=False, nullable=False)
+    finalized_at = Column(DateTime(timezone=True), nullable=True)
+    finalized_by_staff_id = Column(String(20), ForeignKey("academic_staff.staff_id", ondelete="SET NULL"), nullable=True)
     remarks = Column(Text, nullable=True)
     source_file_name = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -40,3 +43,4 @@ class StudentPeriodGrade(Base):
     class_ = relationship("Class", backref="period_grades")
     subject = relationship("Subject", backref="period_grades")
     academic_period = relationship("AcademicPeriod", backref="student_period_grades")
+    finalized_by = relationship("AcademicStaff", backref="finalized_period_grades")

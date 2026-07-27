@@ -1,18 +1,16 @@
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import AppLayout from "../../layouts/app-layout";
 import AddUserModal from "../../components/admin/AddUserModal";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "../../components/retroui/Badge";
+import { Table } from "../../components/retroui/Table";
 import { Input } from "../../components/retroui/Input";
 import { Loader } from "../../components/retroui/Loader";
-import Tabs from "../../components/Tabs";
-import AppLayout from "../../layouts/app-layout";
+import { Avatar } from "../../components/retroui/Avatar";
+import { Tabs, type TabItem } from "../../components/retroui/Tabs";
 import { getUsers, type User, type UserRole } from "../../lib/api";
 import {
   AlertTriangle,
-  ArrowDownUp,
   BookOpen,
-  ChevronDown,
-  ChevronRight,
-  Filter,
   GraduationCap,
   Plus,
   School,
@@ -21,9 +19,13 @@ import {
   Users,
   UsersRound,
 } from "lucide-react";
-import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/retroui/Button";
+import { Select } from "@/components/retroui/Select";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/retroui/Accordion";
+import { cn } from "@/lib/utils";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,14 +48,10 @@ type StatusFilter =
 
 const GRADE_LEVELS: GradeFilter[] = ["all", 7, 8, 9, 10, 11, 12];
 
-const tabs: { id: TabId; label: string; icon: ReactNode }[] = [
-  { id: "admin", label: "Admin", icon: <UserCog className="size-3.5" /> },
-  { id: "teacher", label: "Teachers", icon: <BookOpen className="size-3.5" /> },
-  {
-    id: "student",
-    label: "Students",
-    icon: <GraduationCap className="size-3.5" />,
-  },
+const tabs: TabItem<TabId>[] = [
+  { id: "admin", label: "Admin", icon: UserCog },
+  { id: "teacher", label: "Teachers", icon: BookOpen },
+  { id: "student", label: "Students", icon: GraduationCap },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -65,75 +63,37 @@ function visibleSubjects(subjects: string[] | undefined) {
   };
 }
 
-type StatusStyle = { badge: string; dot: string; label: string };
-const USER_ROW_HOVER =
-  "hover:bg-accent hover:text-sidebar-accent-foreground hover:border-y hover:border-border";
-const STATUS_BADGE_BASE =
-  "inline-flex h-6 w-28 items-center justify-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold";
+type StatusStyle = {
+  label: string;
+  variant: "default" | "secondary" | "outline" | "solid" | "surface" | "ghost";
+};
 
 function getStatusStyle(status: string | undefined | null): StatusStyle {
   switch ((status || "").toLowerCase()) {
     case "active":
-      return {
-        badge: "bg-emerald-50 border-emerald-300 text-emerald-700",
-        dot: "bg-emerald-500",
-        label: "Active",
-      };
+      return { label: "Active", variant: "secondary" };
     case "pending":
-      return {
-        badge: "bg-amber-50 border-amber-300 text-amber-700",
-        dot: "bg-amber-400",
-        label: "Pending",
-      };
+      return { label: "Pending", variant: "outline" };
     case "inactive":
-      return {
-        badge: "bg-slate-100 border-slate-300 text-slate-500",
-        dot: "bg-slate-400",
-        label: "Inactive",
-      };
+      return { label: "Inactive", variant: "default" };
     case "suspended":
-      return {
-        badge: "bg-red-50 border-red-300 text-red-600",
-        dot: "bg-red-500",
-        label: "Suspended",
-      };
+      return { label: "Suspended", variant: "solid" };
     case "archived":
-      return {
-        badge: "bg-zinc-100 border-zinc-300 text-zinc-600",
-        dot: "bg-zinc-500",
-        label: "Archived",
-      };
+      return { label: "Archived", variant: "default" };
     case "graduated":
-      return {
-        badge: "bg-blue-50 border-blue-300 text-blue-700",
-        dot: "bg-blue-500",
-        label: "Graduated",
-      };
+      return { label: "Graduated", variant: "solid" };
     case "transferred":
-      return {
-        badge: "bg-violet-50 border-violet-300 text-violet-700",
-        dot: "bg-violet-500",
-        label: "Transferred",
-      };
+      return { label: "Transferred", variant: "solid" };
     case "dropped":
-      return {
-        badge: "bg-red-50 border-red-300 text-red-600",
-        dot: "bg-red-500",
-        label: "Dropped",
-      };
+      return { label: "Dropped", variant: "solid" };
     case "no section assigned":
-      return {
-        badge: "bg-amber-50 border-amber-300 text-amber-700",
-        dot: "bg-amber-400",
-        label: "No Section",
-      };
+      return { label: "No Section", variant: "outline" };
     default:
       return {
-        badge: "bg-slate-100 border-slate-200 text-slate-600",
-        dot: "bg-slate-400",
         label: status
           ? status.charAt(0).toUpperCase() + status.slice(1)
           : "Unknown",
+        variant: "default",
       };
   }
 }
@@ -270,32 +230,9 @@ export default function AdminUsers() {
 
   const studentGroups = useMemo(
     () =>
-      activeTab === "student" ? groupStudents(filteredStudents) : new Map(),
+      activeTab === "student" ? groupStudents(filteredStudents) : new Map<string, User[]>(),
     [activeTab, filteredStudents],
   );
-
-  const studentStats = useMemo(() => {
-    if (activeTab !== "student") return null;
-    return {
-      total: users.length,
-      active: users.filter(
-        (u) => (u.account_status ?? "").toLowerCase() === "active",
-      ).length,
-      pending: users.filter(
-        (u) => (u.account_status ?? "").toLowerCase() === "pending",
-      ).length,
-      unassigned: users.filter((u) => !u.section).length,
-    };
-  }, [users, activeTab]);
-
-  function toggleSection(key: string) {
-    setCollapsedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
 
   function openUser(user: User) {
     navigate(`/admin/users/${user.role}/${user.id}`);
@@ -311,117 +248,134 @@ export default function AdminUsers() {
                 <SidebarTrigger className="md:hidden" />
                 <h1 className="text-2xl md:text-4xl font-bold tracking-tight">User Management</h1>
               </div>
-              <button
+              <Button
+                className="gap-2"
                 onClick={() => setModalOpen(true)}
-                className="flex items-center gap-1.5 rounded-lg border border-black bg-[#79bd80] px-4 py-2 text-sm font-semibold text-black shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000]"
               >
                 <Plus className="size-4" />
                 New User
-              </button>
+              </Button>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-black/40">
-              <Tabs
-                tabs={tabs}
-                activeTab={activeTab}
-                onChange={(id) => setActiveTab(id as TabId)}
-              />
-            </div>
+            <Tabs
+              tabs={tabs}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+            />
 
             <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="relative max-w-md flex-1">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <div className="grid gap-3 md:grid-cols-[1fr_160px_160px] py-2">
+                <label className="relative shadow-md hover:shadow-none transition-shadow">
+                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                   <Input
-                    aria-label="Search users"
-                    className="h-9 rounded-md border border-black/70 pl-9 shadow-none"
-                    placeholder="Search user"
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search class or adviser..."
+                    className="h-10 w-full shadow-none border-black pl-9 pr-3"
                   />
-                </div>
-                <div className="flex items-center gap-5 text-xs">
-                  <button className="flex items-center gap-1.5">
-                    <Filter className="size-4" />
-                    Add Filter
-                  </button>
-                  <button className="flex items-center gap-1.5">
-                    <ArrowDownUp className="size-4" />
-                    Sort By
-                  </button>
-                </div>
+                </label>
+
+                {activeTab === "student" ? (
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(val) =>
+                      setStatusFilter(val as StatusFilter)
+                    }
+                  >
+                    <Select.Trigger>
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Group>
+                        <Select.Item value="all">All Statuses</Select.Item>
+                        <Select.Item value="active">Active</Select.Item>
+                        <Select.Item value="pending">Pending</Select.Item>
+                        <Select.Item value="inactive">Inactive</Select.Item>
+                        <Select.Item value="suspended">Suspended</Select.Item>
+                        <Select.Item value="archived">Archived</Select.Item>
+                        <Select.Item value="graduated">Graduated</Select.Item>
+                        <Select.Item value="transferred">Transferred</Select.Item>
+                        <Select.Item value="dropped">Dropped</Select.Item>
+                        <Select.Item value="no section assigned">
+                          No Section Assigned
+                        </Select.Item>
+                      </Select.Group>
+                    </Select.Content>
+                  </Select>
+                ) : (
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(val) =>
+                      setStatusFilter(val as StatusFilter)
+                    }
+                  >
+                    <Select.Trigger>
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Group>
+                        <Select.Item value="all">All Statuses</Select.Item>
+                        <Select.Item value="active">Active</Select.Item>
+                        <Select.Item value="inactive">Inactive</Select.Item>
+                        <Select.Item value="suspended">Suspended</Select.Item>
+                        <Select.Item value="archived">Archived</Select.Item>
+                      </Select.Group>
+                    </Select.Content>
+                  </Select>
+                )}
+
+                <Select>
+                  <Select.Trigger className="w-full">
+                    <Select.Value placeholder="Sort By" />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Group>
+                      <Select.Item value={"A-Z"}>A-Z</Select.Item>
+                      <Select.Item value={"Z-A"}>Z-A</Select.Item>
+                    </Select.Group>
+                  </Select.Content>
+                </Select>
               </div>
 
               {activeTab === "student" && (
                 <>
-                  {studentStats && !loading && (
+                  {/* {studentStats && !loading && (
                     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                      <StatCard
-                        label="Total Students"
-                        value={studentStats.total}
-                        icon={<Users className="size-5 text-black" />}
+                      <OverviewCard
+                        title="Total Students"
+                        count={String(studentStats.total)}
                       />
-                      <StatCard
-                        label="Active"
-                        value={studentStats.active}
-                        icon={<GraduationCap className="size-5 text-black" />}
+                      <OverviewCard
+                        title="Active"
+                        count={String(studentStats.active)}
                       />
-                      <StatCard
-                        label="Pending"
-                        value={studentStats.pending}
-                        color={studentStats.pending > 0 ? "amber" : undefined}
-                        icon={<School className="size-5 text-black" />}
+                      <OverviewCard
+                        title="Pending"
+                        count={String(studentStats.pending)}
                       />
-                      <StatCard
-                        label="Unassigned"
-                        value={studentStats.unassigned}
-                        color={
-                          studentStats.unassigned > 0 ? "amber" : undefined
-                        }
-                        icon={<AlertTriangle className="size-5 text-black" />}
+                      <OverviewCard
+                        title="Unassigned"
+                        count={String(studentStats.unassigned)}
                       />
                     </div>
-                  )}
+                  )} */}
 
                   <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                    <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                    <span className="shrink-0 text-sm font-regular text-muted-foreground">
                       Grade:
                     </span>
                     {GRADE_LEVELS.map((g) => (
-                      <button
+                      <Button
                         key={g}
                         onClick={() => setGradeFilter(g)}
-                        className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                          gradeFilter === g
-                            ? "border-black bg-black text-white"
-                            : "border-black/30 bg-background text-muted-foreground hover:border-black/60 hover:text-foreground"
-                        }`}
+                        variant={gradeFilter === g ? "default" : "outline"}
+                        size="sm"
+                        className="shrink-0 border-black shadow-none"
                       >
                         {g === "all" ? "All" : `Grade ${g}`}
-                      </button>
+                      </Button>
+
                     ))}
-                    <div className="ml-auto shrink-0">
-                      <select
-                        value={statusFilter}
-                        onChange={(e) =>
-                          setStatusFilter(e.target.value as StatusFilter)
-                        }
-                        className="h-7 rounded-md border border-black/30 bg-background px-2 text-xs font-medium text-muted-foreground hover:border-black/60"
-                      >
-                        <option value="all">All Statuses</option>
-                        <option value="active">Active</option>
-                        <option value="pending">Pending</option>
-                        <option value="inactive">Inactive</option>
-                        <option value="suspended">Suspended</option>
-                        <option value="archived">Archived</option>
-                        <option value="graduated">Graduated</option>
-                        <option value="transferred">Transferred</option>
-                        <option value="dropped">Dropped</option>
-                        <option value="no section assigned">
-                          No Section Assigned
-                        </option>
-                      </select>
-                    </div>
                   </div>
                 </>
               )}
@@ -442,41 +396,170 @@ export default function AdminUsers() {
               {!loading && activeTab === "student" && (
                 <>
                   {studentGroups.size === 0 && (
-                    <div className="rounded-xl border border-black bg-background py-12 text-center text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
-                      {emptyText}
+                    <div className="">
+                      <Empty className="shadow-md hover:shadow-none transition-shadow">
+                        <EmptyHeader>
+                          <EmptyMedia>
+                            <div className="flex -space-x-2 *:data-[slot=avatar]:size-12 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background *:data-[slot=avatar]:grayscale">
+                              <Avatar variant="student" >
+                                <Avatar.Image
+                                  src="/avatars/student-avatars/3.svg"
+                                  alt="@shadcn" />
+                                <Avatar.Fallback>CN</Avatar.Fallback>
+                              </Avatar>
+                              <Avatar variant="student" >
+                                <Avatar.Image
+                                  src="/avatars/student-avatars/2.svg"
+                                  alt="@maxleiter"
+                                />
+                                <Avatar.Fallback>LR</Avatar.Fallback>
+                              </Avatar>
+                              <Avatar variant="student" >
+                                <Avatar.Image
+                                  src="/avatars/student-avatars/1.svg"
+                                  alt="@evilrabbit"
+                                />
+                                <Avatar.Fallback>ER</Avatar.Fallback>
+                              </Avatar>
+                            </div>
+                          </EmptyMedia>
+                          <EmptyTitle>No Student Enrolled</EmptyTitle>
+                          <EmptyDescription className="text-center whitespace-nowrap">
+                            Students will appear here once they are enrolled in a section.
+                          </EmptyDescription>
+                        </EmptyHeader>
+                        <EmptyContent>
+                          <Button size="sm" variant="default">
+                            Enroll Student
+                          </Button>
+                        </EmptyContent>
+                      </Empty>
                     </div>
                   )}
-                  {[...studentGroups.entries()].map(([key, groupUsers]) => (
-                    <SectionGroup
-                      key={key}
-                      sectionKey={key}
-                      users={groupUsers}
-                      collapsed={collapsedSections.has(key)}
-                      onToggle={() => toggleSection(key)}
-                      onOpenUser={openUser}
-                    />
-                  ))}
+                  <Accordion
+                    multiple
+                    value={[...studentGroups.keys()].filter((k) => !collapsedSections.has(k))}
+                    onValueChange={(values) => {
+                      const collapsed = [...studentGroups.keys()].filter(
+                        (k) => !values.includes(k)
+                      );
+                      setCollapsedSections(new Set(collapsed));
+                    }}
+                    className="flex flex-col gap-3"
+                  >
+                    {[...studentGroups.entries()].map(([key, groupUsers]) => {
+                      const isUnassigned = key === UNASSIGNED_KEY;
+                      const info = isUnassigned ? null : parseSectionInfo(key);
+
+                      const headerLabel = isUnassigned
+                        ? "Unassigned — awaiting section"
+                        : info
+                          ? info.grade > 0
+                            ? `Grade ${info.grade} — ${info.sectionName}`
+                            : info.sectionName
+                          : key;
+
+                      return (
+                        <AccordionItem
+                          key={key}
+                          value={key}
+                          className={isUnassigned ? "border-amber-400" : ""}
+                        >
+                          <AccordionTrigger
+                            className={cn(
+                              "items-center py-2.5 text-sm font-semibold transition-colors",
+                              // isUnassigned
+                              //   ? "bg-amber-50 hover:bg-accent hover:text-sidebar-accent-foreground"
+                              //   : "bg-background hover:bg-accent hover:text-sidebar-accent-foreground"
+                            )}
+                          >
+                            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                              <span
+                                className={cn(
+                                  "truncate flex-1 text-lg font-bold text-left",
+                                  isUnassigned ? "text-amber-800" : ""
+                                )}
+                              >
+                                {headerLabel}
+                              </span>
+                              <Badge
+                                variant="secondary"
+                                size="sm"
+                                className="mr-2"
+                              >
+                                {groupUsers.length} student{groupUsers.length !== 1 ? "s" : ""}
+                              </Badge>
+                            </div>
+
+                          </AccordionTrigger>
+
+                          <AccordionContent className="p-0 border-t-2 border-border">
+                            <Table className="border-none shadow-none" wrapperClassName="overflow-hidden">
+                              <Table.Header className="font-sans">
+                                <Table.Row>
+                                  <Table.Head>Name</Table.Head>
+                                  <Table.Head className="text-center">Status</Table.Head>
+                                  <Table.Head className="text-center">
+                                    {isUnassigned ? "Grade level" : "Section"}
+                                  </Table.Head>
+                                  <Table.Head className="text-right">Average</Table.Head>
+                                </Table.Row>
+                              </Table.Header>
+                              <Table.Body>
+                                {groupUsers.map((user) => (
+                                  <StudentRow
+                                    key={user.id}
+                                    user={user}
+                                    showGrade={isUnassigned}
+                                    onOpenUser={openUser}
+                                  />
+                                ))}
+                              </Table.Body>
+                            </Table>
+                          </AccordionContent>
+                        </AccordionItem>
+                      );
+                    })}
+                  </Accordion>
                 </>
               )}
 
               {!loading && activeTab !== "student" && (
                 <>
-                  {users.length > 0 && <TableHeader activeTab={activeTab} />}
-                  <div className="overflow-hidden rounded-xl border border-black bg-background shadow-[4px_5px_0_#000]">
-                    {users.length === 0 && (
-                      <div className="py-12 text-center text-sm text-muted-foreground">
-                        {emptyText}
-                      </div>
-                    )}
-                    {users.map((user) => (
-                      <UserRow
-                        key={user.id}
-                        user={user}
-                        activeTab={activeTab}
-                        onOpenUser={openUser}
-                      />
-                    ))}
-                  </div>
+                  {users.length === 0 ? (
+                    <div className="rounded-xl border border-black bg-background py-12 text-center text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+                      {emptyText}
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden border border-black bg-background shadow-[4px_5px_0_#000]">
+                      <Table className="border-1 shadow-none">
+                        <Table.Header className="font-sans">
+                          <Table.Row>
+                            <Table.Head>Name</Table.Head>
+                            <Table.Head className="text-center">Status</Table.Head>
+                            {activeTab === "teacher" ? (
+                              <>
+                                <Table.Head className="text-center">Subjects</Table.Head>
+                                <Table.Head className="text-right">Classes</Table.Head>
+                              </>
+                            ) : (
+                              <Table.Head className="text-right">Joined</Table.Head>
+                            )}
+                          </Table.Row>
+                        </Table.Header>
+                        <Table.Body>
+                          {users.map((user) => (
+                            <UserRow
+                              key={user.id}
+                              user={user}
+                              activeTab={activeTab}
+                              onOpenUser={openUser}
+                            />
+                          ))}
+                        </Table.Body>
+                      </Table>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -506,137 +589,10 @@ export default function AdminUsers() {
  * - value as text-3xl font-black
  * - color variants applied to the value only
  */
-function StatCard({
-  label,
-  value,
-  color,
-  icon,
-}: {
-  label: string;
-  value: number;
-  color?: "green" | "amber" | "red";
-  icon?: ReactNode;
-}) {
-  const valueColor =
-    color === "green"
-      ? "text-emerald-700"
-      : color === "amber"
-        ? "text-amber-700"
-        : color === "red"
-          ? "text-red-600"
-          : "";
-
-  return (
-    <div className="rounded-lg border border-black bg-accent! p-4 shadow-[3px_3px_0_#000]">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-bold">{label}</p>
-        {icon && <span className="text-muted-foreground">{icon}</span>}
-      </div>
-      <p className={`mt-3 text-3xl font-black ${valueColor}`}>{value}</p>
-    </div>
-  );
-}
 
 const UNASSIGNED_KEY = "__unassigned__";
 
-function SectionGroup({
-  sectionKey,
-  users,
-  collapsed,
-  onToggle,
-  onOpenUser,
-}: {
-  sectionKey: string;
-  users: User[];
-  collapsed: boolean;
-  onToggle: () => void;
-  onOpenUser: (user: User) => void;
-}) {
-  const isUnassigned = sectionKey === UNASSIGNED_KEY;
-  const info = isUnassigned ? null : parseSectionInfo(sectionKey);
 
-  const headerLabel = isUnassigned
-    ? "Unassigned — awaiting section"
-    : info
-      ? info.grade > 0
-        ? `Grade ${info.grade} — ${info.sectionName}`
-        : info.sectionName
-      : sectionKey;
-
-  return (
-    <div
-      className={`overflow-hidden rounded-xl border shadow-[3px_4px_0_#000] ${
-        isUnassigned ? "border-amber-400" : "border-black"
-      }`}
-    >
-      <button
-        onClick={onToggle}
-        className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors ${
-          isUnassigned
-            ? "bg-amber-50 hover:bg-accent hover:text-sidebar-accent-foreground"
-            : "bg-background hover:bg-accent hover:text-sidebar-accent-foreground"
-        }`}
-        aria-expanded={!collapsed}
-      >
-        {isUnassigned ? (
-          <AlertTriangle className="size-4 shrink-0 text-amber-600" />
-        ) : (
-          <Users className="size-4 shrink-0 text-muted-foreground" />
-        )}
-
-        <span
-          className={`flex-1 text-sm font-semibold ${isUnassigned ? "text-amber-800" : ""}`}
-        >
-          {headerLabel}
-        </span>
-
-        <span
-          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-            isUnassigned
-              ? "border-amber-300 bg-amber-100 text-amber-700"
-              : "border-black/20 bg-muted/50 text-muted-foreground"
-          }`}
-        >
-          {users.length} student{users.length !== 1 ? "s" : ""}
-        </span>
-
-        {collapsed ? (
-          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-        )}
-      </button>
-
-      {!collapsed && (
-        <div className="bg-background">
-          <div
-            className={`grid gap-3 border-t px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground ${
-              isUnassigned
-                ? "border-amber-300 bg-amber-50/60"
-                : "border-black/20 bg-muted/30"
-            } ${isUnassigned ? "grid-cols-[minmax(0,1fr)_120px_120px_90px]" : "grid-cols-[minmax(0,1fr)_120px_150px_90px]"}`}
-          >
-            <span>Name</span>
-            <span className="text-center">Status</span>
-            <span className="text-center">
-              {isUnassigned ? "Grade level" : "Section"}
-            </span>
-            <span className="text-right">Average</span>
-          </div>
-
-          {users.map((user) => (
-            <StudentRow
-              key={user.id}
-              user={user}
-              showGrade={isUnassigned}
-              onOpenUser={onOpenUser}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function StudentRow({
   user,
@@ -647,94 +603,76 @@ function StudentRow({
   showGrade: boolean;
   onOpenUser: (user: User) => void;
 }) {
-  const status = getStatusStyle(user.account_status);
   const gradeLevel = getStudentGradeLevel(user);
   const sectionName = getSectionDisplayName(user.section);
 
   return (
-    <button
-      type="button"
+    <Table.Row
       onClick={() => onOpenUser(user)}
-      className={`grid w-full items-center gap-3 border-t border-black/10 px-4 py-2.5 last:border-b-0 ${
-        showGrade
-          ? "grid-cols-[minmax(0,1fr)_120px_120px_90px]"
-          : "grid-cols-[minmax(0,1fr)_120px_150px_90px]"
-      } text-left transition-colors ${USER_ROW_HOVER}`}
+      className="cursor-pointer"
     >
-      <NameCell name={user.name} subtitle={user.email} />
+      <Table.Cell>
+        <NameCell name={user.name} subtitle={user.email} role={user.role} />
+      </Table.Cell>
 
-      <span
-        className={`justify-self-center ${STATUS_BADGE_BASE} ${status.badge}`}
-      >
-        <span className={`size-1.5 rounded-full ${status.dot}`} />
-        {status.label}
-      </span>
+      <Table.Cell className="text-center">
+        <StatusBadge status={user.account_status} />
+      </Table.Cell>
 
-      <div className="flex justify-center">
-        {showGrade ? (
-          gradeLevel ? (
-            <span className="rounded-md border border-black/20 bg-muted/40 px-2 py-0.5 text-[11px] font-medium">
-              Grade {gradeLevel}
-            </span>
+      <Table.Cell className="text-center">
+        <div className="flex justify-center">
+          {showGrade ? (
+            gradeLevel ? (
+              <Badge
+                variant="outline"
+                size="sm"
+                className="border-black/20 bg-muted/40 text-[11px] font-medium"
+              >
+                Grade {gradeLevel}
+              </Badge>
+            ) : (
+              <span className="text-xs text-muted-foreground">—</span>
+            )
+          ) : sectionName ? (
+            <Badge
+              variant="outline"
+              size="sm"
+            >
+              {sectionName}
+            </Badge>
           ) : (
-            <span className="text-xs text-muted-foreground">—</span>
-          )
-        ) : sectionName ? (
-          <Badge
-            variant="outline"
-            size="sm"
-            className="bg-background text-[10px] font-medium"
-          >
-            {sectionName}
-          </Badge>
-        ) : (
-          <span className="text-xs text-muted-foreground">No section</span>
-        )}
-      </div>
+            <span className="text-xs text-muted-foreground">No section</span>
+          )}
+        </div>
+      </Table.Cell>
 
-      <div className="justify-self-end text-right font-black leading-none">
-        {user.average != null ? (
-          <>
-            <span className="text-lg">{user.average}</span>
-            <span className="text-xs font-semibold">%</span>
-          </>
-        ) : (
-          <span className="text-sm font-normal text-muted-foreground">—</span>
-        )}
-      </div>
-    </button>
+      <Table.Cell className="text-right">
+        <div className="justify-self-end text-right font-black leading-none">
+          {user.average != null ? (
+            <>
+              <span className="text-lg">{user.average}</span>
+              <span className="text-xs font-semibold">%</span>
+            </>
+          ) : (
+            <span className="text-sm font-normal text-muted-foreground">—</span>
+          )}
+        </div>
+      </Table.Cell>
+    </Table.Row>
   );
 }
 
 // ─── Teacher / Admin components (unchanged) ───────────────────────────────────
 
-function TableHeader({ activeTab }: { activeTab: TabId }) {
-  if (activeTab === "teacher") {
-    return (
-      <div className="hidden grid-cols-[minmax(220px,1fr)_120px_minmax(180px,1fr)_110px] gap-3 px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:grid">
-        <span>Name</span>
-        <span>Status</span>
-        <span className="text-center">Subjects</span>
-        <span className="text-right">Classes</span>
-      </div>
-    );
-  }
-  return (
-    <div className="hidden grid-cols-[minmax(200px,1fr)_120px_minmax(160px,1fr)] gap-3 px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:grid">
-      <span>Name / Email</span>
-      <span>Status</span>
-      <span className="text-right">Joined</span>
-    </div>
-  );
-}
-
 function StatusBadge({ status }: { status: string | undefined | null }) {
   const style = getStatusStyle(status);
   return (
-    <span className={`${STATUS_BADGE_BASE} ${style.badge}`}>
-      <span className={`size-1.5 rounded-full ${style.dot}`} />
+    <Badge
+      size="sm"
+      variant={style.variant}
+    >
       {style.label}
-    </span>
+    </Badge>
   );
 }
 
@@ -751,72 +689,97 @@ function UserRow({
 
   if (activeTab === "teacher") {
     return (
-      <button
-        type="button"
+      <Table.Row
         onClick={() => onOpenUser(user)}
-        className={`grid min-h-12 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-black/50 px-3 py-2.5 text-left transition-colors last:border-b-0 md:grid-cols-[minmax(220px,1fr)_120px_minmax(180px,1fr)_110px] ${USER_ROW_HOVER}`}
+        className="cursor-pointer"
       >
-        <NameCell name={user.name} />
-        <div className="hidden justify-self-center md:block">
+        <Table.Cell>
+          <NameCell name={user.name} subtitle={user.email} role={user.role} />
+        </Table.Cell>
+        <Table.Cell className="text-center">
           <StatusBadge status={user.account_status} />
-        </div>
-        <div className="hidden flex-wrap justify-center gap-1.5 md:flex">
-          {shown.length > 0 ? (
-            shown.map((subject) => (
+        </Table.Cell>
+        <Table.Cell className="text-center">
+          <div className="flex flex-wrap justify-center gap-1.5">
+            {shown.length > 0 ? (
+              shown.map((subject) => (
+                <Badge
+                  key={subject}
+                  variant="outline"
+                  size="sm"
+                  className="bg-background text-[10px] font-medium"
+                >
+                  {subject}
+                </Badge>
+              ))
+            ) : (
+              <span className="text-xs text-muted-foreground">No subjects</span>
+            )}
+            {extra > 0 && (
               <Badge
-                key={subject}
                 variant="outline"
                 size="sm"
                 className="bg-background text-[10px] font-medium"
               >
-                {subject}
+                +{extra}
               </Badge>
-            ))
-          ) : (
-            <span className="text-xs text-muted-foreground">No subjects</span>
-          )}
-          {extra > 0 && (
-            <Badge
-              variant="outline"
-              size="sm"
-              className="bg-background text-[10px] font-medium"
-            >
-              +{extra}
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center justify-end gap-1 text-xs font-semibold">
-          <School className="size-3.5" />
-          {user.class_count ?? 0}
-        </div>
-      </button>
+            )}
+          </div>
+        </Table.Cell>
+        <Table.Cell className="text-right">
+          <div className="flex items-center justify-end gap-1 text-xs font-semibold">
+            <School className="size-3.5" />
+            {user.class_count ?? 0}
+          </div>
+        </Table.Cell>
+      </Table.Row>
     );
   }
 
   return (
-    <button
-      type="button"
+    <Table.Row
       onClick={() => onOpenUser(user)}
-      className={`grid min-h-12 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-black/50 px-3 py-2.5 text-left transition-colors last:border-b-0 md:grid-cols-[minmax(200px,1fr)_120px_minmax(160px,1fr)] ${USER_ROW_HOVER}`}
+      className="cursor-pointer"
     >
-      <NameCell name={user.name} subtitle={user.email} />
-      <div className="hidden justify-self-center md:block">
+      <Table.Cell>
+        <NameCell name={user.name} subtitle={user.email} role={user.role} />
+      </Table.Cell>
+      <Table.Cell className="text-center">
         <StatusBadge status={user.account_status} />
-      </div>
-      <div className="hidden items-center justify-end gap-1.5 text-xs text-muted-foreground md:flex">
-        <UsersRound className="size-3.5" />
-        {user.created_at || "—"}
-      </div>
-    </button>
+      </Table.Cell>
+      <Table.Cell className="text-right">
+        <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+          <UsersRound className="size-3.5" />
+          {user.created_at || "—"}
+        </div>
+      </Table.Cell>
+    </Table.Row>
   );
 }
 
-function NameCell({ name, subtitle }: { name: string; subtitle?: string }) {
+function NameCell({
+  name,
+  subtitle,
+  role,
+}: {
+  name: string;
+  subtitle?: string;
+  role: "admin" | "teacher" | "student";
+}) {
+  const defaultAvatar =
+    role === "student"
+      ? "/avatars/student-avatars/1.svg"
+      : "/avatars/teacher-avatars/12.svg";
+
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <div className="grid size-7 shrink-0 place-items-center rounded-full border border-amber-700 bg-amber-200 text-[13px] font-semibold text-amber-900">
-        {name.charAt(0).toUpperCase()}
-      </div>
+      <Avatar
+        variant={role === "student" ? "student" : "teacher"}
+        className="size-10 shrink-0"
+      >
+        <Avatar.Image src={defaultAvatar} alt={name} />
+        <Avatar.Fallback>{name.charAt(0).toUpperCase()}</Avatar.Fallback>
+      </Avatar>
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold">{name}</div>
         {subtitle && (

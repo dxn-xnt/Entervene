@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from typing import Optional
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -92,3 +93,23 @@ class StudentRecordPeriodOption(BaseModel):
 class StudentRecordPeriodOptionsResponse(BaseModel):
     default_academic_period_id: Optional[int] = None
     periods: list[StudentRecordPeriodOption]
+
+
+class StudentPeriodGradeFinalizeRequest(BaseModel):
+    final_period_grade: Optional[float] = None
+    passing_grade: float = 75.0
+
+
+class StudentPeriodGradeFinalizeResponse(BaseModel):
+    period_grade_id: int
+    student_id: UUID
+    class_id: int
+    subject_id: int
+    academic_period_id: int
+    final_period_grade: float
+    is_finalized: bool
+    finalized_at: datetime
+    finalized_by_staff_id: Optional[str] = None
+    prediction_outcomes_evaluated_count: int
+    prediction_outcomes_skipped_count: int
+    prediction_outcomes_message: Optional[str] = None

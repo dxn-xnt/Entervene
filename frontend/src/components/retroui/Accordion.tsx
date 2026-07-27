@@ -47,7 +47,13 @@ const AccordionContent = ({ className, children, ref, ...props }: BaseAccordion.
 const AccordionComponent = Object.assign(Accordion, {
   Item: AccordionItem,
   Header: AccordionHeader,
+  Trigger: AccordionHeader,
   Content: AccordionContent,
 });
 
-export { AccordionComponent as Accordion };
+export {
+  AccordionComponent as Accordion,
+  AccordionItem,
+  AccordionHeader as AccordionTrigger,
+  AccordionContent,
+};

@@ -27,16 +27,24 @@ def normalize_academic_period_values(period: object) -> None:
     if period_type not in PERIOD_TOTALS:
         raise ValueError("period_type must be one of TERM, QUARTER, or SEMESTER")
 
-    expected_total = PERIOD_TOTALS[period_type]
+    default_total = PERIOD_TOTALS[period_type]
     period_sequence = getattr(period, "period_sequence", None) or 1
-    total_periods = getattr(period, "total_periods_in_year", None) or expected_total
 
-    if total_periods != expected_total:
-        raise ValueError(f"{period_type} periods must use total_periods_in_year={expected_total}")
-    if period_sequence < 1 or period_sequence > expected_total:
-        raise ValueError(f"{period_type} period_sequence must be between 1 and {expected_total}")
+    # Allow caller to supply a custom total_periods_in_year (e.g. a transitional
+    # 2-term SSHS pilot year).  Only fall back to the dictionary default when the
+    # caller has not explicitly provided one.
+    caller_total = getattr(period, "total_periods_in_year", None)
+    total_periods = caller_total if caller_total else default_total
+
+    if total_periods < 1:
+        raise ValueError("total_periods_in_year must be at least 1")
+    if period_sequence < 1 or period_sequence > total_periods:
+        raise ValueError(
+            f"{period_type} period_sequence must be between 1 and {total_periods}"
+        )
 
     period.period_type = period_type
     period.period_sequence = period_sequence
     period.total_periods_in_year = total_periods
     period.period_progress_ratio = compute_period_progress_ratio(period_sequence, total_periods)
+

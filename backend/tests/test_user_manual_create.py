@@ -184,10 +184,10 @@ def test_valid_manual_student_creation_saves_dob(client, db):
 
 
 def test_manual_user_creation_rejects_invalid_dob(client, db):
-    response = invite(client, dob="04/15/2012")
+    response = invite(client, dob="invalid-date")
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "dob must use YYYY-MM-DD format"
+    assert response.json()["detail"] == "dob must use YYYY-MM-DD or MM/DD/YYYY format"
     assert db.query(UserAccount).count() == 0
 
 

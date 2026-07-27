@@ -3,7 +3,7 @@ import { Archive, ChevronRight, Info, Paperclip, Plus, Trash2, Users, X } from "
 import { useNavigate, useParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { API_URL, apiFetch } from "@/lib/api";
-import AttachmentDisplay from "@/components/AttachmentDisplay";
+import AttachmentDisplay from "@/components/attachment-display";
 import { getTeacherRecordPeriods, getTeacherStudentRoster } from "@/lib/student-record-api";
 import ClassworkFormModal from "./subject-details/ClassworkFormModal";
 import LessonClassworkList from "./subject-details/LessonClassworkList";

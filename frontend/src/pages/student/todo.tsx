@@ -1,6 +1,7 @@
 import { useState } from "react";
-import Tabs from "../../components/Tabs";
-import ToDoItem from "../../components/StudentUIComponents/ListCardItems/ToDoItem";
+import { useNavigate } from "react-router-dom";
+import { Tabs } from "../../components/retroui/Tabs";
+import ToDoItem from "../../components/to-do-item";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -69,6 +70,15 @@ const completedItems = [
 
 export default function ToDo() {
   const [activeTab, setActiveTab] = useState("pending");
+  const navigate = useNavigate();
+
+  const openTodo = (item: { title: string; subject: string }) => {
+    navigate(
+      `/student/todo/${encodeURIComponent(item.subject)}/${encodeURIComponent(
+        item.title,
+      )}`,
+    );
+  };
 
   return (
     <AppLayout>
@@ -77,16 +87,16 @@ export default function ToDo() {
           <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
-              <h1 className="text-2xl md:text-4xl font-semibold">To Do</h1>
+              <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
+                To do
+              </h1>
             </header>
 
-            <div className="-mx-4 md:-mx-6">
-              <Tabs
-                tabs={todoTabs}
-                activeTab={activeTab}
-                onChange={setActiveTab}
-              />
-            </div>
+            <Tabs
+              tabs={todoTabs}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+            />
 
             {activeTab === "pending" && (
               <>
@@ -95,7 +105,11 @@ export default function ToDo() {
                     Intervention
                   </h3>
                   {interventionItems.map((item, index) => (
-                    <ToDoItem key={index} {...item} />
+                    <ToDoItem
+                      key={index}
+                      {...item}
+                      onClick={() => openTodo(item)}
+                    />
                   ))}
                 </section>
 
@@ -104,7 +118,11 @@ export default function ToDo() {
                     Past Due
                   </h3>
                   {pastDueItems.map((item, index) => (
-                    <ToDoItem key={index} {...item} />
+                    <ToDoItem
+                      key={index}
+                      {...item}
+                      onClick={() => openTodo(item)}
+                    />
                   ))}
                 </section>
 
@@ -113,7 +131,11 @@ export default function ToDo() {
                     Upcoming
                   </h3>
                   {upcomingItems.map((item, index) => (
-                    <ToDoItem key={index} {...item} />
+                    <ToDoItem
+                      key={index}
+                      {...item}
+                      onClick={() => openTodo(item)}
+                    />
                   ))}
                 </section>
               </>
@@ -123,7 +145,11 @@ export default function ToDo() {
               <section className="flex flex-col gap-4">
                 <h3 className="text-xl md:text-3xl font-semibold">Past Due</h3>
                 {pastDueItems.map((item, index) => (
-                  <ToDoItem key={index} {...item} />
+                  <ToDoItem
+                    key={index}
+                    {...item}
+                    onClick={() => openTodo(item)}
+                  />
                 ))}
               </section>
             )}
@@ -132,7 +158,11 @@ export default function ToDo() {
               <section className="flex flex-col gap-4">
                 <h3 className="text-xl md:text-3xl font-semibold">Completed</h3>
                 {completedItems.map((item, index) => (
-                  <ToDoItem key={index} {...item} />
+                  <ToDoItem
+                    key={index}
+                    {...item}
+                    onClick={() => openTodo(item)}
+                  />
                 ))}
               </section>
             )}

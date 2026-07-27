@@ -4,11 +4,12 @@ import type { CSSProperties, PropsWithChildren } from 'react';
 import { AppContent } from './app-content';
 import type { BreadcrumbItem } from '@/types';
 
+
 export default function AppLayout({
-    children,
+  children,
 }: PropsWithChildren<{ breadcrumbs?: BreadcrumbItem[] }>) {
-    return (
-      <SidebarProvider
+  return (
+    <SidebarProvider
       style={
         {
           "--sidebar-width": "calc(var(--spacing) * 72)",
@@ -16,13 +17,14 @@ export default function AppLayout({
         } as CSSProperties
       }
     >
+
       <AppSidebar variant="inset" />
       <SidebarInset>
         <AppContent>
-        {/* <SiteHeader breadcrumbs={breadcrumbs}/> */}
+          {/* <SiteHeader breadcrumbs={breadcrumbs}/> */}
           {children}
         </AppContent>
       </SidebarInset>
     </SidebarProvider>
-    );
+  );
 }

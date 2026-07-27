@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.core.Dependencies import get_staff_id, get_student_record
+from app.core.Dependencies import get_staff_id, get_student_record, require_role
 from app.db.Session import get_db
 from app.schemas.Suggestion import RecommendationDraftRequest, ManualSuggestionCreate, SuggestionListResponse, SuggestionResponse
 from app.services.suggestion.RecommendationService import generate_recommendation_drafts
@@ -27,6 +27,7 @@ router = APIRouter()
 @router.post("/manual", response_model=SuggestionResponse)
 def create_manual_study_suggestion(
     body: ManualSuggestionCreate,
+    current_user: dict = Depends(require_role("teacher")),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
@@ -36,6 +37,7 @@ def create_manual_study_suggestion(
 @router.post("/recommendations/drafts", response_model=SuggestionListResponse)
 def create_recommendation_drafts(
     body: RecommendationDraftRequest,
+    current_user: dict = Depends(require_role("teacher")),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
@@ -48,9 +50,11 @@ def get_teacher_study_suggestions(
     subject_id: Optional[int] = Query(None),
     student_id: Optional[UUID] = Query(None),
     status: Optional[str] = Query(None),
-    staff_id: str = Depends(get_staff_id),
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
+    is_admin = current_user.get("role") == "admin"
     return list_teacher_suggestions(
         db,
         staff_id,
@@ -58,12 +62,14 @@ def get_teacher_study_suggestions(
         subject_id=subject_id,
         student_id=student_id,
         status=status,
+        is_admin=is_admin,
     )
 
 
 @router.patch("/{suggestion_id}/dismiss", response_model=SuggestionResponse)
 def dismiss_study_suggestion(
     suggestion_id: int,
+    current_user: dict = Depends(require_role("teacher")),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
@@ -73,6 +79,7 @@ def dismiss_study_suggestion(
 @router.patch("/{suggestion_id}/approve", response_model=SuggestionResponse)
 def approve_study_suggestion(
     suggestion_id: int,
+    current_user: dict = Depends(require_role("teacher")),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
@@ -82,6 +89,7 @@ def approve_study_suggestion(
 @router.patch("/{suggestion_id}/archive", response_model=SuggestionResponse)
 def archive_study_suggestion(
     suggestion_id: int,
+    current_user: dict = Depends(require_role("teacher")),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):

@@ -5,8 +5,8 @@ import json
 from pathlib import Path
 
 from app.db.Session import SessionLocal
-from app.services.ModelScoringService import DEFAULT_MODEL_NAME
-from app.services.PredictionPersistenceService import score_and_persist_prediction
+from app.services.prediction.ModelScoringService import DEFAULT_MODEL_NAME
+from app.services.prediction.PredictionPersistenceService import score_and_persist_prediction
 
 
 def parse_args() -> argparse.Namespace:

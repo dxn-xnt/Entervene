@@ -9,7 +9,7 @@ class ClassworkCreate(BaseModel):
     description: Optional[str] = None
     instructions: Optional[str] = None
     classwork_type: str  # READING, QUIZ, ASSIGNMENT, ACTIVITY
-    classwork_category: Optional[str] = None  # WRITTEN_WORK, PERFORMANCE_TASK, PERIODICAL_EXAM
+    classwork_category: Optional[str] = None  # WRITTEN_WORK, PERFORMANCE_TASK, QUARTERLY_ASSESSMENT
     total_points: Optional[float] = 100
     subject_id: int
     is_published: Optional[bool] = False

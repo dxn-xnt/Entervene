@@ -14,6 +14,12 @@ npm run dev
 npx expo start
 
 #sample accounts (login)
+
+#admin
+admin@mnsts.edu.ph
+hash_mnsts_admin_01
+
+
 #teacher
 m.cruz@school.edu.ph
 hash_poly_02

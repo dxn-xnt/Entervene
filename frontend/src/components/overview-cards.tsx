@@ -1,20 +1,3 @@
-// "use client";
-
-// import { Card } from "@/components/retroui/Card";
-
-// export function OverviewCard() {
-//   return (
-//     <Card className="@container/card">
-//       <Card.Header>
-
-//         <Card.Description>Total Revenue</Card.Description>
-
-//         <Card.Title className="text-4xl font-bold">$1,250.00</Card.Title>
-//       </Card.Header>
-//     </Card>
-//   );
-// }
-
 "use client";
 
 import { cn } from "@/lib/utils";
@@ -23,7 +6,7 @@ import { Card } from "@/components/retroui/Card";
 type OverviewCardProps = {
   title: string;
   count: string;
-  stat: string;
+  stat?: string;
   className?: string;
 };
 
@@ -35,9 +18,11 @@ export function OverviewCard({ title, count, stat, className }: OverviewCardProp
       </Card.Header>
       <Card.Content>
         <Card.Title className="text-4xl font-bold">{count}</Card.Title>
-        <p className="text-sm">
-          <span className="font-semibold">+{stat}</span> increase from last month
-        </p>
+        {stat && (
+          <p className="text-sm">
+            <span className="font-semibold">+{stat}</span> increase from last month
+          </p>
+        )}
       </Card.Content>
     </Card>
   );

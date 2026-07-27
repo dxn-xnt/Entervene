@@ -51,13 +51,13 @@ const Login = () => {
 
   return (
     <div className="flex flex-col items-center justify-center h-screen">
-      <Card>
-        <Card.Header className="flex flex-col justify-center">
-          <Card.Title>
+      <Card className="p-8 w-md">
+        <Card.Header className="flex flex-col justify-center mb-8">
+          <Card.Title className="font-sans font-bold mb-1">
             Entervene
           </Card.Title>
-          <Card.Description className="text-black text-sm">
-            Welcome back! Enter your details to access your account.
+          <Card.Description className="font-normal text-muted-foreground text-md">
+            Enter your details to access your account
           </Card.Description>
         </Card.Header>
 
@@ -92,7 +92,7 @@ const Login = () => {
               onClick={handleLogin}
               disabled={loading}
             >
-              {loading ? "Signing in..." : "Sign In"}
+              Sign In
             </Button>
             <div className="flex flex-row items-center gap-1">
               <Text as="p" className="text-center">Don't have an account?</Text>

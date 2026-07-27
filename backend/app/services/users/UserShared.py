@@ -59,11 +59,27 @@ def parse_optional_date(data: dict[str, Any], fields: tuple[str, ...] = DOB_FIEL
         return value
 
     text = str(value).strip()
+    if text.startswith(("\t", "'")):
+        text = text[1:].strip()
+
+    if not text:
+        return None
+
+    iso_candidate = text.split(" ")[0].split("T")[0]
     try:
-        return date.fromisoformat(text)
-    except ValueError as exc:
-        field_label = fields[0]
-        raise HTTPException(status_code=400, detail=f"{field_label} must use YYYY-MM-DD format") from exc
+        return date.fromisoformat(iso_candidate)
+    except ValueError:
+        pass
+
+    formats = ("%m/%d/%Y", "%Y/%m/%d", "%d/%m/%Y", "%m-%d-%Y", "%d-%m-%Y")
+    for fmt in formats:
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            pass
+
+    field_label = fields[0]
+    raise HTTPException(status_code=400, detail=f"{field_label} must use YYYY-MM-DD or MM/DD/YYYY format")
 
 
 def validate_optional_date(data: dict[str, Any], fields: tuple[str, ...] = DOB_FIELDS) -> None:

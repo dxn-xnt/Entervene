@@ -20,6 +20,7 @@ interface AuthContextType {
   acceptInvitation: (token: string, password: string, confirmPassword: string) => Promise<Role>;
   logout: () => Promise<void>;
   refresh: () => Promise<boolean>;
+  updateAvatar: (avatarPath: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -31,12 +32,16 @@ function userFromAuthResponse(data: {
   email?: string;
   avatar?: string;
 }): AuthUser {
+  const storedAvatar = localStorage.getItem(`avatar_${data.user_id}`);
+  const defaultAvatar = data.role === "student"
+    ? "/avatars/student-avatars/1.svg"
+    : "/avatars/teacher-avatars/12.svg";
   return {
     role: data.role,
     userId: data.user_id,
     fullName: data.full_name?.trim() || data.email?.split("@")[0] || "User",
     email: data.email ?? "",
-    avatar: data.avatar ?? "",
+    avatar: storedAvatar || data.avatar || defaultAvatar,
   };
 }
 
@@ -148,8 +153,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const updateAvatar = (avatarPath: string) => {
+    if (user) {
+      localStorage.setItem(`avatar_${user.userId}`, avatarPath);
+      setUser({ ...user, avatar: avatarPath });
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, role: user?.role ?? null, isLoading, login, acceptInvitation, logout, refresh }}>
+    <AuthContext.Provider value={{ user, role: user?.role ?? null, isLoading, login, acceptInvitation, logout, refresh, updateAvatar }}>
       {children}
     </AuthContext.Provider>
   );

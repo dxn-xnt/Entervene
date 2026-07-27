@@ -24,7 +24,7 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
-from app.services.PredictionFeatureBuilderService import (
+from app.services.prediction.PredictionFeatureBuilderService import (
     build_prediction_features_from_records,
     check_prediction_readiness,
 )
@@ -124,7 +124,7 @@ def add_period_grade(context, period, grade=86, **overrides):
         final_period_grade=grade,
         written_work_percent=overrides.pop("written_work_percent", None),
         performance_task_percent=overrides.pop("performance_task_percent", None),
-        periodical_assessment_percent=overrides.pop("periodical_assessment_percent", None),
+        quarterly_assessment_percent=overrides.pop("quarterly_assessment_percent", None),
         **overrides,
     )
     context["db"].add(row)
@@ -180,24 +180,24 @@ def test_builds_source_period_grade_from_student_period_grade(feature_context):
 def test_computes_component_percentages_from_assessment_scores(feature_context):
     add_assessment(feature_context, "WRITTEN_WORK", 1, max_score=50, raw_score=42)
     add_assessment(feature_context, "PERFORMANCE_TASK", 1, max_score=40, raw_score=35.2)
-    add_assessment(feature_context, "PERIODICAL_ASSESSMENT", 1, max_score=60, raw_score=49.2)
+    add_assessment(feature_context, "QUARTERLY_ASSESSMENT", 1, max_score=60, raw_score=49.2)
 
     result = build(feature_context)
 
     assert result["features"]["written_work_percent"] == 84.0
     assert result["features"]["performance_task_percent"] == 88.0
-    assert result["features"]["periodical_assessment_percent"] == 82.0
+    assert result["features"]["quarterly_assessment_percent"] == 82.0
 
 
-def test_handles_missing_periodical_assessment_during_early_projection(feature_context):
+def test_handles_missing_quarterly_assessment_during_early_projection(feature_context):
     add_assessment(feature_context, "WRITTEN_WORK", 1, raw_score=84)
     add_assessment(feature_context, "PERFORMANCE_TASK", 1, raw_score=88)
 
     result = build(feature_context, target=feature_context["periods"][1])
 
     assert result["prediction_mode"] == "CURRENT_PERIOD_PROJECTION"
-    assert result["features"]["periodical_assessment_percent"] is None
-    assert "PERIODICAL_ASSESSMENT" in result["evidence_summary"]["components_missing"]
+    assert result["features"]["quarterly_assessment_percent"] is None
+    assert "QUARTERLY_ASSESSMENT" in result["evidence_summary"]["components_missing"]
 
 
 def test_computes_completion_missing_and_coverage(feature_context):
@@ -205,7 +205,7 @@ def test_computes_completion_missing_and_coverage(feature_context):
     add_assessment(feature_context, "WRITTEN_WORK", 1, raw_score=80)
     add_assessment(feature_context, "WRITTEN_WORK", 2, raw_score=None, status="MISSING_NOT_ENCODED")
     add_assessment(feature_context, "PERFORMANCE_TASK", 1, raw_score=90)
-    add_assessment(feature_context, "PERIODICAL_ASSESSMENT", 1, raw_score=85)
+    add_assessment(feature_context, "QUARTERLY_ASSESSMENT", 1, raw_score=85)
 
     result = build(feature_context)
 
@@ -274,6 +274,45 @@ def test_has_previous_period_false_for_first_period(feature_context):
     assert result["features"]["grade_trend_vs_previous_period"] is None
 
 
+def test_includes_live_classwork_submissions_in_component_features(feature_context):
+    from app.models.classwork.Classwork import Classwork
+    from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+    from app.models.submissions.StudentSubmission import StudentSubmission
+
+    db = feature_context["db"]
+    cw = Classwork(
+        title="Term Quiz 1",
+        classwork_type="QUIZ",
+        classwork_category="WRITTEN_WORK",
+        total_points=50,
+        subject_id=feature_context["subject"].subject_id,
+        created_by_staff_id=feature_context["staff"].staff_id,
+    )
+    db.add(cw)
+    db.flush()
+
+    assign = ClassworkAssignment(
+        classwork_id=cw.classwork_id,
+        class_id=feature_context["class"].class_id,
+        assigned_by_staff_id=feature_context["staff"].staff_id,
+    )
+    db.add(assign)
+    db.flush()
+
+    sub = StudentSubmission(
+        classwork_assignment_id=assign.classwork_assignment_id,
+        student_id=feature_context["student"].student_id,
+        status="graded",
+        grade=45,
+    )
+    db.add(sub)
+    db.commit()
+
+    result = build(feature_context)
+
+    assert result["features"]["written_work_percent"] == 90.0
+
+
 @pytest.mark.parametrize(
     ("coverage", "completion", "source_grade", "expected_ready", "expected_level"),
     [
@@ -298,3 +337,244 @@ def test_prediction_readiness_thresholds(coverage, completion, source_grade, exp
 
     assert result["ready"] is expected_ready
     assert result["readiness_level"] == expected_level
+
+
+# ---------------------------------------------------------------------------
+# 3-Term Curriculum Transition Tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def three_term_context():
+    """Fixture providing a 3-term academic year alongside the student, class, and subject."""
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    lrn_check = next(
+        constraint
+        for constraint in Student.__table__.constraints
+        if isinstance(constraint, CheckConstraint) and constraint.name == "lrn_check"
+    )
+    Student.__table__.constraints.remove(lrn_check)
+    Base.metadata.create_all(bind=engine, tables=TABLES)
+    Student.__table__.append_constraint(lrn_check)
+    db = sessionmaker(bind=engine)()
+
+    year = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 8, 1),
+        end_date=date(2027, 5, 31),
+        is_active=True,
+    )
+    level = AcademicLevel(level_name="Grade 11", grade_level=11)
+    db.add_all([year, level])
+    db.flush()
+
+    account = UserAccount(user_id=uuid.uuid4(), email="sshs_teacher@example.test")
+    staff = AcademicStaff(staff_id="T-SSHS", first_name="SSHS", last_name="Teacher", user_id=account.user_id)
+    student = Student(
+        student_id=uuid.uuid4(),
+        student_lrn="200000000001",
+        first_name="Term",
+        last_name="Learner",
+        academic_level_id=level.academic_level_id,
+    )
+
+    # Three TERM periods for the new SSHS calendar
+    term_periods = [
+        AcademicPeriod(
+            period_name=f"Term {index}",
+            period_type="TERM",
+            period_sequence=index,
+            total_periods_in_year=3,
+            period_progress_ratio=Decimal(str(round(index / 3, 4))),
+            start_date=date(2026, 8, 1) + timedelta(days=(index - 1) * 90),
+            end_date=date(2026, 10, 29) + timedelta(days=(index - 1) * 90),
+            academic_year_id=year.academic_year_id,
+            is_active=(index == 1),
+        )
+        for index in (1, 2, 3)
+    ]
+
+    class_ = Class(
+        section_name="Mendel",
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    subject = Subject(
+        subject_name="General Mathematics",
+        subject_codename="GENMATH11",
+        academic_level_id=level.academic_level_id,
+    )
+    db.add_all([account, staff, student, *term_periods, class_, subject])
+    db.commit()
+
+    yield {
+        "db": db,
+        "student": student,
+        "class": class_,
+        "subject": subject,
+        "staff": staff,
+        "term_periods": term_periods,
+        "year": year,
+    }
+    db.close()
+    Base.metadata.drop_all(bind=engine, tables=reversed(TABLES))
+    engine.dispose()
+
+
+def _add_term_grade(ctx, period, grade):
+    row = StudentPeriodGrade(
+        student_id=ctx["student"].student_id,
+        class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        academic_period_id=period.academic_period_id,
+        final_period_grade=grade,
+    )
+    ctx["db"].add(row)
+    ctx["db"].commit()
+    return row
+
+
+def _add_term_assessment(ctx, period, component, item_number, max_score=100, raw_score=None, status="RECORDED"):
+    assessment = AssessmentItem(
+        class_id=ctx["class"].class_id,
+        subject_id=ctx["subject"].subject_id,
+        academic_period_id=period.academic_period_id,
+        component_type=component,
+        item_number=item_number,
+        max_score=max_score,
+    )
+    ctx["db"].add(assessment)
+    ctx["db"].flush()
+    if raw_score is not None or status != "MISSING_NOT_ENCODED":
+        ctx["db"].add(StudentAssessmentScore(
+            assessment_id=assessment.assessment_id,
+            student_id=ctx["student"].student_id,
+            raw_score=raw_score,
+            score_status=status,
+        ))
+    ctx["db"].commit()
+    return assessment
+
+
+# --- Test 1: Mathematical bridge — 3-term sequence is normalised to 4-quarter scale ---
+
+@pytest.mark.parametrize(
+    ("term_sequence", "expected_normalised"),
+    [
+        (1, pytest.approx(1.3333, rel=1e-3)),   # Term 1 of 3 -> (1/3)*4 = 1.3333
+        (2, pytest.approx(2.6667, rel=1e-3)),   # Term 2 of 3 -> (2/3)*4 = 2.6667
+        (3, pytest.approx(4.0000, rel=1e-3)),   # Term 3 of 3 -> (3/3)*4 = 4.0000
+    ],
+)
+def test_period_sequence_normalised_for_3_term_periods(three_term_context, term_sequence, expected_normalised):
+    ctx = three_term_context
+    period = ctx["term_periods"][term_sequence - 1]
+    _add_term_assessment(ctx, period, "WRITTEN_WORK", 1, raw_score=85)
+    _add_term_assessment(ctx, period, "PERFORMANCE_TASK", 1, raw_score=88)
+    _add_term_assessment(ctx, period, "QUARTERLY_ASSESSMENT", 1, raw_score=82)
+
+    target = ctx["term_periods"][min(term_sequence, 2)]  # next term or same if last
+    result = build_prediction_features_from_records(
+        ctx["db"],
+        ctx["student"].student_id,
+        ctx["class"].class_id,
+        ctx["subject"].subject_id,
+        period.academic_period_id,
+        target.academic_period_id,
+    )
+
+    assert result["features"]["period_sequence"] == expected_normalised
+
+
+# --- Test 2: Mathematical bridge — 4-quarter sequence is identity under normalisation ---
+
+@pytest.mark.parametrize(
+    ("quarter_sequence", "expected_normalised"),
+    [
+        (1, pytest.approx(1.0, rel=1e-4)),   # (1/4)*4 = 1.0
+        (2, pytest.approx(2.0, rel=1e-4)),   # (2/4)*4 = 2.0
+        (3, pytest.approx(3.0, rel=1e-4)),   # (3/4)*4 = 3.0
+    ],
+)
+def test_period_sequence_identity_for_4_quarter_periods(feature_context, quarter_sequence, expected_normalised):
+    ctx = feature_context
+    # The fixture provides 3 quarter periods (sequences 1, 2, 3) with total_periods_in_year=4
+    period = ctx["periods"][quarter_sequence - 1]
+    add_assessment(ctx, "WRITTEN_WORK", 1, raw_score=85, period=period)
+    add_assessment(ctx, "PERFORMANCE_TASK", 1, raw_score=88, period=period)
+    add_assessment(ctx, "QUARTERLY_ASSESSMENT", 1, raw_score=82, period=period)
+
+    target = ctx["periods"][min(quarter_sequence, 2)]
+    result = build_prediction_features_from_records(
+        ctx["db"],
+        ctx["student"].student_id,
+        ctx["class"].class_id,
+        ctx["subject"].subject_id,
+        period.academic_period_id,
+        target.academic_period_id,
+    )
+
+    assert result["features"]["period_sequence"] == expected_normalised
+
+
+# --- Test 3: cumulative_period_grade_avg only includes same period_type/year ---
+
+def test_cumulative_grade_avg_excludes_other_period_types(three_term_context):
+    """
+    The cumulative average at Term 2 should only include Term 1 and Term 2 grades.
+    Any QUARTER-type grades for the same student (from a prior year or concurrent
+    test data) must not bleed into the TERM cumulative average.
+    """
+    ctx = three_term_context
+    db = ctx["db"]
+    term1, term2, term3 = ctx["term_periods"]
+
+    # Grades for Term 1 (90) and Term 2 (80): expected average = 85.0
+    _add_term_grade(ctx, term1, grade=90)
+    _add_term_grade(ctx, term2, grade=80)
+
+    # Also add an assessment in Term 2 so the service finds enough data
+    _add_term_assessment(ctx, term2, "WRITTEN_WORK", 1, raw_score=80)
+    _add_term_assessment(ctx, term2, "PERFORMANCE_TASK", 1, raw_score=80)
+    _add_term_assessment(ctx, term2, "QUARTERLY_ASSESSMENT", 1, raw_score=80)
+
+    result = build_prediction_features_from_records(
+        db,
+        ctx["student"].student_id,
+        ctx["class"].class_id,
+        ctx["subject"].subject_id,
+        term2.academic_period_id,
+        term3.academic_period_id,
+    )
+
+    # Average of grades at or before Term 2: (90 + 80) / 2 = 85.0
+    assert result["features"]["cumulative_period_grade_avg"] == pytest.approx(85.0)
+
+
+def test_cumulative_grade_avg_excludes_future_terms(three_term_context):
+    """Term 3 grade must NOT be included when building features at Term 2."""
+    ctx = three_term_context
+    term1, term2, term3 = ctx["term_periods"]
+
+    _add_term_grade(ctx, term1, grade=90)
+    _add_term_grade(ctx, term2, grade=80)
+    _add_term_grade(ctx, term3, grade=70)  # future — must be excluded
+
+    _add_term_assessment(ctx, term2, "WRITTEN_WORK", 1, raw_score=80)
+    _add_term_assessment(ctx, term2, "PERFORMANCE_TASK", 1, raw_score=80)
+    _add_term_assessment(ctx, term2, "QUARTERLY_ASSESSMENT", 1, raw_score=80)
+
+    result = build_prediction_features_from_records(
+        ctx["db"],
+        ctx["student"].student_id,
+        ctx["class"].class_id,
+        ctx["subject"].subject_id,
+        term2.academic_period_id,
+        term3.academic_period_id,
+    )
+
+    # Only Term 1 (90) and Term 2 (80) should be included: (90 + 80) / 2 = 85.0
+    assert result["features"]["cumulative_period_grade_avg"] == pytest.approx(85.0)

@@ -266,3 +266,294 @@ Current working-tree notes:
   and the frontend build before including it in the attachment work.
 - Untracked planning documents and the `screens/` directory remain outside this
   handoff update.
+
+## 13. Admin Subjects Redesign And Grading Template Handoff
+
+### July 2, 2026
+
+This section is the current handoff for the Entervene Admin Subjects work.
+
+Current repository root used in this session:
+
+```text
+C:\Users\Roy Adrian Rondina\Desktop\3rd Year\2nd Sem\Entervene\Entervene
+```
+
+### Completed Work
+
+The Admin Subjects module was redesigned in phases:
+
+- Audited the existing Admin Subjects frontend, API helpers, backend routes,
+  services, schemas, and models for Subjects, Subject Offerings, and Grading
+  Templates.
+- Created reusable frontend foundation components under
+  `frontend/src/pages/admin/subjects/components/`:
+  - `SubjectContextBanner`
+  - `SubjectModuleTabs`
+  - `CurriculumFilters`
+  - `EmptyStateCard`
+  - `SubjectPicker`
+  - `TemplateSubjectPicker`
+  - `CurriculumPlanTable`
+- Replaced the large repeated Subject Offering cards with a compact Curriculum
+  Plan table.
+- Simplified the Add/Edit Subject Offering modal:
+  - Academic Year is hidden by default.
+  - Current setup context is shown read-only.
+  - An Advanced checkbox reveals the Academic Year selector.
+  - Grade controls the available pathway choices.
+  - Grades 7 to 10 lock pathway to `general`.
+  - Grades 11 to 12 support `both`, `stem_medical`, and `stem_engineering`.
+  - Terms use checkbox/chip style selection.
+  - Subjects use a searchable picker.
+- Replaced the Grading Template long subject dropdown with a searchable
+  single-subject picker.
+- Added frontend read-only UX for inactive or previous academic years.
+- Added backend read-only enforcement for Subject Offerings:
+  - create, update, archive, restore, and import are blocked when
+    `academic_year.is_active` is false.
+  - listing and detail viewing remain allowed.
+  - future terms inside the active academic year remain editable.
+- Added Subject Offering copy-forward:
+  - Endpoint: `POST /api/v1/subject-offerings/copy-academic-year`
+  - Copies subject offerings from a source academic year to an active target
+    academic year.
+  - Maps periods by `period_sequence`, not source `academic_period_id`.
+  - Skips duplicates by default.
+  - `overwrite_existing: true` updates exact target matches.
+  - Does not copy teachers, classes, grades, students, submissions,
+    predictions, or subject loads.
+  - Frontend button/modal label: `Copy Previous Year Setup`.
+
+### Files Changed In This Completed Work
+
+Backend:
+
+```text
+backend/app/api/v1/routes/SubjectOfferings.py
+backend/app/schemas/SubjectOffering.py
+backend/app/services/subject_offerings/SubjectOfferingImportService.py
+backend/app/services/subject_offerings/SubjectOfferingService.py
+backend/app/services/subject_offerings/SubjectOfferingShared.py
+backend/tests/test_subject_offering_admin_api.py
+backend/tests/test_subject_offering_import_api.py
+```
+
+Frontend:
+
+```text
+frontend/src/lib/api.ts
+frontend/src/pages/admin/forms/add-grading-component.tsx
+frontend/src/pages/admin/subjects.tsx
+frontend/src/pages/admin/subjects/components/
+```
+
+Docs:
+
+```text
+docs/CODEX_HANDOFF.md
+```
+
+### Current Subject Offering Behavior
+
+- Subject Catalog is reusable and should not be recreated every academic year.
+- Subject Offerings are academic-year scoped.
+- Subject Offerings do not assign teachers or schedules.
+- Teacher assignment belongs in Classes / Subject Load.
+- Admins can add/edit/archive/restore offerings only for an active academic
+  year.
+- Admins can still list and inspect offerings from inactive academic years.
+- Future terms inside the active academic year are editable even if Term 1 is
+  the currently live term.
+- Do not add term-based read-only rules.
+
+### Current Read-Only Rule
+
+The read-only lock is academic-year based only:
+
+```text
+if academic_year.is_active is false:
+  block Subject Offering create/update/archive/restore/import mutations
+else:
+  allow active-year setup, including future terms
+```
+
+Do not use `academic_period.is_active` to decide whether Subject Offering setup
+can be edited.
+
+### Current Copy-Forward Behavior
+
+Endpoint:
+
+```text
+POST /api/v1/subject-offerings/copy-academic-year
+```
+
+Request shape:
+
+```json
+{
+  "source_academic_year_id": 1,
+  "target_academic_year_id": 2,
+  "overwrite_existing": false
+}
+```
+
+Response shape:
+
+```json
+{
+  "source_academic_year_id": 1,
+  "target_academic_year_id": 2,
+  "created_count": 20,
+  "updated_count": 0,
+  "skipped_count": 3,
+  "skipped": [
+    {
+      "subject_id": 12,
+      "source_subject_offering_id": 44,
+      "reason": "Matching target period not found for period_sequence 3."
+    }
+  ]
+}
+```
+
+Rules:
+
+- Source academic year may be active or inactive.
+- Target academic year must be active.
+- Source and target cannot be the same.
+- Matching target periods are found by `period_sequence`.
+- Existing exact duplicates are skipped by default.
+- With `overwrite_existing: true`, exact target matches have their status
+  updated.
+- Extra target offerings are not deleted.
+- `SubjectOffering` has no `hours` column; subject hours remain on the reusable
+  Subject Catalog record.
+
+### Validation Already Passed
+
+```text
+backend/.venv/Scripts/python.exe -m pytest tests/test_subject_offering_admin_api.py
+backend/.venv/Scripts/python.exe -m pytest tests/test_subject_offering_import_api.py
+backend/.venv/Scripts/python.exe -m pytest
+npm.cmd run build
+git diff --check
+```
+
+`git diff --check` passed with only LF-to-CRLF working-copy warnings.
+
+### Remaining Grading Template Problem
+
+Grading template copy-forward is not ready yet because grading templates are not
+safely academic-year scoped.
+
+Current limitations:
+
+- Backend currently supports one optional `subject_id`.
+- True multi-subject grading template assignment is not supported.
+- `TemplateSubjectPicker` should remain single-select for now.
+- Do not fake multi-subject assignment.
+- Do not loop-create multiple templates unless that design is explicitly chosen
+  later.
+
+### Recommended Next-Session Plan
+
+Start with an audit-only task:
+
+```text
+Task: Audit Grading Template Academic-Year Scoping
+```
+
+Inspect backend files:
+
+```text
+backend/app/api/v1/routes/GradingTemplates.py
+backend/app/schemas/GradingTemplate.py
+backend/app/services/grading_templates/GradingTemplateService.py
+backend/app/services/grading_templates/GradingTemplateQueryService.py
+backend/app/services/grading_templates/GradingTemplateShared.py
+backend/app/models/academic/GradingTemplate.py
+backend/app/models/academic/GradingTemplateComponent.py
+backend/app/models/academic/AcademicYear.py
+backend/tests/test_grading_template_admin_api.py
+```
+
+Inspect frontend files:
+
+```text
+frontend/src/pages/admin/subjects.tsx
+frontend/src/pages/admin/forms/add-grading-component.tsx
+frontend/src/pages/admin/subjects/components/TemplateSubjectPicker.tsx
+frontend/src/lib/api.ts
+```
+
+Determine:
+
+- Whether grading templates should become academic-year scoped.
+- Whether templates should remain reusable global definitions with
+  academic-year-scoped assignments.
+- Whether a separate join/assignment table is needed later.
+- What migration would be required, if any.
+- How copy-forward should work without duplicating unsafe or global data.
+
+### Exact Next Implementation Prompt For Codex
+
+```text
+Proceed with audit only.
+
+Task Name:
+Audit Grading Template Academic-Year Scoping
+
+Goal:
+Inspect the current grading template backend and frontend design before making
+schema or endpoint changes. Do not implement yet. Do not create migrations yet.
+Do not touch Subject Offerings unless fixing a regression. Do not touch
+mobile-app.
+
+Business context:
+- Subject Catalog is reusable.
+- Subject Offerings are academic-year scoped and already support copy-forward.
+- Previous/inactive academic years are read-only.
+- Future terms inside the active academic year remain editable.
+- Grading Templates / Grading Components should eventually support safe
+  copy-forward, but current schema may not be academic-year scoped.
+- Backend currently supports one optional subject_id only.
+- True multi-subject template assignment is not supported yet.
+
+Inspect:
+- backend/app/api/v1/routes/GradingTemplates.py
+- backend/app/schemas/GradingTemplate.py
+- backend/app/services/grading_templates/GradingTemplateService.py
+- backend/app/services/grading_templates/GradingTemplateQueryService.py
+- backend/app/services/grading_templates/GradingTemplateShared.py
+- backend/app/models/academic/GradingTemplate.py
+- backend/app/models/academic/GradingTemplateComponent.py
+- backend/app/models/academic/AcademicYear.py
+- backend/tests/test_grading_template_admin_api.py
+- frontend/src/pages/admin/subjects.tsx
+- frontend/src/pages/admin/forms/add-grading-component.tsx
+- frontend/src/pages/admin/subjects/components/TemplateSubjectPicker.tsx
+- frontend/src/lib/api.ts
+
+Produce:
+1. Current grading template data model summary
+2. Current frontend behavior summary
+3. Whether templates are global, subject-scoped, year-scoped, or mixed
+4. Risks of copying current templates forward as-is
+5. Recommended schema/API direction
+6. Files that would need changes later
+7. Tests that should be added later
+8. Blockers/questions before implementation
+
+Stop after the audit and plan.
+```
+
+### Warnings For The Next Session
+
+- Do not touch Subject Offerings unless fixing regressions.
+- Do not add many-to-many grading templates yet.
+- Do not add term-based read-only locking.
+- Do not copy grades, students, classes, teachers, submissions, predictions, or
+  subject loads.
+- Do not touch `mobile-app`.
