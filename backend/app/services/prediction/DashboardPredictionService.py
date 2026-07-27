@@ -74,8 +74,32 @@ def _apply_filters(
     term: int | None = None,
     risk_level: str | None = None,
     search: str | None = None,
+    staff_id: str | None = None,
+    is_admin: bool = True,
+    db: Session | None = None,
 ):
     """Apply shared filters to a query that already joins the required tables."""
+    if not is_admin and staff_id and db is not None:
+        from app.models.academic.SubjectLoad import SubjectLoad
+        from sqlalchemy import or_
+        from sqlalchemy.exc import OperationalError
+        try:
+            loads = (
+                db.query(SubjectLoad.class_id, SubjectLoad.subject_id)
+                .filter(SubjectLoad.staff_id == staff_id, SubjectLoad.status == "active")
+                .all()
+            )
+            if not loads:
+                query = query.filter(AIPrediction.prediction_id == -1)
+            else:
+                clause = or_(*[
+                    (AIPrediction.class_id == l.class_id) & (AIPrediction.subject_id == l.subject_id)
+                    for l in loads
+                ])
+                query = query.filter(clause)
+        except OperationalError:
+            pass
+
     if class_id is not None:
         query = query.filter(AIPrediction.class_id == class_id)
     if subject_id is not None:
@@ -129,6 +153,8 @@ def get_dashboard_at_risk_predictions(
     sort_order: str = "desc",
     limit: int = 25,
     offset: int = 0,
+    staff_id: str | None = None,
+    is_admin: bool = True,
 ) -> dict[str, Any]:
     # ------ build filtered base query ------
     base = _base_joined_query(db)
@@ -139,6 +165,9 @@ def get_dashboard_at_risk_predictions(
         term=term,
         risk_level=risk_level,
         search=search,
+        staff_id=staff_id,
+        is_admin=is_admin,
+        db=db,
     )
 
     # ------ total count ------
@@ -163,6 +192,9 @@ def get_dashboard_at_risk_predictions(
         term=term,
         risk_level=risk_level,
         search=search,
+        staff_id=staff_id,
+        is_admin=is_admin,
+        db=db,
     )
     summary_rows = summary_query.group_by(AIPrediction.risk_level).all()
 

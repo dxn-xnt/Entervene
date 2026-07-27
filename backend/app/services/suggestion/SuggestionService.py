@@ -221,44 +221,66 @@ def create_manual_suggestion(db: Session, staff_id: str, body: ManualSuggestionC
 
 def list_teacher_suggestions(
     db: Session,
-    staff_id: str,
+    staff_id: str | None,
     class_id: Optional[int] = None,
     subject_id: Optional[int] = None,
     student_id: Optional[UUID] = None,
     status: Optional[str] = None,
+    is_admin: bool = False,
 ) -> SuggestionListResponse:
-    load_query = db.query(SubjectLoad.class_id, SubjectLoad.subject_id).filter(
-        SubjectLoad.staff_id == staff_id,
-        SubjectLoad.status == "active",
-    )
-    if class_id is not None:
-        load_query = load_query.filter(SubjectLoad.class_id == class_id)
-    if subject_id is not None:
-        load_query = load_query.filter(SubjectLoad.subject_id == subject_id)
-    loads = load_query.all()
-    if not loads:
-        return SuggestionListResponse()
+    query = _suggestion_query(db)
 
-    scoped_pairs = {(row.class_id, row.subject_id) for row in loads}
-    scoped_subjects = {pair[1] for pair in scoped_pairs}
-    scoped_class_ids = {pair[0] for pair in scoped_pairs}
-    scoped_students = {
-        row[0]
-        for row in db.query(StudentClass.student_id)
-        .filter(
-            StudentClass.class_id.in_(scoped_class_ids),
-            StudentClass.enrollment_status == "enrolled",
+    if not is_admin:
+        if not staff_id:
+            return SuggestionListResponse()
+        load_query = db.query(SubjectLoad.class_id, SubjectLoad.subject_id).filter(
+            SubjectLoad.staff_id == staff_id,
+            SubjectLoad.status == "active",
         )
-        .all()
-    }
-    query = _suggestion_query(db).filter(
-        StudentSuggestion.subject_id.in_(scoped_subjects),
-        StudentSuggestion.student_id.in_(scoped_students),
-    )
+        if class_id is not None:
+            load_query = load_query.filter(SubjectLoad.class_id == class_id)
+        if subject_id is not None:
+            load_query = load_query.filter(SubjectLoad.subject_id == subject_id)
+        loads = load_query.all()
+        if not loads:
+            return SuggestionListResponse()
+
+        scoped_pairs = {(row.class_id, row.subject_id) for row in loads}
+        scoped_subjects = {pair[1] for pair in scoped_pairs}
+        scoped_class_ids = {pair[0] for pair in scoped_pairs}
+        scoped_students = {
+            row[0]
+            for row in db.query(StudentClass.student_id)
+            .filter(
+                StudentClass.class_id.in_(scoped_class_ids),
+                StudentClass.enrollment_status == "enrolled",
+            )
+            .all()
+        }
+        query = query.filter(
+            StudentSuggestion.subject_id.in_(scoped_subjects),
+            StudentSuggestion.student_id.in_(scoped_students),
+        )
+    else:
+        if subject_id is not None:
+            query = query.filter(StudentSuggestion.subject_id == subject_id)
+        if class_id is not None:
+            scoped_students = {
+                row[0]
+                for row in db.query(StudentClass.student_id)
+                .filter(
+                    StudentClass.class_id == class_id,
+                    StudentClass.enrollment_status == "enrolled",
+                )
+                .all()
+            }
+            query = query.filter(StudentSuggestion.student_id.in_(scoped_students))
+
     if student_id is not None:
         query = query.filter(StudentSuggestion.student_id == student_id)
     if status is not None:
         query = query.filter(StudentSuggestion.status == status)
+
     suggestions = query.order_by(StudentSuggestion.created_at.desc()).all()
     return SuggestionListResponse(
         suggestions=[build_suggestion_response(db, suggestion) for suggestion in suggestions]

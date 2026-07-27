@@ -21,9 +21,16 @@ import {
   Send,
   Sparkles,
 } from "lucide-react";
-import type { PredictionDetail, TeacherReview } from "@/lib/prediction-api";
+import type {
+  PredictionDetail,
+  PredictionSuggestionItem,
+  TeacherReview,
+} from "@/lib/prediction-api";
+import { useAuth } from "@/context/AuthContext";
 import {
+  assignPredictionIntervention,
   fetchPredictionDetail,
+  fetchPredictionSuggestions,
   submitTeacherReview,
 } from "@/lib/prediction-api";
 
@@ -82,22 +89,69 @@ export default function PredictionDetailSheet({
   open,
   onOpenChange,
 }: PredictionDetailSheetProps) {
+  const { user } = useAuth();
+  const isTeacher = user?.role === "teacher";
+
   const [detail, setDetail] = useState<PredictionDetail | null>(null);
+  const [suggestions, setSuggestions] = useState<PredictionSuggestionItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [reviewDecision, setReviewDecision] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [reviewSuccess, setReviewSuccess] = useState(false);
 
+  // Intervention assignment state
+  const [interventionTitle, setInterventionTitle] = useState("");
+  const [interventionPriority, setInterventionPriority] = useState<"LOW" | "NORMAL" | "HIGH" | "URGENT">("HIGH");
+  const [assigningIntervention, setAssigningIntervention] = useState(false);
+  const [interventionSuccess, setInterventionSuccess] = useState(false);
+  const [interventionError, setInterventionError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!predictionId || !open) return;
     setLoading(true);
     setReviewSuccess(false);
-    fetchPredictionDetail(predictionId)
-      .then(setDetail)
+    setInterventionSuccess(false);
+    setInterventionError(null);
+    
+    Promise.all([
+      fetchPredictionDetail(predictionId),
+      fetchPredictionSuggestions(predictionId).catch(() => []),
+    ])
+      .then(([detailRes, suggestionsRes]) => {
+        setDetail(detailRes);
+        setSuggestions(suggestionsRes);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [predictionId, open]);
+
+  const handleAssignIntervention = async () => {
+    if (!predictionId || !interventionTitle.trim()) return;
+    setAssigningIntervention(true);
+    setInterventionError(null);
+    try {
+      await assignPredictionIntervention(predictionId, {
+        resource_type: "LESSON",
+        title: interventionTitle.trim(),
+        priority: interventionPriority,
+      });
+      setInterventionSuccess(true);
+      setInterventionTitle("");
+      // Refresh detail and suggestions
+      const [updatedDetail, updatedSuggestions] = await Promise.all([
+        fetchPredictionDetail(predictionId),
+        fetchPredictionSuggestions(predictionId),
+      ]);
+      setDetail(updatedDetail);
+      setSuggestions(updatedSuggestions);
+    } catch (err: any) {
+      console.error(err);
+      setInterventionError(err.message || "Failed to assign intervention");
+    } finally {
+      setAssigningIntervention(false);
+    }
+  };
 
   const handleSubmitReview = async () => {
     if (!predictionId || !reviewDecision) return;
@@ -292,14 +346,115 @@ export default function PredictionDetailSheet({
               </div>
             )}
 
-            <Separator />
+              {/* ── Section: Assigned Interventions ── */}
+              <div className="space-y-3 border-t-2 border-black pt-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-extrabold uppercase tracking-wide text-black flex items-center gap-1.5">
+                    <Sparkles size={16} className="text-yellow-500 fill-yellow-400" />
+                    Assigned Interventions ({suggestions.length})
+                  </h3>
+                </div>
 
-            {/* ── Teacher Review Form ── */}
-            <div>
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
-                <MessageSquare size={16} className="text-indigo-500" />
-                Teacher Review
-              </h3>
+                {suggestions.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    {suggestions.map((s) => (
+                      <div
+                        key={s.student_suggestion_id}
+                        className="rounded-none border-2 border-black bg-yellow-50/50 p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-xs text-black uppercase">
+                            {s.title}
+                          </span>
+                          <Badge
+                            className={`border-2 border-black text-[10px] uppercase font-bold px-2 ${
+                              s.status === "ACTIVE"
+                                ? "bg-amber-300 text-black"
+                                : "bg-emerald-400 text-black"
+                            }`}
+                          >
+                            {s.status}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-gray-700 font-medium mt-1">
+                          Priority: <strong className="text-black">{s.priority}</strong>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500 font-semibold italic">
+                    No persistent interventions assigned yet for this prediction.
+                  </p>
+                )}
+
+                {/* Assign New Intervention Box */}
+                {isTeacher ? (
+                  <div className="border-2 border-black p-3 bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-2.5 mt-2">
+                    <span className="text-xs font-black uppercase text-black">
+                      Quick Assign AI Intervention
+                    </span>
+                    {interventionSuccess && (
+                      <div className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                        <CheckCircle2 size={14} /> Intervention assigned successfully!
+                      </div>
+                    )}
+                    {interventionError && (
+                      <div className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 p-2 rounded">
+                        {interventionError}
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      placeholder="Intervention title (e.g. Remedial Algebra Review)..."
+                      value={interventionTitle}
+                      onChange={(e) => setInterventionTitle(e.target.value)}
+                      className="w-full text-xs font-semibold p-2 border-2 border-black bg-white focus:outline-none shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                    />
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={interventionPriority}
+                        onValueChange={(v: any) => setInterventionPriority(v)}
+                      >
+                        <Select.Trigger className="w-[140px] h-8 text-xs font-bold border-2 border-black bg-white shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                          <Select.Value placeholder="Priority" />
+                        </Select.Trigger>
+                        <Select.Content className="border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                          <Select.Item value="NORMAL">NORMAL</Select.Item>
+                          <Select.Item value="HIGH">HIGH</Select.Item>
+                          <Select.Item value="URGENT">URGENT</Select.Item>
+                        </Select.Content>
+                      </Select>
+                      <Button
+                        size="sm"
+                        disabled={!interventionTitle.trim() || assigningIntervention}
+                        onClick={handleAssignIntervention}
+                        className="h-8 flex-1 bg-yellow-300 hover:bg-yellow-400 text-black border-2 border-black font-extrabold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      >
+                        {assigningIntervention ? (
+                          <Loader2 size={14} className="animate-spin mr-1" />
+                        ) : (
+                          <Send size={12} className="mr-1 stroke-[2.5]" />
+                        )}
+                        Assign Intervention
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border-2 border-black p-3 bg-sky-50 text-sky-900 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] mt-2">
+                    🔒 Read-Only (Admin View): Assigning interventions is reserved for assigned subject teachers.
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* ── Section: Teacher Review ── */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                  <MessageSquare size={16} className="text-indigo-500" />
+                  Teacher Review History
+                </h3>
 
               {/* Existing reviews */}
               {detail.teacher_reviews.length > 0 && (
@@ -342,52 +497,58 @@ export default function PredictionDetailSheet({
               )}
 
               {/* Review form */}
-              <div className="flex flex-col gap-4 rounded-lg border-2 border-black p-4 bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                {/* Decision dropdown */}
-                <div className="space-y-1">
-                  <label className="text-xs font-extrabold uppercase text-gray-800">
-                    Review Decision *
-                  </label>
-                  <Select
-                    value={reviewDecision}
-                    onValueChange={setReviewDecision}
+              {isTeacher ? (
+                <div className="flex flex-col gap-4 rounded-lg border-2 border-black p-4 bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  {/* Decision dropdown */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-extrabold uppercase text-gray-800">
+                      Review Decision *
+                    </label>
+                    <Select
+                      value={reviewDecision}
+                      onValueChange={setReviewDecision}
+                    >
+                      <Select.Trigger className="w-full bg-white border-2 border-black font-semibold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <Select.Value placeholder="Select decision..." />
+                      </Select.Trigger>
+                      <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                        {DECISION_OPTIONS.map((opt) => (
+                          <Select.Item key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </Select.Item>
+                        ))}
+                      </Select.Content>
+                    </Select>
+                  </div>
+                  
+                  <textarea
+                    placeholder="Add notes (optional)..."
+                    value={reviewNotes}
+                    onChange={(e) => setReviewNotes(e.target.value)}
+                    className="w-full rounded-md border-2 border-black bg-white px-3 py-2 text-sm resize-none focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    rows={3}
+                  />
+                  
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={!reviewDecision || submitting}
+                    onClick={handleSubmitReview}
+                    className="w-full bg-yellow-300 hover:bg-yellow-400 text-black border-2 border-black font-extrabold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                   >
-                    <Select.Trigger className="w-full bg-white border-2 border-black font-semibold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                      <Select.Value placeholder="Select decision..." />
-                    </Select.Trigger>
-                    <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                      {DECISION_OPTIONS.map((opt) => (
-                        <Select.Item key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </Select.Item>
-                      ))}
-                    </Select.Content>
-                  </Select>
+                    {submitting ? (
+                      <Loader2 size={16} className="animate-spin mr-1" />
+                    ) : (
+                      <Send size={14} className="mr-1 stroke-[2.5]" />
+                    )}
+                    Submit Review
+                  </Button>
                 </div>
-                
-                <textarea
-                  placeholder="Add notes (optional)..."
-                  value={reviewNotes}
-                  onChange={(e) => setReviewNotes(e.target.value)}
-                  className="w-full rounded-md border-2 border-black bg-white px-3 py-2 text-sm resize-none focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                  rows={3}
-                />
-                
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={!reviewDecision || submitting}
-                  onClick={handleSubmitReview}
-                  className="w-full bg-yellow-300 hover:bg-yellow-400 text-black border-2 border-black font-extrabold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                >
-                  {submitting ? (
-                    <Loader2 size={16} className="animate-spin mr-1" />
-                  ) : (
-                    <Send size={14} className="mr-1 stroke-[2.5]" />
-                  )}
-                  Submit Review
-                </Button>
-              </div>
+              ) : (
+                <div className="border-2 border-black p-3 bg-indigo-50 text-indigo-900 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  🔒 Read-Only (Admin View): Reviewing predictions is reserved for assigned subject teachers.
+                </div>
+              )}
             </div>
           </div>
         ) : (

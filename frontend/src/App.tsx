@@ -48,7 +48,7 @@ import StudentBoard from "./pages/student/storyboard";
 import StudentProfile from "./pages/student/student-profile";
 import StudentSubjects from "./pages/student/subjects";
 import StudentSubjectDetail from "./pages/student/student-subject-detail";
-// import StudentInterventions from "./pages/student/StudentInterventions";
+import StudentInterventions from "./pages/student/student-interventions";
 import StudentGrades from "./pages/student/Grades/grades";
 import StudentTodo from "./pages/student/todo";
 import StudentTodoView from "./pages/student/todo-view";
@@ -117,7 +117,7 @@ const App = () => {
             <Route path={routes.teacher.createLesson} element={<CreateLesson />} />
             <Route path={routes.teacher.lessons} element={<TeacherLessons />} />
             <Route path={routes.teacher.profile} element={<TeacherProfile />} />
-            {/* <Route path={routes.teacher.interventions} element={<TeacherInterventions />} /> */}
+            <Route path={routes.teacher.interventions} element={<AdminInterventions />} />
             <Route path={routes.teacher.grades} element={<TeacherGrades />} />
             <Route path={routes.teacher.gradeView} element={<TeacherGradeView />} />
             <Route path={routes.teacher.notifications} element={<TeacherNotifications />} />
@@ -131,11 +131,7 @@ const App = () => {
             <Route path={routes.student.profile} element={<StudentProfile />} />
             <Route path={routes.student.subjects} element={<StudentSubjects />} />
             <Route path={routes.student.subjectDetail} element={<StudentSubjectDetail />} />
-            <Route path={routes.student.interventions} element={
-              <div className="p-5">
-                <h1 className="text-3xl font-semibold">Interventions</h1>
-              </div>
-            } />
+            <Route path={routes.student.interventions} element={<StudentInterventions />} />
             <Route path={routes.student.grades} element={<StudentGrades />} />
             <Route path={routes.student.todo} element={<StudentTodo />} />
             <Route path={routes.student.todoView} element={<StudentTodoView />} />
