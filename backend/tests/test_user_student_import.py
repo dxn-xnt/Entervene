@@ -183,11 +183,27 @@ def test_csv_import_rejects_unreadable_csv_encoding(client, db):
 
 
 def test_csv_import_reports_invalid_dob(client, db):
-    response = upload(client, DOB_HEADER + "\n" + row(dob="04/15/2012"))
+    response = upload(client, DOB_HEADER + "\n" + row(dob="invalid-date"))
 
     assert response.status_code == 422
     assert "dob" in fields(response)
     assert db.query(UserAccount).count() == 0
+
+
+def test_csv_import_accepts_flexible_dob(client, db):
+    response_slash = upload(client, DOB_HEADER + "\n" + row(dob="12/2/2004", lrn="'786966032787"))
+    assert response_slash.status_code == 200
+    student_slash = db.query(Student).filter(Student.student_lrn == "786966032787").one()
+    assert student_slash.dob == date(2004, 12, 2)
+
+    db.query(Student).delete()
+    db.query(UserAccount).delete()
+    db.commit()
+
+    response_dt = upload(client, DOB_HEADER + "\n" + row(dob="2004-12-02 00:00:00", lrn="'786966032787"))
+    assert response_dt.status_code == 200
+    student_dt = db.query(Student).filter(Student.student_lrn == "786966032787").one()
+    assert student_dt.dob == date(2004, 12, 2)
 
 
 def test_csv_import_preserves_leading_zero_lrn(client, db):

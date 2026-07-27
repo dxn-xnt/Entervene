@@ -72,7 +72,7 @@ def _validate_optional_dob(row: dict[str, Any], row_number: int, errors: list[di
     try:
         row["dob"] = parse_optional_date(row)
     except HTTPException:
-        errors.append(_import_error(row_number, "dob", raw_value, "DOB must use YYYY-MM-DD format"))
+        errors.append(_import_error(row_number, "dob", raw_value, "DOB must use YYYY-MM-DD or MM/DD/YYYY format"))
 
 
 async def _read_import_rows(file: UploadFile) -> tuple[list[dict[str, str]], set[str]]:
