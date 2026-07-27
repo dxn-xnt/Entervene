@@ -329,9 +329,9 @@ export default function AdminClasses() {
                 grouped.map((group) => (
                   <Card
                     key={group.levelName}
-                    className="bg-primary"
+                    className="flex flex-col bg-primary min-w-0 overflow-hidden"
                   >
-                    <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center justify-between">
                       <h2 className="text-xl font-bold">{group.levelName}</h2>
                       <div className="flex flex-row gap-3">
                         <Badge variant={"outline"} className="border-border">
@@ -343,11 +343,9 @@ export default function AdminClasses() {
                           {group.classes.length !== 1 ? "s" : ""}
                         </Badge>
                       </div>
-
                     </div>
                     <div
-                      className={`grid gap-3 md:grid-cols-2 ${group.classes.length > 2 ? "xl:grid-cols-3" : ""
-                        }`}
+                      className="pt-3 flex gap-3 overflow-x-auto pb-2 w-full min-w-0"
                     >
                       {group.classes.map((item) => (
                         <ClassCard

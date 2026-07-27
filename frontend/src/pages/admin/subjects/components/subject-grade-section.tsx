@@ -18,7 +18,7 @@ export function SubjectGradeSection({
 
   return (
     <Card
-      className="flex flex-col bg-primary gap-2"
+      className="flex flex-col bg-primary"
     >
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">{group.grade}</h2>
@@ -29,6 +29,7 @@ export function SubjectGradeSection({
           </Badge>
           <Button
             variant="secondary"
+            className="shadow-none"
             size="icon"
             onClick={() => navigate(`/admin/subjects/${encodeURIComponent(group.grade)}`)}
             title={`View ${group.grade}`}
@@ -38,11 +39,12 @@ export function SubjectGradeSection({
         </div>
 
       </div>
-      <div className="flex gap-3 overflow-x-auto pb-2">
+      <div className="pt-3 flex gap-3 overflow-auto pb-2">
         {group.subjects.map((subject) => (
           <SubjectCatalogCard key={subject.subject_id} subject={subject} onArchive={onArchive} />
         ))}
       </div>
+
     </Card>
   );
 }

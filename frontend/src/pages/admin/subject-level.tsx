@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
-import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
 import { Card as RetroCard } from "@/components/retroui/Card";
@@ -10,10 +9,12 @@ import { Loader } from "@/components/retroui/Loader";
 import { Select } from "@/components/retroui/Select";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
-import { Archive, ArrowUpRight, Plus, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { Text } from "@/components/retroui/Text";
 import { useNavigate, useParams } from "react-router-dom";
 import AddSubjectModal from "./forms/add-subject";
+import { OverviewCard } from "@/components/overview-cards";
+import SubjectItemLine from "@/components/item-line/subject";
 import {
   archiveSubject,
   getSubjectOfferingFormOptions,
@@ -23,77 +24,8 @@ import {
   type SubjectStatus,
 } from "@/lib/api";
 
-function subjectCode(subject: SubjectListItem) {
-  return subject.subject_codename || "No code";
-}
-
-function statusBadge(status: SubjectStatus) {
-  return (
-    <Badge size="sm" variant={status === "active" ? "surface" : "outline"}>
-      {status}
-    </Badge>
-  );
-}
-
-function StatCard({ title, value }: { title: string; value: string }) {
-  return (
-    <RetroCard className="p-4">
-      <p className="text-sm font-semibold">{title}</p>
-      <p className="mt-2 text-4xl font-bold">{value}</p>
-    </RetroCard>
-  );
-}
-
-function SubjectGradeRow({
-  subject,
-  grade,
-  onArchive,
-}: {
-  subject: SubjectListItem;
-  grade: string;
-  onArchive: (subject: SubjectListItem) => void;
-}) {
-  const navigate = useNavigate();
-
-  return (
-    <RetroCard className="p-3">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <button
-          type="button"
-          className="min-w-0 text-left"
-          onClick={() => navigate(`/admin/subjects/${encodeURIComponent(grade)}/${subject.subject_id}`)}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-lg font-bold">{subject.subject_name}</p>
-            {statusBadge(subject.status)}
-          </div>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-black/70">
-            <span>{subjectCode(subject)}</span>
-            <span>{subject.subject_group || "Ungrouped"}</span>
-            <span>{subject.hours ?? 0} hours</span>
-            <span>{subject.default_grading_template || "No template"}</span>
-          </div>
-        </button>
-        <div className="flex shrink-0 gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => navigate(`/admin/subjects/${encodeURIComponent(grade)}/${subject.subject_id}`)}
-          >
-            <ArrowUpRight className="mr-2 size-4" /> View
-          </Button>
-          {subject.status === "active" ? (
-            <Button size="sm" variant="outline" onClick={() => onArchive(subject)}>
-              <Archive className="mr-2 size-4" /> Archive
-            </Button>
-          ) : null}
-        </div>
-      </div>
-    </RetroCard>
-  );
-}
-
 export default function AdminSubjectLevel() {
+  const navigate = useNavigate();
   const { grade } = useParams<{ grade: string }>();
   const decodedGrade = decodeURIComponent(grade || "Grade 7");
   const [subjects, setSubjects] = useState<SubjectListItem[]>([]);
@@ -167,14 +99,14 @@ export default function AdminSubjectLevel() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-4 p-4 md:p-6">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
             <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <Breadcrumb>
                   <Breadcrumb.List>
                     <Breadcrumb.Item>
-                      <Breadcrumb.Link href="/admin/subjects" className="text-2xl">
+                      <Breadcrumb.Link href="/admin/subjects" className="">
                         Subjects
                       </Breadcrumb.Link>
                     </Breadcrumb.Item>
@@ -197,15 +129,16 @@ export default function AdminSubjectLevel() {
               </Dialog>
             </header>
 
-            <RetroCard className="bg-[#fff1b8] px-4 py-3">
+            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
+
+            <RetroCard className="bg-accent py-3">
               <div className="flex flex-col gap-1">
                 <div className="flex flex-wrap items-end gap-2">
-                  <Text as="h1" className="font-sans text-3xl font-bold">
+                  <Text as="h2" className="font-sansm font-bold">
                     {decodedGrade}
                   </Text>
-                  {activeYearLabel ? <p className="pb-1 text-sm font-semibold">({activeYearLabel})</p> : null}
+                  {activeYearLabel ? <p className="pb-1 text-lg font-semibold">({activeYearLabel})</p> : null}
                 </div>
-                <p className="text-sm">Subject catalog records for this grade level.</p>
               </div>
             </RetroCard>
 
@@ -221,10 +154,10 @@ export default function AdminSubjectLevel() {
                 Overview
               </Text>
               <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
-                <StatCard title="Total Subjects" value={String(gradeSubjects.length)} />
-                <StatCard title="Active Subjects" value={String(activeSubjects.length)} />
-                <StatCard title="Archived Subjects" value={String(archivedSubjects.length)} />
-                <StatCard title="Total Hours" value={String(totalHours)} />
+                <OverviewCard title="Total Subjects" count={String(gradeSubjects.length)} />
+                <OverviewCard title="Active Subjects" count={String(activeSubjects.length)} />
+                <OverviewCard title="Archived Subjects" count={String(archivedSubjects.length)} />
+                <OverviewCard title="Total Hours" count={String(totalHours)} />
               </div>
             </section>
 
@@ -267,11 +200,17 @@ export default function AdminSubjectLevel() {
                   <RetroCard className="px-4 py-3">No subjects found for {decodedGrade}.</RetroCard>
                 ) : (
                   visibleSubjects.map((subject) => (
-                    <SubjectGradeRow
+                    <SubjectItemLine
                       key={subject.subject_id}
-                      subject={subject}
-                      grade={decodedGrade}
-                      onArchive={setPendingArchive}
+                      subjectName={subject.subject_name}
+                      status={subject.status}
+                      isArchived={subject.status === "archived"}
+                      subjectCode={subject.subject_codename || "No code"}
+                      subjectGroup={subject.subject_group || "Ungrouped"}
+                      hours={subject.hours ?? 0}
+                      gradingTemplate={subject.default_grading_template || "No template"}
+                      onView={() => navigate(`/admin/subjects/${encodeURIComponent(decodedGrade)}/${subject.subject_id}`)}
+                      onArchive={() => setPendingArchive(subject)}
                     />
                   ))
                 )}
