@@ -1,5 +1,6 @@
 import { useState } from "react";
-import Tabs from "../../components/tabs";
+import { Tabs } from "../../components/retroui/Tabs";
+import { Button } from "@/components/retroui/Button";
 import { NotificationCard } from "../../components/notification-card";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -54,15 +55,17 @@ const Notifications = () => {
                   Notifications
                 </h1>
               </div>
-              <button className="flex items-center gap-1.5 rounded-lg border-2 border-black bg-[#7ABA78] px-4 py-2 text-sm font-semibold shadow-md hover:shadow-none transition-all cursor-pointer">
-                <span className="hidden sm:inline">Mark all as read</span>
+              <Button variant="default" size="md">
+                <span className="hidden sm:inline">Mark All as Read</span>
                 <span className="sm:hidden">Read All</span>
-              </button>
+              </Button>
             </header>
 
-            <div className="-mx-4 md:-mx-6">
-              <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-            </div>
+            <Tabs
+              tabs={tabs}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+            />
 
             <div className="flex flex-col gap-5">
               {(activeTab === "all" || activeTab === "classworks") && (

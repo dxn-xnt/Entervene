@@ -25,7 +25,7 @@ const Grades = () => {
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
               <div>
-                <h1 className="text-2xl md:text-4xl font-semibold">Grades</h1>
+                <h1 className="text-2xl md:text-4xl font-bold">Grades</h1>
               </div>
             </header>
             <div className="-mx-4 md:-mx-6 border-b border-gray-500" />

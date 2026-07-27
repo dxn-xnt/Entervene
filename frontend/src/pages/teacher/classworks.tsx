@@ -1535,7 +1535,7 @@ export default function Classworks() {
             </header>
           </div>
 
-          <div className="bg-white px-5">
+          <div className="px-4 md:px-6 pb-6">
             <Tabs
               tabs={tabs}
               activeTab={activeTab}

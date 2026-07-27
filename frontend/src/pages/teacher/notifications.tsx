@@ -1,5 +1,6 @@
 import { useState } from "react";
-import Tabs from "../../components/tabs";
+import { Tabs } from "@/components/retroui/Tabs";
+import { Button } from "@/components/retroui/Button";
 // import NotificationCard from "../../components/NotificationCard";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
@@ -65,25 +66,21 @@ const Notifications = () => {
             <header className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl md:text-4xl font-semibold">
+                <h1 className="text-2xl md:text-4xl font-bold">
                   Notifications
                 </h1>
               </div>
-              <button className="flex items-center gap-1.5 rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-semibold text-black shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000]">
+              <Button variant="default" size="md">
                 <span className="hidden sm:inline">Mark All as Read</span>
                 <span className="sm:hidden">Read All</span>
-              </button>
+              </Button>
             </header>
 
-            <div className="-mx-4 md:-mx-6">
-              <div className="overflow-x-auto">
-                <Tabs
-                  tabs={tabs}
-                  activeTab={activeTab}
-                  onChange={setActiveTab}
-                />
-              </div>
-            </div>
+            <Tabs
+              tabs={tabs}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+            />
 
             {/* <div className="flex flex-col gap-5">
               {(activeTab === "all" || activeTab === "classworks") && (
