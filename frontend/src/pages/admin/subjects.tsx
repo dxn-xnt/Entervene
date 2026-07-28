@@ -6,6 +6,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Loader } from "@/components/retroui/Loader";
 import { Select } from "@/components/retroui/Select";
+import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import {
@@ -28,7 +29,6 @@ import {
   OfferingModal,
   OfferingRow,
   SubjectGradeSection,
-  SubjectModuleTabs,
   SubjectRow,
   defaultPathwayForGrade,
   downloadBlob,
@@ -71,6 +71,13 @@ import {
   type SubjectOfferingFormOptions,
   type SubjectOfferingListItem,
 } from "@/lib/api";
+
+const MODULE_TABS: Array<TabItem<AdminSubjectSection>> = [
+  { id: "catalog", label: "Subject Catalog" },
+  { id: "offerings", label: "Curriculum Plan" },
+  { id: "grading", label: "Grading Templates" },
+  { id: "archived", label: "Archived" },
+];
 
 export default function AdminSubjects() {
   const catalogImportInputRef = useRef<HTMLInputElement | null>(null);
@@ -624,7 +631,12 @@ export default function AdminSubjects() {
               academicYearId={selectedAcademicYear?.academic_year_id}
               isLoading={isLoadingOptions}
             /> */}
-            <SubjectModuleTabs activeTab={activeSection} onTabChange={setActiveSection} counts={subjectTabCounts} />
+            <Tabs
+              tabs={MODULE_TABS}
+              activeTab={activeSection}
+              onTabChange={setActiveSection}
+              className="border-b-2 border-black -mt-1"
+            />
             {isViewingInactiveAcademicYear ? (
               <div className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
                 <p className="font-bold">{readOnlyReason}</p>
