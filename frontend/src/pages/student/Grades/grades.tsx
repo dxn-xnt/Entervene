@@ -1,5 +1,6 @@
 import { useState } from "react";
 import SubjectCardHeader from "../../../components/subject-card-header";
+import { Card } from "@/components/retroui/Card";
 import SubjectGrade from "./subject-grade";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -40,7 +41,7 @@ const Grades = () => {
             <div className="-mx-4 md:-mx-6 border-b border-gray-500" />
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              <div className="border-2 border-black rounded-lg p-4 shadow-md bg-card">
+              <div className="border-2 border-black p-4 shadow-md bg-card">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold">Performance Rate</h2>
                   <select className="border border-black rounded px-2 py-1 text-xs bg-white">
@@ -126,7 +127,7 @@ const Grades = () => {
                 </div>
               </div>
 
-              <div className="border-2 border-black rounded-lg p-4 shadow-md bg-card">
+              <div className="border-2 border-black p-4 shadow-md bg-card">
                 <h2 className="text-lg font-semibold mb-4">
                   Classwork Distribution
                 </h2>
@@ -199,7 +200,7 @@ const Grades = () => {
                 </div>
               </div>
 
-              <div className="border-2 border-black rounded-lg p-4 shadow-md bg-card">
+              <div className="border-2 border-black p-4 shadow-md bg-card">
                 <h2 className="text-lg font-semibold mb-3">
                   Subject Performance
                 </h2>
@@ -229,41 +230,96 @@ const Grades = () => {
             </div>
 
             <div className="flex flex-col gap-4">
-              <SubjectCardHeader
-                title="Computer Programming"
-                teacher="Raymart Gabutan"
-                gradedCount="7"
-                label="Graded Classwork"
+              <Card
+                className="block w-full cursor-pointer"
                 onClick={() => setSelectedSubject("Computer Programming")}
-              />
-              <SubjectCardHeader
-                title="English"
-                teacher="Raymart Gabutan"
-                gradedCount="5"
-                label="Graded Classwork"
+              >
+                <Card.Content className="flex items-center justify-between">
+                  <div>
+                    <Card.Title className="mb-1 text-lg">
+                      Computer Programming
+                    </Card.Title>
+                    <p className="text-sm text-gray-600">Raymart Gabutan</p>
+                  </div>
+
+                  <div className="text-right">
+                    <Card.Description>7</Card.Description>
+                    <p className="text-xs text-gray-600">Graded Classwork</p>
+                  </div>
+                </Card.Content>
+              </Card>
+
+              <Card
+                className="block w-full cursor-pointer"
                 onClick={() => setSelectedSubject("English")}
-              />
-              <SubjectCardHeader
-                title="Science"
-                teacher="Raymart Gabutan"
-                gradedCount="16"
-                label="Graded Classwork"
+              >
+                <Card.Content className="flex items-center justify-between">
+                  <div>
+                    <Card.Title className="mb-1 text-lg">English</Card.Title>
+                    <p className="text-sm text-gray-600">Raymart Gabutan</p>
+                  </div>
+
+                  <div className="text-right">
+                    <Card.Description>5</Card.Description>
+                    <p className="text-xs text-gray-600">Graded Classwork</p>
+                  </div>
+                </Card.Content>
+              </Card>
+
+              <Card
+                className="block w-full cursor-pointer"
                 onClick={() => setSelectedSubject("Science")}
-              />
-              <SubjectCardHeader
-                title="System Designs"
-                teacher="Raymart Gabutan"
-                gradedCount="3"
-                label="Graded Classwork"
+              >
+                <Card.Content className="flex items-center justify-between">
+                  <div>
+                    <Card.Title className="mb-1 text-lg">Science</Card.Title>
+                    <p className="text-sm text-gray-600">Raymart Gabutan</p>
+                  </div>
+
+                  <div className="text-right">
+                    <Card.Description>16</Card.Description>
+                    <p className="text-xs text-gray-600">Graded Classwork</p>
+                  </div>
+                </Card.Content>
+              </Card>
+
+              <Card
+                className="block w-full cursor-pointer"
                 onClick={() => setSelectedSubject("System Designs")}
-              />
-              <SubjectCardHeader
-                title="Mathematics"
-                teacher="Raymart Gabutan"
-                gradedCount="12"
-                label="Graded Classwork"
+              >
+                <Card.Content className="flex items-center justify-between">
+                  <div>
+                    <Card.Title className="mb-1 text-lg">
+                      System Designs
+                    </Card.Title>
+                    <p className="text-sm text-gray-600">Raymart Gabutan</p>
+                  </div>
+
+                  <div className="text-right">
+                    <Card.Description>3</Card.Description>
+                    <p className="text-xs text-gray-600">Graded Classwork</p>
+                  </div>
+                </Card.Content>
+              </Card>
+
+              <Card
+                className="block w-full cursor-pointer"
                 onClick={() => setSelectedSubject("Mathematics")}
-              />
+              >
+                <Card.Content className="flex items-center justify-between">
+                  <div>
+                    <Card.Title className="mb-1 text-lg">
+                      Mathematics
+                    </Card.Title>
+                    <p className="text-sm text-gray-600">Raymart Gabutan</p>
+                  </div>
+
+                  <div className="text-right">
+                    <Card.Description>12</Card.Description>
+                    <p className="text-xs text-gray-600">Graded Classwork</p>
+                  </div>
+                </Card.Content>
+              </Card>
             </div>
           </div>
         </div>

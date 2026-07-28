@@ -41,6 +41,9 @@ export const routes = {
     notifications: "/teacher/notifications",
     predictions: "/teacher/predictions",
     profile: "/teacher/profile",
+    lessonPlanner: "/teacher/lesson-planner",
+    lessonPlannerCreate: "/teacher/lesson-planner/new",
+    lessonPlannerEdit: "/teacher/lesson-planner/:planId",
   },
 
   student: {

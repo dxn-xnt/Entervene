@@ -8,7 +8,7 @@
   },
   "classifier_warning": "The current dataset contains zero below-75 target examples, so this model is a regression prototype and not a validated at-risk classifier.",
   "column_mappings": {},
-  "created_at": "2026-07-27T12:31:49.614800+00:00",
+  "created_at": "2026-07-27T13:18:15.286003+00:00",
   "dataset_warning": "The current dataset uses synthetic learner identities for development traceability only. It must not be treated as verified production learner data.",
   "excluded_columns": [
     "row_id",

@@ -84,7 +84,7 @@ const IMPORT_TEMPLATES: Record<
       "12 Marcos Highway, Antipolo City",
       "7",
       "",
-      "\t2008-04-15",
+      "2008-04-15",
     ],
   },
   Teacher: {
@@ -111,7 +111,7 @@ const IMPORT_TEMPLATES: Record<
       "09170000000",
       "Antipolo City",
       "",
-      "\t1990-04-15",
+      "1990-04-15",
       "2024-06-01",
       "Regular",
     ],
@@ -174,18 +174,34 @@ function parseCsvRows(text: string): string[][] {
   return rows;
 }
 
-function isValidIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [yearText, monthText, dayText] = value.split("-");
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
-  );
+function isValidDobFormat(value: string): boolean {
+  const clean = value.trim().replace(/^[\t']/, "");
+  if (!clean) return false;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+    const [yearText, monthText, dayText] = clean.split("-");
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return (
+      date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month - 1 &&
+      date.getUTCDate() === day
+    );
+  }
+
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(clean)) {
+    const [p1, p2, year] = clean.split("/").map(Number);
+    return year >= 1900 && year <= 2100 && ((p1 >= 1 && p1 <= 12 && p2 >= 1 && p2 <= 31) || (p2 >= 1 && p2 <= 12 && p1 >= 1 && p1 <= 31));
+  }
+
+  if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(clean)) {
+    const [year, month, day] = clean.split("/").map(Number);
+    return year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31;
+  }
+
+  return false;
 }
 
 function requiredColumnsForRole(role: ImportRole) {
@@ -228,12 +244,12 @@ async function validateCsvImportFile(file: File, role: ImportRole): Promise<Impo
   const errors: ImportErrorItem[] = [];
   for (let index = 1; index < rows.length; index += 1) {
     const value = (rows[index][dobIndex] ?? "").trim();
-    if (value && !isValidIsoDate(value)) {
+    if (value && !isValidDobFormat(value)) {
       errors.push({
         row: index + 1,
         field: headers[dobIndex],
         value,
-        reason: `Invalid DOB "${value}". Use YYYY-MM-DD, example 2008-04-15.`,
+        reason: `Invalid DOB "${value}". Use YYYY-MM-DD or MM/DD/YYYY, example 2008-04-15 or 12/2/2004.`,
       });
     }
   }
@@ -250,7 +266,7 @@ function formatImportError(error: ImportErrorItem) {
   const isDobError = error.field === "dob" || error.field === "date_of_birth";
   if (isDobError) {
     const value = error.value ? ` "${error.value}"` : "";
-    return `Row ${error.row}: Invalid DOB${value}. Use YYYY-MM-DD, example 2008-04-15.`;
+    return `Row ${error.row}: Invalid DOB${value}. Use YYYY-MM-DD or MM/DD/YYYY, example 2008-04-15 or 12/2/2004.`;
   }
   return `Row ${error.row}, ${error.field}: ${error.reason}`;
 }
@@ -259,9 +275,8 @@ function importSummary(result: ImportResult) {
   if (result.errors?.length) {
     return result.message ?? "Import failed. Please check the errors below.";
   }
-  return `${result.message ? `${result.message}. ` : ""}Imported ${
-    result.created_count ?? result.created ?? 0
-  } user(s); failed ${result.failed_count ?? result.skipped ?? 0} user(s).`;
+  return `${result.message ? `${result.message}. ` : ""}Imported ${result.created_count ?? result.created ?? 0
+    } user(s); failed ${result.failed_count ?? result.skipped ?? 0} user(s).`;
 }
 
 function backendImportResult(data: unknown, role: ImportRole): ImportResult {
@@ -520,7 +535,7 @@ export default function AddUserModal({
               <button
                 onClick={handleClose}
                 className="px-4 py-1.5 rounded-lg border text-sm hover:bg-gray-100 transition"
-                // style={{ borderColor: "#d1cfc9" }}
+              // style={{ borderColor: "#d1cfc9" }}
               >
                 Cancel
               </button>
@@ -559,9 +574,6 @@ export default function AddUserModal({
 
               <div className="rounded-lg border bg-white px-3 py-2">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs text-gray-600">
-                    Use YYYY-MM-DD for DOB, for example 2008-04-15.
-                  </p>
                   <button
                     type="button"
                     onClick={() => downloadCsvTemplate(importRole)}
@@ -642,9 +654,7 @@ export default function AddUserModal({
                   if (f) void selectImportFile(f, importRole);
                 }}
               />
-              <p className="text-xs text-gray-600">
-                DOB format for CSV import: YYYY-MM-DD, example 2008-04-15.
-              </p>
+
 
               {importResult && (
                 <Alert
@@ -679,12 +689,12 @@ export default function AddUserModal({
             </div>
             <div
               className="flex justify-end border-t p-4 gap-2"
-              // style={{ borderTop: "1px solid #e5e3de" }}
+            // style={{ borderTop: "1px solid #e5e3de" }}
             >
               <button
                 onClick={() => setStep("choose")}
                 className="px-4 py-1.5 rounded-lg border text-sm hover:bg-gray-100 transition cursor-pointer"
-                // style={{ borderColor: "#d1cfc9" }}
+              // style={{ borderColor: "#d1cfc9" }}
               >
                 Back
               </button>
@@ -825,12 +835,6 @@ export default function AddUserModal({
                     value={form.dob}
                     onChange={(e) => handleField("dob", e.target.value)}
                   />
-                  <p className="text-xs text-gray-500">
-                    Format: YYYY-MM-DD
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Example: 2008-04-15
-                  </p>
                 </Field>
               )}
 

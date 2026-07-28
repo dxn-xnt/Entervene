@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Tabs from "../../components/tabs";
+import { Tabs } from "../../components/retroui/Tabs";
 import ToDoItem from "../../components/to-do-item";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -92,13 +92,11 @@ export default function ToDo() {
               </h1>
             </header>
 
-            <div className="-mx-4 md:-mx-6">
-              <Tabs
-                tabs={todoTabs}
-                activeTab={activeTab}
-                onChange={setActiveTab}
-              />
-            </div>
+            <Tabs
+              tabs={todoTabs}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+            />
 
             {activeTab === "pending" && (
               <>
