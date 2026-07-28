@@ -216,7 +216,7 @@ export const LearningExpTab: React.FC<LearningExpTabProps> = ({
                 <div className="flex items-center justify-between gap-2 border-b-2 border-border pb-2">
                   <div className="flex items-center gap-2">
                     <Badge
-                      variant="outline"
+                      variant="default"
                       className={`border px-2.5 py-0.5 text-xs font-bold ${cfg.color}`}
                     >
                       {cfg.label}
