@@ -13,8 +13,12 @@ import { Switch } from "@/components/retroui/Switch";
 import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
-import { ArrowUpRight, Lock, Pencil } from "lucide-react";
+import { ArrowUpRight, Lock, Pencil, Loader2 } from "lucide-react";
 import AddAcademicPeriodModal from "./forms/add-academic-period";
+
+import { getAllSettings, updateSetting, type GroupedSettings } from "@/lib/settings-api";
+import { useSettings } from "@/context/SettingsContext";
+import { getGradingTemplates, createGradingTemplate } from "@/lib/api";
 
 function Pill({
   children,
@@ -119,6 +123,12 @@ const TERM_LABELS: Record<string, string> = {
 
 export default function AdminSystemSettings() {
   const navigate = useNavigate();
+  const { refetch: refetchGlobalSettings } = useSettings();
+
+  // Loading state
+  const [isLoadingSettings, setIsLoadingSettings] = React.useState(true);
+  const [isSavingThresholds, setIsSavingThresholds] = React.useState(false);
+  const [isSavingScope, setIsSavingScope] = React.useState(false);
 
   // Passing grade thresholds
   const [subjectPassing, setSubjectPassing] = React.useState("80");
@@ -152,11 +162,106 @@ export default function AdminSystemSettings() {
     window.setTimeout(() => setToastMsg(null), 2400);
   };
 
+  // Load Settings from Backend API
+  const loadSettingsFromBackend = React.useCallback(async () => {
+    setIsLoadingSettings(true);
+    try {
+      const data: GroupedSettings = await getAllSettings();
+      const flatSettings: Record<string, string> = {};
+      Object.values(data.groups || {}).forEach((items) => {
+        items.forEach((item) => {
+          flatSettings[item.key] = item.value;
+        });
+      });
+
+      if (flatSettings["subject_passing_grade"]) setSubjectPassing(flatSettings["subject_passing_grade"]);
+      if (flatSettings["general_average_passing_grade"]) setAveragePassing(flatSettings["general_average_passing_grade"]);
+      if (flatSettings["current_school_year"]) setSchoolYear(flatSettings["current_school_year"]);
+      if (flatSettings["active_term"]) setActiveTerm(flatSettings["active_term"]);
+      if (flatSettings["jhs_enabled"]) setJhsEnabled(flatSettings["jhs_enabled"] === "true");
+      if (flatSettings["shs_enabled"]) setShsEnabled(flatSettings["shs_enabled"] === "true");
+      if (flatSettings["medical_pathway_enabled"]) setMedicalEnabled(flatSettings["medical_pathway_enabled"] === "true");
+      if (flatSettings["engineering_pathway_enabled"]) setEngineeringEnabled(flatSettings["engineering_pathway_enabled"] === "true");
+
+      // Fetch dynamic grading templates from DB
+      try {
+        const templatesRes = await getGradingTemplates({ status: "active" });
+        const list = templatesRes.grading_templates || [];
+        if (list.length > 0) {
+          const mappedTemplates: Template[] = list.map((gt) => {
+            const wwComp = gt.components.find((c) => c.component_name.toLowerCase().includes("written"))?.weight ?? 0;
+            const ptComp = gt.components.find((c) => c.component_name.toLowerCase().includes("performance"))?.weight ?? 0;
+            const qaComp = gt.components.find((c) => 
+              c.component_name.toLowerCase().includes("quarter") || 
+              c.component_name.toLowerCase().includes("term") || 
+              c.component_name.toLowerCase().includes("exam")
+            )?.weight ?? 0;
+            return {
+              name: gt.template_name,
+              ww: wwComp,
+              pt: ptComp,
+              qa: qaComp,
+              scope: gt.description || "Database Template",
+            };
+          });
+          setTemplates(mappedTemplates);
+        }
+      } catch {
+        // Fallback to default templates if table empty or unseeded
+      }
+    } catch {
+      // Graceful fallback to default state if backend settings are missing/unseeded
+    } finally {
+      setIsLoadingSettings(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadSettingsFromBackend();
+  }, [loadSettingsFromBackend]);
+
+  const saveSingleSetting = async (key: string, value: string) => {
+    try {
+      await updateSetting(key, value);
+      await refetchGlobalSettings();
+    } catch (err) {
+      console.error(`Failed to update setting ${key}:`, err);
+    }
+  };
+
+  const handleSaveThresholds = async () => {
+    setIsSavingThresholds(true);
+    try {
+      await saveSingleSetting("subject_passing_grade", subjectPassing);
+      await saveSingleSetting("general_average_passing_grade", averagePassing);
+      showToast("Passing grade threshold saved");
+    } finally {
+      setIsSavingThresholds(false);
+    }
+  };
+
+  const handleSaveScope = async () => {
+    setIsSavingScope(true);
+    try {
+      await saveSingleSetting("jhs_enabled", jhsEnabled ? "true" : "false");
+      await saveSingleSetting("shs_enabled", shsEnabled ? "true" : "false");
+      await saveSingleSetting("medical_pathway_enabled", medicalEnabled ? "true" : "false");
+      await saveSingleSetting("engineering_pathway_enabled", engineeringEnabled ? "true" : "false");
+      showToast("Curriculum scope saved");
+    } finally {
+      setIsSavingScope(false);
+    }
+  };
+
   const ratio = Number(activeTerm) / 3;
 
   const handleTermChange = (value: string) => setPendingTerm(value);
-  const confirmTermChange = () => {
-    if (pendingTerm) setActiveTerm(pendingTerm);
+  const confirmTermChange = async () => {
+    if (pendingTerm) {
+      setActiveTerm(pendingTerm);
+      await saveSingleSetting("active_term", pendingTerm);
+      showToast(`Active term changed to ${TERM_LABELS[pendingTerm]}`);
+    }
     setPendingTerm(null);
   };
 
@@ -169,7 +274,7 @@ export default function AdminSystemSettings() {
     setTemplateModalOpen(true);
   };
 
-  const addTemplate = () => {
+  const addTemplate = async () => {
     const name = tplName.trim();
     const ww = Number(tplWw) || 0;
     const pt = Number(tplPt) || 0;
@@ -185,12 +290,52 @@ export default function AdminSystemSettings() {
       );
       return;
     }
-    setTemplates((prev) => [
-      ...prev,
-      { name, ww, pt, qa, scope: "Custom template" },
-    ]);
-    setTemplateModalOpen(false);
-    showToast("New grading template added");
+
+    try {
+      await createGradingTemplate({
+        template_name: name,
+        description: "Custom template",
+        components: [
+          { component_name: "Written Work", weight: ww, display_order: 1 },
+          { component_name: "Performance Task", weight: pt, display_order: 2 },
+          { component_name: "Quarterly Assessment", weight: qa, display_order: 3 },
+        ],
+      });
+
+      // Re-fetch dynamic template list from DB
+      const templatesRes = await getGradingTemplates({ status: "active" });
+      const list = templatesRes.grading_templates || [];
+      if (list.length > 0) {
+        const mappedTemplates: Template[] = list.map((gt) => {
+          const wwComp = gt.components.find((c) => c.component_name.toLowerCase().includes("written"))?.weight ?? 0;
+          const ptComp = gt.components.find((c) => c.component_name.toLowerCase().includes("performance"))?.weight ?? 0;
+          const qaComp = gt.components.find((c) => 
+            c.component_name.toLowerCase().includes("quarter") || 
+            c.component_name.toLowerCase().includes("term") || 
+            c.component_name.toLowerCase().includes("exam")
+          )?.weight ?? 0;
+          return {
+            name: gt.template_name,
+            ww: wwComp,
+            pt: ptComp,
+            qa: qaComp,
+            scope: gt.description || "Database Template",
+          };
+        });
+        setTemplates(mappedTemplates);
+      } else {
+        setTemplates((prev) => [
+          ...prev,
+          { name, ww, pt, qa, scope: "Custom template" },
+        ]);
+      }
+
+      setTemplateModalOpen(false);
+      showToast("New grading template saved to database");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to save template";
+      setTplError(msg);
+    }
   };
 
   const pathwayPills = (level: string) => {
@@ -222,11 +367,19 @@ export default function AdminSystemSettings() {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col gap-2">
           <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center gap-3">
-              <SidebarTrigger className="md:hidden" />
-              <h1 className="text-4xl font-bold tracking-tight">
-                System Settings
-              </h1>
+            <header className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="md:hidden" />
+                <h1 className="text-4xl font-bold tracking-tight">
+                  System Settings
+                </h1>
+              </div>
+              {isLoadingSettings && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Loading settings...
+                </div>
+              )}
             </header>
             <div className="-mx-4 md:-mx-6 border-b border-black/40" />
 
@@ -237,9 +390,10 @@ export default function AdminSystemSettings() {
                   Passing Grade Threshold
                   <Button
                     size="sm"
-                    onClick={() => showToast("Passing grade threshold saved")}
+                    onClick={handleSaveThresholds}
+                    disabled={isSavingThresholds}
                   >
-                    Save Thresholds
+                    {isSavingThresholds ? "Saving..." : "Save Thresholds"}
                   </Button>
                 </Card.Title>
               </Card.Header>
@@ -332,7 +486,13 @@ export default function AdminSystemSettings() {
                     <Text as="h6" className="font-sans font-medium">
                       Current Academic Year
                     </Text>
-                    <Select value={schoolYear} onValueChange={setSchoolYear}>
+                    <Select
+                      value={schoolYear}
+                      onValueChange={(val) => {
+                        setSchoolYear(val);
+                        saveSingleSetting("current_school_year", val);
+                      }}
+                    >
                       <Select.Trigger className="w-full">
                         <Select.Value placeholder="2026 - 2027" />
                       </Select.Trigger>
@@ -401,9 +561,10 @@ export default function AdminSystemSettings() {
                   School Curriculum Scope
                   <Button
                     size="sm"
-                    onClick={() => showToast("Curriculum scope saved")}
+                    onClick={handleSaveScope}
+                    disabled={isSavingScope}
                   >
-                    Save Scope
+                    {isSavingScope ? "Saving..." : "Save Scope"}
                   </Button>
                 </Card.Title>
               </Card.Header>

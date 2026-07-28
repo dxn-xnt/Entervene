@@ -23,6 +23,8 @@ from app.api.v1.routes.GradingTemplates import router as grading_templates_route
 from app.api.v1.routes.LessonPlans import router as lesson_plans_router
 from app.api.v1.routes.AIAssist import router as ai_assist_router
 from app.services.classes.ClassShared import ClassManagementError, class_management_error_handler
+from app.api.v1.routes.Settings import router as settings_router
+
 
 app = FastAPI(
     title=settings.app_name,

@@ -6,7 +6,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
-import { Plus, Trash2 } from "lucide-react";
+import { Lock, Plus, Trash2 } from "lucide-react";
 import { TemplateSubjectPicker } from "@/pages/admin/subjects/components";
 import {
   createGradingTemplate,
@@ -31,6 +31,7 @@ type FormState = {
   description: string;
   academic_level_id: string;
   subject_id: string;
+  subject_ids: string[];
   status: SubjectStatus;
   components: ComponentRow[];
 };
@@ -73,11 +74,16 @@ function rowsFromOptions(options: GradingTemplateFormOptions | null): ComponentR
 
 function initialForm(options: GradingTemplateFormOptions | null, template?: GradingTemplateListItem | null): FormState {
   if (template) {
+    const assignedIds = template.assigned_subjects?.map((s) => String(s.subject_id)) ?? [];
+    if (!assignedIds.length && template.subject) {
+      assignedIds.push(String(template.subject.subject_id));
+    }
     return {
       template_name: template.template_name,
       description: template.description ?? "",
       academic_level_id: template.academic_level ? String(template.academic_level.academic_level_id) : NONE_VALUE,
       subject_id: template.subject ? String(template.subject.subject_id) : NONE_VALUE,
+      subject_ids: assignedIds,
       status: template.status,
       components: template.components.map((component, index) =>
         newComponentRow(index + 1, {
@@ -93,6 +99,7 @@ function initialForm(options: GradingTemplateFormOptions | null, template?: Grad
     description: "",
     academic_level_id: NONE_VALUE,
     subject_id: NONE_VALUE,
+    subject_ids: [],
     status: options?.default_status ?? "active",
     components: rowsFromOptions(options),
   };
@@ -109,6 +116,9 @@ export default function AddGradingComponentModal({
   const [form, setForm] = React.useState<FormState>(() => initialForm(options, template));
   const [isSaving, setIsSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  const isLocked = template?.is_locked ?? false;
+  const lockReason = template?.lock_reason || "Template weights cannot be modified after the term has started. Please create a new template.";
 
   React.useEffect(() => {
     setForm(initialForm(options, template));
@@ -132,29 +142,14 @@ export default function AddGradingComponentModal({
   };
 
   const handleLevelChange = (value: string) => {
-    setForm((current) => {
-      const currentSubject = options?.subjects.find((subject) => String(subject.subject_id) === current.subject_id);
-      return {
-        ...current,
-        academic_level_id: value,
-        subject_id:
-          value !== NONE_VALUE && currentSubject?.academic_level_id !== Number(value)
-            ? NONE_VALUE
-            : current.subject_id,
-      };
-    });
-  };
-
-  const handleSubjectChange = (value: string) => {
-    const subject = options?.subjects.find((item) => String(item.subject_id) === value);
     setForm((current) => ({
       ...current,
-      subject_id: value,
-      academic_level_id: subject ? String(subject.academic_level_id) : current.academic_level_id,
+      academic_level_id: value,
     }));
   };
 
   const updateComponent = (localId: string, patch: Partial<ComponentRow>) => {
+    if (isLocked) return;
     setForm((current) => ({
       ...current,
       components: current.components.map((component) =>
@@ -164,6 +159,7 @@ export default function AddGradingComponentModal({
   };
 
   const addComponent = () => {
+    if (isLocked) return;
     setForm((current) => ({
       ...current,
       components: [...current.components, newComponentRow(current.components.length + 1)],
@@ -171,6 +167,7 @@ export default function AddGradingComponentModal({
   };
 
   const removeComponent = (localId: string) => {
+    if (isLocked) return;
     setForm((current) => ({
       ...current,
       components: current.components.filter((component) => component.local_id !== localId),
@@ -206,15 +203,16 @@ export default function AddGradingComponentModal({
         template_name: form.template_name.trim(),
         description: form.description.trim() || null,
         academic_level_id: form.academic_level_id === NONE_VALUE ? null : Number(form.academic_level_id),
-        subject_id: form.subject_id === NONE_VALUE ? null : Number(form.subject_id),
+        subject_id: form.subject_ids.length ? Number(form.subject_ids[0]) : null,
+        subject_ids: form.subject_ids.map(Number),
         status: form.status,
-        components: buildComponents(),
+        components: isLocked ? undefined : buildComponents(),
       };
 
       if (template) {
         await updateGradingTemplate(template.grading_template_id, payload);
       } else {
-        await createGradingTemplate(payload);
+        await createGradingTemplate(payload as any);
       }
       await onSaved?.();
       onClose();
@@ -228,8 +226,13 @@ export default function AddGradingComponentModal({
   return (
     <Dialog.Content size="3xl">
       <Dialog.Header position="fixed" asChild>
-        <Text as="h5" className="font-sans text-xl font-bold">
-          {template ? "Edit Grading Template" : "Create Grading Template"}
+        <Text as="h5" className="font-sans text-xl font-bold flex items-center gap-2">
+          <span>{template ? "Edit Grading Template" : "Create Grading Template"}</span>
+          {isLocked ? (
+            <span className="inline-flex items-center gap-1 rounded-md border border-amber-600 bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">
+              <Lock className="size-3" /> Locked
+            </span>
+          ) : null}
         </Text>
       </Dialog.Header>
       <section className="flex max-h-[75vh] flex-col gap-4 overflow-y-auto p-4">
@@ -237,11 +240,24 @@ export default function AddGradingComponentModal({
           <section className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
             <p className="font-bold">Read-only academic year</p>
             <p className="text-black/70">{readOnlyReason}</p>
-            <p className="text-xs text-black/70">
-              Grading templates are not academic-year scoped in the current backend, but edits are disabled from this historical setup view.
-            </p>
           </section>
         ) : null}
+
+        {isLocked ? (
+          <section className="rounded-lg border-2 border-black bg-[#fff1b8] p-3 text-sm shadow-[3px_3px_0_#000]">
+            <div className="flex items-start gap-2 text-amber-900">
+              <Lock className="size-4 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">🔒 Formula Locked: The academic term has started.</p>
+                <p className="text-xs text-black/80 mt-0.5">{lockReason}</p>
+                <p className="text-xs text-black/70 mt-1 font-medium">
+                  Note: You can still edit the template name, description, and assigned subjects.
+                </p>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="flex flex-col gap-1">
             <label htmlFor="grading-template-name" className="text-sm">Template Name</label>
@@ -286,23 +302,24 @@ export default function AddGradingComponentModal({
               </Select.Content>
             </Select>
           </div>
+
           <div className="flex flex-col gap-2 md:col-span-2">
             <div>
-              <label className="text-sm font-semibold">Subject Scope</label>
+              <label className="text-sm font-semibold">Subject Scope / Assigned Subjects</label>
               <p className="text-xs text-black/70">
-                Optional. Leave empty for a general/default template.
+                Select subjects that will use this grading template. Leave empty for a general default template.
               </p>
             </div>
             <TemplateSubjectPicker
               subjects={subjectOptions}
               academicLevels={options?.academic_levels ?? []}
-              selectedSubjectId={form.subject_id}
-              onChange={handleSubjectChange}
-              allowClear
+              selectedSubjectIds={form.subject_ids}
+              onChange={(subjectIds) => setField("subject_ids", subjectIds)}
               disabled={!options || isSaving}
-              placeholder="Search subject name, code, or grade"
+              placeholder="Search subject name or code to assign"
             />
           </div>
+
           <div className="flex flex-col gap-1 md:col-span-2">
             <label htmlFor="grading-template-description" className="text-sm">Description</label>
             <Input
@@ -315,23 +332,24 @@ export default function AddGradingComponentModal({
           </div>
         </div>
 
-        <section className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
-          <p className="font-bold">Completed year caution</p>
-          <p className="text-black/70">
-            If this template has already been used for a completed academic year, clone it for the new year instead of editing it.
-          </p>
-        </section>
-
-        <section className="rounded-lg border-2 border-black p-3 shadow-[3px_3px_0_#000]">
+        <section className={`rounded-lg border-2 border-black p-3 shadow-[3px_3px_0_#000] ${isLocked ? "bg-black/5 opacity-80" : ""}`}>
           <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
-              <h3 className="font-bold">Components</h3>
-              <p className="text-sm text-black/70">Weights must total 100 before the backend accepts the template.</p>
+              <h3 className="font-bold flex items-center gap-2">
+                <span>Components</span>
+                {isLocked ? <Lock className="size-3.5 text-amber-800" /> : null}
+              </h3>
+              <p className="text-sm text-black/70">
+                {isLocked
+                  ? "Weights cannot be edited after term start to protect historical grade records."
+                  : "Weights must total 100 before the backend accepts the template."}
+              </p>
             </div>
             <div className={`w-fit rounded-full border border-black px-3 py-1 text-sm font-bold ${totalWeight === 100 ? "bg-[#bbf7d0]" : "bg-[#fff7d6]"}`}>
               Total: {totalWeight}%
             </div>
           </div>
+
           <div className="flex flex-col gap-2">
             {form.components.map((component, index) => (
               <div key={component.local_id} className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_120px_120px_auto]">
@@ -339,6 +357,7 @@ export default function AddGradingComponentModal({
                   value={component.component_name}
                   onChange={(event) => updateComponent(component.local_id, { component_name: event.target.value })}
                   placeholder="Component name"
+                  disabled={isLocked}
                 />
                 <Input
                   value={component.weight}
@@ -347,6 +366,7 @@ export default function AddGradingComponentModal({
                   min={0}
                   step="0.01"
                   placeholder="Weight"
+                  disabled={isLocked}
                 />
                 <Input
                   value={component.display_order}
@@ -354,26 +374,29 @@ export default function AddGradingComponentModal({
                   type="number"
                   min={1}
                   placeholder={String(index + 1)}
+                  disabled={isLocked}
                 />
                 <Button
                   type="button"
                   size="icon"
                   variant="outline"
                   onClick={() => removeComponent(component.local_id)}
-                  disabled={form.components.length <= 1}
-                  title="Remove component"
+                  disabled={isLocked || form.components.length <= 1}
+                  title={isLocked ? "Component weights are locked" : "Remove component"}
                 >
                   <Trash2 className="size-4" />
                 </Button>
               </div>
             ))}
           </div>
-          <Button type="button" size="sm" variant="outline" className="mt-3" onClick={addComponent}>
-            <Plus className="size-4 mr-2" /> Add Component
-          </Button>
+          {!isLocked ? (
+            <Button type="button" size="sm" variant="outline" className="mt-3" onClick={addComponent}>
+              <Plus className="size-4 mr-2" /> Add Component
+            </Button>
+          ) : null}
         </section>
 
-        {totalWeight !== 100 ? (
+        {totalWeight !== 100 && !isLocked ? (
           <p className="text-sm font-semibold text-amber-700">Total weight is currently {totalWeight}%. It should be 100%.</p>
         ) : null}
         {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}

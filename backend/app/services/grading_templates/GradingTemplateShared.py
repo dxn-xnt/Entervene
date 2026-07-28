@@ -1,13 +1,16 @@
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
 
 
@@ -136,11 +139,61 @@ def component_to_item(component: GradingTemplateComponent) -> dict:
     }
 
 
-def template_to_item(template: GradingTemplate) -> dict:
+def get_assigned_subjects(db: Session, template: GradingTemplate) -> list[dict]:
+    query_conditions = []
+    if template.subject_id is not None:
+        query_conditions.append(Subject.subject_id == template.subject_id)
+    query_conditions.append(func.lower(Subject.default_grading_template) == template.template_name.casefold())
+    query_conditions.append(Subject.default_grading_template == str(template.grading_template_id))
+
+    subjects = db.query(Subject).filter(or_(*query_conditions)).all()
+    assigned = []
+    seen = set()
+    for sub in subjects:
+        if sub.subject_id not in seen:
+            seen.add(sub.subject_id)
+            assigned.append({
+                "subject_id": sub.subject_id,
+                "subject_name": sub.subject_name,
+                "subject_codename": sub.subject_codename,
+            })
+    return assigned
+
+
+def check_template_locked(db: Session, template: GradingTemplate) -> tuple[bool, str | None]:
+    try:
+        assigned = get_assigned_subjects(db, template)
+        subject_ids = [sub["subject_id"] for sub in assigned]
+
+        if subject_ids:
+            try:
+                grade_count = db.query(StudentPeriodGrade).filter(StudentPeriodGrade.subject_id.in_(subject_ids)).count()
+                if grade_count > 0:
+                    return True, "Template weights cannot be modified because student grades have already been recorded under assigned subjects."
+            except Exception:
+                db.rollback()
+
+        try:
+            active_period = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
+            if active_period and active_period.start_date and active_period.start_date <= date.today():
+                return True, "Template weights cannot be modified after the term has started. Please create a new template."
+        except Exception:
+            db.rollback()
+
+        return False, None
+    except Exception:
+        return False, None
+
+
+def template_to_item(template: GradingTemplate, db: Session | None = None) -> dict:
     components = sorted(template.components, key=lambda item: item.display_order)
     total_weight = sum((Decimal(str(component.weight)) for component in components), Decimal("0.00")).quantize(Decimal("0.01"))
     academic_level = template.academic_level
     subject = template.subject
+
+    assigned_subjects = get_assigned_subjects(db, template) if db else []
+    is_locked, lock_reason = check_template_locked(db, template) if db else (False, None)
+
     return {
         "grading_template_id": template.grading_template_id,
         "template_name": template.template_name,
@@ -155,6 +208,10 @@ def template_to_item(template: GradingTemplate) -> dict:
             "subject_name": subject.subject_name,
             "subject_codename": subject.subject_codename,
         } if subject else None,
+        "assigned_subjects": assigned_subjects,
+        "assigned_subject_count": len(assigned_subjects),
+        "is_locked": is_locked,
+        "lock_reason": lock_reason,
         "status": template.status or DEFAULT_GRADING_TEMPLATE_STATUS,
         "total_weight": total_weight,
         "component_count": len(components),

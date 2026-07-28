@@ -288,6 +288,10 @@ export type GradingTemplateListItem = {
   description: string | null;
   academic_level: SubjectAcademicLevel | null;
   subject: GradingTemplateSubject | null;
+  assigned_subjects?: GradingTemplateSubject[];
+  assigned_subject_count?: number;
+  is_locked?: boolean;
+  lock_reason?: string | null;
   status: SubjectStatus;
   total_weight: number;
   component_count: number;
@@ -316,6 +320,7 @@ export type GradingTemplateCreatePayload = {
   description?: string | null;
   academic_level_id?: number | null;
   subject_id?: number | null;
+  subject_ids?: number[] | null;
   status?: SubjectStatus;
   components: GradingTemplateComponentPayload[];
 };

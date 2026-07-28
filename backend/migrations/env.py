@@ -16,6 +16,7 @@ import app.models.people.AcademicStaff  # noqa: F401
 import app.models.academic.AcademicLevel  # noqa: F401
 import app.models.classwork.ClassworkAssignment  # noqa: F401
 import app.models.submissions.StudentSubmission  # noqa: F401
+import app.models.settings.Setting  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

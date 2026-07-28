@@ -38,6 +38,7 @@ class GradingTemplateBase(BaseModel):
     description: str | None = None
     academic_level_id: int | None = None
     subject_id: int | None = None
+    subject_ids: list[int] | None = None
 
 
 class GradingTemplateCreate(GradingTemplateBase):
@@ -50,6 +51,7 @@ class GradingTemplateUpdate(BaseModel):
     description: str | None = None
     academic_level_id: int | None = None
     subject_id: int | None = None
+    subject_ids: list[int] | None = None
     status: str | None = None
     components: list[GradingTemplateComponentCreate] | None = None
 
@@ -60,6 +62,10 @@ class GradingTemplateListItem(BaseModel):
     description: str | None
     academic_level: SubjectAcademicLevel | None
     subject: GradingTemplateSubject | None
+    assigned_subjects: list[GradingTemplateSubject] = []
+    assigned_subject_count: int = 0
+    is_locked: bool = False
+    lock_reason: str | None = None
     status: str
     total_weight: float
     component_count: int

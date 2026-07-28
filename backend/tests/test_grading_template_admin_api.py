@@ -274,3 +274,39 @@ def test_non_admin_cannot_create_update_or_archive(client, db):
 
     del client.app.dependency_overrides[get_current_user]
     assert client.post("/api/v1/grading-templates", json=template_payload(level)).status_code == 401
+
+
+def test_multi_subject_assignment_and_locking(client, db):
+    level = add_level(db)
+    sub1 = add_subject(db, level)
+    sub2 = Subject(
+        subject_name="General Chemistry 1",
+        subject_codename="GENCHEM1",
+        subject_group="Specialized",
+        hours=80,
+        status="active",
+        academic_level_id=level.academic_level_id,
+    )
+    db.add(sub2)
+    db.commit()
+
+    # Create template assigned to sub1 and sub2
+    res = client.post(
+        "/api/v1/grading-templates",
+        json=template_payload(level, subject_ids=[sub1.subject_id, sub2.subject_id]),
+    )
+    assert res.status_code == 201
+    body = res.json()
+    assert body["assigned_subject_count"] == 2
+    assert len(body["assigned_subjects"]) == 2
+
+    template_id = body["grading_template_id"]
+
+    # Unassign sub2
+    update_res = client.patch(
+        f"/api/v1/grading-templates/{template_id}",
+        json={"subject_ids": [sub1.subject_id]},
+    )
+    assert update_res.status_code == 200
+    assert update_res.json()["assigned_subject_count"] == 1
+

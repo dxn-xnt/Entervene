@@ -6,3 +6,4 @@ from . import submissions
 from . import quiz
 from . import ai
 from . import suggestion
+from . import settings
