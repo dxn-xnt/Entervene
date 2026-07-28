@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.services.prediction.ModelScoringService import DEFAULT_MODEL_NAME
 
@@ -14,10 +14,12 @@ class PredictionFeatureInput(BaseModel):
 
 
 class PredictionPreviewRequest(PredictionFeatureInput):
+    model_config = ConfigDict(protected_namespaces=())
     model_name: str = DEFAULT_MODEL_NAME
 
 
 class PredictionPersistRequest(PredictionFeatureInput):
+    model_config = ConfigDict(protected_namespaces=())
     student_id: UUID
     class_id: int
     subject_id: int
@@ -28,6 +30,7 @@ class PredictionPersistRequest(PredictionFeatureInput):
 
 
 class PredictionPreviewResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     model_version_id: int
     model_name: str
     model_type: str
@@ -100,6 +103,7 @@ class PredictionFeatureListResponse(BaseModel):
 
 
 class PredictionModelVersionRead(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     model_version_id: int
     model_name: str
     model_type: str
@@ -204,6 +208,7 @@ class PredictionDetailResponse(BaseModel):
 
 
 class ModelPerformanceByVersionItem(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     model_version_id: int | None = None
     model_name: str | None = None
     total_evaluated_predictions: int
@@ -253,6 +258,7 @@ class PredictionBuiltFeaturesResponse(BaseModel):
 
 
 class PredictionFromRecordsPreviewRequest(PredictionBuildFeaturesRequest):
+    model_config = ConfigDict(protected_namespaces=())
     model_name: str = DEFAULT_MODEL_NAME
     allow_early_estimate: bool = True
 
@@ -263,6 +269,7 @@ class PredictionFromRecordsPersistRequest(PredictionFromRecordsPreviewRequest):
 
 
 class PredictionFromRecordsResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     ready: bool
     readiness_level: str
     prediction_mode: str

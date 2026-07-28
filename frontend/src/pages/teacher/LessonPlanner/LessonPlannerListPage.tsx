@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import Tabs from "@/components/Tabs";
+import Tabs from "@/components/tabs";
 import { Alert } from "@/components/retroui/Alert";
 import {
   BookOpen,

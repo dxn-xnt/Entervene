@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     cookie_samesite: str = "lax"
     cookie_domain: str | None = None
+    groq_api_key: str | None = None
+    gemini_api_key: str | None = None
 
     @field_validator("debug", mode="before")
     @classmethod
