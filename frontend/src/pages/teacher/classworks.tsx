@@ -776,26 +776,30 @@ export default function Classworks() {
                     <div className="flex flex-wrap gap-2">
                       {isEditing ? (
                         <>
-                          <button
+                          <Button
                             type="button"
+                            variant="outline"
+                            size="sm"
                             onClick={() => {
                               setIsEditing(false);
                               setEditDraft(classworkToEditDraft(selected));
                               setDetailError("");
                             }}
                             disabled={isSavingEdit}
-                            className="rounded-lg border border-gray-700 bg-white px-3 py-2 text-sm font-bold hover:bg-gray-50 disabled:opacity-50"
+                            className="border-black bg-white font-bold"
                           >
                             Cancel
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
+                            variant="default"
+                            size="sm"
                             onClick={saveClassworkEdit}
                             disabled={isSavingEdit}
-                            className="rounded-lg border border-black bg-[#7ABA78] px-3 py-2 text-sm font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
+                            className="border-black bg-[#7ABA78] hover:bg-[#7ABA78] font-bold"
                           >
                             {isSavingEdit ? "Saving..." : "Save Changes"}
-                          </button>
+                          </Button>
                         </>
                       ) : (
                         <Button
@@ -994,11 +998,11 @@ export default function Classworks() {
                 ) : (
                   <>
                     {isEditing && editDraft ? (
-                      <div className="space-y-4 rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+                      <Card className="block w-full space-y-4 border-black p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition-none hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
                         <div className="grid gap-3 sm:grid-cols-2">
                           <label className="block text-xs font-bold">
                             Title
-                            <input
+                            <Input
                               value={editDraft.title}
                               onChange={(event) =>
                                 setEditDraft((current) =>
@@ -1008,31 +1012,43 @@ export default function Classworks() {
                                 )
                               }
                               disabled={isSavingEdit}
-                              className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm font-semibold"
+                              className="mt-1 w-full rounded-none border-black text-sm font-semibold shadow-none"
                             />
                           </label>
                           <label className="block text-xs font-bold">
                             Type
-                            <select
+                            <Select
                               value={editDraft.classwork_type}
-                              onChange={(event) =>
+                              onValueChange={(v) =>
                                 setEditDraft((current) =>
                                   current
                                     ? {
                                         ...current,
-                                        classwork_type: event.target.value,
+                                        classwork_type: v,
                                       }
                                     : current,
                                 )
                               }
-                              disabled={isSavingEdit}
-                              className="mt-1 w-full rounded-lg border border-gray-700 bg-white px-3 py-2 text-sm font-semibold"
                             >
-                              <option value="READING">Reading</option>
-                              <option value="ACTIVITY">Activity</option>
-                              <option value="ASSIGNMENT">Assignment</option>
-                              <option value="QUIZ">Quiz</option>
-                            </select>
+                              <Select.Trigger
+                                disabled={isSavingEdit}
+                                className="mt-1 w-full h-10 border-2 border-black bg-white text-sm font-semibold shadow-none"
+                              >
+                                <Select.Value />
+                              </Select.Trigger>
+                              <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                                <Select.Item value="READING">
+                                  Reading
+                                </Select.Item>
+                                <Select.Item value="ACTIVITY">
+                                  Activity
+                                </Select.Item>
+                                <Select.Item value="ASSIGNMENT">
+                                  Assignment
+                                </Select.Item>
+                                <Select.Item value="QUIZ">Quiz</Select.Item>
+                              </Select.Content>
+                            </Select>
                           </label>
                         </div>
 
@@ -1041,37 +1057,44 @@ export default function Classworks() {
                         >
                           <label className="block text-xs font-bold">
                             Grading component
-                            <select
-                              value={editDraft.classwork_category}
-                              onChange={(event) =>
+                            <Select
+                              value={editDraft.classwork_category || "NONE"}
+                              onValueChange={(v) =>
                                 setEditDraft((current) =>
                                   current
                                     ? {
                                         ...current,
-                                        classwork_category: event.target.value,
+                                        classwork_category:
+                                          v === "NONE" ? "" : v,
                                       }
                                     : current,
                                 )
                               }
-                              disabled={isSavingEdit}
-                              className="mt-1 w-full rounded-lg border border-gray-700 bg-white px-3 py-2 text-sm"
                             >
-                              <option value="">None</option>
-                              <option value="WRITTEN_WORK">
-                                Written Works
-                              </option>
-                              <option value="PERFORMANCE_TASK">
-                                Performance Task
-                              </option>
-                              <option value="QUARTERLY_ASSESSMENT">
-                                Quarterly Assessment
-                              </option>
-                            </select>
+                              <Select.Trigger
+                                disabled={isSavingEdit}
+                                className="mt-1 w-full h-10 border-2 border-black bg-white text-sm shadow-none"
+                              >
+                                <Select.Value placeholder="None" />
+                              </Select.Trigger>
+                              <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                                <Select.Item value="NONE">None</Select.Item>
+                                <Select.Item value="WRITTEN_WORK">
+                                  Written Works
+                                </Select.Item>
+                                <Select.Item value="PERFORMANCE_TASK">
+                                  Performance Task
+                                </Select.Item>
+                                <Select.Item value="QUARTERLY_ASSESSMENT">
+                                  Quarterly Assessment
+                                </Select.Item>
+                              </Select.Content>
+                            </Select>
                           </label>
                           {!isReadingType(editDraft.classwork_type) && (
                             <label className="block text-xs font-bold">
                               Total points
-                              <input
+                              <Input
                                 type="number"
                                 min="1"
                                 step="1"
@@ -1088,31 +1111,35 @@ export default function Classworks() {
                                   )
                                 }
                                 disabled={isSavingEdit}
-                                className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                                className="mt-1 w-full rounded-none border-black text-sm shadow-none"
                               />
                             </label>
                           )}
-                          <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-bold">
-                            <input
-                              type="checkbox"
-                              checked={editDraft.is_published}
-                              onChange={(event) =>
-                                setEditDraft((current) =>
-                                  current
-                                    ? {
-                                        ...current,
-                                        is_published: event.target.checked,
-                                      }
-                                    : current,
-                                )
-                              }
-                              disabled={isSavingEdit}
-                            />
-                            Published
+                          <label className="block text-xs font-bold">
+                            <span className="invisible">Published</span>
+                            <span className="mt-1 flex h-10 w-full items-center gap-2 border-2 border-black px-3 text-sm font-normal">
+                              <Input
+                                type="checkbox"
+                                checked={editDraft.is_published}
+                                onChange={(event) =>
+                                  setEditDraft((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          is_published: event.target.checked,
+                                        }
+                                      : current,
+                                  )
+                                }
+                                disabled={isSavingEdit}
+                                className="h-4 w-4 rounded-none border-black p-0 shadow-none accent-black"
+                              />
+                              Published
+                            </span>
                           </label>
                         </div>
 
-                        <div className="rounded-lg border border-gray-300 p-3">
+                        <Card className="block w-full border-black p-3 shadow-none transition-none hover:shadow-none">
                           <p className="mb-3 text-xs font-bold">
                             Assignment settings
                           </p>
@@ -1121,7 +1148,7 @@ export default function Classworks() {
                           >
                             <label className="block text-xs font-bold">
                               Due date
-                              <input
+                              <Input
                                 type="datetime-local"
                                 value={editDraft.due_date}
                                 onChange={(event) =>
@@ -1135,12 +1162,12 @@ export default function Classworks() {
                                   )
                                 }
                                 disabled={isSavingEdit}
-                                className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                                className="mt-1 w-full rounded-none border-black text-sm shadow-none"
                               />
                             </label>
                             <label className="block text-xs font-bold">
                               Locked until
-                              <input
+                              <Input
                                 type="datetime-local"
                                 value={editDraft.lock_date}
                                 onChange={(event) =>
@@ -1156,13 +1183,13 @@ export default function Classworks() {
                                 disabled={
                                   isSavingEdit || !editDraft.is_published
                                 }
-                                className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm disabled:bg-gray-100"
+                                className="mt-1 w-full rounded-none border-black text-sm shadow-none disabled:bg-gray-100"
                               />
                             </label>
                             {isQuizType(editDraft.classwork_type) && (
                               <label className="block text-xs font-bold">
                                 Attempts
-                                <input
+                                <Input
                                   type="number"
                                   min="1"
                                   step="1"
@@ -1178,7 +1205,7 @@ export default function Classworks() {
                                     )
                                   }
                                   disabled={isSavingEdit}
-                                  className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                                  className="mt-1 w-full rounded-none border-black text-sm shadow-none"
                                 />
                               </label>
                             )}
@@ -1190,7 +1217,7 @@ export default function Classworks() {
                           </p>
                           {editDraft.due_date &&
                             !isReadingType(editDraft.classwork_type) && (
-                              <label className="mt-3 flex items-start gap-3 rounded-lg border border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold">
+                              <label className="mt-3 flex items-start gap-3 border-2 border-black bg-primary px-3 py-2 text-xs font-bold">
                                 <input
                                   type="checkbox"
                                   checked={editDraft.allow_late_submissions}
@@ -1206,7 +1233,7 @@ export default function Classworks() {
                                     )
                                   }
                                   disabled={isSavingEdit}
-                                  className="mt-0.5"
+                                  className="mt-0.5 accent-black"
                                 />
                                 <span>
                                   Allow submissions/resubmissions after the due
@@ -1217,11 +1244,11 @@ export default function Classworks() {
                                 </span>
                               </label>
                             )}
-                        </div>
+                        </Card>
 
                         <label className="block text-xs font-bold">
                           Description
-                          <input
+                          <Input
                             value={editDraft.description}
                             onChange={(event) =>
                               setEditDraft((current) =>
@@ -1234,7 +1261,7 @@ export default function Classworks() {
                               )
                             }
                             disabled={isSavingEdit}
-                            className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                            className="mt-1 w-full rounded-none border-black text-sm shadow-none"
                           />
                         </label>
 
@@ -1253,11 +1280,11 @@ export default function Classworks() {
                               )
                             }
                             disabled={isSavingEdit}
-                            className="mt-1 min-h-24 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                            className="mt-1 min-h-24 w-full border-2 border-black px-3 py-2 text-sm outline-none focus:border-black"
                           />
                         </label>
 
-                        <div className="rounded-lg border border-gray-300 p-3">
+                        <Card className="block w-full border-black p-3 shadow-none transition-none hover:shadow-none">
                           <div className="mb-3 flex items-center justify-between gap-3">
                             <div>
                               <h3 className="text-sm font-bold">Materials</h3>
@@ -1265,24 +1292,31 @@ export default function Classworks() {
                                 Add or remove files attached to this classwork.
                               </p>
                             </div>
-                            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold hover:bg-[#7ABA78]">
-                              <Plus size={14} />
-                              Add files
-                              <input
-                                type="file"
-                                multiple
-                                accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
-                                className="hidden"
-                                disabled={
-                                  isUploadingEditMaterials ||
-                                  removingAttachmentId !== null
-                                }
-                                onChange={(event) => {
-                                  addEditMaterials(event.target.files);
-                                  event.target.value = "";
-                                }}
-                              />
-                            </label>
+                            <Button
+                              asChild
+                              variant="default"
+                              size="sm"
+                              className="cursor-pointer gap-2 font-bold "
+                            >
+                              <label>
+                                <Plus size={14} />
+                                Add files
+                                <input
+                                  type="file"
+                                  multiple
+                                  accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
+                                  className="hidden"
+                                  disabled={
+                                    isUploadingEditMaterials ||
+                                    removingAttachmentId !== null
+                                  }
+                                  onChange={(event) => {
+                                    addEditMaterials(event.target.files);
+                                    event.target.value = "";
+                                  }}
+                                />
+                              </label>
+                            </Button>
                           </div>
 
                           {selected.attachments.length > 0 ? (
@@ -1290,14 +1324,16 @@ export default function Classworks() {
                               {selected.attachments.map((attachment) => (
                                 <div
                                   key={attachment.classwork_attachment_id}
-                                  className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm"
+                                  className="flex items-center gap-3 border-2 border-black px-3 py-2 text-sm"
                                 >
                                   <FileText size={16} />
                                   <span className="min-w-0 flex-1 truncate font-semibold">
                                     {attachment.file_name}
                                   </span>
-                                  <button
+                                  <Button
                                     type="button"
+                                    variant="ghost"
+                                    size="icon"
                                     onClick={() =>
                                       removeSelectedAttachment(
                                         attachment.classwork_attachment_id,
@@ -1308,16 +1344,16 @@ export default function Classworks() {
                                         attachment.classwork_attachment_id ||
                                       isUploadingEditMaterials
                                     }
-                                    className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                    className="text-red-600 hover:bg-red-50 disabled:opacity-50"
                                     aria-label={`Remove ${attachment.file_name}`}
                                   >
                                     <Trash2 size={15} />
-                                  </button>
+                                  </Button>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <p className="rounded-lg border border-dashed px-3 py-4 text-center text-sm text-gray-500">
+                            <p className="border-2 border-dashed border-black/40 px-3 py-4 text-center text-sm text-gray-500">
                               No files attached yet.
                             </p>
                           )}
@@ -1330,7 +1366,7 @@ export default function Classworks() {
                               {editMaterials.map((material, index) => (
                                 <div
                                   key={`${material.name}-${material.size}`}
-                                  className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm"
+                                  className="flex items-center gap-3 border-2 border-black px-3 py-2 text-sm"
                                 >
                                   <FileText size={16} />
                                   <span className="min-w-0 flex-1 truncate font-semibold">
@@ -1339,30 +1375,34 @@ export default function Classworks() {
                                   <span className="text-xs text-gray-500">
                                     {formatFileSize(material.size)}
                                   </span>
-                                  <button
+                                  <Button
                                     type="button"
+                                    variant="ghost"
+                                    size="icon"
                                     onClick={() => removeEditMaterial(index)}
                                     disabled={isUploadingEditMaterials}
-                                    className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                    className="text-red-600 hover:bg-red-50 disabled:opacity-50"
                                   >
                                     <Trash2 size={15} />
-                                  </button>
+                                  </Button>
                                 </div>
                               ))}
-                              <button
+                              <Button
                                 type="button"
+                                variant="default"
+                                size="sm"
                                 onClick={uploadEditMaterials}
                                 disabled={isUploadingEditMaterials}
-                                className="rounded-lg border border-black bg-[#7ABA78] px-3 py-2 text-xs font-bold disabled:opacity-50"
+                                className="border-black bg-[#7ABA78] font-bold disabled:opacity-50"
                               >
                                 {isUploadingEditMaterials
                                   ? "Uploading..."
                                   : "Upload selected files"}
-                              </button>
+                              </Button>
                             </div>
                           )}
-                        </div>
-                      </div>
+                        </Card>
+                      </Card>
                     ) : (
                       <Card className="block">
                         <Card.Content>
