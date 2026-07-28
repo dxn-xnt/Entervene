@@ -1805,21 +1805,23 @@ export default function Classworks() {
 
                 {showArchiveConfirm && !selectedStudent && (
                   <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4">
-                    <section className="w-full max-w-md rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                      <div className="flex items-center justify-between border-b border-black bg-red-100 px-5 py-3">
+                    <Card className="block w-full max-w-md border-black p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-none hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                      <div className="flex items-center justify-between border-b-2 border-black bg-red-100 px-5 py-3">
                         <div className="flex items-center gap-2 text-red-800">
                           <Archive size={18} />
                           <h2 className="font-bold">Archive Classwork?</h2>
                         </div>
-                        <button
+                        <Button
                           type="button"
+                          variant="ghost"
+                          size="icon"
                           onClick={() => setShowArchiveConfirm(false)}
                           disabled={isArchiving}
-                          className="rounded p-1 hover:bg-white/60 disabled:opacity-50"
+                          className="hover:bg-white/60 disabled:opacity-50"
                           aria-label="Close archive confirmation"
                         >
                           <X size={16} />
-                        </button>
+                        </Button>
                       </div>
                       <div className="space-y-3 p-5">
                         <p className="text-sm font-medium">
@@ -1832,25 +1834,29 @@ export default function Classworks() {
                           Linked lessons stay intact.
                         </p>
                       </div>
-                      <div className="flex justify-end gap-3 border-t border-black px-5 py-4">
-                        <button
+                      <div className="flex justify-end gap-3 border-t-2 border-black px-5 py-4">
+                        <Button
                           type="button"
+                          variant="outline"
+                          size="sm"
                           onClick={() => setShowArchiveConfirm(false)}
                           disabled={isArchiving}
-                          className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
+                          className="border-black font-semibold disabled:opacity-50"
                         >
                           Cancel
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           type="button"
+                          variant="default"
+                          size="sm"
                           onClick={archiveSelectedClasswork}
                           disabled={isArchiving}
-                          className="rounded-lg border border-black bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 disabled:opacity-50"
+                          className="border-black bg-red-600 font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 disabled:opacity-50"
                         >
                           {isArchiving ? "Archiving..." : "Archive Classwork"}
-                        </button>
+                        </Button>
                       </div>
-                    </section>
+                    </Card>
                   </div>
                 )}
               </section>
