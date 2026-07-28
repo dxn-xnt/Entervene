@@ -771,7 +771,7 @@ export default function SubjectDetails() {
                   <Card.Title className="text-3xl font-bold">
                     {subjectName}
                   </Card.Title>
-                  <p className="text-xs font-medium">
+                  <p className="text-xs text-black">
                     {sectionName
                       ? `Section assigned: ${sectionName}`
                       : "Section assigned for this subject"}
@@ -786,11 +786,11 @@ export default function SubjectDetails() {
               <div className="grid gap-4 md:grid-cols-3">
                 <Card className="block">
                   <Card.Content className="space-y-1">
-                    <p className="text-sm font-medium text-gray-600">
+                    <Card.Description>
                       Lesson Mastery
-                    </p>
-                    <p className="text-3xl font-bold">{overviewMastery}%</p>
-                    <p className="text-xs text-gray-500">
+                    </Card.Description>
+                    <Card.Title>{overviewMastery}%</Card.Title>
+                    <p className="text-xs text-black">
                       Average graded classwork performance
                     </p>
                   </Card.Content>
@@ -798,11 +798,11 @@ export default function SubjectDetails() {
 
                 <Card className="block">
                   <Card.Content className="space-y-1">
-                    <p className="text-sm font-medium text-gray-600">
+                    <Card.Description>
                       Classwork Assigned
-                    </p>
-                    <p className="text-3xl font-bold">{classworkCount ?? 0}</p>
-                    <p className="text-xs text-gray-500">
+                    </Card.Description>
+                    <Card.Title>{classworkCount ?? 0}</Card.Title>
+                    <p className="text-xs text-black">
                       Active classworks in this subject
                     </p>
                   </Card.Content>
@@ -810,11 +810,11 @@ export default function SubjectDetails() {
 
                 <Card className="block">
                   <Card.Content className="space-y-1">
-                    <p className="text-sm font-medium text-gray-600">
+                    <Card.Description>
                       Completion Percentage
-                    </p>
-                    <p className="text-3xl font-bold">{overviewCompletion}%</p>
-                    <p className="text-xs text-gray-500">
+                    </Card.Description>
+                    <Card.Title>{overviewCompletion}%</Card.Title>
+                    <p className="text-xs text-black">
                       Average submitted classwork completion
                     </p>
                   </Card.Content>
