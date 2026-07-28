@@ -374,7 +374,7 @@ export default function AdminInterventions() {
                                   </Table.Row>
                                 ))
                               ) : (
-                                <Table.Row>
+                                <Table.Row key="empty-row">
                                   <Table.Cell colSpan={6} className="text-center py-8 font-bold text-gray-500 italic">
                                     No persistent interventions match the selected filters.
                                   </Table.Cell>

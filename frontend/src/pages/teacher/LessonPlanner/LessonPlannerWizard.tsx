@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Tabs,
   TabsList,
@@ -31,6 +32,7 @@ import { useLessonPlanner } from "./useLessonPlanner";
 import type { LessonPlanDraft } from "./useLessonPlanner";
 import { useAuth } from "@/context/AuthContext";
 import { exportLessonPlanPDF, exportLessonPlanWord } from "./LessonPlanExporter";
+import { routes } from "@/../routes";
 
 const TABS = [
   {
@@ -85,6 +87,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({ planId
   const [activeTab, setActiveTab] = useState<TabValue>("info");
   const auth = useAuth();
   const teacherName = auth?.user?.fullName || "Teacher";
+  const navigate = useNavigate();
 
   const {
     draft,
@@ -121,6 +124,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({ planId
       } else if (format === "word") {
         exportLessonPlanWord(draft, teacherName);
       }
+      navigate(routes.teacher.lessonPlanner);
     }
   };
 

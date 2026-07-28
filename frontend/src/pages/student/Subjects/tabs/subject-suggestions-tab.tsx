@@ -12,7 +12,6 @@ import {
 import type { SuggestionResponse } from "@/types/suggestion";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
-import { Card } from "@/components/retroui/Card";
 
 type Notice = {
   status: "success" | "error" | "info";

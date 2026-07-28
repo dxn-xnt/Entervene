@@ -1,4 +1,4 @@
-import { BookOpen, ChevronDown, ChevronRight, ClipboardList, Eye, FileText, Pencil, Plus, Search } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, ClipboardList, Eye, FileText, GraduationCap, Pencil, Plus, Search } from "lucide-react";
 import type { Lesson, LinkedClasswork } from "./types";
 
 type LessonClassworkListProps = {
@@ -15,6 +15,8 @@ type LessonClassworkListProps = {
   openLessonManager: (lesson: Lesson) => void;
   openClassworkForm: (lesson: Lesson) => void;
   openClassworkDetail: (classwork: LinkedClasswork) => void;
+  subjectAssignments?: LinkedClasswork[];
+  openQuarterlyAssessmentForm?: () => void;
 };
 
 export default function LessonClassworkList({
@@ -31,9 +33,95 @@ export default function LessonClassworkList({
   openLessonManager,
   openClassworkForm,
   openClassworkDetail,
+  subjectAssignments,
+  openQuarterlyAssessmentForm,
 }: LessonClassworkListProps) {
+  const quarterlyAssessments = (subjectAssignments ?? []).filter(
+    (cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT"
+  );
+
   return (
-    <section className="flex flex-col gap-3">
+    <section className="flex flex-col gap-6">
+      {/* ── Quarterly Assessments section ── */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <GraduationCap size={20} />
+            <h3 className="text-lg font-bold">Quarterly Assessments</h3>
+            <span className="rounded-full border border-black bg-[#F6E9B2] px-2 py-0.5 text-[10px] font-bold">
+              {quarterlyAssessments.length}
+            </span>
+          </div>
+          {openQuarterlyAssessmentForm && (
+            <button
+              type="button"
+              onClick={openQuarterlyAssessmentForm}
+              className="inline-flex items-center gap-2 rounded-lg border border-black bg-[#F6E9B2] px-3 py-2 text-sm font-semibold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#f0dd9a]"
+            >
+              <Plus size={15} />
+              Add Assessment
+            </button>
+          )}
+        </div>
+
+        <p className="text-xs font-medium text-gray-600">
+          Periodical exams and summative assessments that span multiple lessons — not tied to a single lesson.
+        </p>
+
+        {quarterlyAssessments.length > 0 ? (
+          quarterlyAssessments.map((classwork) => (
+            <button
+              type="button"
+              key={classwork.classwork_assignment_id}
+              onClick={() => openClassworkDetail(classwork)}
+              className="grid w-full grid-cols-[minmax(0,1fr)_7rem_auto] items-center gap-3 rounded-lg border border-black bg-white px-4 py-3 text-left shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <GraduationCap size={20} />
+                <div className="min-w-0">
+                  <p className="truncate text-lg font-bold">{classwork.title}</p>
+                  <p className="text-xs font-medium text-gray-700">
+                    Quarterly Assessment
+                    {classwork.due_date ? ` | Due ${new Date(classwork.due_date).toLocaleDateString()}` : ""}
+                  </p>
+                </div>
+              </div>
+              <div className="flex min-w-28 justify-center">
+                {classwork.attachment_count ? (
+                  <span className="whitespace-nowrap rounded-full bg-[#F6E9B2] px-3 py-1 text-xs font-semibold">
+                    File {classwork.attachment_count}
+                  </span>
+                ) : (
+                  <span aria-hidden="true" className="h-7 w-20" />
+                )}
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs font-semibold">
+                <Eye size={14} />
+                Details
+              </span>
+            </button>
+          ))
+        ) : (
+          <div className="flex items-center gap-3 rounded-lg border border-dashed border-gray-400 bg-white px-4 py-3">
+            <GraduationCap size={20} className="shrink-0 text-gray-400" />
+            <div>
+              <p className="text-sm font-semibold text-gray-700">No quarterly assessments yet</p>
+              <p className="text-xs font-medium text-gray-500">
+                Periodical exams that cover an entire quarter will appear here.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Separator ── */}
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-black" />
+        <span className="text-xs font-bold uppercase tracking-wider text-gray-600">Lessons &amp; Classwork</span>
+        <div className="h-px flex-1 bg-black" />
+      </div>
+
+      {/* ── Lesson search &amp; sort ── */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 md:w-80">
           <Search size={16} className="text-gray-500" />

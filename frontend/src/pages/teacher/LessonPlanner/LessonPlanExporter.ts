@@ -14,13 +14,13 @@ function formatFlow(flow: LessonPlanDraft["learning_experience"]["flow"]): strin
 
   let out = "";
   if (before.length > 0) {
-    out += "**Before (Engage):**\n" + before.map((b, i) => `* ${b.description}`).join("\n") + "\n\n";
+    out += "**Before (Engage):**\n" + before.map((b) => `* ${b.description}`).join("\n") + "\n\n";
   }
   if (during.length > 0) {
-    out += "**During (Explore & Explain):**\n" + during.map((d, i) => `* ${d.description}`).join("\n") + "\n\n";
+    out += "**During (Explore & Explain):**\n" + during.map((d) => `* ${d.description}`).join("\n") + "\n\n";
   }
   if (after.length > 0) {
-    out += "**After (Consolidate & Evaluate):**\n" + after.map((a, i) => `* ${a.description}`).join("\n");
+    out += "**After (Consolidate & Evaluate):**\n" + after.map((a) => `* ${a.description}`).join("\n");
   }
   return out.trim();
 }
@@ -44,7 +44,7 @@ function formatContext(context: LessonPlanDraft["intentions"]["context"]): strin
 /**
  * Builds the exact HTML table structure matching the official DepEd ILAW Lesson Plan format.
  */
-export function buildILAWHTML(draft: LessonPlanDraft, teacherName: string): string {
+export function buildILAWHTML(draft: LessonPlanDraft, teacherName: string, showToolbar = false): string {
   const competenciesText = formatArray(draft.intentions?.competencies);
   const flowText = formatFlow(draft.learning_experience?.flow);
   const evaluationTasksText = formatTasks(draft.assessment?.tasks);
@@ -54,6 +54,24 @@ export function buildILAWHTML(draft: LessonPlanDraft, teacherName: string): stri
     draft.assessment?.formative,
     evaluationTasksText ? `Evaluation Tasks:\n${evaluationTasksText}` : "",
   ].filter(Boolean).join("\n\n");
+
+  const topToolbarHTML = showToolbar
+    ? `
+  <div class="no-print" style="background:#1e293b; color:#ffffff; padding:12px 24px; font-family:Arial, sans-serif; display:flex; align-items:center; justify-content:space-between; margin:-20px -20px 24px -20px; border-bottom:2px solid #0f172a; position:sticky; top:-20px; z-index:9999; shadow:0 2px 8px rgba(0,0,0,0.15);">
+    <div style="font-weight:bold; font-size:14px; display:flex; align-items:center; gap:8px;">
+      <span>📄 DepEd ILAW Lesson Plan Document Preview</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <button onclick="window.print()" style="background:#22c55e; color:#ffffff; border:none; padding:8px 18px; border-radius:6px; font-weight:bold; font-size:13px; cursor:pointer; shadow:0 1px 2px rgba(0,0,0,0.2);">
+        🖨️ Save as PDF / Print
+      </button>
+      <button onclick="window.close()" style="background:#475569; color:#ffffff; border:none; padding:8px 14px; border-radius:6px; font-weight:bold; font-size:13px; cursor:pointer;">
+        Close Window
+      </button>
+    </div>
+  </div>
+  `
+    : "";
 
   return `
 <!DOCTYPE html>
@@ -161,12 +179,14 @@ export function buildILAWHTML(draft: LessonPlanDraft, teacherName: string): stri
       color: #4b5563;
     }
     @media print {
-      body { padding: 0; }
-      .no-print { display: none; }
+      body { padding: 0 !important; }
+      .no-print { display: none !important; }
     }
   </style>
 </head>
 <body>
+
+  ${topToolbarHTML}
 
   <div class="header-title">LESSON PLAN</div>
   <div class="header-subtitle">MNSTS &nbsp; ILAW &middot; SY 2026-2027</div>
@@ -212,31 +232,27 @@ export function buildILAWHTML(draft: LessonPlanDraft, teacherName: string): stri
   <!-- SECTION 1: Intentions -->
   <div class="section-banner">
     <span class="section-title">Intentions.</span>
-    <span class="section-desc">Meaningful learning experiences are anchored in how we frame them. Start by deciding what you want learners to master by the end of the lesson — keep it clear and simple.</span>
+    <span class="section-desc">What will you teach? What will students learn?</span>
   </div>
   <table class="ilaw-table">
     <tr>
       <td class="label-col">
-        Learning Competency and Curriculum Standards
-        <div class="sub-label">Write the competency/ies from the curriculum that we are targeting, and the content or performance standards.</div>
+        Learning Competencies
+        <div class="sub-label">Most Essential Learning Competencies (MELCs) or Curriculum Guide competencies.</div>
       </td>
-      <td class="content-cell">
-${competenciesText ? `Competencies:\n${competenciesText}\n\n` : ""}
-${draft.intentions?.content_standard ? `Content Standard: ${draft.intentions.content_standard}\n\n` : ""}
-${draft.intentions?.performance_standard ? `Performance Standard: ${draft.intentions.performance_standard}` : ""}
-      </td>
+      <td class="content-cell">${competenciesText || "-"}</td>
     </tr>
     <tr>
       <td class="label-col">
         Learning Objectives
-        <div class="sub-label">Write the smaller knowledge, skills, or tasks from the competency that the learners will work on.</div>
+        <div class="sub-label">Specific, measurable goals for this lesson session.</div>
       </td>
       <td class="content-cell">${draft.intentions?.objectives || "-"}</td>
     </tr>
     <tr>
       <td class="label-col">
         Learner Context
-        <div class="sub-label">Write your observations of your learners, including strengths, interests, and possible barriers.</div>
+        <div class="sub-label">Contextual insights, prior knowledge, or learner needs considered.</div>
       </td>
       <td class="content-cell">${contextText}</td>
     </tr>
@@ -245,7 +261,7 @@ ${draft.intentions?.performance_standard ? `Performance Standard: ${draft.intent
   <!-- SECTION 2: Learning Experience -->
   <div class="section-banner">
     <span class="section-title">Learning Experience.</span>
-    <span class="section-desc">A learning experience is like a thoughtfully designed journey. Each activity and interaction builds towards meaningful understanding and growth.</span>
+    <span class="section-desc">How will you teach? How will students learn?</span>
   </div>
   <table class="ilaw-table">
     <tr>
@@ -257,37 +273,30 @@ ${draft.intentions?.performance_standard ? `Performance Standard: ${draft.intent
     </tr>
     <tr>
       <td class="label-col">
-        Flow
-        <div class="sub-label">Describe the activities that you can implement in 1 or more sessions to meet the learning objectives.</div>
+        Instructional Flow
+        <div class="sub-label">Step-by-step learning activities divided into Before, During, and After.</div>
       </td>
       <td class="content-cell">${flowText || "-"}</td>
     </tr>
     <tr>
       <td class="label-col">
-        Learning Resources
-        <div class="sub-label">List down the learning resources that will help you reach your objectives.</div>
+        Learning Resources &amp; Integration
+        <div class="sub-label">Resources, tools, and cross-curricular integration.</div>
       </td>
-      <td class="content-cell">${draft.learning_experience?.resources || "-"}</td>
-    </tr>
-    <tr>
-      <td class="label-col">
-        Opportunities for Integration
-        <div class="sub-label">Write down any possibilities to meaningfully integrate another learning area, topic, or technology.</div>
-      </td>
-      <td class="content-cell">${draft.learning_experience?.integration || "-"}</td>
+      <td class="content-cell">${[draft.learning_experience?.resources, draft.learning_experience?.integration].filter(Boolean).join("\n\n") || "-"}</td>
     </tr>
   </table>
 
   <!-- SECTION 3: Assessment -->
   <div class="section-banner">
     <span class="section-title">Assessment.</span>
-    <span class="section-desc">Assessments reveal what learners have gained and what they still need help with.</span>
+    <span class="section-desc">How will you know if students learned?</span>
   </div>
   <table class="ilaw-table">
     <tr>
       <td class="label-col">
         Formative Assessment
-        <div class="sub-label">Create a task, activity or questions to evaluate learning and provide feedback throughout the session.</div>
+        <div class="sub-label">Checks for understanding during instruction and evaluation tasks.</div>
       </td>
       <td class="content-cell">${formativeCombined || "-"}</td>
     </tr>
@@ -296,7 +305,7 @@ ${draft.intentions?.performance_standard ? `Performance Standard: ${draft.intent
   <!-- SECTION 4: Ways Forward -->
   <div class="section-banner">
     <span class="section-title">Ways Forward.</span>
-    <span class="section-desc">Meaningful learning can also happen beyond the classroom — for both the learners and the teacher.</span>
+    <span class="section-desc">What will you do next based on student outcomes?</span>
   </div>
   <table class="ilaw-table">
     <tr>
@@ -337,28 +346,37 @@ ${draft.intentions?.performance_standard ? `Performance Standard: ${draft.intent
 }
 
 /**
- * Triggers browser print/save as PDF for the formatted DepEd ILAW Lesson Plan.
+ * Downloads a formatted printable HTML document and opens an interactive preview tab
+ * with a manual "Save as PDF / Print" button, preventing main app freeze.
  */
 export function exportLessonPlanPDF(draft: LessonPlanDraft, teacherName: string) {
-  const html = buildILAWHTML(draft, teacherName);
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) {
-    alert("Please allow popups to export the PDF.");
-    return;
+  const html = buildILAWHTML(draft, teacherName, true);
+
+  // 1. Trigger direct file download so user can save/store the document file locally
+  const blob = new Blob(["\ufeff" + html], { type: "text/html;charset=utf-8" });
+  const filename = `${(draft.title || "Lesson_Plan").replace(/[^a-z0-9_-]/gi, "_")}_ILAW.html`;
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
+
+  // 2. Open clean preview tab without calling window.print() on load (prevents browser tab lock)
+  const viewWindow = window.open("", "_blank");
+  if (viewWindow) {
+    viewWindow.document.write(html);
+    viewWindow.document.close();
+    viewWindow.focus();
   }
-  printWindow.document.write(html);
-  printWindow.document.close();
-  printWindow.focus();
-  setTimeout(() => {
-    printWindow.print();
-  }, 300);
 }
 
 /**
- * Downloads an official formatted Microsoft Word (.docx) document matching the DepEd ILAW format.
+ * Downloads an official formatted Microsoft Word (.docx/.doc) document matching the DepEd ILAW format.
  */
 export function exportLessonPlanWord(draft: LessonPlanDraft, teacherName: string) {
-  const html = buildILAWHTML(draft, teacherName);
+  const html = buildILAWHTML(draft, teacherName, false);
   const blob = new Blob(["\ufeff" + html], {
     type: "application/msword;charset=utf-8",
   });

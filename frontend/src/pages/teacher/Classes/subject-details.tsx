@@ -217,12 +217,12 @@ export default function SubjectDetails() {
 
   const openQuarterlyAssessmentForm = () => {
     setError("");
-    const defaultLesson = lessons[0] || { lesson_id: 0, title: "Subject Level" };
-    setClassworkLesson(defaultLesson);
+    // Use a sentinel lesson (id=0) to indicate subject-level — no lesson linkage.
+    setClassworkLesson({ lesson_id: 0, title: "Subject Level", order_index: 0, is_published: true, is_draft: false, is_archived: false, attachments: [] });
     setClassworkDraft({
       ...emptyClassworkDraft,
       classwork_type: "QUIZ",
-      classwork_category: "PERIODICAL_EXAM",
+      classwork_category: "QUARTERLY_ASSESSMENT",
       title: "Quarterly Assessment",
     });
     setClassworkMaterials([]);
@@ -476,6 +476,9 @@ export default function SubjectDetails() {
   const createClassworkForLesson = async () => {
     if (!classworkLesson || !classId || !subjectId) return;
 
+    // Sentinel: lesson_id === 0 means this is a subject-level (quarterly assessment) classwork.
+    const isSubjectLevel = classworkLesson.lesson_id === 0;
+
     setError("");
     const isReadingClasswork = classworkDraft.classwork_type === "READING";
     // Quiz question files go through the quiz import flow, not classwork attachments.
@@ -504,7 +507,8 @@ export default function SubjectDetails() {
           total_points: isReadingClasswork ? null : classworkDraft.total_points ? totalPoints : null,
           subject_id: Number(subjectId),
           is_published: classworkDraft.is_published,
-          lesson_ids: [classworkLesson.lesson_id],
+          // Subject-level classworks (quarterly assessments) are not linked to any lesson.
+          lesson_ids: isSubjectLevel ? [] : [classworkLesson.lesson_id],
         }),
       });
 
@@ -548,7 +552,20 @@ export default function SubjectDetails() {
         throw new Error("Classwork was created, but assignment failed.");
       }
 
-      await loadLessonClassworks(classworkLesson.lesson_id);
+      if (isSubjectLevel) {
+        // Refresh the subject-level assignments list so the new quarterly assessment appears.
+        const refreshResponse = await apiFetch(
+          `/api/v1/classwork-assignments/teacher/class/${classId}/subject/${subjectId}/assignments`
+        );
+        if (refreshResponse.ok) {
+          const refreshed = (await refreshResponse.json()) as LinkedClasswork[];
+          setSubjectAssignments(refreshed);
+          setClassworkCount(refreshed.length);
+        }
+      } else {
+        await loadLessonClassworks(classworkLesson.lesson_id);
+      }
+
       setClassworkLesson(null);
       setClassworkDraft(emptyClassworkDraft);
       setClassworkMaterials([]);
