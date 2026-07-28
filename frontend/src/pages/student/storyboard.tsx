@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SubjectCard } from "../../components/subject-card";
+import { Card } from "@/components/retroui/Card";
 import { ArrowUpRight, Loader2, BookOpen, Search, X } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
@@ -81,7 +82,7 @@ const StoryBoard = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6 flex-1">
+          <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
               <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
@@ -89,7 +90,7 @@ const StoryBoard = () => {
               </h1>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b border-gray-500" />
+            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
             {myClass ? (
               <section className="flex flex-col gap-4 border-2 border-black bg-[#f7e9aa] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] sm:flex-row sm:items-center sm:justify-between">
@@ -148,17 +149,23 @@ const StoryBoard = () => {
                 )}
               </div>
 
-              <div className="lg:w-[35%] border-2 rounded-lg px-5 py-5 shadow-md transition-all hover:shadow-none bg-card">
-                <div className="flex flex-row justify-between items-center">
-                  <h2 className="text-2xl md:text-3xl font-semibold">To do</h2>
-                  <button
-                    onClick={() => navigate(routes.student.todo)}
-                    className="border border-black rounded-full p-1 cursor-pointer"
-                  >
-                    <ArrowUpRight size={18} />
-                  </button>
-                </div>
-              </div>
+              <Card className="block w-full lg:w-[35%]">
+                <Card.Content>
+                  <div className="flex items-center justify-between">
+                    <Card.Title className="mb-0 text-2xl md:text-3xl">
+                      To do
+                    </Card.Title>
+
+                    <button
+                      type="button"
+                      onClick={() => navigate(routes.student.todo)}
+                      className="rounded-full border-2 border-black cursor-pointer p-1 transition-all hover:shadow-none"
+                    >
+                      <ArrowUpRight size={18} />
+                    </button>
+                  </div>
+                </Card.Content>
+              </Card>
             </div>
           </div>
         </div>
