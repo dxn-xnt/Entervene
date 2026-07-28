@@ -274,7 +274,11 @@ export default function LessonClassworkList({
                     </Button>
                   </div>
                   {(() => {
-                    const quarterlyIds = new Set(quarterlyAssessments.map((q) => q.classwork_assignment_id));
+                    const quarterlyIds = new Set(
+                      quarterlyAssessments.map(
+                        (q) => q.classwork_assignment_id,
+                      ),
+                    );
                     const lessonClassworks = classworks.filter(
                       (cw) =>
                         cw.classwork_category !== "QUARTERLY_ASSESSMENT" &&
@@ -295,48 +299,53 @@ export default function LessonClassworkList({
                           onClick={() => openClassworkDetail(classwork)}
                           className="grid w-full grid-cols-[minmax(0,1fr)_7rem_auto] items-center gap-3 rounded-lg border border-black bg-white px-4 py-3 text-left shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
                         >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <FileText size={20} />
-                          <div className="min-w-0">
-                            <p className="truncate text-lg font-bold">{classwork.title}</p>
-                            <p className="text-xs font-medium text-gray-700">
-                              {classwork.classwork_type || "Classwork"}
-                              {classwork.due_date ? ` | Due ${new Date(classwork.due_date).toLocaleDateString()}` : ""}
+                          <div className="flex min-w-0 items-center gap-3">
+                            <FileText size={20} />
+                            <div className="min-w-0">
+                              <p className="truncate text-lg font-bold">
+                                {classwork.title}
+                              </p>
+                              <p className="text-xs font-medium text-gray-700">
+                                {classwork.classwork_type || "Classwork"}
+                                {classwork.due_date
+                                  ? ` | Due ${new Date(classwork.due_date).toLocaleDateString()}`
+                                  : ""}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex min-w-28 justify-center">
+                            {classwork.attachment_count ? (
+                              <span className="whitespace-nowrap rounded-full bg-[#7ABA78] px-3 py-1 text-xs font-semibold">
+                                File {classwork.attachment_count}
+                              </span>
+                            ) : (
+                              <span aria-hidden="true" className="h-7 w-20" />
+                            )}
+                          </div>
+                          <span className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs font-semibold">
+                            <Eye size={14} />
+                            Details
+                          </span>
+                        </button>
+                      ));
+                    }
+                    return (
+                      <Card className="block shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                        <Card.Content className="flex items-center gap-3">
+                          <ClipboardList size={20} />
+                          <div>
+                            <Card.Title className="text-lg font-bold">
+                              No classworks yet
+                            </Card.Title>
+                            <p className="text-xs font-medium">
+                              Readings, activities, assignments, and quizzes
+                              linked to this lesson will appear here.
                             </p>
                           </div>
-                        </div>
-                        <div className="flex min-w-28 justify-center">
-                          {classwork.attachment_count ? (
-                            <span className="whitespace-nowrap rounded-full bg-[#7ABA78] px-3 py-1 text-xs font-semibold">
-                              File {classwork.attachment_count}
-                            </span>
-                          ) : (
-                            <span aria-hidden="true" className="h-7 w-20" />
-                          )}
-                        </div>
-                        <span className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs font-semibold">
-                          <Eye size={14} />
-                          Details
-                        </span>
-                      </button>
-                    ));
-                  }
-                  return (
-                    <div className="flex items-center justify-between rounded-lg border border-black bg-white px-4 py-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                      <div className="flex items-center gap-3">
-                        <ClipboardList size={20} />
-                        <div>
-                          <Card.Title className="text-lg font-bold">
-                            No classworks yet
-                          </Card.Title>
-                          <p className="text-xs font-medium">
-                            Readings, activities, assignments, and quizzes
-                            linked to this lesson will appear here.
-                          </p>
-                        </div>
-                      </Card.Content>
-                    </Card>
-                  )}
+                        </Card.Content>
+                      </Card>
+                    );
+                  })()}
                 </div>
               )}
             </div>
