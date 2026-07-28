@@ -211,19 +211,19 @@ def teacher_student_gradebook(
         written_scores = [
             float(student_subs[asgn.classwork_assignment_id].grade)
             if (asgn.classwork_assignment_id in student_subs and student_subs[asgn.classwork_assignment_id].grade is not None)
-            else 0.0
+            else None
             for asgn in written_assignments
         ]
         performance_scores = [
             float(student_subs[asgn.classwork_assignment_id].grade)
             if (asgn.classwork_assignment_id in student_subs and student_subs[asgn.classwork_assignment_id].grade is not None)
-            else 0.0
+            else None
             for asgn in performance_assignments
         ]
         quarterly_scores = [
             float(student_subs[asgn.classwork_assignment_id].grade)
             if (asgn.classwork_assignment_id in student_subs and student_subs[asgn.classwork_assignment_id].grade is not None)
-            else 0.0
+            else None
             for asgn in quarterly_assignments
         ]
 
@@ -298,7 +298,7 @@ def _categorize_assignment(assignment: ClassworkAssignment) -> str:
 
 
 def _category_ps(
-    scores: list[float],
+    scores: list[float | None],
     assignments: list[ClassworkAssignment],
 ) -> float | None:
     """
@@ -312,7 +312,7 @@ def _category_ps(
     )
     if total_max <= 0:
         return None
-    total_earned = sum(scores)
+    total_earned = sum(s for s in scores if s is not None)
     return round((total_earned / total_max) * 100, 2)
 
 

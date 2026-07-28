@@ -10,6 +10,7 @@ import {
   Info,
   CalendarDays,
   Paperclip,
+  GraduationCap,
 } from "lucide-react";
 import AttachmentDisplay from "@/components/attachment-display";
 import SubmissionForm from "@/components/submission-form";
@@ -280,6 +281,7 @@ export default function SubjectLessonTab({
     subject_name: string;
     teacher_name: string;
   } | null>(null);
+  const [subjectAssignments, setSubjectAssignments] = useState<ClassworkDetail[]>([]);
   const [sortAsc, setSortAsc] = useState(false);
   const [selectedLessonDetail, setSelectedLessonDetail] =
     useState<Lesson | null>(null);
@@ -371,6 +373,13 @@ export default function SubjectLessonTab({
       setLessons(data);
       // Pre-fetch classworks for all lessons in the background
       fetchAllClassworks(data);
+
+      void apiFetch(
+        `/api/v1/classwork-assignments/class/${classId}/subject/${subjectId}`,
+      )
+        .then(async (r) => (r.ok ? ((await r.json()) as ClassworkDetail[]) : []))
+        .then((cwData) => setSubjectAssignments(cwData || []))
+        .catch(() => setSubjectAssignments([]));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch lessons");
     } finally {
@@ -1159,8 +1168,34 @@ export default function SubjectLessonTab({
     ).values(),
   );
 
+  const quarterlyAssessments = Array.from(
+    new Map([
+      ...subjectAssignments
+        .filter((cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT")
+        .map((cw) => [cw.classwork_assignment_id, cw]),
+      ...allClassworks
+        .filter(
+          (cw) =>
+            cw.classwork_category === "QUARTERLY_ASSESSMENT" ||
+            (isQuizType(cw.classwork_type) &&
+              (classworkLessonCounts.get(cw.classwork_assignment_id) ?? 0) > 1),
+        )
+        .map((cw) => [cw.classwork_assignment_id, cw]),
+    ]).values(),
+  );
+
+  const quarterlyAssignmentIds = new Set(
+    quarterlyAssessments.map((qa) => qa.classwork_assignment_id),
+  );
+
   const renderLessonClassworkCards = (lesson: Lesson) => {
-    const classworks = classworksByLesson[lesson.lesson_id] ?? [];
+    const classworks = (classworksByLesson[lesson.lesson_id] ?? []).filter(
+      (cw) =>
+        cw.classwork_category !== "QUARTERLY_ASSESSMENT" &&
+        !quarterlyAssignmentIds.has(cw.classwork_assignment_id) &&
+        (!isQuizType(cw.classwork_type) ||
+          (classworkLessonCounts.get(cw.classwork_assignment_id) ?? 0) <= 1),
+    );
 
     if (classworkLoadingId === lesson.lesson_id) {
       return (
@@ -1296,6 +1331,77 @@ export default function SubjectLessonTab({
             </Card>
           )}
 
+          {/* ════════════════ DEDICATED SECTION: Quarterly Assessments ════════════════ */}
+          <div className="rounded-xl border border-black bg-[#FFFBEE] p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-black bg-[#F6E9B2] shadow-sm">
+                  <GraduationCap size={20} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold tracking-tight text-black">Quarterly Assessments</h3>
+                  <p className="text-xs font-medium text-gray-600">
+                    Periodical exams and summative assessments for this subject.
+                  </p>
+                </div>
+              </div>
+              <span className="rounded-full border border-black bg-[#F6E9B2] px-3 py-1 text-xs font-bold shadow-sm">
+                {quarterlyAssessments.length} {quarterlyAssessments.length === 1 ? "Assessment" : "Assessments"}
+              </span>
+            </div>
+
+            {quarterlyAssessments.length > 0 ? (
+              <div className="mt-4 space-y-3">
+                {quarterlyAssessments.map((cw) => {
+                  const badge = getStatusBadge(cw.submission_status, cw.due_date);
+                  const isLoading = detailLoadingId === cw.classwork_assignment_id;
+                  return (
+                    <button
+                      key={`qa-${cw.classwork_assignment_id}`}
+                      type="button"
+                      onClick={() => openClassworkDetail(cw as any)}
+                      disabled={isLoading}
+                      className="w-full rounded-lg border border-black bg-white px-5 py-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between gap-4 hover:bg-gray-50 transition-all text-left"
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-[#F6E9B2]">
+                          <ClipboardList size={20} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="font-bold text-lg leading-tight truncate">{cw.title}</h4>
+                            <span className="rounded-full border border-black bg-[#7ABA78] px-2.5 py-0.5 text-[10px] font-bold text-white">
+                              Quarterly Assessment
+                            </span>
+                          </div>
+                          <p className="text-xs font-medium text-gray-600 mt-1">
+                            {cw.due_date ? `Scheduled ${fmtDate(cw.due_date)}` : "No due date"}
+                            {cw.total_points ? ` • ${cw.total_points} pts` : ""}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        {badge && (
+                          <span className={`rounded-full border px-3 py-1 text-xs font-bold ${badge.cls}`}>
+                            {badge.label}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="mt-3 flex items-center gap-3 rounded-lg border border-dashed border-gray-400 bg-white px-4 py-3">
+                <GraduationCap size={20} className="shrink-0 text-gray-400" />
+                <p className="text-xs font-semibold text-gray-500">
+                  No quarterly assessments scheduled yet for this subject.
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* ── Empty state ── */}
           {lessons.length === 0 ? (
             <div className="flex flex-col items-center py-16 text-gray-500 gap-2">
@@ -1315,59 +1421,17 @@ export default function SubjectLessonTab({
                 </div>
 
                 <div className="space-y-2">
-                  {multiLessonClassworks.map((classwork) => {
-                    const badge = getStatusBadge(
-                      classwork.submission_status,
-                      classwork.due_date,
-                    );
-                    const isLoading =
-                      detailLoadingId === classwork.classwork_assignment_id;
-                    return (
-                      <button
-                        key={`multi-lesson-${classwork.classwork_assignment_id}`}
-                        type="button"
-                        onClick={() => openClassworkDetail(classwork)}
-                        disabled={isLoading}
-                        className="w-full rounded-lg border border-black bg-white px-5 py-4 shadow-md flex items-center gap-3 hover:bg-[#FFFBEE] transition-colors text-left"
-                      >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-[#F6E9B2]">
-                          <ClipboardList size={18} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h4 className="font-bold text-lg leading-tight">
-                              {classwork.title}
-                            </h4>
-                            <span className="rounded-full border border-black bg-[#7ABA78] px-2 py-0.5 text-[10px] font-bold">
-                              Multi-lesson exam
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-600 mt-0.5">
-                            {classwork.due_date
-                              ? `Scheduled ${fmtDate(classwork.due_date)}`
-                              : "No due date"}
-                          </p>
-                        </div>
-                        {badge ? (
-                          <span
-                            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${badge.cls}`}
-                          >
-                            {badge.label}
-                          </span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
                   {sortedLessons.map((lesson) => {
                     const isExpanded = expandedId === lesson.lesson_id;
                     const classworks = (
                       classworksByLesson[lesson.lesson_id] ?? []
                     ).filter(
                       (classwork) =>
-                        !isQuizType(classwork.classwork_type) ||
-                        (classworkLessonCounts.get(
-                          classwork.classwork_assignment_id,
-                        ) ?? 0) <= 1,
+                        classwork.classwork_category !== "QUARTERLY_ASSESSMENT" &&
+                        (!isQuizType(classwork.classwork_type) ||
+                          (classworkLessonCounts.get(
+                            classwork.classwork_assignment_id,
+                          ) ?? 0) <= 1),
                     );
 
                     return (
