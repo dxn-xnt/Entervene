@@ -37,7 +37,7 @@ function FormField({
 }) {
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
-      <Label className="font-semibold">
+      <Label className="font-bold">
         {label}
         {required && <span className="ml-1 text-destructive">*</span>}
       </Label>
