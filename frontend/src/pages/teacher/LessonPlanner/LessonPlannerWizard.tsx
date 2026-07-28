@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
+import { Card } from "@/components/retroui/Card";
 import {
   FileText,
   Target,
@@ -217,7 +218,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
           ))}
         </TabsList>
 
-        <div className="w-full rounded-xl border bg-white p-6 md:p-8 shadow-sm">
+        <Card className="w-full block">
           <TabsContent value="info" className="w-full">
             <InfoTab
               draft={draft}
@@ -263,7 +264,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
               }
             />
           </TabsContent>
-        </div>
+        </Card>
       </Tabs>
 
       {/* Footer (Single location for action buttons) */}

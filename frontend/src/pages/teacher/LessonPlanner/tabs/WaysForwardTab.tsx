@@ -9,7 +9,7 @@ interface WaysForwardTabProps {
   onNestedChange: (
     section: "ways_forward",
     key: keyof LessonPlanDraft["ways_forward"],
-    value: unknown
+    value: unknown,
   ) => void;
 }
 
@@ -29,56 +29,80 @@ export const WaysForwardTab: React.FC<WaysForwardTabProps> = ({
   onNestedChange,
 }) => {
   const { ways_forward: wf } = draft;
-  const aiCtx = { title: draft.title, learningArea: draft.learning_area, gradeSection: draft.grade_section };
+  const aiCtx = {
+    title: draft.title,
+    learningArea: draft.learning_area,
+    gradeSection: draft.grade_section,
+  };
 
   return (
-    <div className="flex flex-col gap-8 w-full">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-800 mb-1">Ways Forward (W)</h2>
+    <div className="flex w-full flex-col gap-6">
+      {/* Section Header */}
+      <div className="space-y-1 border-b-2 border-border pb-3">
+        <h2 className="text-xl font-bold">Ways Forward</h2>
+
         <p className="text-sm text-muted-foreground">
-          Plan how you will extend learning and reflect on the lesson's effectiveness.
+          Plan how you will extend learning and reflect on the lesson's
+          effectiveness.
         </p>
       </div>
 
       {/* Side-by-Side 2 Column Desktop Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full items-start">
+      <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
         {/* Extended Learning Opportunities */}
-        <div className="flex flex-col gap-2 w-full border rounded-xl p-5 bg-white shadow-2xs">
-          <div className="flex items-center justify-between flex-wrap gap-2 w-full pb-2 border-b">
+        <div className="flex h-full w-full flex-col gap-2 border-2 border-black bg-white p-5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex w-full flex-wrap items-center justify-between gap-2 border-b-2 border-border pb-2">
             <div>
-              <Label className="text-sm font-semibold text-gray-800">Extended Learning Opportunities</Label>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <Label className="font-bold">
+                Extended Learning Opportunities
+              </Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Enrichment activities, remediation strategies, or homework.
               </p>
             </div>
             <AIAssistButton
               field="extended_opportunities"
               {...aiCtx}
-              onSuggestion={(t) => onNestedChange("ways_forward", "extended_opportunities", cleanAIString(t))}
+              onSuggestion={(t) =>
+                onNestedChange(
+                  "ways_forward",
+                  "extended_opportunities",
+                  cleanAIString(t),
+                )
+              }
             />
           </div>
           <textarea
             rows={8}
             placeholder="Describe enrichment or remediation activities for learners who need more support or challenge…"
             value={wf.extended_opportunities}
-            onChange={(e) => onNestedChange("ways_forward", "extended_opportunities", e.target.value)}
-            className="w-full rounded-md border border-input bg-transparent px-3 py-2.5 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y min-h-[180px]"
+            onChange={(e) =>
+              onNestedChange(
+                "ways_forward",
+                "extended_opportunities",
+                e.target.value,
+              )
+            }
+            className="w-full flex-1 resize-none border-2 border-black bg-background px-3 py-2.5 text-sm shadow-none outline-none focus:border-black"
           />
         </div>
 
         {/* Teacher Reflections */}
-        <div className="flex flex-col gap-2 w-full border rounded-xl p-5 bg-white shadow-2xs">
-          <div className="flex items-center justify-between flex-wrap gap-2 w-full pb-2 border-b">
+        <div className="flex h-full w-full flex-col gap-2 border-2 border-black bg-white p-5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex w-full flex-wrap items-center justify-between gap-2 border-b-2 border-border pb-2">
             <div>
-              <Label className="text-sm font-semibold text-gray-800">Teacher Reflections</Label>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Post-lesson notes on what worked, what to improve, and observations.
+              <Label className="font-bold">Teacher Reflections</Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Post-lesson notes on what worked, what to improve, and
+                observations.
               </p>
             </div>
             <AIAssistButton
               field="reflections"
               {...aiCtx}
-              onSuggestion={(t) => onNestedChange("ways_forward", "reflections", cleanAIString(t))}
+              onSuggestion={(t) =>
+                onNestedChange("ways_forward", "reflections", cleanAIString(t))
+              }
               label="AI Template"
             />
           </div>
@@ -86,21 +110,29 @@ export const WaysForwardTab: React.FC<WaysForwardTabProps> = ({
             rows={8}
             placeholder="What went well? What would you do differently? What did you notice about student engagement and learning?…"
             value={wf.reflections}
-            onChange={(e) => onNestedChange("ways_forward", "reflections", e.target.value)}
-            className="w-full rounded-md border border-input bg-transparent px-3 py-2.5 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y min-h-[180px]"
+            onChange={(e) =>
+              onNestedChange("ways_forward", "reflections", e.target.value)
+            }
+            className="w-full flex-1 resize-none border-2 border-black bg-background px-3 py-2.5 text-sm shadow-none outline-none focus:border-black"
           />
         </div>
       </div>
 
       {/* Completion Banner */}
-      <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50/50 p-5 flex items-center gap-3.5 w-full">
-        <div className="size-9 rounded-full bg-blue-100 flex items-center justify-center shrink-0 text-blue-600 font-bold">
+      <div className="flex w-full items-center gap-3.5 border-2 border-black bg-blue-50 p-5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+        <div className="flex size-9 shrink-0 items-center justify-center border-2 border-black bg-blue-100 font-bold text-blue-600">
           <CheckCircle className="size-5" />
         </div>
         <div>
-          <h3 className="text-sm font-semibold text-blue-950">You're on the final step!</h3>
-          <p className="text-xs text-blue-700 mt-0.5">
-            Review your entries above. When ready, use the action buttons at the bottom of the page to <strong>Save Draft</strong>, <strong>Submit &amp; Export PDF</strong>, <strong>Submit &amp; Export Word (.docx)</strong>, or <strong>Submit Only</strong>.
+          <h3 className="text-sm font-bold text-blue-950">
+            You're on the final step!
+          </h3>
+          <p className="mt-0.5 text-xs text-blue-700">
+            Review your entries above. When ready, use the action buttons at the
+            bottom of the page to <strong>Save Draft</strong>,{" "}
+            <strong>Submit &amp; Export PDF</strong>,{" "}
+            <strong>Submit &amp; Export Word (.docx)</strong>, or{" "}
+            <strong>Submit Only</strong>.
           </p>
         </div>
       </div>
