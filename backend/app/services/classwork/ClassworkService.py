@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.FileUpload import delete_file, save_file
 from app.core.Security import decode_access_token
+from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
@@ -534,9 +535,10 @@ def classwork_assignment_detail(assignment_id: int, current_user: dict, db: Sess
 
 def teacher_classes(staff_id: str, db: Session) -> list[dict]:
     rows = (
-        db.query(SubjectLoad, Subject, Class)
+        db.query(SubjectLoad, Subject, Class, AcademicLevel)
         .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
         .join(Class, Class.class_id == SubjectLoad.class_id)
+        .outerjoin(AcademicLevel, AcademicLevel.academic_level_id == Class.academic_level_id)
         .filter(SubjectLoad.staff_id == staff_id, SubjectLoad.status == "active")
         .all()
     )
@@ -548,8 +550,9 @@ def teacher_classes(staff_id: str, db: Session) -> list[dict]:
             "subject_codename": subject.subject_codename,
             "class_id": class_.class_id,
             "section_name": _class_section_name(class_),
+            "grade_level": level.level_name if (level and level.level_name) else (f"Grade {level.grade_level}" if (level and level.grade_level) else "Grade 7"),
         }
-        for subject_load, subject, class_ in rows
+        for subject_load, subject, class_, level in rows
     ]
 
 

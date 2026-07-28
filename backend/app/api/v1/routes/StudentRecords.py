@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.Dependencies import get_staff_id, require_role
 from app.db.Session import get_db
 from app.schemas.StudentRecord import (
+    StudentGradebookResponse,
     StudentPeriodGradeFinalizeRequest,
     StudentPeriodGradeFinalizeResponse,
     StudentRecordDetailResponse,
@@ -15,6 +16,7 @@ from app.schemas.StudentRecord import (
 from app.services.student_record.StudentRecordService import (
     finalize_student_period_grade,
     teacher_period_options,
+    teacher_student_gradebook,
     teacher_student_record_detail,
     teacher_student_roster,
 )
@@ -90,3 +92,25 @@ def get_teacher_student_record_detail(
         student_id,
         academic_period_id,
     )
+
+
+@router.get(
+    "/teacher/classes/{class_id}/subjects/{subject_id}/gradebook",
+    response_model=StudentGradebookResponse,
+)
+def get_teacher_student_gradebook(
+    class_id: int,
+    subject_id: int,
+    academic_period_id: int | None = Query(None),
+    _teacher: dict = Depends(require_role("teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return teacher_student_gradebook(
+        db,
+        staff_id=staff_id,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=academic_period_id,
+    )
+

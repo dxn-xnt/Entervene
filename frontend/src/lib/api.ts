@@ -125,6 +125,7 @@ export type TodoItem = {
   deadline: string;
   type: string;
   category: string | null;
+  total_points?: number;
   status: "pending" | "pastdue" | "completed";
   is_submitted: boolean;
   submission_status: string | null;
@@ -500,6 +501,91 @@ export async function getActivePeriod(): Promise<ActivePeriodResponse> {
 
 // Backward-compatible alias. Prefer getActivePeriod in new code.
 export const getActiveQuarter = getActivePeriod;
+
+export type StudentSubjectItem = {
+  subject_load_id: number;
+  class_id: number;
+  subject_id: number;
+  subject_name: string;
+  subject_codename: string | null;
+  teacher_name: string;
+  period_id: number;
+  period_name: string;
+  is_current_period: boolean;
+  is_current_quarter: boolean;
+  section_name: string;
+  year_label: string;
+};
+
+export async function getMySubjects(): Promise<StudentSubjectItem[]> {
+  const response = await apiFetch("/api/v1/students/me/subjects");
+
+  if (!response.ok) {
+    throw new Error("Unable to load your subjects. Please try again.");
+  }
+
+  return (await response.json()) as StudentSubjectItem[];
+}
+
+export type TeacherClassItem = {
+  class_id: number;
+  subject_id: number;
+  section_name: string;
+  subject_name: string;
+  grade_level?: string;
+};
+
+export async function getTeacherClasses(): Promise<TeacherClassItem[]> {
+  const response = await apiFetch("/api/v1/classwork-assignments/teacher/classes");
+
+  if (!response.ok) {
+    throw new Error("Unable to load teacher classes. Please try again.");
+  }
+
+  return (await response.json()) as TeacherClassItem[];
+}
+
+export type GradebookCategoryHeader = {
+  id: number;
+  title: string;
+  maxScore: number;
+};
+
+export type GradebookCategoryHeaderGroup = {
+  writtenWork: GradebookCategoryHeader[];
+  performanceTask: GradebookCategoryHeader[];
+  quarterlyAssessment: GradebookCategoryHeader[];
+};
+
+export type StudentGradebookRow = {
+  student_id: string;
+  name: string;
+  writtenWork: number[];
+  performanceTask: number[];
+  quarterlyAssessment: number[];
+  ps_written?: number | null;
+  ps_performance?: number | null;
+  ps_quarterly?: number | null;
+  initial_grade?: number | null;
+  transmuted_grade?: number | null;
+  total: string;
+};
+
+export type StudentGradebookResponse = {
+  scope: any;
+  classwork: GradebookCategoryHeaderGroup[];
+  studentGrades: StudentGradebookRow[];
+};
+
+export async function getTeacherGradebook(classId: number | string, subjectId: number | string): Promise<StudentGradebookResponse> {
+  const response = await apiFetch(`/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/gradebook`);
+
+  if (!response.ok) {
+    throw new Error("Unable to load gradebook data. Please try again.");
+  }
+
+  return (await response.json()) as StudentGradebookResponse;
+}
 
 export async function updateUser(userId: string, payload: UpdateUserPayload) {
   const response = await apiFetch(`/api/v1/users/${encodeURIComponent(userId)}`, {
