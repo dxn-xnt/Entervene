@@ -222,8 +222,8 @@ const TeacherGradeView = () => {
 
                       <Table.Cell className="py-2 px-2">
                         <div className="flex flex-row items-center justify-between gap-1 w-full">
-                          <Ellipsis
-                            className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0"
+                          <button
+                            type="button"
                             title="View all Written Works scores"
                             onClick={() =>
                               setSelectedCategory({
@@ -235,7 +235,9 @@ const TeacherGradeView = () => {
                                 })),
                               })
                             }
-                          />
+                          >
+                            <Ellipsis className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                          </button>
                           <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
                             {getLatestTwo(cg.writtenWork).map(({ item }) => (
                               <span
@@ -248,18 +250,20 @@ const TeacherGradeView = () => {
                               </span>
                             ))}
                           </div>
-                          <Plus
-                            className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0"
+                          <button
+                            type="button"
                             title="Add score to Written Works"
                             onClick={() => setAddingCategoryName("Written Works")}
-                          />
+                          >
+                            <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                          </button>
                         </div>
                       </Table.Cell>
 
                       <Table.Cell className="py-2 px-2">
                         <div className="flex flex-row items-center justify-between gap-1 w-full">
-                          <Ellipsis
-                            className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0"
+                          <button
+                            type="button"
                             title="View all Performance Tasks scores"
                             onClick={() =>
                               setSelectedCategory({
@@ -271,7 +275,9 @@ const TeacherGradeView = () => {
                                 })),
                               })
                             }
-                          />
+                          >
+                            <Ellipsis className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                          </button>
                           <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
                             {getLatestTwo(cg.performanceTask).map(({ item }) => (
                               <span
@@ -284,18 +290,20 @@ const TeacherGradeView = () => {
                               </span>
                             ))}
                           </div>
-                          <Plus
-                            className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0"
+                          <button
+                            type="button"
                             title="Add score to Performance Tasks"
                             onClick={() => setAddingCategoryName("Performance Tasks")}
-                          />
+                          >
+                            <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                          </button>
                         </div>
                       </Table.Cell>
 
                       <Table.Cell className="py-2 px-2">
                         <div className="flex flex-row items-center justify-between gap-1 w-full">
-                          <Ellipsis
-                            className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0"
+                          <button
+                            type="button"
                             title="View all Quarterly Assessment scores"
                             onClick={() =>
                               setSelectedCategory({
@@ -307,7 +315,9 @@ const TeacherGradeView = () => {
                                 })),
                               })
                             }
-                          />
+                          >
+                            <Ellipsis className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                          </button>
                           <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
                             {getLatestTwo(cg.quarterlyAssessment).map(({ item }) => (
                               <span
@@ -320,11 +330,13 @@ const TeacherGradeView = () => {
                               </span>
                             ))}
                           </div>
-                          <Plus
-                            className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0"
+                          <button
+                            type="button"
                             title="Add score to Quarterly Assessment"
                             onClick={() => setAddingCategoryName("Quarterly Assessment")}
-                          />
+                          >
+                            <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                          </button>
                         </div>
                       </Table.Cell>
 

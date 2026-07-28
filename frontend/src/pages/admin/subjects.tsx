@@ -116,8 +116,20 @@ export default function AdminSubjects() {
   const [isOfferingModalOpen, setIsOfferingModalOpen] = useState(false);
   const [isCopySetupModalOpen, setIsCopySetupModalOpen] = useState(false);
   const [editingOffering, setEditingOffering] = useState<SubjectOfferingListItem | null>(null);
+  const [isSubjectModalOpen, setIsSubjectModalOpen] = useState(false);
+  const [editingSubject, setEditingSubject] = useState<SubjectListItem | null>(null);
   const [isGradingModalOpen, setIsGradingModalOpen] = useState(false);
   const [editingGradingTemplate, setEditingGradingTemplate] = useState<GradingTemplateListItem | null>(null);
+
+  const openCreateSubject = () => {
+    setEditingSubject(null);
+    setIsSubjectModalOpen(true);
+  };
+
+  const openEditSubject = (subject: SubjectListItem) => {
+    setEditingSubject(subject);
+    setIsSubjectModalOpen(true);
+  };
 
   const loadSubjects = async () => {
     setIsLoadingCatalog(true);
@@ -156,19 +168,20 @@ export default function AdminSubjects() {
     }
   };
 
-  const loadOfferings = useCallback(async () => {
+  const loadOfferings = useCallback(async (overrideFilters?: Partial<OfferingFilters>) => {
     setIsLoadingOfferings(true);
     setError(null);
     try {
+      const activeFilters = overrideFilters ? { ...offeringFilters, ...overrideFilters } : offeringFilters;
       const selectedLevel = offeringOptions?.academic_levels.find(
-        (level) => String(level.grade_level) === offeringFilters.grade
+        (level) => String(level.grade_level) === activeFilters.grade
       );
       const params = {
-        academic_year_id: offeringFilters.academic_year_id !== ALL_VALUE ? Number(offeringFilters.academic_year_id) : undefined,
+        academic_year_id: activeFilters.academic_year_id !== ALL_VALUE ? Number(activeFilters.academic_year_id) : undefined,
         academic_level_id: selectedLevel?.academic_level_id,
-        pathway: offeringFilters.pathway !== ALL_VALUE ? offeringFilters.pathway : undefined,
-        status: offeringFilters.status !== ALL_VALUE ? offeringFilters.status : undefined,
-        search: offeringFilters.search,
+        pathway: activeFilters.pathway !== ALL_VALUE ? activeFilters.pathway : undefined,
+        status: activeFilters.status !== ALL_VALUE ? activeFilters.status : undefined,
+        search: activeFilters.search,
       };
       const [listData, archivedData] = await Promise.all([
         getSubjectOfferings(params),
@@ -378,7 +391,7 @@ export default function AdminSubjects() {
           await restoreSubject(pendingAction.id);
           setNotice(`${pendingAction.label} was restored.`);
         }
-        await loadSubjects();
+        await Promise.all([loadSubjects(), loadOfferings(), loadGradingTemplates()]);
       } else if (pendingAction.kind === "offering") {
         if (pendingAction.action === "archive") {
           await archiveSubjectOffering(pendingAction.id);
@@ -387,7 +400,7 @@ export default function AdminSubjects() {
           await restoreSubjectOffering(pendingAction.id);
           setNotice(`${pendingAction.label} offering was restored.`);
         }
-        await loadOfferings();
+        await Promise.all([loadSubjects(), loadOfferings(), loadGradingTemplates()]);
       } else {
         if (pendingAction.action === "archive") {
           await archiveGradingTemplate(pendingAction.id);
@@ -396,7 +409,7 @@ export default function AdminSubjects() {
           await restoreGradingTemplate(pendingAction.id);
           setNotice(`${pendingAction.label} template was restored.`);
         }
-        await loadGradingTemplates();
+        await Promise.all([loadSubjects(), loadOfferings(), loadGradingTemplates()]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to complete action.");
@@ -529,19 +542,9 @@ export default function AdminSubjects() {
                       className="hidden"
                       onChange={(event) => void handleCatalogImport(event.target.files?.[0])}
                     />
-                    <Dialog>
-                      <Dialog.Trigger>
-                        <Button>
-                          <Plus className="size-4 mr-2" /> New Subject
-                        </Button>
-                      </Dialog.Trigger>
-                      <AddSubjectModal
-                        onCreated={async () => {
-                          await loadSubjects();
-                          await loadOfferings();
-                        }}
-                      />
-                    </Dialog>
+                    <Button onClick={openCreateSubject}>
+                      <Plus className="size-4 mr-2" /> New Subject
+                    </Button>
                     <Button
                       variant="outline"
                       onClick={() => catalogImportInputRef.current?.click()}
@@ -742,17 +745,7 @@ export default function AdminSubjects() {
                     title="No subjects exist yet."
                     description="Create catalog subjects first, then use offerings to place them in a year, grade, pathway, and term."
                   >
-                    <Dialog>
-                      <Dialog.Trigger>
-                        <Button size="sm">Create Subject</Button>
-                      </Dialog.Trigger>
-                      <AddSubjectModal
-                        onCreated={async () => {
-                          await loadSubjects();
-                          await loadOfferings();
-                        }}
-                      />
-                    </Dialog>
+                    <Button size="sm" onClick={openCreateSubject}>Create Subject</Button>
                     <Button
                       size="sm"
                       variant="outline"
@@ -767,6 +760,7 @@ export default function AdminSubjects() {
                     <SubjectGradeSection
                       key={item.academicLevelId}
                       group={item}
+                      onEdit={openEditSubject}
                       onArchive={(itemToArchive) =>
                         setPendingAction({
                           kind: "subject",
@@ -1055,6 +1049,15 @@ export default function AdminSubjects() {
         </div>
       </div>
 
+      <Dialog open={isSubjectModalOpen} onOpenChange={setIsSubjectModalOpen}>
+        <AddSubjectModal
+          subjectToEdit={editingSubject}
+          onCreated={async () => {
+            await Promise.all([loadSubjects(), loadOfferings(), loadGradingTemplates()]);
+          }}
+        />
+      </Dialog>
+
       <OfferingModal
         open={isOfferingModalOpen}
         onOpenChange={setIsOfferingModalOpen}
@@ -1063,9 +1066,21 @@ export default function AdminSubjects() {
         catalogSubjects={subjects}
         readOnly={isViewingInactiveAcademicYear}
         readOnlyReason={readOnlyReason}
-        onSaved={async (message) => {
-          setNotice(message ?? (editingOffering ? "Subject offering updated." : "Offerings saved."));
-          await loadOfferings();
+        onSaved={async (savedMeta) => {
+          setNotice(savedMeta?.message ?? (editingOffering ? "Subject offering updated." : "Offerings saved."));
+          let nextFilters = offeringFilters;
+          if (savedMeta?.gradeValue) {
+            const nextGrade = savedMeta.gradeValue as CurriculumGradeValue;
+            const isShsGrade = nextGrade === "11" || nextGrade === "12";
+            nextFilters = {
+              ...offeringFilters,
+              academic_year_id: savedMeta.academicYearId ? String(savedMeta.academicYearId) : offeringFilters.academic_year_id,
+              grade: nextGrade,
+              pathway: isShsGrade ? "all" : (savedMeta.pathway ?? offeringFilters.pathway),
+            };
+            setOfferingFilters(nextFilters);
+          }
+          await Promise.all([loadSubjects(), loadOfferings(nextFilters), loadGradingTemplates()]);
         }}
       />
 
@@ -1086,7 +1101,7 @@ export default function AdminSubjects() {
           onClose={() => setIsGradingModalOpen(false)}
           onSaved={async () => {
             setNotice(editingGradingTemplate ? "Grading template updated." : "Grading template created.");
-            await loadGradingTemplates();
+            await Promise.all([loadGradingTemplates(), loadSubjects(), loadOfferings()]);
           }}
         />
       </Dialog>

@@ -81,7 +81,9 @@ export default function AddSubjectLoadModal() {
 
 
     const [step, setStep] = React.useState<number>(1);
-    const [yearLevel, setYearLevel] = React.useState<string>("");
+    const [academicYear, setAcademicYear] = React.useState<string>("2025-2026");
+    const [academicPeriod, setAcademicPeriod] = React.useState<string>("term1");
+    const [yearLevel, setYearLevel] = React.useState<string>("g11");
 
     const [selectedSubjects, setSelectedSubjects] = React.useState<Set<string>>(new Set())
 
@@ -128,33 +130,30 @@ export default function AddSubjectLoadModal() {
                             <div className="flex flex-row gap-2 w-full">
                                 <div className="flex flex-col gap-1 w-full">
                                     <label htmlFor="grading-component-name" className="text-sm">Academic Year</label>
-                                    <Select value={yearLevel} onValueChange={setYearLevel}>
+                                    <Select value={academicYear} onValueChange={setAcademicYear}>
                                         <Select.Trigger className="w-full">
                                             <Select.Value placeholder="Select academic year" />
                                         </Select.Trigger>
                                         <Select.Content>
                                             <Select.Group>
-                                                <Select.Item value="g7">2026-2027</Select.Item>
-                                                <Select.Item value="g8">2027-2028</Select.Item>
-                                                <Select.Item value="g9">2028-2029</Select.Item>
-                                                <Select.Item value="g10">2029-2030</Select.Item>
-                                                <Select.Item value="g11">2030-2031</Select.Item>
-                                                <Select.Item value="g12">2031-2032</Select.Item>
+                                                <Select.Item value="2025-2026">2025-2026</Select.Item>
+                                                <Select.Item value="2026-2027">2026-2027</Select.Item>
+                                                <Select.Item value="2027-2028">2027-2028</Select.Item>
                                             </Select.Group>
                                         </Select.Content>
                                     </Select>
                                 </div>
                                 <div className="flex flex-col gap-1 w-full">
                                     <label htmlFor="grading-component-name" className="text-sm">Academic Period</label>
-                                    <Select value={yearLevel} onValueChange={setYearLevel}>
+                                    <Select value={academicPeriod} onValueChange={setAcademicPeriod}>
                                         <Select.Trigger className="w-full">
                                             <Select.Value placeholder="Select period" />
                                         </Select.Trigger>
                                         <Select.Content>
                                             <Select.Group>
-                                                <Select.Item value="g7">Term 1</Select.Item>
-                                                <Select.Item value="g8">Term 2</Select.Item>
-                                                <Select.Item value="g9">Term 3</Select.Item>
+                                                <Select.Item value="term1">Term 1</Select.Item>
+                                                <Select.Item value="term2">Term 2</Select.Item>
+                                                <Select.Item value="term3">Term 3</Select.Item>
                                             </Select.Group>
                                         </Select.Content>
                                     </Select>

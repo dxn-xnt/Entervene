@@ -159,6 +159,7 @@ def offering_to_item(
             "subject_name": subject.subject_name,
             "subject_codename": subject.subject_codename,
             "subject_group": subject.subject_group,
+            "default_grading_template": subject.default_grading_template,
         },
         "academic_year": {
             "academic_year_id": academic_year.academic_year_id,

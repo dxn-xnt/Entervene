@@ -10,10 +10,12 @@ import { Text } from "@/components/retroui/Text";
 import {
   createSubjectOffering,
   createSubject,
+  updateSubject,
   getGradingTemplates,
   getSubjectOfferingFormOptions,
   getSubjectFormOptions,
   type GradingTemplateListItem,
+  type SubjectListItem,
   type SubjectOfferingFormOptions,
   type SubjectOfferingPathway,
   type SubjectFormOptions,
@@ -25,6 +27,7 @@ const JHS_PATHWAYS: SubjectOfferingPathway[] = ["general"];
 const SHS_PATHWAYS: SubjectOfferingPathway[] = ["both", "stem_medical", "stem_engineering"];
 
 type AddSubjectModalProps = {
+  subjectToEdit?: SubjectListItem | null;
   onCreated?: () => void | Promise<void>;
 };
 
@@ -89,7 +92,7 @@ function formWithDefaults(options: SubjectFormOptions | null): SubjectFormState 
   };
 }
 
-export default function AddSubjectModal({ onCreated }: AddSubjectModalProps) {
+export default function AddSubjectModal({ subjectToEdit, onCreated }: AddSubjectModalProps) {
   const [options, setOptions] = React.useState<SubjectFormOptions | null>(null);
   const [offeringOptions, setOfferingOptions] = React.useState<SubjectOfferingFormOptions | null>(null);
   const [gradingTemplates, setGradingTemplates] = React.useState<GradingTemplateListItem[]>([]);
@@ -100,6 +103,22 @@ export default function AddSubjectModal({ onCreated }: AddSubjectModalProps) {
   const [isSaving, setIsSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [successMessage, setSuccessMessage] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (subjectToEdit) {
+      setForm({
+        academic_level_id: String(subjectToEdit.academic_level.academic_level_id),
+        subject_name: subjectToEdit.subject_name,
+        subject_codename: subjectToEdit.subject_codename || "",
+        subject_group: subjectToEdit.subject_group || "",
+        hours: subjectToEdit.hours ? String(subjectToEdit.hours) : "",
+        default_grading_template: subjectToEdit.default_grading_template || NO_TEMPLATE_VALUE,
+        description: subjectToEdit.description || "",
+        status: subjectToEdit.status,
+      });
+      setOfferNow(false);
+    }
+  }, [subjectToEdit]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -232,6 +251,23 @@ export default function AddSubjectModal({ onCreated }: AddSubjectModalProps) {
     try {
       const selectedTemplate =
         form.default_grading_template === NO_TEMPLATE_VALUE ? null : form.default_grading_template;
+
+      if (subjectToEdit) {
+        await updateSubject(subjectToEdit.subject_id, {
+          subject_name: form.subject_name.trim(),
+          subject_codename: form.subject_codename.trim() || null,
+          subject_group: form.subject_group || null,
+          academic_level_id: Number(form.academic_level_id),
+          hours: form.hours.trim() ? Number(form.hours) : null,
+          default_grading_template: selectedTemplate,
+          description: form.description.trim() || null,
+          status: form.status,
+        });
+        setSuccessMessage(`${form.subject_name.trim()} updated successfully.`);
+        await onCreated?.();
+        return;
+      }
+
       const created = await createSubject({
         subject_name: form.subject_name.trim(),
         subject_codename: form.subject_codename.trim() || null,
@@ -280,7 +316,7 @@ export default function AddSubjectModal({ onCreated }: AddSubjectModalProps) {
         await onCreated?.();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create subject.");
+      setError(err instanceof Error ? err.message : "Unable to save subject.");
     } finally {
       setIsSaving(false);
     }
@@ -291,7 +327,7 @@ export default function AddSubjectModal({ onCreated }: AddSubjectModalProps) {
       <Dialog.Content size="lg">
         <Dialog.Header asChild>
           <div className="flex w-full items-center justify-between">
-            <Text as="h5" className="font-sans text-xl font-bold">Subject Added</Text>
+            <Text as="h5" className="font-sans text-xl font-bold">{subjectToEdit ? "Subject Updated" : "Subject Added"}</Text>
           </div>
         </Dialog.Header>
         <section className="flex flex-col gap-4 p-4">
@@ -301,15 +337,17 @@ export default function AddSubjectModal({ onCreated }: AddSubjectModalProps) {
           {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
         </section>
         <Dialog.Footer>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setSuccessMessage(null);
-              setError(null);
-            }}
-          >
-            Add Another
-          </Button>
+          {!subjectToEdit ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSuccessMessage(null);
+                setError(null);
+              }}
+            >
+              Add Another
+            </Button>
+          ) : null}
           <Dialog.Close>
             <Button>Done</Button>
           </Dialog.Close>
@@ -322,7 +360,7 @@ export default function AddSubjectModal({ onCreated }: AddSubjectModalProps) {
     <Dialog.Content size="2xl">
       <Dialog.Header asChild>
         <div className="flex w-full items-center justify-between">
-          <Text as="h5" className="font-sans text-xl font-bold">Add Subject</Text>
+          <Text as="h5" className="font-sans text-xl font-bold">{subjectToEdit ? "Edit Subject" : "Add Subject"}</Text>
         </div>
       </Dialog.Header>
       <section className="flex max-h-[72vh] flex-col gap-4 overflow-y-auto p-4">

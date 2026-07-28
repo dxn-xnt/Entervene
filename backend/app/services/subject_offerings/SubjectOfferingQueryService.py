@@ -109,8 +109,14 @@ def list_subject_offerings_data(
         query = query.filter(SubjectOffering.academic_level_id == academic_level_id)
     if academic_period_id is not None:
         query = query.filter(SubjectOffering.academic_period_id == academic_period_id)
-    if pathway is not None:
-        query = query.filter(SubjectOffering.pathway == normalize_pathway(pathway))
+    if pathway is not None and pathway != "all":
+        norm_pathway = normalize_pathway(pathway)
+        if norm_pathway == "stem_medical":
+            query = query.filter(SubjectOffering.pathway.in_(["stem_medical", "both"]))
+        elif norm_pathway == "stem_engineering":
+            query = query.filter(SubjectOffering.pathway.in_(["stem_engineering", "both"]))
+        else:
+            query = query.filter(SubjectOffering.pathway == norm_pathway)
     if status is not None:
         query = query.filter(func.lower(func.coalesce(SubjectOffering.status, DEFAULT_OFFERING_STATUS)) == normalize_offering_status(status))
     search_term = readable_text(search)

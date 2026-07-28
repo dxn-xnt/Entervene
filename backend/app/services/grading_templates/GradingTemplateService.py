@@ -111,6 +111,10 @@ def update_grading_template_record(db: Session, grading_template_id: int, payloa
 
     target_level_id = data.get("academic_level_id", template.academic_level_id)
     target_subject_id = data.get("subject_id", template.subject_id)
+    if "subject_ids" in data and data["subject_ids"] and len(data["subject_ids"]) > 1:
+        target_subject_id = None
+        template.subject_id = None
+
     validate_scope(db, target_level_id, target_subject_id)
     ensure_template_name_available(
         db,
@@ -120,13 +124,7 @@ def update_grading_template_record(db: Session, grading_template_id: int, payloa
         exclude_template_id=template.grading_template_id,
     )
 
-    if "components" in data and payload.components is not None:
-        is_locked, lock_reason = check_template_locked(db, template)
-        if is_locked:
-            raise HTTPException(
-                status_code=422,
-                detail="Template weights cannot be modified after the term has started. Please create a new template.",
-            )
+    is_locked, lock_reason = check_template_locked(db, template)
 
     if "template_name" in data:
         template.template_name = target_name
@@ -138,7 +136,7 @@ def update_grading_template_record(db: Session, grading_template_id: int, payloa
         template.subject_id = target_subject_id
     if "status" in data:
         template.status = normalize_status(data["status"])
-    if "components" in data and payload.components is not None:
+    if "components" in data and payload.components is not None and not is_locked:
         replace_components(template, normalized_components(payload.components), db=db)
 
     if "subject_ids" in data:

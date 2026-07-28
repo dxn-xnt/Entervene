@@ -10,6 +10,7 @@ from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.people.AcademicStaff import AcademicStaff
+from app.models.academic.SubjectOffering import SubjectOffering
 from app.schemas.SubjectLoad import (
     ValidateSubjectLoadRequest,
     ValidationResultResponse,
@@ -57,6 +58,17 @@ def get_subject_load_studio_data(
     )
 
     existing_loads = db.query(SubjectLoad).filter(SubjectLoad.academic_period_id == selected_period_id).all()
+    try:
+        offerings = (
+            db.query(SubjectOffering)
+            .filter(
+                SubjectOffering.academic_period_id == selected_period_id,
+                SubjectOffering.status == "active",
+            )
+            .all()
+        )
+    except Exception:
+        offerings = []
 
     return {
         "active_period_id": selected_period_id,
@@ -78,6 +90,7 @@ def get_subject_load_studio_data(
                 "section_name": c.section_name,
                 "academic_level_id": c.academic_level_id,
                 "academic_year_id": c.academic_year_id,
+                "pathway": getattr(c, "pathway", None) or "general",
             }
             for c in classes
         ],
@@ -91,6 +104,17 @@ def get_subject_load_studio_data(
                 "subject_group": s.subject_group or "General",
             }
             for s in subjects
+        ],
+        "subject_offerings": [
+            {
+                "subject_offering_id": so.subject_offering_id,
+                "subject_id": so.subject_id,
+                "academic_year_id": so.academic_year_id,
+                "academic_level_id": so.academic_level_id,
+                "academic_period_id": so.academic_period_id,
+                "pathway": so.pathway,
+            }
+            for so in offerings
         ],
         "teachers": [
             {
@@ -112,6 +136,7 @@ def get_subject_load_studio_data(
                 "end_time": getattr(sl, "end_time", None),
                 "days_of_week": getattr(sl, "days_of_week", []) or [],
                 "status": sl.status or "draft",
+                "continued_from_load_id": getattr(sl, "continued_from_load_id", None),
             }
             for sl in existing_loads
         ],
@@ -185,6 +210,7 @@ def batch_save_subject_loads(
         db_load.end_time = load_item.end_time
         db_load.days_of_week = load_item.days_of_week
         db_load.status = status_value
+        db_load.continued_from_load_id = load_item.continued_from_load_id
         saved_count += 1
 
     db.commit()

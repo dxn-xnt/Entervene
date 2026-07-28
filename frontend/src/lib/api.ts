@@ -210,6 +210,7 @@ export type SubjectOfferingSubject = {
   subject_name: string;
   subject_codename: string | null;
   subject_group: string | null;
+  default_grading_template?: string | null;
 };
 export type SubjectOfferingAcademicYear = {
   academic_year_id: number;
@@ -1238,6 +1239,7 @@ export type SubjectLoadItem = {
   end_time?: string | null;
   days_of_week: string[];
   status?: string;
+  continued_from_load_id?: number | null;
 };
 
 export type ConflictItem = {
@@ -1266,13 +1268,23 @@ export type ValidationResultResponse = {
   teacher_workloads: TeacherWorkloadItem[];
 };
 
+export type SubjectOfferingStudioItem = {
+  subject_offering_id: number;
+  subject_id: number;
+  academic_year_id: number;
+  academic_level_id: number;
+  academic_period_id: number;
+  pathway: string;
+};
+
 export type SubjectLoadStudioData = {
   active_period_id: number;
-  academic_years: Array<{ academic_year_id: number; year_label: string; status: string }>;
+  academic_years: Array<{ academic_year_id: number; year_label: string; is_active: boolean }>;
   academic_periods: Array<{ academic_period_id: number; period_name: string; is_active: boolean }>;
   academic_levels: Array<{ academic_level_id: number; level_name: string; grade_level: number }>;
-  classes: Array<{ class_id: number; section_name: string; academic_level_id: number; academic_year_id: number }>;
+  classes: Array<{ class_id: number; section_name: string; academic_level_id: number; academic_year_id: number; pathway?: string }>;
   subjects: Array<{ subject_id: number; subject_name: string; subject_codename: string; academic_level_id: number; hours: number; subject_group: string }>;
+  subject_offerings?: SubjectOfferingStudioItem[];
   teachers: Array<{ staff_id: string; name: string; department: string; specialization: string }>;
   existing_loads: SubjectLoadItem[];
 };

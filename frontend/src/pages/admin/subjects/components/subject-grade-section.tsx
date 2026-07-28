@@ -9,9 +9,11 @@ import { SubjectCatalogCard } from "./subject-catalog-card";
 
 export function SubjectGradeSection({
   group,
+  onEdit,
   onArchive,
 }: {
   group: GradeGroup;
+  onEdit?: (subject: SubjectListItem) => void;
   onArchive: (subject: SubjectListItem) => void;
 }) {
   const navigate = useNavigate();
@@ -41,7 +43,7 @@ export function SubjectGradeSection({
       </div>
       <div className="pt-3 flex gap-3 overflow-auto pb-2">
         {group.subjects.map((subject) => (
-          <SubjectCatalogCard key={subject.subject_id} subject={subject} onArchive={onArchive} />
+          <SubjectCatalogCard key={subject.subject_id} subject={subject} onEdit={onEdit} onArchive={onArchive} />
         ))}
       </div>
 
