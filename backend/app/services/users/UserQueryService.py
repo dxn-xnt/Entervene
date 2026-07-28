@@ -263,7 +263,21 @@ def get_user_analytics(db: Session, user_id: uuid.UUID) -> dict:
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if role_name_to_client_role(user.role_name) == "student" and user.student_id:
-        return _student_user_analytics(db, user.student_id)
+        try:
+            return _student_user_analytics(db, user.student_id)
+        except Exception:
+            return {
+                "summary": None,
+                "subject_mastery": [],
+                "score_trend": [],
+                "historical_performance": [],
+                "period_performance": [],
+                "quarterly_performance": [],
+                "subject_breakdown": [],
+                "activity_feed": [],
+                "classwork": [],
+                "lms_behavior": None,
+            }
     return {
         "summary": None,
         "subject_mastery": [],
