@@ -8,7 +8,6 @@ import { Card } from "@/components/retroui/Card";
 import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
-import { Loader } from "@/components/retroui/Loader";
 import { Progress } from "@/components/retroui/Progress";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
@@ -38,7 +37,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { cn } from "@/lib/utils";
 
 function sectionName(section: string | null | undefined) {
   if (!section) return null;

@@ -19,7 +19,7 @@ from app.models.settings.Setting import Setting, SettingType
 # Each tuple: (key, value, type, group, is_public, description)
 
 DEFAULTS: list[tuple[str, str, SettingType, str, bool, str]] = [
-    # ── General ──
+    # ── General & System ──
     (
         "app_name",
         "ENTERVENE",
@@ -29,14 +29,6 @@ DEFAULTS: list[tuple[str, str, SettingType, str, bool, str]] = [
         "Application display name",
     ),
     (
-        "app_tagline",
-        "Student Intervention Platform",
-        SettingType.STRING,
-        "general",
-        True,
-        "Tagline shown on the login page",
-    ),
-    (
         "maintenance_mode",
         "false",
         SettingType.BOOLEAN,
@@ -44,111 +36,119 @@ DEFAULTS: list[tuple[str, str, SettingType, str, bool, str]] = [
         True,
         "Enable maintenance mode across the application",
     ),
+
+    # ── Passing Thresholds ──
     (
-        "max_file_upload_mb",
-        "10",
+        "subject_passing_grade",
+        "80",
         SettingType.INTEGER,
-        "general",
-        False,
-        "Maximum file upload size in megabytes",
-    ),
-    # ── Appearance ──
-    (
-        "primary_color",
-        "#6366f1",
-        SettingType.STRING,
-        "appearance",
+        "thresholds",
         True,
-        "Brand primary color (hex)",
+        "Minimum passing grade per subject",
     ),
     (
-        "theme_mode",
-        "system",
-        SettingType.STRING,
-        "appearance",
+        "general_average_passing_grade",
+        "80",
+        SettingType.INTEGER,
+        "thresholds",
         True,
-        "Default theme mode: light, dark, or system",
+        "Minimum general average passing grade",
     ),
-    # ── Notifications ──
+
+    # ── Academic Calendar ──
     (
-        "enable_email_notifications",
+        "current_school_year",
+        "AY2025-2026",
+        SettingType.STRING,
+        "calendar",
+        True,
+        "Current active school year",
+    ),
+    (
+        "active_term",
+        "1",
+        SettingType.STRING,
+        "calendar",
+        True,
+        "Current active term sequence",
+    ),
+
+    # ── Curriculum Scope ──
+    (
+        "jhs_enabled",
         "true",
         SettingType.BOOLEAN,
-        "notifications",
-        False,
-        "Toggle email sending globally",
+        "curriculum",
+        True,
+        "Enable Junior High School grade levels",
     ),
     (
-        "smtp_host",
-        "",
-        SettingType.STRING,
-        "notifications",
-        False,
-        "SMTP server host",
-    ),
-    (
-        "smtp_port",
-        "587",
-        SettingType.INTEGER,
-        "notifications",
-        False,
-        "SMTP server port",
-    ),
-    # ── AI ──
-    (
-        "openai_api_key",
-        "",
-        SettingType.STRING,
-        "ai",
-        False,
-        "API key for OpenAI services",
-    ),
-    (
-        "ai_model",
-        "gpt-4o-mini",
-        SettingType.STRING,
-        "ai",
-        False,
-        "Default AI model to use for generation tasks",
-    ),
-    (
-        "enable_ai_features",
+        "shs_enabled",
         "true",
         SettingType.BOOLEAN,
-        "ai",
+        "curriculum",
         True,
-        "Toggle AI features visibility for all users",
+        "Enable Senior High School grade levels",
     ),
     (
-        "prediction_weights",
-        '{"attendance": 0.3, "grades": 0.4, "behavior": 0.3}',
-        SettingType.JSON,
-        "ai",
-        False,
-        "Weight distribution for the prediction model",
-    ),
-    # ── Security ──
-    (
-        "session_timeout_minutes",
-        "30",
-        SettingType.INTEGER,
-        "security",
-        False,
-        "Access token TTL in minutes (JWT expiry)",
+        "medical_pathway_enabled",
+        "true",
+        SettingType.BOOLEAN,
+        "curriculum",
+        True,
+        "Enable STEM Medical strand pathway",
     ),
     (
-        "max_login_attempts",
-        "5",
-        SettingType.INTEGER,
-        "security",
-        False,
-        "Maximum consecutive failed login attempts before lockout",
+        "engineering_pathway_enabled",
+        "true",
+        SettingType.BOOLEAN,
+        "curriculum",
+        True,
+        "Enable STEM Engineering strand pathway",
     ),
+
+    # ── Random Forest ML Risk Model ──
+    (
+        "risk_threshold_high",
+        "75.0",
+        SettingType.STRING,
+        "ml_prediction",
+        False,
+        "Grade threshold for High Risk classification in Random Forest model",
+    ),
+    (
+        "risk_threshold_moderate",
+        "80.0",
+        SettingType.STRING,
+        "ml_prediction",
+        False,
+        "Grade threshold for Moderate Risk classification in Random Forest model",
+    ),
+]
+
+OBSOLETE_KEYS = [
+    "openai_api_key",
+    "ai_model",
+    "enable_ai_features",
+    "prediction_weights",
+    "smtp_host",
+    "smtp_port",
+    "enable_email_notifications",
+    "app_tagline",
+    "primary_color",
+    "theme_mode",
+    "session_timeout_minutes",
+    "max_login_attempts",
+    "max_file_upload_mb",
 ]
 
 
 def seed(db: Session) -> None:
-    """Insert default settings, skipping any that already exist."""
+    """Insert default settings, purge obsolete keys, skipping any that already exist."""
+    # 1. Purge obsolete keys
+    deleted = db.query(Setting).filter(Setting.key.in_(OBSOLETE_KEYS)).delete(synchronize_session=False)
+
+    # 2. Add active defaults
     existing_keys = {row.key for row in db.query(Setting.key).all()}
     inserted = 0
 
@@ -168,7 +168,7 @@ def seed(db: Session) -> None:
         inserted += 1
 
     db.commit()
-    print(f"Seeded {inserted} new setting(s). {len(existing_keys)} already existed.")
+    print(f"Seeded {inserted} new setting(s). Deleted {deleted} obsolete key(s).")
 
 
 if __name__ == "__main__":

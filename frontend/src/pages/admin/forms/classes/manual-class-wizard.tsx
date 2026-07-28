@@ -17,11 +17,12 @@ type SetupErrors = {
   sectionRows: Record<string, { sectionName?: string; adviserStaffId?: string }>;
 };
 
-function createSectionDraft(sectionName = "", adviserStaffId = ""): ManualSectionDraft {
+function createSectionDraft(sectionName = "", adviserStaffId = "", pathway = "general"): ManualSectionDraft {
   return {
     localId: crypto.randomUUID(),
     sectionName,
     adviserStaffId,
+    pathway,
   };
 }
 
@@ -70,6 +71,9 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
     setRetryKey((value) => value + 1);
   }
 
+  const selectedLevel = options?.academic_levels.find((item) => String(item.academic_level_id) === academicLevelId);
+  const isSeniorHigh = selectedLevel ? selectedLevel.grade_level >= 11 : false;
+
   function updateSection(localId: string, changes: Partial<ManualSectionDraft>) {
     setSections((current) => current.map((section) => section.localId === localId ? { ...section, ...changes } : section));
   }
@@ -110,6 +114,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
       sections: sections.map((section) => ({
         ...section,
         sectionName: section.sectionName.trim(),
+        pathway: isSeniorHigh ? (section.pathway || "stem_medical") : "general",
         adviserName: adviserName(options.eligible_advisers.find((adviser) => adviser.staff_id === section.adviserStaffId)),
       })),
     });
@@ -119,61 +124,68 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
     return <StatePanel message="Loading class options..." />;
   }
 
-  if (loadError) {
+  if (loadError || !options) {
     return (
-      <StatePanel message="Unable to load class options." detail={loadError}>
-        <Button variant={"default"} onClick={retryLoading}>Retry</Button>
-        <Button variant={"outline"} onClick={onBack}>Back</Button>
+      <StatePanel message={loadError || "Unable to load class options."}>
+        <Button variant={"outline"} onClick={retryLoading}>Retry</Button>
       </StatePanel>
     );
   }
 
-  if (!options) return null;
   const noLevels = options.academic_levels.length === 0;
   const noAdvisers = options.eligible_advisers.length === 0;
 
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-3">
-        <Field label="Active Academic Year">
-          <Input readOnly value={options.academic_year.year_label} className="bg-muted/50 text-muted-foreground" />
-        </Field>
-        <Field label="Academic Level">
-          <Select
-            disabled={noLevels}
-            value={academicLevelId}
-            onChange={(e) => setAcademicLevelId(e.target.value)}
-          >
-            <Select.Trigger className="w-full">
-              <Select.Value placeholder="Select academic level" />
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Group>
-                {options.academic_levels.map((level) => (
-                  <Select.Item key={level.academic_level_id} value={String(level.academic_level_id)}>
-                    {level.level_name}
-                  </Select.Item>
-                ))}
-              </Select.Group>
-            </Select.Content>
-          </Select>
-          {errors.academicLevel && <InlineError message={errors.academicLevel} />}
-          {noLevels && <InlineError message="No academic levels are available." />}
-        </Field>
-        <Field label="Number of Sections">
-          <Input readOnly value={String(sections.length)} className="bg-muted/50 text-muted-foreground" />
-        </Field>
-      </div>
+    <div className="grid gap-5">
+      {noAdvisers && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-200 font-semibold">
+          All advisers are currently assigned for the active academic year. You can create sections after freeing an adviser slot.
+        </div>
+      )}
 
-      <section className="grid gap-2">
-        <div>
-          <Text as="h6" className="font-bold">Sections</Text>
-          {noAdvisers && <InlineError message="No eligible class advisers are available." />}
+      <Field label="Academic Level">
+        <Select
+          disabled={noLevels}
+          value={academicLevelId}
+          onChange={(e) => {
+            setAcademicLevelId(e.target.value);
+            const nextLvl = options.academic_levels.find((item) => String(item.academic_level_id) === e.target.value);
+            if (nextLvl && nextLvl.grade_level >= 11) {
+              setSections((current) => current.map((s) => ({ ...s, pathway: s.pathway && s.pathway !== "general" ? s.pathway : "stem_medical" })));
+            } else {
+              setSections((current) => current.map((s) => ({ ...s, pathway: "general" })));
+            }
+          }}
+        >
+          <Select.Trigger className="w-full">
+            <Select.Value placeholder="Select level" />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Group>
+              {options.academic_levels.map((level) => (
+                <Select.Item key={level.academic_level_id} value={String(level.academic_level_id)}>
+                  {level.level_name}
+                </Select.Item>
+              ))}
+            </Select.Group>
+          </Select.Content>
+        </Select>
+        {errors.academicLevel && <InlineError message={errors.academicLevel} />}
+      </Field>
+
+      <section className="grid gap-3">
+        <div className="flex items-center justify-between">
+          <Text className="text-sm font-semibold">Sections & Advisers</Text>
           {errors.sections && <InlineError message={errors.sections} />}
         </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px] gap-2 text-xs font-semibold">
-          <span>Section Name</span><span>Adviser</span><span />
+
+        <div className={`grid ${isSeniorHigh ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} gap-2 text-xs font-semibold text-muted-foreground px-1`}>
+          <span>Section Name</span>
+          {isSeniorHigh && <span>Strand / Pathway</span>}
+          <span>Adviser</span>
+          <span />
         </div>
+
         {sections.map((section) => {
           const rowErrors = errors.sectionRows[section.localId];
           const selectedByOtherRows = new Set(
@@ -183,15 +195,33 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
               .filter(Boolean)
           );
           return (
-            <div key={section.localId} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px] items-start gap-2">
+            <div key={section.localId} className={`grid ${isSeniorHigh ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} items-start gap-2`}>
               <div>
                 <Input
                   value={section.sectionName}
                   onChange={(event) => updateSection(section.localId, { sectionName: event.target.value })}
-                  placeholder="e.g. Sapphire"
+                  placeholder="e.g. STEM Med A"
                 />
                 {rowErrors?.sectionName && <InlineError message={rowErrors.sectionName} />}
               </div>
+              {isSeniorHigh && (
+                <div>
+                  <Select
+                    value={section.pathway || "stem_medical"}
+                    onChange={(e) => updateSection(section.localId, { pathway: e.target.value })}
+                  >
+                    <Select.Trigger className="w-full">
+                      <Select.Value placeholder="Select pathway" />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Group>
+                        <Select.Item value="stem_medical">STEM - Medical</Select.Item>
+                        <Select.Item value="stem_engineering">STEM - Engineering</Select.Item>
+                      </Select.Group>
+                    </Select.Content>
+                  </Select>
+                </div>
+              )}
               <div>
                 <Select
                   disabled={noAdvisers}
@@ -230,7 +260,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
         <Button
           variant={"outline"}
           className="w-fit mt-1"
-          onClick={() => setSections((current) => [...current, createSectionDraft()])}
+          onClick={() => setSections((current) => [...current, createSectionDraft("", "", isSeniorHigh ? "stem_medical" : "general")])}
         >
           <Plus className="size-4 mr-2" />Add Another Section
         </Button>

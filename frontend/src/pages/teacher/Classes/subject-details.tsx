@@ -213,18 +213,6 @@ export default function SubjectDetails() {
     setExpandedLessonId(lesson.lesson_id);
   };
 
-  const openQuarterlyAssessmentForm = () => {
-    setError("");
-    // Use a sentinel lesson (id=0) to indicate subject-level — no lesson linkage.
-    setClassworkLesson({ lesson_id: 0, title: "Subject Level", order_index: 0, is_published: true, is_draft: false, is_archived: false, attachments: [] });
-    setClassworkDraft({
-      ...emptyClassworkDraft,
-      classwork_type: "QUIZ",
-      classwork_category: "QUARTERLY_ASSESSMENT",
-      title: "Quarterly Assessment",
-    });
-    setClassworkMaterials([]);
-  };
 
   const openLessonManager = (lesson: Lesson) => {
     setError("");
@@ -551,16 +539,15 @@ export default function SubjectDetails() {
       }
 
       if (isSubjectLevel) {
-        // Refresh the subject-level assignments list so the new quarterly assessment appears.
+        // Refresh the subject-level assignments count so the new quarterly assessment appears.
         const refreshResponse = await apiFetch(
           `/api/v1/classwork-assignments/teacher/class/${classId}/subject/${subjectId}/assignments`
         );
         if (refreshResponse.ok) {
           const refreshed = (await refreshResponse.json()) as LinkedClasswork[];
-          setSubjectAssignments(refreshed);
           setClassworkCount(refreshed.length);
         }
-      } else {
+      } else if (classworkLesson) {
         await loadLessonClassworks(classworkLesson.lesson_id);
       }
 

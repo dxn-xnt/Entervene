@@ -33,6 +33,7 @@ class ClassListItem(BaseModel):
     class_id: int
     section_name: str
     class_status: str
+    pathway: str = "general"
     academic_year: AcademicYearOption
     academic_level: AcademicLevelOption
     adviser: AdviserOption | None
@@ -64,6 +65,7 @@ class ClassDetailResponse(BaseModel):
     class_id: int
     section_name: str
     class_status: str
+    pathway: str = "general"
     created_at: datetime | None
     academic_year: AcademicYearOption
     academic_level: AcademicLevelOption
@@ -81,6 +83,7 @@ class ArchiveClassResponse(BaseModel):
 class ClassUpdateRequest(BaseModel):
     section_name: str | None = None
     adviser_staff_id: str | None = None
+    pathway: str | None = None
 
 
 class ClassStudentListAcademicLevel(BaseModel):
@@ -227,6 +230,7 @@ class ImportPreviewStudent(UnassignedStudentItem):
 
 class ImportPreviewSection(BaseModel):
     section_name: str
+    pathway: str = "general"
     adviser: ImportPreviewAdviser
     students: list[ImportPreviewStudent]
 
@@ -246,6 +250,7 @@ class ValidateClassImportResponse(BaseModel):
 class BatchCreateSectionRequest(BaseModel):
     section_name: str
     adviser_staff_id: str
+    pathway: str = "general"
     student_ids: list[UUID]
 
 
@@ -258,6 +263,7 @@ class CreatedClassItem(BaseModel):
     class_id: int
     section_name: str
     adviser_staff_id: str
+    pathway: str = "general"
     student_count: int
 
 

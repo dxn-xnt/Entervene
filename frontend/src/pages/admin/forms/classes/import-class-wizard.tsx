@@ -25,6 +25,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 const CLASS_IMPORT_TEMPLATE_HEADERS = [
   "section_name",
   "grade_level",
+  "pathway",
   "adviser_staff_id",
   "adviser_first_name",
   "adviser_middle_name",
@@ -114,7 +115,10 @@ export default function ImportClassWizard({ onContinue, onValidationStale }: {
   }
 
   function downloadTemplate() {
-    const content = `${CLASS_IMPORT_TEMPLATE_HEADER_ROW}\nGrade 7 - Sapphire,7,STF-2026-001,John,A,Doe,109876543201,Alice,M,Smith,Female\n`;
+    const content = `${CLASS_IMPORT_TEMPLATE_HEADER_ROW}\n` +
+      `Grade 7 - Sapphire,7,general,STF-2026-001,John,A,Doe,109876543201,Alice,M,Smith,Female\n` +
+      `Grade 11 - STEM Med A,11,stem_medical,STF-2026-002,Jane,B,Smith,109876543202,Bob,K,Jones,Male\n` +
+      `Grade 11 - STEM Eng A,11,stem_engineering,STF-2026-003,Robert,C,Brown,109876543203,Charlie,L,Davis,Male\n`;
     const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -405,7 +409,7 @@ async function preflightClassImportCsv(file: File): Promise<ImportValidationErro
   const lrnOccurrences = new Map<string, number[]>();
 
   parseResult.rows.slice(1).forEach(({ rowNumber, values }) => {
-    const rawLrn = (values[6] ?? "").trim();
+    const rawLrn = (values[7] ?? "").trim();
     if (!rawLrn) return;
     if (isScientificNotation(rawLrn)) {
       details.push({
@@ -548,6 +552,8 @@ function importCodeMessage(code: string, fallback?: string) {
     duplicate_adviser_assignment: "An adviser is assigned to multiple imported sections.",
     conflicting_section_adviser: "A section uses conflicting adviser information.",
     section_already_exists: "A section already exists for the selected academic level and active academic year.",
+    invalid_pathway: "One or more rows contain an invalid or missing pathway for the selected grade level.",
+    conflicting_section_pathway: "A section uses conflicting pathway values in CSV.",
     active_academic_year_missing: "No active academic year is configured.",
     active_academic_year_multiple: "Multiple active academic years were detected.",
   };

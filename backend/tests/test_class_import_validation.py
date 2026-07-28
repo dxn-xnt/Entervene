@@ -168,6 +168,7 @@ def import_data(db):
 def csv_row(
     section="Sapphire",
     grade="7",
+    pathway="general",
     adviser_id="T-1",
     adviser_first="John",
     adviser_middle="NULL",
@@ -182,6 +183,7 @@ def csv_row(
         [
             section,
             grade,
+            pathway,
             adviser_id,
             adviser_first,
             adviser_middle,
@@ -518,3 +520,46 @@ def test_validate_import_requires_admin_and_authentication(client, import_data):
 
     del client.app.dependency_overrides[get_current_user]
     assert upload(client, level.academic_level_id, content).status_code == 401
+
+
+def test_shs_pathway_validation_in_class_import(client, db):
+    add_year(db, "2025-2026", True)
+    shs_level = add_level(db, "Grade 11", 11)
+    teacher = add_staff(db, "T-SHS-1")
+    student = add_student(db, shs_level, "100000000099", "Medical", "Student", "Female")
+    db.commit()
+
+    # Valid SHS import with stem_medical
+    valid_csv = HEADER + "\n" + csv_row(
+        section="11-Med-A",
+        grade="11",
+        pathway="stem_medical",
+        adviser_id=teacher.staff_id,
+        adviser_first=teacher.first_name,
+        adviser_last=teacher.last_name,
+        lrn=student.student_lrn,
+        student_first=student.first_name,
+        student_last=student.last_name,
+        gender="Female",
+    )
+    res = upload(client, shs_level.academic_level_id, valid_csv)
+    assert res.status_code == 200
+    assert res.json()["sections"][0]["pathway"] == "stem_medical"
+
+    # Invalid SHS import without pathway
+    invalid_csv = HEADER + "\n" + csv_row(
+        section="11-Med-A",
+        grade="11",
+        pathway="",
+        adviser_id=teacher.staff_id,
+        adviser_first=teacher.first_name,
+        adviser_last=teacher.last_name,
+        lrn=student.student_lrn,
+        student_first=student.first_name,
+        student_last=student.last_name,
+        gender="Female",
+    )
+    res_invalid = upload(client, shs_level.academic_level_id, invalid_csv)
+    assert res_invalid.status_code == 422
+    assert "invalid_pathway" in error_codes(res_invalid)
+
