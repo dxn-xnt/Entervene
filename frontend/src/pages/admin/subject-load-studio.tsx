@@ -675,52 +675,79 @@ export default function SubjectLoadStudio() {
 
                                   {/* Smart Teacher Dropdown — Single Per Subject */}
                                   <Table.Cell className="align-top py-3">
-                                    <Select
-                                      value={subjectSlots[0]?.staff_id || "none"}
-                                      onValueChange={(val) =>
-                                        handleTeacherChange(cls.class_id, sub.subject_id, val)
-                                      }
-                                    >
-                                      <Select.Trigger className="w-[190px] h-9 border-2 border-black shadow-none font-medium text-xs">
-                                        <Select.Value placeholder="Select Teacher" />
-                                      </Select.Trigger>
-                                      <Select.Content>
-                                        <Select.Group>
-                                          <Select.Item value="none">
-                                            <span className="italic text-muted-foreground font-semibold">
-                                              -- Unassigned --
-                                            </span>
-                                          </Select.Item>
-                                          {(studioData?.teachers || [])
-                                            .filter(
-                                              (t) =>
-                                                !t.staff_id.toUpperCase().startsWith("ADM") &&
-                                                !t.name.toLowerCase().includes("admin")
-                                            )
-                                            .map((t) => {
-                                              const statusText = getTeacherAvailabilityStatus(
-                                                t.staff_id,
-                                                cls.class_id,
-                                                sub.subject_id
-                                              );
-                                              const hasConflict = statusText.includes("Conflict");
+                                    {(() => {
+                                      const currentStaffId = subjectSlots[0]?.staff_id;
+                                      const currentStatusText = currentStaffId
+                                        ? getTeacherAvailabilityStatus(
+                                            currentStaffId,
+                                            cls.class_id,
+                                            sub.subject_id
+                                          )
+                                        : "";
+                                      const currentHasConflict = currentStatusText.includes("Conflict");
 
-                                              return (
-                                                <Select.Item key={t.staff_id} value={t.staff_id}>
-                                                  <div className="flex flex-col text-xs">
-                                                    <span className="font-bold">{t.name}</span>
-                                                    {hasConflict && (
-                                                      <span className="text-red-600 font-bold">
-                                                        {statusText}
-                                                      </span>
-                                                    )}
-                                                  </div>
-                                                </Select.Item>
-                                              );
-                                            })}
-                                        </Select.Group>
-                                      </Select.Content>
-                                    </Select>
+                                      return (
+                                        <Select
+                                          value={currentStaffId || "none"}
+                                          onValueChange={(val) =>
+                                            handleTeacherChange(cls.class_id, sub.subject_id, val)
+                                          }
+                                        >
+                                          <Select.Trigger
+                                            className={`w-[190px] h-9 border-2 border-black shadow-none font-medium text-xs transition-colors ${
+                                              currentHasConflict
+                                                ? "border-red-600 bg-red-50 text-red-950 font-bold"
+                                                : ""
+                                            }`}
+                                          >
+                                            <div className="flex items-center justify-between w-full overflow-hidden">
+                                              <Select.Value placeholder="Select Teacher" />
+                                              {currentHasConflict && (
+                                                <span className="text-red-600 text-xs font-bold shrink-0 ml-1" title={currentStatusText}>
+                                                  ⚠️
+                                                </span>
+                                              )}
+                                            </div>
+                                          </Select.Trigger>
+                                          <Select.Content>
+                                            <Select.Group>
+                                              <Select.Item value="none">
+                                                <span className="italic text-muted-foreground font-semibold">
+                                                  -- Unassigned --
+                                                </span>
+                                              </Select.Item>
+                                              {(studioData?.teachers || [])
+                                                .filter(
+                                                  (t) =>
+                                                    !t.staff_id.toUpperCase().startsWith("ADM") &&
+                                                    !t.name.toLowerCase().includes("admin")
+                                                )
+                                                .map((t) => {
+                                                  const statusText = getTeacherAvailabilityStatus(
+                                                    t.staff_id,
+                                                    cls.class_id,
+                                                    sub.subject_id
+                                                  );
+                                                  const hasConflict = statusText.includes("Conflict");
+
+                                                  return (
+                                                    <Select.Item key={t.staff_id} value={t.staff_id}>
+                                                      <div className="flex flex-col text-xs py-0.5">
+                                                        <span className="font-bold">{t.name}</span>
+                                                        {hasConflict && (
+                                                          <span className="text-red-600 font-semibold text-[11px] leading-tight">
+                                                            {statusText}
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                    </Select.Item>
+                                                  );
+                                                })}
+                                            </Select.Group>
+                                          </Select.Content>
+                                        </Select>
+                                      );
+                                    })()}
                                   </Table.Cell>
                                 </Table.Row>
                               );
