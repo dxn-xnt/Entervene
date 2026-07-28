@@ -5,6 +5,9 @@ import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
+import { Input } from "@/components/retroui/Input";
+import { Badge } from "@/components/retroui/Badge";
+import { Table } from "@/components/retroui/Table";
 import { ManualSuggestionPanel } from "@/components/teacher/suggestions/ManualSuggestionPanel";
 import { getTeacherAdvisoryClassDetail } from "@/lib/api";
 import type {
@@ -139,7 +142,7 @@ export default function TeacherClassDetail() {
               onTabChange={setTab}
             />
 
-            <Card className="block w-full border-black bg-[#F6E9B2] transition-none hover:shadow-md">
+            <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
               <Card.Content>
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div>
@@ -151,9 +154,13 @@ export default function TeacherClassDetail() {
                       since {activeSince}
                     </p>
                   </div>
-                  <span className="w-fit rounded-full border-2 border-black bg-white px-3 py-1 text-xs font-black">
+                  <Badge
+                    variant="outline"
+                    size="sm"
+                    className="w-fit font-black"
+                  >
                     {statusLabel}
-                  </span>
+                  </Badge>
                 </div>
               </Card.Content>
             </Card>
@@ -175,7 +182,7 @@ function OverviewTab({
 }) {
   return (
     <div className="grid gap-4">
-      <div className="grid gap-4 xl:grid-cols-[1fr_300px] items-stretch">
+      <div className="grid gap-4 xl:grid-cols-[1fr_300px] xl:grid-rows-[auto_1fr] items-stretch">
         <div className="flex flex-col gap-2">
           <h3 className="text-lg font-bold">Overview</h3>
           <div className="grid gap-4 md:grid-cols-2">
@@ -191,7 +198,7 @@ function OverviewTab({
 
             <Card className="block w-full border-black">
               <Card.Header>
-                <Card.Description>Subjects</Card.Description>
+                <Card.Description>Total Subjects</Card.Description>
               </Card.Header>
               <Card.Content>
                 <Card.Title>{detail.subject_count}</Card.Title>
@@ -202,37 +209,38 @@ function OverviewTab({
             </Card>
           </div>
         </div>
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <aside className="flex flex-col gap-2">
-            <h3 className="text-lg font-bold">Recent Activity</h3>
-            <Card className="block w-full flex-1">
-              <Card.Content className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-black/60">
-                No recent activity available yet.
-              </Card.Content>
-            </Card>
-          </aside>
-        </div>
+        <aside className="flex flex-col gap-2 xl:row-span-2">
+          <h3 className="text-lg font-bold">Recent Activity</h3>
+          <Card className="block w-full flex-1">
+            <Card.Content className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-black/60">
+              No recent activity available yet.
+            </Card.Content>
+          </Card>
+        </aside>
         <section>
-          <h3 className="mb-1 text-lg font-bold">Subjects</h3>
+          <h3 className="text-lg font-bold">Subjects</h3>
           <div className="grid gap-2">
             {detail.subject_loads.length ? (
               detail.subject_loads.map((load) => (
                 <Link
                   key={load.subject_load_id}
                   to={`/teacher/classes/${detail.class_id}/subjects/${load.subject_id}`}
-                  className="flex min-h-16 items-center justify-between gap-4 rounded-lg border border-black bg-[#fffdf5] px-4 py-3 shadow-[3px_3px_0_#000] transition-colors hover:bg-[#f7e9aa]"
                 >
-                  <span>
-                    <span className="block text-xl font-black">
-                      {load.subject_name}
-                    </span>
-                    <span className="block text-[10px] font-semibold text-black/65">
-                      {load.teacher_name}
-                    </span>
-                  </span>
-                  <span className="text-right text-xs font-semibold">
-                    {load.schedule || "No schedule"}
-                  </span>
+                  <Card className="block w-full">
+                    <Card.Content className="flex min-h-16 items-center justify-between gap-4">
+                      <span>
+                        <span className="block text-xl font-black">
+                          {load.subject_name}
+                        </span>
+                        <span className="block text-[10px] font-semibold text-black/65">
+                          {load.teacher_name}
+                        </span>
+                      </span>
+                      <span className="text-right text-xs font-semibold">
+                        {load.schedule || "No schedule"}
+                      </span>
+                    </Card.Content>
+                  </Card>
                 </Link>
               ))
             ) : (
@@ -241,12 +249,6 @@ function OverviewTab({
           </div>
         </section>
       </div>
-      <aside>
-        <h3 className="mb-1 text-lg font-bold">Recent Activity</h3>
-        <div className="rounded-lg border border-black bg-[#fffdf5] p-6 text-center text-sm font-semibold text-black/60 shadow-[3px_3px_0_#000]">
-          No recent activity available yet.
-        </div>
-      </aside>
     </div>
   );
 }
@@ -301,12 +303,11 @@ function StudentsTab({
       </div>
       <section>
         <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <h3 className="text-lg font-bold">Students</h3>
-          <input
+          <h3 className="text-xl font-bold">Students</h3>
+          <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search students..."
-            className="h-10 rounded-md border-2 border-black bg-white px-3 text-sm sm:w-64"
           />
         </div>
         <Card className="block w-full border-black">
@@ -321,15 +322,19 @@ function StudentsTab({
                   <details
                     key={gender}
                     open
-                    className="group overflow-hidden rounded-lg border-2 border-black bg-white"
+                    className="group overflow-hidden border-2 border-black bg-white"
                   >
-                    <summary className="flex cursor-pointer list-none items-center justify-between bg-[#f7e9aa] px-4 py-3 text-sm font-black">
+                    <summary className="flex cursor-pointer list-none items-center justify-between bg-primary border-b-2 px-4 py-3 text-sm font-black">
                       <span>{gender.toUpperCase()}</span>
                       <span className="flex items-center gap-2">
-                        <span className="rounded-full border border-black/30 bg-white px-2 py-0.5 text-[10px]">
+                        <Badge
+                          variant="outline"
+                          size="sm"
+                          className="rounded-none"
+                        >
                           {students.length} student
                           {students.length !== 1 ? "s" : ""}
-                        </span>
+                        </Badge>
                         <ChevronDown className="size-4" />
                       </span>
                     </summary>
@@ -359,6 +364,8 @@ function SubjectLoadTab({
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
 }) {
+  const navigate = useNavigate();
+
   if (!detail.subject_loads.length) {
     return <EmptyInline message="No subject load assigned yet." />;
   }
@@ -366,33 +373,47 @@ function SubjectLoadTab({
   return (
     <section>
       <h3 className="mb-2 text-lg font-bold">Subject Load</h3>
-      <Card className="block w-full border-black overflow-x-auto">
-        <div className="min-w-[720px]">
-          <div className="grid grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_160px_120px] border-b-2 border-black/50 px-3 py-1.5 text-[11px] font-semibold text-black/70">
-            <span>Subject</span>
-            <span>Teacher</span>
-            <span>Schedule</span>
-            <span>Status</span>
-          </div>
+      <Table
+        wrapperClassName="overflow-x-auto"
+        className="border-black min-w-[720px]"
+      >
+        <Table.Header>
+          <Table.Row>
+            <Table.Head>Subject</Table.Head>
+            <Table.Head>Teacher</Table.Head>
+            <Table.Head>Schedule</Table.Head>
+            <Table.Head>Status</Table.Head>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
           {detail.subject_loads.map((load) => (
-            <Link
+            <Table.Row
               key={load.subject_load_id}
-              to={`/teacher/classes/${detail.class_id}/subjects/${load.subject_id}`}
-              className="grid min-h-12 grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_160px_120px] items-center border-b border-black/40 px-3 py-2 text-xs transition-colors hover:bg-[#f7e9aa] last:border-b-0"
+              className="border-black/40 text-xs"
             >
-              <b className="hover:underline">{load.subject_name}</b>
-              <span className="flex items-center gap-2 font-semibold">
-                <Avatar text={load.teacher_name} />
-                {load.teacher_name}
-              </span>
-              <span>{load.schedule || "No schedule"}</span>
-              <span className="w-fit rounded-full border border-black/30 bg-white px-2 py-0.5 font-bold">
-                {load.status || "N/A"}
-              </span>
-            </Link>
+              <Table.Cell>
+                <b className="hover:underline">{load.subject_name}</b>
+              </Table.Cell>
+              <Table.Cell>
+                <span className="flex items-center gap-2 font-semibold">
+                  <Avatar text={load.teacher_name} />
+                  {load.teacher_name}
+                </span>
+              </Table.Cell>
+              <Table.Cell>{load.schedule || "No schedule"}</Table.Cell>
+              <Table.Cell>
+                <Badge
+                  variant="outline"
+                  size="sm"
+                  className="w-fit rounded-none font-bold"
+                >
+                  {load.status || "N/A"}
+                </Badge>
+              </Table.Cell>
+            </Table.Row>
           ))}
-        </div>
-      </Card>
+        </Table.Body>
+      </Table>
     </section>
   );
 }
@@ -407,7 +428,7 @@ function StudentRow({
   subjectLoads: TeacherAdvisoryClassDetailResponse["subject_loads"];
 }) {
   return (
-    <div className="border-b border-black/10 bg-white px-3 py-2 text-sm last:border-b-0">
+    <div className="border-b-2 border-black bg-white px-3 py-2 text-sm last:border-b-0">
       <div className="flex min-h-12 items-center gap-3">
         <Avatar text={student.avatar_initial || student.full_name} />
         <span className="min-w-0 flex-1">
