@@ -1,42 +1,46 @@
+import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { Table } from "@/components/retroui/Table";
 import { Filter, ArrowUpDown } from "lucide-react";
+import { getStudentTodos, type TodoItem } from "@/lib/api";
 
 type SubjectGradeProps = {
+  subjectId?: number;
   subject: string;
   onBack: () => void;
 };
 
-type ClassworkItem = {
-  id: string;
-  title: string;
-  type: "Quiz" | "Activity" | "Assignment";
-  score: number;
-  total: number;
-};
+const SubjectGrade = ({ subjectId, subject, onBack }: SubjectGradeProps) => {
+  const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-const classworks: ClassworkItem[] = [
-  { id: "1", title: "Python Quiz 1", type: "Quiz", score: 26, total: 30 },
-  { id: "2", title: "Activity 1", type: "Activity", score: 96, total: 100 },
-  {
-    id: "3",
-    title: "Coding Activity",
-    type: "Activity",
-    score: 96,
-    total: 100,
-  },
-  {
-    id: "4",
-    title: "Build your first python program",
-    type: "Assignment",
-    score: 96,
-    total: 100,
-  },
-];
+  useEffect(() => {
+    let isMounted = true;
+    getStudentTodos()
+      .then((data) => {
+        if (!isMounted) return;
+        const allTodos = data.all || [];
+        const filtered = allTodos.filter(
+          (t) => (subjectId && t.subject_id === subjectId) || t.subject.toLowerCase() === subject.toLowerCase()
+        );
+        setTodos(filtered);
+      })
+      .catch((err) => console.error("Error loading subject classworks:", err))
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
 
-const SubjectGrade = ({ subject, onBack }: SubjectGradeProps) => {
+    return () => {
+      isMounted = false;
+    };
+  }, [subjectId, subject]);
+
+  const totalCount = todos.length;
+  const completedCount = todos.filter((t) => t.is_submitted || t.status === "completed" || t.grade !== null).length;
+  const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
@@ -75,10 +79,10 @@ const SubjectGrade = ({ subject, onBack }: SubjectGradeProps) => {
                     Completion Rate
                   </Card.Title>
                   <Card.Description className="text-4xl font-bold">
-                    100<span className="text-lg align-top">%</span>
+                    {completionRate}<span className="text-lg align-top">%</span>
                   </Card.Description>
                   <Card.Content className="text-sm text-muted-foreground">
-                    activities done
+                    {completedCount} of {totalCount} activities done
                   </Card.Content>
                 </Card>
 
@@ -90,10 +94,16 @@ const SubjectGrade = ({ subject, onBack }: SubjectGradeProps) => {
                     <p className="text-xs text-muted-foreground mb-1">
                       Mastery level
                     </p>
-                    <p className="text-base font-semibold">😊 Moderate</p>
+                    <p className="text-base font-semibold">
+                      {completionRate >= 80 ? "😊 High" : completionRate >= 50 ? "😐 Moderate" : "😟 Low"}
+                    </p>
                   </Card.Content>
                   <p className="text-sm text-muted-foreground">
-                    have mastered most of the lessons well
+                    {completionRate >= 80
+                      ? "have mastered most of the lessons well"
+                      : completionRate >= 50
+                      ? "making steady progress on lessons"
+                      : "needs focus on completing activities"}
                   </p>
                 </Card>
               </div>
@@ -117,24 +127,38 @@ const SubjectGrade = ({ subject, onBack }: SubjectGradeProps) => {
                 className="table-fixed bg-card"
               >
                 <Table.Body>
-                  {classworks.map((item) => (
-                    <Table.Row key={item.id} className="hover:bg-transparent">
-                      <Table.Cell className="font-medium w-1/2">
-                        {item.title}
-                      </Table.Cell>
-                      <Table.Cell className="w-32">
-                        <span className="inline-flex items-center rounded-full border px-3 py-1 text-xs">
-                          {item.type}
-                        </span>
-                      </Table.Cell>
-                      <Table.Cell className="text-right font-bold">
-                        {item.score}
-                        <span className="text-xs text-muted-foreground">
-                          /{item.total}
-                        </span>
+                  {loading ? (
+                    <Table.Row>
+                      <Table.Cell colSpan={3} className="text-center py-6 text-muted-foreground">
+                        Loading classworks...
                       </Table.Cell>
                     </Table.Row>
-                  ))}
+                  ) : todos.length === 0 ? (
+                    <Table.Row>
+                      <Table.Cell colSpan={3} className="text-center py-6 text-muted-foreground">
+                        No classworks found for this subject.
+                      </Table.Cell>
+                    </Table.Row>
+                  ) : (
+                    todos.map((item) => (
+                      <Table.Row key={item.assignment_id} className="hover:bg-transparent">
+                        <Table.Cell className="font-medium w-1/2">
+                          {item.title}
+                        </Table.Cell>
+                        <Table.Cell className="w-32">
+                          <span className="inline-flex items-center rounded-full border px-3 py-1 text-xs">
+                            {item.type}
+                          </span>
+                        </Table.Cell>
+                        <Table.Cell className="text-right font-bold">
+                          {item.grade !== null ? item.grade : "-"}
+                          <span className="text-xs text-muted-foreground">
+                            /{item.total_points ?? 100}
+                          </span>
+                        </Table.Cell>
+                      </Table.Row>
+                    ))
+                  )}
                 </Table.Body>
               </Table>
             </main>

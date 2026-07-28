@@ -113,3 +113,38 @@ class StudentPeriodGradeFinalizeResponse(BaseModel):
     prediction_outcomes_evaluated_count: int
     prediction_outcomes_skipped_count: int
     prediction_outcomes_message: Optional[str] = None
+
+
+class ClassworkCategoryHeader(BaseModel):
+    id: int
+    title: str
+    maxScore: float
+
+
+class GradebookCategoryHeaderGroup(BaseModel):
+    writtenWork: list[ClassworkCategoryHeader]
+    performanceTask: list[ClassworkCategoryHeader]
+    quarterlyAssessment: list[ClassworkCategoryHeader]
+
+
+class StudentGradebookRow(BaseModel):
+    student_id: str
+    name: str
+    writtenWork: list[Optional[float]]
+    performanceTask: list[Optional[float]]
+    quarterlyAssessment: list[Optional[float]]
+    # Per-category Percentage Scores (PS = sum_scores / max_possible * 100)
+    ps_written: Optional[float] = None
+    ps_performance: Optional[float] = None
+    ps_quarterly: Optional[float] = None
+    # DepEd computed grades
+    initial_grade: Optional[float] = None
+    transmuted_grade: Optional[float] = None
+    total: Optional[str] = None
+
+
+class StudentGradebookResponse(BaseModel):
+    scope: StudentRecordScope
+    classwork: list[GradebookCategoryHeaderGroup]
+    studentGrades: list[StudentGradebookRow]
+

@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card } from "@/components/retroui/Card";
 import SubjectGrade from "./subject-grade";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { getMySubjects, getStudentTodos, type StudentSubjectItem, type TodoItem } from "@/lib/api";
 
 const subjectPerformanceData = [
   { subject: "Mathematic..", score: 87 },
@@ -14,16 +15,43 @@ const subjectPerformanceData = [
 ];
 
 const Grades = () => {
-  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<{ id: number; name: string } | null>(null);
+  const [subjects, setSubjects] = useState<StudentSubjectItem[]>([]);
+  const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all([getMySubjects(), getStudentTodos()])
+      .then(([subjectsData, todosData]) => {
+        if (!isMounted) return;
+        setSubjects(subjectsData);
+        setTodos(todosData.all || []);
+      })
+      .catch((err) => console.error("Error loading student grades overview:", err))
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   if (selectedSubject) {
     return (
       <SubjectGrade
-        subject={selectedSubject}
+        subjectId={selectedSubject.id}
+        subject={selectedSubject.name}
         onBack={() => setSelectedSubject(null)}
       />
     );
   }
+
+  const getGradedCount = (subjectId: number) => {
+    return todos.filter(
+      (t) => t.subject_id === subjectId && (t.status === "completed" || t.is_submitted || t.grade !== null)
+    ).length;
+  };
 
   return (
     <AppLayout>
@@ -229,96 +257,33 @@ const Grades = () => {
             </div>
 
             <div className="flex flex-col gap-4">
-              <Card
-                className="block w-full cursor-pointer"
-                onClick={() => setSelectedSubject("Computer Programming")}
-              >
-                <Card.Content className="flex items-center justify-between">
-                  <div>
-                    <Card.Title className="mb-1 text-lg">
-                      Computer Programming
-                    </Card.Title>
-                    <p className="text-sm text-gray-600">Raymart Gabutan</p>
-                  </div>
+              {loading ? (
+                <div className="py-6 text-center text-sm text-gray-500">Loading subjects...</div>
+              ) : subjects.length === 0 ? (
+                <div className="py-6 text-center text-sm text-gray-500">No subjects enrolled.</div>
+              ) : (
+                subjects.map((sub) => (
+                  <Card
+                    key={sub.subject_load_id}
+                    className="block w-full cursor-pointer hover:border-black transition-colors"
+                    onClick={() => setSelectedSubject({ id: sub.subject_id, name: sub.subject_name })}
+                  >
+                    <Card.Content className="flex items-center justify-between">
+                      <div>
+                        <Card.Title className="mb-1 text-lg">
+                          {sub.subject_name}
+                        </Card.Title>
+                        <p className="text-sm text-gray-600">{sub.teacher_name}</p>
+                      </div>
 
-                  <div className="text-right">
-                    <Card.Description>7</Card.Description>
-                    <p className="text-xs text-gray-600">Graded Classwork</p>
-                  </div>
-                </Card.Content>
-              </Card>
-
-              <Card
-                className="block w-full cursor-pointer"
-                onClick={() => setSelectedSubject("English")}
-              >
-                <Card.Content className="flex items-center justify-between">
-                  <div>
-                    <Card.Title className="mb-1 text-lg">English</Card.Title>
-                    <p className="text-sm text-gray-600">Raymart Gabutan</p>
-                  </div>
-
-                  <div className="text-right">
-                    <Card.Description>5</Card.Description>
-                    <p className="text-xs text-gray-600">Graded Classwork</p>
-                  </div>
-                </Card.Content>
-              </Card>
-
-              <Card
-                className="block w-full cursor-pointer"
-                onClick={() => setSelectedSubject("Science")}
-              >
-                <Card.Content className="flex items-center justify-between">
-                  <div>
-                    <Card.Title className="mb-1 text-lg">Science</Card.Title>
-                    <p className="text-sm text-gray-600">Raymart Gabutan</p>
-                  </div>
-
-                  <div className="text-right">
-                    <Card.Description>16</Card.Description>
-                    <p className="text-xs text-gray-600">Graded Classwork</p>
-                  </div>
-                </Card.Content>
-              </Card>
-
-              <Card
-                className="block w-full cursor-pointer"
-                onClick={() => setSelectedSubject("System Designs")}
-              >
-                <Card.Content className="flex items-center justify-between">
-                  <div>
-                    <Card.Title className="mb-1 text-lg">
-                      System Designs
-                    </Card.Title>
-                    <p className="text-sm text-gray-600">Raymart Gabutan</p>
-                  </div>
-
-                  <div className="text-right">
-                    <Card.Description>3</Card.Description>
-                    <p className="text-xs text-gray-600">Graded Classwork</p>
-                  </div>
-                </Card.Content>
-              </Card>
-
-              <Card
-                className="block w-full cursor-pointer"
-                onClick={() => setSelectedSubject("Mathematics")}
-              >
-                <Card.Content className="flex items-center justify-between">
-                  <div>
-                    <Card.Title className="mb-1 text-lg">
-                      Mathematics
-                    </Card.Title>
-                    <p className="text-sm text-gray-600">Raymart Gabutan</p>
-                  </div>
-
-                  <div className="text-right">
-                    <Card.Description>12</Card.Description>
-                    <p className="text-xs text-gray-600">Graded Classwork</p>
-                  </div>
-                </Card.Content>
-              </Card>
+                      <div className="text-right">
+                        <Card.Description>{getGradedCount(sub.subject_id)}</Card.Description>
+                        <p className="text-xs text-gray-600">Graded Classwork</p>
+                      </div>
+                    </Card.Content>
+                  </Card>
+                ))
+              )}
             </div>
           </div>
         </div>

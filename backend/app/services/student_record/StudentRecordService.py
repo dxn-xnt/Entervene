@@ -22,7 +22,11 @@ from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.schemas.StudentRecord import (
+    ClassworkCategoryHeader,
+    GradebookCategoryHeaderGroup,
     StudentClassworkResult,
+    StudentGradebookResponse,
+    StudentGradebookRow,
     StudentPeriodGradeFinalizeResponse,
     StudentRecordDetailResponse,
     StudentRecordPeriodOption,
@@ -161,6 +165,225 @@ def teacher_student_record_detail(
             for assignment in assignments
         ],
     )
+
+
+def teacher_student_gradebook(
+    db: Session,
+    staff_id: str,
+    class_id: int,
+    subject_id: int,
+    academic_period_id: int | None = None,
+) -> StudentGradebookResponse:
+    scope = _teacher_scope(db, staff_id, class_id, subject_id, academic_period_id)
+    students = _roster(db, scope)
+    assignments = _classwork_assignments(db, scope)
+    submissions_by_student = _submissions_by_student(db, assignments)
+
+    written_headers: list[ClassworkCategoryHeader] = []
+    performance_headers: list[ClassworkCategoryHeader] = []
+    quarterly_headers: list[ClassworkCategoryHeader] = []
+
+    written_assignments: list[ClassworkAssignment] = []
+    performance_assignments: list[ClassworkAssignment] = []
+    quarterly_assignments: list[ClassworkAssignment] = []
+
+    for assignment in assignments:
+        cat_key = _categorize_assignment(assignment)
+        header = ClassworkCategoryHeader(
+            id=assignment.classwork_assignment_id,
+            title=assignment.classwork.title,
+            maxScore=float(assignment.classwork.total_points or 100),
+        )
+        if cat_key == "writtenWork":
+            written_headers.append(header)
+            written_assignments.append(assignment)
+        elif cat_key == "performanceTask":
+            performance_headers.append(header)
+            performance_assignments.append(assignment)
+        else:
+            quarterly_headers.append(header)
+            quarterly_assignments.append(assignment)
+
+    student_rows: list[StudentGradebookRow] = []
+    for student in students:
+        student_subs = submissions_by_student.get(student.student_id, {})
+
+        written_scores = [
+            float(student_subs[asgn.classwork_assignment_id].grade)
+            if (asgn.classwork_assignment_id in student_subs and student_subs[asgn.classwork_assignment_id].grade is not None)
+            else 0.0
+            for asgn in written_assignments
+        ]
+        performance_scores = [
+            float(student_subs[asgn.classwork_assignment_id].grade)
+            if (asgn.classwork_assignment_id in student_subs and student_subs[asgn.classwork_assignment_id].grade is not None)
+            else 0.0
+            for asgn in performance_assignments
+        ]
+        quarterly_scores = [
+            float(student_subs[asgn.classwork_assignment_id].grade)
+            if (asgn.classwork_assignment_id in student_subs and student_subs[asgn.classwork_assignment_id].grade is not None)
+            else 0.0
+            for asgn in quarterly_assignments
+        ]
+
+        # DepEd K-12 grade computation
+        ps_ww, ps_pt, ps_qa, ig, tg = _deped_grade(
+            written_scores, written_assignments,
+            performance_scores, performance_assignments,
+            quarterly_scores, quarterly_assignments,
+        )
+
+        # Prefer finalized official grade if available
+        metrics = _metrics_for_student(db, scope, student, assignments, student_subs)
+        if metrics.official_period_grade is not None:
+            display_total = str(round(metrics.official_period_grade, 1))
+        elif tg is not None:
+            display_total = str(round(tg, 1))
+        else:
+            display_total = "0"
+
+        student_rows.append(
+            StudentGradebookRow(
+                student_id=str(student.student_id),
+                name=_student_name(student),
+                writtenWork=written_scores,
+                performanceTask=performance_scores,
+                quarterlyAssessment=quarterly_scores,
+                ps_written=ps_ww,
+                ps_performance=ps_pt,
+                ps_quarterly=ps_qa,
+                initial_grade=ig,
+                transmuted_grade=tg,
+                total=display_total,
+            )
+        )
+
+    return StudentGradebookResponse(
+        scope=_scope_out(scope),
+        classwork=[
+            GradebookCategoryHeaderGroup(
+                writtenWork=written_headers,
+                performanceTask=performance_headers,
+                quarterlyAssessment=quarterly_headers,
+            )
+        ],
+        studentGrades=student_rows,
+    )
+
+
+def _categorize_assignment(assignment: ClassworkAssignment) -> str:
+    cat = (assignment.classwork.classwork_category or "").upper().replace(" ", "_").replace("-", "_")
+    cw_type = (assignment.classwork.classwork_type or "").upper()
+
+    # 1. Quarterly / exam signals (strongest priority)
+    if "QUARTERLY" in cat or "QUARTER" in cat or "PERIODIC" in cat or "EXAM" in cat or cw_type == "EXAM":
+        return "quarterlyAssessment"
+
+    # 2. Explicit written-work category name
+    if "WRITTEN" in cat or "SEAT" in cat:
+        return "writtenWork"
+
+    # 3. Explicit performance-task category name
+    if "PERFORMANCE" in cat or "PROJECT" in cat:
+        return "performanceTask"
+
+    # 4. Type-based fallback (ASSIGNMENT and QUIZ are written-work by default in DepEd)
+    if cw_type in ("ACTIVITY", "PROJECT"):
+        return "performanceTask"
+
+    # 5. Default: written work
+    return "writtenWork"
+
+
+
+def _category_ps(
+    scores: list[float],
+    assignments: list[ClassworkAssignment],
+) -> float | None:
+    """
+    Percentage Score for a category.
+    PS = (Sum of student scores) / (Sum of max scores) × 100
+    Returns None when there are no assignments in the category.
+    """
+    total_max = sum(
+        float(asgn.classwork.total_points or 0)
+        for asgn in assignments
+    )
+    if total_max <= 0:
+        return None
+    total_earned = sum(scores)
+    return round((total_earned / total_max) * 100, 2)
+
+
+# DepEd K-12 category weights (DO 8, s. 2015 – Grades 7-10)
+_WW_WEIGHT = 0.30
+_PT_WEIGHT = 0.50
+_QA_WEIGHT = 0.20
+
+
+def _deped_transmuted(initial_grade: float) -> float:
+    """
+    DepEd Transmutation Table (DO 8, s. 2015).
+    Transmuted Grade = ((IG - 60) / 40) × 40 + 60  when IG >= 60
+                     = (IG / 60) × 60               when IG < 60
+    Which simplifies to TG = IG for IG in [60, 100] and TG = IG for IG < 60
+    but the grade floor is 60 for passing marks.
+
+    The published DepEd transmutation table maps:
+      100 -> 100,  95 -> 98,  90 -> 95,  85 -> 91,  80 -> 87,
+       75 -> 83,   70 -> 79,  65 -> 75,  60 -> 70,  55 -> 65,
+       50 -> 60,   45 -> 55,  40 -> 50,  35 -> 45,  30 -> 40,
+       25 -> 35,   20 -> 30,  15 -> 25,  10 -> 20,   5 -> 15, 0 -> 10
+    We interpolate linearly between these breakpoints.
+    """
+    TABLE = [
+        (100, 100), (95, 98), (90, 95), (85, 91), (80, 87),
+        (75, 83), (70, 79), (65, 75), (60, 70), (55, 65),
+        (50, 60), (45, 55), (40, 50), (35, 45), (30, 40),
+        (25, 35), (20, 30), (15, 25), (10, 20), (5, 15), (0, 10),
+    ]
+    ig = max(0.0, min(100.0, initial_grade))
+    # Find the two surrounding rows
+    for i in range(len(TABLE) - 1):
+        ig_high, tg_high = TABLE[i]
+        ig_low, tg_low = TABLE[i + 1]
+        if ig_low <= ig <= ig_high:
+            if ig_high == ig_low:
+                return float(tg_high)
+            ratio = (ig - ig_low) / (ig_high - ig_low)
+            return round(tg_low + ratio * (tg_high - tg_low), 2)
+    return 10.0  # fallback for ig == 0
+
+
+def _deped_grade(
+    written_scores: list[float],
+    written_assignments: list[ClassworkAssignment],
+    performance_scores: list[float],
+    performance_assignments: list[ClassworkAssignment],
+    quarterly_scores: list[float],
+    quarterly_assignments: list[ClassworkAssignment],
+) -> tuple[float | None, float | None, float | None, float | None, float | None]:
+    """
+    Compute DepEd K-12 grades (DO 8, s. 2015).
+    Returns (ps_written, ps_performance, ps_quarterly, initial_grade, transmuted_grade).
+    Any category with no assignments contributes 0 weighted score.
+    """
+    ps_ww = _category_ps(written_scores, written_assignments)
+    ps_pt = _category_ps(performance_scores, performance_assignments)
+    ps_qa = _category_ps(quarterly_scores, quarterly_assignments)
+
+    has_any = ps_ww is not None or ps_pt is not None or ps_qa is not None
+    if not has_any:
+        return None, None, None, None, None
+
+    ww_contrib = (ps_ww or 0.0) * _WW_WEIGHT
+    pt_contrib = (ps_pt or 0.0) * _PT_WEIGHT
+    qa_contrib = (ps_qa or 0.0) * _QA_WEIGHT
+    ig = round(ww_contrib + pt_contrib + qa_contrib, 2)
+    tg = _deped_transmuted(ig)
+    return ps_ww, ps_pt, ps_qa, ig, tg
+
 
 
 def finalize_student_period_grade(

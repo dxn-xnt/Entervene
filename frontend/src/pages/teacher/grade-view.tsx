@@ -1,124 +1,102 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { useParams } from "react-router-dom";
-import { Ellipsis, Plus, Search } from "lucide-react";
+import { Ellipsis, Plus, Search, Download, ClipboardCheck } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
-import AddSubjectLoadModal from "../admin/forms/add-subject-load";
 import ViewGradeScoreModal from "./forms/view-grade-scores";
 import AddClassworkScoreModal from "./forms/add-classwork-score";
+import AttendanceModal from "./forms/attendance-modal";
+import { getTeacherGradebook, type StudentGradebookResponse, type GradebookCategoryHeader } from "@/lib/api";
 
-const classwork = [
-  {
-    writtenWork: [
-      {
-        id: 1,
-        title: "Assignment 1",
-        maxScore: 20,
-      },
-      {
-        id: 2,
-        title: "Assignment 2",
-        maxScore: 20,
-      },
-    ],
-    performanceTask: [
-      {
-        id: 1,
-        title: "Project 1",
-        maxScore: 20,
-      },
-      {
-        id: 2,
-        title: "Project 2",
-        maxScore: 20,
-      },
-    ],
-    quarterlyAssessment: [
-      {
-        id: 1,
-        title: "Test 1",
-        maxScore: 20,
-      }
-    ],
+function fmt(val: number | null | undefined, d = 1): string {
+  if (val == null) return "—";
+  return val.toFixed(d);
+}
+
+/** Helper to get at most 2 latest items (or scores) arranged latest to oldest (newest first). */
+function getLatestTwo<T>(arr: T[]): { item: T; originalIndex: number }[] {
+  if (!arr || arr.length === 0) return [];
+  const result: { item: T; originalIndex: number }[] = [];
+  const start = Math.max(0, arr.length - 2);
+  for (let i = arr.length - 1; i >= start; i--) {
+    result.push({ item: arr[i], originalIndex: i });
   }
-];
-const studentGrades = [
-  {
-    name: "Maria Clara",
-    writtenWork: [
-      20,
-      15,
-    ],
-    performanceTask: [
-      20,
-      15,
-    ],
-    quarterlyAssessment: [
-      15
-    ],
-    total: "88",
-  },
-  {
-    name: "Jose Rizal",
-    writtenWork: [
-      20,
-      15,
-    ],
-    performanceTask: [
-      20,
-      15,
-    ],
-    quarterlyAssessment: [
-      15
-    ],
-    total: "92",
-  },
-  {
-    name: "Juan Dela Cruz",
-    writtenWork: [
-      20,
-      15,
-    ],
-    performanceTask: [
-      20,
-      15,
-    ],
-    quarterlyAssessment: [
-      15
-    ],
-    total: "95",
-  },
-  {
-    name: "Juan Dela Cruz",
-    writtenWork: [
-      20,
-      15,
-    ],
-    performanceTask: [
-      20,
-      15,
-    ],
-    quarterlyAssessment: [
-      15
-    ],
-    total: "95",
-  },
-];
+  return result;
+}
 
 const TeacherGradeView = () => {
   const { section, subject } = useParams<{ section: string; subject: string }>();
+  const [gradebook, setGradebook] = useState<StudentGradebookResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortBy, setSortBy] = useState("name");
+
+  const [openAttendance, setOpenAttendance] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<{
     name: string;
-    items: { id: number; title: string; maxScore: number }[];
+    items: GradebookCategoryHeader[];
     studentGrades: { name: string; scores: number[] }[];
   } | null>(null);
   const [addingCategoryName, setAddingCategoryName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (section && subject) {
+      getTeacherGradebook(section, subject)
+        .then((data) => {
+          if (isMounted) setGradebook(data);
+        })
+        .catch((err) => console.error("Error loading gradebook:", err))
+        .finally(() => {
+          if (isMounted) setLoading(false);
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [section, subject]);
+
+  const cg = gradebook?.classwork?.[0] ?? { writtenWork: [], performanceTask: [], quarterlyAssessment: [] };
+  const raw = gradebook?.studentGrades ?? [];
+  const filtered = raw
+    .filter((sg) => sg.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    .sort((a, b) => (sortBy === "name" ? a.name.localeCompare(b.name) : 0));
+
+  const displaySectionName = gradebook?.scope?.section_name ?? section ?? "Section";
+  const displaySubjectName = gradebook?.scope?.subject_name ?? subject ?? "Subject";
+
+  const handleExportCSV = () => {
+    if (!gradebook) return;
+    const headers = [
+      "Learner's Name",
+      ...cg.writtenWork.map((w) => `WW: ${w.title} (${w.maxScore})`),
+      ...cg.performanceTask.map((p) => `PT: ${p.title} (${p.maxScore})`),
+      ...cg.quarterlyAssessment.map((q) => `QA: ${q.title} (${q.maxScore})`),
+      "Transmuted Grade",
+    ];
+    const rows = raw.map((sg) => [
+      `"${sg.name}"`,
+      ...sg.writtenWork,
+      ...sg.performanceTask,
+      ...sg.quarterlyAssessment,
+      fmt(sg.transmuted_grade ?? sg.initial_grade),
+    ]);
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.setAttribute("download", `${displaySectionName}_${displaySubjectName}_Gradebook.csv`);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
   return (
     <AppLayout>
@@ -130,38 +108,28 @@ const TeacherGradeView = () => {
               <Breadcrumb>
                 <Breadcrumb.List>
                   <Breadcrumb.Item>
-                    <Breadcrumb.Link href="/teacher/grades" className="text-4xl">
+                    <Breadcrumb.Link href="/teacher/grades" className="text-2xl md:text-4xl font-bold">
                       Grades
                     </Breadcrumb.Link>
                   </Breadcrumb.Item>
                   <Breadcrumb.Separator />
                   <Breadcrumb.Item>
-                    <Breadcrumb.Page>{section || "7 - Sapphire"}</Breadcrumb.Page>
+                    <Breadcrumb.Page>{displaySectionName}</Breadcrumb.Page>
                   </Breadcrumb.Item>
                   <Breadcrumb.Separator />
                   <Breadcrumb.Item>
-                    <Breadcrumb.Page>{subject || "Science"}</Breadcrumb.Page>
+                    <Breadcrumb.Page>{displaySubjectName}</Breadcrumb.Page>
                   </Breadcrumb.Item>
                 </Breadcrumb.List>
               </Breadcrumb>
 
-              <div className="flex flex-row gap-2">
-                <Dialog>
-                  <Dialog.Trigger>
-                    <Button variant={"outline"} className="whitespace-nowrap">
-                      <Plus className="size-4 mr-2" /> Check Attendance
-                    </Button>
-                  </Dialog.Trigger>
-                  <AddSubjectLoadModal />
-                </Dialog>
-                <Dialog>
-                  <Dialog.Trigger>
-                    <Button variant={"outline"} className="whitespace-nowrap">
-                      <Plus className="size-4 mr-2" /> Export Grades
-                    </Button>
-                  </Dialog.Trigger>
-                  <AddSubjectLoadModal />
-                </Dialog>
+              <div className="flex flex-row gap-2 ml-auto">
+                <Button variant={"outline"} className="whitespace-nowrap" onClick={() => setOpenAttendance(true)}>
+                  <ClipboardCheck className="size-4 mr-2" /> Check Attendance
+                </Button>
+                <Button variant={"outline"} className="whitespace-nowrap" onClick={handleExportCSV}>
+                  <Download className="size-4 mr-2" /> Export Grades
+                </Button>
               </div>
             </header>
 
@@ -170,189 +138,285 @@ const TeacherGradeView = () => {
             <div className="flex flex-col gap-3">
               <section className="flex flex-row justify-between gap-4">
                 <div className="relative w-full md:w-80">
-                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2" />
+                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     className="w-full pl-9"
-                    value={""}
-                    onChange={() => { }}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="Search student's name"
                   />
                 </div>
                 <div className="flex flex-row gap-4">
-                  <Select value={""}>
+                  <Select value={sortBy} onValueChange={(v) => setSortBy(v)}>
                     <Select.Trigger className="w-full">
                       <Select.Value placeholder="Sort By" />
                     </Select.Trigger>
                     <Select.Content>
                       <Select.Group>
                         <Select.Item value="name">Name</Select.Item>
-                        <Select.Item value="code">Code</Select.Item>
-                        <Select.Item value="group">Group</Select.Item>
                       </Select.Group>
                     </Select.Content>
                   </Select>
                 </div>
               </section>
 
-              <Table>
-                <Table.Header className="font-sans">
-                  <Table.Row>
-                    <Table.Head>Learner's Name</Table.Head>
-                    <Table.Head className="text-center">Written Works</Table.Head>
-                    <Table.Head className="text-center">Performance Task</Table.Head>
-                    <Table.Head className="text-center">Quarterly Assessment</Table.Head>
-                    <Table.Head className="text-center">Grade</Table.Head>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  <Table.Row>
-                    <Table.Cell className="min-w-70">Classwork Name</Table.Cell>
-
-                    <Table.Cell className="py-2">
-                      <div className="group flex flex-row items-center justify-between gap-2">
-                        <Ellipsis
-                          className="size-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                          onClick={() =>
-                            setSelectedCategory({
-                              name: "Written Works",
-                              items: classwork[0].writtenWork,
-                              studentGrades: studentGrades.map((sg) => ({
-                                name: sg.name,
-                                scores: sg.writtenWork,
-                              })),
-                            })
-                          }
-                        />
-                        <div className="flex flex-row w-full gap-4">
-                          {classwork[0].writtenWork.map((item) => (
-                            <span key={item.id} className="flex flex-row w-full items-center justify-center gap-2 whitespace-nowrap">
-                              <span>{item.title}</span>
-                              <span className="text-muted-foreground">({item.maxScore})</span>
-                            </span>
-                          ))}
-                        </div>
-                        <Plus
-                          className="size-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                          onClick={() => setAddingCategoryName("Written Works")}
-                        />
-                      </div>
-                    </Table.Cell>
-
-                    <Table.Cell className="py-2">
-                      <div className="group flex flex-row items-center justify-between gap-2">
-                        <Ellipsis
-                          className="size-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                          onClick={() =>
-                            setSelectedCategory({
-                              name: "Performance Tasks",
-                              items: classwork[0].performanceTask,
-                              studentGrades: studentGrades.map((sg) => ({
-                                name: sg.name,
-                                scores: sg.performanceTask,
-                              })),
-                            })
-                          }
-                        />
-                        <div className="flex flex-row w-full gap-4">
-                          {classwork[0].performanceTask.map((item) => (
-                            <span key={item.id} className="flex flex-row w-full items-center justify-center gap-2 whitespace-nowrap">
-                              <span>{item.title}</span>
-                              <span className="text-muted-foreground">({item.maxScore})</span>
-                            </span>
-                          ))}
-                        </div>
-                        <Plus
-                          className="size-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                          onClick={() => setAddingCategoryName("Performance Tasks")}
-                        />
-                      </div>
-                    </Table.Cell>
-
-                    <Table.Cell className="py-2">
-                      <div className="group flex flex-row items-center justify-between gap-2">
-                        <Ellipsis
-                          className="size-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                          onClick={() =>
-                            setSelectedCategory({
-                              name: "Quarterly Assessment",
-                              items: classwork[0].quarterlyAssessment,
-                              studentGrades: studentGrades.map((sg) => ({
-                                name: sg.name,
-                                scores: sg.quarterlyAssessment,
-                              })),
-                            })
-                          }
-                        />
-                        <div className="flex flex-row w-full gap-4">
-                          {classwork[0].quarterlyAssessment.map((item) => (
-                            <span key={item.id} className="flex flex-row w-full items-center justify-center gap-2 whitespace-nowrap">
-                              <span>{item.title}</span>
-                              <span className="text-muted-foreground">({item.maxScore})</span>
-                            </span>
-                          ))}
-                        </div>
-                        <Plus
-                          className="size-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                          onClick={() => setAddingCategoryName("Quarterly Assessment")}
-                        />
-                      </div>
-                    </Table.Cell>
-
-                    <Table.Cell className="text-center">100</Table.Cell>
-                  </Table.Row>
-                  {studentGrades.map((item) => (
-                    <Table.Row key={item.name}>
-                      <Table.Cell className="font-medium">{item.name}</Table.Cell>
-                      <Table.Cell className="font-medium">
-                        <div className="flex flex-row items-center justify-between gap-2">
-                          <div className="size-4" />
-                          <div className="flex flex-row justify-between w-full">
-                            {item.writtenWork.map((score, index) => (
-                              <span className="w-full text-center" key={index}>{score}</span>
-                            ))}
-                          </div>
-                          <div className="size-4" />
-                        </div>
-                      </Table.Cell>
-                      <Table.Cell className="font-medium">
-                        <div className="flex flex-row items-center justify-between gap-2">
-                          <div className="size-4" />
-                          <div className="flex flex-row justify-between w-full">
-                            {item.performanceTask.map((score, index) => (
-                              <span className="w-full text-center" key={index}>{score}</span>
-                            ))}
-                          </div>
-                          <div className="size-4" />
-                        </div>
-                      </Table.Cell>
-                      <Table.Cell className="font-medium">
-                        <div className="flex flex-row items-center justify-between gap-2">
-                          <div className="size-4" />
-                          <div className="flex flex-row justify-between w-full">
-                            {item.quarterlyAssessment.map((score, index) => (
-                              <span className="w-full text-center" key={index}>{score}</span>
-                            ))}
-                          </div>
-                          <div className="size-4" />
-                        </div>
-                      </Table.Cell>
-                      <Table.Cell className="font-medium">
-                        <div className="flex flex-row items-center justify-between gap-2">
-                          <div className="size-4" />
-                          <span>{item.total}</span>
-                          <div className="size-4" />
-                        </div>
-                      </Table.Cell>
+              <div className="w-full overflow-hidden border border-border rounded-lg shadow-sm">
+                <Table className="w-full text-sm border-collapse">
+                  <Table.Header className="font-sans">
+                    <Table.Row>
+                      <Table.Head className="w-[22%] font-bold">Learner's Name</Table.Head>
+                      <Table.Head
+                        className="w-[27%] text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                        title="Click to view full Written Works breakdown"
+                        onClick={() =>
+                          setSelectedCategory({
+                            name: "Written Works",
+                            items: cg.writtenWork,
+                            studentGrades: filtered.map((sg) => ({
+                              name: sg.name,
+                              scores: sg.writtenWork,
+                            })),
+                          })
+                        }
+                      >
+                        Written Works
+                      </Table.Head>
+                      <Table.Head
+                        className="w-[27%] text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                        title="Click to view full Performance Tasks breakdown"
+                        onClick={() =>
+                          setSelectedCategory({
+                            name: "Performance Tasks",
+                            items: cg.performanceTask,
+                            studentGrades: filtered.map((sg) => ({
+                              name: sg.name,
+                              scores: sg.performanceTask,
+                            })),
+                          })
+                        }
+                      >
+                        Performance Task
+                      </Table.Head>
+                      <Table.Head
+                        className="w-[15%] text-center cursor-pointer hover:bg-muted/50 transition-colors"
+                        title="Click to view full Quarterly Assessment breakdown"
+                        onClick={() =>
+                          setSelectedCategory({
+                            name: "Quarterly Assessment",
+                            items: cg.quarterlyAssessment,
+                            studentGrades: filtered.map((sg) => ({
+                              name: sg.name,
+                              scores: sg.quarterlyAssessment,
+                            })),
+                          })
+                        }
+                      >
+                        Quarterly Assessment
+                      </Table.Head>
+                      <Table.Head className="w-[9%] text-center font-bold">Grade</Table.Head>
                     </Table.Row>
-                  ))}
-                </Table.Body>
-              </Table>
+                  </Table.Header>
+                  <Table.Body>
+                    <Table.Row className="bg-muted/20">
+                      <Table.Cell className="font-semibold text-muted-foreground">Classwork Name</Table.Cell>
+
+                      <Table.Cell className="py-2 px-2">
+                        <div className="flex flex-row items-center justify-between gap-1 w-full">
+                          <Ellipsis
+                            className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0"
+                            title="View all Written Works scores"
+                            onClick={() =>
+                              setSelectedCategory({
+                                name: "Written Works",
+                                items: cg.writtenWork,
+                                studentGrades: filtered.map((sg) => ({
+                                  name: sg.name,
+                                  scores: sg.writtenWork,
+                                })),
+                              })
+                            }
+                          />
+                          <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
+                            {getLatestTwo(cg.writtenWork).map(({ item }) => (
+                              <span
+                                key={item.id}
+                                className="flex flex-row items-center gap-1 whitespace-nowrap truncate"
+                                title={`${item.title} (${item.maxScore})`}
+                              >
+                                <span className="truncate max-w-[90px]">{item.title}</span>
+                                <span className="text-muted-foreground font-normal">({item.maxScore})</span>
+                              </span>
+                            ))}
+                          </div>
+                          <Plus
+                            className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0"
+                            title="Add score to Written Works"
+                            onClick={() => setAddingCategoryName("Written Works")}
+                          />
+                        </div>
+                      </Table.Cell>
+
+                      <Table.Cell className="py-2 px-2">
+                        <div className="flex flex-row items-center justify-between gap-1 w-full">
+                          <Ellipsis
+                            className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0"
+                            title="View all Performance Tasks scores"
+                            onClick={() =>
+                              setSelectedCategory({
+                                name: "Performance Tasks",
+                                items: cg.performanceTask,
+                                studentGrades: filtered.map((sg) => ({
+                                  name: sg.name,
+                                  scores: sg.performanceTask,
+                                })),
+                              })
+                            }
+                          />
+                          <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
+                            {getLatestTwo(cg.performanceTask).map(({ item }) => (
+                              <span
+                                key={item.id}
+                                className="flex flex-row items-center gap-1 whitespace-nowrap truncate"
+                                title={`${item.title} (${item.maxScore})`}
+                              >
+                                <span className="truncate max-w-[90px]">{item.title}</span>
+                                <span className="text-muted-foreground font-normal">({item.maxScore})</span>
+                              </span>
+                            ))}
+                          </div>
+                          <Plus
+                            className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0"
+                            title="Add score to Performance Tasks"
+                            onClick={() => setAddingCategoryName("Performance Tasks")}
+                          />
+                        </div>
+                      </Table.Cell>
+
+                      <Table.Cell className="py-2 px-2">
+                        <div className="flex flex-row items-center justify-between gap-1 w-full">
+                          <Ellipsis
+                            className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0"
+                            title="View all Quarterly Assessment scores"
+                            onClick={() =>
+                              setSelectedCategory({
+                                name: "Quarterly Assessment",
+                                items: cg.quarterlyAssessment,
+                                studentGrades: filtered.map((sg) => ({
+                                  name: sg.name,
+                                  scores: sg.quarterlyAssessment,
+                                })),
+                              })
+                            }
+                          />
+                          <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
+                            {getLatestTwo(cg.quarterlyAssessment).map(({ item }) => (
+                              <span
+                                key={item.id}
+                                className="flex flex-row items-center gap-1 whitespace-nowrap truncate"
+                                title={`${item.title} (${item.maxScore})`}
+                              >
+                                <span className="truncate max-w-[90px]">{item.title}</span>
+                                <span className="text-muted-foreground font-normal">({item.maxScore})</span>
+                              </span>
+                            ))}
+                          </div>
+                          <Plus
+                            className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0"
+                            title="Add score to Quarterly Assessment"
+                            onClick={() => setAddingCategoryName("Quarterly Assessment")}
+                          />
+                        </div>
+                      </Table.Cell>
+
+                      <Table.Cell className="text-center font-semibold">100</Table.Cell>
+                    </Table.Row>
+
+                    {loading ? (
+                      <Table.Row>
+                        <Table.Cell colSpan={5} className="text-center py-8 text-gray-500">
+                          Loading gradebook...
+                        </Table.Cell>
+                      </Table.Row>
+                    ) : filtered.length === 0 ? (
+                      <Table.Row>
+                        <Table.Cell colSpan={5} className="text-center py-8 text-gray-500">
+                          No student records found.
+                        </Table.Cell>
+                      </Table.Row>
+                    ) : (
+                      filtered.map((item) => (
+                        <Table.Row key={item.student_id}>
+                          <Table.Cell className="font-medium truncate max-w-[200px]" title={item.name}>
+                            {item.name}
+                          </Table.Cell>
+
+                          <Table.Cell className="font-medium py-2.5 px-2">
+                            <div className="flex flex-row items-center justify-between gap-1 w-full">
+                              <div className="size-4 shrink-0" />
+                              <div className="flex flex-row justify-around w-full text-xs">
+                                {getLatestTwo(item.writtenWork).map(({ item: score }, idx) => (
+                                  <span className="w-full text-center tabular-nums" key={idx}>
+                                    {score}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="size-4 shrink-0" />
+                            </div>
+                          </Table.Cell>
+
+                          <Table.Cell className="font-medium py-2.5 px-2">
+                            <div className="flex flex-row items-center justify-between gap-1 w-full">
+                              <div className="size-4 shrink-0" />
+                              <div className="flex flex-row justify-around w-full text-xs">
+                                {getLatestTwo(item.performanceTask).map(({ item: score }, idx) => (
+                                  <span className="w-full text-center tabular-nums" key={idx}>
+                                    {score}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="size-4 shrink-0" />
+                            </div>
+                          </Table.Cell>
+
+                          <Table.Cell className="font-medium py-2.5 px-2">
+                            <div className="flex flex-row items-center justify-between gap-1 w-full">
+                              <div className="size-4 shrink-0" />
+                              <div className="flex flex-row justify-around w-full text-xs">
+                                {getLatestTwo(item.quarterlyAssessment).map(({ item: score }, idx) => (
+                                  <span className="w-full text-center tabular-nums" key={idx}>
+                                    {score}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="size-4 shrink-0" />
+                            </div>
+                          </Table.Cell>
+
+                          <Table.Cell className="font-medium text-center tabular-nums">
+                            {item.transmuted_grade != null
+                              ? item.transmuted_grade.toFixed(1)
+                              : item.initial_grade != null
+                              ? item.initial_grade.toFixed(1)
+                              : "—"}
+                          </Table.Cell>
+                        </Table.Row>
+                      ))
+                    )}
+                  </Table.Body>
+                </Table>
+              </div>
             </div>
-
-
           </div>
         </div>
       </div>
+
+      <Dialog open={openAttendance} onOpenChange={setOpenAttendance}>
+        <AttendanceModal
+          sectionName={displaySectionName}
+          students={filtered.map((s) => ({ student_id: s.student_id, name: s.name }))}
+        />
+      </Dialog>
+
       <Dialog
         open={selectedCategory !== null}
         onOpenChange={(open) => {
@@ -367,6 +431,7 @@ const TeacherGradeView = () => {
           />
         )}
       </Dialog>
+
       <Dialog
         open={addingCategoryName !== null}
         onOpenChange={(open) => {
