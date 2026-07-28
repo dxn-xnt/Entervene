@@ -560,9 +560,9 @@ export type GradebookCategoryHeaderGroup = {
 export type StudentGradebookRow = {
   student_id: string;
   name: string;
-  writtenWork: number[];
-  performanceTask: number[];
-  quarterlyAssessment: number[];
+  writtenWork: (number | null)[];
+  performanceTask: (number | null)[];
+  quarterlyAssessment: (number | null)[];
   ps_written?: number | null;
   ps_performance?: number | null;
   ps_quarterly?: number | null;
@@ -585,6 +585,97 @@ export async function getTeacherGradebook(classId: number | string, subjectId: n
   }
 
   return (await response.json()) as StudentGradebookResponse;
+}
+
+export type ActivityCreatePayload = {
+  title: string;
+  classwork_category: string;
+  total_points: number;
+  class_id: number;
+  subject_id: number;
+  activity_mode?: string;
+  description?: string;
+  due_date?: string;
+  lesson_ids?: number[];
+};
+
+export type StudentActivityScoreItem = {
+  student_id: string;
+  name: string;
+  score: number | null;
+};
+
+export type ActivityScoresResponse = {
+  activity_id: number;
+  classwork_assignment_id: number;
+  title: string;
+  max_score: number;
+  activity_mode: string;
+  students: StudentActivityScoreItem[];
+};
+
+export type BulkScoreItem = {
+  student_id: string;
+  score: number | null;
+};
+
+export type BulkScoreUpdatePayload = {
+  class_id: number;
+  scores: BulkScoreItem[];
+};
+
+export async function createActivity(payload: ActivityCreatePayload) {
+  const response = await apiFetch("/api/v1/activities", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail ?? "Failed to create activity.");
+  }
+
+  return await response.json();
+}
+
+export async function getActivityScores(activityId: number | string, classId: number | string): Promise<ActivityScoresResponse> {
+  const response = await apiFetch(`/api/v1/activities/${encodeURIComponent(String(activityId))}/scores?class_id=${encodeURIComponent(String(classId))}`);
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail ?? "Failed to fetch activity scores.");
+  }
+
+  return (await response.json()) as ActivityScoresResponse;
+}
+
+export async function bulkUpdateActivityScores(activityId: number | string, payload: BulkScoreUpdatePayload): Promise<ActivityScoresResponse> {
+  const response = await apiFetch(`/api/v1/activities/${encodeURIComponent(String(activityId))}/scores`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail ?? "Failed to save scores.");
+  }
+
+  return (await response.json()) as ActivityScoresResponse;
+}
+
+export async function deleteActivity(activityId: number | string) {
+  const response = await apiFetch(`/api/v1/activities/${encodeURIComponent(String(activityId))}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail ?? "Failed to delete activity.");
+  }
+
+  return await response.json();
 }
 
 export async function updateUser(userId: string, payload: UpdateUserPayload) {
