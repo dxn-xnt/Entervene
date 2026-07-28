@@ -206,18 +206,28 @@ export default function LessonClassworkList({
                       Add Classwork
                     </button>
                   </div>
-                  {loadingClassworkId === lesson.lesson_id ? (
-                    <div className="rounded-lg border border-black bg-white px-4 py-3 text-sm font-medium shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                      Loading classworks...
-                    </div>
-                  ) : classworks.length > 0 ? (
-                    classworks.map((classwork) => (
-                      <button
-                        type="button"
-                        key={classwork.classwork_assignment_id}
-                        onClick={() => openClassworkDetail(classwork)}
-                        className="grid w-full grid-cols-[minmax(0,1fr)_7rem_auto] items-center gap-3 rounded-lg border border-black bg-white px-4 py-3 text-left shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
-                      >
+                  {(() => {
+                    const quarterlyIds = new Set(quarterlyAssessments.map((q) => q.classwork_assignment_id));
+                    const lessonClassworks = classworks.filter(
+                      (cw) =>
+                        cw.classwork_category !== "QUARTERLY_ASSESSMENT" &&
+                        !quarterlyIds.has(cw.classwork_assignment_id),
+                    );
+                    if (loadingClassworkId === lesson.lesson_id) {
+                      return (
+                        <div className="rounded-lg border border-black bg-white px-4 py-3 text-sm font-medium shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                          Loading classworks...
+                        </div>
+                      );
+                    }
+                    if (lessonClassworks.length > 0) {
+                      return lessonClassworks.map((classwork) => (
+                        <button
+                          type="button"
+                          key={classwork.classwork_assignment_id}
+                          onClick={() => openClassworkDetail(classwork)}
+                          className="grid w-full grid-cols-[minmax(0,1fr)_7rem_auto] items-center gap-3 rounded-lg border border-black bg-white px-4 py-3 text-left shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
+                        >
                         <div className="flex min-w-0 items-center gap-3">
                           <FileText size={20} />
                           <div className="min-w-0">
@@ -242,8 +252,9 @@ export default function LessonClassworkList({
                           Details
                         </span>
                       </button>
-                    ))
-                  ) : (
+                    ));
+                  }
+                  return (
                     <div className="flex items-center justify-between rounded-lg border border-black bg-white px-4 py-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                       <div className="flex items-center gap-3">
                         <ClipboardList size={20} />
@@ -255,7 +266,8 @@ export default function LessonClassworkList({
                         </div>
                       </div>
                     </div>
-                  )}
+                  );
+                })()}
                 </div>
               )}
             </div>
