@@ -13,7 +13,10 @@ import type {
   DashboardQueryParams,
   RiskSummary,
 } from "@/lib/prediction-api";
-import { fetchDashboardAtRisk, fetchDashboardFilters } from "@/lib/prediction-api";
+import {
+  fetchDashboardAtRisk,
+  fetchDashboardFilters,
+} from "@/lib/prediction-api";
 
 const EMPTY_SUMMARY: RiskSummary = {
   HIGH_RISK: 0,
@@ -45,15 +48,13 @@ export default function PredictionsDashboard() {
 
   // Detail sheet
   const [selectedPrediction, setSelectedPrediction] = useState<number | null>(
-    null
+    null,
   );
   const [sheetOpen, setSheetOpen] = useState(false);
 
   // ── Fetch filters once ──
   useEffect(() => {
-    fetchDashboardFilters()
-      .then(setFilters)
-      .catch(console.error);
+    fetchDashboardFilters().then(setFilters).catch(console.error);
   }, []);
 
   // ── Fetch data on filter/sort/page change ──
@@ -85,14 +86,16 @@ export default function PredictionsDashboard() {
   }, [loadData]);
 
   // Debounce search
-  const [searchTimer, setSearchTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [searchTimer, setSearchTimer] = useState<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const handleSearchChange = (value: string) => {
     setSearch(value);
     if (searchTimer) clearTimeout(searchTimer);
     setSearchTimer(
       setTimeout(() => {
         setOffset(0);
-      }, 400)
+      }, 400),
     );
   };
 
@@ -132,24 +135,14 @@ export default function PredictionsDashboard() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-5 py-4 md:py-5 px-4 md:px-6 pb-6">
+          <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
             {/* ── Header ── */}
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
-              <div className="flex items-center gap-2">
-                <Sparkles size={24} className="text-indigo-500" />
-                <div>
-                  <h1 className="text-2xl md:text-3xl font-semibold">
-                    AI Prediction Dashboard
-                  </h1>
-                  <p className="text-sm text-gray-500">
-                    Student risk predictions powered by Entervene ML
-                  </p>
-                </div>
-              </div>
+              <h1 className="text-2xl md:text-4xl font-bold">AI Prediction Dashboard</h1>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b border-black/10" />
+            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
             {/* ── Risk Summary Cards ── */}
             <RiskSummaryCards

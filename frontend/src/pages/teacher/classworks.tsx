@@ -1702,11 +1702,13 @@ export default function Classworks() {
         </main>
       ) : (
         <>
-          <div className="flex flex-col gap-4 pt-4 md:pt-5 px-4 md:px-6 pb-0!">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
             <header className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl md:text-4xl font-bold">Classwork</h1>
+                <h1 className="text-2xl md:text-4xl font-bold">
+                  Classwork
+                </h1>
               </div>
 
               <Button
@@ -1719,9 +1721,7 @@ export default function Classworks() {
                 <span className="sm:hidden">New</span>
               </Button>
             </header>
-          </div>
 
-          <div className="px-4 md:px-6">
             <Tabs
               tabs={tabs}
               activeTab={activeTab}
