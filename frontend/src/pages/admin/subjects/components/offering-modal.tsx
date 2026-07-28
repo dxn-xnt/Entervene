@@ -7,8 +7,13 @@ import { Text } from "@/components/retroui/Text";
 import { formatPeriodLabel } from "@/lib/academic-periods";
 import {
   ApiRequestError,
+  archiveSubjectOffering,
   createSubjectOffering,
+  getGradingTemplates,
+  getSubjectOfferings,
+  updateSubject,
   updateSubjectOffering,
+  type GradingTemplateListItem,
   type SubjectListItem,
   type SubjectOfferingFormOptions,
   type SubjectOfferingListItem,
@@ -43,8 +48,15 @@ export function OfferingModal({
   catalogSubjects: SubjectListItem[];
   readOnly?: boolean;
   readOnlyReason?: string;
-  onSaved: (message?: string) => Promise<void>;
+  onSaved: (meta?: {
+    message?: string;
+    gradeValue?: string;
+    pathway?: SubjectOfferingPathway;
+    academicYearId?: number;
+  }) => Promise<void>;
 }) {
+  const [gradingTemplates, setGradingTemplates] = useState<GradingTemplateListItem[]>([]);
+  const [existingSubjectOfferings, setExistingSubjectOfferings] = useState<SubjectOfferingListItem[]>([]);
   const [form, setForm] = useState<OfferingFormState>({
     subject_id: "",
     subject_ids: [],
@@ -54,10 +66,18 @@ export function OfferingModal({
     academic_period_ids: [],
     pathway: "general",
     status: "active",
+    default_grading_template: "no-template",
   });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAdvancedYear, setShowAdvancedYear] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    getGradingTemplates({ status: "active" })
+      .then((res) => setGradingTemplates(res.grading_templates))
+      .catch(() => setGradingTemplates([]));
+  }, [open]);
 
   const gradeLevels = useMemo(() => targetLevels(options?.academic_levels ?? []), [options]);
   const selectedYearId = Number(form.academic_year_id);
@@ -89,22 +109,86 @@ export function OfferingModal({
     ? `${selectedYear.year_label} - ${formatPeriodLabel(contextPeriod)}`
     : selectedYear?.year_label ?? "Current setup context unavailable";
 
+  const templateOptions = useMemo(() => {
+    const list = [...gradingTemplates];
+    if (
+      form.default_grading_template &&
+      form.default_grading_template !== "no-template" &&
+      !list.some((t) => t.template_name === form.default_grading_template)
+    ) {
+      list.push({
+        grading_template_id: -1,
+        template_name: form.default_grading_template,
+        description: null,
+        academic_level: null,
+        subject: null,
+        status: "active",
+        total_weight: 100,
+        component_count: 0,
+        components: [],
+        created_at: null,
+        updated_at: null,
+      });
+    }
+    return list;
+  }, [gradingTemplates, form.default_grading_template]);
+
   useEffect(() => {
     if (!open) return;
     setError(null);
     setShowAdvancedYear(false);
     if (offering) {
-      setForm({
-        subject_id: String(offering.subject.subject_id),
-        subject_ids: [String(offering.subject.subject_id)],
-        academic_year_id: String(offering.academic_year.academic_year_id),
-        academic_level_id: String(offering.academic_level.academic_level_id),
-        academic_period_id: String(offering.academic_period.academic_period_id),
-        academic_period_ids: [String(offering.academic_period.academic_period_id)],
-        pathway: offering.pathway,
-        status: offering.status,
-      });
-      return;
+      let isMounted = true;
+      const matchingCatalogSubject = catalogSubjects.find(
+        (s) => Number(s.subject_id) === Number(offering.subject.subject_id)
+      );
+      const existingTemplate =
+        offering.subject.default_grading_template || matchingCatalogSubject?.default_grading_template;
+
+      getSubjectOfferings({
+        academic_year_id: offering.academic_year.academic_year_id,
+        academic_level_id: offering.academic_level.academic_level_id,
+      })
+        .then((res) => {
+          if (!isMounted) return;
+          const subjectOfferings = res.subject_offerings.filter(
+            (o) => o.subject.subject_id === offering.subject.subject_id && o.status === "active"
+          );
+          setExistingSubjectOfferings(subjectOfferings);
+          const periodIds = subjectOfferings.map((o) => String(o.academic_period.academic_period_id));
+          setForm({
+            subject_id: String(offering.subject.subject_id),
+            subject_ids: [String(offering.subject.subject_id)],
+            academic_year_id: String(offering.academic_year.academic_year_id),
+            academic_level_id: String(offering.academic_level.academic_level_id),
+            academic_period_id: String(offering.academic_period.academic_period_id),
+            academic_period_ids: periodIds.length
+              ? periodIds
+              : [String(offering.academic_period.academic_period_id)],
+            pathway: offering.pathway,
+            status: offering.status,
+            default_grading_template: existingTemplate || "no-template",
+          });
+        })
+        .catch(() => {
+          if (!isMounted) return;
+          setExistingSubjectOfferings([offering]);
+          setForm({
+            subject_id: String(offering.subject.subject_id),
+            subject_ids: [String(offering.subject.subject_id)],
+            academic_year_id: String(offering.academic_year.academic_year_id),
+            academic_level_id: String(offering.academic_level.academic_level_id),
+            academic_period_id: String(offering.academic_period.academic_period_id),
+            academic_period_ids: [String(offering.academic_period.academic_period_id)],
+            pathway: offering.pathway,
+            status: offering.status,
+            default_grading_template: existingTemplate || "no-template",
+          });
+        });
+
+      return () => {
+        isMounted = false;
+      };
     }
 
     const activeYear = options?.academic_years.find((year) => year.is_active) ?? options?.academic_years[0];
@@ -123,8 +207,9 @@ export function OfferingModal({
         : [],
       pathway: pathwaysForGrade(level?.grade_level, options?.pathways)[0] ?? "general",
       status: options?.default_status ?? "active",
+      default_grading_template: "no-template",
     });
-  }, [gradeLevels, offering, open, options]);
+  }, [catalogSubjects, gradeLevels, offering, open, options]);
 
   const setField = <TKey extends keyof OfferingFormState>(key: TKey, value: OfferingFormState[TKey]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -169,15 +254,6 @@ export function OfferingModal({
   };
 
   const toggleTerm = (periodId: string) => {
-    if (!isCreateMode) {
-      setForm((current) => ({
-        ...current,
-        academic_period_id: periodId,
-        academic_period_ids: [periodId],
-      }));
-      return;
-    }
-
     setForm((current) => {
       const currentIds = new Set(current.academic_period_ids);
       if (currentIds.has(periodId)) {
@@ -223,9 +299,9 @@ export function OfferingModal({
       return;
     }
     const selectedIds = isCreateMode ? form.subject_ids : [form.subject_id].filter(Boolean);
-    const selectedTermIds = isCreateMode ? form.academic_period_ids : [form.academic_period_id].filter(Boolean);
+    const selectedTermIds = form.academic_period_ids;
     if (!selectedIds.length || !selectedTermIds.length || !form.academic_year_id || !form.academic_level_id) {
-      setError(isCreateMode ? "Select setup details, at least one term, and at least one subject." : "Select a subject, academic year, grade level, and term.");
+      setError("Select setup details, at least one term, and at least one subject.");
       return;
     }
     if (selectedTermIds.some((periodId) => Number(periodId) <= 0)) {
@@ -240,16 +316,60 @@ export function OfferingModal({
     setIsSaving(true);
     try {
       if (offering) {
-        const payload = {
-          subject_id: Number(form.subject_id),
-          academic_year_id: Number(form.academic_year_id),
-          academic_level_id: Number(form.academic_level_id),
-          academic_period_id: Number(form.academic_period_id),
+        const targetPeriodIds = new Set(form.academic_period_ids);
+        const existingMap = new Map<string, SubjectOfferingListItem>();
+        for (const item of existingSubjectOfferings) {
+          existingMap.set(String(item.academic_period.academic_period_id), item);
+        }
+        if (!existingMap.has(String(offering.academic_period.academic_period_id))) {
+          existingMap.set(String(offering.academic_period.academic_period_id), offering);
+        }
+
+        for (const periodId of form.academic_period_ids) {
+          if (!existingMap.has(periodId)) {
+            try {
+              await createSubjectOffering({
+                subject_id: Number(form.subject_id),
+                academic_year_id: Number(form.academic_year_id),
+                academic_level_id: Number(form.academic_level_id),
+                academic_period_id: Number(periodId),
+                pathway: form.pathway,
+                status: form.status,
+              });
+            } catch (createErr) {
+              // Ignore duplicates if already existing
+            }
+          }
+        }
+
+        for (const [periodId, existingItem] of existingMap.entries()) {
+          if (targetPeriodIds.has(periodId)) {
+            await updateSubjectOffering(existingItem.subject_offering_id, {
+              subject_id: Number(form.subject_id),
+              academic_year_id: Number(form.academic_year_id),
+              academic_level_id: Number(form.academic_level_id),
+              academic_period_id: Number(periodId),
+              pathway: form.pathway,
+              status: form.status,
+            });
+          } else {
+            await archiveSubjectOffering(existingItem.subject_offering_id);
+          }
+        }
+
+        const selectedTemplate = form.default_grading_template === "no-template" ? null : form.default_grading_template;
+        if (selectedTemplate !== (offering.subject.default_grading_template ?? null)) {
+          await updateSubject(offering.subject.subject_id, {
+            default_grading_template: selectedTemplate,
+          });
+        }
+
+        const savedMeta = {
+          gradeValue: String(selectedLevel?.grade_level ?? ""),
           pathway: form.pathway,
-          status: form.status,
+          academicYearId: Number(form.academic_year_id),
         };
-        await updateSubjectOffering(offering.subject_offering_id, payload);
-        await onSaved("Subject offering updated.");
+        await onSaved({ message: `Updated offerings for ${offering.subject.subject_name}.`, ...savedMeta });
         onOpenChange(false);
       } else {
         let createdCount = 0;
@@ -278,11 +398,17 @@ export function OfferingModal({
           }
         }
 
+        const savedMeta = {
+          gradeValue: String(selectedLevel?.grade_level ?? ""),
+          pathway: form.pathway,
+          academicYearId: Number(form.academic_year_id),
+        };
+
         if (errors.length) {
-          await onSaved(summaryMessage(createdCount, skippedCount, errors.length));
+          await onSaved({ message: summaryMessage(createdCount, skippedCount, errors.length), ...savedMeta });
           setError(`${summaryMessage(createdCount, skippedCount, errors.length)}. ${errors[0]}`);
         } else {
-          await onSaved(summaryMessage(createdCount, skippedCount, 0));
+          await onSaved({ message: summaryMessage(createdCount, skippedCount, 0), ...savedMeta });
           onOpenChange(false);
         }
       }
@@ -400,7 +526,7 @@ export function OfferingModal({
                 <div className="flex flex-col gap-2 md:col-span-2">
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <p className="text-sm font-semibold">{isCreateMode ? "Term(s)" : "Term"}</p>
+                      <p className="text-sm font-semibold">Term(s)</p>
                       {isJhsSelection ? (
                         <p className="text-xs text-black/70">Junior High subjects usually continue across terms. Adjust if needed.</p>
                       ) : null}
@@ -408,7 +534,7 @@ export function OfferingModal({
                         <p className="text-xs text-black/70">Senior High subjects may be offered in selected term(s) depending on hours and curriculum mapping.</p>
                       ) : null}
                     </div>
-                    {isCreateMode && periods.length ? (
+                    {periods.length ? (
                       <Button type="button" size="sm" variant="outline" onClick={toggleAllTerms}>
                         {allTermsSelected ? "Clear terms" : "Select all terms"}
                       </Button>
@@ -442,42 +568,74 @@ export function OfferingModal({
               </div>
             </div>
 
-            <div className="rounded-lg border-2 border-black p-3 shadow-[3px_3px_0_#000]">
-              <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h6 className="font-bold">Select Subjects</h6>
-                  <p className="text-xs text-black/70">Catalog subjects are filtered by the selected grade level.</p>
-                </div>
-              </div>
-
-              <SubjectPicker
-                subjects={subjects}
-                selectedSubjectIds={form.subject_ids}
-                onChange={handleSubjectSelectionChange}
-                singleSelect={!isCreateMode}
-                searchPlaceholder={isCreateMode ? "Search subjects for this grade" : "Search subject"}
-              />
-            </div>
-
             {offering ? (
-              <div className="flex flex-col gap-1">
-                <label className="text-sm" htmlFor="offering-status">Status</label>
-                <Select value={form.status} onValueChange={(value) => setField("status", value as SubjectStatus)}>
-                  <Select.Trigger id="offering-status" className="w-full">
-                    <Select.Value placeholder="Select status" />
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Group>
-                      {(options?.statuses ?? ["active", "archived"]).map((status) => (
-                        <Select.Item key={status} value={status}>
-                          {status}
-                        </Select.Item>
-                      ))}
-                    </Select.Group>
-                  </Select.Content>
-                </Select>
+              <>
+                <div className="rounded-lg border-2 border-black bg-[#fff1b8] p-3 shadow-[3px_3px_0_#000]">
+                  <p className="text-xs font-semibold text-black/70">Subject Being Edited</p>
+                  <p className="text-xl font-bold">{offering.subject.subject_name}</p>
+                  <p className="text-xs text-black/70">
+                    Code: {offering.subject.subject_codename || "N/A"} • Grade: {offering.academic_level.level_name}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-semibold" htmlFor="offering-grading-template">Grading Template</label>
+                    <Select
+                      value={form.default_grading_template}
+                      onValueChange={(value) => setField("default_grading_template", value)}
+                    >
+                      <Select.Trigger id="offering-grading-template" className="w-full">
+                        <Select.Value placeholder="Select grading template" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Group>
+                          <Select.Item value="no-template">No template (Unassigned)</Select.Item>
+                          {templateOptions.map((template) => (
+                            <Select.Item key={template.grading_template_id} value={template.template_name}>
+                              {template.template_name}
+                            </Select.Item>
+                          ))}
+                        </Select.Group>
+                      </Select.Content>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-semibold" htmlFor="offering-status">Status</label>
+                    <Select value={form.status} onValueChange={(value) => setField("status", value as SubjectStatus)}>
+                      <Select.Trigger id="offering-status" className="w-full">
+                        <Select.Value placeholder="Select status" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Group>
+                          {(options?.statuses ?? ["active", "archived"]).map((status) => (
+                            <Select.Item key={status} value={status}>
+                              {status}
+                            </Select.Item>
+                          ))}
+                        </Select.Group>
+                      </Select.Content>
+                    </Select>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-lg border-2 border-black p-3 shadow-[3px_3px_0_#000]">
+                <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h6 className="font-bold">Select Subjects</h6>
+                    <p className="text-xs text-black/70">Catalog subjects are filtered by the selected grade level.</p>
+                  </div>
+                </div>
+
+                <SubjectPicker
+                  subjects={subjects}
+                  selectedSubjectIds={form.subject_ids}
+                  onChange={handleSubjectSelectionChange}
+                  searchPlaceholder="Search subjects for this grade"
+                />
               </div>
-            ) : null}
+            )}
 
             {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
           </div>

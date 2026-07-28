@@ -57,7 +57,7 @@ export function CurriculumFilters({
   const pathwayOptions: CurriculumPathwayValue[] = isJhs
     ? ["general"]
     : isShs
-      ? shsPathways
+      ? ["all", ...shsPathways]
       : ["all", "general", ...shsPathways];
 
   useEffect(() => {

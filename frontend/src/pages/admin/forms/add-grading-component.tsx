@@ -203,7 +203,7 @@ export default function AddGradingComponentModal({
         template_name: form.template_name.trim(),
         description: form.description.trim() || null,
         academic_level_id: form.academic_level_id === NONE_VALUE ? null : Number(form.academic_level_id),
-        subject_id: form.subject_ids.length ? Number(form.subject_ids[0]) : null,
+        subject_id: form.subject_ids.length === 1 ? Number(form.subject_ids[0]) : null,
         subject_ids: form.subject_ids.map(Number),
         status: form.status,
         components: isLocked ? undefined : buildComponents(),

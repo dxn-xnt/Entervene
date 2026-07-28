@@ -102,11 +102,25 @@ export default function SubjectLoadStudio() {
 
       const initialLoads: SubjectLoadItem[] = [];
 
+      const offerings = data.subject_offerings || [];
+
       data.classes.forEach((cls) => {
-        // Find subjects matching class academic level
-        const levelSubjects = data.subjects.filter(
-          (sub) => sub.academic_level_id === cls.academic_level_id
-        );
+        // Find subjects matching class academic level & pathway offering for this period
+        const levelSubjects = data.subjects.filter((sub) => {
+          if (sub.academic_level_id !== cls.academic_level_id) return false;
+          if (offerings.length > 0) {
+            const clsPathway = (cls.pathway || "general").toLowerCase();
+            return offerings.some(
+              (so) =>
+                so.subject_id === sub.subject_id &&
+                so.academic_level_id === cls.academic_level_id &&
+                (so.pathway === "both" ||
+                  so.pathway.toLowerCase() === clsPathway ||
+                  (so.pathway === "general" && clsPathway === "general"))
+            );
+          }
+          return true;
+        });
 
         levelSubjects.forEach((sub) => {
           const matched = existing.filter(

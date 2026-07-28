@@ -75,6 +75,7 @@ export type OfferingFormState = {
   academic_period_ids: string[];
   pathway: SubjectOfferingPathway;
   status: SubjectStatus;
+  default_grading_template: string;
 };
 
 // ─── Utility Functions ──────────────────────────────────────────────────────
@@ -117,7 +118,7 @@ export function gradeValueForLevel(level: SubjectAcademicLevel | null | undefine
 
 export function defaultPathwayForGrade(grade: CurriculumGradeValue): CurriculumPathwayValue {
   if (grade === "7" || grade === "8" || grade === "9" || grade === "10") return "general";
-  if (grade === "11" || grade === "12") return "both";
+  if (grade === "11" || grade === "12") return "all";
   return ALL_VALUE;
 }
 

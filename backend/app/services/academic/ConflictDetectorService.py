@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.academic.Subject import Subject
 from app.models.academic.Class_ import Class
 from app.models.people.AcademicStaff import AcademicStaff
+from app.models.academic.SubjectOffering import SubjectOffering
 from app.schemas.SubjectLoad import (
     ConflictItem,
     SubjectLoadItem,
@@ -232,6 +233,58 @@ class ConflictDetectorService:
                         affected_key=f"{cid}_{sid}",
                     )
                 )
+
+        # ---------------------------------------------------------
+        # 5. Subject Offering Scope Check (Term / Grade Level / Pathway)
+        # ---------------------------------------------------------
+        if academic_period and hasattr(academic_period, 'academic_period_id'):
+            try:
+                period_offerings = (
+                    db.query(SubjectOffering)
+                    .filter(
+                        SubjectOffering.academic_period_id == academic_period.academic_period_id,
+                        SubjectOffering.status == "active",
+                    )
+                    .all()
+                )
+            except Exception:
+                period_offerings = []
+            if period_offerings:
+                offered_tuples = {
+                    (so.subject_id, so.academic_level_id, (so.pathway or "general").casefold())
+                    for so in period_offerings
+                }
+                for load in loads:
+                    class_obj = classes_map.get(load.class_id)
+                    if class_obj:
+                        cls_level_id = class_obj.academic_level_id
+                        cls_pathway = (getattr(class_obj, "pathway", None) or "general").casefold()
+                        subject_obj = subjects_map.get(load.subject_id)
+                        s_name = subject_obj.subject_name if subject_obj else f"Subject #{load.subject_id}"
+                        c_name = class_obj.section_name if class_obj else f"Class #{load.class_id}"
+
+                        is_offered = any(
+                            so_sub == load.subject_id
+                            and so_lvl == cls_level_id
+                            and (
+                                so_pw == "both"
+                                or so_pw == cls_pathway
+                                or (so_pw == "general" and cls_pathway == "general")
+                            )
+                            for (so_sub, so_lvl, so_pw) in offered_tuples
+                        )
+
+                        if not is_offered:
+                            conflicts.append(
+                                ConflictItem(
+                                    rule="SUBJECT_NOT_OFFERED_IN_PERIOD",
+                                    severity="warning",
+                                    message=f"Subject '{s_name}' is not in active subject offerings for section {c_name} in this term.",
+                                    class_id=load.class_id,
+                                    subject_id=load.subject_id,
+                                    affected_key=f"{load.class_id}_{load.subject_id}",
+                                )
+                            )
 
         has_errors = any(c.severity == "error" for c in conflicts)
         return ValidationResultResponse(

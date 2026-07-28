@@ -14,6 +14,7 @@ class SubjectLoadItem(BaseModel):
     end_time: str | None = None
     days_of_week: list[str] = Field(default_factory=list)
     status: str = "draft"
+    continued_from_load_id: int | None = None
 
 
 class ConflictItem(BaseModel):

@@ -1,16 +1,18 @@
 import { Button } from "@/components/retroui/Button";
 import { Card as RetroCard } from "@/components/retroui/Card";
-import { Archive, ArrowUpRight, RotateCcw } from "lucide-react";
+import { Archive, ArrowUpRight, Pencil, RotateCcw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { SubjectListItem } from "@/lib/api";
 import { statusBadge, subjectCode, subjectRouteGrade } from "./subject-utils";
 
 export function SubjectRow({
   subject,
+  onEdit,
   onArchive,
   onRestore,
 }: {
   subject: SubjectListItem;
+  onEdit?: (subject: SubjectListItem) => void;
   onArchive?: (subject: SubjectListItem) => void;
   onRestore?: (subject: SubjectListItem) => void;
 }) {
@@ -48,6 +50,11 @@ export function SubjectRow({
           >
             <ArrowUpRight className="size-4 mr-2" /> View
           </Button>
+          {subject.status === "active" && onEdit ? (
+            <Button size="sm" variant="outline" onClick={() => onEdit(subject)}>
+              <Pencil className="size-4 mr-2" /> Edit
+            </Button>
+          ) : null}
           {subject.status === "active" && onArchive ? (
             <Button size="sm" variant="outline" onClick={() => onArchive(subject)}>
               <Archive className="size-4 mr-2" /> Archive

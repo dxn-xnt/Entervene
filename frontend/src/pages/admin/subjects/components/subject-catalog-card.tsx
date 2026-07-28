@@ -9,9 +9,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 export function SubjectCatalogCard({
   subject,
+  onEdit,
   onArchive,
 }: {
   subject: SubjectListItem;
+  onEdit?: (subject: SubjectListItem) => void;
   onArchive: (subject: SubjectListItem) => void;
 }) {
   const routeGrade = encodeURIComponent(subjectRouteGrade(subject.academic_level));
@@ -45,9 +47,18 @@ export function SubjectCatalogCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="border-2">
-                <DropdownMenuItem className="gap-2">
-                  <PenIcon className="size-4" /> Edit
-                </DropdownMenuItem>
+                {onEdit ? (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onEdit(subject);
+                    }}
+                    className="gap-2"
+                  >
+                    <PenIcon className="size-4" /> Edit
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem onClick={() => onArchive(subject)} className="gap-2">
                   <ArchiveIcon className="size-4" /> Archive
                 </DropdownMenuItem>

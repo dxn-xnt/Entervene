@@ -17,6 +17,7 @@ from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.academic.SubjectOffering import SubjectOffering
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.auth.UserAccount import UserAccount
 from app.models.settings.Setting import Setting, SettingType
@@ -29,6 +30,7 @@ TABLES = [
     AcademicLevel.__table__,
     Class.__table__,
     Subject.__table__,
+    SubjectOffering.__table__,
     AcademicStaff.__table__,
     SubjectLoad.__table__,
     UserAccount.__table__,
