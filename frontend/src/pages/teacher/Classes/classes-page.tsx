@@ -165,7 +165,7 @@ const ClassesPage = () => {
               </div>
             )}
 
-            <Card className="block w-full border-black bg-[#F6E9B2] transition-none hover:shadow-md">
+            <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
               <Card.Content>
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -185,11 +185,11 @@ const ClassesPage = () => {
               </p>
             ) : (
               <>
-                <Card className="flex flex-col bg-primary">
+                <Card className="flex flex-col">
                   <div className="flex items-center justify-between">
                     <h2 className="text-xl font-bold">Classes</h2>
                     <div className="flex flex-row gap-3">
-                      <Badge variant="outline" className="border-border">
+                      <Badge variant="secondary">
                         {advisoryClasses.length} section
                         {advisoryClasses.length !== 1 ? "s" : ""}
                       </Badge>
@@ -230,12 +230,12 @@ const ClassesPage = () => {
                   groupedSubjectLoads.map((group) => (
                     <Card
                       key={group.gradeLabel}
-                      className="flex flex-col bg-primary"
+                      className="flex flex-col"
                     >
                       <div className="flex items-center justify-between">
                         <h2 className="text-xl font-bold">Subjects</h2>
                         <div className="flex flex-row gap-3">
-                          <Badge variant="outline" className="border-border">
+                          <Badge variant="secondary">
                             {group.loads.length} subject
                             {group.loads.length !== 1 ? "s" : ""}
                           </Badge>

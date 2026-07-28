@@ -47,6 +47,10 @@ import type {
   TrackingStudent,
 } from "@/types/classwork";
 import { Button } from "@/components/retroui/Button";
+import { Table } from "@/components/retroui/Table";
+import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { Select } from "@/components/retroui/Select";
+import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Input } from "@/components/retroui/Input";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -719,815 +723,195 @@ export default function Classworks() {
   return (
     <AppLayout>
       {selected ? (
-        <main className="min-h-screen bg-[#F8F6ED] px-5 py-5">
-          <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-black/30 pb-4 text-lg font-bold">
-            <button
-              type="button"
-              onClick={closeClassworkDetail}
-              className="rounded-full p-1 hover:bg-black/10"
-              aria-label="Back to classworks"
-            >
-              <X size={20} />
-            </button>
-            <span>
-              {selectedAssignment?.title ||
-                selected.subject_name ||
-                "Classwork"}
-            </span>
-            <span className="text-black/50">›</span>
-            <span>...</span>
-            <span className="text-black/50">›</span>
-            <span>{selectedStudent?.student_name || selected.title}</span>
-          </div>
-
-          <section className="mx-auto max-w-5xl space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={
-                    selectedStudent
-                      ? closeStudentSubmission
-                      : closeClassworkDetail
-                  }
-                  className="rounded-full border border-transparent p-1 hover:border-black"
-                  aria-label="Back"
-                >
-                  ‹
-                </button>
-                <FileText size={24} />
-                <h1 className="text-3xl font-bold">{selected.title}</h1>
-              </div>
-              {!selectedStudent && (
-                <div className="flex flex-wrap gap-2">
-                  {isEditing ? (
-                    <>
+        <main className="flex flex-1 flex-col overflow-x-hidden">
+          <div className="@container/main flex flex-1 flex-col">
+            <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
+              <Breadcrumb>
+                <Breadcrumb.List>
+                  <Breadcrumb.Item>
+                    <Breadcrumb.Link asChild>
                       <button
                         type="button"
-                        onClick={() => {
-                          setIsEditing(false);
-                          setEditDraft(classworkToEditDraft(selected));
-                          setDetailError("");
-                        }}
-                        disabled={isSavingEdit}
-                        className="rounded-lg border border-gray-700 bg-white px-3 py-2 text-sm font-bold hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={saveClassworkEdit}
-                        disabled={isSavingEdit}
-                        className="rounded-lg border border-black bg-[#7ABA78] px-3 py-2 text-sm font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
-                      >
-                        {isSavingEdit ? "Saving..." : "Save Changes"}
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditDraft(classworkToEditDraft(selected));
-                        setIsEditing(true);
-                        setDetailError("");
-                      }}
-                      disabled={isArchiving}
-                      className="inline-flex items-center gap-2 rounded-lg border border-black bg-white px-3 py-2 text-sm font-bold hover:bg-[#F6E9B2] disabled:opacity-50"
-                    >
-                      <Pencil size={16} />
-                      Edit Classwork
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setShowArchiveConfirm(true)}
-                    disabled={isArchiving || isEditing}
-                    className="inline-flex items-center gap-2 rounded-lg border border-red-400 bg-white px-3 py-2 text-sm font-bold text-red-700 transition hover:border-red-700 hover:bg-red-600 hover:text-white disabled:opacity-50 disabled:hover:border-red-400 disabled:hover:bg-white disabled:hover:text-red-700"
-                  >
-                    <Archive size={16} />
-                    {isArchiving ? "Archiving..." : "Archive Classwork"}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {selectedStudent ? (
-              // Student-level review view shown after clicking a name.
-              <>
-                <div className="overflow-hidden rounded-lg border border-black bg-white shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-                  <div className="flex items-center justify-between gap-3 border-b border-black bg-[#F6E9B2] px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h2 className="text-2xl font-bold">
-                        {selectedStudent.student_name} Submission
-                      </h2>
-                      <span className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium">
-                        {submissionStatusLabel(selectedStudent.status)}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={closeStudentSubmission}
-                      className="rounded border border-black px-2 py-1 text-xs font-bold"
-                    >
-                      Back
-                    </button>
-                  </div>
-                  <div className="min-h-48 p-5">
-                    {isSubmissionLoading ? (
-                      <p className="text-center text-sm font-semibold text-gray-500">
-                        Loading submission...
-                      </p>
-                    ) : submissionDetailError ? (
-                      <p className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                        {submissionDetailError}
-                      </p>
-                    ) : selectedSubmissionDetail ? (
-                      selectedSubmissionDetail.attachments.length > 0 ? (
-                        <AttachmentDisplay
-                          attachments={selectedSubmissionDetail.attachments.map(
-                            (attachment) => ({
-                              ...attachment,
-                              file_type: attachment.file_type ?? undefined,
-                            }),
-                          )}
-                          type="submission"
-                          downloadUrl={(attachmentId) =>
-                            `${API_URL}/api/v1/submissions/${selectedSubmissionDetail.submission_id}/attachments/${attachmentId}/download`
-                          }
-                        />
-                      ) : (
-                        <p className="text-sm font-medium text-gray-500">
-                          No submitted files attached.
-                        </p>
-                      )
-                    ) : (
-                      <p className="text-sm font-medium text-gray-500">
-                        This student has not submitted work yet.
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h2 className="text-xl font-bold">Score & Feedback</h2>
-                    <div className="flex items-center gap-1 rounded border border-black px-2 py-1">
-                      <input
-                        type="number"
-                        min="0"
-                        max={selected.total_points ?? undefined}
-                        value={gradeDraft}
-                        onChange={(event) => {
-                          setGradeDraft(event.target.value);
-                          setGradeError("");
-                          setGradeSuccess("");
-                        }}
-                        disabled={!selectedSubmissionDetail || isPostingGrade}
-                        className="w-12 bg-transparent text-right text-lg font-bold outline-none"
-                        placeholder="0"
-                      />
-                      <span className="text-sm">
-                        /{selected.total_points ?? 0}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mb-4 grid gap-3 md:grid-cols-5">
-                    {[
-                      [
-                        "Excellent",
-                        scoreBand(selected.total_points, 1),
-                        "Displays all required components clearly and accurately.",
-                      ],
-                      [
-                        "Good",
-                        scoreBand(selected.total_points, 0.8),
-                        "Most components are present with minor errors.",
-                      ],
-                      [
-                        "Fair",
-                        scoreBand(selected.total_points, 0.6),
-                        "Some required parts are missing or unclear.",
-                      ],
-                      [
-                        "Needs Improvement",
-                        scoreBand(selected.total_points, 0.4),
-                        "Many required elements are missing.",
-                      ],
-                      [
-                        "Poor",
-                        scoreBand(selected.total_points, 0.2),
-                        "Work is incomplete or not submitted.",
-                      ],
-                    ].map(([label, points, description], index) => (
-                      <div
-                        key={label}
-                        className={`rounded-lg border border-black p-3 ${index === 0 ? "bg-[#8BCB88]" : ""}`}
-                      >
-                        <div className="mb-3 flex items-center justify-between gap-2">
-                          <p className="font-bold">{label}</p>
-                          <p className="text-sm font-bold">{points}</p>
-                        </div>
-                        <p className="text-xs">{description}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <label className="block text-sm font-bold">
-                    Comments
-                    <textarea
-                      value={feedbackDraft}
-                      onChange={(event) => {
-                        setFeedbackDraft(event.target.value);
-                        setGradeError("");
-                        setGradeSuccess("");
-                      }}
-                      disabled={!selectedSubmissionDetail || isPostingGrade}
-                      className="mt-2 min-h-20 w-full rounded-lg border border-black px-3 py-2 text-sm outline-none"
-                      placeholder="Write feedback for the student."
-                    />
-                  </label>
-                  {gradeSuccess && (
-                    <p className="mt-3 rounded border border-green-300 bg-green-50 px-3 py-2 text-sm font-semibold text-green-700">
-                      {gradeSuccess}
-                    </p>
-                  )}
-                  {gradeError && (
-                    <p className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
-                      {gradeError}
-                    </p>
-                  )}
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={postGrade}
-                      disabled={!selectedSubmissionDetail || isPostingGrade}
-                      className="rounded-lg border border-black bg-white px-4 py-2 text-sm font-bold disabled:opacity-50"
-                    >
-                      {isPostingGrade
-                        ? "Saving..."
-                        : selectedSubmissionDetail?.status === "graded"
-                          ? "Update"
-                          : "Post"}
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                {isEditing && editDraft ? (
-                  <div className="space-y-4 rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="block text-xs font-bold">
-                        Title
-                        <input
-                          value={editDraft.title}
-                          onChange={(event) =>
-                            setEditDraft((current) =>
-                              current
-                                ? { ...current, title: event.target.value }
-                                : current,
-                            )
-                          }
-                          disabled={isSavingEdit}
-                          className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm font-semibold"
-                        />
-                      </label>
-                      <label className="block text-xs font-bold">
-                        Type
-                        <select
-                          value={editDraft.classwork_type}
-                          onChange={(event) =>
-                            setEditDraft((current) =>
-                              current
-                                ? {
-                                    ...current,
-                                    classwork_type: event.target.value,
-                                  }
-                                : current,
-                            )
-                          }
-                          disabled={isSavingEdit}
-                          className="mt-1 w-full rounded-lg border border-gray-700 bg-white px-3 py-2 text-sm font-semibold"
-                        >
-                          <option value="READING">Reading</option>
-                          <option value="ACTIVITY">Activity</option>
-                          <option value="ASSIGNMENT">Assignment</option>
-                          <option value="QUIZ">Quiz</option>
-                        </select>
-                      </label>
-                    </div>
-
-                    <div
-                      className={`grid gap-3 ${isReadingType(editDraft.classwork_type) ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}
-                    >
-                      <label className="block text-xs font-bold">
-                        Grading component
-                        <select
-                          value={editDraft.classwork_category}
-                          onChange={(event) =>
-                            setEditDraft((current) =>
-                              current
-                                ? {
-                                    ...current,
-                                    classwork_category: event.target.value,
-                                  }
-                                : current,
-                            )
-                          }
-                          disabled={isSavingEdit}
-                          className="mt-1 w-full rounded-lg border border-gray-700 bg-white px-3 py-2 text-sm"
-                        >
-                          <option value="">None</option>
-                          <option value="WRITTEN_WORK">Written Works</option>
-                          <option value="PERFORMANCE_TASK">
-                            Performance Task
-                          </option>
-                          <option value="QUARTERLY_ASSESSMENT">
-                            Quarterly Assessment
-                          </option>
-                        </select>
-                      </label>
-                      {!isReadingType(editDraft.classwork_type) && (
-                        <label className="block text-xs font-bold">
-                          Total points
-                          <input
-                            type="number"
-                            min="1"
-                            step="1"
-                            inputMode="decimal"
-                            value={editDraft.total_points}
-                            onChange={(event) =>
-                              setEditDraft((current) =>
-                                current
-                                  ? {
-                                      ...current,
-                                      total_points: event.target.value,
-                                    }
-                                  : current,
-                              )
-                            }
-                            disabled={isSavingEdit}
-                            className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
-                          />
-                        </label>
-                      )}
-                      <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-bold">
-                        <input
-                          type="checkbox"
-                          checked={editDraft.is_published}
-                          onChange={(event) =>
-                            setEditDraft((current) =>
-                              current
-                                ? {
-                                    ...current,
-                                    is_published: event.target.checked,
-                                  }
-                                : current,
-                            )
-                          }
-                          disabled={isSavingEdit}
-                        />
-                        Published
-                      </label>
-                    </div>
-
-                    <div className="rounded-lg border border-gray-300 p-3">
-                      <p className="mb-3 text-xs font-bold">
-                        Assignment settings
-                      </p>
-                      <div
-                        className={`grid gap-3 ${isQuizType(editDraft.classwork_type) ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}
-                      >
-                        <label className="block text-xs font-bold">
-                          Due date
-                          <input
-                            type="datetime-local"
-                            value={editDraft.due_date}
-                            onChange={(event) =>
-                              setEditDraft((current) =>
-                                current
-                                  ? { ...current, due_date: event.target.value }
-                                  : current,
-                              )
-                            }
-                            disabled={isSavingEdit}
-                            className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
-                          />
-                        </label>
-                        <label className="block text-xs font-bold">
-                          Locked until
-                          <input
-                            type="datetime-local"
-                            value={editDraft.lock_date}
-                            onChange={(event) =>
-                              setEditDraft((current) =>
-                                current
-                                  ? {
-                                      ...current,
-                                      lock_date: event.target.value,
-                                    }
-                                  : current,
-                              )
-                            }
-                            disabled={isSavingEdit || !editDraft.is_published}
-                            className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm disabled:bg-gray-100"
-                          />
-                        </label>
-                        {isQuizType(editDraft.classwork_type) && (
-                          <label className="block text-xs font-bold">
-                            Attempts
-                            <input
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={editDraft.max_attempts}
-                              onChange={(event) =>
-                                setEditDraft((current) =>
-                                  current
-                                    ? {
-                                        ...current,
-                                        max_attempts: event.target.value,
-                                      }
-                                    : current,
-                                )
-                              }
-                              disabled={isSavingEdit}
-                              className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
-                            />
-                          </label>
-                        )}
-                      </div>
-                      <p className="mt-2 text-xs font-medium text-gray-600">
-                        Published classwork is visible to students. A future
-                        lock date keeps it visible but blocks access until that
-                        time; clear it to unlock now.
-                      </p>
-                      {editDraft.due_date &&
-                        !isReadingType(editDraft.classwork_type) && (
-                          <label className="mt-3 flex items-start gap-3 rounded-lg border border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold">
-                            <input
-                              type="checkbox"
-                              checked={editDraft.allow_late_submissions}
-                              onChange={(event) =>
-                                setEditDraft((current) =>
-                                  current
-                                    ? {
-                                        ...current,
-                                        allow_late_submissions:
-                                          event.target.checked,
-                                      }
-                                    : current,
-                                )
-                              }
-                              disabled={isSavingEdit}
-                              className="mt-0.5"
-                            />
-                            <span>
-                              Allow submissions/resubmissions after the due date
-                              <span className="block font-medium text-gray-700">
-                                Accepted work will be marked late.
-                              </span>
-                            </span>
-                          </label>
-                        )}
-                    </div>
-
-                    <label className="block text-xs font-bold">
-                      Description
-                      <input
-                        value={editDraft.description}
-                        onChange={(event) =>
-                          setEditDraft((current) =>
-                            current
-                              ? { ...current, description: event.target.value }
-                              : current,
-                          )
+                        onClick={
+                          selectedStudent
+                            ? closeStudentSubmission
+                            : closeClassworkDetail
                         }
-                        disabled={isSavingEdit}
-                        className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
-                      />
-                    </label>
+                      >
+                        {selectedAssignment?.title ||
+                          selected.subject_name ||
+                          "Classwork"}
+                      </button>
+                    </Breadcrumb.Link>
+                  </Breadcrumb.Item>
 
-                    <label className="block text-xs font-bold">
-                      Instructions
-                      <textarea
-                        value={editDraft.instructions}
-                        onChange={(event) =>
-                          setEditDraft((current) =>
-                            current
-                              ? { ...current, instructions: event.target.value }
-                              : current,
-                          )
-                        }
-                        disabled={isSavingEdit}
-                        className="mt-1 min-h-24 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
-                      />
-                    </label>
+                  <Breadcrumb.Separator />
 
-                    <div className="rounded-lg border border-gray-300 p-3">
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <div>
-                          <h3 className="text-sm font-bold">Materials</h3>
-                          <p className="text-xs text-gray-500">
-                            Add or remove files attached to this classwork.
-                          </p>
-                        </div>
-                        <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold hover:bg-[#7ABA78]">
-                          <Plus size={14} />
-                          Add files
-                          <input
-                            type="file"
-                            multiple
-                            accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
-                            className="hidden"
-                            disabled={
-                              isUploadingEditMaterials ||
-                              removingAttachmentId !== null
-                            }
-                            onChange={(event) => {
-                              addEditMaterials(event.target.files);
-                              event.target.value = "";
-                            }}
-                          />
-                        </label>
-                      </div>
+                  <Breadcrumb.Item>
+                    <Breadcrumb.Ellipsis />
+                  </Breadcrumb.Item>
 
-                      {selected.attachments.length > 0 ? (
-                        <div className="space-y-2">
-                          {selected.attachments.map((attachment) => (
-                            <div
-                              key={attachment.classwork_attachment_id}
-                              className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm"
-                            >
-                              <FileText size={16} />
-                              <span className="min-w-0 flex-1 truncate font-semibold">
-                                {attachment.file_name}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  removeSelectedAttachment(
-                                    attachment.classwork_attachment_id,
-                                  )
-                                }
-                                disabled={
-                                  removingAttachmentId ===
-                                    attachment.classwork_attachment_id ||
-                                  isUploadingEditMaterials
-                                }
-                                className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
-                                aria-label={`Remove ${attachment.file_name}`}
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="rounded-lg border border-dashed px-3 py-4 text-center text-sm text-gray-500">
-                          No files attached yet.
-                        </p>
-                      )}
+                  <Breadcrumb.Separator />
 
-                      {editMaterials.length > 0 && (
-                        <div className="mt-3 space-y-2">
-                          <p className="text-xs font-bold">Pending uploads</p>
-                          {editMaterials.map((material, index) => (
-                            <div
-                              key={`${material.name}-${material.size}`}
-                              className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm"
-                            >
-                              <FileText size={16} />
-                              <span className="min-w-0 flex-1 truncate font-semibold">
-                                {material.name}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                {formatFileSize(material.size)}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => removeEditMaterial(index)}
-                                disabled={isUploadingEditMaterials}
-                                className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            </div>
-                          ))}
+                  <Breadcrumb.Item>
+                    <Breadcrumb.Page>
+                      {selectedStudent?.student_name || selected.title}
+                    </Breadcrumb.Page>
+                  </Breadcrumb.Item>
+                </Breadcrumb.List>
+              </Breadcrumb>
+
+              <div className="-mx-4 md:-mx-6 border-b-2 border-border" />
+
+              <section className="mx-auto w-full max-w-5xl space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <FileText className="size-7" />
+                    <h1 className="text-2xl font-bold md:text-4xl">
+                      {selected.title}
+                    </h1>
+                  </div>
+
+                  {!selectedStudent && (
+                    <div className="flex flex-wrap gap-2">
+                      {isEditing ? (
+                        <>
                           <button
                             type="button"
-                            onClick={uploadEditMaterials}
-                            disabled={isUploadingEditMaterials}
-                            className="rounded-lg border border-black bg-[#7ABA78] px-3 py-2 text-xs font-bold disabled:opacity-50"
+                            onClick={() => {
+                              setIsEditing(false);
+                              setEditDraft(classworkToEditDraft(selected));
+                              setDetailError("");
+                            }}
+                            disabled={isSavingEdit}
+                            className="rounded-lg border border-gray-700 bg-white px-3 py-2 text-sm font-bold hover:bg-gray-50 disabled:opacity-50"
                           >
-                            {isUploadingEditMaterials
-                              ? "Uploading..."
-                              : "Upload selected files"}
+                            Cancel
                           </button>
-                        </div>
+                          <button
+                            type="button"
+                            onClick={saveClassworkEdit}
+                            disabled={isSavingEdit}
+                            className="rounded-lg border border-black bg-[#7ABA78] px-3 py-2 text-sm font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
+                          >
+                            {isSavingEdit ? "Saving..." : "Save Changes"}
+                          </button>
+                        </>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="md"
+                          onClick={() => {
+                            setEditDraft(classworkToEditDraft(selected));
+                            setIsEditing(true);
+                            setDetailError("");
+                          }}
+                          disabled={isArchiving}
+                          className="gap-2"
+                        >
+                          <Pencil size={16} />
+                          Edit Classwork
+                        </Button>
                       )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="md"
+                        onClick={() => setShowArchiveConfirm(true)}
+                        disabled={isArchiving || isEditing}
+                        className="gap-2 bg-primary"
+                      >
+                        <Archive size={16} />
+                        {isArchiving ? "Archiving..." : "Archive Classwork"}
+                      </Button>
                     </div>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-black bg-white p-4 text-sm font-semibold shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-                    {selected.instructions ||
-                      selected.description ||
-                      "No instructions provided."}
-                  </div>
-                )}
-
-                <div className="rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h2 className="font-bold">Attached Files</h2>
-                    <span className="rounded-full bg-[#7ABA78] px-3 py-1 text-xs font-bold">
-                      File {selected.attachments.length}
-                    </span>
-                  </div>
-                  {selected.attachments.length > 0 ? (
-                    <AttachmentDisplay
-                      attachments={selected.attachments}
-                      type="classwork"
-                      downloadUrl={(attachmentId) =>
-                        `${API_URL}/api/v1/classwork-assignments/classwork/${selected.classwork_id}/attachments/${attachmentId}/download`
-                      }
-                    />
-                  ) : (
-                    <p className="text-sm font-medium text-gray-500">
-                      No files attached.
-                    </p>
                   )}
                 </div>
 
-                {isReadingType(selected.classwork_type) ? (
-                  <div className="rounded-lg border border-black bg-[#F6E9B2] p-4 text-sm font-semibold shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-                    This is a reading material, so scores, attempts, and student
-                    submissions are not required.
-                  </div>
-                ) : (
+                {selectedStudent ? (
+                  // Student-level review view shown after clicking a name.
                   <>
-                    {isQuizType(selected.classwork_type) && (
-                      <div className="rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-                        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <h2 className="text-xl font-bold">Quiz Analysis</h2>
-                            <p className="text-xs font-medium text-gray-600">
-                              Participation, accuracy, and question performance.
-                            </p>
-                          </div>
-                          {quizAnalysis?.class_accuracy_percent !== null &&
-                            quizAnalysis?.class_accuracy_percent !==
-                              undefined && (
-                              <span className="rounded-full border border-black bg-[#7ABA78] px-3 py-1 text-xs font-bold">
-                                Class accuracy{" "}
-                                {quizAnalysis.class_accuracy_percent}%
-                              </span>
-                            )}
+                    <div className="overflow-hidden rounded-lg border border-black bg-white shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+                      <div className="flex items-center justify-between gap-3 border-b border-black bg-[#F6E9B2] px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h2 className="text-2xl font-bold">
+                            {selectedStudent.student_name} Submission
+                          </h2>
+                          <span className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium">
+                            {submissionStatusLabel(selectedStudent.status)}
+                          </span>
                         </div>
-
-                        {isQuizAnalysisLoading ? (
-                          <p className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-sm font-semibold text-gray-500">
-                            Loading quiz analysis...
+                        <button
+                          type="button"
+                          onClick={closeStudentSubmission}
+                          className="rounded border border-black px-2 py-1 text-xs font-bold"
+                        >
+                          Back
+                        </button>
+                      </div>
+                      <div className="min-h-48 p-5">
+                        {isSubmissionLoading ? (
+                          <p className="text-center text-sm font-semibold text-gray-500">
+                            Loading submission...
                           </p>
-                        ) : quizAnalysisError ? (
-                          <p className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                            {quizAnalysisError}
+                        ) : submissionDetailError ? (
+                          <p className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                            {submissionDetailError}
                           </p>
-                        ) : quizAnalysis ? (
-                          <div className="space-y-4">
-                            <div className="grid gap-3 sm:grid-cols-5">
-                              {[
-                                ["Students", quizAnalysis.total_students],
-                                ["Submitted", quizAnalysis.submitted_count],
-                                ["Missing", quizAnalysis.missing_count],
-                                [
-                                  "Needs grading",
-                                  quizAnalysis.needs_grading_count,
-                                ],
-                                [
-                                  "Average",
-                                  quizAnalysis.average_score !== null &&
-                                  quizAnalysis.average_score !== undefined
-                                    ? `${quizAnalysis.average_score}/${quizAnalysis.total_points ?? selected.total_points ?? 0}`
-                                    : "N/A",
-                                ],
-                              ].map(([label, value]) => (
-                                <div
-                                  key={label}
-                                  className="rounded-lg border border-black bg-[#F8F6ED] p-3"
-                                >
-                                  <p className="text-xs font-semibold text-gray-600">
-                                    {label}
-                                  </p>
-                                  <p className="mt-1 text-xl font-bold">
-                                    {value}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-
-                            <div className="grid gap-3 lg:grid-cols-2">
-                              {quizAnalysis.questions.map((question, index) => (
-                                <div
-                                  key={question.quiz_question_id}
-                                  className="rounded-lg border border-black p-3"
-                                >
-                                  <div className="mb-2 flex items-start justify-between gap-3">
-                                    <div>
-                                      <p className="text-sm font-bold">
-                                        {index + 1}. {question.question_text}
-                                      </p>
-                                      <p className="text-xs font-medium text-gray-600">
-                                        {question.answered_count} answered |{" "}
-                                        {question.points} pts
-                                      </p>
-                                    </div>
-                                    <span className="rounded-full border border-gray-300 px-2 py-1 text-xs font-bold">
-                                      {question.question_type ===
-                                      "MULTIPLE_CHOICE"
-                                        ? `${question.accuracy_percent ?? 0}%`
-                                        : `${question.needs_grading_count} to grade`}
-                                    </span>
-                                  </div>
-                                  {question.option_distribution.length > 0 ? (
-                                    <div className="space-y-2">
-                                      {question.option_distribution.map(
-                                        (option) => (
-                                          <div
-                                            key={option.option_id}
-                                            className={`flex items-center justify-between rounded border px-2 py-1 text-xs ${
-                                              option.is_correct
-                                                ? "border-green-400 bg-green-50"
-                                                : "border-gray-200"
-                                            }`}
-                                          >
-                                            <span className="font-semibold">
-                                              {option.option_text}
-                                            </span>
-                                            <span>{option.selected_count}</span>
-                                          </div>
-                                        ),
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <p className="text-xs font-medium text-gray-600">
-                                      Short-answer responses are counted for
-                                      manual grading.
-                                    </p>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-
-                            <div className="overflow-hidden rounded-lg border border-black">
-                              <div className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold">
-                                <span>Student</span>
-                                <span>Attempts</span>
-                                <span>Score</span>
-                              </div>
-                              {quizAnalysis.students.map((student) => (
-                                <div
-                                  key={student.student_id}
-                                  className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-black px-3 py-2 text-sm last:border-b-0"
-                                >
-                                  <div>
-                                    <p className="font-bold">
-                                      {student.student_name}
-                                    </p>
-                                    <p className="text-xs capitalize text-gray-600">
-                                      {submissionStatusLabel(student.status)}
-                                      {student.needs_grading
-                                        ? " | Needs grading"
-                                        : ""}
-                                    </p>
-                                  </div>
-                                  <span className="text-xs font-bold">
-                                    {student.attempt_count}
-                                  </span>
-                                  <span className="text-right text-xs font-bold">
-                                    {student.grade !== null &&
-                                    student.grade !== undefined
-                                      ? `${student.grade}/${quizAnalysis.total_points ?? selected.total_points ?? 0}`
-                                      : `0/${quizAnalysis.total_points ?? selected.total_points ?? 0}`}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
+                        ) : selectedSubmissionDetail ? (
+                          selectedSubmissionDetail.attachments.length > 0 ? (
+                            <AttachmentDisplay
+                              attachments={selectedSubmissionDetail.attachments.map(
+                                (attachment) => ({
+                                  ...attachment,
+                                  file_type: attachment.file_type ?? undefined,
+                                }),
+                              )}
+                              type="submission"
+                              downloadUrl={(attachmentId) =>
+                                `${API_URL}/api/v1/submissions/${selectedSubmissionDetail.submission_id}/attachments/${attachmentId}/download`
+                              }
+                            />
+                          ) : (
+                            <p className="text-sm font-medium text-gray-500">
+                              No submitted files attached.
+                            </p>
+                          )
                         ) : (
-                          <p className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-sm font-semibold text-gray-500">
-                            Quiz analysis is not available yet.
+                          <p className="text-sm font-medium text-gray-500">
+                            This student has not submitted work yet.
                           </p>
                         )}
                       </div>
-                    )}
+                    </div>
 
                     <div className="rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
                       <div className="mb-3 flex items-center justify-between">
-                        <h2 className="font-bold">Activity Score</h2>
-                        <p className="text-sm font-bold">
-                          Total: {selected.total_points ?? 0} pts
-                        </p>
+                        <h2 className="text-xl font-bold">Score & Feedback</h2>
+                        <div className="flex items-center gap-1 rounded border border-black px-2 py-1">
+                          <input
+                            type="number"
+                            min="0"
+                            max={selected.total_points ?? undefined}
+                            value={gradeDraft}
+                            onChange={(event) => {
+                              setGradeDraft(event.target.value);
+                              setGradeError("");
+                              setGradeSuccess("");
+                            }}
+                            disabled={
+                              !selectedSubmissionDetail || isPostingGrade
+                            }
+                            className="w-12 bg-transparent text-right text-lg font-bold outline-none"
+                            placeholder="0"
+                          />
+                          <span className="text-sm">
+                            /{selected.total_points ?? 0}
+                          </span>
+                        </div>
                       </div>
-                      <div className="grid gap-3 md:grid-cols-5">
+                      <div className="mb-4 grid gap-3 md:grid-cols-5">
                         {[
                           [
                             "Excellent",
@@ -1554,10 +938,10 @@ export default function Classworks() {
                             scoreBand(selected.total_points, 0.2),
                             "Work is incomplete or not submitted.",
                           ],
-                        ].map(([label, points, description]) => (
+                        ].map(([label, points, description], index) => (
                           <div
                             key={label}
-                            className="rounded-lg border border-black p-3"
+                            className={`rounded-lg border border-black p-3 ${index === 0 ? "bg-[#8BCB88]" : ""}`}
                           >
                             <div className="mb-3 flex items-center justify-between gap-2">
                               <p className="font-bold">{label}</p>
@@ -1567,148 +951,880 @@ export default function Classworks() {
                           </div>
                         ))}
                       </div>
-                    </div>
-
-                    <div>
-                      <div className="mb-2 flex items-center justify-between">
-                        <h2 className="text-2xl font-bold">
-                          Student's Submissions
-                        </h2>
+                      <label className="block text-sm font-bold">
+                        Comments
+                        <textarea
+                          value={feedbackDraft}
+                          onChange={(event) => {
+                            setFeedbackDraft(event.target.value);
+                            setGradeError("");
+                            setGradeSuccess("");
+                          }}
+                          disabled={!selectedSubmissionDetail || isPostingGrade}
+                          className="mt-2 min-h-20 w-full rounded-lg border border-black px-3 py-2 text-sm outline-none"
+                          placeholder="Write feedback for the student."
+                        />
+                      </label>
+                      {gradeSuccess && (
+                        <p className="mt-3 rounded border border-green-300 bg-green-50 px-3 py-2 text-sm font-semibold text-green-700">
+                          {gradeSuccess}
+                        </p>
+                      )}
+                      {gradeError && (
+                        <p className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                          {gradeError}
+                        </p>
+                      )}
+                      <div className="mt-3 flex justify-end">
                         <button
                           type="button"
-                          onClick={() =>
-                            setSubmissionSort((current) =>
-                              current === "name" ? "score" : "name",
-                            )
-                          }
-                          className="inline-flex items-center gap-2 text-sm font-medium"
+                          onClick={postGrade}
+                          disabled={!selectedSubmissionDetail || isPostingGrade}
+                          className="rounded-lg border border-black bg-white px-4 py-2 text-sm font-bold disabled:opacity-50"
                         >
-                          <ArrowUpDown size={16} />
-                          Sort By {submissionSort === "name" ? "Name" : "Score"}
+                          {isPostingGrade
+                            ? "Saving..."
+                            : selectedSubmissionDetail?.status === "graded"
+                              ? "Update"
+                              : "Post"}
                         </button>
-                      </div>
-
-                      <div className="overflow-hidden rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                        {detailError && (
-                          <div className="border-b border-black bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                            {detailError}
-                          </div>
-                        )}
-                        {isTrackingLoading ? (
-                          <p className="px-4 py-6 text-center text-sm font-semibold text-gray-500">
-                            Loading submissions...
-                          </p>
-                        ) : trackingRows.length > 0 ? (
-                          trackingRows.map((student) => {
-                            const isGraded =
-                              student.status === "graded" ||
-                              (student.grade !== null &&
-                                student.grade !== undefined);
-                            const scoreLabel = isGraded
-                              ? `${student.grade ?? 0}/${selected.total_points ?? 0}`
-                              : `0/${selected.total_points ?? 0}`;
-                            return (
-                              <div
-                                key={student.student_id}
-                                className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-black px-4 py-3 last:border-b-0"
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div className="grid h-8 w-8 place-items-center rounded-full bg-[#FFD08A] text-xs font-bold">
-                                    {student.student_name.slice(0, 1)}
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      openStudentSubmission(student)
-                                    }
-                                    className="font-bold hover:underline"
-                                  >
-                                    {student.student_name}
-                                  </button>
-                                </div>
-                                <span className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium">
-                                  {submissionStatusLabel(
-                                    isGraded ? "graded" : student.status,
-                                  )}
-                                </span>
-                                <p className="min-w-20 text-right text-sm font-semibold text-gray-700">
-                                  {scoreLabel}
-                                </p>
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <p className="px-4 py-6 text-center text-sm font-semibold text-gray-500">
-                            No submissions found for this classwork yet.
-                          </p>
-                        )}
                       </div>
                     </div>
                   </>
+                ) : (
+                  <>
+                    {isEditing && editDraft ? (
+                      <div className="space-y-4 rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="block text-xs font-bold">
+                            Title
+                            <input
+                              value={editDraft.title}
+                              onChange={(event) =>
+                                setEditDraft((current) =>
+                                  current
+                                    ? { ...current, title: event.target.value }
+                                    : current,
+                                )
+                              }
+                              disabled={isSavingEdit}
+                              className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm font-semibold"
+                            />
+                          </label>
+                          <label className="block text-xs font-bold">
+                            Type
+                            <select
+                              value={editDraft.classwork_type}
+                              onChange={(event) =>
+                                setEditDraft((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        classwork_type: event.target.value,
+                                      }
+                                    : current,
+                                )
+                              }
+                              disabled={isSavingEdit}
+                              className="mt-1 w-full rounded-lg border border-gray-700 bg-white px-3 py-2 text-sm font-semibold"
+                            >
+                              <option value="READING">Reading</option>
+                              <option value="ACTIVITY">Activity</option>
+                              <option value="ASSIGNMENT">Assignment</option>
+                              <option value="QUIZ">Quiz</option>
+                            </select>
+                          </label>
+                        </div>
+
+                        <div
+                          className={`grid gap-3 ${isReadingType(editDraft.classwork_type) ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}
+                        >
+                          <label className="block text-xs font-bold">
+                            Grading component
+                            <select
+                              value={editDraft.classwork_category}
+                              onChange={(event) =>
+                                setEditDraft((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        classwork_category: event.target.value,
+                                      }
+                                    : current,
+                                )
+                              }
+                              disabled={isSavingEdit}
+                              className="mt-1 w-full rounded-lg border border-gray-700 bg-white px-3 py-2 text-sm"
+                            >
+                              <option value="">None</option>
+                              <option value="WRITTEN_WORK">
+                                Written Works
+                              </option>
+                              <option value="PERFORMANCE_TASK">
+                                Performance Task
+                              </option>
+                              <option value="QUARTERLY_ASSESSMENT">
+                                Quarterly Assessment
+                              </option>
+                            </select>
+                          </label>
+                          {!isReadingType(editDraft.classwork_type) && (
+                            <label className="block text-xs font-bold">
+                              Total points
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                inputMode="decimal"
+                                value={editDraft.total_points}
+                                onChange={(event) =>
+                                  setEditDraft((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          total_points: event.target.value,
+                                        }
+                                      : current,
+                                  )
+                                }
+                                disabled={isSavingEdit}
+                                className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                              />
+                            </label>
+                          )}
+                          <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-bold">
+                            <input
+                              type="checkbox"
+                              checked={editDraft.is_published}
+                              onChange={(event) =>
+                                setEditDraft((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        is_published: event.target.checked,
+                                      }
+                                    : current,
+                                )
+                              }
+                              disabled={isSavingEdit}
+                            />
+                            Published
+                          </label>
+                        </div>
+
+                        <div className="rounded-lg border border-gray-300 p-3">
+                          <p className="mb-3 text-xs font-bold">
+                            Assignment settings
+                          </p>
+                          <div
+                            className={`grid gap-3 ${isQuizType(editDraft.classwork_type) ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}
+                          >
+                            <label className="block text-xs font-bold">
+                              Due date
+                              <input
+                                type="datetime-local"
+                                value={editDraft.due_date}
+                                onChange={(event) =>
+                                  setEditDraft((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          due_date: event.target.value,
+                                        }
+                                      : current,
+                                  )
+                                }
+                                disabled={isSavingEdit}
+                                className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                              />
+                            </label>
+                            <label className="block text-xs font-bold">
+                              Locked until
+                              <input
+                                type="datetime-local"
+                                value={editDraft.lock_date}
+                                onChange={(event) =>
+                                  setEditDraft((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          lock_date: event.target.value,
+                                        }
+                                      : current,
+                                  )
+                                }
+                                disabled={
+                                  isSavingEdit || !editDraft.is_published
+                                }
+                                className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm disabled:bg-gray-100"
+                              />
+                            </label>
+                            {isQuizType(editDraft.classwork_type) && (
+                              <label className="block text-xs font-bold">
+                                Attempts
+                                <input
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={editDraft.max_attempts}
+                                  onChange={(event) =>
+                                    setEditDraft((current) =>
+                                      current
+                                        ? {
+                                            ...current,
+                                            max_attempts: event.target.value,
+                                          }
+                                        : current,
+                                    )
+                                  }
+                                  disabled={isSavingEdit}
+                                  className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                                />
+                              </label>
+                            )}
+                          </div>
+                          <p className="mt-2 text-xs font-medium text-gray-600">
+                            Published classwork is visible to students. A future
+                            lock date keeps it visible but blocks access until
+                            that time; clear it to unlock now.
+                          </p>
+                          {editDraft.due_date &&
+                            !isReadingType(editDraft.classwork_type) && (
+                              <label className="mt-3 flex items-start gap-3 rounded-lg border border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold">
+                                <input
+                                  type="checkbox"
+                                  checked={editDraft.allow_late_submissions}
+                                  onChange={(event) =>
+                                    setEditDraft((current) =>
+                                      current
+                                        ? {
+                                            ...current,
+                                            allow_late_submissions:
+                                              event.target.checked,
+                                          }
+                                        : current,
+                                    )
+                                  }
+                                  disabled={isSavingEdit}
+                                  className="mt-0.5"
+                                />
+                                <span>
+                                  Allow submissions/resubmissions after the due
+                                  date
+                                  <span className="block font-medium text-gray-700">
+                                    Accepted work will be marked late.
+                                  </span>
+                                </span>
+                              </label>
+                            )}
+                        </div>
+
+                        <label className="block text-xs font-bold">
+                          Description
+                          <input
+                            value={editDraft.description}
+                            onChange={(event) =>
+                              setEditDraft((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      description: event.target.value,
+                                    }
+                                  : current,
+                              )
+                            }
+                            disabled={isSavingEdit}
+                            className="mt-1 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                          />
+                        </label>
+
+                        <label className="block text-xs font-bold">
+                          Instructions
+                          <textarea
+                            value={editDraft.instructions}
+                            onChange={(event) =>
+                              setEditDraft((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      instructions: event.target.value,
+                                    }
+                                  : current,
+                              )
+                            }
+                            disabled={isSavingEdit}
+                            className="mt-1 min-h-24 w-full rounded-lg border border-gray-700 px-3 py-2 text-sm"
+                          />
+                        </label>
+
+                        <div className="rounded-lg border border-gray-300 p-3">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div>
+                              <h3 className="text-sm font-bold">Materials</h3>
+                              <p className="text-xs text-gray-500">
+                                Add or remove files attached to this classwork.
+                              </p>
+                            </div>
+                            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold hover:bg-[#7ABA78]">
+                              <Plus size={14} />
+                              Add files
+                              <input
+                                type="file"
+                                multiple
+                                accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
+                                className="hidden"
+                                disabled={
+                                  isUploadingEditMaterials ||
+                                  removingAttachmentId !== null
+                                }
+                                onChange={(event) => {
+                                  addEditMaterials(event.target.files);
+                                  event.target.value = "";
+                                }}
+                              />
+                            </label>
+                          </div>
+
+                          {selected.attachments.length > 0 ? (
+                            <div className="space-y-2">
+                              {selected.attachments.map((attachment) => (
+                                <div
+                                  key={attachment.classwork_attachment_id}
+                                  className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm"
+                                >
+                                  <FileText size={16} />
+                                  <span className="min-w-0 flex-1 truncate font-semibold">
+                                    {attachment.file_name}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      removeSelectedAttachment(
+                                        attachment.classwork_attachment_id,
+                                      )
+                                    }
+                                    disabled={
+                                      removingAttachmentId ===
+                                        attachment.classwork_attachment_id ||
+                                      isUploadingEditMaterials
+                                    }
+                                    className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                    aria-label={`Remove ${attachment.file_name}`}
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="rounded-lg border border-dashed px-3 py-4 text-center text-sm text-gray-500">
+                              No files attached yet.
+                            </p>
+                          )}
+
+                          {editMaterials.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                              <p className="text-xs font-bold">
+                                Pending uploads
+                              </p>
+                              {editMaterials.map((material, index) => (
+                                <div
+                                  key={`${material.name}-${material.size}`}
+                                  className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm"
+                                >
+                                  <FileText size={16} />
+                                  <span className="min-w-0 flex-1 truncate font-semibold">
+                                    {material.name}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {formatFileSize(material.size)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeEditMaterial(index)}
+                                    disabled={isUploadingEditMaterials}
+                                    className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={uploadEditMaterials}
+                                disabled={isUploadingEditMaterials}
+                                className="rounded-lg border border-black bg-[#7ABA78] px-3 py-2 text-xs font-bold disabled:opacity-50"
+                              >
+                                {isUploadingEditMaterials
+                                  ? "Uploading..."
+                                  : "Upload selected files"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <Card className="block">
+                        <Card.Content>
+                          <Card.Title className="mb-3 text-xl">
+                            Instructions
+                          </Card.Title>
+                          <p className="text-sm">
+                            {selected.instructions ||
+                              selected.description ||
+                              "No instructions provided."}
+                          </p>
+                        </Card.Content>
+                      </Card>
+                    )}
+
+                    <Card className="block">
+                      <Card.Content className="space-y-6">
+                        <div className="flex items-center justify-between">
+                          <Card.Title className="mb-0 text-xl">
+                            Attached Files
+                          </Card.Title>
+
+                          <Badge variant="secondary" size="sm">
+                            File {selected.attachments.length}
+                          </Badge>
+                        </div>
+
+                        {selected.attachments.length > 0 ? (
+                          <AttachmentDisplay
+                            attachments={selected.attachments}
+                            type="classwork"
+                            downloadUrl={(attachmentId) =>
+                              `${API_URL}/api/v1/classwork-assignments/classwork/${selected.classwork_id}/attachments/${attachmentId}/download`
+                            }
+                          />
+                        ) : (
+                          <div className="py-8 text-center">
+                            <p className="text-sm text-muted-foreground">
+                              No files attached.
+                            </p>
+                          </div>
+                        )}
+                      </Card.Content>
+                    </Card>
+
+                    {isReadingType(selected.classwork_type) ? (
+                      <div className="rounded-lg border border-black bg-[#F6E9B2] p-4 text-sm font-semibold shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+                        This is a reading material, so scores, attempts, and
+                        student submissions are not required.
+                      </div>
+                    ) : (
+                      <>
+                        {isQuizType(selected.classwork_type) && (
+                          <div className="rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <h2 className="text-xl font-bold">
+                                  Quiz Analysis
+                                </h2>
+                                <p className="text-xs font-medium text-gray-600">
+                                  Participation, accuracy, and question
+                                  performance.
+                                </p>
+                              </div>
+                              {quizAnalysis?.class_accuracy_percent !== null &&
+                                quizAnalysis?.class_accuracy_percent !==
+                                  undefined && (
+                                  <span className="rounded-full border border-black bg-[#7ABA78] px-3 py-1 text-xs font-bold">
+                                    Class accuracy{" "}
+                                    {quizAnalysis.class_accuracy_percent}%
+                                  </span>
+                                )}
+                            </div>
+
+                            {isQuizAnalysisLoading ? (
+                              <p className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-sm font-semibold text-gray-500">
+                                Loading quiz analysis...
+                              </p>
+                            ) : quizAnalysisError ? (
+                              <p className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                                {quizAnalysisError}
+                              </p>
+                            ) : quizAnalysis ? (
+                              <div className="space-y-4">
+                                <div className="grid gap-3 sm:grid-cols-5">
+                                  {[
+                                    ["Students", quizAnalysis.total_students],
+                                    ["Submitted", quizAnalysis.submitted_count],
+                                    ["Missing", quizAnalysis.missing_count],
+                                    [
+                                      "Needs grading",
+                                      quizAnalysis.needs_grading_count,
+                                    ],
+                                    [
+                                      "Average",
+                                      quizAnalysis.average_score !== null &&
+                                      quizAnalysis.average_score !== undefined
+                                        ? `${quizAnalysis.average_score}/${quizAnalysis.total_points ?? selected.total_points ?? 0}`
+                                        : "N/A",
+                                    ],
+                                  ].map(([label, value]) => (
+                                    <div
+                                      key={label}
+                                      className="rounded-lg border border-black bg-[#F8F6ED] p-3"
+                                    >
+                                      <p className="text-xs font-semibold text-gray-600">
+                                        {label}
+                                      </p>
+                                      <p className="mt-1 text-xl font-bold">
+                                        {value}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                <div className="grid gap-3 lg:grid-cols-2">
+                                  {quizAnalysis.questions.map(
+                                    (question, index) => (
+                                      <div
+                                        key={question.quiz_question_id}
+                                        className="rounded-lg border border-black p-3"
+                                      >
+                                        <div className="mb-2 flex items-start justify-between gap-3">
+                                          <div>
+                                            <p className="text-sm font-bold">
+                                              {index + 1}.{" "}
+                                              {question.question_text}
+                                            </p>
+                                            <p className="text-xs font-medium text-gray-600">
+                                              {question.answered_count} answered
+                                              | {question.points} pts
+                                            </p>
+                                          </div>
+                                          <span className="rounded-full border border-gray-300 px-2 py-1 text-xs font-bold">
+                                            {question.question_type ===
+                                            "MULTIPLE_CHOICE"
+                                              ? `${question.accuracy_percent ?? 0}%`
+                                              : `${question.needs_grading_count} to grade`}
+                                          </span>
+                                        </div>
+                                        {question.option_distribution.length >
+                                        0 ? (
+                                          <div className="space-y-2">
+                                            {question.option_distribution.map(
+                                              (option) => (
+                                                <div
+                                                  key={option.option_id}
+                                                  className={`flex items-center justify-between rounded border px-2 py-1 text-xs ${
+                                                    option.is_correct
+                                                      ? "border-green-400 bg-green-50"
+                                                      : "border-gray-200"
+                                                  }`}
+                                                >
+                                                  <span className="font-semibold">
+                                                    {option.option_text}
+                                                  </span>
+                                                  <span>
+                                                    {option.selected_count}
+                                                  </span>
+                                                </div>
+                                              ),
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <p className="text-xs font-medium text-gray-600">
+                                            Short-answer responses are counted
+                                            for manual grading.
+                                          </p>
+                                        )}
+                                      </div>
+                                    ),
+                                  )}
+                                </div>
+
+                                <div className="overflow-hidden rounded-lg border border-black">
+                                  <div className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold">
+                                    <span>Student</span>
+                                    <span>Attempts</span>
+                                    <span>Score</span>
+                                  </div>
+                                  {quizAnalysis.students.map((student) => (
+                                    <div
+                                      key={student.student_id}
+                                      className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-black px-3 py-2 text-sm last:border-b-0"
+                                    >
+                                      <div>
+                                        <p className="font-bold">
+                                          {student.student_name}
+                                        </p>
+                                        <p className="text-xs capitalize text-gray-600">
+                                          {submissionStatusLabel(
+                                            student.status,
+                                          )}
+                                          {student.needs_grading
+                                            ? " | Needs grading"
+                                            : ""}
+                                        </p>
+                                      </div>
+                                      <span className="text-xs font-bold">
+                                        {student.attempt_count}
+                                      </span>
+                                      <span className="text-right text-xs font-bold">
+                                        {student.grade !== null &&
+                                        student.grade !== undefined
+                                          ? `${student.grade}/${quizAnalysis.total_points ?? selected.total_points ?? 0}`
+                                          : `0/${quizAnalysis.total_points ?? selected.total_points ?? 0}`}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-sm font-semibold text-gray-500">
+                                Quiz analysis is not available yet.
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        <Card className="block">
+                          <Card.Content className="space-y-6">
+                            <div className="flex items-center justify-between">
+                              <Card.Title className="mb-0 text-xl">
+                                Activity Score
+                              </Card.Title>
+
+                              <Badge variant="secondary" size="sm">
+                                Total: {selected.total_points ?? 0} pts
+                              </Badge>
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                              {[
+                                [
+                                  "Excellent",
+                                  scoreBand(selected.total_points, 1),
+                                  "Displays all required components clearly and accurately.",
+                                ],
+                                [
+                                  "Good",
+                                  scoreBand(selected.total_points, 0.8),
+                                  "Most components are present with minor errors.",
+                                ],
+                                [
+                                  "Fair",
+                                  scoreBand(selected.total_points, 0.6),
+                                  "Some required parts are missing or unclear.",
+                                ],
+                                [
+                                  "Needs Improvement",
+                                  scoreBand(selected.total_points, 0.4),
+                                  "Many required elements are missing.",
+                                ],
+                                [
+                                  "Poor",
+                                  scoreBand(selected.total_points, 0.2),
+                                  "Work is incomplete or not submitted.",
+                                ],
+                              ].map(([label, points, description]) => (
+                                <Card key={label} className="block shadow-none">
+                                  <Card.Content className="space-y-3">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <h3 className="font-bold">{label}</h3>
+
+                                      <Badge
+                                        variant="secondary"
+                                        size="sm"
+                                        className="shrink-0 whitespace-nowrap"
+                                      >
+                                        {points}
+                                      </Badge>
+                                    </div>
+
+                                    <p className="text-sm text-muted-foreground">
+                                      {description}
+                                    </p>
+                                  </Card.Content>
+                                </Card>
+                              ))}
+                            </div>
+                          </Card.Content>
+                        </Card>
+
+                        <div>
+                          <div className="mb-2 flex items-center justify-between">
+                            <h2 className="text-2xl font-bold">
+                              Student's Submissions
+                            </h2>
+                            <Select
+                              value={submissionSort}
+                              onValueChange={(v) =>
+                                setSubmissionSort(v as "name" | "score")
+                              }
+                            >
+                              <Select.Trigger className="h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold">
+                                <ArrowUpDown size={16} className="mr-2" />
+                                <Select.Value />
+                              </Select.Trigger>
+                              <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                                <Select.Item value="name">
+                                  Sort By Name
+                                </Select.Item>
+                                <Select.Item value="score">
+                                  Sort By Score
+                                </Select.Item>
+                              </Select.Content>
+                            </Select>
+                          </div>
+
+                          <Table
+                            wrapperClassName="overflow-x-auto"
+                            className="border-black"
+                          >
+                            <Table.Body>
+                              {detailError && (
+                                <Table.Row className="border-black hover:bg-transparent">
+                                  <Table.Cell
+                                    colSpan={3}
+                                    className="bg-red-50 text-sm font-semibold text-red-700"
+                                  >
+                                    {detailError}
+                                  </Table.Cell>
+                                </Table.Row>
+                              )}
+                              {isTrackingLoading ? (
+                                <Table.Row className="hover:bg-transparent">
+                                  <Table.Cell
+                                    colSpan={3}
+                                    className="py-6 text-center text-sm font-semibold text-gray-500"
+                                  >
+                                    Loading submissions...
+                                  </Table.Cell>
+                                </Table.Row>
+                              ) : trackingRows.length > 0 ? (
+                                trackingRows.map((student) => {
+                                  const isGraded =
+                                    student.status === "graded" ||
+                                    (student.grade !== null &&
+                                      student.grade !== undefined);
+                                  const scoreLabel = isGraded
+                                    ? `${student.grade ?? 0}/${selected.total_points ?? 0}`
+                                    : `0/${selected.total_points ?? 0}`;
+                                  return (
+                                    <Table.Row
+                                      key={student.student_id}
+                                      className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-black"
+                                    >
+                                      <Table.Cell>
+                                        <div className="flex items-center gap-3">
+                                          <div className="grid h-8 w-8 place-items-center rounded-full border-2 border-black bg-[#FFD08A] text-xs font-bold">
+                                            {student.student_name.slice(0, 1)}
+                                          </div>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              openStudentSubmission(student)
+                                            }
+                                            className="font-bold hover:underline"
+                                          >
+                                            {student.student_name}
+                                          </button>
+                                        </div>
+                                      </Table.Cell>
+                                      <Table.Cell>
+                                        <Badge
+                                          variant="outline"
+                                          size="sm"
+                                          className="w-fit rounded-none font-medium"
+                                        >
+                                          {submissionStatusLabel(
+                                            isGraded
+                                              ? "graded"
+                                              : student.status,
+                                          )}
+                                        </Badge>
+                                      </Table.Cell>
+                                      <Table.Cell className="min-w-20 text-right text-sm font-semibold text-gray-700">
+                                        {scoreLabel}
+                                      </Table.Cell>
+                                    </Table.Row>
+                                  );
+                                })
+                              ) : (
+                                <Table.Row className="hover:bg-transparent">
+                                  <Table.Cell
+                                    colSpan={3}
+                                    className="py-6 text-center text-sm font-semibold text-gray-500"
+                                  >
+                                    No submissions found for this classwork yet.
+                                  </Table.Cell>
+                                </Table.Row>
+                              )}
+                            </Table.Body>
+                          </Table>
+                        </div>
+                      </>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-            {showArchiveConfirm && !selectedStudent && (
-              <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4">
-                <section className="w-full max-w-md rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                  <div className="flex items-center justify-between border-b border-black bg-red-100 px-5 py-3">
-                    <div className="flex items-center gap-2 text-red-800">
-                      <Archive size={18} />
-                      <h2 className="font-bold">Archive Classwork?</h2>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowArchiveConfirm(false)}
-                      disabled={isArchiving}
-                      className="rounded p-1 hover:bg-white/60 disabled:opacity-50"
-                      aria-label="Close archive confirmation"
-                    >
-                      <X size={16} />
-                    </button>
+
+                {showArchiveConfirm && !selectedStudent && (
+                  <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4">
+                    <section className="w-full max-w-md rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                      <div className="flex items-center justify-between border-b border-black bg-red-100 px-5 py-3">
+                        <div className="flex items-center gap-2 text-red-800">
+                          <Archive size={18} />
+                          <h2 className="font-bold">Archive Classwork?</h2>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowArchiveConfirm(false)}
+                          disabled={isArchiving}
+                          className="rounded p-1 hover:bg-white/60 disabled:opacity-50"
+                          aria-label="Close archive confirmation"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                      <div className="space-y-3 p-5">
+                        <p className="text-sm font-medium">
+                          Are you sure you want to archive{" "}
+                          <span className="font-bold">"{selected.title}"</span>?
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          This only works while no student work is turned in. If
+                          there are submissions, ask students to unsubmit first.
+                          Linked lessons stay intact.
+                        </p>
+                      </div>
+                      <div className="flex justify-end gap-3 border-t border-black px-5 py-4">
+                        <button
+                          type="button"
+                          onClick={() => setShowArchiveConfirm(false)}
+                          disabled={isArchiving}
+                          className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={archiveSelectedClasswork}
+                          disabled={isArchiving}
+                          className="rounded-lg border border-black bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 disabled:opacity-50"
+                        >
+                          {isArchiving ? "Archiving..." : "Archive Classwork"}
+                        </button>
+                      </div>
+                    </section>
                   </div>
-                  <div className="space-y-3 p-5">
-                    <p className="text-sm font-medium">
-                      Are you sure you want to archive{" "}
-                      <span className="font-bold">"{selected.title}"</span>?
-                    </p>
-                    <p className="text-xs text-gray-600">
-                      This only works while no student work is turned in. If
-                      there are submissions, ask students to unsubmit first.
-                      Linked lessons stay intact.
-                    </p>
-                  </div>
-                  <div className="flex justify-end gap-3 border-t border-black px-5 py-4">
-                    <button
-                      type="button"
-                      onClick={() => setShowArchiveConfirm(false)}
-                      disabled={isArchiving}
-                      className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={archiveSelectedClasswork}
-                      disabled={isArchiving}
-                      className="rounded-lg border border-black bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 disabled:opacity-50"
-                    >
-                      {isArchiving ? "Archiving..." : "Archive Classwork"}
-                    </button>
-                  </div>
-                </section>
-              </div>
-            )}
-          </section>
+                )}
+              </section>
+            </div>
+          </div>
         </main>
       ) : (
+        // Main list view
         <>
           <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
             <header className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl md:text-4xl font-bold">
-                  Classwork
-                </h1>
+                <h1 className="text-2xl md:text-4xl font-bold">Classwork</h1>
               </div>
 
               <Button
