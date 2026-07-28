@@ -1136,3 +1136,100 @@ function classImportErrorMessage(data: unknown, status: number): string {
   if ("detail" in data && typeof data.detail === "string") return data.detail;
   return "Unable to validate CSV. Please try again.";
 }
+
+// -------------------------------------------------------------
+// SUBJECT LOAD STUDIO TYPES & API CLIENT
+// -------------------------------------------------------------
+
+export type SubjectLoadItem = {
+  _key?: string;
+  subject_load_id?: number | null;
+  class_id: number;
+  subject_id: number;
+  staff_id?: string | null;
+  academic_period_id: number;
+  start_time?: string | null;
+  end_time?: string | null;
+  days_of_week: string[];
+  status?: string;
+};
+
+export type ConflictItem = {
+  rule: string;
+  severity: "error" | "warning";
+  message: string;
+  class_id?: number | null;
+  subject_id?: number | null;
+  staff_id?: string | null;
+  day?: string | null;
+  affected_key?: string | null;
+};
+
+export type TeacherWorkloadItem = {
+  staff_id: string;
+  staff_name: string;
+  daily_hours: Record<string, number>;
+  daily_subjects_count: Record<string, number>;
+  total_weekly_hours: number;
+  has_capacity_warning: boolean;
+};
+
+export type ValidationResultResponse = {
+  is_valid: boolean;
+  conflicts: ConflictItem[];
+  teacher_workloads: TeacherWorkloadItem[];
+};
+
+export type SubjectLoadStudioData = {
+  active_period_id: number;
+  academic_years: Array<{ academic_year_id: number; year_label: string; status: string }>;
+  academic_periods: Array<{ academic_period_id: number; period_name: string; is_active: boolean }>;
+  academic_levels: Array<{ academic_level_id: number; level_name: string; grade_level: number }>;
+  classes: Array<{ class_id: number; section_name: string; academic_level_id: number; academic_year_id: number }>;
+  subjects: Array<{ subject_id: number; subject_name: string; subject_codename: string; academic_level_id: number; hours: number; subject_group: string }>;
+  teachers: Array<{ staff_id: string; name: string; department: string; specialization: string }>;
+  existing_loads: SubjectLoadItem[];
+};
+
+export async function getSubjectLoadStudioData(periodId?: number): Promise<SubjectLoadStudioData> {
+  const query = periodId ? `?academic_period_id=${periodId}` : "";
+  const response = await apiFetch(`/api/v1/subject-loads/studio-data${query}`);
+  if (!response.ok) {
+    throw new ApiRequestError("Failed to fetch subject load studio data", response.status, null);
+  }
+  return (await response.json()) as SubjectLoadStudioData;
+}
+
+export async function validateSubjectLoads(periodId: number, loads: SubjectLoadItem[]): Promise<ValidationResultResponse> {
+  const response = await apiFetch("/api/v1/subject-loads/validate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ academic_period_id: periodId, loads }),
+  });
+  if (!response.ok) {
+    throw new ApiRequestError("Failed to validate subject loads", response.status, null);
+  }
+  return (await response.json()) as ValidationResultResponse;
+}
+
+export async function batchSaveSubjectLoads(
+  periodId: number,
+  levelId: number,
+  action: "draft" | "publish",
+  loads: SubjectLoadItem[]
+): Promise<{ message: string; saved_count: number; status: string; is_valid: boolean; conflicts: ConflictItem[] }> {
+  const response = await apiFetch("/api/v1/subject-loads/batch-save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ academic_period_id: periodId, academic_level_id: levelId, action, loads }),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    const msg = data && typeof data === "object" && "detail" in data && typeof data.detail === "string"
+      ? data.detail
+      : "Failed to save subject loads";
+    throw new ApiRequestError(msg, response.status, data);
+  }
+  return (await response.json()) as { message: string; saved_count: number; status: string; is_valid: boolean; conflicts: ConflictItem[] };
+}
+

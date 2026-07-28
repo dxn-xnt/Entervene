@@ -302,7 +302,12 @@ export default function AddSubjectLoadModal() {
                                                         <TimePickerSingle
                                                             value={parseTimeRange(item.time).start}
                                                             onChange={(newStart) => {
-                                                                const { end } = parseTimeRange(item.time);
+                                                                let { end } = parseTimeRange(item.time);
+                                                                // If start is PM, force end to PM
+                                                                if (newStart.period === 'PM' && end.period === 'AM') {
+                                                                    const pmHour = end.hour >= 1 && end.hour <= 9 ? end.hour : 12;
+                                                                    end = { ...end, period: 'PM', hour: pmHour };
+                                                                }
                                                                 const newRange = formatTimeRange(newStart, end);
                                                                 handleTimeChange(item.id, newRange);
                                                             }}
@@ -310,6 +315,7 @@ export default function AddSubjectLoadModal() {
                                                         <span className="text-muted-foreground text-xs font-sans">to</span>
                                                         <TimePickerSingle
                                                             value={parseTimeRange(item.time).end}
+                                                            lockedPeriod={parseTimeRange(item.time).start.period === 'PM' ? 'PM' : undefined}
                                                             onChange={(newEnd) => {
                                                                 const { start } = parseTimeRange(item.time);
                                                                 const newRange = formatTimeRange(start, newEnd);
@@ -374,7 +380,11 @@ export default function AddSubjectLoadModal() {
                                                         <TimePickerSingle
                                                             value={parseTimeRange(item.time).start}
                                                             onChange={(newStart) => {
-                                                                const { end } = parseTimeRange(item.time);
+                                                                let { end } = parseTimeRange(item.time);
+                                                                if (newStart.period === 'PM' && end.period === 'AM') {
+                                                                    const pmHour = end.hour >= 1 && end.hour <= 9 ? end.hour : 12;
+                                                                    end = { ...end, period: 'PM', hour: pmHour };
+                                                                }
                                                                 const newRange = formatTimeRange(newStart, end);
                                                                 handleTimeChange(item.id, newRange);
                                                             }}
@@ -382,6 +392,7 @@ export default function AddSubjectLoadModal() {
                                                         <span className="text-muted-foreground text-xs font-sans">to</span>
                                                         <TimePickerSingle
                                                             value={parseTimeRange(item.time).end}
+                                                            lockedPeriod={parseTimeRange(item.time).start.period === 'PM' ? 'PM' : undefined}
                                                             onChange={(newEnd) => {
                                                                 const { start } = parseTimeRange(item.time);
                                                                 const newRange = formatTimeRange(start, newEnd);

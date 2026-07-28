@@ -9,6 +9,8 @@ import {
   Plus,
   Search,
 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { routes } from "@/../routes";
 import AppLayout from "@/layouts/app-layout";
 import ClassCard from "@/components/admin/classes/class-card";
 import AddClassModal from "./forms/add-class";
@@ -23,7 +25,6 @@ import type {
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
-import AddSubjectLoadModal from "./forms/add-subject-load";
 import { OverviewCard } from "@/components/overview-cards";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
@@ -202,14 +203,11 @@ export default function AdminClasses() {
                     onClassesCreated={() => void refreshClasses()}
                   />
                 </Dialog>
-                <Dialog>
-                  <Dialog.Trigger>
-                    <Button variant={"outline"}>
-                      <Plus className="size-4 mr-2" /> Add Subject Load
-                    </Button>
-                  </Dialog.Trigger>
-                  <AddSubjectLoadModal />
-                </Dialog>
+                <Link to={routes.admin.subjectLoadStudio}>
+                  <Button variant={"outline"}>
+                    <Plus className="size-4 mr-2" /> Subject Load Studio
+                  </Button>
+                </Link>
               </div>
             </header>
 

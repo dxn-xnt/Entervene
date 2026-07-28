@@ -49,9 +49,11 @@ export function formatTimeRange(start: TimeValue, end: TimeValue) {
 interface TimePickerSingleProps {
     value: TimeValue;
     onChange: (val: TimeValue) => void;
+    /** When set (e.g. "PM"), the period toggle is locked to this value */
+    lockedPeriod?: string;
 }
 
-export function TimePickerSingle({ value, onChange }: TimePickerSingleProps) {
+export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSingleProps) {
     const [isOpen, setIsOpen] = React.useState(false);
     const popoverRef = React.useRef<HTMLDivElement>(null);
 
@@ -69,56 +71,38 @@ export function TimePickerSingle({ value, onChange }: TimePickerSingleProps) {
         };
     }, [isOpen]);
 
-    const { hour, minute, period } = value;
+    const activePeriod = lockedPeriod || value.period;
+    const { hour, minute } = value;
 
     const hoursOptions = Array.from({ length: 12 }, (_, i) => i + 1);
     const minutesOptions = Array.from({ length: 12 }, (_, i) => i * 5);
 
+    // Practical school hours: AM 6-11, PM 12 + 1-9
     const isHourValid = (h: number, p: string) => {
         if (p === 'AM') {
             return h >= 6 && h <= 11;
         } else {
-            return h === 12 || (h >= 1 && h <= 6);
+            return h === 12 || (h >= 1 && h <= 9);
         }
-    };
-
-    const isPeriodValid = (h: number, p: string) => {
-        if (p === 'AM') {
-            return h >= 6 && h <= 11;
-        } else {
-            return h === 12 || (h >= 1 && h <= 6);
-        }
-    };
-
-    const isMinuteValid = (h: number, m: number, p: string) => {
-        if (p === 'PM' && h === 6) {
-            return m === 0;
-        }
-        return true;
     };
 
     const handleHourSelect = (h: number) => {
-        let newMinute = minute;
-        if (period === 'PM' && h === 6) {
-            newMinute = 0;
-        }
-        onChange({ hour: h, minute: newMinute, period });
+        if (!isHourValid(h, activePeriod)) return;
+        onChange({ hour: h, minute, period: activePeriod });
     };
 
     const handleMinuteSelect = (m: number) => {
-        onChange({ hour, minute: m, period });
+        onChange({ hour, minute: m, period: activePeriod });
     };
 
     const handlePeriodSelect = (p: string) => {
+        if (lockedPeriod) return; // locked, ignore
         let newHour = hour;
-        let newMinute = minute;
+        // Clamp hour to valid range when switching periods
         if (!isHourValid(hour, p)) {
             newHour = p === 'AM' ? 6 : 12;
         }
-        if (p === 'PM' && newHour === 6) {
-            newMinute = 0;
-        }
-        onChange({ hour: newHour, minute: newMinute, period: p });
+        onChange({ hour: newHour, minute, period: p });
     };
 
     const pad = (num: number) => String(num).padStart(2, "0");
@@ -131,20 +115,20 @@ export function TimePickerSingle({ value, onChange }: TimePickerSingleProps) {
                 className="px-2 py-1 border border-2 bg-white text-sm font-medium flex items-center gap-1.5 cursor-pointer min-w-[100px] justify-center animate-fade-in"
             >
                 <Clock className="size-3.5 text-neutral-500" />
-                <span>{hour}:{pad(minute)} {period.toLowerCase()}</span>
+                <span>{hour}:{pad(minute)} {activePeriod.toLowerCase()}</span>
             </button>
 
             {isOpen && (
                 <div className="absolute z-50 left-1/2 -translate-x-1/2 mt-1.5 bg-white border-2 border-black shadow-lg p-3 flex flex-col gap-2 min-w-[280px]">
                     <div className="bg-neutral-50 p-2 border border-black/10 rounded flex items-center justify-center font-bold text-lg font-mono">
                         <Clock className="size-5 mr-2 text-neutral-600" />
-                        <span>{hour} : {pad(minute)} {period.toLowerCase()}</span>
+                        <span>{hour} : {pad(minute)} {activePeriod.toLowerCase()}</span>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 h-44">
                         <div className="flex flex-col overflow-y-auto border border-black/20 rounded bg-white">
                             {hoursOptions.map(h => {
-                                const valid = isHourValid(h, period);
+                                const valid = isHourValid(h, activePeriod);
                                 return (
                                     <button
                                         key={h}
@@ -153,7 +137,9 @@ export function TimePickerSingle({ value, onChange }: TimePickerSingleProps) {
                                         onClick={() => handleHourSelect(h)}
                                         className={`py-1 text-sm font-medium font-mono ${h === hour
                                             ? "bg-black text-white font-bold"
-                                            : "hover:bg-neutral-100 disabled:opacity-30 disabled:hover:bg-transparent"
+                                            : valid
+                                            ? "hover:bg-neutral-100"
+                                            : "opacity-30 cursor-not-allowed"
                                             }`}
                                     >
                                         {h}
@@ -163,37 +149,35 @@ export function TimePickerSingle({ value, onChange }: TimePickerSingleProps) {
                         </div>
 
                         <div className="flex flex-col overflow-y-auto border border-black/20 rounded bg-white">
-                            {minutesOptions.map(m => {
-                                const valid = isMinuteValid(hour, m, period);
-                                return (
+                            {minutesOptions.map(m => (
                                     <button
                                         key={m}
                                         type="button"
-                                        disabled={!valid}
                                         onClick={() => handleMinuteSelect(m)}
                                         className={`py-1 text-sm font-medium font-mono ${m === minute
                                             ? "bg-black text-white font-bold"
-                                            : "hover:bg-neutral-100 disabled:opacity-30 disabled:hover:bg-transparent"
+                                            : "hover:bg-neutral-100"
                                             }`}
                                     >
                                         {pad(m)}
                                     </button>
-                                );
-                            })}
+                            ))}
                         </div>
 
                         <div className="flex flex-col overflow-y-auto border border-black/20 rounded bg-white">
                             {["AM", "PM"].map(p => {
-                                const valid = isPeriodValid(hour, p);
+                                const disabled = !!lockedPeriod && p !== lockedPeriod;
                                 return (
                                     <button
                                         key={p}
                                         type="button"
-                                        disabled={!valid}
+                                        disabled={disabled}
                                         onClick={() => handlePeriodSelect(p)}
-                                        className={`py-1 text-sm font-medium font-mono ${p === period
+                                        className={`py-1 text-sm font-medium font-mono ${p === activePeriod
                                             ? "bg-black text-white font-bold"
-                                            : "hover:bg-neutral-100 disabled:opacity-30 disabled:hover:bg-transparent"
+                                            : disabled
+                                            ? "opacity-30 cursor-not-allowed"
+                                            : "hover:bg-neutral-100"
                                             }`}
                                     >
                                         {p.toLowerCase()}

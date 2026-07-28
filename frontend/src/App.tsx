@@ -17,6 +17,7 @@ import AdminSubjectLevel from "./pages/admin/subject-level-view";
 import AdminSubjectView from "./pages/admin/subject-view";
 import AdminClasses from "./pages/admin/classes";
 import AdminClassDetail from "./pages/admin/class-view";
+import SubjectLoadStudio from "./pages/admin/subject-load-studio";
 import AdminUsers from "./pages/admin/users";
 import AdminUserDetail from "./pages/admin/user-detail";
 import AdminInterventions from "./pages/admin/interventions";
@@ -89,6 +90,7 @@ const App = () => {
             <Route path={routes.admin.subjectView} element={<AdminSubjectView />} />
             <Route path={routes.admin.classes} element={<AdminClasses />} />
             <Route path={routes.admin.classDetail} element={<AdminClassDetail />} />
+            <Route path={routes.admin.subjectLoadStudio} element={<SubjectLoadStudio />} />
             <Route path={routes.admin.users} element={<AdminUsers />} />
             <Route path={routes.admin.userDetail} element={<AdminUserDetail />} />
             <Route path={routes.admin.interventions} element={<AdminInterventions />} />

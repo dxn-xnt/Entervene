@@ -306,16 +306,6 @@ export default function AdminSubjects() {
     () => [...subjects, ...archivedSubjects],
     [archivedSubjects, subjects]
   );
-
-  const activeCatalogCount = subjects.length;
-  const activeOfferingCount = offerings.filter((offering) => offering.status === "active").length;
-  const activeGradingTemplateCount = gradingTemplates.filter((template) => template.status === "active").length;
-  const subjectTabCounts = {
-    catalog: activeCatalogCount,
-    offerings: activeOfferingCount,
-    grading: activeGradingTemplateCount,
-    archived: archivedSubjects.length + archivedOfferings.length + archivedGradingTemplates.length,
-  };
   const setOfferingSearch = (value: string) => {
     setOfferingFilters((current) => ({ ...current, search: value }));
   };

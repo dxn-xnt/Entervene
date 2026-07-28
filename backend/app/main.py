@@ -21,6 +21,7 @@ from app.api.v1.routes.Subjects import router as subjects_router
 from app.api.v1.routes.SubjectOfferings import router as subject_offerings_router
 from app.api.v1.routes.GradingTemplates import router as grading_templates_router
 from app.api.v1.routes.LessonPlans import router as lesson_plans_router
+from app.api.v1.routes.SubjectLoads import router as subject_loads_router
 from app.api.v1.routes.AIAssist import router as ai_assist_router
 from app.services.classes.ClassShared import ClassManagementError, class_management_error_handler
 from app.api.v1.routes.Settings import router as settings_router
@@ -80,7 +81,9 @@ app.include_router(subjects_router,    prefix="/api/v1/subjects",              t
 app.include_router(subject_offerings_router, prefix="/api/v1/subject-offerings", tags=["Subject Offerings"])
 app.include_router(grading_templates_router, prefix="/api/v1/grading-templates", tags=["Grading Templates"])
 app.include_router(lesson_plans_router, prefix="/api/v1/lesson-plans",      tags=["Lesson Plans"])
+app.include_router(subject_loads_router, prefix="/api/v1/subject-loads",     tags=["Subject Loads"])
 app.include_router(ai_assist_router,    prefix="/api/v1/ai",               tags=["AI Assist"])
+app.include_router(settings_router,     prefix="/api/v1/settings",          tags=["Settings"])
 
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
