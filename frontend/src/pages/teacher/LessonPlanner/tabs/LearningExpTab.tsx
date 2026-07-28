@@ -1,5 +1,4 @@
 import React from "react";
-import { Card } from "@/components/retroui/Card";
 import { Label } from "@/components/retroui/Label";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";

@@ -3,7 +3,6 @@ import LessonForm, { type LessonFormData } from "@/components/lesson-form";
 
 import { Dialog } from "@/components/retroui/Dialog";
 import { Card } from "@/components/retroui/Card";
-import { Button } from "@/components/ui/button";
 
 interface LessonModalProps {
   isOpen: boolean;

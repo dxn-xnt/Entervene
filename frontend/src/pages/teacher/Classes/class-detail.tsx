@@ -364,8 +364,6 @@ function SubjectLoadTab({
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
 }) {
-  const navigate = useNavigate();
-
   if (!detail.subject_loads.length) {
     return <EmptyInline message="No subject load assigned yet." />;
   }
