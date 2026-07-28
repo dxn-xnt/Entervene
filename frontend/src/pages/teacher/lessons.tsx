@@ -142,7 +142,7 @@ export default function Lessons() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
             <header className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
@@ -179,11 +179,12 @@ export default function Lessons() {
 
             <label className="relative w-full md:w-96 shadow-md transition-shadow hover:shadow-none">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+
               <Input
                 type="search"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search lessons"
+                placeholder="Search lesson plans..."
                 className="h-10 w-full border-black pl-9 pr-3 shadow-none"
               />
             </label>

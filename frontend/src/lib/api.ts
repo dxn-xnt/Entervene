@@ -114,6 +114,30 @@ export type StudentClassmatesResponse = {
   classmates: StudentClassmateItem[];
 };
 
+export type TodoItem = {
+  assignment_id: number;
+  class_id: number;
+  classwork_id: number;
+  title: string;
+  subject: string;
+  subject_id: number;
+  due_date: string | null;
+  deadline: string;
+  type: string;
+  category: string | null;
+  status: "pending" | "pastdue" | "completed";
+  is_submitted: boolean;
+  submission_status: string | null;
+  grade: number | null;
+};
+
+export type StudentTodosResponse = {
+  pending: TodoItem[];
+  pastdue: TodoItem[];
+  completed: TodoItem[];
+  all: TodoItem[];
+};
+
 export type ActivePeriodResponse = {
   period_id: number | null;
   period_name: string;
@@ -452,6 +476,16 @@ export async function getMyClassmates(): Promise<StudentClassmatesResponse> {
   }
 
   return (await response.json()) as StudentClassmatesResponse;
+}
+
+export async function getStudentTodos(): Promise<StudentTodosResponse> {
+  const response = await apiFetch("/api/v1/students/me/todos");
+
+  if (!response.ok) {
+    throw new Error("Unable to load your to-do items. Please try again.");
+  }
+
+  return (await response.json()) as StudentTodosResponse;
 }
 
 export async function getActivePeriod(): Promise<ActivePeriodResponse> {

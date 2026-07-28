@@ -1,8 +1,13 @@
-import { useRef, useState } from "react";
-import { Download } from "lucide-react";
+   "use client";
+
+import React, { useRef, useState } from "react";
+import { Download, FileSpreadsheet, UserPlus, Upload } from "lucide-react";
 import { Alert } from "@/components/retroui/Alert";
+import { Button } from "@/components/retroui/Button";
+import { Dialog } from "@/components/retroui/Dialog";
 import { apiFetch } from "@/lib/api";
 import type { InviteUserPayload } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 type Step = "choose" | "import" | "manual";
 type Role = "Teacher" | "Student" | "Admin";
@@ -18,7 +23,7 @@ type ImportResult = {
   errors?: ImportErrorItem[];
 };
 
-interface ManualFormData {
+export interface ManualFormData {
   firstName: string;
   lastName: string;
   middleName: string;
@@ -306,7 +311,7 @@ function backendImportResult(data: unknown, role: ImportRole): ImportResult {
   return data as ImportResult;
 }
 
-interface AddUserModalProps {
+export interface AddUserModalProps {
   open: boolean;
   onClose: () => void;
   onUserAdded?: (data: ManualFormData) => void;
@@ -326,8 +331,6 @@ export default function AddUserModal({
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [manualSubmitting, setManualSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  if (!open) return null;
 
   const handleClose = () => {
     setStep("choose");
@@ -464,125 +467,88 @@ export default function AddUserModal({
   const hasImportErrors = Boolean(importResult?.errors?.length);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
-      onClick={handleClose}
-    >
-      <div
-        className="relative w-full max-w-md rounded-xl border border-black overflow-hidden"
-        style={{ background: "#faf9f6" }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }}>
+      <Dialog.Content size="auto" className="w-full max-w-md overflow-hidden border-2 border-black shadow-[6px_7px_0_#000] p-0 font-sans">
+        <Dialog.Header className="px-5 py-3.5 border-b-2 border-black bg-primary text-primary-foreground font-head flex items-center justify-between">
+          <span className="font-bold text-lg">
+            {step === "choose" && "Add New Users"}
+            {step === "import" && "Import Users from File"}
+            {step === "manual" && "Create User Manually"}
+          </span>
+        </Dialog.Header>
+
         {/* ── STEP: CHOOSE ─────────────────────────────────── */}
         {step === "choose" && (
           <>
-            <div className="flex items-center justify-between p-4 border-b">
-              <span className="font-semibold text-base ">Add new users</span>
+            <div className="grid grid-cols-2 gap-4 p-5">
               <button
-                onClick={handleClose}
-                className=" hover:text-gray-700 text-lg leading-none"
-              >
-                ×
-              </button>
-            </div>
-            <div className="flex gap-3 p-4 border-b">
-              <button
+                type="button"
                 onClick={() => setStep("import")}
-                className="flex-1 rounded-lg p-4 text-left transition-all border bg-[#7ABA78] hover:opacity-90 active:scale-95 overflow-hidden"
+                className="group relative flex flex-col gap-2 rounded-md border-2 border-black bg-primary/20 p-4 text-left shadow-[4px_4px_0_#000] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none cursor-pointer"
               >
-                <div className="flex items-center gap-2 font-semibold text-sm mb-1">
-                  <svg
-                    width="16"
-                    height="16"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
-                  </svg>
-                  Import from file
+                <div className="flex items-center gap-2 font-bold text-base text-foreground">
+                  <FileSpreadsheet className="size-5 shrink-0 text-primary" />
+                  Import file
                 </div>
-                <p className="text-xs opacity-80">
-                  Upload a CSV or Excel file to add multiple users at once
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Upload a CSV file to add multiple users at once.
                 </p>
               </button>
+
               <button
+                type="button"
                 onClick={() => setStep("manual")}
-                className="flex-1 rounded-lg p-4 text-left transition-all border bg-[#7ABA78] hover:opacity-90 active:scale-95 overflow-hidden"
+                className="group relative flex flex-col gap-2 rounded-md border-2 border-black bg-primary/20 p-4 text-left shadow-[4px_4px_0_#000] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none cursor-pointer"
               >
-                <div className="flex items-center gap-2 font-semibold text-sm mb-1">
-                  <svg
-                    width="16"
-                    height="16"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                  Create manually
+                <div className="flex items-center gap-2 font-bold text-base text-foreground">
+                  <UserPlus className="size-5 shrink-0 text-primary" />
+                  Create manual
                 </div>
-                <p className="text-xs opacity-80">
-                  Add individual user accounts one at a time
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Add individual user accounts one at a time.
                 </p>
               </button>
             </div>
-            <div className="flex justify-end p-4">
-              <button
-                onClick={handleClose}
-                className="px-4 py-1.5 rounded-lg border text-sm hover:bg-gray-100 transition"
-              // style={{ borderColor: "#d1cfc9" }}
-              >
+
+            <Dialog.Footer className="flex justify-end border-t-2 border-black px-5 py-3 bg-background">
+              <Button variant="outline" size="sm" onClick={handleClose}>
                 Cancel
-              </button>
-            </div>
+              </Button>
+            </Dialog.Footer>
           </>
         )}
 
         {/* ── STEP: IMPORT ─────────────────────────────────── */}
         {step === "import" && (
           <>
-            <div className="flex items-center justify-between p-4 border-b border-black bg-[#7ABA78]">
-              <span className="font-semibold text-s">Import from file</span>
-              <button
-                onClick={handleClose}
-                className=" hover:text-gray-700 text-lg leading-none"
-              >
-                ×
-              </button>
-            </div>
-            <div className="flex flex-col gap-5 p-4">
-              <div>
-                <label className="text-xs font-medium text-gray-600">
-                  Role for imported users
-                </label>
+            <div className="flex flex-col gap-4 p-5">
+              <Field label="Role for imported users">
                 <select
                   value={importRole}
                   onChange={(e) =>
                     handleImportRoleChange(e.target.value as ImportRole)
                   }
-                  className="w-full border rounded-lg px-3 pr-8 py-1.5 text-sm bg-white cursor-pointer"
+                  className="w-full h-9 rounded border-2 border-black bg-background px-3 text-sm font-medium shadow-[2px_2px_0_#000] focus:outline-none cursor-pointer"
                 >
                   <option value="Teacher">Teacher</option>
                   <option value="Student">Student</option>
                 </select>
-              </div>
+              </Field>
 
-              <div className="rounded-lg border bg-white px-3 py-2">
-                <div className="flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => downloadCsvTemplate(importRole)}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-gray-50 transition cursor-pointer"
-                  >
-                    <Download className="size-3.5" />
-                    Download {importRole} Template
-                  </button>
-                </div>
+              <div className="flex items-center justify-between rounded border-2 border-black bg-muted/40 p-3 shadow-[2px_2px_0_#000]">
+                <span className="text-xs font-semibold text-foreground">
+                  Download CSV template for {importRole}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 bg-background hover:bg-accent"
+                  onClick={() => downloadCsvTemplate(importRole)}
+                >
+                  <Download className="size-3.5" />
+                  Template
+                </Button>
               </div>
 
               <div
@@ -593,57 +559,44 @@ export default function AddUserModal({
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleFileDrop}
                 onClick={() => fileInputRef.current?.click()}
-                className="flex flex-col items-center justify-center gap-3 rounded-lg cursor-pointer transition-all"
-                style={{
-                  minHeight: 140,
-                  border: `1px solid ${hasImportErrors ? "#991b1b" : dragOver ? "#5c8f5c" : "black"}`,
-                  background: hasImportErrors ? "#fff1f2" : dragOver ? "#f0f7f0" : "#fff",
-                }}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-center cursor-pointer transition-all min-h-[130px]",
+                  hasImportErrors
+                    ? "border-destructive bg-destructive/10"
+                    : dragOver
+                      ? "border-primary bg-primary/10"
+                      : "border-black/40 bg-background hover:bg-muted/30"
+                )}
               >
                 {uploadedFile ? (
                   <>
-                    {/* <svg
-                      width="28"
-                      height="28"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="#5c8f5c"
-                      strokeWidth="2"
-                    >
-                      <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg> */}
-                    <span className="text-sm font-medium text-gray-700">
+                    <FileSpreadsheet className="size-8 text-primary" />
+                    <span className="text-sm font-bold text-foreground">
                       {uploadedFile.name}
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-muted-foreground">
                       {(uploadedFile.size / 1024).toFixed(1)} KB
                     </span>
                     {hasImportErrors ? (
-                      <span className="text-xs font-medium text-red-800">
+                      <span className="text-xs font-semibold text-destructive">
                         Fix the file or choose a corrected CSV.
                       </span>
                     ) : (
-                      <span className="text-xs text-emerald-700">
+                      <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                         Ready to import
                       </span>
                     )}
                   </>
                 ) : (
                   <>
-                    <button
-                      className="px-4 py-1.5 rounded-lg border text-sm font-medium hover:bg-gray-50 transition cursor-pointer"
-                      // style={{ borderColor: "#ccc" }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        fileInputRef.current?.click();
-                      }}
-                    >
-                      Upload
-                    </button>
-                    <span className="text-xs">Drag & drop file here</span>
+                    <Upload className="size-8 text-muted-foreground" />
+                    <div className="text-xs font-semibold text-foreground">
+                      Drag & drop CSV file here, or <span className="text-primary underline">browse</span>
+                    </div>
                   </>
                 )}
               </div>
+
               <input
                 ref={fileInputRef}
                 type="file"
@@ -655,13 +608,12 @@ export default function AddUserModal({
                 }}
               />
 
-
               {importResult && (
                 <Alert
                   status={importResult.errors?.length ? "error" : "success"}
-                  className="px-3 py-2 text-xs"
+                  className="px-3 py-2 text-xs border-2 border-black"
                 >
-                  <Alert.Title className="text-sm">
+                  <Alert.Title className="text-sm font-bold">
                     {importResult.errors?.length ? "Import needs attention" : "Import complete"}
                   </Alert.Title>
                   <Alert.Description>
@@ -687,47 +639,32 @@ export default function AddUserModal({
                 </Alert>
               )}
             </div>
-            <div
-              className="flex justify-end border-t p-4 gap-2"
-            // style={{ borderTop: "1px solid #e5e3de" }}
-            >
-              <button
-                onClick={() => setStep("choose")}
-                className="px-4 py-1.5 rounded-lg border text-sm hover:bg-gray-100 transition cursor-pointer"
-              // style={{ borderColor: "#d1cfc9" }}
-              >
+
+            <Dialog.Footer className="flex justify-end border-t-2 border-black px-5 py-3 bg-background gap-2">
+              <Button variant="outline" size="sm" onClick={() => setStep("choose")}>
                 Back
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
                 disabled={!uploadedFile || importing || hasImportErrors}
-                className="px-4 py-1.5 rounded-lg border text-sm font-semibold transition cursor-pointer bg-[#7ABA78] disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={handleImportSubmit}
               >
-                {importing ? "Importing..." : "Import"}
-              </button>
-            </div>
+                {importing ? "Importing..." : "Import Users"}
+              </Button>
+            </Dialog.Footer>
           </>
         )}
 
         {/* ── STEP: MANUAL ─────────────────────────────────── */}
         {step === "manual" && (
           <>
-            <div className="flex items-center justify-between p-4 border-b border-black bg-[#7ABA78]">
-              <span className="font-semibold text-s">Create user manually</span>
-              <button
-                onClick={handleClose}
-                className=" hover:text-gray-700 text-lg leading-none"
-              >
-                ×
-              </button>
-            </div>
-            <div className="p-5 flex flex-col gap-3 max-h-[70vh] overflow-y-auto">
-              {/* Role — first so fields adapt below */}
+            <div className="p-5 flex flex-col gap-3.5 max-h-[60vh] overflow-y-auto">
               <Field label="Role">
                 <select
                   value={form.role}
                   onChange={(e) => handleField("role", e.target.value as Role)}
-                  className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white"
+                  className="w-full h-9 rounded border-2 border-black bg-background px-3 text-sm font-medium shadow-[2px_2px_0_#000] focus:outline-none cursor-pointer"
                 >
                   <option>Teacher</option>
                   <option>Student</option>
@@ -735,19 +672,16 @@ export default function AddUserModal({
                 </select>
               </Field>
 
-              {/* Common name fields */}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="First Name">
-                  <input
-                    className="w-full border rounded-lg px-3 py-1.5 text-sm"
+                  <FormInput
                     placeholder="John"
                     value={form.firstName}
                     onChange={(e) => handleField("firstName", e.target.value)}
                   />
                 </Field>
                 <Field label="Last Name">
-                  <input
-                    className="w-full border rounded-lg px-3 py-1.5 text-sm"
+                  <FormInput
                     placeholder="Doe"
                     value={form.lastName}
                     onChange={(e) => handleField("lastName", e.target.value)}
@@ -757,8 +691,7 @@ export default function AddUserModal({
 
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Middle Name">
-                  <input
-                    className="w-full border rounded-lg px-3 py-1.5 text-sm"
+                  <FormInput
                     placeholder="(optional)"
                     value={form.middleName}
                     onChange={(e) => handleField("middleName", e.target.value)}
@@ -766,8 +699,7 @@ export default function AddUserModal({
                 </Field>
                 {(isStudent || !isAdmin) && (
                   <Field label="Suffix">
-                    <input
-                      className="w-full border rounded-lg px-3 py-1.5 text-sm"
+                    <FormInput
                       placeholder="Jr., Sr., III…"
                       value={form.suffix}
                       onChange={(e) => handleField("suffix", e.target.value)}
@@ -777,21 +709,19 @@ export default function AddUserModal({
               </div>
 
               <Field label="Email Address">
-                <input
+                <FormInput
                   type="email"
-                  className="w-full border rounded-lg px-3 py-1.5 text-sm"
                   placeholder="john@example.com"
                   value={form.email}
                   onChange={(e) => handleField("email", e.target.value)}
                 />
               </Field>
 
-              {/* Gender + Contact */}
               {!isAdmin && (
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Gender">
                     <select
-                      className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white"
+                      className="w-full h-9 rounded border-2 border-black bg-background px-3 text-sm font-medium shadow-[2px_2px_0_#000] focus:outline-none cursor-pointer"
                       value={form.gender}
                       onChange={(e) => handleField("gender", e.target.value)}
                     >
@@ -802,8 +732,7 @@ export default function AddUserModal({
                     </select>
                   </Field>
                   <Field label="Contact Number">
-                    <input
-                      className="w-full border rounded-lg px-3 py-1.5 text-sm"
+                    <FormInput
                       placeholder="+63 9XX XXX XXXX"
                       value={form.contactNumber}
                       onChange={(e) =>
@@ -814,12 +743,11 @@ export default function AddUserModal({
                 </div>
               )}
 
-              {/* Address */}
               {!isAdmin && (
                 <Field label="Address">
                   <textarea
                     rows={2}
-                    className="w-full border rounded-lg px-3 py-1.5 text-sm resize-none"
+                    className="w-full rounded border-2 border-black bg-background px-3 py-1.5 text-sm font-medium shadow-[2px_2px_0_#000] focus:outline-none resize-none"
                     placeholder="Street, Barangay, City…"
                     value={form.address}
                     onChange={(e) => handleField("address", e.target.value)}
@@ -829,33 +757,28 @@ export default function AddUserModal({
 
               {!isAdmin && (
                 <Field label="Date of Birth">
-                  <input
+                  <FormInput
                     type="date"
-                    className="w-full border rounded-lg px-3 py-1.5 text-sm"
                     value={form.dob}
                     onChange={(e) => handleField("dob", e.target.value)}
                   />
                 </Field>
               )}
 
-              {/* ── Teacher/Staff-specific ── */}
               {!isStudent && !isAdmin && (
                 <>
-                  <div>
-                    <Field label="Hired Date">
-                      <input
-                        type="date"
-                        className="w-full border rounded-lg px-3 py-1.5 text-sm"
-                        value={form.hiredDate}
-                        onChange={(e) =>
-                          handleField("hiredDate", e.target.value)
-                        }
-                      />
-                    </Field>
-                  </div>
+                  <Field label="Hired Date">
+                    <FormInput
+                      type="date"
+                      value={form.hiredDate}
+                      onChange={(e) =>
+                        handleField("hiredDate", e.target.value)
+                      }
+                    />
+                  </Field>
                   <Field label="Employment Status">
                     <select
-                      className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white"
+                      className="w-full h-9 rounded border-2 border-black bg-background px-3 text-sm font-medium shadow-[2px_2px_0_#000] focus:outline-none cursor-pointer"
                       value={form.employmentStatus}
                       onChange={(e) =>
                         handleField("employmentStatus", e.target.value)
@@ -870,64 +793,58 @@ export default function AddUserModal({
                 </>
               )}
 
-              {/* ── Student-specific ── */}
               {isStudent && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Student LRN">
-                      <input
-                        className="w-full border rounded-lg px-3 py-1.5 text-sm font-mono"
-                        placeholder="12-digit LRN"
-                        maxLength={12}
-                        value={form.studentLrn}
-                        onChange={(e) =>
-                          handleField(
-                            "studentLrn",
-                            e.target.value.replace(/\D/g, ""),
-                          )
-                        }
-                      />
-                    </Field>
-                    <Field label="Grade Level">
-                      <select
-                        className="w-full border rounded px-3 py-1.5 text-sm bg-white"
-                        style={{ borderColor: "#ccc" }}
-                        value={form.gradeLevel}
-                        onChange={(e) => handleField("gradeLevel", e.target.value)}
-                      >
-                        <option value="">Select...</option>
-                        <option value="7">Grade 7</option>
-                        <option value="8">Grade 8</option>
-                        <option value="9">Grade 9</option>
-                        <option value="10">Grade 10</option>
-                        <option value="11">Grade 11</option>
-                        <option value="12">Grade 12</option>
-                      </select>
-                    </Field>
-                  </div>
-                </>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Student LRN">
+                    <FormInput
+                      placeholder="12-digit LRN"
+                      maxLength={12}
+                      className="font-mono"
+                      value={form.studentLrn}
+                      onChange={(e) =>
+                        handleField(
+                          "studentLrn",
+                          e.target.value.replace(/\D/g, ""),
+                        )
+                      }
+                    />
+                  </Field>
+                  <Field label="Grade Level">
+                    <select
+                      className="w-full h-9 rounded border-2 border-black bg-background px-3 text-sm font-medium shadow-[2px_2px_0_#000] focus:outline-none cursor-pointer"
+                      value={form.gradeLevel}
+                      onChange={(e) => handleField("gradeLevel", e.target.value)}
+                    >
+                      <option value="">Select...</option>
+                      <option value="7">Grade 7</option>
+                      <option value="8">Grade 8</option>
+                      <option value="9">Grade 9</option>
+                      <option value="10">Grade 10</option>
+                      <option value="11">Grade 11</option>
+                      <option value="12">Grade 12</option>
+                    </select>
+                  </Field>
+                </div>
               )}
             </div>
 
-            <div className="flex justify-end border-t p-4 gap-2">
-              <button
-                onClick={() => setStep("choose")}
-                className="px-4 py-1.5 rounded-lg border text-sm hover:bg-gray-100 transition"
-              >
+            <Dialog.Footer className="flex justify-end border-t-2 border-black px-5 py-3 bg-background gap-2">
+              <Button variant="outline" size="sm" onClick={() => setStep("choose")}>
                 Back
-              </button>
-              <button
-                onClick={handleManualSubmit}
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
                 disabled={manualSubmitting}
-                className="px-5 py-1.5 rounded-lg border text-sm font-semibold bg-[#7ABA78] transition hover:opacity-90"
+                onClick={handleManualSubmit}
               >
                 {manualSubmitting ? "Sending..." : "Send Invitation"}
-              </button>
-            </div>
+              </Button>
+            </Dialog.Footer>
           </>
         )}
-      </div>
-    </div>
+      </Dialog.Content>
+    </Dialog>
   );
 }
 
@@ -940,8 +857,25 @@ function Field({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium">{label}</label>
+      <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{label}</label>
       {children}
     </div>
+  );
+}
+
+function FormInput({
+  className,
+  type = "text",
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      type={type}
+      className={cn(
+        "w-full h-9 rounded border-2 border-black bg-background px-3 text-sm font-medium shadow-[2px_2px_0_#000] focus:outline-none transition-all",
+        className
+      )}
+      {...props}
+    />
   );
 }

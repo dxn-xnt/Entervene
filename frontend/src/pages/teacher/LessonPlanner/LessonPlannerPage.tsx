@@ -1,8 +1,8 @@
 import { useParams, Link } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { BookOpenCheck, ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
+import { Button } from "@/components/retroui/Button";
 import { LessonPlannerWizard } from "./LessonPlannerWizard";
 import { routes } from "@/../routes";
 
@@ -12,39 +12,29 @@ const LessonPlannerPage = () => {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col w-full">
-        <div className="@container/main flex flex-1 flex-col w-full">
-          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-8 pb-10 w-full max-w-7xl mx-auto">
-            {/* Page Header */}
-            <header className="flex items-center justify-between gap-4 flex-wrap w-full">
+      <div className="flex flex-1 flex-col overflow-x-hidden">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
+            <header className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm shrink-0">
-                    <BookOpenCheck className="size-5" />
-                  </div>
-                  <div>
-                    <h1 className="text-2xl md:text-3xl font-semibold leading-tight">
-                      {numericPlanId ? "Edit Lesson Plan" : "New Lesson Plan"}
-                    </h1>
-                    <p className="text-sm text-gray-500">
-                      ILAW Format — Intentions · Learning Experience · Assessment · Ways Forward
-                    </p>
-                  </div>
-                </div>
+
+                <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
+                  {numericPlanId ? "Edit Lesson Plan" : "New Lesson Plan"}
+                </h1>
               </div>
 
               <Link to={routes.teacher.lessonPlanner}>
-                <Button variant="outline" size="sm" className="gap-2 h-9 text-xs">
-                  <ArrowLeft className="size-3.5" />
-                  Back to Lesson Plans
+                <Button variant="default" size="md" className="gap-2">
+                  <ArrowLeft size={16} />
+                  <span className="hidden sm:inline">Back to Lesson Plans</span>
+                  <span className="sm:hidden">Back</span>
                 </Button>
               </Link>
             </header>
 
-            <div className="-mx-4 md:-mx-8 border-b border-black/10" />
+            <div className="-mx-4 md:-mx-6 border-b-2 border-border" />
 
-            {/* Wizard */}
             <LessonPlannerWizard planId={numericPlanId} />
           </div>
         </div>

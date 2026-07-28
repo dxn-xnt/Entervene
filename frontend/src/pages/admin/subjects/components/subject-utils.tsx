@@ -8,7 +8,6 @@ import type {
   SubjectStatus,
 } from "@/lib/api";
 import type { CurriculumGradeValue, CurriculumPathwayValue, CurriculumStatusValue } from "./CurriculumFilters";
-import type { SubjectModuleTabId } from "./SubjectModuleTabs";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -42,7 +41,8 @@ export const FALLBACK_PERIODS: SubjectOfferingListItem["academic_period"][] = [
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type AdminSubjectSection = SubjectModuleTabId;
+export type AdminSubjectSection = "catalog" | "offerings" | "grading" | "archived";
+export type SubjectModuleTabId = AdminSubjectSection;
 
 export type GradeGroup = {
   academicLevelId: number;

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -15,6 +16,9 @@ from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.Subject import Subject
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
+from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.classwork.Classwork import Classwork
+from app.models.submissions.StudentSubmission import StudentSubmission
 
 router = APIRouter()
 
@@ -318,4 +322,120 @@ def get_active_period(
         "period_progress_ratio": str(row.period_progress_ratio),
         "is_active": row.is_active,
         "year_label": row.year_label,
+    }
+
+
+@router.get("/me/todos")
+def get_my_todos(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns to-do items for the authenticated student categorized as pending, pastdue, and completed.
+    Joined from ClassworkAssignment, Classwork, Subject, and StudentSubmission.
+    """
+    _require_student(current_user)
+    student = _resolve_student(db, current_user["sub"])
+
+    student_classes = (
+        db.query(StudentClass.class_id)
+        .filter(
+            StudentClass.student_id == student.student_id,
+            StudentClass.enrollment_status == "enrolled",
+        )
+        .all()
+    )
+    class_ids = [sc.class_id for sc in student_classes]
+
+    if not class_ids:
+        return {
+            "pending": [],
+            "pastdue": [],
+            "completed": [],
+            "all": [],
+        }
+
+    now = datetime.now(timezone.utc)
+
+    results = (
+        db.query(
+            ClassworkAssignment.classwork_assignment_id,
+            ClassworkAssignment.class_id,
+            ClassworkAssignment.due_date,
+            ClassworkAssignment.publish_date,
+            Classwork.classwork_id,
+            Classwork.title,
+            Classwork.classwork_type,
+            Classwork.classwork_category,
+            Subject.subject_name,
+            Subject.subject_id,
+            StudentSubmission.submission_id,
+            StudentSubmission.status.label("submission_status"),
+            StudentSubmission.submitted_at,
+            StudentSubmission.grade,
+        )
+        .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
+        .join(Subject, Subject.subject_id == Classwork.subject_id)
+        .outerjoin(
+            StudentSubmission,
+            (StudentSubmission.classwork_assignment_id == ClassworkAssignment.classwork_assignment_id)
+            & (StudentSubmission.student_id == student.student_id),
+        )
+        .filter(
+            ClassworkAssignment.class_id.in_(class_ids),
+            ClassworkAssignment.is_published == True,
+            Classwork.is_archived == False,
+        )
+        .order_by(ClassworkAssignment.due_date.asc().nulls_last())
+        .all()
+    )
+
+    pending_items = []
+    pastdue_items = []
+    completed_items = []
+    all_items = []
+
+    for row in results:
+        is_submitted = (row.submission_status in ("submitted", "graded")) or (row.submitted_at is not None)
+
+        due_dt = row.due_date
+        is_past_due = False
+        if due_dt:
+            if due_dt.tzinfo is None:
+                due_dt = due_dt.replace(tzinfo=timezone.utc)
+            if due_dt < now and not is_submitted:
+                is_past_due = True
+
+        status = "completed" if is_submitted else ("pastdue" if is_past_due else "pending")
+
+        item = {
+            "assignment_id": row.classwork_assignment_id,
+            "class_id": row.class_id,
+            "classwork_id": row.classwork_id,
+            "title": row.title,
+            "subject": row.subject_name,
+            "subject_id": row.subject_id,
+            "due_date": row.due_date.isoformat() if row.due_date else None,
+            "deadline": row.due_date.strftime("%B %d, %Y") if row.due_date else "No deadline",
+            "type": row.classwork_type,
+            "category": row.classwork_category,
+            "status": status,
+            "is_submitted": is_submitted,
+            "submission_status": row.submission_status,
+            "grade": float(row.grade) if row.grade is not None else None,
+        }
+
+        all_items.append(item)
+        if status == "completed":
+            completed_items.append(item)
+        elif status == "pastdue":
+            pastdue_items.append(item)
+        else:
+            pending_items.append(item)
+
+    return {
+        "pending": pending_items,
+        "pastdue": pastdue_items,
+        "completed": completed_items,
+        "all": all_items,
     }

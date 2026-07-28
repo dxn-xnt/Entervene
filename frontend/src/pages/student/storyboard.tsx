@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SubjectCard } from "../../components/subject-card";
 import { Card } from "@/components/retroui/Card";
-import { ArrowUpRight, Loader2, BookOpen, Search, X } from "lucide-react";
+import { ArrowUpRight, Loader2, BookOpen, Search, X, CheckCircle2, FileText } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
@@ -10,9 +10,11 @@ import {
   apiFetch,
   getMyClass,
   getMyClassmates,
+  getStudentTodos,
   type StudentClassmateItem,
   type StudentClassmatesResponse,
   type StudentMyClassSummary,
+  type TodoItem,
 } from "@/lib/api";
 
 interface EnrolledSubject {
@@ -36,6 +38,8 @@ const StoryBoard = () => {
   const [isClassmatesLoading, setIsClassmatesLoading] = useState(false);
   const [classmatesError, setClassmatesError] = useState("");
   const [classmatesSearch, setClassmatesSearch] = useState("");
+  const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [isTodosLoading, setIsTodosLoading] = useState(true);
 
   useEffect(() => {
     apiFetch("/api/v1/students/me/subjects")
@@ -53,7 +57,41 @@ const StoryBoard = () => {
             : "Unable to load your section.",
         ),
       );
+
+    getStudentTodos()
+      .then((data) => {
+        const urgent = [...data.pastdue, ...data.pending].slice(0, 3);
+        setTodos(urgent);
+      })
+      .catch(() => {})
+      .finally(() => setIsTodosLoading(false));
   }, []);
+
+  const openTodo = async (item: TodoItem) => {
+    let targetClassId = item.class_id;
+
+    if (!targetClassId && item.subject_id) {
+      try {
+        const res = await apiFetch("/api/v1/students/me/subjects");
+        if (res.ok) {
+          const subjects = await res.json();
+          const match = subjects.find(
+            (s: { subject_id: number; class_id: number }) =>
+              s.subject_id === item.subject_id,
+          );
+          if (match) targetClassId = match.class_id;
+        }
+      } catch {}
+    }
+
+    if (targetClassId && item.subject_id) {
+      navigate(
+        `/student/subjects/${targetClassId}/${item.subject_id}?tab=classwork&classworkAssignmentId=${item.assignment_id}`,
+      );
+    } else {
+      navigate(routes.student.todo);
+    }
+  };
 
   const handleSubjectClick = (subject: EnrolledSubject) => {
     navigate(
@@ -151,7 +189,7 @@ const StoryBoard = () => {
 
               <Card className="block w-full lg:w-[35%]">
                 <Card.Content>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between mb-4">
                     <Card.Title className="mb-0 text-2xl md:text-3xl">
                       To do
                     </Card.Title>
@@ -164,6 +202,43 @@ const StoryBoard = () => {
                       <ArrowUpRight size={18} />
                     </button>
                   </div>
+
+                  {isTodosLoading ? (
+                    <div className="flex justify-center py-8">
+                      <Loader2 className="animate-spin text-gray-400" size={28} />
+                    </div>
+                  ) : todos.length === 0 ? (
+                    <div className="flex flex-col items-center py-6 text-gray-500 gap-1.5">
+                      <CheckCircle2 size={32} className="text-green-500" />
+                      <p className="text-sm font-semibold">All caught up!</p>
+                      <p className="text-xs text-gray-400">No pending tasks</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2.5">
+                      {todos.map((item) => (
+                        <div
+                          key={item.assignment_id}
+                          onClick={() => openTodo(item)}
+                          className="flex items-center gap-3 border-2 border-black bg-white p-3 rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer hover:bg-yellow-50 transition-colors"
+                        >
+                          <FileText size={20} className="shrink-0 text-black/70" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-semibold text-sm">
+                              {item.title}
+                            </p>
+                            <p className="truncate text-xs text-gray-600">
+                              {item.subject} · {item.deadline}
+                            </p>
+                          </div>
+                          {item.status === "pastdue" && (
+                            <span className="shrink-0 text-[10px] uppercase font-bold text-red-700 bg-red-100 border border-red-400 px-1.5 py-0.5 rounded">
+                              Past Due
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </Card.Content>
               </Card>
             </div>

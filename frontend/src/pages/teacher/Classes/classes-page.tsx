@@ -151,13 +151,13 @@ const ClassesPage = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
+          <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
               <h1 className="text-2xl md:text-4xl font-bold">Classes</h1>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b border-gray-500" />
+            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
             {error && (
               <div className="rounded-lg border-2 border-red-500 bg-red-50 px-4 py-3 text-sm text-red-700">
