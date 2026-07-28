@@ -1,4 +1,5 @@
 import React from "react";
+import { Card } from "@/components/retroui/Card";
 import { Label } from "@/components/retroui/Label";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
@@ -201,7 +202,7 @@ export const LearningExpTab: React.FC<LearningExpTabProps> = ({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-3">
           {(["before", "during", "after"] as const).map((phase) => {
             const steps = flowByPhase(phase);
             const cfg = PHASE_CONFIG[phase];
@@ -209,7 +210,7 @@ export const LearningExpTab: React.FC<LearningExpTabProps> = ({
             return (
               <div
                 key={phase}
-                className="flex min-h-[220px] w-full flex-col gap-3 border-2 border-black bg-gray-50/50 p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                className="flex h-full min-h-[220px] w-full flex-col gap-3 border-2 border-black bg-gray-50/50 p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
               >
                 {/* Phase Column Header */}
                 <div className="flex items-center justify-between gap-2 border-b-2 border-border pb-2">
@@ -248,7 +249,7 @@ export const LearningExpTab: React.FC<LearningExpTabProps> = ({
                   {steps.map((step, idx) => (
                     <div
                       key={step.id}
-                      className="flex items-start gap-2 border-2 border-black bg-white p-2.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      className="flex items-start gap-2 border-2 border-black bg-white p-2.5"
                     >
                       <span className="mt-1.5 w-4 shrink-0 text-center text-xs font-medium text-muted-foreground">
                         {idx + 1}.
