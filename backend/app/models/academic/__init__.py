@@ -14,3 +14,4 @@ from .LessonAttachment import LessonAttachment
 from .AssessmentItem import AssessmentItem
 from .StudentAssessmentScore import StudentAssessmentScore
 from .StudentPeriodGrade import StudentPeriodGrade
+from .LessonPlanModel import LessonPlanModel

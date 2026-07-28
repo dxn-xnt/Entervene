@@ -18,6 +18,7 @@ import SubmissionViewer from "@/components/submission-viewer";
 import { StudentLessonDetailScreen } from "@/components/student-lesson-detail-screen";
 import { API_URL, apiFetch } from "@/lib/api";
 import { Card } from "@/components/retroui/Card";
+import { Badge } from "@/components/retroui/Badge";
 import { SortButton } from "@/components/sort-button";
 import type { StudentLesson as Lesson } from "@/types/student-subject";
 
@@ -1181,36 +1182,41 @@ export default function SubjectLessonTab({
       const badge = getStatusBadge(cw.submission_status, cw.due_date);
       const isLoading = detailLoadingId === cw.classwork_assignment_id;
       return (
-        <button
+        <Card
           key={cw.classwork_assignment_id}
-          onClick={() => openClassworkDetail(cw)}
-          disabled={isLoading}
-          className="w-full rounded-lg border border-black bg-white px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left shadow-md"
+          onClick={() => !isLoading && openClassworkDetail(cw)}
+          className="block w-full cursor-pointer border-black"
         >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-black bg-[#F6E9B2]">
-            <ClassworkIcon type={cw.classwork_type} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm truncate">{cw.title}</p>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {cw.due_date
-                ? `Scheduled ${fmtDate(cw.due_date)}`
-                : "No due date"}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {badge && (
-              <span
-                className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${badge.cls}`}
-              >
-                {badge.label}
-              </span>
-            )}
-            {isLoading && (
-              <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-            )}
-          </div>
-        </button>
+          <Card.Content className="flex items-center justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <ClassworkIcon type={cw.classwork_type} size={22} />
+
+                <Card.Title className="mb-0 truncate text-base">
+                  {cw.title}
+                </Card.Title>
+              </div>
+
+              <p className="mt-1 text-xs font-medium text-gray-600">
+                {cw.due_date
+                  ? `Scheduled ${fmtDate(cw.due_date)}`
+                  : "No due date"}
+              </p>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2">
+              {badge && (
+                <Badge variant="secondary" size="sm" className={badge.cls}>
+                  {badge.label}
+                </Badge>
+              )}
+
+              {isLoading && (
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+              )}
+            </div>
+          </Card.Content>
+        </Card>
       );
     });
   };
@@ -1436,46 +1442,50 @@ export default function SubjectLessonTab({
                                   detailLoadingId ===
                                   cw.classwork_assignment_id;
                                 return (
-                                  <button
+                                  <Card
                                     key={cw.classwork_assignment_id}
-                                    onClick={() => openClassworkDetail(cw)}
-                                    disabled={isLoading}
-                                    className="w-full rounded-lg border-2 border-black bg-white p-4 flex items-center text-left gap-3 shadow-md transition-all hover:shadow-none"
+                                    onClick={() =>
+                                      !isLoading && openClassworkDetail(cw)
+                                    }
+                                    className="block w-full cursor-pointer border-black"
                                   >
-                                    {/* Icon */}
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center justify-between">
-                                        <div className="flex items-center min-w-0">
-                                          <div className="flex h-9 w-9 items-center justify-center">
-                                            <ClassworkIcon
-                                              type={cw.classwork_type}
-                                            />
-                                          </div>
-                                          <p className="font-semibold text-lg truncate">
+                                    <Card.Content className="flex items-center justify-between gap-4">
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2">
+                                          <ClassworkIcon
+                                            type={cw.classwork_type}
+                                            size={22}
+                                          />
+
+                                          <Card.Title className="mb-0 truncate text-lg">
                                             {cw.title}
-                                          </p>
+                                          </Card.Title>
                                         </div>
+
+                                        <p className="mt-1 text-xs text-gray-600">
+                                          {cw.due_date
+                                            ? `Scheduled ${fmtDate(cw.due_date)}`
+                                            : "No due date"}
+                                        </p>
                                       </div>
-                                      <p className="text-xs ">
-                                        {cw.due_date
-                                          ? `Scheduled ${fmtDate(cw.due_date)}`
-                                          : "No due date"}
-                                      </p>
-                                    </div>
-                                    {/* Badge + spinner */}
-                                    <div className="flex items-center gap-2 shrink-0">
-                                      {badge && (
-                                        <span
-                                          className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${badge.cls}`}
-                                        >
-                                          {badge.label}
-                                        </span>
-                                      )}
-                                      {isLoading && (
-                                        <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                                      )}
-                                    </div>
-                                  </button>
+
+                                      <div className="flex shrink-0 items-center gap-2">
+                                        {badge && (
+                                          <Badge
+                                            size="sm"
+                                            variant="secondary"
+                                            className={badge.cls}
+                                          >
+                                            {badge.label}
+                                          </Badge>
+                                        )}
+
+                                        {isLoading && (
+                                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+                                        )}
+                                      </div>
+                                    </Card.Content>
+                                  </Card>
                                 );
                               })
                             )}
@@ -1591,9 +1601,7 @@ export default function SubjectLessonTab({
             {/* Modal header */}
             <div className="sticky top-0 flex items-center justify-between rounded-t-lg border-b border-black bg-[#F6E9B2] px-5 py-4">
               <div>
-                <p className="text-xs">
-                  Student classwork detail
-                </p>
+                <p className="text-xs">Student classwork detail</p>
                 <h2 className="text-xl font-bold">
                   {selectedClasswork?.title || "Classwork"}
                 </h2>
