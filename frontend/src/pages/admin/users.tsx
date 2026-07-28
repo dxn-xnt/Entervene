@@ -1,5 +1,5 @@
 import AppLayout from "../../layouts/app-layout";
-import AddUserModal from "../../components/admin/AddUserModal";
+import AddUserModal from "./forms/add-user";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "../../components/retroui/Badge";
 import { Table } from "../../components/retroui/Table";
@@ -18,7 +18,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/retroui/Accordion";
@@ -185,7 +185,9 @@ function groupStudents(students: User[], sortBy: "A-Z" | "Z-A" = "A-Z"): Map<str
 
 export default function AdminUsers() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<TabId>("teacher");
+  const [searchParams] = useSearchParams();
+  const initialTab = (searchParams.get("tab") ?? "teacher") as TabId;
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -544,11 +546,11 @@ export default function AdminUsers() {
                               <Table.Header className="font-sans">
                                 <Table.Row>
                                   <Table.Head>Name</Table.Head>
-                                  <Table.Head className="text-center">Status</Table.Head>
-                                  <Table.Head className="text-center">
+                                  <Table.Head className="text-center w-36">Status</Table.Head>
+                                  <Table.Head className="text-center w-64">
                                     {isUnassigned ? "Grade level" : "Section"}
                                   </Table.Head>
-                                  <Table.Head className="text-right">Average</Table.Head>
+                                  <Table.Head className="text-right w-36">Average</Table.Head>
                                 </Table.Row>
                               </Table.Header>
                               <Table.Body>
@@ -582,14 +584,14 @@ export default function AdminUsers() {
                         <Table.Header className="font-sans">
                           <Table.Row>
                             <Table.Head>Name</Table.Head>
-                            <Table.Head className="text-center">Status</Table.Head>
+                            <Table.Head className="text-center w-36">Status</Table.Head>
                             {activeTab === "teacher" ? (
                               <>
-                                <Table.Head className="text-center">Subjects</Table.Head>
-                                <Table.Head className="text-right">Classes</Table.Head>
+                                <Table.Head className="text-center w-48">Subjects</Table.Head>
+                                <Table.Head className="text-right w-28">Classes</Table.Head>
                               </>
                             ) : (
-                              <Table.Head className="text-right">Joined</Table.Head>
+                              <Table.Head className="text-right w-36">Joined</Table.Head>
                             )}
                           </Table.Row>
                         </Table.Header>
@@ -661,18 +663,17 @@ function StudentRow({
         <NameCell name={user.name} subtitle={user.email} role={user.role} />
       </Table.Cell>
 
-      <Table.Cell className="text-center">
+      <Table.Cell className="text-center w-36">
         <StatusBadge status={user.account_status} />
       </Table.Cell>
 
-      <Table.Cell className="text-center">
+      <Table.Cell className="text-center w-40">
         <div className="flex justify-center">
           {showGrade ? (
             gradeLevel ? (
               <Badge
                 variant="outline"
                 size="sm"
-                className="border-black/20 bg-muted/40 text-[11px] font-medium"
               >
                 Grade {gradeLevel}
               </Badge>
@@ -692,7 +693,7 @@ function StudentRow({
         </div>
       </Table.Cell>
 
-      <Table.Cell className="text-right">
+      <Table.Cell className="text-right w-28">
         <div className="justify-self-end text-right font-black leading-none">
           {user.average != null ? (
             <>
@@ -742,10 +743,10 @@ function UserRow({
         <Table.Cell>
           <NameCell name={user.name} subtitle={user.email} role={user.role} />
         </Table.Cell>
-        <Table.Cell className="text-center">
+        <Table.Cell className="text-center w-36">
           <StatusBadge status={user.account_status} />
         </Table.Cell>
-        <Table.Cell className="text-center">
+        <Table.Cell className="text-center w-48">
           <div className="flex flex-wrap justify-center gap-1.5">
             {shown.length > 0 ? (
               shown.map((subject) => (
@@ -772,7 +773,7 @@ function UserRow({
             )}
           </div>
         </Table.Cell>
-        <Table.Cell className="text-right">
+        <Table.Cell className="text-right w-28">
           <div className="flex items-center justify-end gap-1 text-xs font-semibold">
             <School className="size-3.5" />
             {user.class_count ?? 0}
@@ -790,10 +791,10 @@ function UserRow({
       <Table.Cell>
         <NameCell name={user.name} subtitle={user.email} role={user.role} />
       </Table.Cell>
-      <Table.Cell className="text-center">
+      <Table.Cell className="text-center w-36">
         <StatusBadge status={user.account_status} />
       </Table.Cell>
-      <Table.Cell className="text-right">
+      <Table.Cell className="text-right w-36">
         <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
           <UsersRound className="size-3.5" />
           {user.created_at || "—"}
@@ -818,7 +819,7 @@ function NameCell({
       : "/avatars/teacher-avatars/12.svg";
 
   return (
-    <div className="flex min-w-0 items-center gap-3">
+    <div className="flex min-w-0 max-w-72 items-center gap-3">
       <Avatar
         variant={role === "student" ? "student" : "teacher"}
         className="size-10 shrink-0"

@@ -9,8 +9,6 @@ export type { CurriculumPlanRow } from "./CurriculumPlanTable";
 export { EmptyStateCard } from "./EmptyStateCard";
 export { SubjectContextBanner } from "./SubjectContextBanner";
 export { SubjectPicker } from "./SubjectPicker";
-export { SubjectModuleTabs } from "./SubjectModuleTabs";
-export type { SubjectModuleTabId } from "./SubjectModuleTabs";
 export { TemplateSubjectPicker } from "./TemplateSubjectPicker";
 
 // Extracted from subjects.tsx
@@ -37,6 +35,7 @@ export {
 } from "./subject-utils";
 export type {
   AdminSubjectSection,
+  SubjectModuleTabId,
   GradeGroup,
   OfferingFilters,
   PendingAction,

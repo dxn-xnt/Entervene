@@ -214,10 +214,10 @@ export default function AdminUserDetail() {
                     <Breadcrumb.Separator />
                     <Breadcrumb.Item>
                       <Breadcrumb.Link
-                        href="/admin/users"
+                        href={`/admin/users?tab=${effectiveRole}`}
                         onClick={(e) => {
                           e.preventDefault();
-                          navigate("/admin/users");
+                          navigate(`/admin/users?tab=${effectiveRole}`);
                         }}
                         className="text-xl text-muted-foreground font-semibold capitalize"
                       >
