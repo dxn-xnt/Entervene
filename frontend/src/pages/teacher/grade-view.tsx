@@ -4,13 +4,14 @@ import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { useParams } from "react-router-dom";
-import { Ellipsis, Plus, Search, Download, ClipboardCheck } from "lucide-react";
+import { Ellipsis, Plus, Search, Download, ClipboardCheck, Edit3 } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import ViewGradeScoreModal from "./forms/view-grade-scores";
 import AddClassworkScoreModal from "./forms/add-classwork-score";
+import EnterManualScoresModal from "./forms/enter-manual-scores";
 import AttendanceModal from "./forms/attendance-modal";
 import { getTeacherGradebook, type StudentGradebookResponse, type GradebookCategoryHeader } from "@/lib/api";
 
@@ -41,25 +42,27 @@ const TeacherGradeView = () => {
   const [selectedCategory, setSelectedCategory] = useState<{
     name: string;
     items: GradebookCategoryHeader[];
-    studentGrades: { name: string; scores: number[] }[];
+    studentGrades: { name: string; scores: (number | null)[] }[];
   } | null>(null);
   const [addingCategoryName, setAddingCategoryName] = useState<string | null>(null);
+  const [scoringActivity, setScoringActivity] = useState<{
+    activityId: number;
+    title: string;
+    maxScore: number;
+  } | null>(null);
+
+  const fetchGradebook = () => {
+    if (section && subject) {
+      setLoading(true);
+      getTeacherGradebook(section, subject)
+        .then((data) => setGradebook(data))
+        .catch((err) => console.error("Error loading gradebook:", err))
+        .finally(() => setLoading(false));
+    }
+  };
 
   useEffect(() => {
-    let isMounted = true;
-    if (section && subject) {
-      getTeacherGradebook(section, subject)
-        .then((data) => {
-          if (isMounted) setGradebook(data);
-        })
-        .catch((err) => console.error("Error loading gradebook:", err))
-        .finally(() => {
-          if (isMounted) setLoading(false);
-        });
-    }
-    return () => {
-      isMounted = false;
-    };
+    fetchGradebook();
   }, [section, subject]);
 
   const cg = gradebook?.classwork?.[0] ?? { writtenWork: [], performanceTask: [], quarterlyAssessment: [] };
@@ -82,9 +85,9 @@ const TeacherGradeView = () => {
     ];
     const rows = raw.map((sg) => [
       `"${sg.name}"`,
-      ...sg.writtenWork,
-      ...sg.performanceTask,
-      ...sg.quarterlyAssessment,
+      ...sg.writtenWork.map((s) => (s !== null && s !== undefined ? s : "")),
+      ...sg.performanceTask.map((s) => (s !== null && s !== undefined ? s : "")),
+      ...sg.quarterlyAssessment.map((s) => (s !== null && s !== undefined ? s : "")),
       fmt(sg.transmuted_grade ?? sg.initial_grade),
     ]);
     const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
@@ -238,14 +241,22 @@ const TeacherGradeView = () => {
                           />
                           <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
                             {getLatestTwo(cg.writtenWork).map(({ item }) => (
-                              <span
+                              <button
+                                type="button"
                                 key={item.id}
-                                className="flex flex-row items-center gap-1 whitespace-nowrap truncate"
-                                title={`${item.title} (${item.maxScore})`}
+                                className="flex flex-row items-center gap-1 whitespace-nowrap truncate hover:text-primary transition-colors cursor-pointer"
+                                title={`Click to Enter Scores for ${item.title}`}
+                                onClick={() =>
+                                  setScoringActivity({
+                                    activityId: item.id,
+                                    title: item.title,
+                                    maxScore: item.maxScore,
+                                  })
+                                }
                               >
-                                <span className="truncate max-w-[90px]">{item.title}</span>
+                                <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
                                 <span className="text-muted-foreground font-normal">({item.maxScore})</span>
-                              </span>
+                              </button>
                             ))}
                           </div>
                           <Plus
@@ -274,14 +285,22 @@ const TeacherGradeView = () => {
                           />
                           <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
                             {getLatestTwo(cg.performanceTask).map(({ item }) => (
-                              <span
+                              <button
+                                type="button"
                                 key={item.id}
-                                className="flex flex-row items-center gap-1 whitespace-nowrap truncate"
-                                title={`${item.title} (${item.maxScore})`}
+                                className="flex flex-row items-center gap-1 whitespace-nowrap truncate hover:text-primary transition-colors cursor-pointer"
+                                title={`Click to Enter Scores for ${item.title}`}
+                                onClick={() =>
+                                  setScoringActivity({
+                                    activityId: item.id,
+                                    title: item.title,
+                                    maxScore: item.maxScore,
+                                  })
+                                }
                               >
-                                <span className="truncate max-w-[90px]">{item.title}</span>
+                                <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
                                 <span className="text-muted-foreground font-normal">({item.maxScore})</span>
-                              </span>
+                              </button>
                             ))}
                           </div>
                           <Plus
@@ -310,14 +329,22 @@ const TeacherGradeView = () => {
                           />
                           <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
                             {getLatestTwo(cg.quarterlyAssessment).map(({ item }) => (
-                              <span
+                              <button
+                                type="button"
                                 key={item.id}
-                                className="flex flex-row items-center gap-1 whitespace-nowrap truncate"
-                                title={`${item.title} (${item.maxScore})`}
+                                className="flex flex-row items-center gap-1 whitespace-nowrap truncate hover:text-primary transition-colors cursor-pointer"
+                                title={`Click to Enter Scores for ${item.title}`}
+                                onClick={() =>
+                                  setScoringActivity({
+                                    activityId: item.id,
+                                    title: item.title,
+                                    maxScore: item.maxScore,
+                                  })
+                                }
                               >
-                                <span className="truncate max-w-[90px]">{item.title}</span>
+                                <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
                                 <span className="text-muted-foreground font-normal">({item.maxScore})</span>
-                              </span>
+                              </button>
                             ))}
                           </div>
                           <Plus
@@ -356,7 +383,7 @@ const TeacherGradeView = () => {
                               <div className="flex flex-row justify-around w-full text-xs">
                                 {getLatestTwo(item.writtenWork).map(({ item: score }, idx) => (
                                   <span className="w-full text-center tabular-nums" key={idx}>
-                                    {score}
+                                    {score !== null && score !== undefined ? score : "—"}
                                   </span>
                                 ))}
                               </div>
@@ -370,7 +397,7 @@ const TeacherGradeView = () => {
                               <div className="flex flex-row justify-around w-full text-xs">
                                 {getLatestTwo(item.performanceTask).map(({ item: score }, idx) => (
                                   <span className="w-full text-center tabular-nums" key={idx}>
-                                    {score}
+                                    {score !== null && score !== undefined ? score : "—"}
                                   </span>
                                 ))}
                               </div>
@@ -384,7 +411,7 @@ const TeacherGradeView = () => {
                               <div className="flex flex-row justify-around w-full text-xs">
                                 {getLatestTwo(item.quarterlyAssessment).map(({ item: score }, idx) => (
                                   <span className="w-full text-center tabular-nums" key={idx}>
-                                    {score}
+                                    {score !== null && score !== undefined ? score : "—"}
                                   </span>
                                 ))}
                               </div>
@@ -428,6 +455,14 @@ const TeacherGradeView = () => {
             categoryName={selectedCategory.name}
             items={selectedCategory.items}
             studentGrades={selectedCategory.studentGrades}
+            onEnterScores={(item) => {
+              setSelectedCategory(null);
+              setScoringActivity({
+                activityId: item.id,
+                title: item.title,
+                maxScore: item.maxScore,
+              });
+            }}
           />
         )}
       </Dialog>
@@ -439,7 +474,31 @@ const TeacherGradeView = () => {
         }}
       >
         {addingCategoryName && (
-          <AddClassworkScoreModal categoryName={addingCategoryName} />
+          <AddClassworkScoreModal
+            categoryName={addingCategoryName}
+            classId={section ? Number(section) : undefined}
+            subjectId={subject ? Number(subject) : undefined}
+            onSuccess={fetchGradebook}
+            onClose={() => setAddingCategoryName(null)}
+          />
+        )}
+      </Dialog>
+
+      <Dialog
+        open={scoringActivity !== null}
+        onOpenChange={(open) => {
+          if (!open) setScoringActivity(null);
+        }}
+      >
+        {scoringActivity && (
+          <EnterManualScoresModal
+            activityId={scoringActivity.activityId}
+            classId={Number(section)}
+            activityTitle={scoringActivity.title}
+            maxScore={scoringActivity.maxScore}
+            onSuccess={fetchGradebook}
+            onClose={() => setScoringActivity(null)}
+          />
         )}
       </Dialog>
     </AppLayout>

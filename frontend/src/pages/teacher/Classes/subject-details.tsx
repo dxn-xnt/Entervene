@@ -31,6 +31,7 @@ export default function SubjectDetails() {
   const [activeTab, setActiveTab] = useState<"lessons" | "students">("lessons");
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [subjectAssignments, setSubjectAssignments] = useState<LinkedClasswork[]>([]);
   const [classworkCount, setClassworkCount] = useState<number | null>(null);
   const [overviewMastery, setOverviewMastery] = useState<number>(0);
   const [overviewCompletion, setOverviewCompletion] = useState<number>(0);
@@ -92,6 +93,7 @@ export default function SubjectDetails() {
             throw new Error("Unable to load classwork overview.");
           }
           const assignmentsData = (await assignmentsResponse.json()) as LinkedClasswork[];
+          setSubjectAssignments(assignmentsData);
           setClassworkCount(assignmentsData.length);
         }
 
@@ -657,6 +659,7 @@ export default function SubjectDetails() {
             openLessonManager={openLessonManager}
             openClassworkForm={openClassworkForm}
             openClassworkDetail={openClassworkDetail}
+            subjectAssignments={subjectAssignments}
           />
         )}
       </main>

@@ -126,6 +126,7 @@ def teacher_lesson_linked_classwork(
             "classwork_id": assignment.classwork_id,
             "title": classwork.title,
             "classwork_type": classwork.classwork_type,
+            "classwork_category": classwork.classwork_category,
             "due_date": assignment.due_date.isoformat() if assignment.due_date else None,
             "attachment_count": len(classwork.attachments),
         }

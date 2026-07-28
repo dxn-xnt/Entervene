@@ -6,7 +6,7 @@ import { Text } from "@/components/retroui/Text";
 import { Table } from "@/components/retroui/Table";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Edit3 } from "lucide-react";
 
 interface ViewGradeScoreModalProps {
   categoryName: string;
@@ -17,8 +17,9 @@ interface ViewGradeScoreModalProps {
   }[];
   studentGrades: {
     name: string;
-    scores: number[];
+    scores: (number | null)[];
   }[];
+  onEnterScores?: (item: { id: number; title: string; maxScore: number }) => void;
 }
 
 const ITEMS_PER_PAGE = 4;
@@ -27,6 +28,7 @@ export default function ViewGradeScoreModal({
   categoryName,
   items,
   studentGrades,
+  onEnterScores,
 }: ViewGradeScoreModalProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
@@ -82,9 +84,21 @@ export default function ViewGradeScoreModal({
                 {paginatedItems.map((item) => (
                   <Table.Head key={item.id} className="text-center min-w-[150px] py-3 px-3">
                     <div className="flex flex-col items-center justify-center gap-1">
-                      <span className="font-bold text-sm text-foreground text-center break-words max-w-[180px] leading-tight" title={item.title}>
-                        {item.title}
-                      </span>
+                      <div className="flex items-center justify-center gap-1">
+                        <span className="font-bold text-sm text-foreground text-center break-words max-w-[160px] leading-tight" title={item.title}>
+                          {item.title}
+                        </span>
+                        {onEnterScores && (
+                          <button
+                            type="button"
+                            title="Enter / Edit Scores"
+                            className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-black transition-colors"
+                            onClick={() => onEnterScores(item)}
+                          >
+                            <Edit3 className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
                       <span className="text-[11px] font-semibold text-muted-foreground bg-background px-2 py-0.5 rounded-full border border-border whitespace-nowrap">
                         {item.maxScore} pts
                       </span>
@@ -110,7 +124,7 @@ export default function ViewGradeScoreModal({
                 filteredStudents.map((student) => {
                   const orderedScores = [...student.scores].reverse();
                   const studentPaginatedScores = orderedScores.slice(startIndex, endIndex);
-                  const totalScore = student.scores.reduce((sum, score) => sum + score, 0);
+                  const totalScore = student.scores.reduce<number>((sum, score) => sum + (score ?? 0), 0);
 
                   return (
                     <Table.Row key={student.name} className="hover:bg-muted/20">
@@ -121,7 +135,7 @@ export default function ViewGradeScoreModal({
                         const score = studentPaginatedScores[idx];
                         return (
                           <Table.Cell key={idx} className="text-center font-semibold tabular-nums">
-                            {score ?? 0}
+                            {score !== null && score !== undefined ? score : "—"}
                           </Table.Cell>
                         );
                       })}
