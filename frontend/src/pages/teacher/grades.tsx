@@ -1,21 +1,30 @@
+import { useEffect, useState } from "react";
 import GradeItemLine from "@/components/item-line/grade";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { useNavigate } from "react-router-dom";
-
-type Grade = {
-  section: string;
-  subject: string;
-};
-
-const grades: Grade[] = [
-  { section: "7 - Sapphire", subject: "Science" },
-  { section: "7 - Ruby", subject: "Math" },
-  { section: "7 - Gold", subject: "English" },
-];
+import { getTeacherClasses, type TeacherClassItem } from "@/lib/api";
 
 const Grades = () => {
   const navigate = useNavigate();
+  const [classes, setClasses] = useState<TeacherClassItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    getTeacherClasses()
+      .then((data) => {
+        if (!isMounted) return;
+        setClasses(data);
+      })
+      .catch((err) => console.error("Error loading teacher classes:", err))
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <AppLayout>
@@ -29,20 +38,28 @@ const Grades = () => {
               </div>
             </header>
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
-            <div className="flex flex-col gap-3">
-              {grades.map((grade) => (
-                <GradeItemLine
-                  key={grade.section}
-                  section={grade.section}
-                  subject={grade.subject}
-                  onClick={() =>
-                    navigate(
-                      `/teacher/grades/${encodeURIComponent(grade.section)}/${encodeURIComponent(grade.subject)}`,
-                    )
-                  }
-                />
-              ))}
-            </div>
+            {loading ? (
+              <div className="py-12 text-center text-sm text-gray-500">Loading grades...</div>
+            ) : classes.length === 0 ? (
+              <div className="py-12 text-center text-sm text-gray-500">No classes assigned.</div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {classes.map((item) => (
+                  <GradeItemLine
+                    key={`${item.class_id}-${item.subject_id}`}
+                    section={item.section_name}
+                    subject={item.subject_name}
+                    onClick={() =>
+                      navigate(
+                        `/teacher/grades/${encodeURIComponent(String(item.class_id))}/${encodeURIComponent(
+                          String(item.subject_id)
+                        )}`
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
