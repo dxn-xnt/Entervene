@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { BookOpen, ChevronDown, ChevronRight, Users } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { BookOpen, ChevronDown, Users } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
