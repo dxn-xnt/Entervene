@@ -10,10 +10,8 @@ import ClassItemLine from "@/components/item-line/class";
 import {
   getClasses,
   getSubjectDetail,
-  getSubjectOfferings,
   getSubjects,
   type SubjectListItem,
-  type SubjectOfferingListItem,
 } from "@/lib/api";
 import type { ClassListItem } from "@/types/adminClasses";
 import { OverviewCard } from "@/components/overview-cards";
@@ -23,19 +21,11 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat("en", { month: "long", day: "numeric", year: "numeric" }).format(new Date(value));
 }
 
-function pathwayLabel(value: string) {
-  if (value === "general") return "General";
-  if (value === "stem_medical") return "STEM Medical";
-  if (value === "stem_engineering") return "STEM Engineering";
-  return "Both";
-}
-
 export default function AdminSubjectView() {
   const { grade, subject } = useParams<{ grade: string; subject: string }>();
   const decodedGrade = decodeURIComponent(grade || "Grade 11");
   const decodedSubjectParam = decodeURIComponent(subject || "");
   const [subjectDetail, setSubjectDetail] = useState<SubjectListItem | null>(null);
-  const [offerings, setOfferings] = useState<SubjectOfferingListItem[]>([]);
   const [classesList, setClassesList] = useState<ClassListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,16 +48,7 @@ export default function AdminSubjectView() {
           throw new Error("Subject not found.");
         }
 
-        const [offeringData, classesData] = await Promise.all([
-          getSubjectOfferings({
-            search: loadedSubject.subject_codename || loadedSubject.subject_name,
-          }).catch(() => ({ subject_offerings: [] })),
-          getClasses("active").catch(() => ({ summary: { total_classes: 0, active_classes: 0, archived_classes: 0, students_assigned: 0 }, classes: [] })),
-        ]);
-
-        const matchingOfferings = offeringData.subject_offerings.filter(
-          (offering) => offering.subject.subject_id === loadedSubject.subject_id
-        );
+        const classesData = await getClasses("active").catch(() => ({ summary: { total_classes: 0, active_classes: 0, archived_classes: 0, students_assigned: 0 }, classes: [] }));
 
         const matchingClasses = classesData.classes.filter(
           (item) => item.academic_level.level_name.toLowerCase() === loadedSubject.academic_level.level_name.toLowerCase()
@@ -75,14 +56,12 @@ export default function AdminSubjectView() {
 
         if (isMounted) {
           setSubjectDetail(loadedSubject);
-          setOfferings(matchingOfferings);
           setClassesList(matchingClasses);
         }
       } catch (err) {
         if (isMounted) {
           setError(err instanceof Error ? err.message : "Unable to load subject.");
           setSubjectDetail(null);
-          setOfferings([]);
           setClassesList([]);
         }
       } finally {
