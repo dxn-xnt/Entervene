@@ -19,6 +19,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # 0. Drop old check constraints if present using IF EXISTS so transaction is preserved
+    op.execute("ALTER TABLE classwork DROP CONSTRAINT IF EXISTS classwork_classwork_category_check;")
+    op.execute("ALTER TABLE classwork DROP CONSTRAINT IF EXISTS ck_classwork_classwork_category;")
+
     # 1. Update data in classwork table
     op.execute(
         "UPDATE classwork SET classwork_category = 'QUARTERLY_ASSESSMENT' "
@@ -30,10 +34,7 @@ def upgrade() -> None:
         "WHERE component_type = 'PERIODICAL_ASSESSMENT'"
     )
     # 3. Drop old check constraint if it exists and create new check constraint
-    try:
-        op.drop_constraint('ck_assessment_item_component_type', 'assessment_item', type_='check')
-    except Exception:
-        pass
+    op.execute("ALTER TABLE assessment_item DROP CONSTRAINT IF EXISTS ck_assessment_item_component_type;")
 
     op.create_check_constraint(
         'ck_assessment_item_component_type',

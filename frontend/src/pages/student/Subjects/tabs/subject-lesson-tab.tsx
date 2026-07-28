@@ -8,7 +8,6 @@ import {
   BookOpen,
   FileText,
   Info,
-  X,
   CalendarDays,
   Paperclip,
 } from "lucide-react";
@@ -19,6 +18,7 @@ import { StudentLessonDetailScreen } from "@/components/student-lesson-detail-sc
 import { API_URL, apiFetch } from "@/lib/api";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
+import { Dialog } from "@/components/retroui/Dialog";
 import { SortButton } from "@/components/sort-button";
 import type { StudentLesson as Lesson } from "@/types/student-subject";
 
@@ -1596,34 +1596,32 @@ export default function SubjectLessonTab({
       )}
 
       {(selectedClasswork || detailLoadingId !== null || detailError) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/50 px-4 py-6">
-          <Card className="block w-full p-0">
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) closeClassworkDetail();
+          }}
+        >
+          <Dialog.Content size="3xl" className="max-h-[90vh] p-0">
             {/* Modal header */}
-            <div className="sticky top-0 flex items-center justify-between rounded-t-lg border-b border-black bg-[#F6E9B2] px-5 py-4">
+            <Dialog.Header position="fixed" className="bg-[#F6E9B2] px-5 py-4 text-black">
               <div>
                 <p className="text-xs">Student classwork detail</p>
                 <h2 className="text-xl font-bold">
                   {selectedClasswork?.title || "Classwork"}
                 </h2>
               </div>
-              <button
-                type="button"
-                onClick={closeClassworkDetail}
-                className="cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
+            </Dialog.Header>
 
             {/* Modal body */}
             {detailLoadingId !== null ? (
-              <div className="p-8 text-center text-sm font-semibold text-gray-600">
+              <Card className="m-5 block p-6 text-center text-sm font-semibold text-gray-600 shadow-none">
                 Loading classwork details...
-              </div>
+              </Card>
             ) : detailError ? (
-              <div className="m-5 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <Card className="m-5 block border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-none">
                 {detailError}
-              </div>
+              </Card>
             ) : selectedClasswork ? (
               <div className="grid max-h-[calc(90vh-88px)] min-w-0 gap-5 overflow-y-auto overflow-x-hidden p-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,1fr)]">
                 {/* Left: details */}
@@ -1631,16 +1629,16 @@ export default function SubjectLessonTab({
                   {/* Status + title card */}
                   <Card className="block w-full shadow-none">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-black bg-[#7ABA78] px-3 py-1 text-xs font-bold">
+                      <Badge variant="surface" size="sm" className="bg-[#7ABA78] text-black">
                         {selectedClasswork.classwork_type || "Classwork"}
-                      </span>
-                      <span className="rounded-full border border-gray-300 px-3 py-1 text-xs font-semibold capitalize">
+                      </Badge>
+                      <Badge variant="outline" size="sm" className="border-gray-300 capitalize">
                         {statusLabel(
                           selectedQuizAttempt?.status ??
                             selectedSubmission?.status ??
                             selectedClasswork.submission_status,
                         )}
-                      </span>
+                      </Badge>
                     </div>
                     <h3 className="mt-4 break-words text-3xl font-bold">
                       {selectedClasswork.title}
@@ -1910,8 +1908,8 @@ export default function SubjectLessonTab({
                 </Card>
               </div>
             ) : null}
-          </Card>
-        </div>
+          </Dialog.Content>
+        </Dialog>
       )}
     </div>
   );

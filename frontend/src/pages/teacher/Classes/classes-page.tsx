@@ -229,6 +229,7 @@ const ClassesPage = () => {
                 ) : (
                   groupedSubjectLoads.map((group) => (
                     <Card
+                      key={group.gradeLabel}
                       className="flex flex-col bg-primary"
                     >
                       <div className="flex items-center justify-between">

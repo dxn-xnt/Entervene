@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { routes } from "@/../routes";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -302,7 +301,8 @@ export function useLessonPlanner(planId?: number) {
       }
       if (!res.ok) throw new Error("Unable to submit plan.");
       toast.success("Lesson plan submitted successfully!");
-      navigate(routes.teacher.lessonPlanner);
+      // Navigation is intentionally deferred to the caller so exports
+      // can complete before the component unmounts.
       return { success: true };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Submission failed.";
@@ -312,7 +312,7 @@ export function useLessonPlanner(planId?: number) {
     } finally {
       setIsSubmitting(false);
     }
-  }, [draft, planId, navigate]);
+  }, [draft, planId]);
 
   return {
     draft,

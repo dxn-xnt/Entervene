@@ -98,8 +98,8 @@ export default function TodoView() {
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
-            <header className="flex items-center gap-3 pb-4 -mx-4 md:-mx-6 px-4 md:px-6 border-b border-gray-500">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
+            <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
               <Breadcrumb>
                 <Breadcrumb.List>
@@ -129,6 +129,8 @@ export default function TodoView() {
                 </Breadcrumb.List>
               </Breadcrumb>
             </header>
+
+            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
             <h2 className="text-xl md:text-2xl font-semibold">
               Topics to Review

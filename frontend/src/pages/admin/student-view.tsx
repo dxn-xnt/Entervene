@@ -32,7 +32,8 @@ export default function AdminStudentView() {
                                 </Breadcrumb.List>
                             </Breadcrumb>
                         </header>
-                        <div className="-mx-4 md:-mx-6 border-b border-black/40" />
+
+                        <div className="-mx-4 md:-mx-6 border-b" />
 
                         {/* Student Banner Card */}
                         <Card className="w-full flex flex-col p-6 border-2 border-black rounded-lg shadow-md bg-white">
