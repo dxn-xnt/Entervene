@@ -1,20 +1,19 @@
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.Base import Base
 
 class SubjectLoad(Base):
     __tablename__ = "subject_load"
-    __table_args__ = (
-        UniqueConstraint("staff_id", "subject_id", "class_id", "academic_period_id",
-                         name="uq_subject_load"),
-    )
 
     subject_load_id        = Column(Integer, primary_key=True, autoincrement=True)
-    staff_id               = Column(String(20), ForeignKey("academic_staff.staff_id"), nullable=False)
+    staff_id               = Column(String(20), ForeignKey("academic_staff.staff_id"), nullable=True)
     subject_id             = Column(Integer, ForeignKey("subject.subject_id"), nullable=False)
     class_id               = Column(Integer, ForeignKey("class.class_id"), nullable=False)
     academic_period_id     = Column(Integer, ForeignKey("academic_period.academic_period_id"), nullable=False)
+    start_time             = Column(String(10), nullable=True)
+    end_time               = Column(String(10), nullable=True)
+    days_of_week           = Column(JSON, nullable=True)
     status                 = Column(String(20), default="active")
     is_locked              = Column(Boolean, default=False)
     locked_at              = Column(DateTime(timezone=True), nullable=True)

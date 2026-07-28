@@ -1,5 +1,3 @@
-"use client";
-
 import { cn } from "@/lib/utils";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
@@ -57,6 +55,8 @@ const SelectContent = ({
   className,
   children,
   position = "popper",
+  side = "bottom",
+  sideOffset = 4,
   ...props
 }: SelectPrimitive.SelectContentProps) => {
   return (
@@ -69,6 +69,8 @@ const SelectContent = ({
           className,
         )}
         position={position}
+        side={side}
+        sideOffset={sideOffset}
         {...props}
       >
         <SelectPrimitive.ScrollUpButton className="flex cursor-default items-center justify-center py-1 text-muted-foreground">
@@ -76,6 +78,7 @@ const SelectContent = ({
         </SelectPrimitive.ScrollUpButton>
         <SelectPrimitive.Viewport
           className={cn(
+            "p-1 max-h-40 overflow-y-auto",
             position === "popper" &&
             "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]",
           )}
@@ -113,6 +116,7 @@ const SelectItem = ({
     </span>
   </SelectPrimitive.Item>
 );
+
 const SelectLabel = SelectPrimitive.Label;
 const SelectSeparator = SelectPrimitive.Separator;
 
