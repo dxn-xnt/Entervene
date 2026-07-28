@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Upload, X } from "lucide-react";
+import { Button } from "@/components/retroui/Button";
 
 interface SubmissionFormProps {
   assignmentId: number;
@@ -115,11 +116,10 @@ export default function SubmissionForm({
           id="file-input"
           disabled={isLoading || !canSubmitMore}
         />
-        <label
-          htmlFor="file-input"
-          className="items-center gap-1.5 rounded-lg border-2 border-black bg-[#7ABA78] px-4 py-2 text-sm font-semibold shadow-md hover:shadow-none transition-all cursor-pointer"
-        >
-          Select Files
+        <label htmlFor="file-input">
+          <Button asChild variant="default" size="md">
+            <span>Select Files</span>
+          </Button>
         </label>
       </div>
 
@@ -163,13 +163,15 @@ export default function SubmissionForm({
       )}
 
       {/* Submit Button */}
-      <button
+      <Button
         type="submit"
+        variant="default"
+        size="lg"
+        className="w-full"
         disabled={isLoading || !canSubmitMore || files.length === 0}
-        className="flex w-full items-center justify-center gap-1.5 rounded-lg border-2 border-black bg-[#7ABA78] px-4 py-2 text-sm font-semibold shadow-md transition-all hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isLoading ? "Submitting..." : "Submit Assignment"}
-      </button>
+      </Button>
     </form>
   );
 }
