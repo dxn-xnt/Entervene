@@ -537,7 +537,7 @@ export default function AddSubjectModal({ onCreated }: AddSubjectModalProps) {
           <Button variant="outline" disabled={isSaving}>Cancel</Button>
         </Dialog.Close>
         <Button onClick={handleSubmit} disabled={isSaving || isLoadingOptions}>
-          {isSaving ? "Adding..." : "Add Subject"}
+          Add Subject
         </Button>
       </Dialog.Footer>
     </Dialog.Content>
