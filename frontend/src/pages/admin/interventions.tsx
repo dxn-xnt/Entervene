@@ -151,7 +151,7 @@ export default function AdminInterventions() {
             <header className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
-                <h1 className="text-4xl font-black tracking-tight flex items-center gap-2 text-black">
+                <h1 className="text-4xl font-black  flex items-center gap-2 text-black">
                   <Shield className="size-8 text-black fill-yellow-300" />
                   Interventions Dashboard
                 </h1>

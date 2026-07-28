@@ -2,7 +2,10 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import Tabs from "@/components/tabs";
+import { Tabs } from "@/components/retroui/Tabs";
+import { Input } from "@/components/retroui/Input";
+import { Card } from "@/components/retroui/Card";
+import { Button } from "@/components/retroui/Button";
 import { Alert } from "@/components/retroui/Alert";
 import {
   BookOpen,
@@ -52,7 +55,9 @@ export const LessonPlannerListPage: React.FC = () => {
       const data = await res.json();
       setPlans(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load lesson plans.");
+      setError(
+        err instanceof Error ? err.message : "Unable to load lesson plans.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +69,8 @@ export const LessonPlannerListPage: React.FC = () => {
 
   const handleDelete = async (e: React.MouseEvent, planId: number) => {
     e.stopPropagation();
-    if (!window.confirm("Are you sure you want to delete this lesson plan?")) return;
+    if (!window.confirm("Are you sure you want to delete this lesson plan?"))
+      return;
 
     setDeletingId(planId);
     try {
@@ -86,14 +92,15 @@ export const LessonPlannerListPage: React.FC = () => {
       activeTab === "submitted"
         ? plan.status === "SUBMITTED"
         : activeTab === "drafts"
-        ? plan.status === "DRAFT"
-        : true;
+          ? plan.status === "DRAFT"
+          : true;
 
     const query = searchQuery.trim().toLowerCase();
     const matchesSearch =
       !query ||
       plan.title.toLowerCase().includes(query) ||
-      (plan.learning_area && plan.learning_area.toLowerCase().includes(query)) ||
+      (plan.learning_area &&
+        plan.learning_area.toLowerCase().includes(query)) ||
       (plan.grade_section && plan.grade_section.toLowerCase().includes(query));
 
     return matchesTab && matchesSearch;
@@ -103,35 +110,34 @@ export const LessonPlannerListPage: React.FC = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
-            {/* Header */}
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
             <header className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <div>
-                  <h1 className="text-2xl md:text-4xl font-semibold">
+                  <h1 className="text-2xl md:text-4xl font-bold">
                     Lesson Planner
                   </h1>
-                  <p className="text-xs md:text-sm text-gray-500 mt-0.5">
-                    ILAW (DO 016, s. 2026) · legacy DLP/DLL · SURY-assisted
-                  </p>
                 </div>
               </div>
 
-              <button
+              <Button
+                variant="default"
+                size="md"
                 onClick={() => navigate(routes.teacher.lessonPlannerCreate)}
-                className="flex items-center gap-1.5 rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-semibold text-black shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000]"
+                className="gap-1.5"
               >
                 <Plus className="size-4" />
-                <span className="hidden sm:inline">+ Create Lesson Plan</span>
+                <span className="hidden sm:inline">Create Lesson Plan</span>
                 <span className="sm:hidden">+</span>
-              </button>
+              </Button>
             </header>
 
-            {/* Navigation Tabs */}
-            <div className="-mx-4 md:-mx-6">
-              <Tabs tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
-            </div>
+            <Tabs
+              tabs={TABS}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+            />
 
             {/* Error Alert */}
             {error && (
@@ -141,46 +147,57 @@ export const LessonPlannerListPage: React.FC = () => {
               </Alert>
             )}
 
-            {/* Search Bar */}
-            <div className="flex items-center gap-2 rounded-lg border border-black bg-white px-3 py-2 md:w-96 shadow-[2px_2px_0_#000]">
-              <Search size={16} className="text-gray-500 shrink-0" />
-              <input
+            <label className="relative w-full md:w-96 shadow-md transition-shadow hover:shadow-none">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+
+              <Input
                 type="search"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-transparent text-sm outline-none placeholder:text-gray-500"
+                onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search lesson plans..."
+                className="h-10 w-full border-black pl-9 pr-3 shadow-none"
               />
-            </div>
+            </label>
 
             {/* Loading state */}
             {isLoading && (
               <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
                 <Loader2 className="size-7 animate-spin text-[#7ABA78]" />
-                <p className="text-sm font-medium">Loading your lesson plans…</p>
+                <p className="text-sm font-medium">
+                  Loading your lesson plans…
+                </p>
               </div>
             )}
 
             {/* Empty state */}
             {!isLoading && filteredPlans.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-16 px-4 text-center rounded-lg border border-black bg-white p-8 shadow-[3px_3px_0_#000]">
-                <div className="size-14 rounded-lg border border-black bg-[#E6F4EA] flex items-center justify-center text-emerald-800 mb-3 shadow-[2px_2px_0_#000]">
-                  <BookOpen className="size-7" />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900">No Lesson Plans Found</h3>
-                <p className="text-sm text-gray-500 max-w-md mt-1 mb-5">
-                  {searchQuery
-                    ? "No lesson plans match your search filter."
-                    : "Start structuring your lessons using the DepEd ILAW format with built-in AI assistance."}
-                </p>
-                <button
-                  onClick={() => navigate(routes.teacher.lessonPlannerCreate)}
-                  className="flex items-center gap-1.5 rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-semibold text-black shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000]"
-                >
-                  <Plus className="size-4" />
-                  <span>Create Lesson Plan</span>
-                </button>
-              </div>
+              <Card className="block w-full text-center border-black">
+                <Card.Content className="flex flex-col items-center py-10">
+                  <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-lg border-2 border-black">
+                    <BookOpen className="size-7" />
+                  </div>
+
+                  <Card.Title className="mb-2 text-xl">
+                    No Lesson Plans Found
+                  </Card.Title>
+
+                  <p className="mb-6 max-w-md text-sm text-gray-600">
+                    {searchQuery
+                      ? "No lesson plans match your search filter."
+                      : "Start structuring your lessons using the DepEd ILAW format with built-in AI assistance."}
+                  </p>
+
+                  <Button
+                    variant="default"
+                    size="md"
+                    onClick={() => navigate(routes.teacher.lessonPlannerCreate)}
+                    className="gap-2"
+                  >
+                    <Plus size={16} />
+                    <span>Create Lesson Plan</span>
+                  </Button>
+                </Card.Content>
+              </Card>
             )}
 
             {/* Lesson Plans List */}
@@ -189,7 +206,9 @@ export const LessonPlannerListPage: React.FC = () => {
                 {filteredPlans.map((plan) => (
                   <div
                     key={plan.plan_id}
-                    onClick={() => navigate(`/teacher/lesson-planner/${plan.plan_id}`)}
+                    onClick={() =>
+                      navigate(`/teacher/lesson-planner/${plan.plan_id}`)
+                    }
                     className="group flex items-center justify-between gap-4 p-4 rounded-lg border border-black bg-white shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000] cursor-pointer"
                   >
                     <div className="flex items-center gap-3.5 min-w-0 flex-1">
@@ -202,17 +221,28 @@ export const LessonPlannerListPage: React.FC = () => {
                           {plan.title || "Untitled Lesson Plan"}
                         </h2>
                         <div className="flex items-center gap-2 text-xs md:text-sm text-gray-500 flex-wrap mt-0.5">
-                          {plan.learning_area && <span>{plan.learning_area}</span>}
-                          {plan.learning_area && plan.grade_section && <span>&middot;</span>}
-                          {plan.grade_section && <span>{plan.grade_section}</span>}
-                          {(plan.date || plan.created_at) && <span>&middot;</span>}
+                          {plan.learning_area && (
+                            <span>{plan.learning_area}</span>
+                          )}
+                          {plan.learning_area && plan.grade_section && (
+                            <span>&middot;</span>
+                          )}
+                          {plan.grade_section && (
+                            <span>{plan.grade_section}</span>
+                          )}
+                          {(plan.date || plan.created_at) && (
+                            <span>&middot;</span>
+                          )}
                           {plan.date ? (
                             <span className="flex items-center gap-1">
                               <Calendar className="size-3 shrink-0" />
                               {plan.date}
                             </span>
                           ) : plan.created_at ? (
-                            <span>Created {new Date(plan.created_at).toLocaleDateString()}</span>
+                            <span>
+                              Created{" "}
+                              {new Date(plan.created_at).toLocaleDateString()}
+                            </span>
                           ) : null}
                         </div>
                       </div>
