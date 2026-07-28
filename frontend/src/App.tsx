@@ -12,10 +12,10 @@ import { NavigationProgress } from "./components/navigation-progress";
 // Admin pages
 import AdminDashboard from "./pages/admin/dashboard";
 import AdminSubjects from "./pages/admin/subjects";
-import AdminSubjectLevel from "./pages/admin/subject-level";
+import AdminSubjectLevel from "./pages/admin/subject-level-view";
 import AdminSubjectView from "./pages/admin/subject-view";
 import AdminClasses from "./pages/admin/classes";
-import AdminClassDetail from "./pages/admin/class-detail";
+import AdminClassDetail from "./pages/admin/class-view";
 import AdminUsers from "./pages/admin/users";
 import AdminUserDetail from "./pages/admin/user-detail";
 import AdminInterventions from "./pages/admin/interventions";
