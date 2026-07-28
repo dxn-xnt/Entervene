@@ -41,6 +41,7 @@ interface LessonClasswork {
   classwork_id: number;
   title: string;
   classwork_type?: string | null;
+  classwork_category?: string | null;
   total_points?: number | null;
   due_date?: string | null;
   allow_late_submissions?: boolean;
@@ -634,7 +635,7 @@ export default function SubjectLessonTab({
     };
   }, [isQuizFullscreen, selectedClasswork]);
 
-  const openClassworkDetail = async (cw: LessonClasswork) => {
+  const openClassworkDetail = async (cw: LessonClasswork | ClassworkDetail) => {
     setDetailLoadingId(cw.classwork_assignment_id);
     setDetailError("");
     try {
@@ -1155,24 +1156,14 @@ export default function SubjectLessonTab({
     return counts;
   }, new Map<number, number>());
 
-  const multiLessonClassworks = Array.from(
-    new Map(
-      allClassworks
-        .filter(
-          (classwork) =>
-            isQuizType(classwork.classwork_type) &&
-            (classworkLessonCounts.get(classwork.classwork_assignment_id) ??
-              0) > 1,
-        )
-        .map((classwork) => [classwork.classwork_assignment_id, classwork]),
-    ).values(),
-  );
-
   const quarterlyAssessments = Array.from(
-    new Map([
+    new Map<number, LessonClasswork | ClassworkDetail>([
       ...subjectAssignments
         .filter((cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT")
-        .map((cw) => [cw.classwork_assignment_id, cw]),
+        .map((cw): [number, LessonClasswork | ClassworkDetail] => [
+          cw.classwork_assignment_id,
+          cw,
+        ]),
       ...allClassworks
         .filter(
           (cw) =>
@@ -1180,7 +1171,10 @@ export default function SubjectLessonTab({
             (isQuizType(cw.classwork_type) &&
               (classworkLessonCounts.get(cw.classwork_assignment_id) ?? 0) > 1),
         )
-        .map((cw) => [cw.classwork_assignment_id, cw]),
+        .map((cw): [number, LessonClasswork | ClassworkDetail] => [
+          cw.classwork_assignment_id,
+          cw,
+        ]),
     ]).values(),
   );
 
@@ -1359,7 +1353,7 @@ export default function SubjectLessonTab({
                     <button
                       key={`qa-${cw.classwork_assignment_id}`}
                       type="button"
-                      onClick={() => openClassworkDetail(cw as any)}
+                      onClick={() => openClassworkDetail(cw)}
                       disabled={isLoading}
                       className="w-full rounded-lg border border-black bg-white px-5 py-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between gap-4 hover:bg-gray-50 transition-all text-left"
                     >
