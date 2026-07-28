@@ -30,7 +30,7 @@ const Grades = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
               <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
@@ -38,7 +38,7 @@ const Grades = () => {
               </h1>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b border-gray-500" />
+            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               <div className="border-2 border-black p-4 shadow-md bg-card">
