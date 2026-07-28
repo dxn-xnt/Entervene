@@ -58,9 +58,9 @@ import StudentNotifications from "./pages/student/notifications";
 import AdminStudentView from "./pages/admin/student-view";
 
 // TEMP
-import StudentQuizTake from "./pages/student/quiz-interface";
-import StudentQuizView from "./pages/student/quiz-view";
-import StudentQuizResult from "./pages/student/quiz-result";
+import StudentQuizTake from "./pages/quiz/quiz-interface";
+import StudentQuizView from "./pages/quiz/quiz-view";
+import StudentQuizResult from "./pages/quiz/quiz-result";
 
 // // Layouts
 // import TeacherLayout from "./pages/teacher/TeacherLayout";
