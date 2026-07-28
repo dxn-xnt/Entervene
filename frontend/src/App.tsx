@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { SettingsProvider } from "./context/SettingsContext";
 import ProtectedRoute from "./components/protected-route";
 import Login from "./pages/Login";
 import { routes } from "@/../routes";
@@ -68,6 +69,7 @@ import StudentQuizResult from "./pages/student/quiz-result";
 
 const App = () => {
   return (
+    <SettingsProvider>
     <AuthProvider>
       <BrowserRouter>
         <NavigationProgress />
@@ -148,6 +150,7 @@ const App = () => {
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </SettingsProvider>
   );
 };
 

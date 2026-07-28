@@ -1,6 +1,6 @@
 import { Button } from "@/components/retroui/Button";
 import { Card as RetroCard } from "@/components/retroui/Card";
-import { Archive, Pencil, RotateCcw } from "lucide-react";
+import { Archive, Lock, Pencil, RotateCcw } from "lucide-react";
 import type { GradingTemplateListItem } from "@/lib/api";
 import { scopeLabel, statusBadge } from "./subject-utils";
 
@@ -19,27 +19,40 @@ export function GradingTemplateRow({
   readOnly?: boolean;
   readOnlyReason?: string;
 }) {
+  const assignedCount = template.assigned_subjects?.length ?? (template.subject ? 1 : 0);
+  const assignedSubjects = template.assigned_subjects ?? (template.subject ? [template.subject] : []);
+
   return (
     <RetroCard className="p-3">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-bold">{template.template_name}</p>
+            <p className="font-bold text-base">{template.template_name}</p>
             {statusBadge(template.status)}
+            {template.is_locked ? (
+              <span className="inline-flex items-center gap-1 rounded-md border border-amber-600 bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">
+                <Lock className="size-3" /> Term Started (Formula Locked)
+              </span>
+            ) : null}
           </div>
           <div className="mt-2 grid grid-cols-1 gap-1 text-sm md:grid-cols-2">
             <span><strong>Academic scope:</strong> {template.academic_level?.level_name ?? "Any level"}</span>
-            <span><strong>Subject scope:</strong> {template.subject?.subject_name ?? "Any subject"}</span>
+            <span>
+              <strong>Assigned subjects ({assignedCount}):</strong>{" "}
+              {assignedSubjects.length > 0
+                ? assignedSubjects.map((s) => s.subject_name).join(", ")
+                : "General / Default template"}
+            </span>
             <span><strong>Total weight:</strong> {template.total_weight}%</span>
             <span><strong>Components:</strong> {template.component_count}</span>
           </div>
           <p className="sr-only">{scopeLabel(template)}</p>
-          {template.description ? <p className="text-xs text-muted-foreground">{template.description}</p> : null}
+          {template.description ? <p className="text-xs text-muted-foreground mt-1">{template.description}</p> : null}
           <div className="mt-2 flex flex-wrap gap-2">
             {template.components.map((component) => (
               <span
                 key={component.component_id}
-                className="rounded-full border border-black px-2 py-1 text-xs font-semibold"
+                className="rounded-full border border-black bg-white px-2.5 py-0.5 text-xs font-semibold"
               >
                 {component.component_name}: {component.weight}%
               </span>

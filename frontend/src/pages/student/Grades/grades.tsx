@@ -1,5 +1,4 @@
 import { useState } from "react";
-import SubjectCardHeader from "../../../components/subject-card-header";
 import { Card } from "@/components/retroui/Card";
 import SubjectGrade from "./subject-grade";
 import AppLayout from "@/layouts/app-layout";

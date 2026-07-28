@@ -20,6 +20,7 @@ from app.api.v1.routes.Classes import router as classes_router
 from app.api.v1.routes.Subjects import router as subjects_router
 from app.api.v1.routes.SubjectOfferings import router as subject_offerings_router
 from app.api.v1.routes.GradingTemplates import router as grading_templates_router
+from app.api.v1.routes.Settings import router as settings_router
 from app.services.classes.ClassShared import ClassManagementError, class_management_error_handler
 
 app = FastAPI(
@@ -75,6 +76,24 @@ app.include_router(classes_router,     prefix="/api/v1/classes",               t
 app.include_router(subjects_router,    prefix="/api/v1/subjects",              tags=["Subjects"])
 app.include_router(subject_offerings_router, prefix="/api/v1/subject-offerings", tags=["Subject Offerings"])
 app.include_router(grading_templates_router, prefix="/api/v1/grading-templates", tags=["Grading Templates"])
+app.include_router(settings_router, prefix="/api/v1/settings", tags=["Settings"])
+
+
+@app.on_event("startup")
+def warm_settings_cache():
+    """Load all settings into the in-memory cache on startup."""
+    import logging
+    from app.core.SettingsCache import settings_cache
+    from app.db.Session import SessionLocal
+    logger = logging.getLogger(__name__)
+    db = SessionLocal()
+    try:
+        settings_cache.load_all(db)
+        logger.info("Settings cache warmed on startup.")
+    except Exception:
+        logger.warning("Could not warm settings cache (table may not exist yet).")
+    finally:
+        db.close()
 
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):

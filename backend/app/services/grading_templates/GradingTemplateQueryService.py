@@ -88,7 +88,7 @@ def list_grading_templates_data(
             "active_templates": sum(1 for item in all_templates if (item.status or DEFAULT_GRADING_TEMPLATE_STATUS).casefold() == "active"),
             "archived_templates": sum(1 for item in all_templates if (item.status or "").casefold() == "archived"),
         },
-        "grading_templates": [template_to_item(template) for template in templates],
+        "grading_templates": [template_to_item(template, db) for template in templates],
     }
 
 
@@ -106,4 +106,4 @@ def get_grading_template_detail_data(db: Session, grading_template_id: int) -> d
     if template is None:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Grading template not found.")
-    return template_to_item(template)
+    return template_to_item(template, db)

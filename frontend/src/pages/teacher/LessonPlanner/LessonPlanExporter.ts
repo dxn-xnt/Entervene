@@ -14,13 +14,13 @@ function formatFlow(flow: LessonPlanDraft["learning_experience"]["flow"]): strin
 
   let out = "";
   if (before.length > 0) {
-    out += "**Before (Engage):**\n" + before.map((b, i) => `* ${b.description}`).join("\n") + "\n\n";
+    out += "**Before (Engage):**\n" + before.map((b) => `* ${b.description}`).join("\n") + "\n\n";
   }
   if (during.length > 0) {
-    out += "**During (Explore & Explain):**\n" + during.map((d, i) => `* ${d.description}`).join("\n") + "\n\n";
+    out += "**During (Explore & Explain):**\n" + during.map((d) => `* ${d.description}`).join("\n") + "\n\n";
   }
   if (after.length > 0) {
-    out += "**After (Consolidate & Evaluate):**\n" + after.map((a, i) => `* ${a.description}`).join("\n");
+    out += "**After (Consolidate & Evaluate):**\n" + after.map((a) => `* ${a.description}`).join("\n");
   }
   return out.trim();
 }

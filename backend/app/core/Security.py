@@ -32,11 +32,19 @@ def create_token(user_id: str, role: str, token_type: str, expires_delta: timede
 
 
 def create_access_token(user_id: str, role: str) -> str:
+    # Lazy import to avoid circular dependency (SettingsCache → models → …)
+    from app.core.SettingsCache import settings_cache
+
+    # Dynamically fetch the TTL from the admin-configurable settings.
+    # settings_cache.get() auto-parses "integer" type → returns int.
+    # Falls back to 30 if the setting is missing (pre-migration or unseeded).
+    ttl_minutes: int = settings_cache.get("session_timeout_minutes", default=30)
+
     return create_token(
         user_id,
         role,
         "access",
-        timedelta(minutes=settings.access_token_expire_minutes),
+        timedelta(minutes=ttl_minutes),
     )
 
 
