@@ -63,6 +63,7 @@ export type ClassListItem = {
   class_id: number;
   section_name: string;
   class_status: string;
+  pathway?: string;
   academic_year: ClassListAcademicYear;
   academic_level: ClassListAcademicLevel;
   adviser: ClassListAdviser | null;
@@ -94,6 +95,7 @@ export type ClassDetailResponse = {
   class_id: number;
   section_name: string;
   class_status: string;
+  pathway?: string;
   created_at: string | null;
   academic_year: AcademicYearOption;
   academic_level: AcademicLevelOption;
@@ -233,6 +235,7 @@ export type ManualSectionDraft = {
   sectionName: string;
   adviserStaffId: string;
   adviserName?: string;
+  pathway?: string;
 };
 
 export type ManualClassSetup = {
@@ -270,6 +273,7 @@ export type ManualAssignmentWorkspaceState = {
 export type BatchCreateSectionRequest = {
   section_name: string;
   adviser_staff_id: string;
+  pathway?: string;
   student_ids: string[];
 };
 
@@ -282,6 +286,7 @@ export type CreatedClassItem = {
   class_id: number;
   section_name: string;
   adviser_staff_id: string;
+  pathway?: string;
   student_count: number;
 };
 
@@ -327,6 +332,7 @@ export type ValidatedImportStudent = {
 
 export type ValidatedImportSection = {
   section_name: string;
+  pathway?: string;
   adviser: ValidatedImportAdviser;
   students: ValidatedImportStudent[];
 };

@@ -115,6 +115,9 @@ def update_class_record(
                 )
             class_.adviser_staff_id = adviser_staff_id
 
+    if "pathway" in changes and changes["pathway"]:
+        class_.pathway = changes["pathway"]
+
     try:
         db.commit()
     except Exception:
@@ -285,6 +288,7 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                     "section_name": section_name,
                     "section_key": section_key,
                     "adviser_staff_id": adviser_id,
+                    "pathway": getattr(section, "pathway", "general") or "general",
                     "student_ids": section_student_ids,
                 }
             )
@@ -299,34 +303,26 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                 .all()
             )
         }
-        for section in normalized_sections:
-            if section["section_key"] and section["section_key"] in existing_section_names:
+
+        for index, section in enumerate(normalized_sections):
+            if section["section_key"] in existing_section_names:
                 errors.append(
                     _request_validation_error(
                         "section_already_exists",
                         f'Section "{section["section_name"]}" already exists for the selected academic level and active academic year.',
-                        "sections",
+                        f"sections.{index}.section_name",
                     )
                 )
 
-        advisers = {
-            adviser.staff_id: adviser
-            for adviser in (
-                db.query(AcademicStaff)
-                .filter(AcademicStaff.staff_id.in_(adviser_ids))
-                .all()
-            )
-        } if adviser_ids else {}
         eligible_adviser_ids = {
             adviser.staff_id
-            for adviser in (
-                eligible_advisers_query(db)
-                .filter(AcademicStaff.staff_id.in_(adviser_ids))
-                .all()
-            )
+            for adviser in eligible_advisers_query(db).filter(AcademicStaff.staff_id.in_(adviser_ids)).all()
         } if adviser_ids else set()
-        for section in normalized_sections:
-            adviser_id = section["adviser_staff_id"]
+        advisers = {
+            adviser.staff_id: adviser
+            for adviser in db.query(AcademicStaff).filter(AcademicStaff.staff_id.in_(adviser_ids)).all()
+        } if adviser_ids else {}
+        for adviser_id in sorted(adviser_ids):
             if not adviser_id:
                 continue
             if adviser_id not in advisers:
@@ -425,6 +421,7 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                 academic_year_id=academic_year.academic_year_id,
                 academic_level_id=academic_level.academic_level_id,
                 academic_period_id=None,
+                pathway=section.get("pathway", "general"),
                 class_status="active",
             )
             db.add(class_)
@@ -446,6 +443,7 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                     "class_id": class_.class_id,
                     "section_name": class_.section_name,
                     "adviser_staff_id": class_.adviser_staff_id,
+                    "pathway": class_.pathway or "general",
                     "student_count": len(section["student_ids"]),
                 }
                 for class_, section in created

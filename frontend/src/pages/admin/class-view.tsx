@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { BookOpen, ChevronDown, Pencil, Plus, Users } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";

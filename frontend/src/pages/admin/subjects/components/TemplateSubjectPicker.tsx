@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, Plus, Search, X } from "lucide-react";
+import { Check, Search, X } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";

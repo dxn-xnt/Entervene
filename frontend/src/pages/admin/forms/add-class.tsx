@@ -404,6 +404,7 @@ function buildBatchCreatePayload(setup: ManualClassSetup, assignmentState: Manua
     return {
       section_name: sectionName,
       adviser_staff_id: adviserStaffId,
+      pathway: section.pathway || "general",
       student_ids: submittedStudentIds,
     };
   });

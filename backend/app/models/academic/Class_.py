@@ -19,6 +19,7 @@ class Class(Base):
     academic_year_id   = Column(Integer, ForeignKey("academic_year.academic_year_id"), nullable=False)
     academic_level_id  = Column(Integer, ForeignKey("academic_level.academic_level_id"), nullable=False)
     academic_period_id = Column(Integer, ForeignKey("academic_period.academic_period_id"), nullable=True)
+    pathway            = Column(String(30), nullable=False, default="general")
     created_at         = Column(DateTime(timezone=True), server_default=func.now())
     updated_at         = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

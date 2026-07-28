@@ -29,6 +29,7 @@ from app.services.classes.ClassShared import (
 CLASS_IMPORT_HEADERS = [
     "section_name",
     "grade_level",
+    "pathway",
     "adviser_staff_id",
     "adviser_first_name",
     "adviser_middle_name",
@@ -40,6 +41,24 @@ CLASS_IMPORT_HEADERS = [
     "student_gender",
 ]
 SCIENTIFIC_NOTATION_PATTERN = re.compile(r"^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$")
+
+
+def normalize_import_pathway(raw: str | None, grade_level: int) -> tuple[str | None, str | None]:
+    cleaned = normalized_text(raw).casefold()
+    if grade_level <= 10:
+        if cleaned and cleaned not in {"general", ""}:
+            return None, "Grades 7 to 10 must use 'general' pathway."
+        return "general", None
+
+    if not cleaned:
+        return None, f"Pathway is required for Grade {grade_level} (must be 'stem_medical' or 'stem_engineering')."
+
+    if cleaned in {"stem_medical", "medical", "med", "stem medical"}:
+        return "stem_medical", None
+    if cleaned in {"stem_engineering", "engineering", "eng", "stem engineering"}:
+        return "stem_engineering", None
+
+    return None, f'Invalid pathway "{raw}" for Grade {grade_level}. Allowed values: stem_medical, stem_engineering.'
 
 
 def normalized_import_row(row: dict[str, Any]) -> tuple[str, ...]:
@@ -259,6 +278,11 @@ async def validate_class_import_file(
                 "grade_level",
             ))
 
+        raw_pathway = readable_text(row.get("pathway"))
+        pathway_val, pathway_err = normalize_import_pathway(raw_pathway, academic_level.grade_level)
+        if pathway_err:
+            errors.append(csv_validation_error("invalid_pathway", pathway_err, row_number, "pathway"))
+
         adviser_id = readable_text(row["adviser_staff_id"])
         adviser = advisers.get(adviser_id)
         if not adviser_id:
@@ -300,6 +324,7 @@ async def validate_class_import_file(
                 imported_adviser_sections[adviser_id] = section_key
             section = grouped.setdefault(section_key, {
                 "section_name": section_name,
+                "pathway": pathway_val or "general",
                 "adviser_signature": adviser_signature,
                 "adviser": adviser,
                 "students": [],
@@ -310,6 +335,13 @@ async def validate_class_import_file(
                     f'Section "{section["section_name"]}" uses conflicting adviser information.',
                     row_number,
                     "adviser_staff_id",
+                ))
+            if pathway_val and section.get("pathway") != pathway_val:
+                errors.append(csv_validation_error(
+                    "conflicting_section_pathway",
+                    f'Section "{section["section_name"]}" uses conflicting pathway values in CSV.',
+                    row_number,
+                    "pathway",
                 ))
 
         student_lrn = readable_text(row["student_lrn"])
@@ -360,6 +392,7 @@ async def validate_class_import_file(
         section_students = sorted(section["students"], key=student_sort_key)
         sections.append({
             "section_name": section["section_name"],
+            "pathway": section.get("pathway", "general"),
             "adviser": {
                 "staff_id": adviser.staff_id,
                 "first_name": adviser.first_name,
