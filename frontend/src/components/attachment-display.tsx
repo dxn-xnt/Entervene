@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Download, FileText, File, X } from "lucide-react";
 import PDFViewer from "./pdf-viewer";
 import { apiFetch } from "@/lib/api";
+import { Button } from "@/components/retroui/Button";
 
 interface Attachment {
   classwork_attachment_id?: number;
@@ -35,9 +36,14 @@ export default function AttachmentDisplay({
   const [selectedPdf, setSelectedPdf] = useState<string | null>(null);
   const [selectedPdfName, setSelectedPdfName] = useState<string>("");
   const [selectedPdfDownload, setSelectedPdfDownload] = useState<string>("");
-  const [selectedImage, setSelectedImage] = useState<{ url: string; name: string } | null>(null);
+  const [selectedImage, setSelectedImage] = useState<{
+    url: string;
+    name: string;
+  } | null>(null);
   const [imageLoadingName, setImageLoadingName] = useState<string | null>(null);
-  const [downloadLoadingName, setDownloadLoadingName] = useState<string | null>(null);
+  const [downloadLoadingName, setDownloadLoadingName] = useState<string | null>(
+    null,
+  );
   const [previewError, setPreviewError] = useState("");
 
   useEffect(() => {
@@ -66,7 +72,7 @@ export default function AttachmentDisplay({
   const isImage = (attachment: Attachment): boolean => {
     return Boolean(
       attachment.file_type?.startsWith("image/") ||
-      /\.(jpe?g|png)$/i.test(attachment.file_name)
+      /\.(jpe?g|png)$/i.test(attachment.file_name),
     );
   };
 
@@ -101,7 +107,9 @@ export default function AttachmentDisplay({
       setSelectedPdfName(attachment.file_name);
       setSelectedPdfDownload(blobUrl);
     } catch (error) {
-      setPreviewError(error instanceof Error ? error.message : "The PDF could not be loaded.");
+      setPreviewError(
+        error instanceof Error ? error.message : "The PDF could not be loaded.",
+      );
     } finally {
       setImageLoadingName(null);
     }
@@ -137,7 +145,11 @@ export default function AttachmentDisplay({
         name: attachment.file_name,
       });
     } catch (error) {
-      setPreviewError(error instanceof Error ? error.message : "The image could not be loaded.");
+      setPreviewError(
+        error instanceof Error
+          ? error.message
+          : "The image could not be loaded.",
+      );
     } finally {
       setImageLoadingName(null);
     }
@@ -159,7 +171,11 @@ export default function AttachmentDisplay({
       link.click();
       URL.revokeObjectURL(blobUrl);
     } catch (error) {
-      setPreviewError(error instanceof Error ? error.message : "The file could not be downloaded.");
+      setPreviewError(
+        error instanceof Error
+          ? error.message
+          : "The file could not be downloaded.",
+      );
     } finally {
       setDownloadLoadingName(null);
     }
@@ -174,7 +190,8 @@ export default function AttachmentDisplay({
             downloadUrl={selectedPdfDownload}
             fileName={selectedPdfName}
             onClose={() => {
-              if (selectedPdf.startsWith("blob:")) URL.revokeObjectURL(selectedPdf);
+              if (selectedPdf.startsWith("blob:"))
+                URL.revokeObjectURL(selectedPdf);
               setSelectedPdf(null);
               setSelectedPdfDownload("");
             }}
@@ -196,7 +213,11 @@ export default function AttachmentDisplay({
             </button>
           </div>
           <div className="flex max-h-[70vh] items-center justify-center overflow-auto p-4">
-            <img src={selectedImage.url} alt={selectedImage.name} className="max-h-[65vh] max-w-full object-contain" />
+            <img
+              src={selectedImage.url}
+              alt={selectedImage.name}
+              className="max-h-[65vh] max-w-full object-contain"
+            />
           </div>
         </div>
       )}
@@ -224,12 +245,18 @@ export default function AttachmentDisplay({
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     {isPdfFile ? (
-                      <FileText className="text-red-500 flex-shrink-0" size={20} />
+                      <FileText
+                        className="text-red-500 flex-shrink-0"
+                        size={20}
+                      />
                     ) : (
                       <File className="text-blue-500 flex-shrink-0" size={20} />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="truncate text-sm font-medium" title={attachment.file_name}>
+                      <p
+                        className="truncate text-sm font-medium"
+                        title={attachment.file_name}
+                      >
                         {attachment.file_name}
                       </p>
                       <p className="text-xs text-gray-500">
@@ -240,28 +267,35 @@ export default function AttachmentDisplay({
 
                   <div className="flex shrink-0 flex-wrap gap-2 sm:ml-2 sm:justify-end">
                     {(isPdfFile || isImageFile) && url && (
-                      <button
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
                         onClick={() =>
                           isPdfFile
                             ? handleOpenPdf(attachment)
                             : handleOpenImage(attachment)
                         }
                         disabled={imageLoadingName === attachment.file_name}
-                        className="px-4 py-2 text-sm border rounded-lg cursor-pointer"
                       >
-                        {imageLoadingName === attachment.file_name ? "Loading..." : "View"}
-                      </button>
+                        {imageLoadingName === attachment.file_name
+                          ? "Loading..."
+                          : "View"}
+                      </Button>
                     )}
                     {url && (
-                      <button
+                      <Button
                         type="button"
+                        size="sm"
                         onClick={() => handleDownload(attachment)}
                         disabled={downloadLoadingName === attachment.file_name}
-                        className="flex items-center gap-1.5 rounded-lg border border-black bg-[#7ABA78] px-2 py-2 text-sm cursor-pointer"
+                        className="gap-1.5"
                       >
                         <Download size={14} />
-                        {downloadLoadingName === attachment.file_name ? "Downloading..." : "Download"}
-                      </button>
+                        {downloadLoadingName === attachment.file_name
+                          ? "Downloading..."
+                          : "Download"}
+                      </Button>
                     )}
                   </div>
                 </div>
