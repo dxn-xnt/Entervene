@@ -1,12 +1,15 @@
-   "use client";
+"use client";
 
 import React, { useRef, useState } from "react";
 import { Download, FileSpreadsheet, UserPlus, Upload } from "lucide-react";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
+import { Input } from "@/components/retroui/Input";
+import { Select } from "@/components/retroui/Select";
 import { apiFetch } from "@/lib/api";
 import type { InviteUserPayload } from "@/lib/api";
+import { DialogueSelect } from "@/components/dialogue-select";
 import { cn } from "@/lib/utils";
 
 type Step = "choose" | "import" | "manual";
@@ -467,51 +470,38 @@ export default function AddUserModal({
   const hasImportErrors = Boolean(importResult?.errors?.length);
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }}>
-      <Dialog.Content size="auto" className="w-full max-w-md overflow-hidden border-2 border-black shadow-[6px_7px_0_#000] p-0 font-sans">
-        <Dialog.Header className="px-5 py-3.5 border-b-2 border-black bg-primary text-primary-foreground font-head flex items-center justify-between">
-          <span className="font-bold text-lg">
-            {step === "choose" && "Add New Users"}
-            {step === "import" && "Import Users from File"}
-            {step === "manual" && "Create User Manually"}
-          </span>
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }} >
+      <Dialog.Content size="md" className="w-full overflow-hidden font-sans">
+        <Dialog.Header asChild className="bg-primary text-primary-foreground font-head flex items-center justify-between">
+          <div>
+            <span className="font-bold text-lg">
+              {step === "choose" && "Add New Users"}
+              {step === "import" && "Import Users from File"}
+              {step === "manual" && "Create User Manually"}
+            </span>
+          </div>
         </Dialog.Header>
 
         {/* ── STEP: CHOOSE ─────────────────────────────────── */}
         {step === "choose" && (
           <>
             <div className="grid grid-cols-2 gap-4 p-5">
-              <button
-                type="button"
+              <DialogueSelect
+                icon={FileSpreadsheet}
+                title="Import file"
+                description="Upload a CSV file to add multiple users at once."
                 onClick={() => setStep("import")}
-                className="group relative flex flex-col gap-2 rounded-md border-2 border-black bg-primary/20 p-4 text-left shadow-[4px_4px_0_#000] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none cursor-pointer"
-              >
-                <div className="flex items-center gap-2 font-bold text-base text-foreground">
-                  <FileSpreadsheet className="size-5 shrink-0 text-primary" />
-                  Import file
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Upload a CSV file to add multiple users at once.
-                </p>
-              </button>
-
-              <button
-                type="button"
+              />
+              <DialogueSelect
+                icon={UserPlus}
+                title="Create manual"
+                description="Add individual user accounts one at a time."
                 onClick={() => setStep("manual")}
-                className="group relative flex flex-col gap-2 rounded-md border-2 border-black bg-primary/20 p-4 text-left shadow-[4px_4px_0_#000] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-none cursor-pointer"
-              >
-                <div className="flex items-center gap-2 font-bold text-base text-foreground">
-                  <UserPlus className="size-5 shrink-0 text-primary" />
-                  Create manual
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Add individual user accounts one at a time.
-                </p>
-              </button>
+              />
             </div>
 
-            <Dialog.Footer className="flex justify-end border-t-2 border-black px-5 py-3 bg-background">
-              <Button variant="outline" size="sm" onClick={handleClose}>
+            <Dialog.Footer>
+              <Button variant="outline" onClick={handleClose}>
                 Cancel
               </Button>
             </Dialog.Footer>
@@ -523,16 +513,15 @@ export default function AddUserModal({
           <>
             <div className="flex flex-col gap-4 p-5">
               <Field label="Role for imported users">
-                <select
-                  value={importRole}
-                  onChange={(e) =>
-                    handleImportRoleChange(e.target.value as ImportRole)
-                  }
-                  className="w-full h-9 rounded border-2 border-black bg-background px-3 text-sm font-medium shadow-[2px_2px_0_#000] focus:outline-none cursor-pointer"
-                >
-                  <option value="Teacher">Teacher</option>
-                  <option value="Student">Student</option>
-                </select>
+                <Select value={importRole} onValueChange={(val) => handleImportRoleChange(val as ImportRole)}>
+                  <Select.Trigger className="w-full">
+                    <Select.Value />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Item value="Teacher">Teacher</Select.Item>
+                    <Select.Item value="Student">Student</Select.Item>
+                  </Select.Content>
+                </Select>
               </Field>
 
               <div className="flex items-center justify-between rounded border-2 border-black bg-muted/40 p-3 shadow-[2px_2px_0_#000]">
@@ -542,7 +531,6 @@ export default function AddUserModal({
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
                   className="gap-1.5 bg-background hover:bg-accent"
                   onClick={() => downloadCsvTemplate(importRole)}
                 >
@@ -641,16 +629,15 @@ export default function AddUserModal({
             </div>
 
             <Dialog.Footer className="flex justify-end border-t-2 border-black px-5 py-3 bg-background gap-2">
-              <Button variant="outline" size="sm" onClick={() => setStep("choose")}>
+              <Button variant="outline" onClick={() => setStep("choose")}>
                 Back
               </Button>
               <Button
                 variant="default"
-                size="sm"
                 disabled={!uploadedFile || importing || hasImportErrors}
                 onClick={handleImportSubmit}
               >
-                {importing ? "Importing..." : "Import Users"}
+                Import Users
               </Button>
             </Dialog.Footer>
           </>
@@ -661,83 +648,90 @@ export default function AddUserModal({
           <>
             <div className="p-5 flex flex-col gap-3.5 max-h-[60vh] overflow-y-auto">
               <Field label="Role">
-                <select
-                  value={form.role}
-                  onChange={(e) => handleField("role", e.target.value as Role)}
-                  className="w-full h-9 rounded border-2 border-black bg-background px-3 text-sm font-medium shadow-[2px_2px_0_#000] focus:outline-none cursor-pointer"
-                >
-                  <option>Teacher</option>
-                  <option>Student</option>
-                  <option>Admin</option>
-                </select>
+                <Select value={form.role} onValueChange={(val) => handleField("role", val)}>
+                  <Select.Trigger className="w-full">
+                    <Select.Value />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Item value="Teacher">Teacher</Select.Item>
+                    <Select.Item value="Student">Student</Select.Item>
+                    <Select.Item value="Admin">Admin</Select.Item>
+                  </Select.Content>
+                </Select>
               </Field>
 
               <div className="grid grid-cols-2 gap-3">
                 <Field label="First Name">
-                  <FormInput
+                  <Input
                     placeholder="John"
                     value={form.firstName}
                     onChange={(e) => handleField("firstName", e.target.value)}
+                    className="w-full bg-background border-2 border-black"
                   />
                 </Field>
                 <Field label="Last Name">
-                  <FormInput
+                  <Input
                     placeholder="Doe"
                     value={form.lastName}
                     onChange={(e) => handleField("lastName", e.target.value)}
+                    className="w-full bg-background border-2 border-black"
                   />
                 </Field>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Middle Name">
-                  <FormInput
+                  <Input
                     placeholder="(optional)"
                     value={form.middleName}
                     onChange={(e) => handleField("middleName", e.target.value)}
+                    className="w-full bg-background border-2 border-black"
                   />
                 </Field>
                 {(isStudent || !isAdmin) && (
                   <Field label="Suffix">
-                    <FormInput
+                    <Input
                       placeholder="Jr., Sr., III…"
                       value={form.suffix}
                       onChange={(e) => handleField("suffix", e.target.value)}
+                      className="w-full bg-background border-2 border-black"
                     />
                   </Field>
                 )}
               </div>
 
               <Field label="Email Address">
-                <FormInput
+                <Input
                   type="email"
                   placeholder="john@example.com"
                   value={form.email}
                   onChange={(e) => handleField("email", e.target.value)}
+                  className="w-full bg-background border-2 border-black"
                 />
               </Field>
 
               {!isAdmin && (
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Gender">
-                    <select
-                      className="w-full h-9 rounded border-2 border-black bg-background px-3 text-sm font-medium shadow-[2px_2px_0_#000] focus:outline-none cursor-pointer"
-                      value={form.gender}
-                      onChange={(e) => handleField("gender", e.target.value)}
-                    >
-                      <option value="">Select…</option>
-                      <option>Male</option>
-                      <option>Female</option>
-                      <option>Other</option>
-                    </select>
+                    <Select value={form.gender} onValueChange={(val) => handleField("gender", val)}>
+                      <Select.Trigger className="w-full">
+                        <Select.Value placeholder="Select gender" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Item value="Male">Male</Select.Item>
+                        <Select.Item value="Female">Female</Select.Item>
+                        <Select.Item value="Other">Other</Select.Item>
+                      </Select.Content>
+                    </Select>
                   </Field>
                   <Field label="Contact Number">
-                    <FormInput
+                    <Input
                       placeholder="+63 9XX XXX XXXX"
                       value={form.contactNumber}
                       onChange={(e) =>
                         handleField("contactNumber", e.target.value)
                       }
+                      className="w-full bg-background border-2 border-black"
                     />
                   </Field>
                 </div>
@@ -747,7 +741,7 @@ export default function AddUserModal({
                 <Field label="Address">
                   <textarea
                     rows={2}
-                    className="w-full rounded border-2 border-black bg-background px-3 py-1.5 text-sm font-medium shadow-[2px_2px_0_#000] focus:outline-none resize-none"
+                    className="w-full rounded border-2 border-black bg-background px-4 py-2 text-sm font-medium shadow-md transition focus:outline-hidden focus:shadow-xs resize-none"
                     placeholder="Street, Barangay, City…"
                     value={form.address}
                     onChange={(e) => handleField("address", e.target.value)}
@@ -757,10 +751,11 @@ export default function AddUserModal({
 
               {!isAdmin && (
                 <Field label="Date of Birth">
-                  <FormInput
+                  <Input
                     type="date"
                     value={form.dob}
                     onChange={(e) => handleField("dob", e.target.value)}
+                    className="w-full bg-background border-2 border-black"
                   />
                 </Field>
               )}
@@ -768,27 +763,26 @@ export default function AddUserModal({
               {!isStudent && !isAdmin && (
                 <>
                   <Field label="Hired Date">
-                    <FormInput
+                    <Input
                       type="date"
                       value={form.hiredDate}
                       onChange={(e) =>
                         handleField("hiredDate", e.target.value)
                       }
+                      className="w-full bg-background border-2 border-black"
                     />
                   </Field>
                   <Field label="Employment Status">
-                    <select
-                      className="w-full h-9 rounded border-2 border-black bg-background px-3 text-sm font-medium shadow-[2px_2px_0_#000] focus:outline-none cursor-pointer"
-                      value={form.employmentStatus}
-                      onChange={(e) =>
-                        handleField("employmentStatus", e.target.value)
-                      }
-                    >
-                      <option value="">Select…</option>
-                      <option>Regular</option>
-                      <option>Contractual</option>
-                      <option>Part-time</option>
-                    </select>
+                    <Select value={form.employmentStatus} onValueChange={(val) => handleField("employmentStatus", val)}>
+                      <Select.Trigger className="w-full">
+                        <Select.Value placeholder="Select status" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Item value="Regular">Regular</Select.Item>
+                        <Select.Item value="Contractual">Contractual</Select.Item>
+                        <Select.Item value="Part-time">Part-time</Select.Item>
+                      </Select.Content>
+                    </Select>
                   </Field>
                 </>
               )}
@@ -796,10 +790,10 @@ export default function AddUserModal({
               {isStudent && (
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Student LRN">
-                    <FormInput
+                    <Input
                       placeholder="12-digit LRN"
                       maxLength={12}
-                      className="font-mono"
+                      className="w-full bg-background border-2 border-black font-mono"
                       value={form.studentLrn}
                       onChange={(e) =>
                         handleField(
@@ -810,35 +804,34 @@ export default function AddUserModal({
                     />
                   </Field>
                   <Field label="Grade Level">
-                    <select
-                      className="w-full h-9 rounded border-2 border-black bg-background px-3 text-sm font-medium shadow-[2px_2px_0_#000] focus:outline-none cursor-pointer"
-                      value={form.gradeLevel}
-                      onChange={(e) => handleField("gradeLevel", e.target.value)}
-                    >
-                      <option value="">Select...</option>
-                      <option value="7">Grade 7</option>
-                      <option value="8">Grade 8</option>
-                      <option value="9">Grade 9</option>
-                      <option value="10">Grade 10</option>
-                      <option value="11">Grade 11</option>
-                      <option value="12">Grade 12</option>
-                    </select>
+                    <Select value={form.gradeLevel} onValueChange={(val) => handleField("gradeLevel", val)}>
+                      <Select.Trigger className="w-full">
+                        <Select.Value placeholder="Select grade level" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Item value="7">Grade 7</Select.Item>
+                        <Select.Item value="8">Grade 8</Select.Item>
+                        <Select.Item value="9">Grade 9</Select.Item>
+                        <Select.Item value="10">Grade 10</Select.Item>
+                        <Select.Item value="11">Grade 11</Select.Item>
+                        <Select.Item value="12">Grade 12</Select.Item>
+                      </Select.Content>
+                    </Select>
                   </Field>
                 </div>
               )}
             </div>
 
             <Dialog.Footer className="flex justify-end border-t-2 border-black px-5 py-3 bg-background gap-2">
-              <Button variant="outline" size="sm" onClick={() => setStep("choose")}>
+              <Button variant="outline" onClick={() => setStep("choose")}>
                 Back
               </Button>
               <Button
                 variant="default"
-                size="sm"
                 disabled={manualSubmitting}
                 onClick={handleManualSubmit}
               >
-                {manualSubmitting ? "Sending..." : "Send Invitation"}
+                Send Invitation
               </Button>
             </Dialog.Footer>
           </>
@@ -860,22 +853,5 @@ function Field({
       <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{label}</label>
       {children}
     </div>
-  );
-}
-
-function FormInput({
-  className,
-  type = "text",
-  ...props
-}: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      type={type}
-      className={cn(
-        "w-full h-9 rounded border-2 border-black bg-background px-3 text-sm font-medium shadow-[2px_2px_0_#000] focus:outline-none transition-all",
-        className
-      )}
-      {...props}
-    />
   );
 }

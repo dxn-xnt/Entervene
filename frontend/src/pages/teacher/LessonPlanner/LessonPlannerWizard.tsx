@@ -1,13 +1,9 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Button } from "@/components/retroui/Button";
+import { Badge } from "@/components/retroui/Badge";
+import { Card } from "@/components/retroui/Card";
 import {
   FileText,
   Target,
@@ -31,7 +27,10 @@ import { WaysForwardTab } from "./tabs/WaysForwardTab";
 import { useLessonPlanner } from "./useLessonPlanner";
 import type { LessonPlanDraft } from "./useLessonPlanner";
 import { useAuth } from "@/context/AuthContext";
-import { exportLessonPlanPDF, exportLessonPlanWord } from "./LessonPlanExporter";
+import {
+  exportLessonPlanPDF,
+  exportLessonPlanWord,
+} from "./LessonPlanExporter";
 import { routes } from "@/../routes";
 
 const TABS = [
@@ -83,7 +82,9 @@ interface LessonPlannerWizardProps {
   planId?: number;
 }
 
-export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({ planId }) => {
+export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
+  planId,
+}) => {
   const [activeTab, setActiveTab] = useState<TabValue>("info");
   const auth = useAuth();
   const teacherName = auth?.user?.fullName || "Teacher";
@@ -107,8 +108,12 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({ planId
   const isFirst = currentIndex === 0;
   const isLast = currentIndex === TABS.length - 1;
 
-  const goNext = () => { if (!isLast) setActiveTab(TABS[currentIndex + 1].value); };
-  const goPrev = () => { if (!isFirst) setActiveTab(TABS[currentIndex - 1].value); };
+  const goNext = () => {
+    if (!isLast) setActiveTab(TABS[currentIndex + 1].value);
+  };
+  const goPrev = () => {
+    if (!isFirst) setActiveTab(TABS[currentIndex - 1].value);
+  };
 
   const handleSaveDraft = () => saveDraft();
 
@@ -159,39 +164,40 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({ planId
       )}
 
       {/* Progress stepper */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 w-full">
+      <div className="flex items-center justify-center overflow-x-auto py-2">
         {TABS.map((tab, idx) => {
           const Icon = tab.icon;
           const isDone = idx < currentIndex;
           const isActive = tab.value === activeTab;
+
           return (
             <React.Fragment key={tab.value}>
-              <button
+              <Button
                 type="button"
+                variant={isActive ? "default" : "outline"}
+                size="sm"
                 onClick={() => setActiveTab(tab.value)}
-                className={[
-                  "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-all shrink-0",
-                  isActive
-                    ? `${tab.bgColor} ${tab.color} border ${tab.borderColor} shadow-sm`
-                    : isDone
-                    ? "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                    : "text-gray-400 hover:text-gray-600 hover:bg-gray-50",
-                ].join(" ")}
+                className="gap-2 shrink-0"
               >
-                {isDone ? (
-                  <CheckCircle className="size-4 text-green-500" />
-                ) : (
-                  <Icon className={`size-4 ${isActive ? tab.color : "text-gray-400"}`} />
-                )}
-                <span className="hidden sm:inline">{tab.label}</span>
+                {isDone ? <CheckCircle size={16} /> : <Icon size={16} />}
+
+                <span>{tab.label}</span>
+
                 {isActive && (
-                  <Badge variant="outline" className={`ml-1 hidden sm:flex text-xs ${tab.color} border-current`}>
+                  <Badge size="sm" variant="secondary">
                     Current
                   </Badge>
                 )}
-              </button>
+              </Button>
+
               {idx < TABS.length - 1 && (
-                <div className={["h-[2px] flex-1 min-w-[12px] rounded-full transition-colors", idx < currentIndex ? "bg-green-400" : "bg-gray-200"].join(" ")} />
+                <div className="mx-3 flex w-10 items-center">
+                  <div
+                    className={`h-[2px] w-full rounded-full transition-colors ${
+                      isDone ? "bg-primary" : "bg-border"
+                    }`}
+                  />
+                </div>
               )}
             </React.Fragment>
           );
@@ -199,57 +205,92 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({ planId
       </div>
 
       {/* Tab content */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="w-full flex flex-col">
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as TabValue)}
+        className="w-full flex flex-col"
+      >
         <TabsList className="hidden">
-          {TABS.map((t) => <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>)}
+          {TABS.map((t) => (
+            <TabsTrigger key={t.value} value={t.value}>
+              {t.label}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
-        <div className="w-full rounded-xl border bg-white p-6 md:p-8 shadow-sm">
+        <Card className="w-full block">
           <TabsContent value="info" className="w-full">
             <InfoTab
               draft={draft}
               errors={errors}
-              onChange={(key, value) => setField(key as keyof LessonPlanDraft, value as LessonPlanDraft[keyof LessonPlanDraft])}
+              onChange={(key, value) =>
+                setField(
+                  key as keyof LessonPlanDraft,
+                  value as LessonPlanDraft[keyof LessonPlanDraft],
+                )
+              }
             />
           </TabsContent>
           <TabsContent value="intentions" className="w-full">
             <IntentionsTab
               draft={draft}
               errors={errors}
-              onNestedChange={(section, key, value) => setNestedField(section, key, value)}
+              onNestedChange={(section, key, value) =>
+                setNestedField(section, key, value)
+              }
             />
           </TabsContent>
           <TabsContent value="learning" className="w-full">
             <LearningExpTab
               draft={draft}
-              onNestedChange={(section, key, value) => setNestedField(section, key, value)}
+              onNestedChange={(section, key, value) =>
+                setNestedField(section, key, value)
+              }
             />
           </TabsContent>
           <TabsContent value="assessment" className="w-full">
             <AssessmentTab
               draft={draft}
-              onNestedChange={(section, key, value) => setNestedField(section, key, value)}
+              onNestedChange={(section, key, value) =>
+                setNestedField(section, key, value)
+              }
             />
           </TabsContent>
           <TabsContent value="ways" className="w-full">
             <WaysForwardTab
               draft={draft}
-              onNestedChange={(section, key, value) => setNestedField(section, key, value)}
+              onNestedChange={(section, key, value) =>
+                setNestedField(section, key, value)
+              }
             />
           </TabsContent>
-        </div>
+        </Card>
       </Tabs>
 
       {/* Footer (Single location for action buttons) */}
       <div className="flex items-center justify-between pt-2 border-t w-full gap-4 flex-wrap">
-        <Button variant="outline" onClick={goPrev} disabled={isFirst} className="gap-2">
+        <Button
+          variant="outline"
+          onClick={goPrev}
+          disabled={isFirst}
+          className="gap-2"
+        >
           <ChevronLeft className="size-4" />
           Previous
         </Button>
 
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          <Button variant="outline" onClick={handleSaveDraft} disabled={isSaving || isSubmitting} className="gap-2">
-            {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+          <Button
+            variant="outline"
+            onClick={handleSaveDraft}
+            disabled={isSaving || isSubmitting}
+            className="gap-2"
+          >
+            {isSaving ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Save className="size-4" />
+            )}
             {isSaving ? "Saving…" : "Save Draft"}
           </Button>
 
@@ -281,7 +322,11 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({ planId
                 disabled={isSubmitting}
                 className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
               >
-                {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle className="size-4" />}
+                {isSubmitting ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="size-4" />
+                )}
                 {isSubmitting ? "Submitting…" : "Submit Only"}
               </Button>
             </>
