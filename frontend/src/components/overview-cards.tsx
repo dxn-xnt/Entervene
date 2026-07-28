@@ -7,10 +7,17 @@ type OverviewCardProps = {
   title: string;
   count: string;
   stat?: string;
+  statDescription?: string;
   className?: string;
 };
 
-export function OverviewCard({ title, count, stat, className }: OverviewCardProps) {
+export function OverviewCard({
+  title,
+  count,
+  stat,
+  statDescription,
+  className,
+}: OverviewCardProps) {
   return (
     <Card className={cn("@container/card", className)}>
       <Card.Header>
@@ -18,9 +25,10 @@ export function OverviewCard({ title, count, stat, className }: OverviewCardProp
       </Card.Header>
       <Card.Content>
         <Card.Title className="text-4xl font-bold">{count}</Card.Title>
-        {stat && (
-          <p className="text-sm">
-            <span className="font-semibold">+{stat}</span> increase from last month
+        {(stat || statDescription) && (
+          <p className="text-sm text-muted-foreground">
+            {stat && <span className="font-semibold text-foreground">{stat} </span>}
+            {statDescription ? statDescription : "increase from last month"}
           </p>
         )}
       </Card.Content>

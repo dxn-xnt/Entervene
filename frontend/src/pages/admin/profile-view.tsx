@@ -1,3 +1,4 @@
+import { ProfileHeader } from "@/components/profile-header";
 import { useMemo, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { Button } from "@/components/retroui/Button";
@@ -6,7 +7,6 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Table } from "@/components/retroui/Table";
 import { useAuth } from "@/context/AuthContext";
 import { Pen, X } from "lucide-react";
-import { Avatar } from "@/components/retroui/Avatar";
 
 type ScheduleRow =
   | {
@@ -192,27 +192,7 @@ export default function AdminProfile() {
 
             <div className="flex flex-col gap-4 py-2 md:gap-6">
 
-              <Card className="flex flex-row items-center gap-4 p-2 md:p-4">
-                <Avatar
-                  className="cursor-pointer relative group h-16 w-16 rounded-full overflow-hidden border-2 border-black transition-transform hover:scale-105 shrink-0"
-                  onClick={openModal}
-                  title="Click to change avatar"
-                >
-                  <Avatar.Image src={user?.avatar || "/avatars/teacher-avatars/12.svg"} alt={user?.fullName || "User"} />
-                  <Avatar.Fallback>{user?.fullName?.charAt(0) || "U"}</Avatar.Fallback>
-                  <div className="absolute inset-0 bg-black/45 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Pen className="size-4 text-white" />
-                  </div>
-                </Avatar>
-                <div className="flex flex-col">
-                  <p className="text-lg font-bold">
-                    {user?.fullName ?? "John Doe"}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {user?.email ?? "johndoe@example.com"}
-                  </p>
-                </div>
-              </Card>
+              <ProfileHeader user={user} onAvatarClick={openModal} />
 
               <div className="flex flex-col lg:flex-row gap-4 md:gap-6">
                 <div className="flex flex-col gap-3 flex-1">
