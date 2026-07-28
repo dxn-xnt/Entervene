@@ -9,14 +9,12 @@ import { Avatar } from "../../components/retroui/Avatar";
 import { Tabs, type TabItem } from "../../components/retroui/Tabs";
 import { getUsers, type User, type UserRole } from "../../lib/api";
 import {
-  AlertTriangle,
   BookOpen,
   GraduationCap,
   Plus,
   School,
   Search,
   UserCog,
-  Users,
   UsersRound,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -102,11 +100,14 @@ function parseSectionInfo(
   section: string | undefined | null,
 ): { grade: number; sectionName: string } | null {
   if (!section) return null;
-  const match = section.match(/^(\d+)-(.+)$/);
-  if (match) {
-    return { grade: parseInt(match[1], 10), sectionName: match[2] };
+  const trimmed = section.trim();
+  const match = trimmed.match(/^(?:Grade\s*)?(\d+)\s*(?:[-–—]\s*|\s+)?(.*)$/i);
+  if (match && match[1]) {
+    const grade = parseInt(match[1], 10);
+    const rest = match[2]?.trim();
+    return { grade, sectionName: rest || trimmed };
   }
-  return { grade: 0, sectionName: section };
+  return { grade: 0, sectionName: trimmed };
 }
 
 function getStudentGradeLevel(user: User): number | null {
@@ -122,7 +123,17 @@ function getSectionDisplayName(
   return parseSectionInfo(section)?.sectionName ?? null;
 }
 
-function groupStudents(students: User[]): Map<string, User[]> {
+function getGroupGrade(key: string, bucket: User[]): number {
+  const info = parseSectionInfo(key);
+  if (info && info.grade > 0) return info.grade;
+  for (const student of bucket) {
+    const g = getStudentGradeLevel(student);
+    if (g && g > 0) return g;
+  }
+  return 999;
+}
+
+function groupStudents(students: User[], sortBy: "A-Z" | "Z-A" = "A-Z"): Map<string, User[]> {
   const map = new Map<string, User[]>();
   const UNASSIGNED = "__unassigned__";
 
@@ -133,22 +144,40 @@ function groupStudents(students: User[]): Map<string, User[]> {
     map.set(key, bucket);
   }
 
-  const sorted = new Map<string, User[]>();
-  if (map.has(UNASSIGNED)) sorted.set(UNASSIGNED, map.get(UNASSIGNED)!);
+  for (const bucket of map.values()) {
+    bucket.sort((a, b) => {
+      const cmp = a.name.localeCompare(b.name);
+      return sortBy === "Z-A" ? -cmp : cmp;
+    });
+  }
 
   const sectionKeys = [...map.keys()]
     .filter((k) => k !== UNASSIGNED)
     .sort((a, b) => {
+      const bucketA = map.get(a) ?? [];
+      const bucketB = map.get(b) ?? [];
+      const gradeA = getGroupGrade(a, bucketA);
+      const gradeB = getGroupGrade(b, bucketB);
+
+      if (gradeA !== gradeB) {
+        return gradeA - gradeB;
+      }
       const pa = parseSectionInfo(a);
       const pb = parseSectionInfo(b);
-      if (pa && pb) {
-        if (pa.grade !== pb.grade) return pa.grade - pb.grade;
-        return pa.sectionName.localeCompare(pb.sectionName);
-      }
-      return a.localeCompare(b);
+      const nameA = pa?.sectionName ?? a;
+      const nameB = pb?.sectionName ?? b;
+      return nameA.localeCompare(nameB);
     });
 
-  for (const k of sectionKeys) sorted.set(k, map.get(k)!);
+  const sorted = new Map<string, User[]>();
+  for (const k of sectionKeys) {
+    sorted.set(k, map.get(k)!);
+  }
+
+  if (map.has(UNASSIGNED)) {
+    sorted.set(UNASSIGNED, map.get(UNASSIGNED)!);
+  }
+
   return sorted;
 }
 
@@ -166,6 +195,7 @@ export default function AdminUsers() {
 
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortBy, setSortBy] = useState<"A-Z" | "Z-A">("A-Z");
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     new Set(),
   );
@@ -230,9 +260,19 @@ export default function AdminUsers() {
 
   const studentGroups = useMemo(
     () =>
-      activeTab === "student" ? groupStudents(filteredStudents) : new Map<string, User[]>(),
-    [activeTab, filteredStudents],
+      activeTab === "student"
+        ? groupStudents(filteredStudents, sortBy)
+        : new Map<string, User[]>(),
+    [activeTab, filteredStudents, sortBy],
   );
+
+  const displayUsers = useMemo(() => {
+    if (activeTab === "student") return filteredStudents;
+    return [...users].sort((a, b) => {
+      const cmp = a.name.localeCompare(b.name);
+      return sortBy === "Z-A" ? -cmp : cmp;
+    });
+  }, [users, activeTab, filteredStudents, sortBy]);
 
   function openUser(user: User) {
     navigate(`/admin/users/${user.role}/${user.id}`);
@@ -324,7 +364,10 @@ export default function AdminUsers() {
                   </Select>
                 )}
 
-                <Select>
+                <Select
+                  value={sortBy}
+                  onValueChange={(val) => setSortBy(val as "A-Z" | "Z-A")}
+                >
                   <Select.Trigger className="w-full">
                     <Select.Value placeholder="Sort By" />
                   </Select.Trigger>
@@ -450,13 +493,16 @@ export default function AdminUsers() {
                     {[...studentGroups.entries()].map(([key, groupUsers]) => {
                       const isUnassigned = key === UNASSIGNED_KEY;
                       const info = isUnassigned ? null : parseSectionInfo(key);
+                      const groupGrade = isUnassigned ? 0 : getGroupGrade(key, groupUsers);
 
                       const headerLabel = isUnassigned
                         ? "Unassigned — awaiting section"
                         : info
                           ? info.grade > 0
                             ? `Grade ${info.grade} — ${info.sectionName}`
-                            : info.sectionName
+                            : groupGrade > 0 && groupGrade < 999
+                              ? `Grade ${groupGrade} — ${info.sectionName}`
+                              : info.sectionName
                           : key;
 
                       return (
@@ -526,7 +572,7 @@ export default function AdminUsers() {
 
               {!loading && activeTab !== "student" && (
                 <>
-                  {users.length === 0 ? (
+                  {displayUsers.length === 0 ? (
                     <div className="rounded-xl border border-black bg-background py-12 text-center text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
                       {emptyText}
                     </div>
@@ -548,7 +594,7 @@ export default function AdminUsers() {
                           </Table.Row>
                         </Table.Header>
                         <Table.Body>
-                          {users.map((user) => (
+                          {displayUsers.map((user) => (
                             <UserRow
                               key={user.id}
                               user={user}

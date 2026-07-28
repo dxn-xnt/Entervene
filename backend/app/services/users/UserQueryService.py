@@ -110,15 +110,23 @@ def _student_summaries(db: Session, student_ids: set[uuid.UUID]) -> tuple[dict, 
         return latest_sections, averages
 
     enrollment_rows = (
-        db.query(StudentClass.student_id, Class.section_name)
+        db.query(
+            StudentClass.student_id,
+            Class.section_name,
+            AcademicLevel.grade_level,
+        )
         .join(Class, Class.class_id == StudentClass.class_id)
+        .outerjoin(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
         .filter(StudentClass.student_id.in_(student_ids))
         .filter(StudentClass.enrollment_status == "enrolled")
         .order_by(StudentClass.student_id, StudentClass.enrolled_at.desc())
         .all()
     )
     for enrollment in enrollment_rows:
-        latest_sections.setdefault(enrollment.student_id, enrollment.section_name)
+        latest_sections.setdefault(enrollment.student_id, {
+            "section_name": enrollment.section_name,
+            "grade_level": enrollment.grade_level,
+        })
 
     average_rows = (
         db.query(
@@ -187,8 +195,9 @@ def list_users(
             item["class_count"] = len(summary["class_ids"])
         if client_role == "student" and user.student_id:
             average = averages.get(user.student_id)
-            item["section"] = latest_sections.get(user.student_id)
-            item["grade_level"] = user.grade_level
+            sec_info = latest_sections.get(user.student_id)
+            item["section"] = sec_info["section_name"] if sec_info else None
+            item["grade_level"] = sec_info["grade_level"] if (sec_info and sec_info.get("grade_level")) else user.grade_level
             item["average"] = round(float(average)) if average is not None else None
         response.append(item)
     return response
