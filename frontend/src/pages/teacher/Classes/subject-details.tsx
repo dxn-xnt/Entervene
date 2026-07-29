@@ -9,7 +9,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { API_URL, apiFetch } from "@/lib/api";
 import AttachmentDisplay from "@/components/attachment-display";
@@ -25,6 +25,7 @@ import { Badge } from "@/components/retroui/Badge";
 import ClassworkFormModal from "./subject-details/ClassworkFormModal";
 import LessonClassworkList from "./subject-details/LessonClassworkList";
 import StudentRecordsPanel from "./subject-details/StudentRecordsPanel";
+import TeacherLessonDetailScreen from "./subject-details/TeacherLessonDetailScreen";
 import {
   LOCKED_CLASSWORK_MESSAGE,
   allowedMaterialExtensions,
@@ -52,7 +53,9 @@ export default function SubjectDetails() {
     subjectId: string;
   }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<"lessons" | "students">("lessons");
+  const [activeLessonDetail, setActiveLessonDetail] = useState<Lesson | null>(null);
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [subjectAssignments, setSubjectAssignments] = useState<LinkedClasswork[]>([]);
@@ -92,6 +95,23 @@ export default function SubjectDetails() {
   >("order");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const openLessonDetail = async (lesson: Lesson) => {
+    setActiveLessonDetail(lesson);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("lessonId", String(lesson.lesson_id));
+    setSearchParams(nextParams, { replace: true });
+    if (classId && !linkedClassworks[lesson.lesson_id]) {
+      await loadLessonClassworks(lesson.lesson_id);
+    }
+  };
+
+  const closeLessonDetail = () => {
+    setActiveLessonDetail(null);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("lessonId");
+    setSearchParams(nextParams, { replace: true });
+  };
 
   useEffect(() => {
     const loadContext = async () => {
@@ -176,6 +196,17 @@ export default function SubjectDetails() {
 
     loadContext();
   }, [classId, subjectId]);
+
+  useEffect(() => {
+    const targetId = Number(searchParams.get("lessonId"));
+    if (!targetId || lessons.length === 0) return;
+    const targetLesson = lessons.find((l) => l.lesson_id === targetId);
+    if (!targetLesson) return;
+    setActiveLessonDetail(targetLesson);
+    if (classId && !linkedClassworks[targetId]) {
+      void loadLessonClassworks(targetId);
+    }
+  }, [classId, lessons, searchParams]);
 
   const subjectLoad = useMemo(() => {
     return loads.find(
@@ -720,141 +751,164 @@ export default function SubjectDetails() {
     <AppLayout>
       <div className="@container/main flex flex-1 flex-col">
         <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <Breadcrumb>
-              <Breadcrumb.List>
-                <Breadcrumb.Item>
-                  <Breadcrumb.Link asChild>
-                    <button
-                      type="button"
-                      onClick={() => navigate("/teacher/classes/subjects")}
-                    >
-                      Subjects
-                    </button>
-                  </Breadcrumb.Link>
-                </Breadcrumb.Item>
-
-                <Breadcrumb.Separator />
-
-                <Breadcrumb.Item>
-                  <Breadcrumb.Page>{subjectName}</Breadcrumb.Page>
-                </Breadcrumb.Item>
-              </Breadcrumb.List>
-            </Breadcrumb>
-
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              onClick={() =>
-                navigate(
-                  `/teacher/lessons/create?classId=${classId || ""}&subjectId=${subjectId || ""}`,
-                )
-              }
-              className="w-full lg:w-auto gap-2 whitespace-nowrap font-semibold"
-            >
-              <Plus size={16} />
-              Add Lesson
-            </Button>
-          </div>
-
-          <div className="-mx-4 md:-mx-6 border-b-2 border-border" />
-
-          <main className="flex flex-col gap-5 pt-5">
-            {error && (
-              <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
-
-            <Card className="block bg-primary">
-              <Card.Content className="flex items-start justify-between gap-4">
-                <div>
-                  <Card.Title className="text-3xl font-bold">
-                    {subjectName}
-                  </Card.Title>
-                  <p className="text-xs text-black">
-                    {sectionName
-                      ? `Section assigned: ${sectionName}`
-                      : "Section assigned for this subject"}
-                  </p>
+          {activeLessonDetail ? (
+            <main className="pt-2">
+              {error && (
+                <div className="mb-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {error}
                 </div>
-                <Info size={16} />
-              </Card.Content>
-            </Card>
-
-            <section>
-              <h2 className="mb-3 text-xl font-bold">Subject Overview</h2>
-              <div className="grid gap-4 md:grid-cols-3">
-                <Card className="block">
-                  <Card.Content className="space-y-1">
-                    <Card.Description>
-                      Lesson Mastery
-                    </Card.Description>
-                    <Card.Title>{overviewMastery}%</Card.Title>
-                    <p className="text-xs text-black">
-                      Average graded classwork performance
-                    </p>
-                  </Card.Content>
-                </Card>
-
-                <Card className="block">
-                  <Card.Content className="space-y-1">
-                    <Card.Description>
-                      Classwork Assigned
-                    </Card.Description>
-                    <Card.Title>{classworkCount ?? 0}</Card.Title>
-                    <p className="text-xs text-black">
-                      Active classworks in this subject
-                    </p>
-                  </Card.Content>
-                </Card>
-
-                <Card className="block">
-                  <Card.Content className="space-y-1">
-                    <Card.Description>
-                      Completion Percentage
-                    </Card.Description>
-                    <Card.Title>{overviewCompletion}%</Card.Title>
-                    <p className="text-xs text-black">
-                      Average submitted classwork completion
-                    </p>
-                  </Card.Content>
-                </Card>
-              </div>
-            </section>
-
-            <Tabs
-              tabs={tabs}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-            />
-
-            {activeTab === "students" && classId && subjectId ? (
-              <StudentRecordsPanel classId={classId} subjectId={subjectId} />
-            ) : isLoading ? (
-              <p className="py-8 text-center text-gray-500">
-                Loading lessons...
-              </p>
-            ) : (
-              <LessonClassworkList
-                lessonSearch={lessonSearch}
-                setLessonSearch={setLessonSearch}
-                lessonSort={lessonSort}
-                setLessonSort={setLessonSort}
-                filteredLessons={filteredLessons}
-                totalLessons={lessons.length}
-                expandedLessonId={expandedLessonId}
-                linkedClassworks={linkedClassworks}
-                loadingClassworkId={loadingClassworkId}
-                toggleLesson={toggleLesson}
+              )}
+              <TeacherLessonDetailScreen
+                lesson={activeLessonDetail}
+                subjectName={subjectName}
+                closeLessonDetail={closeLessonDetail}
                 openLessonManager={openLessonManager}
                 openClassworkForm={openClassworkForm}
                 openClassworkDetail={openClassworkDetail}
-                subjectAssignments={subjectAssignments}
-          />
-            )}
-          </main>
+                linkedClassworks={linkedClassworks[activeLessonDetail.lesson_id] || []}
+                isLoadingClasswork={loadingClassworkId === activeLessonDetail.lesson_id}
+              />
+            </main>
+          ) : (
+            <>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <Breadcrumb>
+                  <Breadcrumb.List>
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Link asChild>
+                        <button
+                          type="button"
+                          onClick={() => navigate("/teacher/classes/subjects")}
+                        >
+                          Subjects
+                        </button>
+                      </Breadcrumb.Link>
+                    </Breadcrumb.Item>
+
+                    <Breadcrumb.Separator />
+
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Page>{subjectName}</Breadcrumb.Page>
+                    </Breadcrumb.Item>
+                  </Breadcrumb.List>
+                </Breadcrumb>
+
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={() =>
+                    navigate(
+                      `/teacher/lessons/create?classId=${classId || ""}&subjectId=${subjectId || ""}`,
+                    )
+                  }
+                  className="w-full lg:w-auto gap-2 whitespace-nowrap font-semibold"
+                >
+                  <Plus size={16} />
+                  Add Lesson
+                </Button>
+              </div>
+
+              <div className="-mx-4 md:-mx-6 border-b-2 border-border" />
+
+              <main className="flex flex-col gap-5 pt-5">
+                {error && (
+                  <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
+                  </div>
+                )}
+
+                <Card className="block bg-primary">
+                  <Card.Content className="flex items-start justify-between gap-4">
+                    <div>
+                      <Card.Title className="text-3xl font-bold">
+                        {subjectName}
+                      </Card.Title>
+                      <p className="text-xs text-black">
+                        {sectionName
+                          ? `Section assigned: ${sectionName}`
+                          : "Section assigned for this subject"}
+                      </p>
+                    </div>
+                    <Info size={16} />
+                  </Card.Content>
+                </Card>
+
+                <section>
+                  <h2 className="mb-3 text-xl font-bold">Subject Overview</h2>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <Card className="block">
+                      <Card.Content className="space-y-1">
+                        <Card.Description>
+                          Lesson Mastery
+                        </Card.Description>
+                        <Card.Title>{overviewMastery}%</Card.Title>
+                        <p className="text-xs text-black">
+                          Average graded classwork performance
+                        </p>
+                      </Card.Content>
+                    </Card>
+
+                    <Card className="block">
+                      <Card.Content className="space-y-1">
+                        <Card.Description>
+                          Classwork Assigned
+                        </Card.Description>
+                        <Card.Title>{classworkCount ?? 0}</Card.Title>
+                        <p className="text-xs text-black">
+                          Active classworks in this subject
+                        </p>
+                      </Card.Content>
+                    </Card>
+
+                    <Card className="block">
+                      <Card.Content className="space-y-1">
+                        <Card.Description>
+                          Completion Percentage
+                        </Card.Description>
+                        <Card.Title>{overviewCompletion}%</Card.Title>
+                        <p className="text-xs text-black">
+                          Average submitted classwork completion
+                        </p>
+                      </Card.Content>
+                    </Card>
+                  </div>
+                </section>
+
+                <Tabs
+                  tabs={tabs}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                />
+
+                {activeTab === "students" && classId && subjectId ? (
+                  <StudentRecordsPanel classId={classId} subjectId={subjectId} />
+                ) : isLoading ? (
+                  <p className="py-8 text-center text-gray-500">
+                    Loading lessons...
+                  </p>
+                ) : (
+                  <LessonClassworkList
+                    lessonSearch={lessonSearch}
+                    setLessonSearch={setLessonSearch}
+                    lessonSort={lessonSort}
+                    setLessonSort={setLessonSort}
+                    filteredLessons={filteredLessons}
+                    totalLessons={lessons.length}
+                    expandedLessonId={expandedLessonId}
+                    linkedClassworks={linkedClassworks}
+                    loadingClassworkId={loadingClassworkId}
+                    toggleLesson={toggleLesson}
+                    openLessonManager={openLessonManager}
+                    openClassworkForm={openClassworkForm}
+                    openClassworkDetail={openClassworkDetail}
+                    subjectAssignments={subjectAssignments}
+                    openLessonDetail={openLessonDetail}
+                  />
+                )}
+              </main>
+            </>
+          )}
 
           {selectedLesson && lessonDraft && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
