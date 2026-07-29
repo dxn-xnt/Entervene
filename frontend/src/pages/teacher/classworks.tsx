@@ -23,6 +23,7 @@ import { API_URL, apiFetch } from "@/lib/api";
 import ClassworkCard from "./classworks/ClassworkCard";
 import { Badge } from "@/components/retroui/Badge";
 import type { QuizAnalysis } from "./classworks/quiz-builder-types";
+import QuizGradingModal from "@/components/quiz-grading-modal";
 import {
   allowedClassworkMaterialExtensions,
   classworkToEditDraft,
@@ -124,6 +125,7 @@ export default function Classworks() {
   const [quizAnalysis, setQuizAnalysis] = useState<QuizAnalysis | null>(null);
   const [isQuizAnalysisLoading, setIsQuizAnalysisLoading] = useState(false);
   const [quizAnalysisError, setQuizAnalysisError] = useState("");
+  const [selectedGradingSubmissionId, setSelectedGradingSubmissionId] = useState<number | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -1577,16 +1579,17 @@ export default function Classworks() {
                                   )}
                                 </div>
 
-                                <div className="overflow-hidden rounded-lg border border-black">
-                                  <div className="grid grid-cols-[1fr_auto_auto] gap-3 border-b border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold">
+                                 <div className="overflow-hidden rounded-lg border border-black">
+                                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 border-b border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold">
                                     <span>Student</span>
                                     <span>Attempts</span>
                                     <span>Score</span>
+                                    <span className="text-right">Action</span>
                                   </div>
                                   {quizAnalysis.students.map((student) => (
                                     <div
                                       key={student.student_id}
-                                      className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-black px-3 py-2 text-sm last:border-b-0"
+                                      className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 border-b border-black px-3 py-2 text-sm last:border-b-0"
                                     >
                                       <div>
                                         <p className="font-bold">
@@ -1610,6 +1613,32 @@ export default function Classworks() {
                                           ? `${student.grade}/${quizAnalysis.total_points ?? selected.total_points ?? 0}`
                                           : `0/${quizAnalysis.total_points ?? selected.total_points ?? 0}`}
                                       </span>
+                                      <div className="text-right">
+                                        {student.submission_id ? (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setSelectedGradingSubmissionId(
+                                                student.submission_id!,
+                                              )
+                                            }
+                                            className={`inline-flex items-center gap-1 rounded border border-black px-2.5 py-1 text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] transition-colors ${
+                                              student.needs_grading
+                                                ? "bg-amber-300 hover:bg-amber-400 text-black font-extrabold"
+                                                : "bg-white hover:bg-gray-100 text-black"
+                                            }`}
+                                          >
+                                            <Pencil size={12} />
+                                            {student.needs_grading
+                                              ? "Grade"
+                                              : "Score"}
+                                          </button>
+                                        ) : (
+                                          <span className="text-xs italic text-gray-400">
+                                            No attempt
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                   ))}
                                 </div>
@@ -2108,6 +2137,19 @@ export default function Classworks() {
               ))}
           </Dialog>
         </>
+      )}
+
+      {selectedGradingSubmissionId && (
+        <QuizGradingModal
+          submissionId={selectedGradingSubmissionId}
+          isOpen={Boolean(selectedGradingSubmissionId)}
+          onClose={() => setSelectedGradingSubmissionId(null)}
+          onSuccess={() => {
+            if (selected) {
+              void openClassworkDetail(selected);
+            }
+          }}
+        />
       )}
     </AppLayout>
   );
