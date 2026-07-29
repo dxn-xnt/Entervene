@@ -190,52 +190,7 @@ class ConflictDetectorService:
             )
 
         # ---------------------------------------------------------
-        # 4. Total Subject Hours Validation (Term Total)
-        # ---------------------------------------------------------
-        # Group loads by (class_id, subject_id)
-        load_groups: dict[tuple[int, int], list[SubjectLoadItem]] = {}
-        for load in loads:
-            key = (load.class_id, load.subject_id)
-            if key not in load_groups:
-                load_groups[key] = []
-            load_groups[key].append(load)
-
-        for (cid, sid), group in load_groups.items():
-            subject_obj = subjects_map.get(sid)
-            class_obj = classes_map.get(cid)
-            if not subject_obj or not subject_obj.hours or subject_obj.hours <= 0:
-                continue
-
-            required_hours = float(subject_obj.hours)
-            weekly_scheduled = 0.0
-
-            for load in group:
-                dur = calculate_duration_hours(load.start_time, load.end_time)
-                days_count = len(load.days_of_week or [])
-                weekly_scheduled += dur * days_count
-
-            # subject.hours is the total for the entire term, so multiply weekly by num_weeks
-            if num_weeks is not None:
-                total_scheduled = weekly_scheduled * num_weeks
-            else:
-                # Fallback: assume 20 weeks if no period info available
-                total_scheduled = weekly_scheduled * 20
-
-            if abs(total_scheduled - required_hours) > 0.01:
-                c_name = class_obj.section_name if class_obj else f"Class #{cid}"
-                conflicts.append(
-                    ConflictItem(
-                        rule="SUBJECT_HOURS_MISMATCH",
-                        severity="warning",
-                        message=f"Subject '{subject_obj.subject_name}' in {c_name} requires {required_hours:.0f} hrs total for the term, but {total_scheduled:.1f} hrs are scheduled ({weekly_scheduled:.1f} hrs/wk × {num_weeks or 20} weeks).",
-                        class_id=cid,
-                        subject_id=sid,
-                        affected_key=f"{cid}_{sid}",
-                    )
-                )
-
-        # ---------------------------------------------------------
-        # 5. Subject Offering Scope Check (Term / Grade Level / Pathway)
+        # 4. Subject Offering Scope Check (Term / Grade Level / Pathway)
         # ---------------------------------------------------------
         if academic_period and hasattr(academic_period, 'academic_period_id'):
             try:

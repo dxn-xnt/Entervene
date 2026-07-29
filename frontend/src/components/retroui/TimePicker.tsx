@@ -57,6 +57,18 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
     const [isOpen, setIsOpen] = React.useState(false);
     const popoverRef = React.useRef<HTMLDivElement>(null);
 
+    const activePeriod = lockedPeriod || value.period;
+    const { hour, minute } = value;
+    const pad = (num: number) => String(num).padStart(2, "0");
+
+    const formattedValue = `${hour}:${pad(minute)} ${activePeriod.toLowerCase()}`;
+    const [inputText, setInputText] = React.useState(formattedValue);
+
+    // Sync input text when value or activePeriod changes externally
+    React.useEffect(() => {
+        setInputText(`${value.hour}:${pad(value.minute)} ${(lockedPeriod || value.period).toLowerCase()}`);
+    }, [value.hour, value.minute, value.period, lockedPeriod]);
+
     React.useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
@@ -71,18 +83,16 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
         };
     }, [isOpen]);
 
-    const activePeriod = lockedPeriod || value.period;
-    const { hour, minute } = value;
-
     const hoursOptions = Array.from({ length: 12 }, (_, i) => i + 1);
+    // 5-minute interval options for popover picker
     const minutesOptions = Array.from({ length: 12 }, (_, i) => i * 5);
 
-    // Practical school hours: AM 6-11, PM 12 + 1-9
+    // School hours: AM 6-11, PM 12 + 1-5 (Longest end time 5:00 PM)
     const isHourValid = (h: number, p: string) => {
         if (p === 'AM') {
             return h >= 6 && h <= 11;
         } else {
-            return h === 12 || (h >= 1 && h <= 9);
+            return h === 12 || (h >= 1 && h <= 5);
         }
     };
 
@@ -98,36 +108,83 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
     const handlePeriodSelect = (p: string) => {
         if (lockedPeriod) return; // locked, ignore
         let newHour = hour;
-        // Clamp hour to valid range when switching periods
         if (!isHourValid(hour, p)) {
             newHour = p === 'AM' ? 6 : 12;
         }
         onChange({ hour: newHour, minute, period: p });
     };
 
-    const pad = (num: number) => String(num).padStart(2, "0");
+    // Parse custom text typed directly into the input box
+    const parseCustomInput = (raw: string) => {
+        const clean = raw.trim();
+        if (!clean) return;
+
+        // Match formats: "09:12", "9 12", "9:12 am", "10:24 pm", "1024"
+        const match = clean.match(/^(\d{1,2})[:\s]*(\d{2})?\s*(am|pm)?$/i);
+        if (match) {
+            let h = parseInt(match[1], 10);
+            const m = match[2] ? parseInt(match[2], 10) : 0;
+            let p = match[3] ? match[3].toUpperCase() : activePeriod;
+
+            if (h > 12) {
+                h = h - 12;
+                p = "PM";
+            } else if (h === 0) {
+                h = 12;
+                p = "AM";
+            }
+
+            if (h >= 1 && h <= 12 && m >= 0 && m <= 59) {
+                const finalPeriod = lockedPeriod || p;
+                onChange({ hour: h, minute: m, period: finalPeriod });
+                setInputText(`${h}:${pad(m)} ${finalPeriod.toLowerCase()}`);
+            }
+        }
+    };
 
     return (
-        <div className={`relative inline-block text-left ${isOpen ? "z-50" : "z-0"}`} ref={popoverRef}>
-            <button
-                type="button"
-                onClick={() => setIsOpen(!isOpen)}
-                className="px-2 py-1 border border-2 bg-white text-sm font-medium flex items-center gap-1.5 cursor-pointer min-w-[100px] justify-center animate-fade-in"
-            >
-                <Clock className="size-3.5 text-neutral-500" />
-                <span>{hour}:{pad(minute)} {activePeriod.toLowerCase()}</span>
-            </button>
+        <div className={`relative inline-flex items-center text-left ${isOpen ? "z-50" : "z-0"}`} ref={popoverRef}>
+            <div className="flex items-center border-2 border-black bg-white rounded-none overflow-hidden shadow-[1px_1px_0_#000]">
+                {/* Direct Editable Input */}
+                <input
+                    type="text"
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    onBlur={(e) => parseCustomInput(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                            parseCustomInput(inputText);
+                            (e.target as HTMLInputElement).blur();
+                        }
+                    }}
+                    placeholder="08:00 am"
+                    className="w-24 px-2 py-1 text-xs font-bold font-mono text-center focus:outline-none focus:bg-amber-50"
+                    title="Type any custom time (e.g. 09:12 am, 10:24 am)"
+                />
+
+                {/* Clock Icon Button for 5-minute interval popover */}
+                <button
+                    type="button"
+                    onClick={() => setIsOpen(!isOpen)}
+                    title="Open 5-minute interval picker"
+                    className="p-1 border-l-2 border-black bg-neutral-100 hover:bg-amber-200 transition-colors cursor-pointer flex items-center justify-center"
+                >
+                    <Clock className="size-3.5 text-black" />
+                </button>
+            </div>
 
             {isOpen && (
-                <div className="absolute z-50 left-1/2 -translate-x-1/2 mt-1.5 bg-white border-2 border-black shadow-lg p-3 flex flex-col gap-2 min-w-[280px]">
-                    <div className="bg-neutral-50 p-2 border border-black/10 rounded flex items-center justify-center font-bold text-lg font-mono">
-                        <Clock className="size-5 mr-2 text-neutral-600" />
+                <div className="absolute z-50 left-0 top-full mt-1.5 bg-white border-2 border-black shadow-[4px_4px_0_#000] p-3 flex flex-col gap-2 min-w-[280px]">
+                    <div className="bg-amber-50 p-2 border border-black rounded flex items-center justify-center font-bold text-base font-mono">
+                        <Clock className="size-4 mr-2 text-amber-800" />
                         <span>{hour} : {pad(minute)} {activePeriod.toLowerCase()}</span>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 h-44">
+                        {/* Hours list */}
                         <div className="flex flex-col overflow-y-auto border border-black/20 rounded bg-white">
-                            {hoursOptions.map(h => {
+                            <span className="text-[10px] font-bold text-center border-b border-black/10 py-0.5 bg-neutral-100">Hour</span>
+                            {hoursOptions.map((h) => {
                                 const valid = isHourValid(h, activePeriod);
                                 return (
                                     <button
@@ -135,12 +192,13 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
                                         type="button"
                                         disabled={!valid}
                                         onClick={() => handleHourSelect(h)}
-                                        className={`py-1 text-sm font-medium font-mono ${h === hour
-                                            ? "bg-black text-white font-bold"
-                                            : valid
-                                            ? "hover:bg-neutral-100"
-                                            : "opacity-30 cursor-not-allowed"
-                                            }`}
+                                        className={`py-1 text-xs font-bold font-mono ${
+                                            h === hour
+                                                ? "bg-black text-white"
+                                                : valid
+                                                ? "hover:bg-neutral-100"
+                                                : "opacity-30 cursor-not-allowed"
+                                        }`}
                                     >
                                         {h}
                                     </button>
@@ -148,24 +206,27 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
                             })}
                         </div>
 
+                        {/* 5-minute interval list */}
                         <div className="flex flex-col overflow-y-auto border border-black/20 rounded bg-white">
-                            {minutesOptions.map(m => (
-                                    <button
-                                        key={m}
-                                        type="button"
-                                        onClick={() => handleMinuteSelect(m)}
-                                        className={`py-1 text-sm font-medium font-mono ${m === minute
-                                            ? "bg-black text-white font-bold"
-                                            : "hover:bg-neutral-100"
-                                            }`}
-                                    >
-                                        {pad(m)}
-                                    </button>
+                            <span className="text-[10px] font-bold text-center border-b border-black/10 py-0.5 bg-neutral-100">Min (5m)</span>
+                            {minutesOptions.map((m) => (
+                                <button
+                                    key={m}
+                                    type="button"
+                                    onClick={() => handleMinuteSelect(m)}
+                                    className={`py-1 text-xs font-bold font-mono ${
+                                        m === minute ? "bg-black text-white" : "hover:bg-neutral-100"
+                                    }`}
+                                >
+                                    {pad(m)}
+                                </button>
                             ))}
                         </div>
 
+                        {/* AM/PM toggle */}
                         <div className="flex flex-col overflow-y-auto border border-black/20 rounded bg-white">
-                            {["AM", "PM"].map(p => {
+                            <span className="text-[10px] font-bold text-center border-b border-black/10 py-0.5 bg-neutral-100">Period</span>
+                            {["AM", "PM"].map((p) => {
                                 const disabled = !!lockedPeriod && p !== lockedPeriod;
                                 return (
                                     <button
@@ -173,12 +234,13 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
                                         type="button"
                                         disabled={disabled}
                                         onClick={() => handlePeriodSelect(p)}
-                                        className={`py-1 text-sm font-medium font-mono ${p === activePeriod
-                                            ? "bg-black text-white font-bold"
-                                            : disabled
-                                            ? "opacity-30 cursor-not-allowed"
-                                            : "hover:bg-neutral-100"
-                                            }`}
+                                        className={`py-1 text-xs font-bold font-mono ${
+                                            p === activePeriod
+                                                ? "bg-black text-white"
+                                                : disabled
+                                                ? "opacity-30 cursor-not-allowed"
+                                                : "hover:bg-neutral-100"
+                                        }`}
                                     >
                                         {p.toLowerCase()}
                                     </button>

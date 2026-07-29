@@ -41,6 +41,7 @@ interface LessonClasswork {
   classwork_id: number;
   title: string;
   classwork_type?: string | null;
+  classwork_category?: string | null;
   total_points?: number | null;
   due_date?: string | null;
   allow_late_submissions?: boolean;
@@ -1155,34 +1156,22 @@ export default function SubjectLessonTab({
     return counts;
   }, new Map<number, number>());
 
-  const multiLessonClassworks = Array.from(
-    new Map(
-      allClassworks
-        .filter(
-          (classwork) =>
-            isQuizType(classwork.classwork_type) &&
-            (classworkLessonCounts.get(classwork.classwork_assignment_id) ??
-              0) > 1,
-        )
-        .map((classwork) => [classwork.classwork_assignment_id, classwork]),
-    ).values(),
-  );
+  const quarterlyMap = new Map<number, LessonClasswork | ClassworkDetail>();
 
-  const quarterlyAssessments = Array.from(
-    new Map([
-      ...subjectAssignments
-        .filter((cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT")
-        .map((cw) => [cw.classwork_assignment_id, cw]),
-      ...allClassworks
-        .filter(
-          (cw) =>
-            cw.classwork_category === "QUARTERLY_ASSESSMENT" ||
-            (isQuizType(cw.classwork_type) &&
-              (classworkLessonCounts.get(cw.classwork_assignment_id) ?? 0) > 1),
-        )
-        .map((cw) => [cw.classwork_assignment_id, cw]),
-    ]).values(),
-  );
+  subjectAssignments
+    .filter((cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT")
+    .forEach((cw) => quarterlyMap.set(cw.classwork_assignment_id, cw));
+
+  allClassworks
+    .filter(
+      (cw) =>
+        cw.classwork_category === "QUARTERLY_ASSESSMENT" ||
+        (isQuizType(cw.classwork_type) &&
+          (classworkLessonCounts.get(cw.classwork_assignment_id) ?? 0) > 1),
+    )
+    .forEach((cw) => quarterlyMap.set(cw.classwork_assignment_id, cw));
+
+  const quarterlyAssessments = Array.from(quarterlyMap.values());
 
   const quarterlyAssignmentIds = new Set(
     quarterlyAssessments.map((qa) => qa.classwork_assignment_id),

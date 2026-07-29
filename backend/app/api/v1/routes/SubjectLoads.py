@@ -14,11 +14,13 @@ from app.models.academic.SubjectOffering import SubjectOffering
 from app.schemas.SubjectLoad import (
     ValidateSubjectLoadRequest,
     ValidationResultResponse,
+    AutoScheduleResponse,
     BatchSaveSubjectLoadRequest,
     BatchSaveSubjectLoadResponse,
     SubjectLoadItem,
 )
 from app.services.academic.ConflictDetectorService import ConflictDetectorService
+from app.services.academic.AutoSchedulerService import AutoSchedulerService
 
 router = APIRouter()
 
@@ -91,6 +93,8 @@ def get_subject_load_studio_data(
                 "academic_level_id": c.academic_level_id,
                 "academic_year_id": c.academic_year_id,
                 "pathway": getattr(c, "pathway", None) or "general",
+                "paired_class_id": getattr(c, "paired_class_id", None),
+                "period_template_group": getattr(c, "period_template_group", None) or "JHS_45MIN",
             }
             for c in classes
         ],
@@ -151,6 +155,29 @@ def validate_subject_loads(
 ):
     period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == payload.academic_period_id).first()
     return ConflictDetectorService.validate_loads(db=db, loads=payload.loads, academic_period=period)
+
+
+@router.post("/auto-schedule", response_model=AutoScheduleResponse)
+def auto_schedule_subject_loads(
+    payload: ValidateSubjectLoadRequest,
+    mode: str = Query("standard"),
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == payload.academic_period_id).first()
+    if mode == "teacher_swap":
+        auto_scheduled_loads = AutoSchedulerService.auto_schedule_paired_swap(db=db, loads=payload.loads, academic_period=period)
+    else:
+        auto_scheduled_loads = AutoSchedulerService.auto_schedule_loads(db=db, loads=payload.loads, academic_period=period)
+
+    validation_res = ConflictDetectorService.validate_loads(db=db, loads=auto_scheduled_loads, academic_period=period)
+    
+    return AutoScheduleResponse(
+        is_valid=validation_res.is_valid,
+        conflicts=validation_res.conflicts,
+        teacher_workloads=validation_res.teacher_workloads,
+        scheduled_loads=auto_scheduled_loads,
+    )
 
 
 @router.post("/batch-save", response_model=BatchSaveSubjectLoadResponse)
