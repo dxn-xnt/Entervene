@@ -49,6 +49,7 @@ export type QuizQuestionAnalysis = {
 export type QuizStudentScore = {
   student_id: string;
   student_name: string;
+  submission_id?: number | null;
   status: string;
   attempt_count: number;
   grade?: number | null;
@@ -86,4 +87,41 @@ export type QuizImportPreview = {
     options: QuizOptionDraft[];
   }>;
   warnings: string[];
+};
+
+export type TeacherQuizAnswer = {
+  answer_id?: number | null;
+  quiz_question_id: number;
+  question_text: string;
+  question_type: string;
+  max_points: number;
+  answer_text?: string | null;
+  is_correct?: boolean | null;
+  points_awarded?: number | null;
+};
+
+export type TeacherQuizSubmissionDetail = {
+  submission_id: number;
+  classwork_id: number;
+  student_id: string;
+  student_name: string;
+  status: string;
+  attempt_count: number;
+  total_points: number;
+  grade?: number | null;
+  feedback?: string | null;
+  submitted_at?: string | null;
+  graded_at?: string | null;
+  needs_grading: boolean;
+  answers: TeacherQuizAnswer[];
+};
+
+export type TeacherGradeQuizSubmissionPayload = {
+  answers: Array<{
+    quiz_question_id: number;
+    points_awarded: number;
+    is_correct?: boolean | null;
+  }>;
+  feedback?: string | null;
+  override_total_grade?: number | null;
 };

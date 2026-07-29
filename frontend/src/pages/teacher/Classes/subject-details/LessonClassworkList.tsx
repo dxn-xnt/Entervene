@@ -33,6 +33,7 @@ type LessonClassworkListProps = {
   openClassworkDetail: (classwork: LinkedClasswork) => void;
   subjectAssignments?: LinkedClasswork[];
   openQuarterlyAssessmentForm?: () => void;
+  openLessonDetail?: (lesson: Lesson) => void;
 };
 
 export default function LessonClassworkList({
@@ -51,6 +52,7 @@ export default function LessonClassworkList({
   openClassworkDetail,
   subjectAssignments,
   openQuarterlyAssessmentForm,
+  openLessonDetail,
 }: LessonClassworkListProps) {
   const quarterlyAssessments = (subjectAssignments ?? []).filter(
     (cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT",
@@ -206,14 +208,14 @@ export default function LessonClassworkList({
             <div key={lesson.lesson_id} className="flex flex-col gap-2">
               <Card className="bg-primary border-black">
                 <Card.Content className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => toggleLesson(lesson.lesson_id)}
-                    className="flex min-w-0 flex-1 items-center justify-between text-left"
-                  >
-                    <div className="min-w-0">
+                  <div className="flex min-w-0 flex-1 items-center justify-between text-left">
+                    <button
+                      type="button"
+                      onClick={() => (openLessonDetail ? openLessonDetail(lesson) : openLessonManager(lesson))}
+                      className="group min-w-0 flex-1 text-left cursor-pointer"
+                    >
                       <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <Card.Title className="truncate text-2xl font-bold text-gray-950">
+                        <Card.Title className="truncate text-2xl font-bold text-gray-950 group-hover:underline">
                           {lesson.title}
                         </Card.Title>
                         <Badge
@@ -239,13 +241,20 @@ export default function LessonClassworkList({
                             ? `Created ${new Date(lesson.created_at).toLocaleDateString()}`
                             : "Lesson folder")}
                       </p>
-                    </div>
-                    {isExpanded ? (
-                      <ChevronDown size={18} />
-                    ) : (
-                      <ChevronRight size={18} />
-                    )}
-                  </button>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleLesson(lesson.lesson_id)}
+                      className="p-1 text-gray-800 hover:text-black cursor-pointer"
+                      title={isExpanded ? "Collapse classwork list" : "Expand classwork list"}
+                    >
+                      {isExpanded ? (
+                        <ChevronDown size={20} />
+                      ) : (
+                        <ChevronRight size={20} />
+                      )}
+                    </button>
+                  </div>
                   <Button
                     type="button"
                     variant="outline"

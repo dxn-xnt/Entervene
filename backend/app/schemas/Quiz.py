@@ -175,6 +175,7 @@ class QuizQuestionAnalysisOut(BaseModel):
 class QuizStudentScoreOut(BaseModel):
     student_id: str
     student_name: str
+    submission_id: Optional[int] = None
     status: str
     attempt_count: int
     grade: Optional[float] = None
@@ -197,3 +198,42 @@ class QuizAnalysisResponse(BaseModel):
     class_accuracy_percent: Optional[float] = None
     questions: list[QuizQuestionAnalysisOut] = Field(default_factory=list)
     students: list[QuizStudentScoreOut] = Field(default_factory=list)
+
+
+class TeacherQuizAnswerOut(BaseModel):
+    answer_id: Optional[int] = None
+    quiz_question_id: int
+    question_text: str
+    question_type: str
+    max_points: float
+    answer_text: Optional[str] = None
+    is_correct: Optional[bool] = None
+    points_awarded: Optional[float] = None
+
+
+class TeacherQuizSubmissionDetailResponse(BaseModel):
+    submission_id: int
+    classwork_id: int
+    student_id: str
+    student_name: str
+    status: str
+    attempt_count: int
+    total_points: float
+    grade: Optional[float] = None
+    feedback: Optional[str] = None
+    submitted_at: Optional[datetime] = None
+    graded_at: Optional[datetime] = None
+    needs_grading: bool = False
+    answers: list[TeacherQuizAnswerOut] = Field(default_factory=list)
+
+
+class TeacherQuizAnswerGradeItem(BaseModel):
+    quiz_question_id: int
+    points_awarded: float
+    is_correct: Optional[bool] = None
+
+
+class TeacherGradeQuizSubmissionRequest(BaseModel):
+    answers: list[TeacherQuizAnswerGradeItem] = Field(default_factory=list)
+    feedback: Optional[str] = None
+    override_total_grade: Optional[float] = None
