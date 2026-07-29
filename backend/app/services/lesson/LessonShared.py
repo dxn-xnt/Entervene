@@ -63,8 +63,16 @@ def authorize_lesson_access(db: Session, lesson: Lesson, current_user: dict) -> 
         return
     if role == "teacher":
         staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
-        if staff and lesson.created_by_staff_id == staff.staff_id:
-            return
+        if staff:
+            if lesson.created_by_staff_id == staff.staff_id:
+                return
+            load = db.query(SubjectLoad).filter(
+                SubjectLoad.staff_id == staff.staff_id,
+                SubjectLoad.subject_id == lesson.subject_id,
+                SubjectLoad.status == "active",
+            ).first()
+            if load:
+                return
     if lesson.is_archived:
         raise HTTPException(status_code=404, detail="Lesson not found")
     if role == "student" and lesson.is_published:

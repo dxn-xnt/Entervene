@@ -11,13 +11,19 @@ from app.schemas.Quiz import (
     QuizImportPreviewResponse,
     QuizReadinessResponse,
     QuizSubmitRequest,
+    TeacherGradeQuizSubmissionRequest,
+    TeacherQuizSubmissionDetailResponse,
 )
 from app.services.quiz.QuizAttemptService import (
     get_student_quiz_attempt,
     start_student_quiz_attempt,
     submit_student_quiz_attempt,
 )
-from app.services.quiz.QuizAnalysisService import build_teacher_quiz_analysis
+from app.services.quiz.QuizAnalysisService import (
+    build_teacher_quiz_analysis,
+    get_teacher_quiz_submission_detail,
+    grade_teacher_quiz_submission,
+)
 from app.services.quiz.QuizBuilderService import (
     build_quiz_response,
     delete_quiz_builder,
@@ -131,3 +137,22 @@ def get_quiz_readiness(
 ):
     classwork = get_teacher_quiz_classwork(db, staff_id, classwork_id)
     return quiz_readiness(db, classwork)
+
+
+@router.get("/submission/{submission_id}", response_model=TeacherQuizSubmissionDetailResponse)
+def get_quiz_submission_detail(
+    submission_id: int,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return get_teacher_quiz_submission_detail(db, staff_id, submission_id)
+
+
+@router.put("/submission/{submission_id}/grade", response_model=TeacherQuizSubmissionDetailResponse)
+def grade_quiz_submission(
+    submission_id: int,
+    body: TeacherGradeQuizSubmissionRequest,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return grade_teacher_quiz_submission(db, staff_id, submission_id, body)

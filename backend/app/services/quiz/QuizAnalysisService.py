@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Iterable
 
@@ -18,6 +19,9 @@ from app.schemas.Quiz import (
     QuizOptionDistributionOut,
     QuizQuestionAnalysisOut,
     QuizStudentScoreOut,
+    TeacherGradeQuizSubmissionRequest,
+    TeacherQuizAnswerOut,
+    TeacherQuizSubmissionDetailResponse,
 )
 from app.services.quiz.QuizBuilderService import get_teacher_quiz_classwork
 
@@ -151,6 +155,7 @@ def _student_score_out(
     return QuizStudentScoreOut(
         student_id=str(student.student_id),
         student_name=_student_name(student),
+        submission_id=submission.submission_id if submission else None,
         status=submission.status if submission else "not_submitted",
         attempt_count=submission.attempt_count if submission else 0,
         grade=grade,
@@ -216,3 +221,160 @@ def _student_name(student: Student) -> str:
         ]
         if part
     )
+
+
+def get_teacher_quiz_submission_detail(
+    db: Session,
+    staff_id: str,
+    submission_id: int,
+) -> TeacherQuizSubmissionDetailResponse:
+    submission = db.query(StudentSubmission).filter(StudentSubmission.submission_id == submission_id).first()
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    assignment = db.query(ClassworkAssignment).filter(
+        ClassworkAssignment.classwork_assignment_id == submission.classwork_assignment_id
+    ).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    classwork = get_teacher_quiz_classwork(db, staff_id, assignment.classwork_id)
+    quiz = _quiz_with_questions(db, classwork.classwork_id)
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+
+    student = db.query(Student).filter(Student.student_id == submission.student_id).first()
+    student_name = _student_name(student) if student else "Student"
+
+    existing_answers = {
+        ans.quiz_question_id: ans
+        for ans in db.query(QuizAnswer).filter(QuizAnswer.submission_id == submission.submission_id).all()
+    }
+
+    answers_out: list[TeacherQuizAnswerOut] = []
+    links = sorted(quiz.questions, key=lambda q: q.display_order)
+    for link in links:
+        question = link.question
+        ans = existing_answers.get(link.quiz_question_id)
+        answers_out.append(
+            TeacherQuizAnswerOut(
+                answer_id=ans.answer_id if ans else None,
+                quiz_question_id=link.quiz_question_id,
+                question_text=question.question_text,
+                question_type=question.question_type,
+                max_points=float(question.points),
+                answer_text=ans.answer_text if ans else None,
+                is_correct=ans.is_correct if ans else None,
+                points_awarded=float(ans.points_awarded) if ans and ans.points_awarded is not None else None,
+            )
+        )
+
+    total_pts = float(classwork.total_points) if classwork.total_points is not None else 0.0
+    grade_val = float(submission.grade) if submission.grade is not None else None
+    needs_g = any(a.points_awarded is None for a in answers_out)
+
+    return TeacherQuizSubmissionDetailResponse(
+        submission_id=submission.submission_id,
+        classwork_id=classwork.classwork_id,
+        student_id=str(submission.student_id),
+        student_name=student_name,
+        status=submission.status,
+        attempt_count=submission.attempt_count,
+        total_points=total_pts,
+        grade=grade_val,
+        feedback=submission.feedback,
+        submitted_at=submission.submitted_at,
+        graded_at=submission.graded_at,
+        needs_grading=needs_g,
+        answers=answers_out,
+    )
+
+
+def grade_teacher_quiz_submission(
+    db: Session,
+    staff_id: str,
+    submission_id: int,
+    payload: TeacherGradeQuizSubmissionRequest,
+) -> TeacherQuizSubmissionDetailResponse:
+    submission = db.query(StudentSubmission).filter(StudentSubmission.submission_id == submission_id).first()
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    assignment = db.query(ClassworkAssignment).filter(
+        ClassworkAssignment.classwork_assignment_id == submission.classwork_assignment_id
+    ).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    classwork = get_teacher_quiz_classwork(db, staff_id, assignment.classwork_id)
+    quiz = _quiz_with_questions(db, classwork.classwork_id)
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+
+    question_map = {link.quiz_question_id: link.question for link in quiz.questions}
+    existing_answers = {
+        ans.quiz_question_id: ans
+        for ans in db.query(QuizAnswer).filter(QuizAnswer.submission_id == submission.submission_id).all()
+    }
+
+    for grade_item in payload.answers:
+        if grade_item.quiz_question_id not in question_map:
+            continue
+        question = question_map[grade_item.quiz_question_id]
+        if grade_item.points_awarded < 0:
+            raise HTTPException(status_code=400, detail="Points awarded cannot be negative")
+        if grade_item.points_awarded > float(question.points):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Points awarded cannot exceed question maximum ({question.points})",
+            )
+
+        pts_decimal = Decimal(str(grade_item.points_awarded))
+        is_corr = grade_item.is_correct
+        if is_corr is None:
+            if pts_decimal == Decimal(str(question.points)):
+                is_corr = True
+            elif pts_decimal == Decimal("0"):
+                is_corr = False
+
+        answer_obj = existing_answers.get(grade_item.quiz_question_id)
+        if not answer_obj:
+            answer_obj = QuizAnswer(
+                quiz_question_id=grade_item.quiz_question_id,
+                submission_id=submission.submission_id,
+                answer_text=None,
+            )
+            db.add(answer_obj)
+
+        answer_obj.points_awarded = pts_decimal
+        answer_obj.is_correct = is_corr
+
+    db.flush()
+
+    if payload.override_total_grade is not None:
+        if payload.override_total_grade < 0:
+            raise HTTPException(status_code=400, detail="Grade cannot be negative")
+        if classwork.total_points is not None and payload.override_total_grade > float(classwork.total_points):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Grade cannot be greater than total points ({classwork.total_points})",
+            )
+        submission.grade = Decimal(str(payload.override_total_grade))
+    else:
+        all_answers = db.query(QuizAnswer).filter(QuizAnswer.submission_id == submission.submission_id).all()
+        total_awarded = sum(
+            (ans.points_awarded for ans in all_answers if ans.points_awarded is not None),
+            Decimal("0"),
+        )
+        submission.grade = total_awarded
+
+    if payload.feedback is not None:
+        submission.feedback = payload.feedback
+
+    submission.status = "graded"
+    submission.graded_at = datetime.now(timezone.utc)
+    submission.graded_by_staff_id = staff_id
+
+    db.commit()
+    db.refresh(submission)
+    return get_teacher_quiz_submission_detail(db, staff_id, submission_id)
