@@ -13,12 +13,14 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { API_URL, apiFetch } from "@/lib/api";
 import AttachmentDisplay from "@/components/attachment-display";
+import CreateLessonModal from "@/pages/teacher/create-lesson";
 import {
   getTeacherRecordPeriods,
   getTeacherStudentRoster,
 } from "@/lib/student-record-api";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
+import { Dialog } from "@/components/retroui/Dialog";
 import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Badge } from "@/components/retroui/Badge";
@@ -55,10 +57,13 @@ export default function SubjectDetails() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<"lessons" | "students">("lessons");
+  const [isCreatingLesson, setIsCreatingLesson] = useState(false);
   const [activeLessonDetail, setActiveLessonDetail] = useState<Lesson | null>(null);
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [subjectAssignments, setSubjectAssignments] = useState<LinkedClasswork[]>([]);
+  const [subjectAssignments, setSubjectAssignments] = useState<
+    LinkedClasswork[]
+  >([]);
   const [classworkCount, setClassworkCount] = useState<number | null>(null);
   const [overviewMastery, setOverviewMastery] = useState<number>(0);
   const [overviewCompletion, setOverviewCompletion] = useState<number>(0);
@@ -196,6 +201,18 @@ export default function SubjectDetails() {
 
     loadContext();
   }, [classId, subjectId]);
+
+  useEffect(() => {
+    const isOpen = Boolean(selectedClasswork || detailLoadingId || detailError);
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [selectedClasswork, detailLoadingId, detailError]);
 
   useEffect(() => {
     const targetId = Number(searchParams.get("lessonId"));
@@ -793,21 +810,17 @@ export default function SubjectDetails() {
                   </Breadcrumb.List>
                 </Breadcrumb>
 
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  onClick={() =>
-                    navigate(
-                      `/teacher/lessons/create?classId=${classId || ""}&subjectId=${subjectId || ""}`,
-                    )
-                  }
-                  className="w-full lg:w-auto gap-2 whitespace-nowrap font-semibold"
-                >
-                  <Plus size={16} />
-                  Add Lesson
-                </Button>
-              </div>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              onClick={() => setIsCreatingLesson(true)}
+              className="w-full lg:w-auto gap-2 whitespace-nowrap font-semibold"
+            >
+              <Plus size={16} />
+              Add Lesson
+            </Button>
+          </div>
 
               <div className="-mx-4 md:-mx-6 border-b-2 border-border" />
 
@@ -834,46 +847,40 @@ export default function SubjectDetails() {
                   </Card.Content>
                 </Card>
 
-                <section>
-                  <h2 className="mb-3 text-xl font-bold">Subject Overview</h2>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <Card className="block">
-                      <Card.Content className="space-y-1">
-                        <Card.Description>
-                          Lesson Mastery
-                        </Card.Description>
-                        <Card.Title>{overviewMastery}%</Card.Title>
-                        <p className="text-xs text-black">
-                          Average graded classwork performance
-                        </p>
-                      </Card.Content>
-                    </Card>
+            <section>
+              <h2 className="mb-3 text-xl font-bold">Subject Overview</h2>
+              <div className="grid gap-4 md:grid-cols-3">
+                <Card className="block">
+                  <Card.Content className="space-y-1">
+                    <Card.Description>Lesson Mastery</Card.Description>
+                    <Card.Title>{overviewMastery}%</Card.Title>
+                    <p className="text-xs text-black">
+                      Average graded classwork performance
+                    </p>
+                  </Card.Content>
+                </Card>
 
-                    <Card className="block">
-                      <Card.Content className="space-y-1">
-                        <Card.Description>
-                          Classwork Assigned
-                        </Card.Description>
-                        <Card.Title>{classworkCount ?? 0}</Card.Title>
-                        <p className="text-xs text-black">
-                          Active classworks in this subject
-                        </p>
-                      </Card.Content>
-                    </Card>
+                <Card className="block">
+                  <Card.Content className="space-y-1">
+                    <Card.Description>Classwork Assigned</Card.Description>
+                    <Card.Title>{classworkCount ?? 0}</Card.Title>
+                    <p className="text-xs text-black">
+                      Active classworks in this subject
+                    </p>
+                  </Card.Content>
+                </Card>
 
-                    <Card className="block">
-                      <Card.Content className="space-y-1">
-                        <Card.Description>
-                          Completion Percentage
-                        </Card.Description>
-                        <Card.Title>{overviewCompletion}%</Card.Title>
-                        <p className="text-xs text-black">
-                          Average submitted classwork completion
-                        </p>
-                      </Card.Content>
-                    </Card>
-                  </div>
-                </section>
+                <Card className="block">
+                  <Card.Content className="space-y-1">
+                    <Card.Description>Completion Percentage</Card.Description>
+                    <Card.Title>{overviewCompletion}%</Card.Title>
+                    <p className="text-xs text-black">
+                      Average submitted classwork completion
+                    </p>
+                  </Card.Content>
+                </Card>
+              </div>
+            </section>
 
                 <Tabs
                   tabs={tabs}
@@ -904,7 +911,7 @@ export default function SubjectDetails() {
                     openClassworkDetail={openClassworkDetail}
                     subjectAssignments={subjectAssignments}
                     openLessonDetail={openLessonDetail}
-                  />
+                      />
                 )}
               </main>
             </>
@@ -912,7 +919,7 @@ export default function SubjectDetails() {
 
           {selectedLesson && lessonDraft && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
-              <Card className="block max-h-[92vh] w-full max-w-4xl overflow-y-auto shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <Card className="block max-h-[92vh] w-full max-w-4xl overflow-y-auto">
                 <div className="sticky top-0 z-10 flex items-center justify-between border-b border-black bg-[#F6E9B2] px-5 py-4">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wide text-gray-700">
@@ -939,7 +946,7 @@ export default function SubjectDetails() {
                       </div>
                     )}
 
-                    <Card className="block shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <Card className="block">
                       <Card.Content className="space-y-4">
                         <div className="grid gap-4 sm:grid-cols-[1fr_130px]">
                           <div>
@@ -1043,7 +1050,7 @@ export default function SubjectDetails() {
                       </Card.Content>
                     </Card>
 
-                    <Card className="block shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <Card className="block">
                       <Card.Content className="space-y-3">
                         <div className="flex items-center gap-2">
                           <Paperclip size={18} />
@@ -1115,7 +1122,7 @@ export default function SubjectDetails() {
                   </div>
 
                   <aside className="space-y-4">
-                    <Card className="block border-black bg-[#F6E9B2] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <Card className="block bg-[#F6E9B2]">
                       <Card.Content>
                         <Card.Title className="mb-0 text-base font-bold">
                           Publication
@@ -1148,7 +1155,7 @@ export default function SubjectDetails() {
                       </Card.Content>
                     </Card>
 
-                    <Card className="block shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <Card className="block">
                       <Card.Content>
                         <Card.Title className="mb-0 text-base font-bold">
                           Assigned Sections
@@ -1188,7 +1195,7 @@ export default function SubjectDetails() {
                       </Card.Content>
                     </Card>
 
-                    <Card className="block border-red-300 bg-red-50 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <Card className="block border-red-300 bg-red-50">
                       <Card.Content>
                         <div className="flex items-center gap-2 text-red-800">
                           <Archive size={17} />
@@ -1251,7 +1258,7 @@ export default function SubjectDetails() {
 
           {showArchiveConfirm && selectedLesson && (
             <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4">
-              <Card className="block w-full max-w-md shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <Card className="block w-full max-w-md">
                 <div className="flex items-center justify-between border-b border-black bg-red-100 px-5 py-3">
                   <div className="flex items-center gap-2 text-red-800">
                     <Archive size={18} />
@@ -1317,63 +1324,92 @@ export default function SubjectDetails() {
             />
           )}
 
+          {isCreatingLesson && (
+            <CreateLessonModal
+              classId={classId}
+              subjectId={subjectId}
+              onClose={() => setIsCreatingLesson(false)}
+              onCreated={() => {
+                setIsCreatingLesson(false);
+                window.location.reload();
+              }}
+            />
+          )}
+
           {(selectedClasswork || detailLoadingId || detailError) && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
-              <Card className="block max-h-[90vh] w-full max-w-4xl overflow-y-auto shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                <div className="sticky top-0 flex items-center justify-between border-b border-black bg-[#F6E9B2] px-5 py-4">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wide text-gray-700">
-                      Teacher classwork detail
-                    </p>
-                    <Card.Title className="text-xl font-bold">
-                      {selectedClasswork?.title || "Classwork"}
-                    </Card.Title>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {selectedClasswork && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          navigate(
-                            `/teacher/classworks?classworkId=${selectedClasswork.classwork_id}`,
-                          )
-                        }
-                        className="rounded-lg border border-black bg-white px-3 py-1.5 text-xs font-bold hover:bg-[#7ABA78]"
+            <Dialog
+              open={Boolean(
+                selectedClasswork || detailLoadingId || detailError,
+              )}
+              onOpenChange={(open) => {
+                if (!open) closeClassworkDetail();
+              }}
+            >
+              <Dialog.Content
+                size="4xl"
+                className="no-scrollbar h-fit max-h-[90vh] !overflow-y-auto overflow-x-hidden"
+                overlay={{ className: "bg-black/50" }}
+              >
+                <Dialog.Header asChild className="bg-primary px-5 py-4">
+                  <>
+                    <div>
+                      <p className="text-xs font-bold uppercase">
+                        Teacher classwork detail
+                      </p>
+                      <p className="text-xl font-bold">
+                        {selectedClasswork?.title || "Classwork"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {selectedClasswork && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            navigate(
+                              `/teacher/classworks?classworkId=${selectedClasswork.classwork_id}`,
+                            )
+                          }
+                          className="border-black bg-white font-bold"
+                        >
+                          Click for more details
+                        </Button>
+                      )}
+                      <Dialog.Close
+                        title="Close"
+                        className="cursor-pointer rounded p-1 hover:bg-white/60"
                       >
-                        Click for more details
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={closeClassworkDetail}
-                      className="rounded p-1 hover:bg-white/60"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                </div>
+                        <X size={18} />
+                      </Dialog.Close>
+                    </div>
+                  </>
+                </Dialog.Header>
 
                 {detailLoadingId ? (
                   <div className="p-8 text-center text-sm font-semibold text-gray-600">
                     Loading classwork details...
                   </div>
                 ) : detailError ? (
-                  <div className="m-5 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <div className="m-5 border-2 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700">
                     {detailError}
                   </div>
                 ) : selectedClasswork ? (
                   <div className="grid gap-5 p-5 lg:grid-cols-[1.4fr_1fr]">
                     <div className="space-y-4">
-                      <Card className="block shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                      <Card className="block">
                         <Card.Content className="space-y-3">
                           <div className="flex flex-wrap items-center gap-2">
-                            <Badge className="border border-black bg-[#7ABA78] px-3 py-1 text-xs font-bold">
+                            <Badge
+                              variant="secondary"
+                              className="bg-[#7ABA78] text-xs font-semibold"
+                            >
                               {selectedClasswork.classwork_type || "Classwork"}
                             </Badge>
                             {selectedClasswork.classwork_category && (
                               <Badge
-                                variant="outline"
-                                className="border border-gray-300 px-3 py-1 text-xs font-semibold"
+                                variant="solid"
+                                className="text-xs font-semibold"
                               >
                                 {selectedClasswork.classwork_category.replace(
                                   /_/g,
@@ -1382,15 +1418,15 @@ export default function SubjectDetails() {
                               </Badge>
                             )}
                             <Badge
-                              variant="outline"
-                              className="border border-gray-300 px-3 py-1 text-xs font-semibold"
+                              variant="solid"
+                              className="text-xs font-semibold"
                             >
                               {selectedClasswork.is_published
                                 ? "Published"
                                 : "Draft"}
                             </Badge>
                             {selectedClasswork.is_locked && (
-                              <Badge className="border border-red-300 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                              <Badge className="rounded-none border-2 border-red-600 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
                                 Locked
                               </Badge>
                             )}
@@ -1400,7 +1436,7 @@ export default function SubjectDetails() {
                             {selectedClasswork.title}
                           </Card.Title>
                           <div className="grid gap-3 text-sm sm:grid-cols-3">
-                            <div className="rounded-lg bg-gray-50 p-3">
+                            <div className="border-2 border-black bg-gray-50 p-3">
                               <p className="font-semibold text-gray-600">
                                 Due date
                               </p>
@@ -1412,7 +1448,7 @@ export default function SubjectDetails() {
                                   : "No due date"}
                               </p>
                             </div>
-                            <div className="rounded-lg bg-gray-50 p-3">
+                            <div className="border-2 border-black bg-gray-50 p-3">
                               <p className="font-semibold text-gray-600">
                                 Points
                               </p>
@@ -1420,7 +1456,7 @@ export default function SubjectDetails() {
                                 {selectedClasswork.total_points ?? "Not set"}
                               </p>
                             </div>
-                            <div className="rounded-lg bg-gray-50 p-3">
+                            <div className="border-2 border-black bg-gray-50 p-3">
                               <p className="font-semibold text-gray-600">
                                 Section
                               </p>
@@ -1436,24 +1472,24 @@ export default function SubjectDetails() {
 
                       {(selectedClasswork.description ||
                         selectedClasswork.instructions) && (
-                        <Card className="block shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                        <Card className="block">
                           <Card.Content className="space-y-3">
                             {selectedClasswork.description && (
                               <div>
-                                <Card.Title className="mb-0 text-base font-bold">
+                                <Card.Title className="mb-0 font-bold">
                                   Description
                                 </Card.Title>
-                                <p className="mt-1 text-sm text-gray-700">
+                                <p className="mt-1 text-sm">
                                   {selectedClasswork.description}
                                 </p>
                               </div>
                             )}
                             {selectedClasswork.instructions && (
                               <div>
-                                <Card.Title className="mb-0 text-base font-bold">
+                                <Card.Title className="mb-0 font-bold">
                                   Instructions
                                 </Card.Title>
-                                <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
+                                <p className="mt-1 whitespace-pre-wrap text-sm">
                                   {selectedClasswork.instructions}
                                 </p>
                               </div>
@@ -1462,7 +1498,7 @@ export default function SubjectDetails() {
                         </Card>
                       )}
 
-                      <Card className="block shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                      <Card className="block">
                         <Card.Content className="space-y-3">
                           <div className="flex items-center gap-2">
                             <Paperclip size={18} />
@@ -1495,7 +1531,7 @@ export default function SubjectDetails() {
                     </div>
 
                     <aside className="space-y-4">
-                      <Card className="block border-black bg-[#F6E9B2] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                      <Card className="block bg-primary">
                         <Card.Content>
                           <div className="flex items-center gap-2">
                             <Users size={18} />
@@ -1504,7 +1540,7 @@ export default function SubjectDetails() {
                             </Card.Title>
                           </div>
                           <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                            <div className="rounded-lg border border-black bg-white p-2">
+                            <div className="border-2 border-black bg-white p-2">
                               <p className="text-2xl font-bold">
                                 {selectedTracking?.total_students ?? 0}
                               </p>
@@ -1512,7 +1548,7 @@ export default function SubjectDetails() {
                                 Students
                               </p>
                             </div>
-                            <div className="rounded-lg border border-black bg-white p-2">
+                            <div className="border-2 border-black bg-white p-2">
                               <p className="text-2xl font-bold">
                                 {selectedTracking?.submitted_count ?? 0}
                               </p>
@@ -1520,7 +1556,7 @@ export default function SubjectDetails() {
                                 Submitted
                               </p>
                             </div>
-                            <div className="rounded-lg border border-black bg-white p-2">
+                            <div className="border-2 border-black bg-white p-2">
                               <p className="text-2xl font-bold">
                                 {selectedTracking?.missing_count ?? 0}
                               </p>
@@ -1532,7 +1568,7 @@ export default function SubjectDetails() {
                         </Card.Content>
                       </Card>
 
-                      <Card className="block shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                      <Card className="block">
                         <Card.Content>
                           <Card.Title className="mb-3 text-base font-bold">
                             Submitted Students
@@ -1543,7 +1579,7 @@ export default function SubjectDetails() {
                               .map((student) => (
                                 <div
                                   key={student.student_id}
-                                  className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                                  className="border-2 border-black px-3 py-2 text-sm"
                                 >
                                   <p className="font-semibold">
                                     {student.student_name}
@@ -1569,7 +1605,7 @@ export default function SubjectDetails() {
                         </Card.Content>
                       </Card>
 
-                      <Card className="block shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                      <Card className="block">
                         <Card.Content>
                           <Card.Title className="mb-3 text-base font-bold">
                             Needs Follow-up
@@ -1580,7 +1616,7 @@ export default function SubjectDetails() {
                               .map((student) => (
                                 <div
                                   key={student.student_id}
-                                  className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                                  className="border-2 border-black px-3 py-2 text-sm"
                                 >
                                   <p className="font-semibold">
                                     {student.student_name}
@@ -1601,8 +1637,8 @@ export default function SubjectDetails() {
                     </aside>
                   </div>
                 ) : null}
-              </Card>
-            </div>
+              </Dialog.Content>
+            </Dialog>
           )}
         </div>
       </div>
