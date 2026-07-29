@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Archive,
-  ChevronRight,
   Info,
   Paperclip,
   Plus,

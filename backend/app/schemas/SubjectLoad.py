@@ -43,6 +43,13 @@ class ValidationResultResponse(BaseModel):
     teacher_workloads: list[TeacherWorkloadItem]
 
 
+class AutoScheduleResponse(BaseModel):
+    is_valid: bool
+    conflicts: list[ConflictItem]
+    teacher_workloads: list[TeacherWorkloadItem]
+    scheduled_loads: list[SubjectLoadItem]
+
+
 class ValidateSubjectLoadRequest(BaseModel):
     academic_period_id: int
     academic_level_id: int | None = None

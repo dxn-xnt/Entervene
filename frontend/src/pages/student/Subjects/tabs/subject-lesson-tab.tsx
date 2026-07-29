@@ -1156,14 +1156,24 @@ export default function SubjectLessonTab({
     return counts;
   }, new Map<number, number>());
 
+  const multiLessonClassworks = Array.from(
+    new Map(
+      allClassworks
+        .filter(
+          (classwork) =>
+            isQuizType(classwork.classwork_type) &&
+            (classworkLessonCounts.get(classwork.classwork_assignment_id) ??
+              0) > 1,
+        )
+        .map((classwork) => [classwork.classwork_assignment_id, classwork]),
+    ).values(),
+  );
+
   const quarterlyAssessments = Array.from(
-    new Map<number, LessonClasswork | ClassworkDetail>([
+    new Map([
       ...subjectAssignments
         .filter((cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT")
-        .map((cw): [number, LessonClasswork | ClassworkDetail] => [
-          cw.classwork_assignment_id,
-          cw,
-        ]),
+        .map((cw) => [cw.classwork_assignment_id, cw]),
       ...allClassworks
         .filter(
           (cw) =>
@@ -1171,10 +1181,7 @@ export default function SubjectLessonTab({
             (isQuizType(cw.classwork_type) &&
               (classworkLessonCounts.get(cw.classwork_assignment_id) ?? 0) > 1),
         )
-        .map((cw): [number, LessonClasswork | ClassworkDetail] => [
-          cw.classwork_assignment_id,
-          cw,
-        ]),
+        .map((cw) => [cw.classwork_assignment_id, cw]),
     ]).values(),
   );
 

@@ -12,6 +12,7 @@ import { TimePickerSingle, type TimeValue } from "@/components/retroui/TimePicke
 import {
   getSubjectLoadStudioData,
   validateSubjectLoads,
+  autoScheduleSubjectLoads,
   batchSaveSubjectLoads,
   type SubjectLoadItem,
   type SubjectLoadStudioData,
@@ -28,6 +29,9 @@ import {
   AlertCircle,
   Plus,
   Trash2,
+  Wand2,
+  Sparkles,
+  Zap,
 } from "lucide-react";
 
 function stringToTimeValue(str?: string | null, fallbackHour = 8): TimeValue {
@@ -74,14 +78,25 @@ export default function SubjectLoadStudio() {
   const [notice, setNotice] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
 
-  const handleHighlightKey = (key: string | undefined) => {
+  const handleHighlightKey = (key: string | undefined, classId?: number | null) => {
     if (!key) return;
-    setHighlightedKey(key);
-    const targetId = `subject-row-${key}`;
-    const el = document.getElementById(targetId);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    if (classId && studioData) {
+      const targetClass = studioData.classes.find((c) => c.class_id === classId);
+      if (targetClass && selectedGradeId !== "all" && String(targetClass.academic_level_id) !== selectedGradeId) {
+        setSelectedGradeId(String(targetClass.academic_level_id));
+      }
     }
+
+    setHighlightedKey(key);
+    setTimeout(() => {
+      const targetId = `subject-row-${key}`;
+      const el = document.getElementById(targetId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 150);
+
     setTimeout(() => {
       setHighlightedKey((prev) => (prev === key ? null : prev));
     }, 2500);
@@ -137,8 +152,8 @@ export default function SubjectLoadStudio() {
               subject_id: m.subject_id,
               staff_id: m.staff_id || null,
               academic_period_id: periodIdToUse,
-              start_time: m.start_time || "08:00",
-              end_time: m.end_time || "09:00",
+              start_time: m.start_time || null,
+              end_time: m.end_time || null,
               days_of_week: m.days_of_week || [],
               status: m.status || "draft",
             });
@@ -273,6 +288,159 @@ export default function SubjectLoadStudio() {
     void runValidation(updated);
   };
 
+  // Auto-schedule entire studio or single section
+  const handleAutoSchedule = async (targetClassId?: number, mode: "standard" | "teacher_swap" = "standard") => {
+    if (!selectedPeriodId) return;
+    setIsLoading(true);
+    setNotice(null);
+    try {
+      let currentLoads = [...loads];
+      let targetClassIds: number[] = [];
+      if (targetClassId) {
+        const targetClass = studioData?.classes.find((c) => c.class_id === targetClassId);
+        const pairedClass = studioData?.classes.find(
+          (c) =>
+            c.class_id !== targetClassId &&
+            (c.class_id === targetClass?.paired_class_id ||
+              c.academic_level_id === targetClass?.academic_level_id)
+        );
+        targetClassIds = [targetClassId, pairedClass?.class_id].filter(
+          (id): id is number => typeof id === "number"
+        );
+      }
+
+      const targetClasses = targetClassId
+        ? studioData?.classes.filter((c) => targetClassIds.includes(c.class_id)) || []
+        : studioData?.classes || [];
+
+      targetClasses.forEach((cls) => {
+        const offerings = studioData?.subject_offerings || [];
+        const clsPathway = (cls.pathway || "general").toLowerCase();
+
+        const levelSubjects = (studioData?.subjects || []).filter((sub) => {
+          if (sub.academic_level_id !== cls.academic_level_id) return false;
+          if (offerings.length > 0) {
+            return offerings.some(
+              (so) =>
+                so.subject_id === sub.subject_id &&
+                so.academic_level_id === cls.academic_level_id &&
+                (so.pathway === "both" ||
+                  so.pathway.toLowerCase() === clsPathway ||
+                  (so.pathway === "general" && clsPathway === "general"))
+            );
+          }
+          return true;
+        });
+        levelSubjects.forEach((sub) => {
+          const hasSlot = currentLoads.some(
+            (l) => l.class_id === cls.class_id && l.subject_id === sub.subject_id
+          );
+          if (!hasSlot) {
+            currentLoads.push({
+              _key: `slot_${cls.class_id}_${sub.subject_id}_${Date.now()}`,
+              class_id: cls.class_id,
+              subject_id: sub.subject_id,
+              staff_id: null,
+              academic_period_id: selectedPeriodId,
+              start_time: null,
+              end_time: null,
+              days_of_week: [],
+              status: "draft",
+            });
+          }
+        });
+      });
+
+      const loadsToProcess = targetClassId
+        ? currentLoads.filter((l) => targetClassIds.includes(l.class_id))
+        : currentLoads;
+
+      const effectiveMode = targetClassId ? "teacher_swap" : mode;
+      const res = await autoScheduleSubjectLoads(selectedPeriodId, loadsToProcess, effectiveMode);
+
+      // Merge updated scheduled loads back into full loads array
+      const scheduledMap = new Map(
+        res.scheduled_loads.map((sl) => [`${sl.class_id}_${sl.subject_id}`, sl])
+      );
+
+      const mergedLoads = currentLoads.map((item) => {
+        const key = `${item.class_id}_${item.subject_id}`;
+        const match = scheduledMap.get(key);
+        if (match && (targetClassId === undefined || targetClassIds.includes(item.class_id))) {
+          return {
+            ...item,
+            start_time: match.start_time || "08:00",
+            end_time: match.end_time || "10:00",
+            days_of_week: match.days_of_week && match.days_of_week.length > 0 ? match.days_of_week : ["MON", "WED"],
+          };
+        }
+        return item;
+      });
+
+      setLoads(mergedLoads);
+      setConflicts(res.conflicts);
+      setTeacherWorkloads(res.teacher_workloads);
+
+      const errCount = res.conflicts.filter((c) => c.severity === "error").length;
+      const warnCount = res.conflicts.filter((c) => c.severity === "warning").length;
+
+      if (errCount > 0) {
+        setNotice({
+          message: `Auto-fit complete. Detected ${errCount} conflict(s). Please review highlighted errors.`,
+          type: "error",
+        });
+      } else if (warnCount > 0) {
+        setNotice({
+          message: `Auto-fit complete with ${warnCount} warning(s). Please check conflict tracker.`,
+          type: "error",
+        });
+      } else {
+        setNotice({
+          message: targetClassId
+            ? "Successfully auto-fitted section timetable without conflicts!"
+            : "Successfully auto-generated conflict-free timetables for all subjects!",
+          type: "success",
+        });
+      }
+    } catch (err) {
+      setNotice({
+        message: err instanceof Error ? err.message : "Failed to auto-generate timetable.",
+        type: "error",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Preset pattern applications
+  const handleApplyPreset = (classId: number, subjectId: number, pattern: "2day" | "3day" | "4day") => {
+    let days: string[] = ["MON", "WED"];
+    let startTime = "08:00";
+    let endTime = "10:00";
+
+    if (pattern === "2day") {
+      days = ["MON", "WED"];
+      startTime = "08:00";
+      endTime = "10:00";
+    } else if (pattern === "3day") {
+      days = ["MON", "WED", "FRI"];
+      startTime = "08:00";
+      endTime = "09:20";
+    } else if (pattern === "4day") {
+      days = ["MON", "TUE", "WED", "THU"];
+      startTime = "08:00";
+      endTime = "09:00";
+    }
+
+    const updated = loads.map((l) =>
+      l.class_id === classId && l.subject_id === subjectId
+        ? { ...l, days_of_week: days, start_time: startTime, end_time: endTime }
+        : l
+    );
+    setLoads(updated);
+    void runValidation(updated);
+  };
+
   // Save / Publish
   const handleSave = async (action: "draft" | "publish") => {
     if (!selectedPeriodId || isSaving) return;
@@ -388,7 +556,26 @@ export default function SubjectLoadStudio() {
             </div>
 
             {/* Sticky Action Controls */}
-            <div className="flex items-center gap-3 self-end md:self-auto">
+            <div className="flex flex-wrap items-center gap-2 self-end md:self-auto">
+              <Button
+                variant="default"
+                disabled={isLoading || isSaving}
+                onClick={() => void handleAutoSchedule(undefined, "teacher_swap")}
+                className="bg-sky-400 text-black hover:bg-sky-500 border-2 border-black shadow-[2px_2px_0_#000] font-bold"
+                title="CTU Master Pattern: Auto-swap teachers back-to-back between paired sections"
+              >
+                <Zap className="size-4 mr-2 text-black" />
+                Auto-Teacher Swap
+              </Button>
+              <Button
+                variant="default"
+                disabled={isLoading || isSaving}
+                onClick={() => void handleAutoSchedule(undefined, "standard")}
+                className="bg-amber-400 text-black hover:bg-amber-500 border-2 border-black shadow-[2px_2px_0_#000] font-bold"
+              >
+                <Sparkles className="size-4 mr-2 text-black" />
+                Auto-Generate All
+              </Button>
               <Button
                 variant="outline"
                 disabled={isSaving}
@@ -415,9 +602,8 @@ export default function SubjectLoadStudio() {
           {/* Notice Alert */}
           {notice && (
             <div
-              className={`p-3 border-2 border-black text-sm font-bold shadow-[3px_3px_0_#000] flex items-center gap-2 ${
-                notice.type === "success" ? "bg-[#bbf7d0]" : "bg-[#fecdd3]"
-              }`}
+              className={`p-3 border-2 border-black text-sm font-bold shadow-[3px_3px_0_#000] flex items-center gap-2 ${notice.type === "success" ? "bg-[#bbf7d0]" : "bg-[#fecdd3]"
+                }`}
             >
               {notice.type === "success" ? (
                 <CheckCircle2 className="size-5 text-emerald-800" />
@@ -484,13 +670,12 @@ export default function SubjectLoadStudio() {
             <div className="md:col-span-2 flex flex-wrap items-center justify-end gap-2 pt-4 md:pt-0">
               <Badge variant="outline" className="border-2 border-black py-1 px-2.5 font-bold">
                 <UserCheck className="size-3.5 mr-1 text-amber-600" />
-                {unassignedCount} Unassigned Teachers
+                {unassignedCount} Unassigned Subjects
               </Badge>
               <Badge
                 variant={errorConflictsCount > 0 ? "solid" : "outline"}
-                className={`border-2 border-black py-1 px-2.5 font-bold ${
-                  errorConflictsCount > 0 ? "bg-red-500 text-white" : ""
-                }`}
+                className={`border-2 border-black py-1 px-2.5 font-bold ${errorConflictsCount > 0 ? "bg-red-500 text-white" : ""
+                  }`}
               >
                 <AlertCircle className="size-3.5 mr-1" />
                 {errorConflictsCount} Conflicts
@@ -524,250 +709,320 @@ export default function SubjectLoadStudio() {
                   </RetroCard>
                 ) : (
                   filteredClasses.map((cls) => {
-                    const classSubjects = (studioData?.subjects || []).filter(
-                      (sub) => sub.academic_level_id === cls.academic_level_id
-                    );
+                    const offerings = studioData?.subject_offerings || [];
+                    const clsPathway = (cls.pathway || "general").toLowerCase();
+
+                    const classSubjects = (studioData?.subjects || []).filter((sub) => {
+                      if (sub.academic_level_id !== cls.academic_level_id) return false;
+                      if (offerings.length > 0) {
+                        return offerings.some(
+                          (so) =>
+                            so.subject_id === sub.subject_id &&
+                            so.academic_level_id === cls.academic_level_id &&
+                            (so.pathway === "both" ||
+                              so.pathway.toLowerCase() === clsPathway ||
+                              (so.pathway === "general" && clsPathway === "general"))
+                        );
+                      }
+                      return true;
+                    });
 
                     return (
                       <RetroCard
                         key={cls.class_id}
                         className="border-2 border-black shadow-[4px_4px_0_#000] p-4 bg-background"
                       >
-                        <div className="flex items-center justify-between border-b-2 border-black pb-3 mb-4">
-                          <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-between border-b-2 border-black pb-3 mb-4 flex-wrap gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <Text as="h3" className="font-bold text-xl">
                               Section: {cls.section_name}
                             </Text>
-                          </div>
-                          <Text as="p" className="text-xs text-muted-foreground font-bold">
-                            {classSubjects.length} Subject Loads
-                          </Text>
-                        </div>
-
-                        <Table wrapperClassName="overflow-visible">
-                          <Table.Header className="font-sans border-b-2 border-black bg-muted/30">
-                            <Table.Row>
-                              <Table.Head className="font-bold text-black">Subject</Table.Head>
-                              <Table.Head className="font-bold text-black">Days</Table.Head>
-                              <Table.Head className="font-bold text-black">Time Slot</Table.Head>
-                              <Table.Head className="font-bold text-black">Assigned Teacher</Table.Head>
-                            </Table.Row>
-                          </Table.Header>
-                          <Table.Body>
-                            {classSubjects.map((sub) => {
-                              const subjectSlots = loads.filter(
-                                (l) => l.class_id === cls.class_id && l.subject_id === sub.subject_id
-                              );
-
-                              const conflict = getLoadConflict(cls.class_id, sub.subject_id);
-                              const isHighlighted =
-                                highlightedKey === `${cls.class_id}_${sub.subject_id}`;
+                            {(() => {
+                              if (!cls.pathway || cls.pathway === "general") return null;
+                              const formatted = cls.pathway
+                                .replace(/_/g, " ")
+                                .replace(/\b\w/g, (l) => l.toUpperCase())
+                                .replace(/Stem/i, "STEM");
 
                               return (
-                                <Table.Row
-                                  key={sub.subject_id}
-                                  id={`subject-row-${cls.class_id}_${sub.subject_id}`}
-                                  className={`transition-all duration-300 border-b border-black/20 ${
-                                    isHighlighted
-                                      ? "bg-amber-200 border-4 border-black ring-4 ring-amber-400 shadow-xl scale-[1.01]"
-                                      : conflict
-                                      ? conflict.severity === "error"
-                                        ? "bg-red-50/90 border-2 border-red-500"
-                                        : "bg-amber-50/90 border-2 border-amber-500"
-                                      : ""
-                                  }`}
-                                >
-                                  {/* Subject Column */}
-                                  <Table.Cell className="align-top py-3 min-w-[200px]">
-                                    <div className="flex flex-col gap-1.5">
-                                      <div className="flex items-center gap-1.5">
-                                        <span className="font-bold text-base text-black">
-                                          {sub.subject_name}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-1.5 text-xs">
-                                        <Badge variant="surface" size="sm" className="border border-black font-mono">
-                                          {sub.subject_codename || `SUB-${sub.subject_id}`}
-                                        </Badge>
-                                        <span className="text-muted-foreground font-semibold">
-                                          ({sub.hours || 80} hrs total)
-                                        </span>
-                                      </div>
+                                <Badge variant="surface" size="sm" className="border-2 border-black font-bold uppercase text-[10px] bg-emerald-100 text-emerald-950 border-emerald-800">
+                                  {formatted}
+                                </Badge>
+                              );
+                            })()}
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void handleAutoSchedule(cls.class_id)}
+                              className="border-2 border-black bg-amber-100 hover:bg-amber-200 text-xs font-bold shadow-[1px_1px_0_#000]"
+                            >
+                              <Wand2 className="size-3.5 mr-1 text-amber-800" />
+                              Auto-Fit Section
+                            </Button>
+                            <Text as="p" className="text-xs text-muted-foreground font-bold">
+                              {classSubjects.length} Curriculum Subjects
+                            </Text>
+                          </div>
+                        </div>
 
-                                      <button
-                                        type="button"
-                                        onClick={() => handleAddSlot(cls.class_id, sub.subject_id)}
-                                        className="mt-1 text-xs font-bold flex items-center gap-1 text-black hover:bg-neutral-100 border border-black px-2 py-1 rounded bg-white shadow-[1px_1px_0_#000] w-fit"
-                                      >
-                                        <Plus className="size-3.5 text-primary" />
-                                        <span>+ Add Time Slot</span>
-                                      </button>
+                        {classSubjects.length === 0 ? (
+                          <div className="p-6 text-center border-2 border-dashed border-black/30 bg-muted/20 my-2">
+                            <Text as="p" className="text-sm font-bold text-muted-foreground">
+                              No subjects offered in Curriculum Plan for {cls.section_name} in this term.
+                            </Text>
+                            <Text as="p" className="text-xs text-muted-foreground mt-1">
+                              Go to &quot;Subjects &rarr; Curriculum Plan&quot; to enable subject offerings.
+                            </Text>
+                          </div>
+                        ) : (
+                          <Table wrapperClassName="overflow-visible">
+                            <Table.Header className="font-sans border-b-2 border-black bg-muted/30">
+                              <Table.Row>
+                                <Table.Head className="font-bold text-black">Subject</Table.Head>
+                                <Table.Head className="font-bold text-black">Days & Presets</Table.Head>
+                                <Table.Head className="font-bold text-black">Time Slot</Table.Head>
+                                <Table.Head className="font-bold text-black">Assigned Teacher</Table.Head>
+                              </Table.Row>
+                            </Table.Header>
+                            <Table.Body>
+                              {classSubjects.map((sub) => {
+                                const subjectSlots = loads.filter(
+                                  (l) => l.class_id === cls.class_id && l.subject_id === sub.subject_id
+                                );
 
-                                      {conflict && (
-                                        <div
-                                          className={`mt-1 text-xs font-bold p-1.5 border border-black flex items-start gap-1 ${
-                                            conflict.severity === "error"
-                                              ? "bg-red-200 text-red-900"
-                                              : "bg-amber-200 text-amber-900"
-                                          }`}
-                                        >
-                                          <AlertCircle className="size-3.5 shrink-0 mt-0.5" />
-                                          <span>{conflict.message}</span>
+                                let scheduledWeeklyHours = 0;
+                                subjectSlots.forEach((sl) => {
+                                  const dur = (parseMin(sl.end_time) - parseMin(sl.start_time)) / 60;
+                                  const numDays = (sl.days_of_week || []).length;
+                                  if (dur > 0 && numDays > 0) {
+                                    scheduledWeeklyHours += dur * numDays;
+                                  }
+                                });
+
+                                const conflict = getLoadConflict(cls.class_id, sub.subject_id);
+                                const isHighlighted =
+                                  highlightedKey === `${cls.class_id}_${sub.subject_id}`;
+
+                                return (
+                                  <Table.Row
+                                    key={sub.subject_id}
+                                    id={`subject-row-${cls.class_id}_${sub.subject_id}`}
+                                    className={`transition-all duration-300 border-b border-black/20 ${isHighlighted
+                                        ? "bg-amber-200 border-4 border-black ring-4 ring-amber-400 shadow-xl scale-[1.01]"
+                                        : conflict
+                                          ? conflict.severity === "error"
+                                            ? "bg-red-50/90 border-2 border-red-500"
+                                            : "bg-amber-50/90 border-2 border-amber-500"
+                                          : ""
+                                      }`}
+                                  >
+                                    {/* Subject Column */}
+                                    <Table.Cell className="align-top py-3 min-w-[200px]">
+                                      <div className="flex flex-col gap-1.5">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="font-bold text-base text-black">
+                                            {sub.subject_name}
+                                          </span>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                                          <Badge variant="surface" size="sm" className="border border-black font-mono font-bold bg-amber-100 text-black">
+                                            {sub.subject_codename || `SUB-${sub.subject_id}`}
+                                          </Badge>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleAddSlot(cls.class_id, sub.subject_id)}
+                                            className="text-[11px] font-bold flex items-center gap-0.5 text-black hover:bg-neutral-100 border border-black px-1.5 py-0.5 rounded bg-white shadow-[1px_1px_0_#000]"
+                                          >
+                                            <Plus className="size-3 text-primary" />
+                                            <span>Slot</span>
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            title="Apply 2-Day (MW 2h/day) Preset"
+                                            onClick={() => handleApplyPreset(cls.class_id, sub.subject_id, "2day")}
+                                            className="text-[10px] font-bold border border-black px-1.5 py-0.5 rounded bg-sky-100 hover:bg-sky-200 text-sky-950 shadow-[1px_1px_0_#000]"
+                                          >
+                                            Preset: 2-Day
+                                          </button>
+                                          <button
+                                            type="button"
+                                            title="Apply 3-Day (MWF 1.3h/day) Preset"
+                                            onClick={() => handleApplyPreset(cls.class_id, sub.subject_id, "3day")}
+                                            className="text-[10px] font-bold border border-black px-1.5 py-0.5 rounded bg-purple-100 hover:bg-purple-200 text-purple-950 shadow-[1px_1px_0_#000]"
+                                          >
+                                            Preset: 3-Day
+                                          </button>
+                                        </div>
+
+                                        {conflict && (
+                                          <div
+                                            className={`mt-1 text-xs font-bold p-1.5 border border-black flex items-start gap-1 ${conflict.severity === "error"
+                                                ? "bg-red-200 text-red-900"
+                                                : "bg-amber-200 text-amber-900"
+                                              }`}
+                                          >
+                                            <AlertCircle className="size-3.5 shrink-0 mt-0.5" />
+                                            <span>{conflict.message}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </Table.Cell>
+
+                                    {/* Days & Time Slot Columns */}
+                                    <Table.Cell colSpan={2} className="align-top py-3 px-2">
+                                      {subjectSlots.length === 0 ? (
+                                        <span className="text-xs italic text-muted-foreground font-semibold py-1 inline-block">
+                                          Unscheduled — click "+ Add Time Slot" to assign schedule
+                                        </span>
+                                      ) : (
+                                        <div className="flex flex-col gap-3">
+                                          {subjectSlots.map((slot, sIdx) => {
+                                            const slotKey = slot._key || `slot_${cls.class_id}_${sub.subject_id}_${sIdx}`;
+                                            return (
+                                              <div key={slotKey} className="flex flex-wrap items-center gap-3 pb-2 border-b border-black/10 last:border-b-0 last:pb-0">
+                                                {/* Days Chips */}
+                                                <div className="flex flex-wrap gap-1">
+                                                  {DAYS.map((d) => {
+                                                    const isSelected = (slot.days_of_week || []).includes(d.key);
+                                                    return (
+                                                      <button
+                                                        key={d.key}
+                                                        type="button"
+                                                        onClick={() => handleToggleDay(slotKey, d.key)}
+                                                        className={`size-7 text-xs font-bold border-2 border-black transition-all ${isSelected
+                                                            ? "bg-primary text-primary-foreground shadow-[1px_1px_0_#000] translate-y-[-1px]"
+                                                            : "bg-background text-foreground opacity-60 hover:opacity-100"
+                                                          }`}
+                                                      >
+                                                        {d.label}
+                                                      </button>
+                                                    );
+                                                  })}
+                                                </div>
+
+                                                {/* Time Picker */}
+                                                <div className="flex items-center gap-1.5">
+                                                  <TimePickerSingle
+                                                    value={stringToTimeValue(slot.start_time, 8)}
+                                                    onChange={(newStart) =>
+                                                      handleTimeChange(slotKey, "start_time", timeValueToString(newStart))
+                                                    }
+                                                  />
+                                                  <span className="text-xs font-bold text-muted-foreground">to</span>
+                                                  <TimePickerSingle
+                                                    value={stringToTimeValue(slot.end_time, 9)}
+                                                    lockedPeriod={stringToTimeValue(slot.start_time, 8).period === "PM" ? "PM" : undefined}
+                                                    onChange={(newEnd) =>
+                                                      handleTimeChange(slotKey, "end_time", timeValueToString(newEnd))
+                                                    }
+                                                  />
+                                                </div>
+
+                                                {/* Delete slot button */}
+                                                {subjectSlots.length > 1 && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveSlot(slotKey)}
+                                                    className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 border border-red-300 rounded ml-1"
+                                                    title="Remove this time slot"
+                                                  >
+                                                    <Trash2 className="size-4" />
+                                                  </button>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
                                         </div>
                                       )}
-                                    </div>
-                                  </Table.Cell>
+                                    </Table.Cell>
 
-                                  {/* Days & Time Slot Columns */}
-                                  <Table.Cell colSpan={2} className="align-top py-3 px-2">
-                                    {subjectSlots.length === 0 ? (
-                                      <span className="text-xs italic text-muted-foreground font-semibold py-1 inline-block">
-                                        Unscheduled — click "+ Add Time Slot" to assign schedule
-                                      </span>
-                                    ) : (
-                                      <div className="flex flex-col gap-3">
-                                        {subjectSlots.map((slot, sIdx) => {
-                                          const slotKey = slot._key || `slot_${cls.class_id}_${sub.subject_id}_${sIdx}`;
-                                          return (
-                                            <div key={slotKey} className="flex flex-wrap items-center gap-3 pb-2 border-b border-black/10 last:border-b-0 last:pb-0">
-                                              {/* Days Chips */}
-                                              <div className="flex flex-wrap gap-1">
-                                                {DAYS.map((d) => {
-                                                  const isSelected = (slot.days_of_week || []).includes(d.key);
-                                                  return (
-                                                    <button
-                                                      key={d.key}
-                                                      type="button"
-                                                      onClick={() => handleToggleDay(slotKey, d.key)}
-                                                      className={`size-7 text-xs font-bold border-2 border-black transition-all ${
-                                                        isSelected
-                                                          ? "bg-primary text-primary-foreground shadow-[1px_1px_0_#000] translate-y-[-1px]"
-                                                          : "bg-background text-foreground opacity-60 hover:opacity-100"
-                                                      }`}
-                                                    >
-                                                      {d.label}
-                                                    </button>
-                                                  );
-                                                })}
-                                              </div>
-
-                                              {/* Time Picker */}
-                                              <div className="flex items-center gap-1.5">
-                                                <TimePickerSingle
-                                                  value={stringToTimeValue(slot.start_time, 8)}
-                                                  onChange={(newStart) =>
-                                                    handleTimeChange(slotKey, "start_time", timeValueToString(newStart))
-                                                  }
-                                                />
-                                                <span className="text-xs font-bold text-muted-foreground">to</span>
-                                                <TimePickerSingle
-                                                  value={stringToTimeValue(slot.end_time, 9)}
-                                                  lockedPeriod={stringToTimeValue(slot.start_time, 8).period === "PM" ? "PM" : undefined}
-                                                  onChange={(newEnd) =>
-                                                    handleTimeChange(slotKey, "end_time", timeValueToString(newEnd))
-                                                  }
-                                                />
-                                              </div>
-
-                                              {/* Delete slot button */}
-                                              {subjectSlots.length > 1 && (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => handleRemoveSlot(slotKey)}
-                                                  className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 border border-red-300 rounded ml-1"
-                                                  title="Remove this time slot"
-                                                >
-                                                  <Trash2 className="size-4" />
-                                                </button>
-                                              )}
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
-                                  </Table.Cell>
-
-                                  {/* Smart Teacher Dropdown — Single Per Subject */}
-                                  <Table.Cell className="align-top py-3">
-                                    {(() => {
-                                      const currentStaffId = subjectSlots[0]?.staff_id;
-                                      const currentStatusText = currentStaffId
-                                        ? getTeacherAvailabilityStatus(
+                                    {/* Smart Teacher Dropdown — Single Per Subject */}
+                                    <Table.Cell className="align-top py-3">
+                                      {(() => {
+                                        const currentStaffId = subjectSlots[0]?.staff_id;
+                                        const currentStatusText = currentStaffId
+                                          ? getTeacherAvailabilityStatus(
                                             currentStaffId,
                                             cls.class_id,
                                             sub.subject_id
                                           )
-                                        : "";
-                                      const currentHasConflict = currentStatusText.includes("Conflict");
+                                          : "";
+                                        const currentHasConflict = currentStatusText.includes("Conflict");
 
-                                      return (
-                                        <Select
-                                          value={currentStaffId || "none"}
-                                          onValueChange={(val) =>
-                                            handleTeacherChange(cls.class_id, sub.subject_id, val)
-                                          }
-                                        >
-                                          <Select.Trigger
-                                            className={`w-[190px] h-9 border-2 border-black shadow-none font-medium text-xs transition-colors ${
-                                              currentHasConflict
-                                                ? "border-red-600 bg-red-50 text-red-950 font-bold"
-                                                : ""
-                                            }`}
+                                        return (
+                                          <Select
+                                            value={currentStaffId || "none"}
+                                            onValueChange={(val) =>
+                                              handleTeacherChange(cls.class_id, sub.subject_id, val)
+                                            }
                                           >
-                                            <div className="flex items-center justify-between w-full overflow-hidden">
-                                              <Select.Value placeholder="Select Teacher" />
-                                              {currentHasConflict && (
-                                                <span className="text-red-600 text-xs font-bold shrink-0 ml-1" title={currentStatusText}>
-                                                  ⚠️
-                                                </span>
-                                              )}
-                                            </div>
-                                          </Select.Trigger>
-                                          <Select.Content>
-                                            <Select.Group>
-                                              <Select.Item value="none">
-                                                <span className="italic text-muted-foreground font-semibold">
-                                                  -- Unassigned --
-                                                </span>
-                                              </Select.Item>
-                                              {(studioData?.teachers || [])
-                                                .filter(
-                                                  (t) =>
-                                                    !t.staff_id.toUpperCase().startsWith("ADM") &&
-                                                    !t.name.toLowerCase().includes("admin")
-                                                )
-                                                .map((t) => {
-                                                  const statusText = getTeacherAvailabilityStatus(
-                                                    t.staff_id,
-                                                    cls.class_id,
-                                                    sub.subject_id
-                                                  );
-                                                  const hasConflict = statusText.includes("Conflict");
+                                            <Select.Trigger
+                                              className={`w-[190px] h-9 border-2 border-black shadow-none font-medium text-xs transition-colors ${currentHasConflict
+                                                  ? "border-red-600 bg-red-50 text-red-950 font-bold"
+                                                  : ""
+                                                }`}
+                                            >
+                                              <div className="flex items-center justify-between w-full overflow-hidden">
+                                                <Select.Value placeholder="Select Teacher" />
+                                                {currentHasConflict && (
+                                                  <span className="text-red-600 text-xs font-bold shrink-0 ml-1" title={currentStatusText}>
+                                                    ⚠️
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </Select.Trigger>
+                                            <Select.Content>
+                                              <Select.Group>
+                                                <Select.Item value="none">
+                                                  <span className="italic text-muted-foreground font-semibold">
+                                                    -- Unassigned --
+                                                  </span>
+                                                </Select.Item>
+                                                {(studioData?.teachers || [])
+                                                  .filter(
+                                                    (t) =>
+                                                      !t.staff_id.toUpperCase().startsWith("ADM") &&
+                                                      !t.name.toLowerCase().includes("admin")
+                                                  )
+                                                  .map((t) => {
+                                                    const statusText = getTeacherAvailabilityStatus(
+                                                      t.staff_id,
+                                                      cls.class_id,
+                                                      sub.subject_id
+                                                    );
+                                                    const hasConflict = statusText.includes("Conflict");
 
-                                                  return (
-                                                    <Select.Item key={t.staff_id} value={t.staff_id}>
-                                                      <div className="flex flex-col text-xs py-0.5">
-                                                        <span className="font-bold">{t.name}</span>
-                                                        {hasConflict && (
-                                                          <span className="text-red-600 font-semibold text-[11px] leading-tight">
-                                                            {statusText}
-                                                          </span>
-                                                        )}
-                                                      </div>
-                                                    </Select.Item>
-                                                  );
-                                                })}
-                                            </Select.Group>
-                                          </Select.Content>
-                                        </Select>
-                                      );
-                                    })()}
-                                  </Table.Cell>
-                                </Table.Row>
-                              );
-                            })}
-                          </Table.Body>
-                        </Table>
+                                                    return (
+                                                      <Select.Item key={t.staff_id} value={t.staff_id}>
+                                                        <div className="flex flex-col text-xs py-0.5">
+                                                          <span className="font-bold">{t.name}</span>
+                                                          {hasConflict && (
+                                                            <span className="text-red-600 font-semibold text-[11px] leading-tight">
+                                                              {statusText}
+                                                            </span>
+                                                          )}
+                                                        </div>
+                                                      </Select.Item>
+                                                    );
+                                                  })}
+                                              </Select.Group>
+                                            </Select.Content>
+                                          </Select>
+                                        );
+                                      })()}
+                                    </Table.Cell>
+                                  </Table.Row>
+                                );
+                              })}
+                            </Table.Body>
+                          </Table>
+                        )}
                       </RetroCard>
                     );
                   })
@@ -799,13 +1054,12 @@ export default function SubjectLoadStudio() {
                           key={idx}
                           onClick={() => {
                             const targetKey = conf.affected_key || (conf.class_id && conf.subject_id ? `${conf.class_id}_${conf.subject_id}` : undefined);
-                            handleHighlightKey(targetKey);
+                            handleHighlightKey(targetKey, conf.class_id);
                           }}
-                          className={`p-3 border-2 border-black text-xs font-medium cursor-pointer transition-all hover:translate-x-1 ${
-                            conf.severity === "error"
+                          className={`p-3 border-2 border-black text-xs font-medium cursor-pointer transition-all hover:translate-x-1 ${conf.severity === "error"
                               ? "bg-red-100 text-red-950 border-red-800"
                               : "bg-amber-100 text-amber-950 border-amber-800"
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center justify-between font-bold mb-1">
                             <span className="uppercase tracking-wider text-[10px] px-1.5 py-0.5 border border-black bg-white">
@@ -824,13 +1078,16 @@ export default function SubjectLoadStudio() {
 
                 {/* Teacher Workload Capacity Card */}
                 <RetroCard className="border-2 border-black shadow-[4px_4px_0_#000] p-4 bg-background">
-                  <div className="flex items-center justify-between border-b-2 border-black pb-3 mb-3">
+                  <div className="flex flex-col gap-1 border-b-2 border-black pb-3 mb-3">
                     <div className="flex items-center gap-2">
                       <Clock className="size-5 text-blue-600" />
                       <Text as="h3" className="font-bold text-lg">
                         Teacher Capacity Tracker
                       </Text>
                     </div>
+                    <span className="text-[11px] font-bold text-muted-foreground">
+                      Limits: Max 6.0 hrs/day • Max 4 subjects/day
+                    </span>
                   </div>
 
                   <div className="flex flex-col gap-4 max-h-[420px] overflow-y-auto pr-1">
@@ -842,9 +1099,8 @@ export default function SubjectLoadStudio() {
                       teacherWorkloads.map((tw) => (
                         <div
                           key={tw.staff_id}
-                          className={`p-3 border-2 border-black text-xs ${
-                            tw.has_capacity_warning ? "bg-red-50 border-red-600" : "bg-muted/20"
-                          }`}
+                          className={`p-3 border-2 border-black text-xs ${tw.has_capacity_warning ? "bg-red-50 border-red-600" : "bg-muted/20"
+                            }`}
                         >
                           <div className="flex items-center justify-between font-bold mb-1">
                             <span className="text-sm">{tw.staff_name}</span>
@@ -863,13 +1119,12 @@ export default function SubjectLoadStudio() {
                               return (
                                 <div
                                   key={dayKey}
-                                  className={`flex flex-col items-center p-1 border text-[10px] font-bold ${
-                                    isOverLimit
+                                  className={`flex flex-col items-center p-1 border text-[10px] font-bold ${isOverLimit
                                       ? "bg-red-200 border-red-700 text-red-900"
                                       : hrs > 0
-                                      ? "bg-emerald-100 border-emerald-700 text-emerald-900"
-                                      : "bg-background border-black/30 text-muted-foreground"
-                                  }`}
+                                        ? "bg-emerald-100 border-emerald-700 text-emerald-900"
+                                        : "bg-background border-black/30 text-muted-foreground"
+                                    }`}
                                 >
                                   <span>{dayKey.slice(0, 2)}</span>
                                   <span className="font-mono text-[11px] mt-0.5">
