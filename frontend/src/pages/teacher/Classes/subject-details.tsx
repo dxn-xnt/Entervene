@@ -13,6 +13,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { API_URL, apiFetch } from "@/lib/api";
 import AttachmentDisplay from "@/components/attachment-display";
+import CreateLessonModal from "@/pages/teacher/create-lesson";
 import {
   getTeacherRecordPeriods,
   getTeacherStudentRoster,
@@ -54,6 +55,7 @@ export default function SubjectDetails() {
   }>();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"lessons" | "students">("lessons");
+  const [isCreatingLesson, setIsCreatingLesson] = useState(false);
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [subjectAssignments, setSubjectAssignments] = useState<
@@ -761,11 +763,7 @@ export default function SubjectDetails() {
               type="button"
               variant="default"
               size="sm"
-              onClick={() =>
-                navigate(
-                  `/teacher/lessons/create?classId=${classId || ""}&subjectId=${subjectId || ""}`,
-                )
-              }
+              onClick={() => setIsCreatingLesson(true)}
               className="w-full lg:w-auto gap-2 whitespace-nowrap font-semibold"
             >
               <Plus size={16} />
@@ -1269,6 +1267,18 @@ export default function SubjectDetails() {
               addClassworkMaterials={addClassworkMaterials}
               removeClassworkMaterial={removeClassworkMaterial}
               createClassworkForLesson={createClassworkForLesson}
+            />
+          )}
+
+          {isCreatingLesson && (
+            <CreateLessonModal
+              classId={classId}
+              subjectId={subjectId}
+              onClose={() => setIsCreatingLesson(false)}
+              onCreated={() => {
+                setIsCreatingLesson(false);
+                window.location.reload();
+              }}
             />
           )}
 

@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { FolderPlus, X } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import AppLayout from "@/layouts/app-layout";
+import { Card } from "@/components/retroui/Card";
+import { Button } from "@/components/retroui/Button";
+import { Select } from "@/components/retroui/Select";
+import { Input } from "@/components/retroui/Input";
+import { Dialog } from "@/components/retroui/Dialog";
 import { apiFetch } from "@/lib/api";
 
 type TeacherClassLoad = {
@@ -19,17 +22,30 @@ type LessonResponse = {
 
 async function responseError(response: Response, fallback: string) {
   const data: unknown = await response.json().catch(() => null);
-  if (data && typeof data === "object" && "detail" in data && typeof data.detail === "string") {
+  if (
+    data &&
+    typeof data === "object" &&
+    "detail" in data &&
+    typeof data.detail === "string"
+  ) {
     return data.detail;
   }
   return fallback;
 }
 
-export default function CreateLesson() {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const initialClassId = searchParams.get("classId");
-  const initialSubjectId = searchParams.get("subjectId");
+interface CreateLessonModalProps {
+  classId?: string;
+  subjectId?: string;
+  onClose: () => void;
+  onCreated: () => void;
+}
+
+export default function CreateLessonModal({
+  classId: initialClassId,
+  subjectId: initialSubjectId,
+  onClose,
+  onCreated,
+}: CreateLessonModalProps) {
   const [classLoads, setClassLoads] = useState<TeacherClassLoad[]>([]);
   const [subjectId, setSubjectId] = useState("");
   const [classIds, setClassIds] = useState<number[]>([]);
@@ -48,7 +64,9 @@ export default function CreateLesson() {
       setError("");
 
       try {
-        const response = await apiFetch("/api/v1/classwork-assignments/teacher/classes");
+        const response = await apiFetch(
+          "/api/v1/classwork-assignments/teacher/classes",
+        );
         if (!response.ok) {
           throw new Error("Unable to load your assigned subjects.");
         }
@@ -62,10 +80,21 @@ export default function CreateLesson() {
           : null;
 
         setClassLoads(data);
-        setSubjectId(String(contextSubject?.subject_id || contextClass?.subject_id || data[0]?.subject_id || ""));
+        setSubjectId(
+          String(
+            contextSubject?.subject_id ||
+              contextClass?.subject_id ||
+              data[0]?.subject_id ||
+              "",
+          ),
+        );
         setClassIds(contextClass ? [contextClass.class_id] : []);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to load your assigned subjects.");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load your assigned subjects.",
+        );
       } finally {
         setIsLoading(false);
       }
@@ -83,7 +112,7 @@ export default function CreateLesson() {
     });
 
     return Array.from(bySubject.values()).sort((a, b) =>
-      a.subject_name.localeCompare(b.subject_name)
+      a.subject_name.localeCompare(b.subject_name),
     );
   }, [classLoads]);
 
@@ -93,20 +122,11 @@ export default function CreateLesson() {
       .sort((a, b) => a.section_name.localeCompare(b.section_name));
   }, [classLoads, subjectId]);
 
-  const closeToSubject = () => {
-    if (initialClassId && subjectId) {
-      navigate(`/teacher/classes/${initialClassId}/subjects/${subjectId}`);
-      return;
-    }
-
-    navigate("/teacher/classes");
-  };
-
   const toggleClass = (classId: number) => {
     setClassIds((current) =>
       current.includes(classId)
         ? current.filter((id) => id !== classId)
-        : [...current, classId]
+        : [...current, classId],
     );
   };
 
@@ -149,25 +169,35 @@ export default function CreateLesson() {
       });
 
       if (!response.ok) {
-        throw new Error(await responseError(response, "Unable to create lesson."));
+        throw new Error(
+          await responseError(response, "Unable to create lesson."),
+        );
       }
 
       const created = (await response.json()) as LessonResponse;
 
-      const assignResponse = await apiFetch(`/api/v1/lessons/${created.lesson_id}/assign`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          class_ids: classIds,
-          is_published: isPublished,
-        }),
-      });
+      const assignResponse = await apiFetch(
+        `/api/v1/lessons/${created.lesson_id}/assign`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            class_ids: classIds,
+            is_published: isPublished,
+          }),
+        },
+      );
 
       if (!assignResponse.ok) {
-        throw new Error(await responseError(assignResponse, "Lesson was created, but class assignment failed."));
+        throw new Error(
+          await responseError(
+            assignResponse,
+            "Lesson was created, but class assignment failed.",
+          ),
+        );
       }
 
-      closeToSubject();
+      onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create lesson.");
     } finally {
@@ -176,152 +206,223 @@ export default function CreateLesson() {
   };
 
   return (
-    <AppLayout>
-      <main className="flex min-h-[calc(100vh-2rem)] items-center justify-center bg-[#FFFDF5] px-5 py-10">
-        <section className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-black bg-[#7ABA78] px-5 py-4">
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !isSubmitting) onClose();
+      }}
+    >
+      <Dialog.Content
+        size="4xl"
+        className="no-scrollbar h-fit max-h-[92vh] !overflow-y-auto overflow-x-hidden border-black p-0"
+        overlay={{ className: "bg-black/50" }}
+      >
+        <Dialog.Header
+          asChild
+          className="border-b-2 border-black bg-primary px-5 py-4"
+        >
+          <>
             <div className="flex items-center gap-2">
-              <FolderPlus size={20} />
               <div>
-                <h1 className="text-lg font-bold">Add Lesson</h1>
-                <p className="text-xs font-medium">Create a draft or publish it to selected sections.</p>
+                <p className="text-lg font-bold">Add Lesson</p>
+                <p className="text-xs text-black">
+                  Create a draft or publish it to selected sections.
+                </p>
               </div>
             </div>
-            <button type="button" onClick={closeToSubject} className="rounded p-1 hover:bg-white/30">
+            <Dialog.Close
+              title="Close"
+              className="cursor-pointer rounded p-1 hover:bg-white/30"
+              disabled={isSubmitting}
+            >
               <X size={16} />
-            </button>
-          </div>
+            </Dialog.Close>
+          </>
+        </Dialog.Header>
 
-          <div className="space-y-4 p-5">
-            {error && (
-              <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
-              </div>
-            )}
+        <div className="space-y-4 p-5">
+          {error && (
+            <div className="border-2 border-red-600 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
-            <div className="grid gap-4 sm:grid-cols-[1fr_140px]">
-              <div>
-                <label htmlFor="subject" className="mb-1 block text-sm font-semibold">Subject</label>
-                <select
+          <div className="grid gap-4 sm:grid-cols-[1fr_140px]">
+            <div>
+              <label
+                htmlFor="subject"
+                className="mb-1 block text-sm font-semibold"
+              >
+                Subject
+              </label>
+              <Select
+                value={subjectId}
+                onValueChange={(v) => {
+                  setSubjectId(v);
+                  setClassIds([]);
+                }}
+              >
+                <Select.Trigger
                   id="subject"
-                  value={subjectId}
-                  onChange={(event) => {
-                    setSubjectId(event.target.value);
-                    setClassIds([]);
-                  }}
                   disabled={isLoading || isSubmitting}
-                  className="w-full rounded-lg border border-gray-700 px-3 py-2"
+                  className="h-10 w-full border-2 border-black bg-white text-sm !shadow-none"
                 >
+                  <Select.Value />
+                </Select.Trigger>
+                <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                   {subjects.map((subject) => (
-                    <option key={subject.subject_id} value={subject.subject_id}>
+                    <Select.Item
+                      key={subject.subject_id}
+                      value={String(subject.subject_id)}
+                    >
                       {subject.subject_name}
-                    </option>
+                    </Select.Item>
                   ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="lesson-order" className="mb-1 block text-sm font-semibold">Lesson order</label>
-                <input
-                  id="lesson-order"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={orderIndex}
-                  onChange={(event) => setOrderIndex(event.target.value)}
-                  disabled={isSubmitting}
-                  className="w-full rounded-lg border border-gray-700 px-3 py-2"
-                />
-              </div>
+                </Select.Content>
+              </Select>
             </div>
-
             <div>
-              <p className="mb-2 text-sm font-semibold">Class or section</p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {classesForSubject.map((item) => (
-                  <label key={item.subject_load_id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={classIds.includes(item.class_id)}
-                      onChange={() => toggleClass(item.class_id)}
-                      disabled={isSubmitting}
-                    />
-                    {item.section_name}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="lesson" className="mb-1 block text-sm font-semibold">Lesson name</label>
-              <input
-                id="lesson"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                className="w-full rounded-lg border border-gray-700 px-3 py-2"
-                placeholder="Term 1: Variables and Expressions"
+              <label
+                htmlFor="lesson-order"
+                className="mb-1 block text-sm font-semibold"
+              >
+                Lesson order
+              </label>
+              <Input
+                id="lesson-order"
+                type="number"
+                min="1"
+                step="1"
+                value={orderIndex}
+                onChange={(event) => setOrderIndex(event.target.value)}
                 disabled={isSubmitting}
+                className="h-10 w-full rounded-none border-black !shadow-none"
               />
             </div>
+          </div>
 
-            <div>
-              <label htmlFor="description" className="mb-1 block text-sm font-semibold">Description</label>
-              <textarea
-                id="description"
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                className="min-h-20 w-full rounded-lg border border-gray-700 px-3 py-2"
-                placeholder="Short lesson summary"
-                disabled={isSubmitting}
-              />
+          <div>
+            <p className="mb-2 text-sm font-semibold">Class or section</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {classesForSubject.map((item) => (
+                <label
+                  key={item.subject_load_id}
+                  className="flex items-center gap-2 border-2 border-black px-3 py-2 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={classIds.includes(item.class_id)}
+                    onChange={() => toggleClass(item.class_id)}
+                    disabled={isSubmitting}
+                    className="accent-black"
+                  />
+                  {item.section_name}
+                </label>
+              ))}
             </div>
+          </div>
 
-            <div>
-              <label htmlFor="lesson-content" className="mb-1 block text-sm font-semibold">Lesson content</label>
-              <textarea
-                id="lesson-content"
-                value={content}
-                onChange={(event) => setContent(event.target.value)}
-                className="min-h-44 w-full rounded-lg border border-gray-700 px-3 py-2"
-                placeholder="Write the lesson notes or learning content students will read."
-                disabled={isSubmitting}
-              />
-            </div>
-
-            <div className="rounded-lg border border-black bg-[#F6E9B2] px-4 py-3 text-sm font-medium shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-              Upload lesson materials as Reading classworks so they can be scheduled, locked, and tracked with student classwork.
-            </div>
-
-            <label className="flex items-center gap-3 rounded-lg border border-black bg-[#F6E9B2] px-4 py-3 text-sm font-semibold">
-              <input
-                type="checkbox"
-                checked={isPublished}
-                onChange={(event) => setIsPublished(event.target.checked)}
-                disabled={isSubmitting}
-              />
-              {isPublished ? "Publish lesson for selected sections" : "Save as draft for selected sections"}
+          <div>
+            <label
+              htmlFor="lesson"
+              className="mb-1 block text-sm font-semibold"
+            >
+              Lesson name
             </label>
+            <Input
+              id="lesson"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              className="h-10 w-full rounded-none border-black !shadow-none"
+              placeholder="Term 1: Variables and Expressions"
+              disabled={isSubmitting}
+            />
           </div>
 
-          <div className="sticky bottom-0 flex justify-end gap-3 border-t border-black bg-white px-5 py-4">
-            <button
-              type="button"
-              onClick={closeToSubject}
-              className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-50"
-              disabled={isSubmitting}
+          <div>
+            <label
+              htmlFor="description"
+              className="mb-1 block text-sm font-semibold"
             >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={submitLesson}
+              Description
+            </label>
+            <textarea
+              id="description"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              className="min-h-20 w-full border-2 border-black px-3 py-2 text-sm outline-none focus:border-black"
+              placeholder="Short lesson summary"
               disabled={isSubmitting}
-              className="rounded-lg border border-gray-700 bg-[#7ABA78] px-4 py-2 text-sm font-semibold hover:brightness-95 disabled:opacity-60"
-            >
-              {isSubmitting ? "Saving..." : isPublished ? "Publish Lesson" : "Save Draft"}
-            </button>
+            />
           </div>
-        </section>
-      </main>
-    </AppLayout>
+
+          <div>
+            <label
+              htmlFor="lesson-content"
+              className="mb-1 block text-sm font-semibold"
+            >
+              Lesson content
+            </label>
+            <textarea
+              id="lesson-content"
+              value={content}
+              onChange={(event) => setContent(event.target.value)}
+              className="min-h-44 w-full border-2 border-black px-3 py-2 text-sm outline-none focus:border-black"
+              placeholder="Write the lesson notes or learning content students will read."
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <Card className="block shadow-none">
+            <Card.Content>
+              <p className="text-black">
+                Upload lesson materials as Reading classworks so they can be
+                scheduled, locked, and tracked with student classwork.
+              </p>
+            </Card.Content>
+          </Card>
+
+          <label className="flex items-center gap-3 border-2 border-black bg-primary px-4 py-3 text-sm font-semibold">
+            <input
+              type="checkbox"
+              checked={isPublished}
+              onChange={(event) => setIsPublished(event.target.checked)}
+              disabled={isSubmitting}
+              className="accent-black"
+            />
+            {isPublished
+              ? "Publish lesson for selected sections"
+              : "Save as draft for selected sections"}
+          </label>
+        </div>
+
+        <div className="sticky bottom-0 flex justify-end gap-3 border-t-2 border-black bg-white px-5 py-4">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="border-black font-semibold"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={submitLesson}
+            disabled={isSubmitting}
+            className="border-black bg-[#7ABA78] font-semibold hover:bg-[#7ABA78] hover:brightness-95 disabled:opacity-60"
+          >
+            {isSubmitting
+              ? "Saving..."
+              : isPublished
+                ? "Publish Lesson"
+                : "Save Draft"}
+          </Button>
+        </div>
+      </Dialog.Content>
+    </Dialog>
   );
 }

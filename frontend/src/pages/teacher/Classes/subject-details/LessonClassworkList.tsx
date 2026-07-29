@@ -258,7 +258,7 @@ export default function LessonClassworkList({
                   </Button>
                 </Card.Content>
               </Card>
-
+    
               {isExpanded && (
                 <div className="ml-3 flex flex-col gap-2 border-l-2 border-black pl-3">
                   <div className="flex justify-end mt-1">
