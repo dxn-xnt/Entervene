@@ -81,7 +81,6 @@ def teacher_lessons_for_class_subject(
         .filter(
             LessonAssignment.class_id == class_id,
             Lesson.subject_id == subject_id,
-            Lesson.created_by_staff_id == staff_id,
         )
         .order_by(Lesson.order_index.asc(), Lesson.created_at.desc())
         .all()
@@ -114,7 +113,6 @@ def teacher_lesson_linked_classwork(
         .filter(
             ClassworkLesson.lesson_id == lesson_id,
             ClassworkAssignment.class_id == class_id,
-            Classwork.created_by_staff_id == staff_id,
             Classwork.is_archived == False,
         )
         .order_by(ClassworkAssignment.created_at.desc())
@@ -318,6 +316,7 @@ def lesson_classwork_assignments(lesson_id: int, class_id: int, student, db: Ses
             "classwork_id": assignment.classwork_id,
             "title": classwork.title if classwork else "Untitled",
             "classwork_type": classwork.classwork_type if classwork else None,
+            "classwork_category": classwork.classwork_category if classwork else None,
             "total_points": float(classwork.total_points) if classwork and classwork.total_points else None,
             "due_date": assignment.due_date.isoformat() if assignment.due_date else None,
             "submission_status": display_status,

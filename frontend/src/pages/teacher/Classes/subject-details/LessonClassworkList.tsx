@@ -33,6 +33,7 @@ type LessonClassworkListProps = {
   openClassworkDetail: (classwork: LinkedClasswork) => void;
   subjectAssignments?: LinkedClasswork[];
   openQuarterlyAssessmentForm?: () => void;
+  openLessonDetail?: (lesson: Lesson) => void;
 };
 
 export default function LessonClassworkList({
@@ -51,6 +52,7 @@ export default function LessonClassworkList({
   openClassworkDetail,
   subjectAssignments,
   openQuarterlyAssessmentForm,
+  openLessonDetail,
 }: LessonClassworkListProps) {
   const quarterlyAssessments = (subjectAssignments ?? []).filter(
     (cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT",
@@ -206,14 +208,14 @@ export default function LessonClassworkList({
             <div key={lesson.lesson_id} className="flex flex-col gap-2">
               <Card className="bg-primary border-black">
                 <Card.Content className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => toggleLesson(lesson.lesson_id)}
-                    className="flex min-w-0 flex-1 items-center justify-between text-left"
-                  >
-                    <div className="min-w-0">
+                  <div className="flex min-w-0 flex-1 items-center justify-between text-left">
+                    <button
+                      type="button"
+                      onClick={() => (openLessonDetail ? openLessonDetail(lesson) : openLessonManager(lesson))}
+                      className="group min-w-0 flex-1 text-left cursor-pointer"
+                    >
                       <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <Card.Title className="truncate text-2xl font-bold text-gray-950">
+                        <Card.Title className="truncate text-2xl font-bold text-gray-950 group-hover:underline">
                           {lesson.title}
                         </Card.Title>
                         <Badge
@@ -239,13 +241,20 @@ export default function LessonClassworkList({
                             ? `Created ${new Date(lesson.created_at).toLocaleDateString()}`
                             : "Lesson folder")}
                       </p>
-                    </div>
-                    {isExpanded ? (
-                      <ChevronDown size={18} />
-                    ) : (
-                      <ChevronRight size={18} />
-                    )}
-                  </button>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleLesson(lesson.lesson_id)}
+                      className="p-1 text-gray-800 hover:text-black cursor-pointer"
+                      title={isExpanded ? "Collapse classwork list" : "Expand classwork list"}
+                    >
+                      {isExpanded ? (
+                        <ChevronDown size={20} />
+                      ) : (
+                        <ChevronRight size={20} />
+                      )}
+                    </button>
+                  </div>
                   <Button
                     type="button"
                     variant="outline"
@@ -258,7 +267,7 @@ export default function LessonClassworkList({
                   </Button>
                 </Card.Content>
               </Card>
-
+    
               {isExpanded && (
                 <div className="ml-3 flex flex-col gap-2 border-l-2 border-black pl-3">
                   <div className="flex justify-end mt-1">
@@ -267,7 +276,7 @@ export default function LessonClassworkList({
                       variant="default"
                       size="sm"
                       onClick={() => openClassworkForm(lesson)}
-                      className="gap-2 bg-[#7ABA78] font-semibold"
+                      className="gap-2 bg-[#7ABA78] hover:bg-[#7ABA78] font-semibold"
                     >
                       <Plus size={16} />
                       Add Classwork
@@ -293,11 +302,16 @@ export default function LessonClassworkList({
                     }
                     if (lessonClassworks.length > 0) {
                       return lessonClassworks.map((classwork) => (
-                        <button
-                          type="button"
+                        <Card
                           key={classwork.classwork_assignment_id}
                           onClick={() => openClassworkDetail(classwork)}
-                          className="grid w-full grid-cols-[minmax(0,1fr)_7rem_auto] items-center gap-3 rounded-lg border border-black bg-white px-4 py-3 text-left shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
+                          className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4"
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ")
+                              openClassworkDetail(classwork);
+                          }}
                         >
                           <div className="flex min-w-0 items-center gap-3">
                             <FileText size={20} />
@@ -313,24 +327,30 @@ export default function LessonClassworkList({
                               </p>
                             </div>
                           </div>
-                          <div className="flex min-w-28 justify-center">
+                          <div className="flex">
                             {classwork.attachment_count ? (
-                              <span className="whitespace-nowrap rounded-full bg-[#7ABA78] px-3 py-1 text-xs font-semibold">
+                              <Badge
+                                variant="secondary"
+                                className="inline-flex h-8 items-center whitespace-nowrap rounded-none text-xs font-semibold"
+                              >
                                 File {classwork.attachment_count}
-                              </span>
+                              </Badge>
                             ) : (
-                              <span aria-hidden="true" className="h-7 w-20" />
+                              <span aria-hidden="true" className="h-8 w-20" />
                             )}
                           </div>
-                          <span className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs font-semibold">
+                          <Badge
+                            variant="outline"
+                            className="inline-flex h-8 items-center gap-1 rounded-none text-xs font-semibold"
+                          >
                             <Eye size={14} />
                             Details
-                          </span>
-                        </button>
+                          </Badge>
+                        </Card>
                       ));
                     }
                     return (
-                      <Card className="block shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                      <Card className="block">
                         <Card.Content className="flex items-center gap-3">
                           <ClipboardList size={20} />
                           <div>
