@@ -14,7 +14,14 @@ class SubjectLoadItem(BaseModel):
     end_time: str | None = None
     days_of_week: list[str] = Field(default_factory=list)
     status: str = "draft"
+    version: int = 1
+    is_active_version: bool = True
+    is_locked: bool = False
+    published_at: str | None = None
+    published_by: str | None = None
+    last_modified_by: str | None = None
     continued_from_load_id: int | None = None
+    is_math_or_science: bool | None = False
 
 
 class ConflictItem(BaseModel):
@@ -40,7 +47,11 @@ class TeacherWorkloadItem(BaseModel):
 class ValidationResultResponse(BaseModel):
     is_valid: bool
     conflicts: list[ConflictItem]
+    grouped_conflicts: dict[str, list[ConflictItem]] = Field(default_factory=dict)
     teacher_workloads: list[TeacherWorkloadItem]
+    passed_checks_count: int = 8
+    total_checks_count: int = 8
+    can_publish: bool = True
 
 
 class AutoScheduleResponse(BaseModel):
@@ -69,3 +80,15 @@ class BatchSaveSubjectLoadResponse(BaseModel):
     status: str
     is_valid: bool
     conflicts: list[ConflictItem]
+
+
+class PeriodTemplateSlotSchema(BaseModel):
+    slot_id: int | None = None
+    template_group: str
+    slot_name: str
+    slot_type: str = "CLASS"
+    start_time: str
+    end_time: str
+    is_locked_break: bool = False
+    display_order: int = 0
+
