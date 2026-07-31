@@ -19,19 +19,19 @@ import {
   type ConflictItem,
   type TeacherWorkloadItem,
 } from "@/lib/api";
+import BreakConfigDrawer, { type PeriodTemplateSlotItem } from "@/pages/admin/forms/BreakConfigDrawer";
 import {
   AlertTriangle,
   CheckCircle2,
   Clock,
-  Save,
   Send,
-  UserCheck,
   AlertCircle,
   Plus,
   Trash2,
   Wand2,
   Sparkles,
   Zap,
+  Settings,
 } from "lucide-react";
 
 function stringToTimeValue(str?: string | null, fallbackHour = 8): TimeValue {
@@ -77,6 +77,86 @@ export default function SubjectLoadStudio() {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [notice, setNotice] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
+  const [isBreakDrawerOpen, setIsBreakDrawerOpen] = useState<boolean>(false);
+  const [periodTemplateSlots, setPeriodTemplateSlots] = useState<PeriodTemplateSlotItem[]>([]);
+  const [isToolsOpen, setIsToolsOpen] = useState<boolean>(false);
+  const [openRowKey, setOpenRowKey] = useState<string | null>(null);
+  const [expandedIssueRule, setExpandedIssueRule] = useState<string | null>(null);
+
+  const activeGroupKey = useMemo(() => {
+    if (selectedGradeId === "all") return "JHS_45MIN";
+    const levelObj = studioData?.academic_levels.find((l) => String(l.academic_level_id) === selectedGradeId);
+    const grade = levelObj?.grade_level || 7;
+    if (grade >= 11) {
+      const classInLevel = studioData?.classes.find((c) => String(c.academic_level_id) === selectedGradeId);
+      const name = (classInLevel?.section_name || "").toLowerCase();
+      if (name.includes("del mundo") || name.includes("reyes")) return "SHS_DELMUNDO_REYES";
+      return "SHS_CAMPOS_ZARA";
+    }
+    return "JHS_45MIN";
+  }, [selectedGradeId, studioData]);
+
+  const activeGroupBreakSlots = useMemo(() => {
+    return periodTemplateSlots.filter((s) => s.template_group === activeGroupKey && s.is_locked_break);
+  }, [periodTemplateSlots, activeGroupKey]);
+
+  const isCurrentPublished = useMemo(() => {
+    return loads.some((l) => l.status === "published" || l.is_locked);
+  }, [loads]);
+
+  const currentVersionNumber = useMemo(() => {
+    return loads[0]?.version || 1;
+  }, [loads]);
+
+  const prePublishChecklistCount = useMemo(() => {
+    const errorRules = new Set(conflicts.filter((c) => c.severity === "error").map((c) => c.rule));
+    return Math.max(0, 6 - errorRules.size);
+  }, [conflicts]);
+
+  const groupedIssues = useMemo(() => {
+    const map: Record<string, { title: string; explanation: string; severity: "error" | "warning"; items: typeof conflicts }> = {};
+
+    conflicts.forEach((conf) => {
+      let key = conf.rule;
+      let title = conf.rule.replace(/_/g, " ");
+      let explanation = conf.message;
+      let severity = conf.severity;
+
+      if (conf.rule === "MATH_SCIENCE_DURATION_MISMATCH" || conf.rule === "DURATION_MISMATCH") {
+        key = "DURATION_MISMATCH";
+        title = "Period shorter than subject requires";
+        explanation = "Math & Science core subjects need 60 min/day. The active break schedule leaves 45-min periods, so every Math/Science slot falls short by 15 min.";
+        severity = "warning";
+      } else if (conf.rule === "TEACHER_DOUBLE_BOOKING") {
+        key = "TEACHER_DOUBLE_BOOKING";
+        title = "Teacher double-booked";
+        explanation = "Assigned teacher has overlapping period commitments across two classes.";
+        severity = "error";
+      } else if (conf.rule === "SECTION_DOUBLE_BOOKING") {
+        key = "SECTION_DOUBLE_BOOKING";
+        title = "Section double-booked";
+        explanation = "Section has two subjects scheduled at the exact same time slot.";
+        severity = "error";
+      } else if (conf.rule === "BREAK_TIME_VIOLATION") {
+        key = "BREAK_TIME_VIOLATION";
+        title = "Break time overlap";
+        explanation = "Subject schedule overlaps with locked Homeroom, Recess, or Lunch walls.";
+        severity = "error";
+      } else if (conf.rule === "TEACHER_CAPACITY_LIMIT") {
+        key = "TEACHER_CAPACITY_LIMIT";
+        title = "Teacher workload capacity exceeded";
+        explanation = "Assigned daily or weekly teaching hours exceed max capacity policy limits.";
+        severity = "error";
+      }
+
+      if (!map[key]) {
+        map[key] = { title, explanation, severity, items: [] };
+      }
+      map[key].items.push(conf);
+    });
+
+    return Object.values(map);
+  }, [conflicts]);
 
   const handleHighlightKey = (key: string | undefined, classId?: number | null) => {
     if (!key) return;
@@ -110,6 +190,9 @@ export default function SubjectLoadStudio() {
       const data = await getSubjectLoadStudioData(periodId);
       setStudioData(data);
       setSelectedPeriodId(data.active_period_id);
+      if ((data as any).period_template_slots) {
+        setPeriodTemplateSlots((data as any).period_template_slots);
+      }
 
       // Initialize subject loads: populate missing loads from section x subject combinations
       const existing = data.existing_loads || [];
@@ -549,50 +632,102 @@ export default function SubjectLoadStudio() {
                     </Breadcrumb.Item>
                   </Breadcrumb.List>
                 </Breadcrumb>
-                <h1 className="text-2xl md:text-3xl font-bold tracking-tight mt-1">
-                  Subject Load Studio
-                </h1>
+                <div className="flex items-center gap-2 mt-1">
+                  <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+                    Subject Load Studio
+                  </h1>
+                  <Badge
+                    size="sm"
+                    className={`border-2 border-black font-bold px-2.5 py-0.5 shadow-[2px_2px_0_#000] text-xs ${
+                      isCurrentPublished
+                        ? "bg-emerald-300 text-emerald-950"
+                        : "bg-amber-300 text-amber-950"
+                    }`}
+                  >
+                    {isCurrentPublished ? `🔒 PUBLISHED v${currentVersionNumber}.0` : `📝 DRAFT v${currentVersionNumber}.0`}
+                  </Badge>
+                </div>
               </div>
             </div>
 
             {/* Sticky Action Controls */}
-            <div className="flex flex-wrap items-center gap-2 self-end md:self-auto">
-              <Button
-                variant="default"
-                disabled={isLoading || isSaving}
-                onClick={() => void handleAutoSchedule(undefined, "teacher_swap")}
-                className="bg-sky-400 text-black hover:bg-sky-500 border-2 border-black shadow-[2px_2px_0_#000] font-bold"
-                title="CTU Master Pattern: Auto-swap teachers back-to-back between paired sections"
-              >
-                <Zap className="size-4 mr-2 text-black" />
-                Auto-Teacher Swap
-              </Button>
-              <Button
-                variant="default"
-                disabled={isLoading || isSaving}
-                onClick={() => void handleAutoSchedule(undefined, "standard")}
-                className="bg-amber-400 text-black hover:bg-amber-500 border-2 border-black shadow-[2px_2px_0_#000] font-bold"
-              >
-                <Sparkles className="size-4 mr-2 text-black" />
-                Auto-Generate All
-              </Button>
-              <Button
-                variant="outline"
+            <div className="flex flex-wrap items-center gap-3 self-end md:self-auto">
+              <button
+                type="button"
                 disabled={isSaving}
                 onClick={() => void handleSave("draft")}
-                className="border-2 border-black shadow-[2px_2px_0_#000]"
+                className="text-xs font-bold text-black/70 hover:text-black transition-colors px-2 py-1"
               >
-                <Save className="size-4 mr-2" />
                 Save Draft
-              </Button>
+              </button>
+
+              {/* Setup Tools Retro Dropdown */}
+              <div className="relative">
+                <Button
+                  variant="outline"
+                  disabled={isLoading || isSaving}
+                  onClick={() => setIsToolsOpen((prev) => !prev)}
+                  className="border-2 border-black bg-white hover:bg-gray-100 shadow-[2px_2px_0_#000] font-bold text-xs"
+                >
+                  <Wand2 className="size-3.5 mr-1.5 text-black" />
+                  <span>Tools ▾</span>
+                </Button>
+
+                {isToolsOpen && (
+                  <div
+                    className="absolute right-0 mt-1 w-56 bg-white border-2 border-black shadow-[3px_3px_0_#000] p-1.5 z-50 flex flex-col gap-1 rounded"
+                    onMouseLeave={() => setIsToolsOpen(false)}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsToolsOpen(false);
+                        setIsBreakDrawerOpen(true);
+                      }}
+                      className="text-xs font-bold text-left px-2.5 py-1.5 hover:bg-purple-100 flex items-center gap-2 rounded transition-colors"
+                    >
+                      <Settings className="size-3.5 text-purple-900" />
+                      <span>Edit Break Timelines</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsToolsOpen(false);
+                        void handleAutoSchedule(undefined, "teacher_swap");
+                      }}
+                      className="text-xs font-bold text-left px-2.5 py-1.5 hover:bg-sky-100 flex items-center gap-2 rounded transition-colors"
+                    >
+                      <Zap className="size-3.5 text-sky-900" />
+                      <span>Auto-Teacher Swap</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsToolsOpen(false);
+                        void handleAutoSchedule(undefined, "standard");
+                      }}
+                      className="text-xs font-bold text-left px-2.5 py-1.5 hover:bg-amber-100 flex items-center gap-2 rounded transition-colors"
+                    >
+                      <Sparkles className="size-3.5 text-amber-900" />
+                      <span>Auto-Generate All</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <Button
                 variant="default"
                 disabled={isSaving || errorConflictsCount > 0}
                 onClick={() => void handleSave("publish")}
-                className="border-2 border-black shadow-[2px_2px_0_#000]"
+                className={`border-2 border-black shadow-[2px_2px_0_#000] font-bold text-xs ${
+                  errorConflictsCount > 0
+                    ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-60"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
+                }`}
+                title={errorConflictsCount > 0 ? `Fix ${errorConflictsCount} conflict errors before publishing` : "Publish official schedule"}
               >
-                <Send className="size-4 mr-2" />
-                Publish Schedule
+                <Send className="size-4 mr-1.5" />
+                Publish Schedule →
               </Button>
             </div>
           </header>
@@ -668,24 +803,69 @@ export default function SubjectLoadStudio() {
             </div>
 
             <div className="md:col-span-2 flex flex-wrap items-center justify-end gap-2 pt-4 md:pt-0">
-              <Badge variant="outline" className="border-2 border-black py-1 px-2.5 font-bold">
-                <UserCheck className="size-3.5 mr-1 text-amber-600" />
-                {unassignedCount} Unassigned Subjects
-              </Badge>
-              <Badge
-                variant={errorConflictsCount > 0 ? "solid" : "outline"}
-                className={`border-2 border-black py-1 px-2.5 font-bold ${errorConflictsCount > 0 ? "bg-red-500 text-white" : ""
+              <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+                <span
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 border-2 border-black font-bold shadow-[1px_1px_0_#000] ${
+                    prePublishChecklistCount === 6 ? "bg-emerald-100 text-emerald-950" : "bg-amber-100 text-amber-950"
                   }`}
-              >
-                <AlertCircle className="size-3.5 mr-1" />
-                {errorConflictsCount} Conflicts
-              </Badge>
-              {warningConflictsCount > 0 && (
-                <Badge variant="surface" className="border-2 border-black py-1 px-2.5 font-bold bg-amber-100">
-                  <AlertTriangle className="size-3.5 mr-1 text-amber-700" />
-                  {warningConflictsCount} Warnings
-                </Badge>
+                >
+                  <CheckCircle2 className="size-3.5 text-emerald-700" />
+                  <span>Checklist <strong>{prePublishChecklistCount}/6 passed</strong></span>
+                </span>
+
+                {errorConflictsCount > 0 ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 border-2 border-black bg-red-100 text-red-950 font-bold shadow-[1px_1px_0_#000]">
+                    <AlertCircle className="size-3.5 text-red-700" />
+                    <span>✕ <strong>{errorConflictsCount} conflicts</strong> — must resolve to publish</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 border-2 border-black bg-emerald-50 text-emerald-900 font-bold shadow-[1px_1px_0_#000]">
+                    <span>Conflicts: <strong>0</strong></span>
+                  </span>
+                )}
+
+                {warningConflictsCount > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 border-2 border-black bg-amber-100 text-amber-950 font-bold shadow-[1px_1px_0_#000]">
+                    <AlertTriangle className="size-3.5 text-amber-700" />
+                    <span>⚠️ <strong>{warningConflictsCount} warnings</strong></span>
+                  </span>
+                )}
+
+                {unassignedCount > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 border-2 border-black bg-red-50 text-red-900 font-bold shadow-[1px_1px_0_#000]">
+                    <span><strong>{unassignedCount}</strong> unassigned</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Section Group Timetable Control Bar */}
+          <section className="flex flex-wrap items-center justify-between gap-3 bg-purple-50/90 p-3.5 border-2 border-black shadow-[3px_3px_0_#000]">
+            <div className="flex items-center gap-2">
+              <Clock className="size-4 text-purple-900" />
+              <span className="text-xs font-bold uppercase tracking-wider text-purple-950">
+                Active Section Group Break Schedule ({activeGroupKey}):
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {activeGroupBreakSlots.length === 0 ? (
+                <span className="text-xs text-muted-foreground font-semibold">Standard Defaults Active</span>
+              ) : (
+                activeGroupBreakSlots.map((b) => (
+                  <Badge key={`${b.template_group}_${b.display_order}`} size="sm" className="border-2 border-black font-bold bg-white text-black shadow-[1px_1px_0_#000]">
+                    {b.slot_type === "HOMEROOM" ? "🌅 " : b.slot_type === "LUNCH" ? "🍱 " : "☕ "}
+                    {b.slot_name}: {b.start_time}–{b.end_time}
+                  </Badge>
+                ))
               )}
+              <button
+                type="button"
+                onClick={() => setIsBreakDrawerOpen(true)}
+                className="text-xs font-bold border border-black bg-purple-200 hover:bg-purple-300 text-purple-950 px-2 py-0.5 rounded shadow-[1px_1px_0_#000] ml-1"
+              >
+                ⚙️ Adjust Breaks
+              </button>
             </div>
           </section>
 
@@ -809,85 +989,61 @@ export default function SubjectLoadStudio() {
                                   <Table.Row
                                     key={sub.subject_id}
                                     id={`subject-row-${cls.class_id}_${sub.subject_id}`}
-                                    className={`transition-all duration-300 border-b border-black/20 ${isHighlighted
-                                        ? "bg-amber-200 border-4 border-black ring-4 ring-amber-400 shadow-xl scale-[1.01]"
+                                    className={`transition-all duration-200 border-b border-black/20 ${
+                                      isHighlighted
+                                        ? "bg-amber-200 border-4 border-black ring-4 ring-amber-400 shadow-xl"
                                         : conflict
-                                          ? conflict.severity === "error"
-                                            ? "bg-red-50/90 border-2 border-red-500"
-                                            : "bg-amber-50/90 border-2 border-amber-500"
-                                          : ""
-                                      }`}
+                                        ? conflict.severity === "error"
+                                          ? "bg-red-50/70 border-l-4 border-l-red-600"
+                                          : "bg-amber-50/70 border-l-4 border-l-amber-500"
+                                        : "hover:bg-gray-50/80"
+                                    }`}
                                   >
                                     {/* Subject Column */}
-                                    <Table.Cell className="align-top py-3 min-w-[200px]">
-                                      <div className="flex flex-col gap-1.5">
+                                    <Table.Cell className="py-2.5 px-3 align-middle min-w-[210px]">
+                                      <div className="flex flex-col gap-1">
                                         <div className="flex items-center gap-1.5">
-                                          <span className="font-bold text-base text-black">
+                                          <span className="font-bold text-sm text-black">
                                             {sub.subject_name}
                                           </span>
+                                          {conflict && (
+                                            <span
+                                              className={`text-[11px] font-bold px-1.5 py-0.5 rounded border border-black ${
+                                                conflict.severity === "error" ? "bg-red-200 text-red-950" : "bg-amber-200 text-amber-950"
+                                              }`}
+                                              title={conflict.message}
+                                            >
+                                              ⚠️ {conflict.severity === "error" ? "Conflict" : "15 min short"}
+                                            </span>
+                                          )}
                                         </div>
-                                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                                          <Badge variant="surface" size="sm" className="border border-black font-mono font-bold bg-amber-100 text-black">
+                                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                          <Badge variant="surface" size="sm" className="border border-black font-mono font-bold bg-amber-100 text-black text-[10px]">
                                             {sub.subject_codename || `SUB-${sub.subject_id}`}
                                           </Badge>
+                                          {(sub.is_math_or_science || /math|science|physics|chemistry|biology/i.test(sub.subject_name)) && (
+                                            <span className="text-[10px] font-bold text-purple-900 bg-purple-100 px-1.5 py-0.5 border border-purple-800 rounded">
+                                              1 hr Core
+                                            </span>
+                                          )}
                                         </div>
-
-                                        <div className="flex flex-wrap items-center gap-1 mt-1">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleAddSlot(cls.class_id, sub.subject_id)}
-                                            className="text-[11px] font-bold flex items-center gap-0.5 text-black hover:bg-neutral-100 border border-black px-1.5 py-0.5 rounded bg-white shadow-[1px_1px_0_#000]"
-                                          >
-                                            <Plus className="size-3 text-primary" />
-                                            <span>Slot</span>
-                                          </button>
-
-                                          <button
-                                            type="button"
-                                            title="Apply 2-Day (MW 2h/day) Preset"
-                                            onClick={() => handleApplyPreset(cls.class_id, sub.subject_id, "2day")}
-                                            className="text-[10px] font-bold border border-black px-1.5 py-0.5 rounded bg-sky-100 hover:bg-sky-200 text-sky-950 shadow-[1px_1px_0_#000]"
-                                          >
-                                            Preset: 2-Day
-                                          </button>
-                                          <button
-                                            type="button"
-                                            title="Apply 3-Day (MWF 1.3h/day) Preset"
-                                            onClick={() => handleApplyPreset(cls.class_id, sub.subject_id, "3day")}
-                                            className="text-[10px] font-bold border border-black px-1.5 py-0.5 rounded bg-purple-100 hover:bg-purple-200 text-purple-950 shadow-[1px_1px_0_#000]"
-                                          >
-                                            Preset: 3-Day
-                                          </button>
-                                        </div>
-
-                                        {conflict && (
-                                          <div
-                                            className={`mt-1 text-xs font-bold p-1.5 border border-black flex items-start gap-1 ${conflict.severity === "error"
-                                                ? "bg-red-200 text-red-900"
-                                                : "bg-amber-200 text-amber-900"
-                                              }`}
-                                          >
-                                            <AlertCircle className="size-3.5 shrink-0 mt-0.5" />
-                                            <span>{conflict.message}</span>
-                                          </div>
-                                        )}
                                       </div>
                                     </Table.Cell>
 
                                     {/* Days & Time Slot Columns */}
-                                    <Table.Cell colSpan={2} className="align-top py-3 px-2">
+                                    <Table.Cell colSpan={2} className="py-2.5 px-2 align-middle">
                                       {subjectSlots.length === 0 ? (
                                         <span className="text-xs italic text-muted-foreground font-semibold py-1 inline-block">
-                                          Unscheduled — click "+ Add Time Slot" to assign schedule
+                                          Unscheduled — click &quot;+ Add Slot&quot; to assign schedule
                                         </span>
                                       ) : (
-                                        <div className="flex flex-col gap-3">
+                                        <div className="flex flex-col gap-2">
                                           {subjectSlots.map((slot, sIdx) => {
                                             const slotKey = slot._key || `slot_${cls.class_id}_${sub.subject_id}_${sIdx}`;
                                             return (
-                                              <div key={slotKey} className="flex flex-wrap items-center gap-3 pb-2 border-b border-black/10 last:border-b-0 last:pb-0">
+                                              <div key={slotKey} className="flex flex-wrap items-center gap-2.5">
                                                 {/* Days Chips */}
-                                                <div className="flex flex-wrap gap-1">
+                                                <div className="flex flex-wrap gap-0.5">
                                                   {DAYS.map((d) => {
                                                     const isSelected = (slot.days_of_week || []).includes(d.key);
                                                     return (
@@ -895,9 +1051,9 @@ export default function SubjectLoadStudio() {
                                                         key={d.key}
                                                         type="button"
                                                         onClick={() => handleToggleDay(slotKey, d.key)}
-                                                        className={`size-7 text-xs font-bold border-2 border-black transition-all ${isSelected
-                                                            ? "bg-primary text-primary-foreground shadow-[1px_1px_0_#000] translate-y-[-1px]"
-                                                            : "bg-background text-foreground opacity-60 hover:opacity-100"
+                                                        className={`size-6 text-[11px] font-bold border-2 border-black transition-all ${isSelected
+                                                            ? "bg-primary text-primary-foreground shadow-[1px_1px_0_#000]"
+                                                            : "bg-background text-foreground opacity-50 hover:opacity-100"
                                                           }`}
                                                       >
                                                         {d.label}
@@ -907,14 +1063,14 @@ export default function SubjectLoadStudio() {
                                                 </div>
 
                                                 {/* Time Picker */}
-                                                <div className="flex items-center gap-1.5">
+                                                <div className="flex items-center gap-1">
                                                   <TimePickerSingle
                                                     value={stringToTimeValue(slot.start_time, 8)}
                                                     onChange={(newStart) =>
                                                       handleTimeChange(slotKey, "start_time", timeValueToString(newStart))
                                                     }
                                                   />
-                                                  <span className="text-xs font-bold text-muted-foreground">to</span>
+                                                  <span className="text-xs font-bold text-muted-foreground">–</span>
                                                   <TimePickerSingle
                                                     value={stringToTimeValue(slot.end_time, 9)}
                                                     lockedPeriod={stringToTimeValue(slot.start_time, 8).period === "PM" ? "PM" : undefined}
@@ -932,7 +1088,7 @@ export default function SubjectLoadStudio() {
                                                     className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 border border-red-300 rounded ml-1"
                                                     title="Remove this time slot"
                                                   >
-                                                    <Trash2 className="size-4" />
+                                                    <Trash2 className="size-3.5" />
                                                   </button>
                                                 )}
                                               </div>
@@ -942,10 +1098,11 @@ export default function SubjectLoadStudio() {
                                       )}
                                     </Table.Cell>
 
-                                    {/* Smart Teacher Dropdown — Single Per Subject */}
-                                    <Table.Cell className="align-top py-3">
+                                    {/* Smart Teacher Dropdown & Workload Bar */}
+                                    <Table.Cell className="py-2.5 px-3 align-middle">
                                       {(() => {
                                         const currentStaffId = subjectSlots[0]?.staff_id;
+                                        const teacherObj = (studioData?.teachers || []).find((t) => t.staff_id === currentStaffId);
                                         const currentStatusText = currentStaffId
                                           ? getTeacherAvailabilityStatus(
                                             currentStaffId,
@@ -955,65 +1112,147 @@ export default function SubjectLoadStudio() {
                                           : "";
                                         const currentHasConflict = currentStatusText.includes("Conflict");
 
-                                        return (
-                                          <Select
-                                            value={currentStaffId || "none"}
-                                            onValueChange={(val) =>
-                                              handleTeacherChange(cls.class_id, sub.subject_id, val)
-                                            }
-                                          >
-                                            <Select.Trigger
-                                              className={`w-[190px] h-9 border-2 border-black shadow-none font-medium text-xs transition-colors ${currentHasConflict
-                                                  ? "border-red-600 bg-red-50 text-red-950 font-bold"
-                                                  : ""
-                                                }`}
-                                            >
-                                              <div className="flex items-center justify-between w-full overflow-hidden">
-                                                <Select.Value placeholder="Select Teacher" />
-                                                {currentHasConflict && (
-                                                  <span className="text-red-600 text-xs font-bold shrink-0 ml-1" title={currentStatusText}>
-                                                    ⚠️
-                                                  </span>
-                                                )}
-                                              </div>
-                                            </Select.Trigger>
-                                            <Select.Content>
-                                              <Select.Group>
-                                                <Select.Item value="none">
-                                                  <span className="italic text-muted-foreground font-semibold">
-                                                    -- Unassigned --
-                                                  </span>
-                                                </Select.Item>
-                                                {(studioData?.teachers || [])
-                                                  .filter(
-                                                    (t) =>
-                                                      !t.staff_id.toUpperCase().startsWith("ADM") &&
-                                                      !t.name.toLowerCase().includes("admin")
-                                                  )
-                                                  .map((t) => {
-                                                    const statusText = getTeacherAvailabilityStatus(
-                                                      t.staff_id,
-                                                      cls.class_id,
-                                                      sub.subject_id
-                                                    );
-                                                    const hasConflict = statusText.includes("Conflict");
+                                        // Compute teacher workload hours
+                                        const tWorkload = teacherWorkloads.find((w) => w.staff_id === currentStaffId);
+                                        const weeklyHours = tWorkload?.total_weekly_hours || 0;
+                                        const maxWeeklyHours = 30.0;
+                                        const pct = Math.min(100, Math.round((weeklyHours / maxWeeklyHours) * 100));
 
-                                                    return (
-                                                      <Select.Item key={t.staff_id} value={t.staff_id}>
-                                                        <div className="flex flex-col text-xs py-0.5">
-                                                          <span className="font-bold">{t.name}</span>
-                                                          {hasConflict && (
-                                                            <span className="text-red-600 font-semibold text-[11px] leading-tight">
-                                                              {statusText}
-                                                            </span>
-                                                          )}
-                                                        </div>
-                                                      </Select.Item>
-                                                    );
-                                                  })}
-                                              </Select.Group>
-                                            </Select.Content>
-                                          </Select>
+                                        const rowKey = `${cls.class_id}_${sub.subject_id}`;
+                                        const isRowMenuOpen = openRowKey === rowKey;
+
+                                        return (
+                                          <div className="flex items-center gap-2">
+                                            <div className="flex flex-col gap-1">
+                                              <Select
+                                                value={currentStaffId || "none"}
+                                                onValueChange={(val) =>
+                                                  handleTeacherChange(cls.class_id, sub.subject_id, val)
+                                                }
+                                              >
+                                                <Select.Trigger
+                                                  className={`w-[170px] h-8 border-2 border-black font-bold text-xs transition-colors ${
+                                                    !currentStaffId
+                                                      ? "bg-red-50 text-red-900 border-red-500 shadow-[1px_1px_0_#000]"
+                                                      : currentHasConflict
+                                                      ? "bg-red-100 text-red-950 border-red-600 font-bold"
+                                                      : "bg-white text-black shadow-[1px_1px_0_#000]"
+                                                  }`}
+                                                >
+                                                  <div className="flex items-center justify-between w-full overflow-hidden">
+                                                    <Select.Value placeholder="Select Teacher" />
+                                                    {currentHasConflict && (
+                                                      <span className="text-red-600 text-xs font-bold shrink-0 ml-1" title={currentStatusText}>
+                                                        ⚠️
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                </Select.Trigger>
+                                                <Select.Content>
+                                                  <Select.Group>
+                                                    <Select.Item value="none">
+                                                      <span className="italic text-red-700 font-bold">
+                                                        -- Unassigned --
+                                                      </span>
+                                                    </Select.Item>
+                                                    {(studioData?.teachers || [])
+                                                      .filter(
+                                                        (t) =>
+                                                          !t.staff_id.toUpperCase().startsWith("ADM") &&
+                                                          !t.name.toLowerCase().includes("admin")
+                                                      )
+                                                      .map((t) => {
+                                                        const statusText = getTeacherAvailabilityStatus(
+                                                          t.staff_id,
+                                                          cls.class_id,
+                                                          sub.subject_id
+                                                        );
+                                                        const hasConflict = statusText.includes("Conflict");
+
+                                                        return (
+                                                          <Select.Item key={t.staff_id} value={t.staff_id}>
+                                                            <div className="flex flex-col text-xs py-0.5">
+                                                              <span className="font-bold">{t.name}</span>
+                                                              {hasConflict && (
+                                                                <span className="text-red-600 font-semibold text-[11px] leading-tight">
+                                                                  {statusText}
+                                                                </span>
+                                                              )}
+                                                            </div>
+                                                          </Select.Item>
+                                                        );
+                                                      })}
+                                                  </Select.Group>
+                                                </Select.Content>
+                                              </Select>
+
+                                              {/* Inline Teacher Workload Capacity Indicator */}
+                                              {currentStaffId && teacherObj && (
+                                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
+                                                  <div className="w-12 h-1.5 bg-gray-200 border border-black rounded-full overflow-hidden">
+                                                    <div
+                                                      className={`h-full ${
+                                                        pct > 90 ? "bg-red-500" : pct > 70 ? "bg-amber-500" : "bg-emerald-500"
+                                                      }`}
+                                                      style={{ width: `${pct}%` }}
+                                                    />
+                                                  </div>
+                                                  <span>{weeklyHours.toFixed(1)}h/wk</span>
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            {/* Row Action Overflow Menu (⋯) */}
+                                            <div className="relative">
+                                              <button
+                                                type="button"
+                                                onClick={() => setOpenRowKey(isRowMenuOpen ? null : rowKey)}
+                                                className="size-7 border-2 border-black bg-white hover:bg-gray-100 font-bold shadow-[1px_1px_0_#000] flex items-center justify-center text-xs rounded"
+                                                title="Row Presets & Options"
+                                              >
+                                                ⋯
+                                              </button>
+
+                                              {isRowMenuOpen && (
+                                                <div
+                                                  className="absolute right-0 mt-1 w-44 bg-white border-2 border-black shadow-[3px_3px_0_#000] p-1 z-50 flex flex-col gap-1 rounded"
+                                                  onMouseLeave={() => setOpenRowKey(null)}
+                                                >
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setOpenRowKey(null);
+                                                      handleAddSlot(cls.class_id, sub.subject_id);
+                                                    }}
+                                                    className="text-[11px] font-bold text-left px-2 py-1 hover:bg-neutral-100 flex items-center gap-1 rounded"
+                                                  >
+                                                    <Plus className="size-3 text-primary" />
+                                                    <span>+ Add Time Slot</span>
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setOpenRowKey(null);
+                                                      handleApplyPreset(cls.class_id, sub.subject_id, "2day");
+                                                    }}
+                                                    className="text-[11px] font-bold text-left px-2 py-1 hover:bg-sky-100 text-sky-950 rounded"
+                                                  >
+                                                    Preset: 2-Day (MW 2h)
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setOpenRowKey(null);
+                                                      handleApplyPreset(cls.class_id, sub.subject_id, "3day");
+                                                    }}
+                                                    className="text-[11px] font-bold text-left px-2 py-1 hover:bg-purple-100 text-purple-950 rounded"
+                                                  >
+                                                    Preset: 3-Day (MWF 1.3h)
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
                                         );
                                       })()}
                                     </Table.Cell>
@@ -1031,47 +1270,77 @@ export default function SubjectLoadStudio() {
 
               {/* RIGHT PANE: Live Conflict Tracker & Teacher Workload */}
               <aside className="lg:col-span-4 flex flex-col gap-6">
-                {/* Active Conflicts Card */}
+                {/* Grouped Issues Card (Root-Cause Aggregated) */}
                 <RetroCard className="border-2 border-black shadow-[4px_4px_0_#000] p-4 bg-background">
                   <div className="flex items-center justify-between border-b-2 border-black pb-3 mb-3">
                     <div className="flex items-center gap-2">
                       <AlertTriangle className="size-5 text-amber-600" />
                       <Text as="h3" className="font-bold text-lg">
-                        Conflict Tracker ({conflicts.length})
+                        Issues ({conflicts.length})
                       </Text>
                     </div>
                   </div>
 
                   {conflicts.length === 0 ? (
-                    <div className="p-4 bg-emerald-50 border-2 border-black text-emerald-900 font-bold text-xs flex items-center gap-2">
+                    <div className="p-4 bg-emerald-50 border-2 border-black text-emerald-900 font-bold text-xs flex items-center gap-2 shadow-[2px_2px_0_#000]">
                       <CheckCircle2 className="size-5 shrink-0 text-emerald-700" />
                       <span>All schedules and workloads are valid! No conflicts detected.</span>
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-2 max-h-[380px] overflow-y-auto pr-1">
-                      {conflicts.map((conf, idx) => (
-                        <div
-                          key={idx}
-                          onClick={() => {
-                            const targetKey = conf.affected_key || (conf.class_id && conf.subject_id ? `${conf.class_id}_${conf.subject_id}` : undefined);
-                            handleHighlightKey(targetKey, conf.class_id);
-                          }}
-                          className={`p-3 border-2 border-black text-xs font-medium cursor-pointer transition-all hover:translate-x-1 ${conf.severity === "error"
-                              ? "bg-red-100 text-red-950 border-red-800"
-                              : "bg-amber-100 text-amber-950 border-amber-800"
+                    <div className="flex flex-col gap-3 max-h-[440px] overflow-y-auto pr-1">
+                      {groupedIssues.map((group) => {
+                        const isExpanded = expandedIssueRule === group.title;
+                        return (
+                          <div
+                            key={group.title}
+                            className={`p-3 border-2 border-black text-xs transition-all shadow-[2px_2px_0_#000] ${
+                              group.severity === "error"
+                                ? "bg-red-50 text-red-950 border-red-800"
+                                : "bg-amber-50 text-amber-950 border-amber-800"
                             }`}
-                        >
-                          <div className="flex items-center justify-between font-bold mb-1">
-                            <span className="uppercase tracking-wider text-[10px] px-1.5 py-0.5 border border-black bg-white">
-                              {conf.rule.replace(/_/g, " ")}
-                            </span>
-                            {conf.affected_key && (
-                              <span className="underline text-[11px]">Click to highlight</span>
+                          >
+                            <div className="flex items-center justify-between font-bold mb-1">
+                              <span className="text-sm font-bold">{group.title}</span>
+                              <span
+                                className={`px-2 py-0.5 border border-black font-bold text-xs rounded ${
+                                  group.severity === "error" ? "bg-red-200 text-red-950" : "bg-amber-200 text-amber-950"
+                                }`}
+                              >
+                                {group.items.length}
+                              </span>
+                            </div>
+                            <p className="font-medium text-xs leading-relaxed text-black/80 mb-2">
+                              {group.explanation}
+                            </p>
+
+                            <button
+                              type="button"
+                              onClick={() => setExpandedIssueRule(isExpanded ? null : group.title)}
+                              className="text-xs font-bold underline hover:text-black transition-colors flex items-center gap-1 mt-1"
+                            >
+                              <span>{isExpanded ? "Hide details ▲" : `Show affected items (${group.items.length}) ▾`}</span>
+                            </button>
+
+                            {isExpanded && (
+                              <div className="mt-2.5 pt-2 border-t border-black/20 flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                                {group.items.map((conf, cIdx) => (
+                                  <div
+                                    key={cIdx}
+                                    onClick={() => {
+                                      const targetKey = conf.affected_key || (conf.class_id && conf.subject_id ? `${conf.class_id}_${conf.subject_id}` : undefined);
+                                      handleHighlightKey(targetKey, conf.class_id);
+                                    }}
+                                    className="p-1.5 bg-white border border-black text-[11px] font-semibold cursor-pointer hover:bg-gray-100 flex items-center justify-between rounded"
+                                  >
+                                    <span className="truncate pr-2">{conf.message}</span>
+                                    <span className="text-[10px] font-bold underline shrink-0">View</span>
+                                  </div>
+                                ))}
+                              </div>
                             )}
                           </div>
-                          <p className="font-semibold leading-snug">{conf.message}</p>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </RetroCard>
@@ -1144,6 +1413,13 @@ export default function SubjectLoadStudio() {
           )}
         </div>
       </div>
+
+      <BreakConfigDrawer
+        open={isBreakDrawerOpen}
+        onClose={() => setIsBreakDrawerOpen(false)}
+        initialSlots={periodTemplateSlots}
+        onSaved={() => void loadStudio(selectedPeriodId || undefined)}
+      />
     </AppLayout>
   );
 }

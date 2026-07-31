@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { FolderPlus, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { X } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
@@ -36,8 +37,8 @@ async function responseError(response: Response, fallback: string) {
 interface CreateLessonModalProps {
   classId?: string;
   subjectId?: string;
-  onClose: () => void;
-  onCreated: () => void;
+  onClose?: () => void;
+  onCreated?: () => void;
 }
 
 export default function CreateLessonModal({
@@ -46,6 +47,21 @@ export default function CreateLessonModal({
   onClose,
   onCreated,
 }: CreateLessonModalProps) {
+  const navigate = useNavigate();
+  const handleClose = () => {
+    if (onClose) {
+      onClose();
+    } else {
+      navigate(-1);
+    }
+  };
+  const handleCreated = () => {
+    if (onCreated) {
+      onCreated();
+    } else {
+      navigate(-1);
+    }
+  };
   const [classLoads, setClassLoads] = useState<TeacherClassLoad[]>([]);
   const [subjectId, setSubjectId] = useState("");
   const [classIds, setClassIds] = useState<number[]>([]);
@@ -197,7 +213,7 @@ export default function CreateLessonModal({
         );
       }
 
-      onCreated();
+      handleCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create lesson.");
     } finally {
@@ -209,7 +225,7 @@ export default function CreateLessonModal({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open && !isSubmitting) onClose();
+        if (!open && !isSubmitting) handleClose();
       }}
     >
       <Dialog.Content
@@ -401,7 +417,7 @@ export default function CreateLessonModal({
             type="button"
             variant="outline"
             size="sm"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={isSubmitting}
             className="border-black font-semibold"
           >

@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from app.models.academic.Subject import Subject
 from app.models.academic.Class_ import Class
+from app.models.academic.PeriodTemplateSlot import PeriodTemplateSlot
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.academic.SubjectOffering import SubjectOffering
 from app.schemas.SubjectLoad import (
@@ -241,10 +242,88 @@ class ConflictDetectorService:
                                 )
                             )
 
+        # ---------------------------------------------------------
+        # 5. Math/Science 1-Hour Duration Mismatch Check (JHS)
+        # ---------------------------------------------------------
+        for load in loads:
+            subject_obj = subjects_map.get(load.subject_id)
+            class_obj = classes_map.get(load.class_id)
+            if subject_obj and class_obj:
+                s_name = subject_obj.subject_name or ""
+                s_code = subject_obj.subject_codename or ""
+                c_name = class_obj.section_name or ""
+                is_jhs = not any(k in c_name.lower() for k in ["campos", "zara", "reyes", "del mundo"])
+                is_math_sci = getattr(subject_obj, "is_math_or_science", False) or any(k in s_name.lower() or k in s_code.lower() for k in ["math", "mathematics", "science", "physics", "chemistry", "biology"])
+
+                if is_jhs and is_math_sci and load.start_time and load.end_time:
+                    dur_hrs = calculate_duration_hours(load.start_time, load.end_time)
+                    if dur_hrs < 0.95:  # less than 60 mins
+                        dur_mins = int(dur_hrs * 60)
+                        conflicts.append(
+                            ConflictItem(
+                                rule="MATH_SCIENCE_DURATION_MISMATCH",
+                                severity="warning",
+                                message=f"Core subject '{s_name}' in JHS section '{c_name}' is assigned {dur_mins} mins, but requires 1 hr (60 mins) per day.",
+                                class_id=load.class_id,
+                                subject_id=load.subject_id,
+                                affected_key=f"{load.class_id}_{load.subject_id}",
+                            )
+                        )
+
+        # ---------------------------------------------------------
+        # 6. Break Time Violation Check (Homeroom / Recess / Lunch)
+        # ---------------------------------------------------------
+        all_break_slots = db.query(PeriodTemplateSlot).filter(PeriodTemplateSlot.is_locked_break == True).all()
+        break_map: dict[str, list[PeriodTemplateSlot]] = {}
+        for bslot in all_break_slots:
+            break_map.setdefault(bslot.template_group, []).append(bslot)
+
+        for load in loads:
+            if not load.start_time or not load.end_time:
+                continue
+            class_obj = classes_map.get(load.class_id)
+            if not class_obj:
+                continue
+
+            c_name = class_obj.section_name or ""
+            grp = "JHS_45MIN"
+            if "campos" in c_name.lower() or "zara" in c_name.lower():
+                grp = "SHS_CAMPOS_ZARA"
+            elif "del mundo" in c_name.lower() or "reyes" in c_name.lower():
+                grp = "SHS_DELMUNDO_REYES"
+
+            group_breaks = break_map.get(grp, [])
+            for bslot in group_breaks:
+                if times_overlap(load.start_time, load.end_time, bslot.start_time, bslot.end_time):
+                    subject_obj = subjects_map.get(load.subject_id)
+                    s_name = subject_obj.subject_name if subject_obj else f"Subject #{load.subject_id}"
+                    conflicts.append(
+                        ConflictItem(
+                            rule="BREAK_TIME_VIOLATION",
+                            severity="error",
+                            message=f"Subject '{s_name}' in section '{c_name}' overlaps with {bslot.slot_name} ({bslot.start_time}-{bslot.end_time}).",
+                            class_id=load.class_id,
+                            subject_id=load.subject_id,
+                            affected_key=f"{load.class_id}_{load.subject_id}",
+                        )
+                    )
+
         has_errors = any(c.severity == "error" for c in conflicts)
+        failing_rules = {c.rule for c in conflicts if c.severity == "error"}
+        total_rules = 6
+        passed_count = max(0, total_rules - len(failing_rules))
+
+        grouped_conflicts: dict[str, list[ConflictItem]] = {}
+        for c in conflicts:
+            grouped_conflicts.setdefault(c.rule, []).append(c)
+
         return ValidationResultResponse(
             is_valid=not has_errors,
             conflicts=conflicts,
+            grouped_conflicts=grouped_conflicts,
             teacher_workloads=teacher_workloads,
+            passed_checks_count=passed_count,
+            total_checks_count=total_rules,
+            can_publish=not has_errors,
         )
 

@@ -99,6 +99,6 @@ def subject_to_item(subject: Subject, academic_level: AcademicLevel | None = Non
             "level_name": level.level_name,
             "grade_level": level.grade_level,
         },
-        "created_at": subject.created_at,
-        "updated_at": subject.updated_at,
+        "created_at": getattr(subject, "created_at", None),
+        "updated_at": getattr(subject, "updated_at", None),
     }
