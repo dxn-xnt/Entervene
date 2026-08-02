@@ -172,6 +172,12 @@ class QuizQuestionAnalysisOut(BaseModel):
     option_distribution: list[QuizOptionDistributionOut] = Field(default_factory=list)
 
 
+class QuizStudentQuestionAnswerOut(BaseModel):
+    quiz_question_id: int
+    is_correct: Optional[bool] = None
+    points_awarded: Optional[float] = None
+
+
 class QuizStudentScoreOut(BaseModel):
     student_id: str
     student_name: str
@@ -182,6 +188,7 @@ class QuizStudentScoreOut(BaseModel):
     score_percent: Optional[float] = None
     submitted_at: Optional[datetime] = None
     needs_grading: bool = False
+    answers: list[QuizStudentQuestionAnswerOut] = Field(default_factory=list)
 
 
 class QuizAnalysisResponse(BaseModel):
