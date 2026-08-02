@@ -18,6 +18,7 @@ from app.schemas.Quiz import (
     QuizAnalysisResponse,
     QuizOptionDistributionOut,
     QuizQuestionAnalysisOut,
+    QuizStudentQuestionAnswerOut,
     QuizStudentScoreOut,
     TeacherGradeQuizSubmissionRequest,
     TeacherQuizAnswerOut,
@@ -123,6 +124,7 @@ def _submissions(db: Session, assignment_ids: list[int]) -> list[StudentSubmissi
         return []
     return (
         db.query(StudentSubmission)
+        .options(selectinload(StudentSubmission.quiz_answers))
         .filter(StudentSubmission.classwork_assignment_id.in_(assignment_ids))
         .all()
     )
@@ -147,6 +149,18 @@ def _student_score_out(
     total_points: Decimal | None,
 ) -> QuizStudentScoreOut:
     grade = float(submission.grade) if submission and submission.grade is not None else None
+    
+    answers_out = []
+    if submission:
+        for answer in getattr(submission, "quiz_answers", []):
+            answers_out.append(
+                QuizStudentQuestionAnswerOut(
+                    quiz_question_id=answer.quiz_question_id,
+                    is_correct=answer.is_correct,
+                    points_awarded=float(answer.points_awarded) if answer.points_awarded is not None else None,
+                )
+            )
+            
     needs_grading = bool(
         submission
         and submission.status in {"submitted", "late"}
@@ -166,6 +180,7 @@ def _student_score_out(
         ),
         submitted_at=submission.submitted_at if submission else None,
         needs_grading=needs_grading,
+        answers=answers_out,
     )
 
 

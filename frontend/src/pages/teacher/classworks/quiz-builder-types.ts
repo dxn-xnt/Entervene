@@ -46,6 +46,12 @@ export type QuizQuestionAnalysis = {
   }>;
 };
 
+export type QuizStudentQuestionAnswer = {
+  quiz_question_id: number;
+  is_correct?: boolean | null;
+  points_awarded?: number | null;
+};
+
 export type QuizStudentScore = {
   student_id: string;
   student_name: string;
@@ -56,6 +62,7 @@ export type QuizStudentScore = {
   score_percent?: number | null;
   submitted_at?: string | null;
   needs_grading: boolean;
+  answers: QuizStudentQuestionAnswer[];
 };
 
 export type QuizAnalysis = {
