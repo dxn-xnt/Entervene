@@ -149,14 +149,15 @@ const StudentProfile = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
             <header className="flex items-center gap-3 pb-4 -mx-4 md:-mx-6 px-4 md:px-6 border-b border-gray-500">
               <p className="text-2xl md:text-4xl font-bold tracking-tight">
                 Profile
               </p>
             </header>
 
-            <Card className="flex flex-row items-center gap-4 p-4 md:p-6">
+            <main className="flex flex-col gap-3 py-3">
+              <Card className="flex flex-row items-center gap-4 p-4 md:p-6">
               <Avatar
                 variant="student"
                 className="h-12 w-12 shrink-0 bg-amber-100"
@@ -174,7 +175,7 @@ const StudentProfile = () => {
               </div>
             </Card>
 
-            <div className="flex flex-col lg:flex-row gap-4 md:gap-6">
+              <div className="flex flex-col lg:flex-row gap-4 md:gap-6">
               <div className="flex flex-col gap-3 flex-1">
                 <p className="text-2xl md:text-3xl font-bold tracking-tight">
                   My Schedule
@@ -282,7 +283,8 @@ const StudentProfile = () => {
                   </div>
                 </Card>
               </div>
-            </div>
+              </div>
+            </main>
           </div>
         </div>
       </div>

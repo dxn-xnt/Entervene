@@ -120,7 +120,7 @@ const StoryBoard = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
+          <div className="flex flex-1 flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
               <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
@@ -130,7 +130,8 @@ const StoryBoard = () => {
 
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
-            {myClass ? (
+            <main className="flex flex-1 flex-col gap-3 py-3">
+              {myClass ? (
               <section className="flex flex-col gap-4 border-2 border-black bg-[#f7e9aa] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-4">
                   <div className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-black bg-[#79c889] text-lg font-bold">
@@ -161,7 +162,7 @@ const StoryBoard = () => {
               <p className="text-sm text-gray-500">No section assigned yet.</p>
             ) : null}
 
-            <div className="flex flex-col lg:flex-row lg:items-stretch gap-4 flex-1">
+              <div className="flex flex-col lg:flex-row lg:items-stretch gap-4 flex-1">
               <div className="grid grid-cols-2 gap-4 flex-1 content-start">
                 {isLoading ? (
                   <div className="col-span-2 flex justify-center py-16">
@@ -241,7 +242,8 @@ const StoryBoard = () => {
                   )}
                 </Card.Content>
               </Card>
-            </div>
+              </div>
+            </main>
           </div>
         </div>
       </div>

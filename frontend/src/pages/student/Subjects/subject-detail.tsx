@@ -20,7 +20,7 @@ const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
 
   return (
     <AppLayout>
-      <header className="px-5 py-5 flex items-center gap-3">
+      <header className="flex items-center gap-3 py-4 md:py-5 px-4 md:px-6">
         <button
           onClick={onBack}
           className="text-4xl font-semibold cursor-pointer"
@@ -31,7 +31,7 @@ const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
         <h1 className="text-3xl">{subject}</h1>
       </header>
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-      <main className="px-5 py-5">
+      <main className="py-4 md:py-5 px-4 md:px-6">
         <div>
           {activeTab === "lessons" && <SubjectLessonTab subject={subject} />}
           {activeTab === "classwork" && <SubjectClassworkTab />}

@@ -132,11 +132,12 @@ export default function TodoView() {
 
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
-            <h2 className="text-xl md:text-2xl font-semibold">
+            <main className="flex flex-col gap-3 py-3">
+              <h2 className="text-xl md:text-2xl font-semibold">
               Topics to Review
             </h2>
 
-            <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-6">
               {topics.map((topic, i) => (
                 <div key={i} className="flex flex-col gap-4">
                   <div key={i} className="flex flex-col gap-4">
@@ -195,7 +196,8 @@ export default function TodoView() {
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+            </main>
           </div>
         </div>
       </div>
