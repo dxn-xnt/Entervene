@@ -61,13 +61,14 @@ const Notifications = () => {
               </Button>
             </header>
 
-            <Tabs
+            <main className="flex flex-col gap-3">
+              <Tabs
               tabs={tabs}
               activeTab={activeTab}
               onTabChange={setActiveTab}
             />
 
-            <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-5">
               {(activeTab === "all" || activeTab === "classworks") && (
                 <section className="flex flex-col gap-3">
                   <h2 className="text-xl md:text-3xl font-semibold">
@@ -89,7 +90,8 @@ const Notifications = () => {
                   ))}
                 </section>
               )}
-            </div>
+              </div>
+            </main>
           </div>
         </div>
       </div>

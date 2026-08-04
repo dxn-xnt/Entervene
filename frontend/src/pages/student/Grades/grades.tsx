@@ -67,7 +67,8 @@ const Grades = () => {
 
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <main className="flex flex-col gap-3 py-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               <div className="border-2 border-black p-4 shadow-md bg-card">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold">Performance Rate</h2>
@@ -256,7 +257,7 @@ const Grades = () => {
               </div>
             </div>
 
-            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4">
               {loading ? (
                 <div className="py-6 text-center text-sm text-gray-500">Loading subjects...</div>
               ) : subjects.length === 0 ? (
@@ -284,7 +285,8 @@ const Grades = () => {
                   </Card>
                 ))
               )}
-            </div>
+              </div>
+            </main>
           </div>
         </div>
       </div>
