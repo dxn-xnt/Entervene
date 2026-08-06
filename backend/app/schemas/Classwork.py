@@ -14,6 +14,7 @@ class ClassworkCreate(BaseModel):
     total_points: Optional[float] = 100
     subject_id: int
     is_published: Optional[bool] = False
+    show_scores: Optional[bool] = True
     lesson_ids: Optional[list[int]] = None
 
 
@@ -26,6 +27,7 @@ class ClassworkUpdate(BaseModel):
     activity_mode: Optional[str] = None
     total_points: Optional[float] = None
     is_published: Optional[bool] = None
+    show_scores: Optional[bool] = None
     lesson_ids: Optional[list[int]] = None
 
 
@@ -48,6 +50,7 @@ class CwAssignmentRow(BaseModel):
     allow_late_submissions: bool = False
     max_attempts: Optional[int] = 1
     is_published: bool
+    show_scores: bool
     is_locked: Optional[bool] = False
 
 
@@ -61,6 +64,7 @@ class ClassworkResponse(BaseModel):
     activity_mode: Optional[str] = "ONLINE"
     total_points: Optional[float]
     is_published: bool
+    show_scores: bool
     is_locked: bool
     is_archived: bool
     subject_id: int
@@ -100,6 +104,7 @@ class ClassworkAssignmentResponse(BaseModel):
     lock_date: Optional[datetime] = None
     allow_late_submissions: bool = False
     is_published: bool
+    show_scores: bool
     is_locked: Optional[bool] = False
     max_attempts: Optional[int] = 1
     teacher_name: Optional[str] = None

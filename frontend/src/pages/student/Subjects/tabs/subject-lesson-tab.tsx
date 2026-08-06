@@ -783,7 +783,9 @@ export default function SubjectLessonTab({
             <div className="text-center">
               <p className="text-xl font-black leading-none">
                 {isSummaryMode
-                  ? `${selectedQuizAttempt.grade ?? 0}/${totalPoints}`
+                  ? selectedClasswork.show_scores 
+                      ? `${selectedQuizAttempt.grade ?? 0}/${totalPoints}`
+                      : "Hidden"
                   : formatExamTimer(quizRemainingSeconds)}
               </p>
               <p className="text-xs font-semibold text-gray-700">
@@ -887,7 +889,9 @@ export default function SubjectLessonTab({
                           {index + 1}. {question.question_text}
                         </h2>
                         <span className="shrink-0 rounded-full border border-gray-300 px-3 py-1 text-xs font-bold">
-                          {question.points_awarded ?? 0}/{question.points} pts
+                          {selectedClasswork.show_scores
+                            ? `${question.points_awarded ?? 0}/${question.points} pts`
+                            : `${question.points} pts`}
                         </span>
                       </div>
                       {question.question_type === "MULTIPLE_CHOICE" ? (
@@ -1835,10 +1839,16 @@ export default function SubjectLessonTab({
                             {selectedQuizAttempt.grade !== null &&
                             selectedQuizAttempt.grade !== undefined ? (
                               <p className="mt-2 text-sm font-bold">
-                                Score: {selectedQuizAttempt.grade}/
-                                {selectedQuizAttempt.total_points ??
-                                  selectedClasswork.total_points ??
-                                  0}
+                                {selectedClasswork.show_scores ? (
+                                  <>
+                                    Score: {selectedQuizAttempt.grade}/
+                                    {selectedQuizAttempt.total_points ??
+                                      selectedClasswork.total_points ??
+                                      0}
+                                  </>
+                                ) : (
+                                  <span className="rounded-full bg-gray-200 px-2 py-1 text-xs text-gray-700">Score hidden</span>
+                                )}
                               </p>
                             ) : null}
                           </div>
@@ -1925,6 +1935,7 @@ export default function SubjectLessonTab({
                         selectedClasswork.allow_late_submissions
                       }
                       maxAttempts={selectedClasswork.max_attempts}
+                      showScores={selectedClasswork.show_scores}
                       onDeleteSubmission={() =>
                         handleDeleteSubmission(
                           selectedClasswork.classwork_assignment_id,

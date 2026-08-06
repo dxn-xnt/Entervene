@@ -697,6 +697,7 @@ def _assignment_response(
         lock_date=assignment.lock_date,
         allow_late_submissions=assignment.allow_late_submissions,
         is_published=assignment.is_published,
+        show_scores=classwork.show_scores,
         is_locked=assignment_is_locked(assignment),
         max_attempts=assignment.max_attempts,
         teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,

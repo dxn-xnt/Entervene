@@ -57,6 +57,7 @@ interface ClassworkAssignment {
   is_published: boolean;
   is_locked?: boolean;
   max_attempts?: number;
+  show_scores?: boolean;
   teacher_name?: string;
   attachments: Attachment[];
   submission_status?: string;
@@ -554,6 +555,7 @@ export default function SubjectClassworkTab({
                             isLocked={cw.is_locked}
                             allowLateSubmissions={cw.allow_late_submissions}
                             maxAttempts={cw.max_attempts}
+                            showScores={cw.show_scores}
                             onDeleteSubmission={() =>
                               handleDeleteSubmission(cw.classwork_assignment_id)
                             }

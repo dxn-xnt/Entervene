@@ -368,6 +368,7 @@ def get_my_todos(
             Classwork.classwork_type,
             Classwork.classwork_category,
             Classwork.total_points,
+            Classwork.show_scores,
             Subject.subject_name,
             Subject.subject_id,
             StudentSubmission.submission_id,
@@ -424,6 +425,7 @@ def get_my_todos(
             "status": status,
             "is_submitted": is_submitted,
             "submission_status": row.submission_status,
+            "show_scores": row.show_scores,
             "grade": float(row.grade) if row.grade is not None else None,
         }
 
