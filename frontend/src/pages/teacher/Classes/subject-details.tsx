@@ -687,6 +687,7 @@ export default function SubjectDetails() {
               : null,
           subject_id: Number(subjectId),
           is_published: classworkDraft.is_published,
+          show_scores: classworkDraft.show_scores,
           // Subject-level classworks (quarterly assessments) are not linked to any lesson.
           lesson_ids: isSubjectLevel ? [] : [classworkLesson.lesson_id],
         }),

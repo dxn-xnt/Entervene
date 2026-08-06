@@ -320,6 +320,17 @@ export default function ClassworkFormModal({
             />
             Publish for this class
           </label>
+          <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={classworkDraft.show_scores}
+              onChange={(event) =>
+                setClassworkDraft((current) => ({ ...current, show_scores: event.target.checked }))
+              }
+              disabled={isCreatingClasswork}
+            />
+            Show scores to students
+          </label>
         </div>
 
         <div className="flex justify-end gap-3 border-t border-black px-5 py-4">

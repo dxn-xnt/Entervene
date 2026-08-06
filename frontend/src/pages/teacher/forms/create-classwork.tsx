@@ -8,6 +8,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { Alert } from "@/components/retroui/Alert";
+import { Switch } from "@/components/retroui/Switch";
 import { apiFetch } from "@/lib/api";
 import {
   emptyClassworkDraft,
@@ -264,6 +265,7 @@ export default function CreateClassworkModal({
       }
       formData.append("subject_id", String(draft.subject_id));
       formData.append("is_published", String(draft.is_published));
+      formData.append("show_scores", String(draft.show_scores));
       formData.append("class_ids", JSON.stringify(selectedClassIds));
       formData.append("lesson_ids", JSON.stringify(selectedLessonIds));
       if (draft.due_date) {
@@ -586,8 +588,25 @@ export default function CreateClassworkModal({
                 </Select>
               </div>
             </div>
+            {!isReadingType(selectedType) && (
+              <div className="flex items-center gap-2 mt-2">
+                <Switch
+                  checked={draft.show_scores}
+                  onCheckedChange={(checked) =>
+                    setDraft((current) => ({
+                      ...current,
+                      show_scores: checked,
+                    }))
+                  }
+                  disabled={isCreating}
+                />
+                <label className="text-sm font-medium text-gray-700">
+                  Show scores to students
+                </label>
+              </div>
+            )}
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 mt-4">
               <div className="flex flex-col gap-1 w-full">
                 <label className="text-xs font-bold text-gray-700">
                   Locked until

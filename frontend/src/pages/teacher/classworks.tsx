@@ -410,6 +410,7 @@ export default function Classworks() {
             classwork_category: editDraft.classwork_category || null,
             total_points: totalPoints,
             is_published: editDraft.is_published,
+            show_scores: editDraft.show_scores,
           }),
         },
       );
@@ -1138,6 +1139,28 @@ export default function Classworks() {
                                 className="h-4 w-4 rounded-none border-black p-0 shadow-none accent-black"
                               />
                               Published
+                            </span>
+                          </label>
+                          <label className="block text-xs font-bold">
+                            <span className="invisible">Show Scores</span>
+                            <span className="mt-1 flex h-10 w-full items-center gap-2 border-2 border-black px-3 text-sm font-normal">
+                              <Input
+                                type="checkbox"
+                                checked={editDraft.show_scores}
+                                onChange={(event) =>
+                                  setEditDraft((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          show_scores: event.target.checked,
+                                        }
+                                      : current,
+                                  )
+                                }
+                                disabled={isSavingEdit}
+                                className="h-4 w-4 rounded-none border-black p-0 shadow-none accent-black"
+                              />
+                              Show Scores to Students
                             </span>
                           </label>
                         </div>

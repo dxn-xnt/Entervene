@@ -151,10 +151,16 @@ const SubjectGrade = ({ subjectId, subject, onBack }: SubjectGradeProps) => {
                           </span>
                         </Table.Cell>
                         <Table.Cell className="text-right font-bold">
-                          {item.grade !== null ? item.grade : "-"}
-                          <span className="text-xs text-muted-foreground">
-                            /{item.total_points ?? 100}
-                          </span>
+                          {item.show_scores !== false ? (
+                            <>
+                              {item.grade !== null ? item.grade : "-"}
+                              <span className="text-xs text-muted-foreground">
+                                /{item.total_points ?? 100}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-xs text-gray-500 font-normal bg-gray-100 px-2 py-1 rounded-full">Score hidden</span>
+                          )}
                         </Table.Cell>
                       </Table.Row>
                     ))

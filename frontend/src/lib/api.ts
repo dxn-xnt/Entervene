@@ -130,6 +130,7 @@ export type TodoItem = {
   is_submitted: boolean;
   submission_status: string | null;
   grade: number | null;
+  show_scores?: boolean;
 };
 
 export type StudentTodosResponse = {
