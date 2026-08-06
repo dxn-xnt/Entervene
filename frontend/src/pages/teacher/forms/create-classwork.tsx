@@ -588,8 +588,7 @@ export default function CreateClassworkModal({
                 </Select>
               </div>
             </div>
-
-            {!isReading && (
+            {!isReadingType(selectedType) && (
               <div className="flex items-center gap-2 mt-2">
                 <Switch
                   checked={draft.show_scores}
