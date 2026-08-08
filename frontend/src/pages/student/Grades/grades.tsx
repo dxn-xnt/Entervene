@@ -15,7 +15,7 @@ const subjectPerformanceData = [
 ];
 
 const Grades = () => {
-  const [selectedSubject, setSelectedSubject] = useState<{ id: number; name: string } | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<{ id: number; classId?: number; name: string } | null>(null);
   const [subjects, setSubjects] = useState<StudentSubjectItem[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +41,7 @@ const Grades = () => {
     return (
       <SubjectGrade
         subjectId={selectedSubject.id}
+        classId={selectedSubject.classId}
         subject={selectedSubject.name}
         onBack={() => setSelectedSubject(null)}
       />
@@ -267,7 +268,7 @@ const Grades = () => {
                   <Card
                     key={sub.subject_load_id}
                     className="block w-full cursor-pointer hover:border-black transition-colors"
-                    onClick={() => setSelectedSubject({ id: sub.subject_id, name: sub.subject_name })}
+                    onClick={() => setSelectedSubject({ id: sub.subject_id, classId: sub.class_id, name: sub.subject_name })}
                   >
                     <Card.Content className="flex items-center justify-between">
                       <div>

@@ -1,18 +1,22 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { Table } from "@/components/retroui/Table";
 import { Filter, ArrowUpDown } from "lucide-react";
 import { getStudentTodos, type TodoItem } from "@/lib/api";
+import { routes } from "@/../routes";
 
 type SubjectGradeProps = {
+  classId?: number;
   subjectId?: number;
   subject: string;
   onBack: () => void;
 };
 
-const SubjectGrade = ({ subjectId, subject, onBack }: SubjectGradeProps) => {
+const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps) => {
+  const navigate = useNavigate();
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -140,30 +144,47 @@ const SubjectGrade = ({ subjectId, subject, onBack }: SubjectGradeProps) => {
                       </Table.Cell>
                     </Table.Row>
                   ) : (
-                    todos.map((item) => (
-                      <Table.Row key={item.assignment_id} className="hover:bg-transparent">
-                        <Table.Cell className="font-medium w-1/2">
-                          {item.title}
-                        </Table.Cell>
-                        <Table.Cell className="w-32">
-                          <span className="inline-flex items-center rounded-full border px-3 py-1 text-xs">
-                            {item.type}
-                          </span>
-                        </Table.Cell>
-                        <Table.Cell className="text-right font-bold">
-                          {item.show_scores !== false ? (
-                            <>
-                              {item.grade !== null ? item.grade : "-"}
-                              <span className="text-xs text-muted-foreground">
-                                /{item.total_points ?? 100}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-xs text-gray-500 font-normal bg-gray-100 px-2 py-1 rounded-full">Score hidden</span>
-                          )}
-                        </Table.Cell>
-                      </Table.Row>
-                    ))
+                    todos.map((item) => {
+                      const canNavigate = !!(classId ?? item.class_id) && subjectId;
+                      return (
+                        <Table.Row
+                          key={item.assignment_id}
+                          className={canNavigate ? "cursor-pointer hover:bg-muted/40 transition-colors" : "hover:bg-transparent"}
+                          onClick={() => {
+                            const targetClassId = classId ?? item.class_id;
+                            if (!targetClassId || !subjectId) return;
+                            navigate(
+                              routes.student.subjectDetail
+                                .replace(":classId", String(targetClassId))
+                                .replace(":subjectId", String(subjectId)) +
+                                `?tab=classwork&classworkAssignmentId=${item.assignment_id}`,
+                            );
+                          }}
+                          title={canNavigate ? `Open "${item.title}" in classwork tab` : undefined}
+                        >
+                          <Table.Cell className="font-medium w-1/2">
+                            {item.title}
+                          </Table.Cell>
+                          <Table.Cell className="w-32">
+                            <span className="inline-flex items-center rounded-full border px-3 py-1 text-xs">
+                              {item.type}
+                            </span>
+                          </Table.Cell>
+                          <Table.Cell className="text-right font-bold">
+                            {item.show_scores !== false ? (
+                              <>
+                                {item.grade !== null ? item.grade : "-"}
+                                <span className="text-xs text-muted-foreground">
+                                  /{item.total_points ?? 100}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-xs text-gray-500 font-normal bg-gray-100 px-2 py-1 rounded-full">Score hidden</span>
+                            )}
+                          </Table.Cell>
+                        </Table.Row>
+                      );
+                    })
                   )}
                 </Table.Body>
               </Table>
