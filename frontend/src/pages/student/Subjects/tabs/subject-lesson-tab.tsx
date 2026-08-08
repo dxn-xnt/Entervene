@@ -60,6 +60,7 @@ interface ClassworkDetail {
   due_date?: string | null;
   allow_late_submissions?: boolean;
   is_published: boolean;
+  show_scores?: boolean;
   is_locked?: boolean;
   max_attempts?: number;
   teacher_name?: string | null;
