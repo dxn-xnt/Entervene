@@ -15,9 +15,13 @@ import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Select } from "@/components/retroui/Select";
 
+import type { TeacherAdvisorySubjectLoadItem } from "@/types/adminClasses";
+import { ManualSuggestionPanel } from "@/components/teacher/suggestions/ManualSuggestionPanel";
+
 type StudentRecordsPanelProps = {
   classId: string;
   subjectId: string;
+  subjectLoads?: TeacherAdvisorySubjectLoadItem[];
 };
 
 function formatMetric(value?: number | null, suffix = "%", emptyValue = "0") {
@@ -44,6 +48,7 @@ function statusLabel(status: string) {
 export default function StudentRecordsPanel({
   classId,
   subjectId,
+  subjectLoads = [],
 }: StudentRecordsPanelProps) {
   const [periods, setPeriods] = useState<StudentRecordPeriodOption[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
@@ -207,7 +212,11 @@ export default function StudentRecordsPanel({
             Loading student record...
           </p>
         ) : (
-          <StudentRecordDetail detail={detail} />
+          <StudentRecordDetail 
+          detail={detail} 
+          classId={Number(classId)} 
+          subjectLoads={subjectLoads}
+        />
         )}
       </section>
     );
@@ -388,8 +397,12 @@ export default function StudentRecordsPanel({
 
 function StudentRecordDetail({
   detail,
+  classId,
+  subjectLoads,
 }: {
   detail: StudentRecordDetailResponse;
+  classId: number;
+  subjectLoads: TeacherAdvisorySubjectLoadItem[];
 }) {
   return (
     <div className="space-y-4">
@@ -410,6 +423,15 @@ function StudentRecordDetail({
           <UserRound size={24} className="shrink-0" />
         </Card.Content>
       </Card>
+      
+      <ManualSuggestionPanel
+        classId={classId}
+        student={{
+          student_id: detail.student.student_id,
+          full_name: detail.student.full_name,
+        } as any}
+        subjectLoads={subjectLoads}
+      />
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card className="block bg-[#F6E9B2] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">

@@ -351,6 +351,7 @@ export default function SubjectDetails() {
       content: lesson.content || "",
       order_index: String(lesson.order_index || 1),
       is_published: lesson.is_published,
+      show_scores: lesson.show_scores,
     });
     setLessonClassIds(classId ? [Number(classId)] : []);
   };
@@ -469,6 +470,7 @@ export default function SubjectDetails() {
         content: updatedLesson.content || "",
         order_index: String(updatedLesson.order_index || 1),
         is_published: updatedLesson.is_published,
+        show_scores: updatedLesson.show_scores,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update lesson.");
@@ -889,7 +891,7 @@ export default function SubjectDetails() {
                 />
 
                 {activeTab === "students" && classId && subjectId ? (
-                  <StudentRecordsPanel classId={classId} subjectId={subjectId} />
+                  <StudentRecordsPanel classId={classId} subjectId={subjectId} subjectLoads={loads as any} />
                 ) : isLoading ? (
                   <p className="py-8 text-center text-gray-500">
                     Loading lessons...

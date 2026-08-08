@@ -47,6 +47,7 @@ class PredictionPreviewResponse(BaseModel):
 
 
 class PredictionPersistResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     prediction_id: int
     model_version_id: int | None = None
     student_id: UUID
@@ -66,6 +67,7 @@ class PredictionPersistResponse(BaseModel):
 
 
 class PredictionSummaryResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     prediction_id: int
     student_id: UUID
     class_id: int
@@ -187,6 +189,7 @@ class PredictionTeacherReviewListResponse(BaseModel):
 
 
 class PredictionDetailResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     prediction_id: int
     student_id: UUID
     class_id: int
