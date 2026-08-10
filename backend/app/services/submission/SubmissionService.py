@@ -551,7 +551,30 @@ def grade_student_submission(
     submission.graded_by_staff_id = staff_id
     db.commit()
     db.refresh(submission)
+
+    # Notify student that their grade was released
+    try:
+        student = db.query(Student).filter(Student.student_id == submission.student_id).first()
+        if student and student.user_id:
+            from app.services.NotificationService import create_notification
+            from app.schemas.Notification import NotificationCreate
+
+            cw_title = classwork.title if classwork else "Classwork"
+            create_notification(
+                db,
+                NotificationCreate(
+                    user_id=student.user_id,
+                    notification_type="grade_released",
+                    title=f"Grade Released: {cw_title}",
+                    body=f"Your submission was graded: {body.grade} points.",
+                    action_url="/student/todo",
+                ),
+            )
+    except Exception as err:
+        print(f"[Notification Error] Failed to send grade notification: {err}")
+
     return build_submission_response(submission, db)
+
 
 
 def get_submission_for_user(submission_id: int, current_user: dict, db: Session) -> SubmissionResponse:

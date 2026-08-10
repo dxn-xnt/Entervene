@@ -57,6 +57,47 @@ from app.services.classwork.ClassworkShared import (
 from app.services.quiz.QuizBuilderService import upsert_quiz_builder
 
 
+def notify_students_for_classwork(
+    db: Session,
+    class_ids: list[int],
+    title: str,
+    body_text: str,
+    notification_type: str = "assignment_due",
+    action_url: str | None = "/student/todo",
+):
+    if not class_ids:
+        return
+    try:
+        from app.models.people.Student import Student
+        from app.models.academic.StudentCLass import StudentClass
+        from app.services.NotificationService import create_notification
+        from app.schemas.Notification import NotificationCreate
+
+        student_users = (
+            db.query(Student.user_id)
+            .join(StudentClass, StudentClass.student_id == Student.student_id)
+            .filter(StudentClass.class_id.in_(class_ids))
+            .filter(Student.user_id.isnot(None))
+            .distinct()
+            .all()
+        )
+
+        for (user_id,) in student_users:
+            if user_id:
+                create_notification(
+                    db,
+                    NotificationCreate(
+                        user_id=user_id,
+                        notification_type=notification_type,
+                        title=title,
+                        body=body_text,
+                        action_url=action_url,
+                    ),
+                )
+    except Exception as err:
+        print(f"[Notification Error] Failed to send classwork notification: {err}")
+
+
 def create_classwork_record(body: ClassworkCreate, staff_id: str, db: Session) -> ClassworkResponse:
     classwork_type = normalize_classwork_type(body.classwork_type)
     total_points = None if is_reading_type(classwork_type) else body.total_points
@@ -177,6 +218,17 @@ async def create_classwork_wizard_record(
 
         db.commit()
         db.refresh(classwork)
+
+        if is_published and selected_class_ids:
+            due_str = f" (Due: {due_date.strftime('%b %d, %Y')})" if due_date else ""
+            notify_students_for_classwork(
+                db=db,
+                class_ids=selected_class_ids,
+                title=f"New Classwork: {title.strip()}",
+                body_text=f"A new {normalized_type.replace('_', ' ')} has been published.{due_str}",
+                notification_type="assignment_due",
+            )
+
         return build_classwork_response(classwork)
     except Exception:
         db.rollback()
@@ -289,6 +341,16 @@ def update_classwork_record(
                 db.add(ClassworkLesson(classwork_id=classwork_id, lesson_id=lesson_id))
         db.commit()
         db.refresh(classwork)
+
+        assigned_class_ids = [a.class_id for a in classwork.assignments if a.is_published]
+        if assigned_class_ids:
+            notify_students_for_classwork(
+                db=db,
+                class_ids=assigned_class_ids,
+                title=f"Classwork Updated: {classwork.title}",
+                body_text="Classwork details have been updated by your teacher.",
+                notification_type="assignment_due",
+            )
     except Exception:
         db.rollback()
         raise
@@ -467,6 +529,17 @@ def assign_classwork_to_classes(
             for assignment in new_assignments:
                 assignment.max_attempts = None
         db.commit()
+
+        if class_ids:
+            due_str = f" (Due: {body.due_date.strftime('%b %d, %Y')})" if body.due_date else ""
+            notify_students_for_classwork(
+                db=db,
+                class_ids=class_ids,
+                title=f"Classwork Assigned/Updated: {classwork.title}",
+                body_text=f"Classwork details have been updated.{due_str}",
+                notification_type="assignment_due",
+            )
+
     except Exception:
         db.rollback()
         raise
