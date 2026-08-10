@@ -125,7 +125,7 @@ const Notifications = () => {
                             title={card.title}
                             description={card.body ?? ""}
                             date={card.created_at ? new Date(card.created_at).toLocaleDateString() : ""}
-                            user={card.notification_type.replace(/_/g, " ")}
+                            user={card.notification_type === "assignment_due" ? "Classwork" : card.notification_type.replace(/_/g, " ").toUpperCase()}
                             badge={card.is_read ? undefined : "Unread"}
                             isRead={card.is_read}
                           />
@@ -145,7 +145,7 @@ const Notifications = () => {
                             title={card.title}
                             description={card.body ?? ""}
                             date={card.created_at ? new Date(card.created_at).toLocaleDateString() : ""}
-                            user={card.notification_type.replace(/_/g, " ")}
+                            user={card.notification_type === "assignment_due" ? "Classwork" : card.notification_type.replace(/_/g, " ").toUpperCase()}
                             badge={card.is_read ? undefined : "Unread"}
                             isRead={card.is_read}
                           />

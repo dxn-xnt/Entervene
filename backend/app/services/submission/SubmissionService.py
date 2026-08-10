@@ -558,15 +558,26 @@ def grade_student_submission(
         if student and student.user_id:
             from app.services.NotificationService import create_notification
             from app.schemas.Notification import NotificationCreate
+            from app.models.academic.Subject import Subject
+            from app.models.people.AcademicStaff import AcademicStaff
+
+            subj = db.query(Subject).filter(Subject.subject_id == classwork.subject_id).first() if classwork else None
+            subject_name = subj.subject_name if subj else "Subject"
+
+            staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == staff_id).first()
+            teacher_name = f"{staff.first_name} {staff.last_name}".strip() if staff else "Teacher"
 
             cw_title = classwork.title if classwork else "Classwork"
+            notif_title = f"{subject_name}: {cw_title}"
+            notif_body = f"Graded by {teacher_name} • Score: {body.grade} points."
+
             create_notification(
                 db,
                 NotificationCreate(
                     user_id=student.user_id,
                     notification_type="grade_released",
-                    title=f"Grade Released: {cw_title}",
-                    body=f"Your submission was graded: {body.grade} points.",
+                    title=notif_title,
+                    body=notif_body,
                     action_url="/student/todo",
                 ),
             )
