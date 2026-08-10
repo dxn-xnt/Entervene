@@ -7,3 +7,4 @@ from . import quiz
 from . import ai
 from . import suggestion
 from . import settings
+from . import notifications

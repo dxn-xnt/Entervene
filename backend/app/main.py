@@ -26,6 +26,7 @@ from app.api.v1.routes.AIAssist import router as ai_assist_router
 from app.api.v1.routes.Activities import router as activities_router
 from app.services.classes.ClassShared import ClassManagementError, class_management_error_handler
 from app.api.v1.routes.Settings import router as settings_router
+from app.api.v1.routes.Notifications import router as notifications_router
 
 
 app = FastAPI(
@@ -85,7 +86,8 @@ app.include_router(lesson_plans_router, prefix="/api/v1/lesson-plans",      tags
 app.include_router(subject_loads_router, prefix="/api/v1/subject-loads",     tags=["Subject Loads"])
 app.include_router(ai_assist_router,    prefix="/api/v1/ai",               tags=["AI Assist"])
 app.include_router(settings_router,     prefix="/api/v1/settings",          tags=["Settings"])
-app.include_router(activities_router,   prefix="/api/v1/activities",       tags=["Activities"])
+app.include_router(activities_router,    prefix="/api/v1/activities",       tags=["Activities"])
+app.include_router(notifications_router, prefix="/api/v1/notifications",    tags=["Notifications"])
 
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
