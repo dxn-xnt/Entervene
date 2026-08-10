@@ -296,7 +296,77 @@ def _parse_quiz_payload(raw_payload: Optional[str], normalized_type: str) -> Qui
         raise HTTPException(status_code=400, detail="Invalid quiz payload") from exc
 
 
+def check_and_notify_post_deadline_summaries(db: Session, staff_id: str):
+    try:
+        from datetime import datetime, timezone
+        from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+        from app.models.academic.Subject import Subject
+        from app.models.submissions.StudentSubmission import StudentSubmission
+        from app.models.academic.StudentCLass import StudentClass
+        from app.models.people.AcademicStaff import AcademicStaff
+        from app.services.NotificationService import create_notification
+        from app.schemas.Notification import NotificationCreate
+        from app.models.notifications.Notification import Notification
+
+        staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == staff_id).first()
+        if not staff or not staff.user_id:
+            return
+
+        now = datetime.now(timezone.utc)
+        past_due_assignments = (
+            db.query(ClassworkAssignment, Classwork)
+            .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
+            .filter(
+                Classwork.created_by_staff_id == staff_id,
+                ClassworkAssignment.is_published == True,
+                ClassworkAssignment.due_date.isnot(None),
+                ClassworkAssignment.due_date < now,
+            )
+            .all()
+        )
+
+        for assignment, cw in past_due_assignments:
+            title_tag = f"Deadline Summary: {cw.title}"
+            existing = (
+                db.query(Notification)
+                .filter(
+                    Notification.user_id == staff.user_id,
+                    Notification.title == title_tag,
+                )
+                .first()
+            )
+            if existing:
+                continue
+
+            total_students = db.query(StudentClass).filter(
+                StudentClass.class_id == assignment.class_id,
+                StudentClass.enrollment_status == "enrolled",
+            ).count()
+
+            submitted_students = db.query(StudentSubmission).filter(
+                StudentSubmission.classwork_assignment_id == assignment.classwork_assignment_id,
+                StudentSubmission.status.in_(["submitted", "late", "graded"]),
+            ).count()
+
+            subj = db.query(Subject).filter(Subject.subject_id == cw.subject_id).first()
+            subject_name = subj.subject_name if subj else "Subject"
+
+            create_notification(
+                db,
+                NotificationCreate(
+                    user_id=staff.user_id,
+                    notification_type="assignment_due",
+                    title=title_tag,
+                    body=f"{subject_name} — Classwork '{cw.title}' deadline has passed. {submitted_students}/{total_students} students turned in their work.",
+                    action_url="/teacher/classworks",
+                ),
+            )
+    except Exception as err:
+        print(f"[Notification Error] Failed to generate post-deadline summary: {err}")
+
+
 def teacher_classworks(staff_id: str, db: Session) -> list[ClassworkResponse]:
+    check_and_notify_post_deadline_summaries(db, staff_id)
     classworks = (
         db.query(Classwork)
         .options(

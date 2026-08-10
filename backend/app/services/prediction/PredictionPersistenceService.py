@@ -239,6 +239,42 @@ def score_and_persist_prediction(
         if commit:
             db.commit()
             db.refresh(prediction)
+
+            if str(prediction.risk_level).upper() == "HIGH":
+                try:
+                    from app.models.people.Student import Student
+                    from app.models.people.AcademicStaff import AcademicStaff
+                    from app.models.academic.Subject import Subject
+                    from app.models.academic.Class_ import Class
+                    from app.services.NotificationService import create_notification
+                    from app.schemas.Notification import NotificationCreate
+
+                    student_obj = db.get(Student, identifiers["student_id"])
+                    subj_obj = db.get(Subject, identifiers["subject_id"])
+                    class_obj = db.get(Class, identifiers["class_id"])
+
+                    student_name = f"{student_obj.first_name} {student_obj.last_name}" if student_obj else "A student"
+                    subject_name = subj_obj.subject_name if subj_obj else "Subject"
+
+                    teacher_user_ids = set()
+                    if class_obj and class_obj.adviser_staff_id:
+                        adviser = db.query(AcademicStaff.user_id).filter(AcademicStaff.staff_id == class_obj.adviser_staff_id).first()
+                        if adviser and adviser[0]:
+                            teacher_user_ids.add(adviser[0])
+
+                    for t_uid in teacher_user_ids:
+                        create_notification(
+                            db,
+                            NotificationCreate(
+                                user_id=t_uid,
+                                notification_type="risk_alert",
+                                title=f"High Risk Alert: {student_name}",
+                                body=f"{student_name} has been flagged as High Risk in {subject_name}. Early intervention is recommended.",
+                                action_url="/teacher/interventions",
+                            ),
+                        )
+                except Exception as err:
+                    print(f"[Notification Error] Failed to send risk alert notification: {err}")
         return _prediction_result(prediction, scoring_result, len(feature_rows), duplicate=False)
     except Exception:
         db.rollback()

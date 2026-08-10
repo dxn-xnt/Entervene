@@ -259,6 +259,32 @@ async def submit_student_work(
             db.add(SubmissionAttachment(submission_id=submission.submission_id, **info))
         db.commit()
         db.refresh(submission)
+
+        if is_late and classwork and classwork.created_by_staff_id:
+            try:
+                from app.models.people.AcademicStaff import AcademicStaff
+                from app.models.academic.Subject import Subject
+                from app.services.NotificationService import create_notification
+                from app.schemas.Notification import NotificationCreate
+
+                staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == classwork.created_by_staff_id).first()
+                if staff and staff.user_id:
+                    subj = db.query(Subject).filter(Subject.subject_id == classwork.subject_id).first()
+                    subject_name = subj.subject_name if subj else "Subject"
+                    s_name = f"{student.first_name} {student.last_name}"
+
+                    create_notification(
+                        db,
+                        NotificationCreate(
+                            user_id=staff.user_id,
+                            notification_type="assignment_due",
+                            title=f"Late Submission: {subject_name} - {classwork.title}",
+                            body=f"{s_name} turned in their work late after the due date.",
+                            action_url="/teacher/classworks",
+                        ),
+                    )
+            except Exception as err:
+                print(f"[Notification Error] Failed to send late submission notification: {err}")
     except Exception:
         db.rollback()
         cleanup_saved_files(saved_paths)
