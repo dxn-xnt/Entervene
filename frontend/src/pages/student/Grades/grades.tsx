@@ -3,7 +3,12 @@ import { Card } from "@/components/retroui/Card";
 import SubjectGrade from "./subject-grade";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { getMySubjects, getStudentTodos, type StudentSubjectItem, type TodoItem } from "@/lib/api";
+import {
+  getMySubjects,
+  getStudentTodos,
+  type StudentSubjectItem,
+  type TodoItem,
+} from "@/lib/api";
 
 // ─── Color palette for donut / legends ───────────────────────────────────────
 const TYPE_COLORS: Record<string, string> = {
@@ -58,7 +63,12 @@ function computeSubjectPerformance(todos: TodoItem[]) {
     if (t.grade === null || !t.total_points) continue;
     const key = t.subject_id;
     if (!buckets[key]) {
-      buckets[key] = { subject: t.subject, subjectId: t.subject_id, earned: 0, possible: 0 };
+      buckets[key] = {
+        subject: t.subject,
+        subjectId: t.subject_id,
+        earned: 0,
+        possible: 0,
+      };
     }
     buckets[key].earned += t.grade;
     buckets[key].possible += t.total_points;
@@ -78,7 +88,9 @@ const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
 function donutSegments(distribution: ReturnType<typeof computeDistribution>) {
   let offset = 0;
   return distribution.map((d) => {
-    const arc = (d.count / distribution.reduce((s, x) => s + x.count, 0)) * DONUT_CIRCUMFERENCE;
+    const arc =
+      (d.count / distribution.reduce((s, x) => s + x.count, 0)) *
+      DONUT_CIRCUMFERENCE;
     const segment = { ...d, arc, offset, color: colorForType(d.type) };
     offset -= arc; // negative offset moves clockwise
     return segment;
@@ -88,7 +100,11 @@ function donutSegments(distribution: ReturnType<typeof computeDistribution>) {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 const Grades = () => {
-  const [selectedSubject, setSelectedSubject] = useState<{ id: number; classId?: number; name: string } | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<{
+    id: number;
+    classId?: number;
+    name: string;
+  } | null>(null);
   const [subjects, setSubjects] = useState<StudentSubjectItem[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,7 +117,9 @@ const Grades = () => {
         setSubjects(subjectsData);
         setTodos(todosData.all || []);
       })
-      .catch((err) => console.error("Error loading student grades overview:", err))
+      .catch((err) =>
+        console.error("Error loading student grades overview:", err),
+      )
       .finally(() => {
         if (isMounted) setLoading(false);
       });
@@ -130,7 +148,9 @@ const Grades = () => {
 
   const getGradedCount = (subjectId: number) => {
     return todos.filter(
-      (t) => t.subject_id === subjectId && (t.status === "completed" || t.is_submitted || t.grade !== null)
+      (t) =>
+        t.subject_id === subjectId &&
+        (t.status === "completed" || t.is_submitted || t.grade !== null),
     ).length;
   };
 
@@ -157,163 +177,247 @@ const Grades = () => {
               {/* ── Analytics Widgets ── */}
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {/* Widget 1 — Overall Completion Rate */}
-                <div className="border-2 border-black p-4 shadow-md bg-card">
-                  <h2 className="text-lg font-semibold mb-4">Completion Rate</h2>
-                  <div className="flex items-center justify-center">
-                    <div className="relative w-36 h-36">
-                      <svg viewBox="0 0 120 120" className="w-full h-full">
-                        {/* Background ring */}
-                        <circle
-                          cx="60"
-                          cy="60"
-                          r={RING_R}
-                          fill="transparent"
-                          stroke="#E5E7EB"
-                          strokeWidth="10"
-                        />
-                        {/* Filled arc */}
-                        <circle
-                          cx="60"
-                          cy="60"
-                          r={RING_R}
-                          fill="transparent"
-                          stroke={completion.rate >= 80 ? "#22C55E" : completion.rate >= 50 ? "#F59E0B" : "#EF4444"}
-                          strokeWidth="10"
-                          strokeDasharray={RING_C}
-                          strokeDashoffset={ringStroke}
-                          strokeLinecap="round"
-                          className="transition-all duration-700 ease-out"
-                          style={{ transform: "rotate(-90deg)", transformOrigin: "60px 60px" }}
-                        />
-                      </svg>
-                      {/* Center label */}
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-3xl font-bold leading-none">{completion.rate}</span>
-                        <span className="text-[10px] text-gray-500 -mt-0.5">%</span>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-center text-xs text-gray-600 mt-2">
-                    {completion.completed} of {completion.total} activities done
-                  </p>
-                </div>
+                <Card className="w-full">
+                  <Card.Header>
+                    <Card.Title>Completion Rate</Card.Title>
+                  </Card.Header>
 
-                {/* Widget 2 — Classwork Distribution (donut) */}
-                <div className="border-2 border-black p-4 shadow-md bg-card">
-                  <h2 className="text-lg font-semibold mb-4">Classwork Distribution</h2>
-                  {todos.length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-8">No classwork data yet</p>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-center">
-                        <div className="relative w-36 h-36">
-                          <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-                            {segments.map((seg) => (
-                              <circle
-                                key={seg.type}
-                                cx="50"
-                                cy="50"
-                                r={DONUT_RADIUS}
-                                fill="transparent"
-                                stroke={seg.color}
-                                strokeWidth="20"
-                                strokeDasharray={`${seg.arc} ${DONUT_CIRCUMFERENCE - seg.arc}`}
-                                strokeDashoffset={seg.offset}
-                                className="transition-all duration-500"
-                              />
-                            ))}
-                          </svg>
-                          {/* Center total */}
-                          <div className="absolute inset-0 flex flex-col items-center justify-center rotate-0">
-                            <span className="text-2xl font-bold leading-none">{todos.length}</span>
-                            <span className="text-[9px] text-gray-500">total</span>
-                          </div>
+                  <Card.Content>
+                    <div className="flex items-center justify-center">
+                      <div className="relative w-36 h-36">
+                        <svg viewBox="0 0 120 120" className="w-full h-full">
+                          {/* Background ring */}
+                          <circle
+                            cx="60"
+                            cy="60"
+                            r={RING_R}
+                            fill="transparent"
+                            stroke="#E5E7EB"
+                            strokeWidth="10"
+                          />
+
+                          {/* Filled arc */}
+                          <circle
+                            cx="60"
+                            cy="60"
+                            r={RING_R}
+                            fill="transparent"
+                            stroke={
+                              completion.rate >= 80
+                                ? "#22C55E"
+                                : completion.rate >= 50
+                                  ? "#F59E0B"
+                                  : "#EF4444"
+                            }
+                            strokeWidth="10"
+                            strokeDasharray={RING_C}
+                            strokeDashoffset={ringStroke}
+                            strokeLinecap="round"
+                            className="transition-all duration-700 ease-out"
+                            style={{
+                              transform: "rotate(-90deg)",
+                              transformOrigin: "60px 60px",
+                            }}
+                          />
+                        </svg>
+
+                        {/* Center label */}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <span className="text-3xl font-bold leading-none">
+                            {completion.rate}
+                          </span>
+                          <span className="text-[10px] text-gray-500 -mt-0.5">
+                            %
+                          </span>
                         </div>
                       </div>
-                      <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-3 text-xs">
-                        {distribution.map((d) => (
-                          <span key={d.type} className="flex items-center gap-1">
-                            <span
-                              className="w-2 h-2 rounded-full inline-block"
-                              style={{ backgroundColor: colorForType(d.type) }}
-                            />
-                            {d.type} ({d.count})
-                          </span>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
+                    </div>
 
-                {/* Widget 3 — Subject Performance */}
-                <div className="border-2 border-black p-4 shadow-md bg-card">
-                  <h2 className="text-lg font-semibold mb-3">Subject Performance</h2>
-                  {subjectPerf.length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-8">No graded classwork yet</p>
-                  ) : (
-                    <>
-                      <div className="flex flex-col gap-2">
-                        {[...subjectPerf].sort((a, b) => b.score - a.score).map((item) => (
-                          <div key={item.subjectId} className="flex items-center gap-2">
-                            <span className="text-[10px] w-20 truncate" title={item.subject}>
-                              {item.subject}
-                            </span>
-                            <div className="flex-1 bg-gray-200 rounded-full h-3 relative overflow-hidden">
-                              <div
-                                className="h-3 rounded-full transition-all duration-500"
+                    <p className="text-center text-xs text-gray-600 mt-2">
+                      {completion.completed} of {completion.total} activities
+                      done
+                    </p>
+                  </Card.Content>
+                </Card>
+
+                {/* Widget 2 — Classwork Distribution (donut) */}
+                <Card className="w-full">
+                  <Card.Header>
+                    <Card.Title>Classwork Distribution</Card.Title>
+                  </Card.Header>
+
+                  <Card.Content>
+                    {todos.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-8">
+                        No classwork data yet
+                      </p>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-center">
+                          <div className="relative w-36 h-36">
+                            <svg
+                              viewBox="0 0 100 100"
+                              className="w-full h-full -rotate-90"
+                            >
+                              {segments.map((seg) => (
+                                <circle
+                                  key={seg.type}
+                                  cx="50"
+                                  cy="50"
+                                  r={DONUT_RADIUS}
+                                  fill="transparent"
+                                  stroke={seg.color}
+                                  strokeWidth="20"
+                                  strokeDasharray={`${seg.arc} ${
+                                    DONUT_CIRCUMFERENCE - seg.arc
+                                  }`}
+                                  strokeDashoffset={seg.offset}
+                                  className="transition-all duration-500"
+                                />
+                              ))}
+                            </svg>
+
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                              <span className="text-2xl font-bold leading-none">
+                                {todos.length}
+                              </span>
+                              <span className="text-[9px] text-gray-500">
+                                total
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-3 text-xs">
+                          {distribution.map((d) => (
+                            <span
+                              key={d.type}
+                              className="flex items-center gap-1"
+                            >
+                              <span
+                                className="w-2 h-2 rounded-full inline-block"
                                 style={{
-                                  width: `${item.score}%`,
-                                  backgroundColor:
-                                    item.score >= 80 ? "#22C55E" : item.score >= 60 ? "#F59E0B" : "#EF4444",
+                                  backgroundColor: colorForType(d.type),
                                 }}
                               />
-                            </div>
-                            <span className="text-[10px] font-semibold w-8 text-right">
-                              {item.score}%
+                              {d.type} ({d.count})
                             </span>
-                          </div>
-                        ))}
-                      </div>
-                      {weakestSubject && (
-                        <p className="text-[10px] mt-3 text-gray-600">
-                          Recommended Attention:{" "}
-                          <span className="font-bold">{weakestSubject.subject}</span>
-                        </p>
-                      )}
-                    </>
-                  )}
-                </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </Card.Content>
+                </Card>
+
+                {/* Widget 3 — Subject Performance */}
+                <Card className="w-full">
+                  <Card.Header>
+                    <Card.Title>Subject Performance</Card.Title>
+                  </Card.Header>
+
+                  <Card.Content>
+                    {subjectPerf.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-8">
+                        No graded classwork yet
+                      </p>
+                    ) : (
+                      <>
+                        <div className="flex flex-col gap-2">
+                          {[...subjectPerf]
+                            .sort((a, b) => b.score - a.score)
+                            .map((item) => (
+                              <div
+                                key={item.subjectId}
+                                className="flex items-center gap-2"
+                              >
+                                <span
+                                  className="text-[10px] w-20 truncate"
+                                  title={item.subject}
+                                >
+                                  {item.subject}
+                                </span>
+
+                                <div className="flex-1 bg-gray-200 rounded-full h-3 relative overflow-hidden">
+                                  <div
+                                    className="h-3 rounded-full transition-all duration-500"
+                                    style={{
+                                      width: `${item.score}%`,
+                                      backgroundColor:
+                                        item.score >= 80
+                                          ? "#22C55E"
+                                          : item.score >= 60
+                                            ? "#F59E0B"
+                                            : "#EF4444",
+                                    }}
+                                  />
+                                </div>
+
+                                <span className="text-[10px] font-semibold w-8 text-right">
+                                  {item.score}%
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+
+                        {weakestSubject && (
+                          <p className="text-[10px] mt-3 text-gray-600">
+                            Recommended Attention:{" "}
+                            <span className="font-bold">
+                              {weakestSubject.subject}
+                            </span>
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </Card.Content>
+                </Card>
               </div>
 
               {/* ── Subject list ── */}
               <div className="flex flex-col gap-4">
-              {loading ? (
-                <div className="py-6 text-center text-sm text-gray-500">Loading subjects...</div>
-              ) : subjects.length === 0 ? (
-                <div className="py-6 text-center text-sm text-gray-500">No subjects enrolled.</div>
-              ) : (
-                subjects.map((sub) => (
-                  <Card
-                    key={sub.subject_load_id}
-                    className="block w-full cursor-pointer hover:border-black transition-colors"
-                    onClick={() => setSelectedSubject({ id: sub.subject_id, classId: sub.class_id, name: sub.subject_name })}
-                  >
-                    <Card.Content className="flex items-center justify-between">
-                      <div>
-                        <Card.Title className="mb-1 text-lg">
-                          {sub.subject_name}
-                        </Card.Title>
-                        <p className="text-sm text-gray-600">{sub.teacher_name}</p>
-                      </div>
+                {loading ? (
+                  <div className="py-6 text-center text-sm text-gray-500">
+                    Loading subjects...
+                  </div>
+                ) : subjects.length === 0 ? (
+                  <div className="py-6 text-center text-sm text-gray-500">
+                    No subjects enrolled.
+                  </div>
+                ) : (
+                  subjects.map((sub) => (
+                    <Card
+                      key={sub.subject_load_id}
+                      className="block w-full cursor-pointer hover:border-black transition-colors"
+                      onClick={() =>
+                        setSelectedSubject({
+                          id: sub.subject_id,
+                          classId: sub.class_id,
+                          name: sub.subject_name,
+                        })
+                      }
+                    >
+                      <Card.Content className="flex items-center justify-between">
+                        <div>
+                          <Card.Title className="mb-1 text-lg">
+                            {sub.subject_name}
+                          </Card.Title>
+                          <p className="text-sm text-gray-600">
+                            {sub.teacher_name}
+                          </p>
+                        </div>
 
-                      <div className="text-right">
-                        <Card.Description>{getGradedCount(sub.subject_id)}</Card.Description>
-                        <p className="text-xs text-gray-600">Graded Classwork</p>
-                      </div>
-                    </Card.Content>
-                  </Card>
-                ))
-              )}
+                        <div className="text-right">
+                          <Card.Description>
+                            {getGradedCount(sub.subject_id)}
+                          </Card.Description>
+                          <p className="text-xs text-gray-600">
+                            Graded Classwork
+                          </p>
+                        </div>
+                      </Card.Content>
+                    </Card>
+                  ))
+                )}
               </div>
             </main>
           </div>
