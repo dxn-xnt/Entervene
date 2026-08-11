@@ -1,1578 +1,353 @@
-# Entervene ML / Prediction Handoff
+# Entervene ML System Documentation
 
-This document is the ML-specific handoff for the next Codex session. It does not replace `docs/CODEX_HANDOFF.md`; that file still contains broader project context.
+> How the prediction and at-risk detection system works, end to end.
 
-## Current Status
+---
 
-ML backend pipeline is complete through training, model registration, scoring, risk interpretation, prediction persistence, prediction API endpoints, automatic feature building from real Entervene records, outcome tracking, finalized-grade evaluation, teacher risk review, model performance summary, prediction detail, read-only causes/recommended actions, and **live inference pipeline generating real scored predictions**.
+## 1. What the System Does (Overview)
 
-Completed:
+Entervene uses a **Machine Learning model** to predict a student's **next period grade** and then uses a **rule-based Risk Engine** to classify that student into a risk level. This helps teachers identify students who may be struggling early, so they can provide timely interventions.
 
-```text
-ML training: complete
-Model registration: complete
-Risk engine: complete
-Model scoring: complete
-Prediction persistence: complete
-Prediction API endpoints: complete
-Automatic feature builder from real records: complete
-Prediction outcome tracking: complete
-Finalized-grade outcome evaluation: complete
-Teacher risk review: complete
-Model performance summary: complete
-Prediction detail read endpoint: complete
-Read-only causes and recommended actions: complete
-Live inference pipeline (bypass synthetic zero-below-75 limitation): complete
-3,980 real student-period predictions scored and persisted to DB (seeding): complete
-3-Term Curriculum (DO 017 s. 2026) period_sequence normalization bridge: complete
+```
+Student academic records (grades, scores, submissions)
+    ↓
+Feature Builder (computes 16 ML features from records)
+    ↓
+Random Forest Regressor (predicts next period grade)
+    ↓
+Risk Engine (classifies risk level based on predicted grade + evidence)
+    ↓
+Result: risk_level, risk_score, causes, recommended actions
+    ↓
+Saved to database → shown on teacher dashboard → teacher reviews/assigns intervention
 ```
 
-Ready next backend/ML work:
+---
 
-```text
-Database seeding from final_student_risk_predictions.csv
-Dashboard list/filter endpoint
-Grading component integration
-Persistent suggestion-to-prediction linking
-Frontend prediction dashboard
-Future classifier after real labels
+## 2. The ML Algorithm
+
+### Model: Random Forest Regressor
+
+| Property | Value |
+|---|---|
+| Algorithm | `RandomForestRegressor` (scikit-learn) |
+| Type | **Regression** (predicts a number, not a category) |
+| Target variable | `target_next_period_grade` (the student's grade in the next quarter) |
+| Number of trees | 300 |
+| Missing value strategy | Median imputation |
+| Random state | 42 (for reproducibility) |
+
+**Key point:** The model does **NOT** directly predict "at-risk" or "not at-risk." It predicts a **grade number** (e.g., 87.5), then the Risk Engine interprets whether that grade is concerning.
+
+### Why Regression Instead of Classification?
+
+The training dataset contains **zero below-75 grade examples** (all students passed). Without actual failing examples, a binary classifier (at-risk vs. not-at-risk) cannot learn what a failing student looks like. Instead, the system:
+
+1. Predicts the **numeric grade** using regression
+2. Uses a **rule-based Risk Engine** to interpret the predicted grade along with other evidence
+
+This approach works because even without failing examples, the model can identify students trending toward lower grades, which the Risk Engine flags.
+
+---
+
+## 3. Training Data
+
+### Data Source
+
+The training data comes from **real E-Class Record workbooks** (DepEd electronic class records) that were extracted, anonymized, and processed into ML-ready CSV files.
+
+### Dataset Numbers
+
+| Item | Count |
+|---|---|
+| Total training rows | 1,580 |
+| Total test rows | 395 |
+| Unique students (train) | 448 |
+| Unique students (test) | 113 |
+| Student overlap between train/test | **0** (no data leakage) |
+| Below-75 grade examples | **0** (all students passed) |
+
+### How Data Was Prepared
+
+```
+E-Class Record Excel workbooks
+    ↓
+Extraction & anonymization (synthetic IDs, no real names/LRNs)
+    ↓
+Normalized CSV pack (17 CSV files: students, classes, grades, assessments, etc.)
+    ↓
+ML-optimized pack (feature engineering, train/test split by student)
+    ↓
+03_random_forest_regression_train.csv  (938 rows)
+04_random_forest_regression_test.csv   (231 rows)
 ```
 
-Grading component integration is still important because `PredictionFeatureBuilderService` can compute ML features from records, but real teacher-created classwork, quiz, activity, project, and exam records must be consistently mapped to DepEd grading components:
+### Data Validity
 
-```text
-WRITTEN_WORK
-PERFORMANCE_TASK
-PERIODICAL_ASSESSMENT
+- **Student identity separation**: Train and test sets are split by student (0 overlap), preventing data leakage.
+- **Anonymized**: Student names and LRNs in the dataset are synthetic — they are NOT real student identities.
+- **Below-75 limitation**: The dataset has no failing examples. This means:
+  - The model has never seen what a failing student's data looks like
+  - Classification metrics (Accuracy, AUC, Precision, Recall, F1) are **not valid** for at-risk detection
+  - The model's lowest predicted grade was **83.46** (still above passing)
+
+---
+
+## 4. The 16 Features (Model Inputs)
+
+These are the inputs the model uses to predict the next period grade, ranked by importance:
+
+| Rank | Feature | Importance | Description |
+|---|---|---|---|
+| 1 | `source_period_grade` | 56.5% | Student's current period grade |
+| 2 | `cumulative_period_grade_avg` | 18.7% | Average of all previous period grades |
+| 3 | `written_work_percent` | 6.7% | Written work component percentage |
+| 4 | `quarterly_assessment_percent` | 4.9% | Quarterly exam/assessment percentage |
+| 5 | `performance_task_percent` | 4.0% | Performance task component percentage |
+| 6 | `grade_trend_vs_previous_period` | 2.5% | Grade change from previous period |
+| 7 | `period_sequence` | 2.4% | Which quarter/term (1st, 2nd, etc.) |
+| 8 | `grade_level` | 1.1% | Student's year level |
+| 9-14 | `subject_*` (6 one-hot flags) | ~2.8% total | Which subject (Creative Tech, ICT, Science, Math, Electronics, Values Ed) |
+| 15 | `has_previous_period` | 0.4% | Whether a previous period grade exists |
+| 16 | `assessment_completion_rate` | 0.05% | Fraction of assessments completed |
+
+### How Features Are Built from Live Records
+
+The `PredictionFeatureBuilderService` computes these features by querying the database:
+
+- **Grade components**: Pulls `AssessmentItem` and `StudentAssessmentScore` records, groups by DepEd component (Written Work, Performance Task, Quarterly Assessment), computes percentages
+- **Submissions**: Pulls `Classwork` and `StudentSubmission` records for missing/late counts
+- **Grade history**: Queries `StudentPeriodGrade` for current and previous period grades, computes trend and cumulative average
+- **Subject**: One-hot encodes the subject name
+
+### Readiness Check (Before Running the Model)
+
+Before the model runs, the system checks if there is enough data:
+
+| Level | Condition |
+|---|---|
+| **INSUFFICIENT** (blocked) | Source period grade missing, OR data coverage < 50%, OR completion rate < 50% |
+| **MINIMUM** | Coverage 50–69% |
+| **GOOD** | Coverage 70–84% |
+| **STRONG** | Coverage ≥ 85% |
+
+If readiness is `INSUFFICIENT`, no prediction is made and the response returns `INSUFFICIENT_DATA`.
+
+---
+
+## 5. Model Performance (Regression Metrics)
+
+| Metric | Value | Meaning |
+|---|---|---|
+| **MAE** | 1.48 | Average prediction error is ~1.48 grade points |
+| **RMSE** | 2.05 | Root mean squared error is ~2.05 points |
+| **R²** | 0.65 | Model explains 65% of grade variation |
+
+**In plain English**: If a student's actual next-period grade is 88, the model would typically predict between 86.5 and 89.5. The model is reasonably accurate for grade prediction, but it has limitations because it has never seen failing students.
+
+---
+
+## 6. Risk Engine (How "At Risk" Is Determined)
+
+The Risk Engine takes the model's predicted grade and combines it with behavioral evidence to assign a risk level. It uses **rule-based logic**, NOT the ML model.
+
+### Risk Levels
+
+| Level | Score Range | Meaning |
+|---|---|---|
+| `HIGH_RISK` | 75–100 | Immediate teacher attention needed |
+| `MODERATE_RISK` | 50–74 | Needs targeted follow-up |
+| `NEEDS_MONITORING` | 25–49 | Keep watching, not urgent yet |
+| `LOW_RISK` | 0–24 | Student is performing well |
+| `INSUFFICIENT_DATA` | 0 | Not enough evidence to decide |
+
+### How Risk Level Is Assigned
+
+The Risk Engine evaluates **multiple rules** and picks the **highest severity** triggered:
+
+**HIGH_RISK triggers:**
+- Predicted grade < 75
+- Current grade < 75
+- Predicted grade < 80 AND grade trend declined ≥ 5 points
+- Completion rate < 70% AND predicted grade < 82
+- ≥ 3 missing activities AND predicted grade < 85
+
+**MODERATE_RISK triggers:**
+- Predicted grade between 75–81
+- Grade trend declined ≥ 7 points
+- Completion rate < 75%
+- ≥ 2 missing activities
+- ≥ 3 late submissions
+
+**NEEDS_MONITORING triggers:**
+- Predicted grade between 82–87
+- Grade trend declined ≥ 3 points
+- Completion rate < 90%
+- 1 missing activity
+- Any late submissions
+- No previous period record available
+
+**LOW_RISK triggers:**
+- Predicted grade ≥ 88 AND completion ≥ 90% AND coverage ≥ 75% AND no missing activities AND no severe grade decline
+
+### Risk Score Calculation
+
+The risk score (0–100) starts at a base score for the risk level, then adds points for:
+- Predicted grade below 88: up to +20 points
+- Negative grade trend: up to +10 points
+- Low completion rate: up to +10 points
+- Missing activities: up to +8 points
+- Late submissions: up to +5 points
+- Multiple triggered rules: up to +5 points
+
+The score is then clamped to stay within the risk level's range.
+
+---
+
+## 7. Complete Workflow (End to End)
+
+### Step 1: Build Features
 ```
-
-Not ready yet:
-
-```text
-Frontend prediction dashboard is not implemented yet.
-Persistent StudentSuggestion rows are not generated from predictions yet.
-Persistent suggestion-to-prediction linking is not implemented yet.
-Production classifier is not ready.
-Accuracy/AUC/F1/Precision/Recall reporting is not valid yet.
-Grading component integration is still needed for production-quality running-grade/component calculations.
-```
-
-## Core ML Approach
-
-Entervene currently uses a **Random Forest regression prototype**, not an at-risk classifier.
-
-The model predicts:
-
-```text
-target_next_period_grade
-```
-
-In runtime/API language, this appears as:
-
-```text
-predicted_period_grade
-```
-
-The system does not directly predict:
-
-```text
-AT_RISK / NOT_AT_RISK
-```
-
-Current active flow:
-
-```text
-E-Class Record / LMS academic records
--> feature builder
--> readiness check
--> RandomForestRegressor
--> predicted_period_grade
--> RiskEngine
--> risk_level / risk_score
--> ai_prediction persistence
--> prediction detail causes/actions
--> teacher review
--> finalized grade outcome evaluation
--> model performance summary
-```
-
-The current historical E-Class Record dataset contains **zero below-75 target examples**. This limitation was **bypassed** by running a live inference pipeline against all 3,259 real student-period records extracted from the E-Class Record workbooks. Because of that:
-
-- Accuracy is not the correct metric.
-- AUC is not valid.
-- Precision is not valid.
-- Recall is not valid.
-- F1 score is not valid.
-- SMOTE/SMOTENC should not be used yet.
-- A classifier should not be trained yet.
-
-The live inference pipeline does not retroactively add below-75 examples to the training set. It scores real records using the already-trained model and persists the resulting predictions. The lowest predicted grade observed in the live scored data was **83.46**, which is still above passing. The synthetic data limitation is documented separately below.
-
-Current valid regression metrics:
-
-```text
-MAE: 1.4396
-RMSE: 2.0984
-R2: 0.6227
-```
-
-Plain explanation:
-
-```text
-The model predicts a grade number, like 87.81, not a category like at-risk or not-at-risk. The RiskEngine then interprets that predicted grade together with evidence such as grade trend, completion rate, missing activities, late submissions, and data coverage.
-```
-
-### 3-Term Curriculum Transition (Period Sequence Normalization Strategy)
-
-The system is being adapted to the new DepEd Strengthened Senior High School (SSHS) Curriculum (DO 017 s. 2026), which mandates a 3-Term school calendar. However, the current ML model was trained on a 4-Quarter dataset. 
-
-In the 4-Quarter dataset, the model learned that a `period_sequence` of 3 meant 75% of the year had elapsed (3 out of 4). Under the 3-Term curriculum, a sequence of 3 means 100% of the year has elapsed (3 out of 3). Passing a 3-term sequence directly to the model would cause it to systematically underestimate the student's progress through the year.
-
-To bypass this without retraining the model right now, a **mathematical bridge** has been implemented in `PredictionFeatureBuilderService`. The `period_sequence` is mathematically normalized to the equivalent 4-quarter scale before being fed to the model:
-
-```text
-normalized_sequence = round((period_sequence / total_periods_in_year) * 4, 4)
-```
-
-For legacy 4-quarter periods, this evaluates to the original integer (e.g., (3 / 4) * 4 = 3). For 3-term periods, it scales appropriately (e.g., Term 2 -> (2 / 3) * 4 = 2.6667). 
-
-This allows the existing quarter-trained model to accurately interpret time-progress in a 3-term curriculum. The feature dictionary key passed to the `.joblib` model remains strictly `period_sequence` so as not to break the expected schema.
-
-## Dataset Context
-
-Local dataset folders:
-
-```text
-backend/data/datasets/entervene_interpreted_synthetic_csv_pack
-backend/data/datasets/entervene_current_data_ml_optimized
-```
-
-These folders are ignored by Git.
-
-Important data-safety notes:
-
-- Student names and LRNs in the development dataset are synthetic placeholders.
-- They were created only for development traceability.
-- They are not real verified learner identities.
-- They must not be imported into production as real students.
-- Names/LRNs must not be used as model features.
-- `PRIVATE_source_student_identity_map.csv` exists in the normalized pack but must not be printed or shared.
-
-### Dataset Validation Summary
-
-Normalized pack:
-
-```text
-00_import_manifest.csv: 12
-01_academic_years.csv: 3
-02_academic_periods.csv: 12
-03_teachers.csv: 2
-04_students_synthetic.csv: 289
-05_classes.csv: 9
-06_student_class_enrollments.csv: 289
-07_subjects.csv: 8
-08_subject_load_groups.csv: 12
-09_subject_loads_by_period.csv: 48
-10_assessments.csv: 400
-11_student_assessment_scores.csv: 13115
-12_student_period_grades.csv: 1564
-13_student_final_grades.csv: 391
-14_student_subject_period_features.csv: 1564
-15_prototype_model_rows.csv: 1169
-16_data_quality_issues.csv: 12
-17_table_relationships.csv: 16
-```
-
-ML optimized pack:
-
-```text
-01_training_rows_readable.csv: 1169
-02_random_forest_regression_matrix_all.csv: 1169
-03_random_forest_regression_train.csv: 938
-04_random_forest_regression_test.csv: 231
-05_prediction_scoring_template.csv: 1
-06_feature_dictionary.csv: 23
-07_baseline_feature_importance.csv: 16
-08_validation_summary.csv: 14
-```
-
-Important validation findings:
-
-```text
-ready_for_task_3 = true
-below-75 count = 0
-below-90 count = 273
-train/test student overlap = 0
-synthetic names/LRNs excluded from model features
-quarterly_assessment_percent mapped to periodical_assessment_percent
-period_type, total_periods_in_year, and period_progress_ratio are missing from ML train/test files and should be added later for three-term readiness
-```
-
-## Live Inference Pipeline
-
-Status: **Complete**
-
-After the synthetic training dataset was found to contain zero below-75 target examples, a live inference pipeline was developed to score all real student-period records extracted from the actual E-Class Record workbooks. This pipeline bypasses the synthetic data limitation by running the trained model against live data instead of generating new training examples.
-
-### Output File
-
-```text
-backend/data/live_predictions/final_student_risk_predictions.csv
-```
-
-This file is **not** tracked by Git. It is a local-only artifact.
-
-### Dataset Statistics
-
-```text
-Total scored records: 3,259
-Unique students: 971
-Predicted grade range: 83.46 (lowest) to 95.56 (highest)
-Risk level distribution:
-  NEEDS_MONITORING: 2,522 records
-  LOW_RISK:           737 records
-```
-
-### Key Observation
-
-The lowest predicted grade achieved in the live scored data was **83.46**. This is still above the 75-point passing threshold. This confirms:
-
-- The Random Forest model, trained on synthetic data with no below-75 examples, does not predict below-75 grades.
-- The RiskEngine correctly assigns NEEDS_MONITORING to borderline predicted grades (83-88 range) and LOW_RISK to stronger predicted grades.
-- A future classifier still requires real below-75 teacher-confirmed outcomes before it can be trained.
-
-### CSV Columns
-
-```text
-student_id                    (synthetic ID from E-Class Record source, e.g. STU-ADV-M-1)
-original_name                 (synthetic placeholder name from E-Class Record)
-file_source                   (source Excel workbook filename)
-period                        (quarter label from source workbook)
-predicted_period_grade        (model output, Numeric)
-risk_level                    (NEEDS_MONITORING or LOW_RISK)
-risk_score                    (integer, from RiskEngine)
-written_work_percent
-performance_task_percent
-periodical_assessment_percent
-source_period_grade
-grade_level
-period_sequence
-has_previous_period
-assessment_completion_rate
-grade_trend_vs_previous_period
-cumulative_period_grade_avg
-subject_CREATIVE_TECHNOLOGY   (one-hot encoded subject flags)
-subject_ELECTRONICS
-subject_ICT
-subject_MATHEMATICS
-subject_SCIENCE
-subject_VALUES_EDUCATION
-```
-
-### Seeding Note
-
-The `student_id` values in the CSV (e.g. `STU-ADV-M-1`) are synthetic identifiers from the E-Class Record extraction pipeline. Before seeding the database, these must be resolved against the `student` table (matched using `student_number` / synthetic enrollment key or name). See the Database Seeding Strategy section for the full plan.
-
-## Git Ignore Protection
-
-`.gitignore` protects local datasets and generated model artifacts:
-
-```gitignore
-backend/data/datasets/
-backend/data/dataset_validation/
-backend/data/models/
-backend/data/raw_eclass_records/
-backend/data/normalized_eclass_records/
-**/PRIVATE_source_student_identity_map.csv
-__pycache__/
-*.py[cod]
-.pytest_cache/
-```
-
-## Completed Tasks
-
-### Task 1 - ML Database Foundation
-
-Created models:
-
-```text
-backend/app/models/academic/AssessmentItem.py
-backend/app/models/academic/StudentAssessmentScore.py
-backend/app/models/academic/StudentPeriodGrade.py
-backend/app/models/ai/AIModelVersion.py
-backend/app/models/ai/RiskThreshold.py
-backend/app/models/ai/AIPrediction.py
-backend/app/models/ai/AIPredictionFeature.py
-backend/app/models/ai/TeacherRiskReview.py
-backend/app/models/ai/PredictionOutcome.py
-```
-
-Migration:
-
-```text
-backend/migrations/versions/20260621_add_ml_prediction_foundation.py
-```
-
-Validation:
-
-```text
-alembic upgrade head: passed
-pytest -q: 161 passed, 5 warnings
-```
-
-### Task 2A - Dataset Validation
-
-Created:
-
-```text
-backend/app/ml/DatasetPackValidator.py
-backend/tests/test_dataset_pack_validator.py
-```
-
-Tests:
-
-```text
-pytest tests/test_dataset_pack_validator.py -q: 11 passed
-pytest -q: 172 passed, 5 warnings
-```
-
-### Task 3 - Train RandomForestRegressor
-
-Modified:
-
-```text
-backend/app/ml/Train.py
-```
-
-Created:
-
-```text
-backend/tests/test_ml_train.py
-```
-
-Generated ignored artifacts:
-
-```text
-backend/data/models/entervene_next_period_grade_rf.joblib
-backend/data/models/entervene_next_period_grade_rf_training_report.json
-backend/data/models/entervene_next_period_grade_rf_feature_schema.json
-backend/data/models/entervene_next_period_grade_rf_feature_importance.csv
-```
-
-Training behavior:
-
-```text
-loads 03_random_forest_regression_train.csv
-loads 04_random_forest_regression_test.csv
-detects target_next_period_grade
-excludes identity/leakage columns
-trains RandomForestRegressor
-writes model artifact, training report, feature schema, and feature importance
-```
-
-Training results:
-
-```text
-target_column: target_next_period_grade
-feature_count: 16
-mapped: quarterly_assessment_percent -> periodical_assessment_percent
-MAE: 1.4396
-RMSE: 2.0984
-R2: 0.6227
-train/test student overlap: 0
-ready_for_task_4: true
-```
-
-Tests:
-
-```text
-pytest tests/test_ml_train.py -q: 7 passed
-pytest -q: 179 passed, 5 warnings
-```
-
-### Task 4 - Register Model Metadata
-
-Created:
-
-```text
-backend/app/ml/RegisterModelVersion.py
-backend/app/services/prediction/ModelVersionService.py
-backend/tests/test_register_model_version.py
-```
-
-Registered active model:
-
-```text
-model_name: entervene_next_period_grade_rf
-model_type: REGRESSOR
-algorithm: RandomForestRegressor
-artifact_path: data/models/entervene_next_period_grade_rf.joblib
-MAE: 1.4396
-RMSE: 2.0984
-R2: 0.6227
-is_active: true
-```
-
-Tests:
-
-```text
-pytest tests/test_register_model_version.py -q: 10 passed
-pytest -q: 189 passed, 5 warnings
-```
-
-### Task 5 - Risk Engine
-
-Created:
-
-```text
-backend/app/services/prediction/RiskEngine.py
-backend/tests/test_risk_engine.py
-```
-
-Risk levels:
-
-```text
-INSUFFICIENT_DATA
-LOW_RISK
-NEEDS_MONITORING
-MODERATE_RISK
-HIGH_RISK
-```
-
-Priority order:
-
-```text
-INSUFFICIENT_DATA > HIGH_RISK > MODERATE_RISK > NEEDS_MONITORING > LOW_RISK
-```
-
-Tests:
-
-```text
-pytest tests/test_risk_engine.py -q: 14 passed
-pytest -q: 203 passed, 5 warnings
-```
-
-### Task 6 - Model Scoring Service
-
-Created:
-
-```text
-backend/app/services/prediction/ModelScoringService.py
-backend/app/ml/ScorePrediction.py
-backend/tests/test_model_scoring_service.py
-```
-
-Behavior:
-
-```text
-active AI_MODEL_VERSION
--> load joblib artifact
--> load feature schema
--> prepare one feature row
--> predict predicted_period_grade
--> call RiskEngine
--> return structured prediction output
-```
-
-Tests:
-
-```text
-pytest tests/test_model_scoring_service.py -q: 12 passed
-pytest -q: 215 passed, 5 warnings
-```
-
-### Task 7 - Prediction Persistence
-
-Created:
-
-```text
-backend/app/services/prediction/PredictionPersistenceService.py
-backend/app/ml/SavePrediction.py
-backend/tests/test_prediction_persistence_service.py
-```
-
-Behavior:
-
-```text
-validates student/class/subject/period identifiers
-calls score_student_prediction
-saves ai_prediction and ai_prediction_feature rows
-avoids duplicate saved predictions unless replace_existing=True
-```
-
-Tests:
-
-```text
-pytest tests/test_prediction_persistence_service.py -q: 10 passed
-pytest -q: 225 passed, 5 warnings
-```
-
-### Task 8 - Prediction API Endpoints
-
-Created:
-
-```text
-backend/app/schemas/Prediction.py
-backend/tests/test_prediction_routes.py
-```
-
-Modified:
-
-```text
-backend/app/api/v1/routes/Predictions.py
-```
-
-Endpoints:
-
-```text
-POST /api/v1/predictions/preview
-POST /api/v1/predictions
-GET /api/v1/predictions/latest
-GET /api/v1/predictions/classes/{class_id}/risks
-GET /api/v1/predictions/{prediction_id}/features
-```
-
-Endpoint behavior:
-
-```text
-POST /preview:
-calls ModelScoringService.score_student_prediction and does not save.
-
-POST /predictions:
-calls PredictionPersistenceService.score_and_persist_prediction and saves ai_prediction / ai_prediction_feature rows.
-
-GET /latest:
-fetches the latest saved prediction for a student/class/subject, with optional period/model filters.
-
-GET /classes/{class_id}/risks:
-lists saved predictions with subject, period, risk_level, limit, and offset filters.
-
-GET /{prediction_id}/features:
-lists saved feature evidence rows for one prediction.
-```
-
-Tests:
-
-```text
-tests/test_prediction_routes.py -q: 12 passed
-related regression/risk tests: 37 passed
-full backend suite after Task 8: 282 passed, 5 warnings
-```
-
-### Task 9 - Prediction Feature Builder and Readiness Service
-
-Created:
-
-```text
-backend/app/services/prediction/PredictionFeatureBuilderService.py
-backend/tests/test_prediction_feature_builder_service.py
-```
-
-Modified:
-
-```text
-backend/app/api/v1/routes/Predictions.py
-backend/app/schemas/Prediction.py
-backend/tests/test_prediction_routes.py
-```
-
-Service functions:
-
-```text
-build_prediction_features_from_records(...)
-check_prediction_readiness(...)
-insufficient_prediction_response(...)
-```
-
-New endpoints:
-
-```text
 POST /api/v1/predictions/build-features
-POST /api/v1/predictions/from-records/preview
-POST /api/v1/predictions/from-records
 ```
+Takes `student_id`, `class_id`, `subject_id`, `source_period_id` → queries the database for grades, scores, submissions → returns 16 ML features + readiness check.
 
-Task 9 flow:
-
-```text
-student_id/class_id/subject_id/source_period_id/target_period_id
--> collect StudentPeriodGrade, AssessmentItem, StudentAssessmentScore, and classwork submission records
--> compute ML features
--> check readiness
--> if insufficient, return INSUFFICIENT_DATA without calling the model
--> if ready, call scoring or persistence service
+### Step 2: Score Prediction
 ```
-
-Tests:
-
-```text
-tests/test_prediction_feature_builder_service.py -q: 13 passed
-tests/test_prediction_routes.py -q: 18 passed
-related regression/risk tests: 37 passed
-full backend suite after Task 9: 301 passed, 5 warnings
+POST /api/v1/predictions/preview (read-only, no save)
+POST /api/v1/predictions (score + save to database)
+POST /api/v1/predictions/from-records (auto-build features from DB + score + save)
 ```
+Loads the trained `.joblib` model → feeds the 16 features → gets predicted grade → runs Risk Engine → returns risk level, score, causes, recommended actions.
 
-## Post-Task 9 Backend Prediction/Outcome Polish
+### Step 3: Persist to Database
+Saves into PostgreSQL tables:
+- `ai_prediction` — the prediction result (predicted grade, risk level, risk score)
+- `ai_prediction_feature` — the individual feature values used
+- `prediction_outcome` — tracks if the prediction was later proven correct (when real grades come in)
 
-### A. Prediction Outcome Evaluation
-
-Added/changed:
-
-```text
-backend/app/models/ai/PredictionOutcome.py
-backend/app/services/prediction/PredictionOutcomeService.py
-backend/migrations/versions/20260703_add_prediction_outcome_evaluation_fields.py
-backend/tests/test_prediction_outcome_service.py
+### Step 4: Teacher Dashboard
 ```
-
-Purpose:
-
-```text
-After a prediction is made, the system can later compare the predicted grade against the actual finalized grade.
-```
-
-Computed fields:
-
-```text
-prediction_error = actual_period_grade - predicted_period_grade
-absolute_error = abs(actual_period_grade - predicted_period_grade)
-actual_passed = actual_period_grade >= passing_grade
-actual_risk_label = LOW_RISK if passed, HIGH_RISK if below passing for now
-outcome_status = EVALUATED
-evaluated_at
-```
-
-This is regression-safe outcome tracking. It does not make classifier metrics valid yet. It only tracks how close the predicted grade was to the actual grade.
-
-### B. Manual Outcome Evaluation Endpoint
-
-Endpoint:
-
-```text
-POST /api/v1/predictions/{prediction_id}/outcome/evaluate
-```
-
-Request:
-
-```json
-{
-  "actual_period_grade": 86.5,
-  "passing_grade": 75
-}
-```
-
-Response includes:
-
-```text
-outcome_id
-prediction_id
-actual_period_grade
-predicted_period_grade
-prediction_error
-absolute_error
-actual_passed
-actual_risk_label
-outcome_status
-evaluated_at
-```
-
-Changed:
-
-```text
-backend/app/schemas/Prediction.py
-backend/app/api/v1/routes/Predictions.py
-backend/tests/test_prediction_routes.py
-```
-
-### C. Finalized Grade Outcome Helper
-
-Service helper:
-
-```text
-evaluate_outcomes_for_finalized_period_grade(...)
-```
-
-Purpose:
-
-```text
-When a StudentPeriodGrade is finalized, the system can find matching predictions and evaluate their outcomes.
-```
-
-Safe matching rule:
-
-```text
-student_id
-class_id
-subject_id
-AIPrediction.target_period_id == StudentPeriodGrade.academic_period_id
-```
-
-### D. StudentPeriodGrade Finalization Workflow
-
-Fields added to `StudentPeriodGrade`:
-
-```text
-is_finalized
-finalized_at
-finalized_by_staff_id
-```
-
-Migration:
-
-```text
-backend/migrations/versions/20260703_add_student_period_grade_finalization.py
-```
-
-Endpoint:
-
-```text
-POST /api/v1/student-records/period-grades/{period_grade_id}/finalize
-```
-
-Request:
-
-```json
-{
-  "final_period_grade": 86.5,
-  "passing_grade": 75
-}
-```
-
-Purpose:
-
-```text
-This finalizes an existing StudentPeriodGrade row and automatically triggers prediction outcome evaluation.
-```
-
-Important limitation: this finalizes existing `StudentPeriodGrade` rows only. It does not create period-grade rows from scratch or implement a full grading module.
-
-Changed:
-
-```text
-backend/app/models/academic/StudentPeriodGrade.py
-backend/app/schemas/StudentRecord.py
-backend/app/services/student_record/StudentRecordService.py
-backend/app/api/v1/routes/StudentRecords.py
-backend/tests/test_student_period_grade_finalization.py
-backend/tests/test_prediction_outcome_grade_finalization.py
-```
-
-### E. Teacher Risk Review Workflow
-
-Model already existed:
-
-```text
-backend/app/models/ai/TeacherRiskReview.py
-```
-
-Migration:
-
-```text
-backend/migrations/versions/20260703_update_teacher_risk_review_decisions.py
-```
-
-Allowed decisions:
-
-```text
-CONFIRMED_RISK
-DISMISSED_RISK
-NEEDS_MORE_DATA
-INTERVENTION_ASSIGNED
-ESCALATED
-```
-
-Service:
-
-```text
-backend/app/services/prediction/TeacherRiskReviewService.py
-```
-
-Endpoint:
-
-```text
-POST /api/v1/predictions/{prediction_id}/teacher-review
-```
-
-Request:
-
-```json
-{
-  "decision": "CONFIRMED_RISK",
-  "teacher_notes": "Student has missed multiple classworks and needs remediation."
-}
-```
-
-Purpose:
-
-```text
-The AI prediction remains decision support only. The teacher/admin records whether they confirm, dismiss, need more data, assigned intervention, or escalated the risk.
-```
-
-Idempotency rule:
-
-```text
-One review per prediction_id + staff_id. A repeated review by the same staff member updates the existing review instead of duplicating it.
-```
-
-### F. Model Performance Summary
-
-Service:
-
-```text
-backend/app/services/prediction/ModelPerformanceService.py
-```
-
-Endpoint:
-
-```text
-GET /api/v1/predictions/model-performance
-```
-
-Supported query params:
-
-```text
-model_version_id
-class_id
-subject_id
-academic_period_id mapped to AIPrediction.target_period_id
-```
-
-Response includes:
-
-```text
-total_evaluated_predictions
-mae
-rmse
-mean_prediction_error
-min_absolute_error
-max_absolute_error
-actual_risk_label_counts
-predicted_risk_level_counts
-by_model_version
-```
-
-Formulas:
-
-```text
-MAE = average(absolute_error)
-RMSE = sqrt(average(prediction_error^2))
-mean_prediction_error = average(prediction_error)
-```
-
-These are still regression-safe metrics. Do not describe this as production classifier accuracy. Risk-label counts are descriptive only, not precision/recall/F1/AUC.
-
-Changed:
-
-```text
-backend/app/services/prediction/ModelPerformanceService.py
-backend/app/schemas/Prediction.py
-backend/app/api/v1/routes/Predictions.py
-backend/tests/test_model_performance_summary.py
-```
-
-### G. Prediction Detail and Teacher Review Read Endpoints
-
-Service:
-
-```text
-backend/app/services/prediction/PredictionReadService.py
-```
-
-Endpoints:
-
-```text
+GET /api/v1/predictions/dashboard/at-risk
+GET /api/v1/predictions/dashboard/filters
 GET /api/v1/predictions/{prediction_id}/detail
-GET /api/v1/predictions/{prediction_id}/teacher-review
 ```
+Teachers see at-risk students, filter by class/subject/term/risk level, view prediction details with causes and recommended actions.
 
-Prediction detail returns:
-
-```text
-prediction core fields
-model version
-features
-outcome if available
-teacher_reviews
-current_user_review
+### Step 5: Teacher Review & Intervention
 ```
-
-Teacher review read endpoint returns:
-
-```json
-{
-  "prediction_id": 1,
-  "teacher_reviews": [],
-  "current_user_review": null
-}
+POST /api/v1/predictions/{prediction_id}/review (teacher records decision)
+POST /api/v1/predictions/{prediction_id}/assign-intervention (assign remedial work)
 ```
+Teachers can review predictions with decisions: `CONFIRMED_RISK`, `DISMISSED_RISK`, `NEEDS_MORE_DATA`, `INTERVENTION_ASSIGNED`, `ESCALATED`.
 
-Changed:
+Assigning an intervention creates a `StudentSuggestion` record (either a lesson or classwork) and logs a `TeacherRiskReview`.
 
-```text
-backend/app/services/prediction/PredictionReadService.py
-backend/app/schemas/Prediction.py
-backend/app/api/v1/routes/Predictions.py
-backend/tests/test_prediction_read_endpoints.py
+### Step 6: Outcome Evaluation
 ```
-
-### H. Prediction Causes and Recommended Actions
-
-Service:
-
-```text
-backend/app/services/prediction/PredictionExplanationService.py
+POST /api/v1/predictions/{prediction_id}/evaluate-outcome
 ```
-
-Prediction detail now includes:
-
-```text
-causes: []
-recommended_actions: []
-```
-
-Sample causes:
-
-```text
-LOW_COMPLETION_RATE
-MISSING_WORK
-LOW_ASSESSMENT_AVERAGE
-DECLINING_TREND
-LOW_DATA_COVERAGE
-HIGH_RISK_SCORE
-PREDICTED_BELOW_PASSING
-INSUFFICIENT_DATA
-```
-
-Sample recommended actions:
-
-```text
-ASSIGN_REMEDIAL_ACTIVITY
-REVIEW_MISSING_CLASSWORKS
-SCHEDULE_TEACHER_FOLLOW_UP
-GIVE_TARGETED_PRACTICE
-MONITOR_NEXT_SUBMISSIONS
-COLLECT_MORE_DATA
-```
-
-These are read-only, system-derived recommendation previews. They do not create `StudentSuggestion` rows, assign interventions automatically, or link persistent suggestions to predictions yet.
-
-Changed:
-
-```text
-backend/app/services/prediction/PredictionExplanationService.py
-backend/app/services/prediction/PredictionReadService.py
-backend/app/schemas/Prediction.py
-backend/tests/test_prediction_detail_explanations.py
-```
-
-## Mathematical Explanation of the Prediction Pipeline
-
-### Prediction Features Are Inputs
-
-Prediction features are the input variables passed into the model. Examples:
-
-```text
-source_period_grade
-written_work_percent
-performance_task_percent
-periodical_assessment_percent
-assessment_completion_rate
-missing_activity_count
-late_submission_count
-data_coverage_ratio
-grade_trend_vs_previous_period
-has_previous_period
-```
-
-These are different from evaluation metrics. Features are values used to make a prediction. Metrics such as MAE, RMSE, and R2 are used after training/testing to evaluate how good the predictions were.
-
-### Component Percentage Formulas
-
-Component percentages come from DepEd-style E-Class Record grading components.
-
-```text
-written_work_percent =
-(total written work score earned / total written work max score) * 100
-```
-
-```text
-performance_task_percent =
-(total performance task score earned / total performance task max score) * 100
-```
-
-```text
-periodical_assessment_percent =
-(total periodical assessment score earned / total periodical assessment max score) * 100
-```
-
-The raw E-Class Record may show item groups under:
-
-```text
-Written Works
-Performance Tasks
-Quarterly Assessment
-```
-
-In Entervene, teacher-created classwork, quiz, assignment, activity, project, and exam records should eventually map consistently to:
-
-```text
-WRITTEN_WORK
-PERFORMANCE_TASK
-PERIODICAL_ASSESSMENT
-```
-
-Current Task 9 implementation uses `AssessmentItem.component_type` as the primary source for these component-level calculations. Classwork due dates/submissions are currently used for late-submission evidence, not for weighted component score calculation.
-
-### Source Period Grade Formula
-
-The service computes `source_period_grade` using the best available source:
-
-```text
-1. Prefer StudentPeriodGrade.final_period_grade.
-2. If final is missing, use StudentPeriodGrade.transmuted_grade.
-3. If transmuted is missing, use StudentPeriodGrade.initial_grade.
-4. If no period grade exists, compute a running grade from available component percentages.
-5. If no grade or component percentages exist, use None.
-```
-
-Current implemented running-grade fallback:
-
-```text
-running_grade = average(available component percentages)
-```
-
-Example:
-
-```text
-available values = written_work_percent, performance_task_percent
-running_grade = (written_work_percent + performance_task_percent) / 2
-```
-
-Important: the current service does **not yet** apply DepEd component weights in the running-grade fallback. For the sample ICT E-Class Record style, conceptual weights may be:
-
-```text
-Written Works = 20%
-Performance Tasks = 60%
-Quarterly Assessment = 20%
-```
-
-Conceptual weighted formula:
-
-```text
-running_grade =
-(written_work_percent * 0.20)
-+ (performance_task_percent * 0.60)
-+ (periodical_assessment_percent * 0.20)
-```
-
-A future grading component integration task should align teacher-created records and component weights so production running-grade behavior can follow the correct grading policy. If one component is missing early in the quarter, the current implementation averages only the available component percentages and emits a warning that the source period grade was estimated from available assessment component percentages.
-
-### Completion, Missing, Late, and Coverage Formulas
-
-Current implementation:
-
-```text
-expected_assessment_count =
-count of AssessmentItem rows for class_id + subject_id + source_period_id
-```
-
-```text
-recorded_assessment_count =
-count of matching StudentAssessmentScore rows with score_status = RECORDED and raw_score not null
-```
-
-```text
-submitted_assessment_count =
-same as recorded_assessment_count in the current AssessmentItem-based implementation
-```
-
-```text
-missing_activity_count =
-count of expected assessment items with no score row, score_status = MISSING_NOT_ENCODED, or score_status = ABSENT
-```
-
-```text
-assessment_completion_rate =
-submitted_assessment_count / expected_assessment_count
-```
-
-```text
-data_coverage_ratio =
-recorded_assessment_count / expected_assessment_count
-```
-
-```text
-late_submission_count =
-count of published classwork submissions where submitted_at > due_date, or status is late
-```
-
-If there are no classwork due dates, `late_submission_count` defaults to 0 and the service returns a warning.
-
-### Prediction Readiness
-
-Prediction is not forced when evidence is insufficient.
-
-The service returns `INSUFFICIENT_DATA` without calling the model if:
-
-```text
-data_coverage_ratio < 0.50
-or assessment_completion_rate < 0.50
-or source_period_grade is missing
-```
-
-Readiness levels:
-
-```text
-INSUFFICIENT:
-coverage < 0.50, completion < 0.50, or no source grade
-
-MINIMUM:
-coverage >= 0.50 and < 0.70
-
-GOOD:
-coverage >= 0.70 and < 0.85
-
-STRONG:
-coverage >= 0.85
-```
-
-### Grade Trend Formula
-
-```text
-grade_trend_vs_previous_period =
-source_period_grade - previous_period_grade
-```
-
-If no previous period grade exists:
-
-```text
-has_previous_period = false
-grade_trend_vs_previous_period = None
-```
-
-This does not automatically block prediction if enough current-period evidence exists.
-
-### Prediction Mode
-
-The feature builder reports:
-
-```text
-CURRENT_PERIOD_PROJECTION
-```
-
-when the source period is active, the target period is missing, or the target period is the same as the source period.
-
-It reports:
-
-```text
-NEXT_PERIOD_PREDICTION
-```
-
-when the source period is complete and the target period is later.
-
-### Random Forest Regression Math
-
-The model is:
-
-```text
-RandomForestRegressor
-```
-
-It contains many decision trees. In the current training code:
-
-```text
-n_estimators = 300
-```
-
-The prediction is approximately:
-
-```text
-predicted_period_grade =
-(tree_1_prediction + tree_2_prediction + ... + tree_300_prediction) / 300
-```
-
-The model does not use one fixed manual weight like linear regression. Each tree makes decisions based on feature thresholds. The forest averages all tree outputs to reduce overfitting and improve stability.
-
-### Feature Importance
-
-Feature importance is not the same as DepEd grading weight.
-
-DepEd grading weight example:
-
-```text
-Written Works = 20%
-Performance Tasks = 60%
-Quarterly Assessment = 20%
-```
-
-Random Forest feature importance means:
-
-```text
-How much a feature helped reduce prediction error across the decision trees.
-```
-
-Generated file:
-
-```text
-backend/data/models/entervene_next_period_grade_rf_feature_importance.csv
-```
-
-This is model-level explanation, not exact per-student SHAP contribution. Current `ai_prediction_feature` rows store feature evidence values. `feature_contribution` may still be null.
-
-## Regression Evaluation Metrics
-
-Evaluation metrics do not make the prediction. They evaluate how close model predictions are to actual next-period grades on the test set.
-
-For each test row:
-
-```text
-error_i = actual_i - predicted_i
-```
-
-### MAE
-
-```text
-MAE = mean(|actual_i - predicted_i|)
-```
-
-Meaning:
-
-```text
-Average absolute grade-point error.
-Current MAE: 1.4396
-The model is off by about 1.44 grade points on average.
-```
-
-### RMSE
-
-```text
-RMSE = sqrt(mean((actual_i - predicted_i)^2))
-```
-
-Meaning:
-
-```text
-Penalizes larger errors more heavily.
-Current RMSE: 2.0984
-```
-
-### R2
-
-```text
-R2 = 1 - SS_res / SS_tot
-```
-
-Where:
-
-```text
-SS_res = sum((actual_i - predicted_i)^2)
-SS_tot = sum((actual_i - mean_actual)^2)
-```
-
-Meaning:
-
-```text
-Explains how much variance in the target is captured by the model.
-Current R2: 0.6227
-The model explains about 62.27% of the variation in next-period grades in the test set.
-```
-
-Classification metrics are not valid for the current regression model:
-
-```text
-Accuracy
-AUC
-Precision
-Recall
-F1
-```
-
-They become valid only if the project later trains a classifier using real teacher-confirmed risk labels or enough real below-threshold outcomes.
-
-## RiskEngine Math
-
-The RiskEngine is rule-based and runs after the Random Forest prediction.
-
-Flow:
-
-```text
-predicted_period_grade + academic evidence
--> triggered rules
--> risk_level
--> risk_score
-```
-
-Risk levels:
-
-```text
-INSUFFICIENT_DATA
-LOW_RISK
-NEEDS_MONITORING
-MODERATE_RISK
-HIGH_RISK
-```
-
-Priority:
-
-```text
-INSUFFICIENT_DATA > HIGH_RISK > MODERATE_RISK > NEEDS_MONITORING > LOW_RISK
-```
-
-Rough score bands:
-
-```text
-INSUFFICIENT_DATA: 0
-LOW_RISK: up to 24
-NEEDS_MONITORING: 25 to 49
-MODERATE_RISK: 50 to 74
-HIGH_RISK: 75 to 100
-```
-
-Risk score starts from the selected risk level's base score and increases based on signals such as:
-
-```text
-lower predicted grade
-negative grade trend
-low completion rate
-missing activities
-late submissions
-multiple triggered rules
-```
-
-The risk score is not produced directly by the Random Forest. It is produced by `RiskEngine.py`.
-
-## Current Full Backend ML Flow
-
-```text
-1. Historical E-Class Record workbooks are converted into normalized CSVs.
-2. ML train/test matrices are created from normalized grade data.
-3. Train.py trains RandomForestRegressor to predict target_next_period_grade.
-4. RegisterModelVersion.py stores model metadata into ai_model_version.
-5. PredictionFeatureBuilderService builds features from real Entervene records.
-6. Readiness logic checks data coverage, completion rate, and source grade.
-7. ModelScoringService loads the active model and predicts predicted_period_grade.
-8. RiskEngine converts predicted grade + academic evidence into risk_level and risk_score.
-9. PredictionPersistenceService saves ai_prediction and ai_prediction_feature rows.
-10. Prediction detail can show feature evidence.
-11. PredictionExplanationService derives user-friendly causes and recommended actions.
-12. Teacher/admin can review the prediction through TeacherRiskReview.
-13. StudentPeriodGrade can be finalized.
-14. Finalized grades trigger PredictionOutcome evaluation.
-15. PredictionOutcome stores prediction_error, absolute_error, actual_passed, and actual_risk_label.
-16. ModelPerformanceService summarizes MAE, RMSE, mean error, risk counts, and performance by model version.
-17. Predictions.py exposes scoring, saving, from-records prediction, latest prediction, class risk list, feature evidence, outcome evaluation, teacher review, model performance, and detail endpoints.
-18. Live inference pipeline scored all 3,259 real student-period records and persisted results to final_student_risk_predictions.csv.
-19. Database seeding script will bulk-insert these CSV records into ai_prediction and prediction_outcome PostgreSQL tables.
-```
-
-Text flow diagram:
-
-```text
-Academic records
--> feature builder
--> readiness check
--> RandomForestRegressor
--> predicted_period_grade
--> RiskEngine
--> risk_level/risk_score
--> save prediction + features
--> prediction detail shows causes/actions
--> teacher review
--> grade finalization
--> outcome evaluation
--> model performance summary
-
-Live inference pipeline (separate):
-Real E-Class Record workbooks
--> extraction + feature computation
--> RandomForestRegressor
--> RiskEngine
--> final_student_risk_predictions.csv (3,259 rows)
--> SeedLivePredictions.py
--> ai_prediction + prediction_outcome tables
--> Dashboard list/filter API
--> Frontend prediction dashboard
-```
-
-## Important Commands
-
-General:
+When the actual period grade is finalized, the system compares it against the prediction to measure accuracy (prediction error, absolute error, actual pass/fail).
+
+---
+
+## 8. Key Files
+
+### ML Pipeline
+| File | Purpose |
+|---|---|
+| `backend/app/ml/Train.py` | Trains the RandomForestRegressor model |
+| `backend/app/ml/ScorePrediction.py` | CLI to score one prediction |
+| `backend/app/ml/SeedLivePredictions.py` | Bulk-seeds CSV predictions into DB |
+| `backend/app/ml/RegisterModelVersion.py` | Registers model metadata in DB |
+
+### Services
+| File | Purpose |
+|---|---|
+| `backend/app/services/prediction/PredictionFeatureBuilderService.py` | Builds 16 features from live DB records |
+| `backend/app/services/prediction/ModelScoringService.py` | Loads model, scores prediction, calls Risk Engine |
+| `backend/app/services/prediction/RiskEngine.py` | Rule-based risk classification |
+| `backend/app/services/prediction/PredictionPersistenceService.py` | Saves predictions to database |
+| `backend/app/services/prediction/PredictionExplanationService.py` | Generates causes and recommended actions |
+| `backend/app/services/prediction/PredictionOutcomeService.py` | Evaluates prediction accuracy against actual grades |
+| `backend/app/services/prediction/TeacherRiskReviewService.py` | Teacher review decisions |
+| `backend/app/services/prediction/PredictionSuggestionService.py` | Creates interventions from predictions |
+| `backend/app/services/prediction/DashboardPredictionService.py` | Dashboard at-risk list with filters |
+
+### Model Artifacts (not in Git, must be shared manually)
+| File | Purpose |
+|---|---|
+| `backend/data/models/entervene_next_period_grade_rf.joblib` | Trained model file |
+| `backend/data/models/entervene_next_period_grade_rf_feature_schema.json` | Feature column list |
+| `backend/data/models/entervene_next_period_grade_rf_feature_importance.csv` | Feature rankings |
+| `backend/data/models/entervene_next_period_grade_rf_training_report.json` | Training metrics |
+| `backend/data/live_predictions/final_student_risk_predictions.csv` | Pre-scored predictions CSV |
+| `backend/app/ml/Model.pkl` | Pickle model file |
+| `backend/app/ml/feature_columns.pkl` | Feature column names |
+
+### Database Tables
+| Table | Purpose |
+|---|---|
+| `ai_model_version` | Registered model metadata |
+| `ai_prediction` | Stored predictions |
+| `ai_prediction_feature` | Feature values per prediction |
+| `prediction_outcome` | Actual vs predicted comparison |
+| `teacher_risk_review` | Teacher review decisions |
+| `student_suggestion` | Intervention recommendations |
+| `risk_threshold` | Configurable risk thresholds (for future use) |
+
+---
+
+## 9. Database Seeding (For New Laptops)
+
+The pre-scored predictions can be bulk-inserted using:
 
 ```bash
 cd backend
-alembic upgrade head
-backend/.venv/Scripts/python.exe -m pytest -q
+
+# Dry run (no DB changes)
+python -m app.ml.SeedLivePredictions --dry-run
+
+# Live seeding
+python -m app.ml.SeedLivePredictions --model-version-id 1
 ```
 
-Dataset validation:
+The seeding script:
+1. Reads `final_student_risk_predictions.csv` (3,259 scored records)
+2. Auto-creates missing subjects in the DB
+3. Creates synthetic students with deterministic UUIDs
+4. Inserts `ai_prediction` rows
+5. Inserts `prediction_outcome` rows (status = PENDING)
 
-```bash
-python -m app.ml.DatasetPackValidator --normalized-dir data/datasets/entervene_interpreted_synthetic_csv_pack --ml-dir data/datasets/entervene_current_data_ml_optimized --output-dir data/dataset_validation
+### Files NOT in Git (must be sent manually)
+- `backend/data/live_predictions/final_student_risk_predictions.csv`
+- `backend/data/models/*` (all model artifacts)
+- `backend/app/ml/Model.pkl` and `feature_columns.pkl`
+- `backend/.env` (database credentials)
+
+---
+
+## 10. 3-Term Curriculum Adaptation
+
+The model was trained on 4-quarter data. For the new DepEd 3-term curriculum (DO 017 s. 2026), the `period_sequence` feature is normalized:
+
+```
+normalized_sequence = round((period_sequence / total_periods_in_year) × 4, 4)
 ```
 
-Training:
+| Curriculum | Period 2 | Normalized |
+|---|---|---|
+| 4-Quarter | Q2 = 2/4 × 4 = **2.0** | Same as original |
+| 3-Term | T2 = 2/3 × 4 = **2.67** | Scaled to 4-quarter equivalent |
 
-```bash
-python -m app.ml.Train --ml-dir data/datasets/entervene_current_data_ml_optimized --output-dir data/models --model-name entervene_next_period_grade_rf
-```
+This lets the existing model work with 3-term data without retraining.
 
-Register model:
+---
 
-```bash
-python -m app.ml.RegisterModelVersion --training-report data/models/entervene_next_period_grade_rf_training_report.json --feature-schema data/models/entervene_next_period_grade_rf_feature_schema.json --artifact-path data/models/entervene_next_period_grade_rf.joblib --model-name entervene_next_period_grade_rf --activate
-```
+## 11. Known Limitations
 
-Score only:
-
-```bash
-python -m app.ml.ScorePrediction --model-name entervene_next_period_grade_rf --input-json data/models/sample_prediction_input.json
-```
-
-Score and save:
-
-```bash
-python -m app.ml.SavePrediction --model-name entervene_next_period_grade_rf --input-json data/models/sample_prediction_persist_input.json --replace-existing
-```
-
-Current test commands:
-
-```bash
-cd backend
-backend/.venv/Scripts/python.exe -m pytest tests/test_prediction_feature_builder_service.py -q
-backend/.venv/Scripts/python.exe -m pytest tests/test_prediction_routes.py -q
-backend/.venv/Scripts/python.exe -m pytest tests/test_model_scoring_service.py tests/test_prediction_persistence_service.py tests/test_risk_engine.py -q
-backend/.venv/Scripts/python.exe -m pytest tests/test_prediction_outcome_service.py -q
-backend/.venv/Scripts/python.exe -m pytest tests/test_prediction_outcome_grade_finalization.py -q
-backend/.venv/Scripts/python.exe -m pytest tests/test_student_period_grade_finalization.py -q
-backend/.venv/Scripts/python.exe -m pytest tests/test_teacher_risk_review.py -q
-backend/.venv/Scripts/python.exe -m pytest tests/test_model_performance_summary.py -q
-backend/.venv/Scripts/python.exe -m pytest tests/test_prediction_read_endpoints.py -q
-backend/.venv/Scripts/python.exe -m pytest tests/test_prediction_detail_explanations.py -q
-backend/.venv/Scripts/python.exe -m pytest -q
-```
-
-Latest known results:
-
-```text
-Task 1 outcome service: focused tests passed
-Task 2 outcome route: focused tests passed
-Task 3 grade-finalized helper: focused tests passed
-Task 3.5 student period grade finalization: focused tests passed
-Task 4 teacher risk review: focused tests passed
-Task 5 model performance summary: focused tests passed
-Task 6 prediction read endpoints: focused tests passed
-Task 7 prediction detail explanations: focused tests passed
-Full backend suite after Task 7 backend polish: 454 passed, 5 warnings
-```
-
-Warnings are existing SQLAlchemy/Pydantic deprecation warnings.
-
-## Current Limitations
-
-```text
-1. The active ML model is still regression-only.
-2. It is not a validated at-risk classifier.
-3. The historical dataset has zero below-75 target examples.
-4. Accuracy/AUC/F1/Precision/Recall are still not valid.
-5. The model predicts grade; RiskEngine interprets risk.
-6. actual_risk_label in PredictionOutcome is currently pass/fail-derived using the passing threshold.
-7. Recommended actions in prediction detail are read-only previews and do not create StudentSuggestion records.
-8. TeacherRiskReview records teacher/admin judgment but does not automatically create interventions.
-9. Persistent intervention assignment and completion tracking from predictions are still future work.
-10. Production reliability still depends on consistent grading component mapping.
-11. Frontend dashboard is not yet implemented.
-12. Synthetic names/LRNs remain development placeholders only.
-13. Current model artifacts/datasets are ignored by Git.
-14. final_student_risk_predictions.csv is not tracked by Git and exists only locally.
-15. The live inference pipeline did not produce any below-75 predicted grades; the lowest observed was 83.46.
-16. Database seeding from the CSV requires resolving synthetic student_id values to PostgreSQL UUIDs.
-17. PredictionOutcome rows seeded from the CSV will have outcome_status = PENDING until real finalized grades are available.
-```
-
-## Next Recommended Backend/ML Tasks
-
-### 1. Backend Dashboard List/Filter Endpoint for Prediction Dashboard
-
-```text
-Purpose:
-Let frontend load at-risk students by class, subject, target period, risk level, model version, and review status.
-```
-
-### 2. Grading Component Integration for Classwork, Quiz, and Assessment Records
-
-```text
-Purpose:
-Ensure teacher-created records consistently map to:
-- WRITTEN_WORK
-- PERFORMANCE_TASK
-- PERIODICAL_ASSESSMENT
-```
-
-### 3. Persistent Suggestion-to-Prediction Linking
-
-```text
-Purpose:
-Connect predictions to generated StudentSuggestion / SuggestionClasswork records later.
-```
-
-### 4. Frontend Prediction Dashboard
-
-```text
-Purpose:
-Show risk list, prediction detail, causes, recommended actions, teacher review, outcome, and model-performance summary.
-```
-
-### 5. Future Classifier Only After Real Labels
-
-```text
-Purpose:
-Train classifier only after enough real below-75 or teacher-confirmed at-risk outcomes exist.
-```
-
-## Defense Explanation
-
-The Random Forest model predicts a future grade number. It does not directly decide whether a learner is at risk.
-
-`RiskEngine` converts that predicted grade plus academic evidence into a risk level and risk score. Prediction features explain what evidence was used. Prediction causes convert raw feature evidence into teacher-friendly reasons. Recommended actions are read-only system suggestions.
-
-`TeacherRiskReview` records the teacher/admin decision. `PredictionOutcome` compares the predicted grade to the actual finalized grade. `ModelPerformanceService` summarizes how close the model was using MAE, RMSE, and mean error.
-
-The system does not claim classifier accuracy yet because the current dataset has no below-75 examples.
-
-## Worktree Note
-
-`frontend/package-lock.json` may be modified in the worktree but is unrelated to the ML task unless intentionally changed.
-
-## Final Summary
-
-Current status:
-
-```text
-ML backend pipeline is complete through training, model registration, scoring, risk interpretation,
-prediction persistence, automatic feature building/readiness checks from real Entervene records,
-outcome tracking, finalized-grade evaluation, teacher risk review, model performance summary,
-prediction detail, read-only causes/recommended actions, and live inference pipeline.
-
-3,259 real student-period records have been scored and persisted to:
-  backend/data/live_predictions/final_student_risk_predictions.csv
-
-Lowest predicted grade in live data: 83.46
-Risk distribution: 2,522 NEEDS_MONITORING, 737 LOW_RISK
-```
-
-Ready next:
-
-```text
-Database seeding from final_student_risk_predictions.csv (SeedLivePredictions.py CLI script),
-backend dashboard list/filter endpoint, grading component integration,
-persistent suggestion-to-prediction linking, frontend prediction dashboard,
-and future classifier work only after real labels.
-```
-
-Not ready yet:
-
-```text
-Frontend prediction dashboard, persistent StudentSuggestion generation/linking from predictions,
-production classifier, Accuracy/AUC/F1/Precision/Recall reporting,
-and production-quality grading component integration.
-```
+1. **No failing examples in training data** — The model cannot predict below-75 grades because it has never seen them
+2. **Classification metrics are invalid** — AUC, Precision, Recall, F1 cannot be reported
+3. **Lowest predicted grade is 83.46** — The model never predicts below passing
+4. **Risk detection relies on rules** — The Risk Engine compensates for the model's limitation by also checking behavioral signals (completion rate, missing work, grade trends)
+5. **Synthetic student identities** — Training data names/LRNs are fake, not real students
