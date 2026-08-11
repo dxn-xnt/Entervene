@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SubjectCard } from "../../components/subject-card";
 import { Card } from "@/components/retroui/Card";
-import { ArrowUpRight, Loader2, BookOpen, Search, X, CheckCircle2, FileText } from "lucide-react";
+import { ArrowUpRight, Loader2, BookOpen, Search, X, CheckCircle2, FileText, Calendar } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
@@ -121,11 +121,21 @@ const StoryBoard = () => {
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center gap-3">
-              <SidebarTrigger className="md:hidden" />
-              <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
-                Storyboard
-              </h1>
+            <header className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="md:hidden" />
+                <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
+                  Storyboard
+                </h1>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate(routes.student.profile)}
+                className="h-10 flex items-center gap-2 border-2 border-black bg-[#f7c76f] px-4 text-xs sm:text-sm font-bold text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+              >
+                <Calendar className="size-4" />
+                View My Schedule
+              </button>
             </header>
 
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />

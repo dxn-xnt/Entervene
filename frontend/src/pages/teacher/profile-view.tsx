@@ -4,6 +4,9 @@ import { Progress } from "@/components/retroui/Progress";
 import { Card } from "@/components/retroui/Card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
+import { getMySchedule, type DynamicScheduleResponse } from "@/lib/api";
+import { DynamicScheduleTable } from "@/components/dynamic-schedule-table";
+import { useEffect, useState } from "react";
 
 const overviewCards = [
   { title: "Students", count: "1402", stat: "12" },
@@ -31,6 +34,27 @@ const subjectMasteryRates = [
 ];
 
 export default function TeacherProfile() {
+  const [scheduleData, setScheduleData] = useState<DynamicScheduleResponse | null>(null);
+  const [isScheduleLoading, setIsScheduleLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadSchedule() {
+      setIsScheduleLoading(true);
+      try {
+        const data = await getMySchedule();
+        if (isMounted) setScheduleData(data);
+      } catch (err) {
+        console.error("Failed to load teacher schedule:", err);
+      } finally {
+        if (isMounted) setIsScheduleLoading(false);
+      }
+    }
+    void loadSchedule();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
@@ -63,6 +87,18 @@ export default function TeacherProfile() {
                     stat={card.stat}
                   />
                 ))}
+              </div>
+
+              <div className="flex flex-col gap-3 mt-2">
+                <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
+                  My Schedule
+                </h2>
+                <DynamicScheduleTable
+                  schedule={scheduleData?.schedule || []}
+                  isPublished={scheduleData?.is_published}
+                  isLoading={isScheduleLoading}
+                  emptyMessage="No published schedule assigned to you yet."
+                />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4">

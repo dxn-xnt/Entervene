@@ -118,7 +118,7 @@ export default function AdminNotifications() {
                         description={notification.body ?? ""}
                         badge={notification.is_read ? undefined : "Unread"}
                         date={notification.created_at ? new Date(notification.created_at).toLocaleDateString() : ""}
-                        isRead={notification.isRead}
+                        isRead={notification.is_read}
                         user={notification.notification_type.replace(/_/g, " ")}
                       />
                     </div>
