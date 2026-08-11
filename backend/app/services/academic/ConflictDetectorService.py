@@ -69,6 +69,24 @@ class ConflictDetectorService:
                 num_weeks = max(1, delta.days // 7)
 
         # ---------------------------------------------------------
+        # 0. Unassigned Teacher Check
+        # ---------------------------------------------------------
+        for load in loads:
+            if not load.staff_id:
+                c_name = classes_map[load.class_id].section_name if load.class_id in classes_map else f"Section #{load.class_id}"
+                s_name = subjects_map[load.subject_id].subject_name if load.subject_id in subjects_map else f"Subject #{load.subject_id}"
+                conflicts.append(
+                    ConflictItem(
+                        rule="UNASSIGNED_TEACHER",
+                        severity="warning",
+                        message=f"Subject '{s_name}' in section '{c_name}' has no assigned teacher.",
+                        class_id=load.class_id,
+                        subject_id=load.subject_id,
+                        affected_key=f"{load.class_id}_{load.subject_id}",
+                    )
+                )
+
+        # ---------------------------------------------------------
         # 1. Teacher Time Overlap & 2. Section Timetable Overlap
         # ---------------------------------------------------------
         for i in range(len(loads)):

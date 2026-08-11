@@ -32,6 +32,10 @@ import {
   Sparkles,
   Zap,
   Settings,
+  Unlock,
+  Globe,
+  Layers,
+  ChevronDown,
 } from "lucide-react";
 
 function stringToTimeValue(str?: string | null, fallbackHour = 8): TimeValue {
@@ -80,6 +84,7 @@ export default function SubjectLoadStudio() {
   const [isBreakDrawerOpen, setIsBreakDrawerOpen] = useState<boolean>(false);
   const [periodTemplateSlots, setPeriodTemplateSlots] = useState<PeriodTemplateSlotItem[]>([]);
   const [isToolsOpen, setIsToolsOpen] = useState<boolean>(false);
+  const [isPublishOpen, setIsPublishOpen] = useState<boolean>(false);
   const [openRowKey, setOpenRowKey] = useState<string | null>(null);
   const [expandedIssueRule, setExpandedIssueRule] = useState<string | null>(null);
 
@@ -100,9 +105,20 @@ export default function SubjectLoadStudio() {
     return periodTemplateSlots.filter((s) => s.template_group === activeGroupKey && s.is_locked_break);
   }, [periodTemplateSlots, activeGroupKey]);
 
+  const levelClassIds = useMemo(() => {
+    if (selectedGradeId === "all") return new Set<number>();
+    return new Set((studioData?.classes || []).filter((c) => String(c.academic_level_id) === selectedGradeId).map((c) => c.class_id));
+  }, [selectedGradeId, studioData]);
+
   const isCurrentPublished = useMemo(() => {
-    return loads.some((l) => l.status === "published" || l.is_locked);
-  }, [loads]);
+    const targetLoads = selectedGradeId !== "all"
+      ? loads.filter((l) => levelClassIds.has(l.class_id))
+      : loads;
+    if (targetLoads.length === 0) return false;
+    const hasUnassigned = targetLoads.some((l) => !l.staff_id);
+    if (hasUnassigned) return false;
+    return targetLoads.every((l) => l.status === "published");
+  }, [loads, selectedGradeId, levelClassIds]);
 
   const currentVersionNumber = useMemo(() => {
     return loads[0]?.version || 1;
@@ -225,22 +241,39 @@ export default function SubjectLoadStudio() {
             (ex) => ex.class_id === cls.class_id && ex.subject_id === sub.subject_id
           );
 
-          matched.forEach((m, idx) => {
-            initialLoads.push({
-              _key: m.subject_load_id
-                ? `sl_${m.subject_load_id}`
-                : `slot_${cls.class_id}_${sub.subject_id}_${idx}`,
-              subject_load_id: m.subject_load_id,
-              class_id: m.class_id,
-              subject_id: m.subject_id,
-              staff_id: m.staff_id || null,
-              academic_period_id: periodIdToUse,
-              start_time: m.start_time || null,
-              end_time: m.end_time || null,
-              days_of_week: m.days_of_week || [],
-              status: m.status || "draft",
+          if (matched.length > 0) {
+            matched.forEach((m, idx) => {
+              initialLoads.push({
+                _key: m.subject_load_id
+                  ? `sl_${m.subject_load_id}`
+                  : `slot_${cls.class_id}_${sub.subject_id}_${idx}`,
+                subject_load_id: m.subject_load_id,
+                class_id: m.class_id,
+                subject_id: m.subject_id,
+                staff_id: m.staff_id || null,
+                academic_period_id: periodIdToUse,
+                start_time: m.start_time || null,
+                end_time: m.end_time || null,
+                days_of_week: m.days_of_week || [],
+                status: m.status || "draft",
+              });
             });
-          });
+          } else {
+            // No DB record yet — create synthetic draft load so unassigned counts are accurate
+            initialLoads.push({
+              _key: `new_${cls.class_id}_${sub.subject_id}`,
+              subject_load_id: undefined,
+              class_id: cls.class_id,
+              subject_id: sub.subject_id,
+              staff_id: null,
+              academic_period_id: periodIdToUse,
+              start_time: null,
+              end_time: null,
+              days_of_week: [],
+              status: "draft",
+              is_locked: false,
+            });
+          }
         });
       });
 
@@ -285,7 +318,7 @@ export default function SubjectLoadStudio() {
   const handleTeacherChange = (classId: number, subjectId: number, staffId: string | null) => {
     const updated = loads.map((item) =>
       item.class_id === classId && item.subject_id === subjectId
-        ? { ...item, staff_id: staffId === "none" ? null : staffId }
+        ? { ...item, staff_id: staffId === "none" ? null : staffId, status: "draft", is_locked: false }
         : item
     );
     setLoads(updated);
@@ -300,7 +333,7 @@ export default function SubjectLoadStudio() {
     const updated = loads.map((item) => {
       if (item._key !== slotKey) return item;
 
-      const newItem = { ...item, [field]: val };
+      const newItem = { ...item, [field]: val, status: "draft", is_locked: false };
 
       // When start_time switches to PM, auto-force end_time to PM too
       if (field === "start_time") {
@@ -327,7 +360,7 @@ export default function SubjectLoadStudio() {
         const newDays = currentDays.includes(dayKey)
           ? currentDays.filter((d) => d !== dayKey)
           : [...currentDays, dayKey];
-        return { ...item, days_of_week: newDays };
+        return { ...item, days_of_week: newDays, status: "draft", is_locked: false };
       }
       return item;
     });
@@ -455,6 +488,8 @@ export default function SubjectLoadStudio() {
             start_time: match.start_time || "08:00",
             end_time: match.end_time || "10:00",
             days_of_week: match.days_of_week && match.days_of_week.length > 0 ? match.days_of_week : ["MON", "WED"],
+            status: "draft",
+            is_locked: false,
           };
         }
         return item;
@@ -517,7 +552,7 @@ export default function SubjectLoadStudio() {
 
     const updated = loads.map((l) =>
       l.class_id === classId && l.subject_id === subjectId
-        ? { ...l, days_of_week: days, start_time: startTime, end_time: endTime }
+        ? { ...l, days_of_week: days, start_time: startTime, end_time: endTime, status: "draft", is_locked: false }
         : l
     );
     setLoads(updated);
@@ -525,14 +560,26 @@ export default function SubjectLoadStudio() {
   };
 
   // Save / Publish
-  const handleSave = async (action: "draft" | "publish") => {
+  const handleSave = async (
+    action: "draft" | "publish",
+    publishScope: "all" | "level" | "section" = "all",
+    targetClassId?: number | null
+  ) => {
     if (!selectedPeriodId || isSaving) return;
     setIsSaving(true);
     setNotice(null);
 
     try {
       const levelIdToSave = selectedGradeId !== "all" ? Number(selectedGradeId) : 1;
-      const res = await batchSaveSubjectLoads(selectedPeriodId, levelIdToSave, action, loads);
+      const res = await batchSaveSubjectLoads(
+        selectedPeriodId,
+        levelIdToSave,
+        action,
+        loads,
+        publishScope,
+        publishScope === "level" ? levelIdToSave : null,
+        targetClassId ?? null
+      );
 
       setConflicts(res.conflicts);
       setNotice({
@@ -540,7 +587,28 @@ export default function SubjectLoadStudio() {
         type: "success",
       });
 
-      // Refresh studio data
+      // Optimistic update: immediately flip in-memory load statuses
+      // so section badges update instantly without waiting for DB reload
+      setLoads((prev) =>
+        prev.map((l) => {
+          const isInScope =
+            publishScope === "section"
+              ? l.class_id === targetClassId
+              : publishScope === "level"
+              ? levelClassIds.has(l.class_id)
+              : true; // "all"
+
+          if (action === "publish" && isInScope && Boolean(l.staff_id)) {
+            return { ...l, status: "published", is_locked: true };
+          }
+          if (action === "draft" && isInScope) {
+            return { ...l, status: "draft", is_locked: false };
+          }
+          return l;
+        })
+      );
+
+      // Refresh studio data to sync with DB
       void loadStudio(selectedPeriodId);
     } catch (err) {
       setNotice({
@@ -549,6 +617,7 @@ export default function SubjectLoadStudio() {
       });
     } finally {
       setIsSaving(false);
+      setIsPublishOpen(false);
     }
   };
 
@@ -610,7 +679,22 @@ export default function SubjectLoadStudio() {
 
   const errorConflictsCount = conflicts.filter((c) => c.severity === "error").length;
   const warningConflictsCount = conflicts.filter((c) => c.severity === "warning").length;
-  const unassignedCount = loads.filter((l) => !l.staff_id).length;
+  // School-wide unassigned count (used for Master Schedule strict guard)
+  const unassignedTotal = loads.filter((l) => !l.staff_id).length;
+
+  const unassignedInCurrentScope = useMemo(() => {
+    if (selectedGradeId !== "all") {
+      return loads.filter((l) => levelClassIds.has(l.class_id) && !l.staff_id).length;
+    }
+    return unassignedTotal;
+  }, [selectedGradeId, levelClassIds, loads, unassignedTotal]);
+
+  // Grade-level publish: only blocks if current scope has unassigned
+  const isGradeLevelPublishDisabled = isSaving || errorConflictsCount > 0 || unassignedInCurrentScope > 0;
+  // Master Schedule publish: strictly blocks if ANY subject school-wide is unassigned
+  const isMasterPublishDisabled = isSaving || errorConflictsCount > 0 || unassignedTotal > 0;
+  // Alias for main header button (depends on current view)
+  const isHeaderPublishDisabled = selectedGradeId !== "all" ? isGradeLevelPublishDisabled : isMasterPublishDisabled;
 
   return (
     <AppLayout>
@@ -715,20 +799,102 @@ export default function SubjectLoadStudio() {
                 )}
               </div>
 
-              <Button
-                variant="default"
-                disabled={isSaving || errorConflictsCount > 0}
-                onClick={() => void handleSave("publish")}
-                className={`border-2 border-black shadow-[2px_2px_0_#000] font-bold text-xs ${
-                  errorConflictsCount > 0
-                    ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-60"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90"
-                }`}
-                title={errorConflictsCount > 0 ? `Fix ${errorConflictsCount} conflict errors before publishing` : "Publish official schedule"}
-              >
-                <Send className="size-4 mr-1.5" />
-                Publish Schedule →
-              </Button>
+              {/* Publish Dropdown & Action */}
+              <div className="relative flex items-center">
+                <Button
+                  variant="default"
+                  disabled={isHeaderPublishDisabled}
+                  onClick={() => {
+                    const scope = selectedGradeId !== "all" ? "level" : "all";
+                    void handleSave("publish", scope);
+                  }}
+                  className={`border-2 border-black border-r-0 rounded-r-none shadow-[2px_2px_0_#000] font-bold text-xs ${
+                    isHeaderPublishDisabled
+                      ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-60"
+                      : "bg-primary text-primary-foreground hover:bg-primary/90"
+                  }`}
+                  title={
+                    unassignedInCurrentScope > 0
+                      ? `Assign all ${unassignedInCurrentScope} unassigned teacher(s) in this ${selectedGradeId !== "all" ? "grade level" : "school"} before publishing`
+                      : errorConflictsCount > 0
+                      ? `Fix ${errorConflictsCount} conflict errors before publishing`
+                      : "Publish official schedule"
+                  }
+                >
+                  <Send className="size-3.5 mr-1.5" />
+                  {selectedGradeId !== "all"
+                    ? `Publish Grade Level`
+                    : `Publish Master Schedule`}
+                </Button>
+                <Button
+                  variant="default"
+                  disabled={isHeaderPublishDisabled}
+                  onClick={() => setIsPublishOpen((prev) => !prev)}
+                  className={`border-2 border-black rounded-l-none px-2 shadow-[2px_2px_0_#000] font-bold text-xs ${
+                    isHeaderPublishDisabled
+                      ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-60"
+                      : "bg-primary text-primary-foreground hover:bg-primary/90"
+                  }`}
+                  title="Publishing options"
+                >
+                  <ChevronDown className="size-3.5" />
+                </Button>
+
+                {isPublishOpen && (
+                  <div
+                    className="absolute right-0 top-full mt-1 w-64 bg-white border-2 border-black shadow-[3px_3px_0_#000] p-1.5 z-50 flex flex-col gap-1 rounded"
+                    onMouseLeave={() => setIsPublishOpen(false)}
+                  >
+                    {selectedGradeId !== "all" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsPublishOpen(false);
+                          void handleSave("publish", "level");
+                        }}
+                        className="text-xs font-bold text-left px-2.5 py-2 hover:bg-emerald-100 flex items-center gap-2 rounded transition-colors text-emerald-950"
+                      >
+                        <Layers className="size-3.5 text-emerald-700" />
+                        <div>
+                          <div>Publish Current Grade Level</div>
+                          <div className="text-[10px] text-muted-foreground font-normal">Publish only loads in this selected grade level</div>
+                        </div>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={isMasterPublishDisabled}
+                      onClick={() => {
+                        if (isMasterPublishDisabled) return;
+                        setIsPublishOpen(false);
+                        void handleSave("publish", "all");
+                      }}
+                      title={
+                        unassignedTotal > 0
+                          ? `Cannot publish master schedule: ${unassignedTotal} subject(s) school-wide have no assigned teacher`
+                          : errorConflictsCount > 0
+                          ? "Fix all schedule conflicts before publishing master schedule"
+                          : "Publish all sections & grades school-wide"
+                      }
+                      className={`text-xs font-bold text-left px-2.5 py-2 flex items-center gap-2 rounded transition-colors ${
+                        isMasterPublishDisabled
+                          ? "text-gray-400 cursor-not-allowed opacity-60 bg-gray-50"
+                          : "hover:bg-purple-100 text-purple-950"
+                      }`}
+                    >
+                      <Globe className="size-3.5 text-purple-700" />
+                      <div>
+                        <div>Publish Master Schedule</div>
+                        <div className="text-[10px] text-muted-foreground font-normal">
+                          {unassignedTotal > 0
+                            ? `⚠️ ${unassignedTotal} unassigned subject(s) school-wide`
+                            : "Publish all sections & grades school-wide"}
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </header>
 
@@ -831,9 +997,9 @@ export default function SubjectLoadStudio() {
                   </span>
                 )}
 
-                {unassignedCount > 0 && (
+                {unassignedTotal > 0 && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 border-2 border-black bg-red-50 text-red-900 font-bold shadow-[1px_1px_0_#000]">
-                    <span><strong>{unassignedCount}</strong> unassigned</span>
+                    <span><strong>{unassignedTotal}</strong> unassigned</span>
                   </span>
                 )}
               </div>
@@ -907,6 +1073,16 @@ export default function SubjectLoadStudio() {
                       return true;
                     });
 
+                    const sectionLoads = loads.filter((l) => l.class_id === cls.class_id);
+                    const sectionUnassignedCount = sectionLoads.filter((l) => !l.staff_id).length;
+                    const hasUnassigned = sectionUnassignedCount > 0 || classSubjects.length === 0;
+                    // Section is published when: no unassigned, has loads, every load is status="published"
+                    const isSectionPublished = !hasUnassigned && sectionLoads.length > 0 && sectionLoads.every((l) => l.status === "published");
+                    const sectionHasErrors = conflicts.some(
+                      (c) => c.severity === "error" && (c.class_id === cls.class_id || (c.affected_key && c.affected_key.startsWith(`${cls.class_id}_`)))
+                    );
+                    const isPublishSectionDisabled = isSaving || sectionHasErrors || sectionUnassignedCount > 0;
+
                     return (
                       <RetroCard
                         key={cls.class_id}
@@ -917,6 +1093,16 @@ export default function SubjectLoadStudio() {
                             <Text as="h3" className="font-bold text-xl">
                               Section: {cls.section_name}
                             </Text>
+                            <Badge
+                              size="sm"
+                              className={`border-2 border-black font-bold text-[10px] px-2 py-0.5 shadow-[1px_1px_0_#000] ${
+                                isSectionPublished
+                                  ? "bg-emerald-200 text-emerald-950"
+                                  : "bg-amber-200 text-amber-950"
+                              }`}
+                            >
+                              {isSectionPublished ? "🔒 PUBLISHED" : "📝 DRAFT"}
+                            </Badge>
                             {(() => {
                               if (!cls.pathway || cls.pathway === "general") return null;
                               const formatted = cls.pathway
@@ -932,11 +1118,46 @@ export default function SubjectLoadStudio() {
                             })()}
                           </div>
                           <div className="flex items-center gap-2 flex-wrap">
+                            {isSectionPublished ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isSaving}
+                                onClick={() => void handleSave("draft", "section", cls.class_id)}
+                                className="border-2 border-black bg-amber-100 hover:bg-amber-200 text-amber-950 text-xs font-bold shadow-[1px_1px_0_#000]"
+                                title="Revert this section to draft status to allow edits"
+                              >
+                                <Unlock className="size-3.5 mr-1 text-amber-800" />
+                                Unlock Section
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isPublishSectionDisabled}
+                                onClick={() => void handleSave("publish", "section", cls.class_id)}
+                                className={`border-2 border-black font-bold text-xs shadow-[1px_1px_0_#000] ${
+                                  isPublishSectionDisabled
+                                    ? "bg-gray-200 text-gray-500 cursor-not-allowed opacity-70"
+                                    : "bg-emerald-100 hover:bg-emerald-200 text-emerald-950"
+                                }`}
+                                title={
+                                  sectionUnassignedCount > 0
+                                    ? `Assign all ${sectionUnassignedCount} unassigned teacher(s) in this section before publishing`
+                                    : sectionHasErrors
+                                    ? "Fix schedule conflicts in this section before publishing"
+                                    : "Publish only this section's schedule"
+                                }
+                              >
+                                <Send className="size-3.5 mr-1 text-emerald-800" />
+                                Publish Section
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => void handleAutoSchedule(cls.class_id)}
-                              className="border-2 border-black bg-amber-100 hover:bg-amber-200 text-xs font-bold shadow-[1px_1px_0_#000]"
+                              className="border-2 border-black bg-amber-50 hover:bg-amber-100 text-xs font-bold shadow-[1px_1px_0_#000]"
                             >
                               <Wand2 className="size-3.5 mr-1 text-amber-800" />
                               Auto-Fit Section

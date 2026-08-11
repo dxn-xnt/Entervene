@@ -20,8 +20,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.add_column('classwork', sa.Column('show_scores', sa.Boolean(), server_default='true', nullable=False))
-    # ### end Alembic commands ###
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    cw_cols = [c['name'] for c in inspector.get_columns('classwork')]
+    if 'show_scores' not in cw_cols:
+        op.add_column('classwork', sa.Column('show_scores', sa.Boolean(), server_default='true', nullable=False))
 
 
 def downgrade() -> None:

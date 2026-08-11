@@ -20,7 +20,10 @@ import {
   getClassTransferOptions,
   getUnassignedClassStudents,
   updateClassStudentList,
+  getClassSchedule,
+  type DynamicScheduleResponse,
 } from "@/lib/api";
+import { DynamicScheduleTable } from "@/components/dynamic-schedule-table";
 import { classData } from "@/mocks/adminClasses";
 import type {
   ClassDetailResponse,
@@ -405,7 +408,28 @@ function OverviewTab({
   selectedClass: ClassRecord;
   activeSince: string;
 }) {
+  const { classId } = useParams();
+  const [scheduleData, setScheduleData] = useState<DynamicScheduleResponse | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadSchedule() {
+      if (!classId) return;
+      try {
+        const data = await getClassSchedule(classId);
+        if (isMounted) setScheduleData(data);
+      } catch {
+        // fallback
+      }
+    }
+    void loadSchedule();
+    return () => {
+      isMounted = false;
+    };
+  }, [classId]);
+
   const recentActivity = [1, 2, 3].slice(0, 3);
+  const classSubjects = (scheduleData?.schedule || []).filter((s) => s.type === "class");
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
@@ -469,18 +493,22 @@ function OverviewTab({
               Average mastery per subject load
             </Text>
             <div className="grid gap-2">
-              {selectedClass.subjects.map((subject, index) => (
-                <div key={subject.name} className="grid grid-cols-[80px_1fr_34px] items-center gap-2 text-xs">
-                  <span className="truncate font-semibold">{subject.name}</span>
-                  <span className="h-2 rounded-full bg-black/15">
-                    <span
-                      className={`block h-full rounded-full ${index % 2 === 0 ? "bg-[#79bd80]" : "bg-[#f7c76f]"}`}
-                      style={{ width: `${subject.progress}%` }}
-                    />
-                  </span>
-                  <span className="text-right font-bold">{subject.progress}%</span>
-                </div>
-              ))}
+              {(classSubjects.length > 0 ? classSubjects : selectedClass.subjects).map((subject, index) => {
+                const name = subject.subject || (subject as any).name;
+                const progress = (subject as any).progress || 90;
+                return (
+                  <div key={name} className="grid grid-cols-[80px_1fr_34px] items-center gap-2 text-xs">
+                    <span className="truncate font-semibold">{name}</span>
+                    <span className="h-2 rounded-full bg-black/15">
+                      <span
+                        className={`block h-full rounded-full ${index % 2 === 0 ? "bg-[#79bd80]" : "bg-[#f7c76f]"}`}
+                        style={{ width: `${progress}%` }}
+                      />
+                    </span>
+                    <span className="text-right font-bold">{progress}%</span>
+                  </div>
+                );
+              })}
             </div>
           </RetroCard>
         </div>
@@ -511,23 +539,29 @@ function OverviewTab({
             Subjects
           </Text>
           <div className="grid gap-2">
-            {selectedClass.subjects.map((subject) => (
-              <RetroCard key={subject.name} className="p-3">
-                <div className="flex items-center justify-between">
-                  <span>
-                    <Text as="p" className="text-lg font-bold">
-                      {subject.name}
+            {classSubjects.length > 0 ? (
+              classSubjects.map((subject) => (
+                <RetroCard key={subject.subject_load_id || subject.subject} className="p-3">
+                  <div className="flex items-center justify-between">
+                    <span>
+                      <Text as="p" className="text-lg font-bold">
+                        {subject.subject}
+                      </Text>
+                      <Text as="p" className="text-xs font-semibold text-black/65">
+                        Teacher: {subject.teacher || "Unassigned"}
+                      </Text>
+                    </span>
+                    <Text as="p" className="text-sm font-semibold">
+                      {subject.time}
                     </Text>
-                    <Text as="p" className="text-xs font-semibold text-black/65">
-                      Active since November 10, 2025
-                    </Text>
-                  </span>
-                  <Text as="p" className="text-sm font-semibold">
-                    {subject.time}
-                  </Text>
-                </div>
+                  </div>
+                </RetroCard>
+              ))
+            ) : (
+              <RetroCard className="p-4 text-center text-sm font-semibold text-muted-foreground">
+                No published subjects for this section yet.
               </RetroCard>
-            ))}
+            )}
           </div>
         </section>
       </div>
@@ -697,60 +731,42 @@ function StudentsTab({
   );
 }
 
-function SubjectLoadTab({ selectedClass }: { selectedClass: ClassRecord }) {
-  if (!selectedClass.subjects.length)
-    return (
-      <RetroCard className="p-8 text-center">
-        <Text as="p" className="text-sm font-semibold">
-          No subject load assigned yet.
-        </Text>
-      </RetroCard>
-    );
+function SubjectLoadTab() {
+  const { classId } = useParams();
+  const [scheduleData, setScheduleData] = useState<DynamicScheduleResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadSchedule() {
+      if (!classId) return;
+      setIsLoading(true);
+      try {
+        const data = await getClassSchedule(classId);
+        if (isMounted) setScheduleData(data);
+      } catch (err) {
+        console.error("Failed to load class schedule:", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    void loadSchedule();
+    return () => {
+      isMounted = false;
+    };
+  }, [classId]);
 
   return (
     <section className="flex flex-col gap-2">
       <Text as="h3" className="font-sans text-xl font-bold">
-        Subject Load
+        Subject Load Schedule
       </Text>
-      <RetroCard className="overflow-x-auto p-0">
-        <div className="min-w-[720px]">
-          <div className="grid grid-cols-[minmax(150px,1fr)_150px_130px_minmax(180px,1fr)] border-b-2 border-border bg-accent px-4 py-2 text-xs font-bold">
-            <span className="text-center">Subject</span>
-            <span className="text-center">Time</span>
-            <span className="text-center">Days</span>
-            <span className="text-center">Teacher</span>
-          </div>
-          {selectedClass.subjects.map((subject, index) => (
-            <div key={subject.name}>
-              {index === 2 && (
-                <div className="border-b border-border bg-muted/40 py-1 text-center text-xs font-bold">
-                  Break
-                </div>
-              )}
-              {index === 4 && (
-                <div className="border-b border-border bg-muted/40 py-1 text-center text-xs font-bold">
-                  Lunch Break
-                </div>
-              )}
-              <div className="grid min-h-12 grid-cols-[minmax(150px,1fr)_150px_130px_minmax(180px,1fr)] items-center border-b border-border px-4 py-2 text-sm last:border-b-0">
-                <span className="font-bold">{subject.name}</span>
-                <span className="text-center">{subject.time}</span>
-                <span className="flex justify-center gap-1">
-                  {["M", "T", "W", "Th", "F"].map((day) => (
-                    <Badge key={day} size="sm" variant="outline" className="px-1.5 py-0 text-[10px]">
-                      {day}
-                    </Badge>
-                  ))}
-                </span>
-                <span className="flex items-center justify-center gap-2">
-                  <CustomAvatar text={subject.teacher} size="sm" />
-                  <span className="font-semibold text-xs">{subject.teacher}</span>
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </RetroCard>
+      <DynamicScheduleTable
+        schedule={scheduleData?.schedule || []}
+        isPublished={scheduleData?.is_published}
+        isLoading={isLoading}
+        emptyMessage="No published schedule assigned yet for this section."
+      />
     </section>
   );
 }

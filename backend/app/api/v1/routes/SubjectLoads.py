@@ -2,7 +2,8 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from app.core.Dependencies import require_role
+from app.core.Dependencies import require_role, get_optional_staff_id, get_student_record
+from app.api.v1.routes.Auth import get_current_user
 from app.db.Session import get_db
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.AcademicPeriod import AcademicPeriod
@@ -13,6 +14,7 @@ from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.academic.SubjectOffering import SubjectOffering
 from app.models.academic.PeriodTemplateSlot import PeriodTemplateSlot
+from app.models.academic.StudentCLass import StudentClass
 from app.schemas.SubjectLoad import (
     ValidateSubjectLoadRequest,
     ValidationResultResponse,
@@ -139,6 +141,12 @@ def get_subject_load_studio_data(
         )
         .all()
     )
+
+    try:
+        db.execute(text("UPDATE subject_load SET status = 'draft', is_locked = FALSE, published_at = NULL, published_by = NULL WHERE staff_id IS NULL OR staff_id = '';"))
+        db.commit()
+    except Exception:
+        db.rollback()
 
     existing_loads = db.query(SubjectLoad).filter(SubjectLoad.academic_period_id == selected_period_id).all()
     try:
@@ -348,7 +356,74 @@ def batch_save_subject_loads(
     db: Session = Depends(get_db),
 ):
     period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == payload.academic_period_id).first()
-    validation_res = ConflictDetectorService.validate_loads(db=db, loads=payload.loads, academic_period=period)
+
+    # Identify affected classes in this payload
+    affected_class_ids = set(load_item.class_id for load_item in payload.loads)
+
+    # Fetch all existing DB loads for full-school merged validation
+    db_all_period_loads = (
+        db.query(SubjectLoad)
+        .filter(SubjectLoad.academic_period_id == payload.academic_period_id)
+        .all()
+    )
+
+    # Merge incoming payload loads with existing DB loads from non-affected classes
+    merged_validation_loads: list[SubjectLoadItem] = list(payload.loads)
+    for sl in db_all_period_loads:
+        if sl.class_id not in affected_class_ids:
+            merged_validation_loads.append(
+                SubjectLoadItem(
+                    subject_load_id=sl.subject_load_id,
+                    class_id=sl.class_id,
+                    subject_id=sl.subject_id,
+                    staff_id=sl.staff_id,
+                    academic_period_id=sl.academic_period_id,
+                    start_time=getattr(sl, "start_time", None),
+                    end_time=getattr(sl, "end_time", None),
+                    days_of_week=getattr(sl, "days_of_week", []) or [],
+                    status=sl.status or "draft",
+                    is_locked=bool(getattr(sl, "is_locked", False)),
+                )
+            )
+
+    user_email = current_user.get("email") or current_user.get("username") or "Admin"
+    status_value = "published" if payload.action == "publish" else "draft"
+    is_publishing = (payload.action == "publish")
+
+    # Determine target class IDs based on publish scope
+    target_class_ids: set[int] = set()
+    if is_publishing:
+        scope = payload.publish_scope or "all"
+        if scope == "level":
+            target_lvl = payload.target_level_id or payload.academic_level_id
+            matching_classes = db.query(Class.class_id).filter(Class.academic_level_id == target_lvl).all()
+            target_class_ids = {c[0] for c in matching_classes}
+        elif scope == "section" and payload.target_class_id is not None:
+            target_class_ids = {payload.target_class_id}
+        else:
+            # "all" scope
+            target_class_ids = set(affected_class_ids)
+
+        # Enforce that all subject loads within target_class_ids have assigned teachers
+        unassigned_in_target: list[str] = []
+        for load_item in merged_validation_loads:
+            if load_item.class_id in target_class_ids and not load_item.staff_id:
+                c_obj = db.query(Class).filter(Class.class_id == load_item.class_id).first()
+                s_obj = db.query(Subject).filter(Subject.subject_id == load_item.subject_id).first()
+                c_name = c_obj.section_name if c_obj else f"Section #{load_item.class_id}"
+                s_name = s_obj.subject_name if s_obj else f"Subject #{load_item.subject_id}"
+                unassigned_in_target.append(f"'{s_name}' in {c_name}")
+
+        if unassigned_in_target:
+            sample_str = ", ".join(unassigned_in_target[:3])
+            if len(unassigned_in_target) > 3:
+                sample_str += f" and {len(unassigned_in_target) - 3} more"
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot publish schedule: All subjects in the target schedule must have an assigned teacher. Unassigned: {sample_str}.",
+            )
+
+    validation_res = ConflictDetectorService.validate_loads(db=db, loads=merged_validation_loads, academic_period=period)
     
     # If action is publish and there are error-level conflicts, block publication
     if payload.action == "publish" and not validation_res.is_valid:
@@ -357,24 +432,9 @@ def batch_save_subject_loads(
             detail="Cannot publish schedule with unresolved conflicts. Please fix all errors before publishing.",
         )
 
-    user_email = current_user.get("email") or current_user.get("username") or "Admin"
-    status_value = "published" if payload.action == "publish" else "draft"
-    is_publishing = (payload.action == "publish")
 
-    # Identify affected classes in this academic period
-    affected_class_ids = list({load_item.class_id for load_item in payload.loads})
-    existing_db_loads = (
-        db.query(SubjectLoad)
-        .filter(
-            SubjectLoad.academic_period_id == payload.academic_period_id,
-            SubjectLoad.class_id.in_(affected_class_ids),
-        )
-        .all()
-        if affected_class_ids
-        else []
-    )
-
-    existing_map = {sl.subject_load_id: sl for sl in existing_db_loads}
+    existing_db_affected = [sl for sl in db_all_period_loads if sl.class_id in affected_class_ids]
+    existing_map = {sl.subject_load_id: sl for sl in existing_db_affected}
     incoming_ids = {item.subject_load_id for item in payload.loads if item.subject_load_id is not None}
 
     # Delete loads that were removed in the UI for affected classes
@@ -400,26 +460,271 @@ def batch_save_subject_loads(
         db_load.start_time = load_item.start_time
         db_load.end_time = load_item.end_time
         db_load.days_of_week = load_item.days_of_week
-        db_load.status = status_value
         db_load.last_modified_by = user_email
         db_load.continued_from_load_id = load_item.continued_from_load_id
 
-        if is_publishing:
+        should_publish_this_load = is_publishing and (load_item.class_id in target_class_ids) and bool(load_item.staff_id)
+        if should_publish_this_load:
+            db_load.status = "published"
             db_load.is_locked = True
             db_load.locked_at = now_time
             db_load.published_at = now_time
             db_load.published_by = user_email
-        else:
+        elif payload.action == "draft" or not load_item.staff_id:
+            db_load.status = "draft"
             db_load.is_locked = False
+            db_load.published_at = None
+            db_load.published_by = None
+        else:
+            if not getattr(db_load, "status", None):
+                db_load.status = "draft"
+                db_load.is_locked = False
 
         saved_count += 1
 
+    # Cleanup any stale published records in DB that have no assigned staff
+    try:
+        db.execute(text("UPDATE subject_load SET status = 'draft', is_locked = FALSE WHERE staff_id IS NULL AND status = 'published';"))
+    except Exception:
+        pass
+
     db.commit()
 
+    scope_label = "all sections" if payload.publish_scope == "all" else f"{payload.publish_scope} scope"
     return BatchSaveSubjectLoadResponse(
-        message=f"Successfully saved {saved_count} subject loads as {status_value.upper()}.",
+        message=f"Successfully saved {saved_count} subject loads for {scope_label} as {status_value.upper()}.",
         saved_count=saved_count,
         status=status_value,
         is_valid=validation_res.is_valid,
         conflicts=validation_res.conflicts,
     )
+
+
+DAY_MAP = {
+    "MON": "M",
+    "TUE": "T",
+    "WED": "W",
+    "THU": "Th",
+    "FRI": "F",
+    "SAT": "Sa",
+    "SUN": "Su",
+}
+
+
+def format_time_str(t: str | None) -> str:
+    if not t:
+        return ""
+    try:
+        parts = t.split(":")
+        hh = int(parts[0])
+        mm = int(parts[1])
+        suffix = "AM" if hh < 12 else "PM"
+        display_hh = hh if hh <= 12 else hh - 12
+        if display_hh == 0:
+            display_hh = 12
+        return f"{display_hh}:{mm:02d} {suffix}"
+    except Exception:
+        return t or ""
+
+
+@router.get("/class-schedule/{class_id}")
+def get_class_schedule(
+    class_id: int,
+    academic_period_id: int | None = Query(None),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    cls = db.query(Class).filter(Class.class_id == class_id).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class section not found")
+
+    period = None
+    if academic_period_id:
+        period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == academic_period_id).first()
+    if not period:
+        period = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
+
+    period_id = period.academic_period_id if period else 1
+
+    published_loads = (
+        db.query(SubjectLoad)
+        .filter(
+            SubjectLoad.class_id == class_id,
+            SubjectLoad.academic_period_id == period_id,
+            SubjectLoad.status == "published",
+        )
+        .all()
+    )
+
+    ensure_default_period_templates(db)
+    grp = getattr(cls, "period_template_group", None) or "JHS_45MIN"
+    break_slots = (
+        db.query(PeriodTemplateSlot)
+        .filter(PeriodTemplateSlot.template_group == grp)
+        .order_by(PeriodTemplateSlot.display_order)
+        .all()
+    )
+
+    is_published = len(published_loads) > 0
+    slots = []
+
+    for sl in published_loads:
+        sub = db.query(Subject).filter(Subject.subject_id == sl.subject_id).first()
+        staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == sl.staff_id).first() if sl.staff_id else None
+
+        start_fmt = format_time_str(sl.start_time)
+        end_fmt = format_time_str(sl.end_time)
+        time_range = f"{start_fmt} - {end_fmt}" if (start_fmt and end_fmt) else ""
+
+        raw_days = getattr(sl, "days_of_week", []) or []
+        formatted_days = [DAY_MAP.get(d.upper(), d) for d in raw_days]
+
+        slots.append({
+            "type": "class",
+            "subject_load_id": sl.subject_load_id,
+            "subject": sub.subject_name if sub else f"Subject #{sl.subject_id}",
+            "subject_codename": sub.subject_codename if sub else "",
+            "teacher": f"{staff.first_name} {staff.last_name}" if staff else "Unassigned",
+            "section_name": cls.section_name,
+            "start_time": sl.start_time or "00:00",
+            "end_time": sl.end_time or "00:00",
+            "time": time_range,
+            "days": formatted_days if formatted_days else ["M", "T", "W", "Th", "F"],
+            "slot_type": "CLASS",
+        })
+
+    for b in break_slots:
+        if b.slot_type in ("HOMEROOM", "RECESS", "LUNCH"):
+            start_fmt = format_time_str(b.start_time)
+            end_fmt = format_time_str(b.end_time)
+            slots.append({
+                "type": "break",
+                "label": b.slot_name,
+                "start_time": b.start_time,
+                "end_time": b.end_time,
+                "time": f"{start_fmt} - {end_fmt}" if (start_fmt and end_fmt) else "",
+                "slot_type": b.slot_type,
+            })
+
+    slots.sort(key=lambda s: s.get("start_time") or "00:00")
+
+    lvl = db.query(AcademicLevel).filter(AcademicLevel.academic_level_id == cls.academic_level_id).first()
+    lvl_name = lvl.level_name if lvl else ""
+
+    return {
+        "is_published": is_published,
+        "class_id": cls.class_id,
+        "section_name": cls.section_name,
+        "grade_level": lvl_name,
+        "schedule": slots,
+    }
+
+
+@router.get("/my-schedule")
+def get_my_schedule(
+    academic_period_id: int | None = Query(None),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    role = current_user.get("role", "")
+    period = None
+    if academic_period_id:
+        period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == academic_period_id).first()
+    if not period:
+        period = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
+    period_id = period.academic_period_id if period else 1
+
+    if role == "student":
+        try:
+            student_obj = get_student_record(current_user=current_user, db=db)
+            st_class = (
+                db.query(StudentClass)
+                .filter(
+                    StudentClass.student_id == student_obj.student_id,
+                    StudentClass.enrollment_status == "enrolled",
+                )
+                .first()
+            )
+            if not st_class:
+                return {"is_published": False, "schedule": []}
+            return get_class_schedule(class_id=st_class.class_id, academic_period_id=period_id, current_user=current_user, db=db)
+        except Exception:
+            return {"is_published": False, "schedule": []}
+
+    elif role in ("teacher", "admin"):
+        staff_id = get_optional_staff_id(current_user=current_user, db=db)
+        if not staff_id:
+            pub_load = db.query(SubjectLoad).filter(SubjectLoad.academic_period_id == period_id, SubjectLoad.status == "published").first()
+            if pub_load:
+                return get_class_schedule(class_id=pub_load.class_id, academic_period_id=period_id, current_user=current_user, db=db)
+            return {"is_published": False, "schedule": []}
+
+        teacher_loads = (
+            db.query(SubjectLoad)
+            .filter(
+                SubjectLoad.staff_id == staff_id,
+                SubjectLoad.academic_period_id == period_id,
+                SubjectLoad.status == "published",
+            )
+            .all()
+        )
+
+        if not teacher_loads:
+            return {"is_published": False, "schedule": []}
+
+        class_ids = list(set(sl.class_id for sl in teacher_loads))
+        primary_class = db.query(Class).filter(Class.class_id == class_ids[0]).first() if class_ids else None
+        grp = getattr(primary_class, "period_template_group", None) or "JHS_45MIN" if primary_class else "JHS_45MIN"
+
+        ensure_default_period_templates(db)
+        break_slots = (
+            db.query(PeriodTemplateSlot)
+            .filter(PeriodTemplateSlot.template_group == grp)
+            .order_by(PeriodTemplateSlot.display_order)
+            .all()
+        )
+
+        slots = []
+        for sl in teacher_loads:
+            sub = db.query(Subject).filter(Subject.subject_id == sl.subject_id).first()
+            cls_obj = db.query(Class).filter(Class.class_id == sl.class_id).first()
+            staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == staff_id).first()
+
+            start_fmt = format_time_str(sl.start_time)
+            end_fmt = format_time_str(sl.end_time)
+            time_range = f"{start_fmt} - {end_fmt}" if (start_fmt and end_fmt) else ""
+            raw_days = getattr(sl, "days_of_week", []) or []
+            formatted_days = [DAY_MAP.get(d.upper(), d) for d in raw_days]
+
+            slots.append({
+                "type": "class",
+                "subject_load_id": sl.subject_load_id,
+                "subject": sub.subject_name if sub else f"Subject #{sl.subject_id}",
+                "subject_codename": sub.subject_codename if sub else "",
+                "teacher": f"{staff.first_name} {staff.last_name}" if staff else "",
+                "section_name": cls_obj.section_name if cls_obj else "",
+                "start_time": sl.start_time or "00:00",
+                "end_time": sl.end_time or "00:00",
+                "time": time_range,
+                "days": formatted_days if formatted_days else ["M", "T", "W", "Th", "F"],
+                "slot_type": "CLASS",
+            })
+
+        for b in break_slots:
+            if b.slot_type in ("HOMEROOM", "RECESS", "LUNCH"):
+                start_fmt = format_time_str(b.start_time)
+                end_fmt = format_time_str(b.end_time)
+                slots.append({
+                    "type": "break",
+                    "label": b.slot_name,
+                    "start_time": b.start_time,
+                    "end_time": b.end_time,
+                    "time": f"{start_fmt} - {end_fmt}" if (start_fmt and end_fmt) else "",
+                    "slot_type": b.slot_type,
+                })
+
+        slots.sort(key=lambda s: s.get("start_time") or "00:00")
+        return {"is_published": True, "schedule": slots}
+
+    return {"is_published": False, "schedule": []}
+

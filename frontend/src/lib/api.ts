@@ -1440,12 +1440,23 @@ export async function batchSaveSubjectLoads(
   periodId: number,
   levelId: number,
   action: "draft" | "publish",
-  loads: SubjectLoadItem[]
+  loads: SubjectLoadItem[],
+  publishScope: "all" | "level" | "section" = "all",
+  targetLevelId?: number | null,
+  targetClassId?: number | null
 ): Promise<{ message: string; saved_count: number; status: string; is_valid: boolean; conflicts: ConflictItem[] }> {
   const response = await apiFetch("/api/v1/subject-loads/batch-save", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ academic_period_id: periodId, academic_level_id: levelId, action, loads }),
+    body: JSON.stringify({
+      academic_period_id: periodId,
+      academic_level_id: levelId,
+      action,
+      publish_scope: publishScope,
+      target_level_id: targetLevelId ?? (publishScope === "level" ? levelId : null),
+      target_class_id: targetClassId ?? null,
+      loads,
+    }),
   });
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null);
@@ -1456,4 +1467,52 @@ export async function batchSaveSubjectLoads(
   }
   return (await response.json()) as { message: string; saved_count: number; status: string; is_valid: boolean; conflicts: ConflictItem[] };
 }
+
+export interface DynamicScheduleRow {
+  type: "class" | "break";
+  subject_load_id?: number;
+  subject?: string;
+  subject_codename?: string;
+  teacher?: string;
+  section_name?: string;
+  time: string;
+  start_time?: string;
+  end_time?: string;
+  days?: string[];
+  label?: string;
+  slot_type?: "HOMEROOM" | "RECESS" | "LUNCH" | "CLASS";
+}
+
+export interface DynamicScheduleResponse {
+  is_published: boolean;
+  class_id?: number;
+  section_name?: string;
+  grade_level?: string;
+  schedule: DynamicScheduleRow[];
+}
+
+export async function getClassSchedule(
+  classId: number | string,
+  academicPeriodId?: number
+): Promise<DynamicScheduleResponse> {
+  const query = academicPeriodId ? `?academic_period_id=${academicPeriodId}` : "";
+  const response = await apiFetch(`/api/v1/subject-loads/class-schedule/${classId}${query}`);
+  if (!response.ok) {
+    throw new ApiRequestError("Failed to fetch class schedule", response.status);
+  }
+  return (await response.json()) as DynamicScheduleResponse;
+}
+
+export async function getMySchedule(
+  academicPeriodId?: number
+): Promise<DynamicScheduleResponse> {
+  const query = academicPeriodId ? `?academic_period_id=${academicPeriodId}` : "";
+  const response = await apiFetch(`/api/v1/subject-loads/my-schedule${query}`);
+  if (!response.ok) {
+    throw new ApiRequestError("Failed to fetch schedule", response.status);
+  }
+  return (await response.json()) as DynamicScheduleResponse;
+}
+
+
 

@@ -1,10 +1,8 @@
-import { useState, useMemo } from "react";
-import { Check, X, Pencil, Filter, ArrowUpDown } from "lucide-react";
+import { useState } from "react";
+import { Check, X, Pencil } from "lucide-react";
 import type { QuizAnalysis } from "./quiz-builder-types";
 import type { TeacherClasswork } from "@/types/classwork";
-import { submissionStatusLabel } from "@/lib/classwork-utils";
 import { Select } from "@/components/retroui/Select";
-import { Tabs } from "@/components/retroui/Tabs";
 
 interface QuizAnalysisViewProps {
   quizAnalysis: QuizAnalysis | null;
