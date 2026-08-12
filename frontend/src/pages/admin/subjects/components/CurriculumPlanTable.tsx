@@ -127,7 +127,7 @@ export function groupOfferingsForCurriculumPlan(
         subjectId: primaryOffering.subject.subject_id,
         subjectName: primaryOffering.subject.subject_name,
         subjectCode: primaryOffering.subject.subject_codename,
-        subjectGroup: primaryOffering.subject.subject_group,
+        subjectGroup: primaryOffering.subject.subject_group?.name,
         hours: catalogSubject?.hours ?? null,
         gradingTemplate: catalogSubject?.default_grading_template ?? null,
         status: rowStatus,

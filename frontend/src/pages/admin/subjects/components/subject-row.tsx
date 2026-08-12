@@ -3,7 +3,7 @@ import { Card as RetroCard } from "@/components/retroui/Card";
 import { Archive, ArrowUpRight, Pencil, RotateCcw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { SubjectListItem } from "@/lib/api";
-import { statusBadge, subjectCode, subjectRouteGrade } from "./subject-utils";
+import { formatSubjectHours, statusBadge, subjectCode, subjectRouteGrade } from "./subject-utils";
 
 export function SubjectRow({
   subject,
@@ -34,8 +34,8 @@ export function SubjectRow({
           <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm md:grid-cols-3">
             <span><strong>Code:</strong> {subjectCode(subject)}</span>
             <span><strong>Grade:</strong> {subject.academic_level.level_name}</span>
-            <span><strong>Group:</strong> {subject.subject_group || "Ungrouped"}</span>
-            <span><strong>Hours:</strong> {subject.hours ?? 0}</span>
+            <span><strong>Group:</strong> {subject.subject_group?.name || "Ungrouped"}</span>
+            <span><strong>Hours:</strong> {formatSubjectHours(subject.hours)}</span>
             <span className="col-span-2 md:col-span-2">
               <strong>Default template:</strong> {subject.default_grading_template || "No grading template"}
             </span>

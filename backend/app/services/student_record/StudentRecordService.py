@@ -391,7 +391,6 @@ def finalize_student_period_grade(
     period_grade_id: int,
     final_period_grade: float | None = None,
     finalized_by_staff_id: str | None = None,
-    passing_grade: float = 75.0,
 ) -> StudentPeriodGradeFinalizeResponse:
     period_grade = db.get(StudentPeriodGrade, period_grade_id)
     if period_grade is None:
@@ -402,6 +401,15 @@ def finalize_student_period_grade(
     if period_grade.final_period_grade is None:
         raise HTTPException(status_code=400, detail="final_period_grade is required to finalize a period grade")
 
+    # Resolve passing threshold from SubjectGroup via the subject FK.
+    # Falls back to 75.0 if the relation is not loaded (e.g. test environments
+    # that don't seed the SubjectGroup table yet).
+    passing_grade: float = 75.0
+    from app.models.academic.Subject import Subject
+    subject = db.get(Subject, period_grade.subject_id)
+    if subject is not None and hasattr(subject, "subject_group_rel") and subject.subject_group_rel is not None:
+        passing_grade = float(subject.subject_group_rel.passing_threshold)
+
     period_grade.is_finalized = True
     period_grade.finalized_at = datetime.now(timezone.utc)
     period_grade.finalized_by_staff_id = finalized_by_staff_id
@@ -410,7 +418,6 @@ def finalize_student_period_grade(
     outcome_summary = evaluate_outcomes_for_finalized_period_grade(
         db,
         period_grade.period_grade_id,
-        passing_grade=passing_grade,
         commit=False,
     )
     db.commit()

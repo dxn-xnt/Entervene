@@ -19,6 +19,14 @@ import AddAcademicPeriodModal from "./forms/add-academic-period";
 import { getAllSettings, updateSetting, type GroupedSettings } from "@/lib/settings-api";
 import { useSettings } from "@/context/SettingsContext";
 import { getGradingTemplates, createGradingTemplate } from "@/lib/api";
+import {
+  getSubjectGroups,
+  createSubjectGroup,
+  updateSubjectGroup,
+  deactivateSubjectGroup,
+  type SubjectGroupRead,
+  type AffectedSubject,
+} from "@/lib/subject-groups-api";
 
 function Pill({
   children,
@@ -162,6 +170,30 @@ export default function AdminSystemSettings() {
     window.setTimeout(() => setToastMsg(null), 2400);
   };
 
+  // Subject Groups state
+  const [subjectGroups, setSubjectGroups] = React.useState<SubjectGroupRead[]>([]);
+  const [isLoadingGroups, setIsLoadingGroups] = React.useState(false);
+  const [isAddGroupOpen, setIsAddGroupOpen] = React.useState(false);
+  const [newGroupName, setNewGroupName] = React.useState("");
+  const [newGroupThreshold, setNewGroupThreshold] = React.useState("83");
+  const [groupError, setGroupError] = React.useState<string | null>(null);
+  const [deactivateErrorDialog, setDeactivateErrorDialog] = React.useState<{
+    message: string;
+    affectedSubjects: AffectedSubject[];
+  } | null>(null);
+
+  const loadSubjectGroups = React.useCallback(async () => {
+    setIsLoadingGroups(true);
+    try {
+      const res = await getSubjectGroups();
+      setSubjectGroups(res.groups || []);
+    } catch (err) {
+      console.error("Failed to load subject groups", err);
+    } finally {
+      setIsLoadingGroups(false);
+    }
+  }, []);
+
   // Load Settings from Backend API
   const loadSettingsFromBackend = React.useCallback(async () => {
     setIsLoadingSettings(true);
@@ -174,7 +206,6 @@ export default function AdminSystemSettings() {
         });
       });
 
-      if (flatSettings["subject_passing_grade"]) setSubjectPassing(flatSettings["subject_passing_grade"]);
       if (flatSettings["general_average_passing_grade"]) setAveragePassing(flatSettings["general_average_passing_grade"]);
       if (flatSettings["current_school_year"]) setSchoolYear(flatSettings["current_school_year"]);
       if (flatSettings["active_term"]) setActiveTerm(flatSettings["active_term"]);
@@ -218,7 +249,8 @@ export default function AdminSystemSettings() {
 
   React.useEffect(() => {
     loadSettingsFromBackend();
-  }, [loadSettingsFromBackend]);
+    loadSubjectGroups();
+  }, [loadSettingsFromBackend, loadSubjectGroups]);
 
   const saveSingleSetting = async (key: string, value: string) => {
     try {
@@ -232,11 +264,77 @@ export default function AdminSystemSettings() {
   const handleSaveThresholds = async () => {
     setIsSavingThresholds(true);
     try {
-      await saveSingleSetting("subject_passing_grade", subjectPassing);
       await saveSingleSetting("general_average_passing_grade", averagePassing);
-      showToast("Passing grade threshold saved");
+      showToast("General average threshold saved");
     } finally {
       setIsSavingThresholds(false);
+    }
+  };
+
+  const handleUpdateGroupThreshold = async (groupId: number, passingThreshold: number) => {
+    try {
+      await updateSubjectGroup(groupId, { passing_threshold: passingThreshold });
+      showToast("Subject group passing threshold updated");
+      await loadSubjectGroups();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to update threshold");
+    }
+  };
+
+  const handleToggleGroupActive = async (groupId: number, currentActive: boolean) => {
+    if (currentActive) {
+      // Try deactivating
+      try {
+        await deactivateSubjectGroup(groupId);
+        showToast("Subject group deactivated");
+        await loadSubjectGroups();
+      } catch (err: unknown) {
+        if (err && typeof err === "object" && "affectedSubjects" in err) {
+          const customErr = err as Error & { affectedSubjects: AffectedSubject[] };
+          setDeactivateErrorDialog({
+            message: customErr.message,
+            affectedSubjects: customErr.affectedSubjects,
+          });
+        } else {
+          showToast(err instanceof Error ? err.message : "Failed to deactivate group");
+        }
+      }
+    } else {
+      // Re-activate
+      try {
+        await updateSubjectGroup(groupId, { is_active: true });
+        showToast("Subject group activated");
+        await loadSubjectGroups();
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Failed to activate group");
+      }
+    }
+  };
+
+  const handleCreateGroup = async () => {
+    setGroupError(null);
+    if (!newGroupName.trim()) {
+      setGroupError("Group name is required.");
+      return;
+    }
+    const val = Number(newGroupThreshold);
+    if (isNaN(val) || val < 0 || val > 100) {
+      setGroupError("Passing threshold must be between 0 and 100.");
+      return;
+    }
+
+    try {
+      await createSubjectGroup({
+        name: newGroupName.trim(),
+        passing_threshold: val,
+      });
+      showToast(`Group "${newGroupName.trim()}" created successfully`);
+      setNewGroupName("");
+      setNewGroupThreshold("83");
+      setIsAddGroupOpen(false);
+      await loadSubjectGroups();
+    } catch (err) {
+      setGroupError(err instanceof Error ? err.message : "Failed to create group");
     }
   };
 
@@ -383,45 +481,113 @@ export default function AdminSystemSettings() {
             </header>
             <div className="-mx-4 md:-mx-6 border-b border-black/40" />
 
-            {/* Passing Grade Threshold */}
+            {/* Subject Groups & Passing Thresholds */}
             <Card className="@container/card w-full">
               <Card.Header>
                 <Card.Title className="flex flex-row justify-between w-full items-center">
-                  Passing Grade Threshold
+                  Subject Groups & Passing Thresholds
+                  <Button size="sm" onClick={() => setIsAddGroupOpen(true)}>
+                    Add Group
+                  </Button>
+                </Card.Title>
+              </Card.Header>
+              <Card.Content className="px-4 pt-4 flex flex-col gap-4">
+                <Text as="p" className="font-sans text-sm text-muted-foreground">
+                  Threshold changes apply to grades finalized from this point forward. Already-finalized period grades are not re-evaluated.
+                </Text>
+                <div className="overflow-x-auto">
+                  <Table className="w-full">
+                    <Table.Header>
+                      <Table.Row>
+                        <Table.Head>Group Name</Table.Head>
+                        <Table.Head>Passing Threshold</Table.Head>
+                        <Table.Head>Subjects Assigned</Table.Head>
+                        <Table.Head>Status</Table.Head>
+                        <Table.Head className="text-right">Actions</Table.Head>
+                      </Table.Row>
+                    </Table.Header>
+                    <Table.Body>
+                      {isLoadingGroups ? (
+                        <Table.Row>
+                          <Table.Cell colSpan={5} className="text-center py-4 text-sm text-muted-foreground">
+                            Loading subject groups...
+                          </Table.Cell>
+                        </Table.Row>
+                      ) : subjectGroups.length === 0 ? (
+                        <Table.Row>
+                          <Table.Cell colSpan={5} className="text-center py-4 text-sm text-muted-foreground">
+                            No subject groups found.
+                          </Table.Cell>
+                        </Table.Row>
+                      ) : (
+                        subjectGroups.map((g) => (
+                          <Table.Row key={g.subject_group_id}>
+                            <Table.Cell className="font-medium">{g.name}</Table.Cell>
+                            <Table.Cell>
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  className="w-20"
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  step="0.5"
+                                  defaultValue={g.passing_threshold}
+                                  onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+                                    const val = Number(e.target.value);
+                                    if (!isNaN(val) && val !== g.passing_threshold && val >= 0 && val <= 100) {
+                                      handleUpdateGroupThreshold(g.subject_group_id, val);
+                                    }
+                                  }}
+                                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                                    if (e.key === "Enter") {
+                                      const val = Number(e.currentTarget.value);
+                                      if (!isNaN(val) && val !== g.passing_threshold && val >= 0 && val <= 100) {
+                                        handleUpdateGroupThreshold(g.subject_group_id, val);
+                                      }
+                                    }
+                                  }}
+                                />
+                              </div>
+                            </Table.Cell>
+                            <Table.Cell>{g.subject_count}</Table.Cell>
+                            <Table.Cell>
+                              <Badge variant={g.is_active ? "secondary" : "default"}>
+                                {g.is_active ? "Active" : "Inactive"}
+                              </Badge>
+                            </Table.Cell>
+                            <Table.Cell className="text-right">
+                              <Button
+                                size="sm"
+                                variant={g.is_active ? "outline" : "default"}
+                                onClick={() => handleToggleGroupActive(g.subject_group_id, g.is_active)}
+                              >
+                                {g.is_active ? "Deactivate" : "Activate"}
+                              </Button>
+                            </Table.Cell>
+                          </Table.Row>
+                        ))
+                      )}
+                    </Table.Body>
+                  </Table>
+                </div>
+              </Card.Content>
+            </Card>
+
+            {/* General Average Threshold */}
+            <Card className="@container/card w-full">
+              <Card.Header>
+                <Card.Title className="flex flex-row justify-between w-full items-center">
+                  General Average Passing Grade
                   <Button
                     size="sm"
                     onClick={handleSaveThresholds}
                     disabled={isSavingThresholds}
                   >
-                    {isSavingThresholds ? "Saving..." : "Save Thresholds"}
+                    {isSavingThresholds ? "Saving..." : "Save Threshold"}
                   </Button>
                 </Card.Title>
               </Card.Header>
               <Card.Content className="px-4 pt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="flex flex-col gap-2">
-                  <div className="flex flex-row justify-between w-full items-center">
-                    <Text as="h6" className="font-sans font-medium">
-                      Subject Passing Grade
-                    </Text>
-                    <Input
-                      className="w-20"
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={subjectPassing}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                        setSubjectPassing(e.target.value)
-                      }
-                    />
-                  </div>
-                  <Text
-                    as="p"
-                    className="font-sans text-sm text-muted-foreground"
-                  >
-                    Used to determine if the learner passed an individual
-                    subject.
-                  </Text>
-                </div>
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-row justify-between w-full items-center">
                     <Text as="h6" className="font-sans font-medium">
@@ -977,13 +1143,105 @@ export default function AdminSystemSettings() {
         </Dialog.Content>
       </Dialog>
 
+      {/* Add Subject Group Dialog */}
+      <Dialog open={isAddGroupOpen} onOpenChange={setIsAddGroupOpen}>
+        <Dialog.Content size="md">
+          <Dialog.Header position="static">
+            <Text as="h5" className="font-sans text-xl font-bold">
+              Add Subject Group
+            </Text>
+          </Dialog.Header>
+          <section className="flex flex-col gap-4 p-4 text-sm">
+            {groupError && (
+              <Alert status="error" className="text-sm">
+                {groupError}
+              </Alert>
+            )}
+            <div className="flex flex-col gap-1">
+              <label htmlFor="new-group-name" className="font-medium text-xs">
+                Group Name
+              </label>
+              <Input
+                id="new-group-name"
+                placeholder="e.g. Elective, Practicum"
+                value={newGroupName}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewGroupName(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="new-group-threshold" className="font-medium text-xs">
+                Passing Threshold (Grade)
+              </label>
+              <Input
+                id="new-group-threshold"
+                type="number"
+                min={0}
+                max={100}
+                step="0.5"
+                placeholder="83"
+                value={newGroupThreshold}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewGroupThreshold(e.target.value)}
+              />
+            </div>
+          </section>
+          <Dialog.Footer position="static">
+            <Button onClick={handleCreateGroup}>Create Group</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsAddGroupOpen(false);
+                setGroupError(null);
+              }}
+            >
+              Cancel
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+
+      {/* Deactivate Error Dialog (Lists affected subjects) */}
+      <Dialog
+        open={deactivateErrorDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeactivateErrorDialog(null);
+        }}
+      >
+        <Dialog.Content size="lg">
+          <Dialog.Header position="static">
+            <Text as="h5" className="font-sans text-xl font-bold text-red-600">
+              Cannot Deactivate Group
+            </Text>
+          </Dialog.Header>
+          <section className="flex flex-col gap-3 p-4 text-sm">
+            <p>{deactivateErrorDialog?.message}</p>
+            {deactivateErrorDialog?.affectedSubjects && deactivateErrorDialog.affectedSubjects.length > 0 && (
+              <div className="flex flex-col gap-2 max-h-48 overflow-y-auto border p-2 rounded bg-muted/20">
+                <Text as="p" className="font-semibold text-xs text-muted-foreground">
+                  Assigned Subjects:
+                </Text>
+                <ul className="list-disc list-inside space-y-1 text-xs">
+                  {deactivateErrorDialog.affectedSubjects.map((s) => (
+                    <li key={s.subject_id}>
+                      {s.subject_name} {s.subject_codename ? `(${s.subject_codename})` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+          <Dialog.Footer position="static">
+            <Button onClick={() => setDeactivateErrorDialog(null)}>Close</Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+
       {/* Toast */}
       {toastMsg && (
         <div
           className="fixed right-6 bottom-6 z-50 border-2 border-black bg-white rounded-md px-4 py-3 font-bold text-sm max-w-sm"
           style={{ boxShadow: "5px 5px 0 #000" }}
         >
-          ✓ {toastMsg}
+          {toastMsg}
         </div>
       )}
     </AppLayout>

@@ -71,7 +71,7 @@ export default function AdminSubjectLevel() {
       const matchesSearch = !query || [
         subject.subject_name,
         subject.subject_codename,
-        subject.subject_group,
+        subject.subject_group?.name,
         subject.default_grading_template,
       ].some((value) => value?.toLowerCase().includes(query));
       return matchesStatus && matchesSearch;
@@ -82,6 +82,8 @@ export default function AdminSubjectLevel() {
   const activeSubjects = gradeSubjects.filter((subject) => subject.status === "active");
   const archivedSubjects = gradeSubjects.filter((subject) => subject.status === "archived");
   const totalHours = gradeSubjects.reduce((total, subject) => total + (subject.hours ?? 0), 0);
+  const unsetHoursCount = gradeSubjects.filter((subject) => subject.hours == null).length;
+  const totalHoursDisplay = unsetHoursCount > 0 ? `${totalHours} (${unsetHoursCount} unset)` : String(totalHours);
 
   const handleArchive = async () => {
     if (!pendingArchive) return;
@@ -157,7 +159,7 @@ export default function AdminSubjectLevel() {
                 <OverviewCard title="Total Subjects" count={String(gradeSubjects.length)} />
                 <OverviewCard title="Active Subjects" count={String(activeSubjects.length)} />
                 <OverviewCard title="Archived Subjects" count={String(archivedSubjects.length)} />
-                <OverviewCard title="Total Hours" count={String(totalHours)} />
+                <OverviewCard title="Total Hours" count={totalHoursDisplay} />
               </div>
             </section>
 
@@ -206,8 +208,8 @@ export default function AdminSubjectLevel() {
                       status={subject.status}
                       isArchived={subject.status === "archived"}
                       subjectCode={subject.subject_codename || "No code"}
-                      subjectGroup={subject.subject_group || "Ungrouped"}
-                      hours={subject.hours ?? 0}
+                      subjectGroup={subject.subject_group?.name || "Ungrouped"}
+                      hours={subject.hours != null ? subject.hours : undefined}
                       gradingTemplate={subject.default_grading_template || "No template"}
                       onView={() => navigate(`/admin/subjects/${encodeURIComponent(decodedGrade)}/${subject.subject_id}`)}
                       onArchive={() => setPendingArchive(subject)}

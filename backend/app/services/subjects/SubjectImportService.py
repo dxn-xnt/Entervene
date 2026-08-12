@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.Subject import Subject
+from app.models.academic.SubjectGroup import SubjectGroup
 from app.services.subjects.SubjectShared import (
-    ALLOWED_SUBJECT_GROUPS,
     DEFAULT_SUBJECT_STATUS,
     normalize_optional_text,
     normalized_text,
@@ -26,7 +26,25 @@ SUBJECT_IMPORT_HEADERS = [
 ]
 
 
-def subject_import_template_csv() -> str:
+def subject_import_template_csv(db: Session | None = None) -> str:
+    """Return a CSV string for the subject catalog import template.
+
+    The example row's ``subject_group`` value is fetched from the live
+    SubjectGroup table (first active group by display_order) so the template
+    stays current even when an admin renames or reorders groups.  Falls back to
+    "Core" when db is not supplied or no groups exist.
+    """
+    example_group = "Core"
+    if db is not None:
+        first_group = (
+            db.query(SubjectGroup)
+            .filter(SubjectGroup.is_active.is_(True))
+            .order_by(SubjectGroup.display_order, func.lower(SubjectGroup.name))
+            .first()
+        )
+        if first_group is not None:
+            example_group = first_group.name
+
     output = io.StringIO()
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(SUBJECT_IMPORT_HEADERS)
@@ -34,10 +52,19 @@ def subject_import_template_csv() -> str:
         "GENBIO1",
         "General Biology 1",
         "11",
-        "Specialized",
+        example_group,
         "80",
         "Default SHS",
         "STEM specialized subject",
+    ])
+    writer.writerow([
+        "MATH7",
+        "Mathematics 7",
+        "7",
+        example_group,
+        "",
+        "",
+        "JHS Core Mathematics (hours optional)",
     ])
     return output.getvalue()
 
@@ -104,6 +131,17 @@ def _existing_subject_keys(db: Session) -> set[tuple[int, str]]:
     }
 
 
+def _build_group_map(db: Session) -> tuple[dict[str, SubjectGroup], SubjectGroup | None]:
+    """Return (name_lower -> SubjectGroup, other_group_or_None)."""
+    groups = db.query(SubjectGroup).filter(SubjectGroup.is_active.is_(True)).all()
+    group_map = {normalized_text(g.name): g for g in groups}
+    # Also include inactive groups so we can still match names from older data
+    all_groups = db.query(SubjectGroup).all()
+    full_map = {normalized_text(g.name): g for g in all_groups}
+    other_group = full_map.get("other")
+    return full_map, other_group
+
+
 async def import_subject_catalog_csv(db: Session, file: UploadFile) -> dict:
     rows, errors = await _read_csv_rows(file, SUBJECT_IMPORT_HEADERS)
     if errors:
@@ -113,14 +151,16 @@ async def import_subject_catalog_csv(db: Session, file: UploadFile) -> dict:
             "skipped_count": len(rows),
             "error_count": len(errors),
             "errors": errors,
+            "warnings": [],
         }
 
     levels = _grade_level_map(db)
     existing_keys = _existing_subject_keys(db)
     seen_keys: dict[tuple[int, str], int] = {}
-    allowed_groups = {normalized_text(group): group for group in ALLOWED_SUBJECT_GROUPS}
+    group_map, other_group = _build_group_map(db)
     created: list[Subject] = []
     errors = []
+    warnings: list[str] = []
 
     for row_number, row in rows:
         row_errors = []
@@ -145,20 +185,40 @@ async def import_subject_catalog_csv(db: Session, file: UploadFile) -> dict:
             if academic_level is None:
                 row_errors.append(f"grade_level {grade_level_text} does not match an existing academic level.")
 
-        subject_group = None
+        # Group resolution: unknown name → assign "Other", add warning (not error)
+        resolved_group: SubjectGroup | None = None
         if subject_group_text is None:
             row_errors.append("subject_group cannot be blank.")
         else:
-            subject_group = allowed_groups.get(normalized_text(subject_group_text))
-            if subject_group is None:
-                row_errors.append(f"subject_group {subject_group_text} is not valid.")
+            resolved_group = group_map.get(normalized_text(subject_group_text))
+            if resolved_group is None:
+                if other_group is not None:
+                    resolved_group = other_group
+                    warnings.append(
+                        f"Row {row_number}: subject_group \"{subject_group_text}\" not recognised — "
+                        f"assigned to \"{other_group.name}\"."
+                    )
+                else:
+                    row_errors.append(f"subject_group \"{subject_group_text}\" not recognised and no \"Other\" group exists.")
 
         hours = None
         if hours_text is not None:
-            if not hours_text.isdecimal():
-                row_errors.append("hours must be numeric.")
-            else:
-                hours = int(hours_text)
+            try:
+                parsed_val = int(hours_text)
+                if parsed_val < 0:
+                    warnings.append(
+                        f"Row {row_number} ({subject_code or 'Subject'}): negative hours '{hours_text}' — saved as unset (needs review)."
+                    )
+                else:
+                    hours = parsed_val
+            except ValueError:
+                warnings.append(
+                    f"Row {row_number} ({subject_code or 'Subject'}): invalid hours value '{hours_text}' — saved as unset (needs review)."
+                )
+        else:
+            warnings.append(
+                f"Row {row_number} ({subject_code or 'Subject'}): hours column is empty — saved as unset (needs review)."
+            )
 
         duplicate_key = None
         if academic_level is not None and subject_code is not None:
@@ -179,7 +239,7 @@ async def import_subject_catalog_csv(db: Session, file: UploadFile) -> dict:
         created.append(Subject(
             subject_name=subject_name or "",
             subject_codename=subject_code,
-            subject_group=subject_group,
+            subject_group_id=resolved_group.subject_group_id if resolved_group else (other_group.subject_group_id if other_group else 1),
             hours=hours,
             default_grading_template=normalize_optional_text(row["default_grading_template"]),
             description=normalize_optional_text(row["description"]),
@@ -198,4 +258,5 @@ async def import_subject_catalog_csv(db: Session, file: UploadFile) -> dict:
         "skipped_count": len(rows) - len(created),
         "error_count": len(errors),
         "errors": errors,
+        "warnings": warnings,
     }

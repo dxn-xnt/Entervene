@@ -345,7 +345,6 @@ def evaluate_outcome(
             db,
             prediction_id=prediction_id,
             actual_period_grade=payload.actual_period_grade,
-            passing_grade=payload.passing_grade,
         )
     except (LookupError, ValueError) as exc:
         raise _service_error(exc) from exc

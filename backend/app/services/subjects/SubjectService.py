@@ -8,8 +8,8 @@ from app.services.subjects.SubjectShared import (
     DEFAULT_SUBJECT_STATUS,
     ensure_subject_code_available,
     get_academic_level_or_404,
+    get_subject_group_or_404,
     normalize_optional_text,
-    normalize_subject_group,
     normalize_subject_status,
     subject_to_item,
 )
@@ -17,6 +17,8 @@ from app.services.subjects.SubjectShared import (
 
 def create_subject_record(db: Session, payload: SubjectCreate) -> dict:
     get_academic_level_or_404(db, payload.academic_level_id)
+    get_subject_group_or_404(db, payload.subject_group_id)
+
     subject_name = normalize_optional_text(payload.subject_name)
     if subject_name is None:
         raise HTTPException(status_code=422, detail="Subject name is required.")
@@ -26,7 +28,7 @@ def create_subject_record(db: Session, payload: SubjectCreate) -> dict:
     subject = Subject(
         subject_name=subject_name,
         subject_codename=code,
-        subject_group=normalize_subject_group(payload.subject_group),
+        subject_group_id=payload.subject_group_id,
         hours=payload.hours,
         default_grading_template=normalize_optional_text(payload.default_grading_template),
         description=normalize_optional_text(payload.description),
@@ -53,6 +55,9 @@ def update_subject_record(db: Session, subject_id: int, payload: SubjectUpdate) 
     if "academic_level_id" in data:
         get_academic_level_or_404(db, target_level_id)
 
+    if "subject_group_id" in data and data["subject_group_id"] is not None:
+        get_subject_group_or_404(db, data["subject_group_id"])
+
     target_code = normalize_optional_text(data.get("subject_codename", subject.subject_codename))
     ensure_subject_code_available(db, target_code, target_level_id, exclude_subject_id=subject.subject_id)
 
@@ -63,8 +68,8 @@ def update_subject_record(db: Session, subject_id: int, payload: SubjectUpdate) 
         subject.subject_name = subject_name
     if "subject_codename" in data:
         subject.subject_codename = target_code
-    if "subject_group" in data:
-        subject.subject_group = normalize_subject_group(data["subject_group"])
+    if "subject_group_id" in data and data["subject_group_id"] is not None:
+        subject.subject_group_id = data["subject_group_id"]
     if "hours" in data:
         subject.hours = data["hours"]
     if "default_grading_template" in data:
