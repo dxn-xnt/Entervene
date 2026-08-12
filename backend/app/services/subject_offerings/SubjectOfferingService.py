@@ -13,6 +13,7 @@ from sqlalchemy import func
 from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
+from app.models.academic.Subject import Subject
 from app.services.subject_offerings.SubjectOfferingShared import (
     DEFAULT_OFFERING_STATUS,
     ensure_academic_year_is_active,

@@ -8,3 +8,5 @@ from . import ai
 from . import suggestion
 from . import settings
 from . import notifications
+from . import attendance
+

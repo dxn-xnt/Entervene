@@ -139,15 +139,31 @@ def list_subject_offerings_data(
     elif pathway is not None and pathway != "all":
         # Match by pathway code or legacy string
         norm = normalized_text(pathway)
-        query = query.filter(
-            or_(
-                Subject.is_core.is_(True),
-                ~SubjectOffering.offering_pathways.any(),
-                SubjectOffering.offering_pathways.any(
-                    SubjectOfferingPathway.pathway.has(func.lower(AcademicPathway.code) == norm)
-                ),
+        if norm == "both":
+            query = query.filter(
+                or_(
+                    Subject.is_core.is_(True),
+                    ~SubjectOffering.offering_pathways.any(),
+                    SubjectOffering.offering_pathways.any(
+                        SubjectOfferingPathway.pathway.has(func.lower(AcademicPathway.code) == "both")
+                    ),
+                    SubjectOffering.subject_offering_id.in_(
+                        db.query(SubjectOfferingPathway.subject_offering_id)
+                        .group_by(SubjectOfferingPathway.subject_offering_id)
+                        .having(func.count(SubjectOfferingPathway.pathway_id) > 1)
+                    ),
+                )
             )
-        )
+        else:
+            query = query.filter(
+                or_(
+                    Subject.is_core.is_(True),
+                    ~SubjectOffering.offering_pathways.any(),
+                    SubjectOffering.offering_pathways.any(
+                        SubjectOfferingPathway.pathway.has(func.lower(AcademicPathway.code) == norm)
+                    ),
+                )
+            )
 
     if status is not None:
         query = query.filter(func.lower(func.coalesce(SubjectOffering.status, DEFAULT_OFFERING_STATUS)) == normalize_offering_status(status))
