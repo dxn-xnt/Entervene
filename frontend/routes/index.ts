@@ -42,6 +42,7 @@ export const routes = {
     notifications: "/teacher/notifications",
     predictions: "/teacher/predictions",
     profile: "/teacher/profile",
+    attendance: "/teacher/attendance",
     lessonPlanner: "/teacher/lesson-planner",
     lessonPlannerCreate: "/teacher/lesson-planner/new",
     lessonPlannerEdit: "/teacher/lesson-planner/:planId",
@@ -57,6 +58,7 @@ export const routes = {
     todo: "/student/todo",
     todoView: "/student/todo/:subject/:quizTitle",
     notifications: "/student/notifications",
+    attendance: "/student/attendance",
 
     // TEMP 
     quizTake: "/student/quiz/:subject/:quizTitle/take",

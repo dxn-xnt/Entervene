@@ -1,7 +1,7 @@
 import React from "react"
 import {
   BarChart2, Bell, Book, BookOpen, BookOpenCheck, CheckSquare,
-  ClipboardList, LayoutDashboard, School, Settings, Shield, Users, Sparkles, Calendar
+  ClipboardList, LayoutDashboard, School, Settings, Shield, Users, Sparkles, Calendar, UserCheck
 } from "lucide-react"
 import { routes } from "@/../routes"
 
@@ -26,6 +26,7 @@ export const SidebarConfigs: Record<string, NavItem[]> = {
     teacher: [
       { title: "Dashboard",      url: routes.teacher.dashboard,     icon: <LayoutDashboard /> },
       { title: "Classes",        url: routes.teacher.classes,       icon: <School />          },
+      { title: "Attendance",     url: routes.teacher.attendance,    icon: <UserCheck />       },
       { title: "Classworks",     url: routes.teacher.classworks,    icon: <ClipboardList />   },
       { title: "Lessons",        url: routes.teacher.lessons,       icon: <Book />            },
       { title: "Lesson Planner", url: routes.teacher.lessonPlanner, icon: <BookOpenCheck />   },
@@ -37,6 +38,7 @@ export const SidebarConfigs: Record<string, NavItem[]> = {
     student: [
       { title: "Study Board",   url: routes.student.board,          icon: <LayoutDashboard /> },
       { title: "Subjects",      url: routes.student.subjects,       icon: <BookOpen />        },
+      { title: "Attendance",    url: routes.student.attendance,     icon: <UserCheck />       },
       { title: "Interventions", url: routes.student.interventions,  icon: <Shield />          },
       { title: "Grades",        url: routes.student.grades,         icon: <BarChart2 />       },
       { title: "To Do",         url: routes.student.todo,           icon: <CheckSquare />     },
