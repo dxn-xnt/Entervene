@@ -114,6 +114,9 @@ def _student_list_item(student: Student) -> dict:
     full_name = _student_full_name(student)
     return {
         "student_id": student.student_id,
+        "student_lrn": student.student_lrn,
+        "first_name": student.first_name,
+        "last_name": student.last_name,
         "full_name": full_name,
         "gender": _student_gender_group(student.gender),
         "avatar_initial": (readable_text(student.first_name)[:1] or "?").upper(),

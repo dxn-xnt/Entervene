@@ -84,7 +84,7 @@ def authorize_submission_access(submission: StudentSubmission, current_user: dic
     if role == "teacher":
         staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == current_user_id).first()
         if staff:
-            teacher_owns_assignment(submission.classwork_assignment_id, cast(str, staff.staff_id), db)
+            teacher_owns_assignment(cast(int, submission.classwork_assignment_id), cast(str, staff.staff_id), db)
             return
     raise HTTPException(status_code=403, detail="Access denied")
 
@@ -171,6 +171,34 @@ def assert_student_can_modify_submission(
     return assignment, submission
 
 
+def student_has_excused_exemption(db: Session, student_id: UUID, class_id: int, check_date: datetime) -> bool:
+    try:
+        from app.models.attendance.Attendance import AttendanceRecord, LeaveRequest
+
+        d_val = check_date.date()
+        att = db.query(AttendanceRecord).filter(
+            AttendanceRecord.student_id == student_id,
+            AttendanceRecord.class_id == class_id,
+            AttendanceRecord.date == d_val,
+            AttendanceRecord.status == "excused",
+        ).first()
+        if att:
+            return True
+
+        leave = db.query(LeaveRequest).filter(
+            LeaveRequest.student_id == student_id,
+            LeaveRequest.class_id == class_id,
+            LeaveRequest.status == "approved",
+            LeaveRequest.start_date <= d_val,
+            LeaveRequest.end_date >= d_val,
+        ).first()
+        if leave:
+            return True
+    except Exception as err:
+        print(f"[Attendance Exemption Check Error] {err}")
+    return False
+
+
 async def submit_student_work(
     assignment_id: int,
     request: Request,
@@ -214,6 +242,13 @@ async def submit_student_work(
 
     due_date = aware_utc(assignment.due_date)
     is_late = bool(due_date and now > due_date)
+
+    # Check Excused Attendance / Approved Leave Exemption
+    if is_late:
+        has_excused = student_has_excused_exemption(db, cast(UUID, getattr(student, "student_id")), cast(int, assignment.class_id), due_date or now)
+        if has_excused:
+            is_late = False  # Excused exemption applied: bypass late penalty & restriction
+
     if is_late and not assignment.allow_late_submissions:
         raise HTTPException(status_code=403, detail="Cannot submit after due date")
     enforce_attempt_limit = classwork_uses_attempt_limit(classwork)
@@ -303,8 +338,8 @@ def unsubmit_student_work(assignment_id: int, student: Student, db: Session) -> 
     if not submission.attachments:
         raise HTTPException(status_code=400, detail="No files to keep; upload work first")
 
-    submission.status = "pending"
-    submission.submitted_at = None
+    setattr(submission, "status", "pending")
+    setattr(submission, "submitted_at", None)
     db.commit()
     db.refresh(submission)
     return build_submission_response(submission, db)
