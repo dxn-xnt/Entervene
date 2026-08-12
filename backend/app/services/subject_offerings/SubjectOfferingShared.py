@@ -187,6 +187,24 @@ def ensure_offering_available(
             )
 
 
+def get_offering_legacy_pathway(offering: SubjectOffering) -> str:
+    pathway_links = getattr(offering, "offering_pathways", None) or []
+    pathway_ids = [p.pathway_id for p in pathway_links if p]
+    if not pathway_ids:
+        return getattr(offering, "pathway", None) or "general"
+    if len(pathway_ids) == 1:
+        pw = getattr(pathway_links[0], "pathway", None)
+        if pw and getattr(pw, "code", None):
+            code = str(pw.code).lower()
+            if "medical" in code:
+                return "stem_medical"
+            if "engineering" in code:
+                return "stem_engineering"
+            return code
+        return "general"
+    return "both"
+
+
 def offering_to_item(
     offering: SubjectOffering,
     subject: Subject | None = None,
@@ -213,15 +231,7 @@ def offering_to_item(
         if p.pathway
     ]
     pathway_ids = [p["id"] for p in pathways_data]
-
-    # Legacy string compatibility
-    if not pathway_ids:
-        legacy_pathway = getattr(offering, "pathway", None) or "general"
-    elif len(pathway_ids) == 1:
-        code = pathways_data[0]["code"]
-        legacy_pathway = "stem_medical" if "medical" in code else ("stem_engineering" if "engineering" in code else code)
-    else:
-        legacy_pathway = "both"
+    legacy_pathway = get_offering_legacy_pathway(offering)
 
     return {
         "subject_offering_id": offering.subject_offering_id,

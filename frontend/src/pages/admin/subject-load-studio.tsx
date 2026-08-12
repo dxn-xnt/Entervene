@@ -62,6 +62,29 @@ function timeValueToString(tv: TimeValue): string {
   return `${pad(h)}:${pad(tv.minute)}`;
 }
 
+function isSubjectOfferedForClass(
+  sub: { subject_id: number; academic_level_id: number },
+  cls: { academic_level_id: number; pathway?: string | null },
+  offerings: Array<{ subject_id: number; academic_level_id: number; pathway?: string | null }>
+): boolean {
+  if (sub.academic_level_id !== cls.academic_level_id) return false;
+  if (!offerings || offerings.length === 0) return true;
+
+  const clsPathway = (cls.pathway || "general").toLowerCase();
+
+  return offerings.some((so) => {
+    if (so.subject_id !== sub.subject_id || so.academic_level_id !== cls.academic_level_id) {
+      return false;
+    }
+    const soPathway = (so.pathway || "general").toLowerCase();
+    return (
+      soPathway === "both" ||
+      soPathway === clsPathway ||
+      (soPathway === "general" && clsPathway === "general")
+    );
+  });
+}
+
 const DAYS = [
   { key: "MON", label: "M" },
   { key: "TUE", label: "T" },
@@ -133,32 +156,32 @@ export default function SubjectLoadStudio() {
     const map: Record<string, { title: string; explanation: string; severity: "error" | "warning"; items: typeof conflicts }> = {};
 
     conflicts.forEach((conf) => {
-      let key = conf.rule;
-      let title = conf.rule.replace(/_/g, " ");
-      let explanation = conf.message;
-      let severity = conf.severity;
+      let key = conf.rule || "UNSPECIFIED_RULE";
+      let title = key.replace(/_/g, " ");
+      let explanation = conf.message || "Conflict error detected.";
+      let severity = conf.severity || "error";
 
-      if (conf.rule === "MATH_SCIENCE_DURATION_MISMATCH" || conf.rule === "DURATION_MISMATCH") {
+      if (key === "MATH_SCIENCE_DURATION_MISMATCH" || key === "DURATION_MISMATCH") {
         key = "DURATION_MISMATCH";
         title = "Period shorter than subject requires";
         explanation = "Math & Science core subjects need 60 min/day. The active break schedule leaves 45-min periods, so every Math/Science slot falls short by 15 min.";
         severity = "warning";
-      } else if (conf.rule === "TEACHER_DOUBLE_BOOKING") {
+      } else if (key === "TEACHER_DOUBLE_BOOKING") {
         key = "TEACHER_DOUBLE_BOOKING";
         title = "Teacher double-booked";
         explanation = "Assigned teacher has overlapping period commitments across two classes.";
         severity = "error";
-      } else if (conf.rule === "SECTION_DOUBLE_BOOKING") {
+      } else if (key === "SECTION_DOUBLE_BOOKING") {
         key = "SECTION_DOUBLE_BOOKING";
         title = "Section double-booked";
         explanation = "Section has two subjects scheduled at the exact same time slot.";
         severity = "error";
-      } else if (conf.rule === "BREAK_TIME_VIOLATION") {
+      } else if (key === "BREAK_TIME_VIOLATION") {
         key = "BREAK_TIME_VIOLATION";
         title = "Break time overlap";
         explanation = "Subject schedule overlaps with locked Homeroom, Recess, or Lunch walls.";
         severity = "error";
-      } else if (conf.rule === "TEACHER_CAPACITY_LIMIT") {
+      } else if (key === "TEACHER_CAPACITY_LIMIT") {
         key = "TEACHER_CAPACITY_LIMIT";
         title = "Teacher workload capacity exceeded";
         explanation = "Assigned daily or weekly teaching hours exceed max capacity policy limits.";
@@ -218,23 +241,11 @@ export default function SubjectLoadStudio() {
 
       const offerings = data.subject_offerings || [];
 
-      data.classes.forEach((cls) => {
+      (data.classes || []).forEach((cls) => {
         // Find subjects matching class academic level & pathway offering for this period
-        const levelSubjects = data.subjects.filter((sub) => {
-          if (sub.academic_level_id !== cls.academic_level_id) return false;
-          if (offerings.length > 0) {
-            const clsPathway = (cls.pathway || "general").toLowerCase();
-            return offerings.some(
-              (so) =>
-                so.subject_id === sub.subject_id &&
-                so.academic_level_id === cls.academic_level_id &&
-                (so.pathway === "both" ||
-                  so.pathway.toLowerCase() === clsPathway ||
-                  (so.pathway === "general" && clsPathway === "general"))
-            );
-          }
-          return true;
-        });
+        const levelSubjects = (data.subjects || []).filter((sub) =>
+          isSubjectOfferedForClass(sub, cls, offerings)
+        );
 
         levelSubjects.forEach((sub) => {
           const matched = existing.filter(
@@ -431,22 +442,10 @@ export default function SubjectLoadStudio() {
 
       targetClasses.forEach((cls) => {
         const offerings = studioData?.subject_offerings || [];
-        const clsPathway = (cls.pathway || "general").toLowerCase();
 
-        const levelSubjects = (studioData?.subjects || []).filter((sub) => {
-          if (sub.academic_level_id !== cls.academic_level_id) return false;
-          if (offerings.length > 0) {
-            return offerings.some(
-              (so) =>
-                so.subject_id === sub.subject_id &&
-                so.academic_level_id === cls.academic_level_id &&
-                (so.pathway === "both" ||
-                  so.pathway.toLowerCase() === clsPathway ||
-                  (so.pathway === "general" && clsPathway === "general"))
-            );
-          }
-          return true;
-        });
+        const levelSubjects = (studioData?.subjects || []).filter((sub) =>
+          isSubjectOfferedForClass(sub, cls, offerings)
+        );
         levelSubjects.forEach((sub) => {
           const hasSlot = currentLoads.some(
             (l) => l.class_id === cls.class_id && l.subject_id === sub.subject_id
@@ -595,8 +594,8 @@ export default function SubjectLoadStudio() {
             publishScope === "section"
               ? l.class_id === targetClassId
               : publishScope === "level"
-              ? levelClassIds.has(l.class_id)
-              : true; // "all"
+                ? levelClassIds.has(l.class_id)
+                : true; // "all"
 
           if (action === "publish" && isInScope && Boolean(l.staff_id)) {
             return { ...l, status: "published", is_locked: true };
@@ -722,11 +721,10 @@ export default function SubjectLoadStudio() {
                   </h1>
                   <Badge
                     size="sm"
-                    className={`border-2 border-black font-bold px-2.5 py-0.5 shadow-[2px_2px_0_#000] text-xs ${
-                      isCurrentPublished
-                        ? "bg-emerald-300 text-emerald-950"
-                        : "bg-amber-300 text-amber-950"
-                    }`}
+                    className={`border-2 border-black font-bold px-2.5 py-0.5 shadow-[2px_2px_0_#000] text-xs ${isCurrentPublished
+                      ? "bg-emerald-300 text-emerald-950"
+                      : "bg-amber-300 text-amber-950"
+                      }`}
                   >
                     {isCurrentPublished ? `🔒 PUBLISHED v${currentVersionNumber}.0` : `📝 DRAFT v${currentVersionNumber}.0`}
                   </Badge>
@@ -808,17 +806,16 @@ export default function SubjectLoadStudio() {
                     const scope = selectedGradeId !== "all" ? "level" : "all";
                     void handleSave("publish", scope);
                   }}
-                  className={`border-2 border-black border-r-0 rounded-r-none shadow-[2px_2px_0_#000] font-bold text-xs ${
-                    isHeaderPublishDisabled
-                      ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-60"
-                      : "bg-primary text-primary-foreground hover:bg-primary/90"
-                  }`}
+                  className={`border-2 border-black border-r-0 rounded-r-none shadow-[2px_2px_0_#000] font-bold text-xs ${isHeaderPublishDisabled
+                    ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-60"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
+                    }`}
                   title={
                     unassignedInCurrentScope > 0
                       ? `Assign all ${unassignedInCurrentScope} unassigned teacher(s) in this ${selectedGradeId !== "all" ? "grade level" : "school"} before publishing`
                       : errorConflictsCount > 0
-                      ? `Fix ${errorConflictsCount} conflict errors before publishing`
-                      : "Publish official schedule"
+                        ? `Fix ${errorConflictsCount} conflict errors before publishing`
+                        : "Publish official schedule"
                   }
                 >
                   <Send className="size-3.5 mr-1.5" />
@@ -830,11 +827,10 @@ export default function SubjectLoadStudio() {
                   variant="default"
                   disabled={isHeaderPublishDisabled}
                   onClick={() => setIsPublishOpen((prev) => !prev)}
-                  className={`border-2 border-black rounded-l-none px-2 shadow-[2px_2px_0_#000] font-bold text-xs ${
-                    isHeaderPublishDisabled
-                      ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-60"
-                      : "bg-primary text-primary-foreground hover:bg-primary/90"
-                  }`}
+                  className={`border-2 border-black rounded-l-none px-2 shadow-[2px_2px_0_#000] font-bold text-xs ${isHeaderPublishDisabled
+                    ? "bg-gray-300 text-gray-600 cursor-not-allowed opacity-60"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
+                    }`}
                   title="Publishing options"
                 >
                   <ChevronDown className="size-3.5" />
@@ -873,14 +869,13 @@ export default function SubjectLoadStudio() {
                         unassignedTotal > 0
                           ? `Cannot publish master schedule: ${unassignedTotal} subject(s) school-wide have no assigned teacher`
                           : errorConflictsCount > 0
-                          ? "Fix all schedule conflicts before publishing master schedule"
-                          : "Publish all sections & grades school-wide"
+                            ? "Fix all schedule conflicts before publishing master schedule"
+                            : "Publish all sections & grades school-wide"
                       }
-                      className={`text-xs font-bold text-left px-2.5 py-2 flex items-center gap-2 rounded transition-colors ${
-                        isMasterPublishDisabled
-                          ? "text-gray-400 cursor-not-allowed opacity-60 bg-gray-50"
-                          : "hover:bg-purple-100 text-purple-950"
-                      }`}
+                      className={`text-xs font-bold text-left px-2.5 py-2 flex items-center gap-2 rounded transition-colors ${isMasterPublishDisabled
+                        ? "text-gray-400 cursor-not-allowed opacity-60 bg-gray-50"
+                        : "hover:bg-purple-100 text-purple-950"
+                        }`}
                     >
                       <Globe className="size-3.5 text-purple-700" />
                       <div>
@@ -971,9 +966,8 @@ export default function SubjectLoadStudio() {
             <div className="md:col-span-2 flex flex-wrap items-center justify-end gap-2 pt-4 md:pt-0">
               <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
                 <span
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 border-2 border-black font-bold shadow-[1px_1px_0_#000] ${
-                    prePublishChecklistCount === 6 ? "bg-emerald-100 text-emerald-950" : "bg-amber-100 text-amber-950"
-                  }`}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 border-2 border-black font-bold shadow-[1px_1px_0_#000] ${prePublishChecklistCount === 6 ? "bg-emerald-100 text-emerald-950" : "bg-amber-100 text-amber-950"
+                    }`}
                 >
                   <CheckCircle2 className="size-3.5 text-emerald-700" />
                   <span>Checklist <strong>{prePublishChecklistCount}/6 passed</strong></span>
@@ -1056,22 +1050,9 @@ export default function SubjectLoadStudio() {
                 ) : (
                   filteredClasses.map((cls) => {
                     const offerings = studioData?.subject_offerings || [];
-                    const clsPathway = (cls.pathway || "general").toLowerCase();
-
-                    const classSubjects = (studioData?.subjects || []).filter((sub) => {
-                      if (sub.academic_level_id !== cls.academic_level_id) return false;
-                      if (offerings.length > 0) {
-                        return offerings.some(
-                          (so) =>
-                            so.subject_id === sub.subject_id &&
-                            so.academic_level_id === cls.academic_level_id &&
-                            (so.pathway === "both" ||
-                              so.pathway.toLowerCase() === clsPathway ||
-                              (so.pathway === "general" && clsPathway === "general"))
-                        );
-                      }
-                      return true;
-                    });
+                    const classSubjects = (studioData?.subjects || []).filter((sub) =>
+                      isSubjectOfferedForClass(sub, cls, offerings)
+                    );
 
                     const sectionLoads = loads.filter((l) => l.class_id === cls.class_id);
                     const sectionUnassignedCount = sectionLoads.filter((l) => !l.staff_id).length;
@@ -1095,11 +1076,10 @@ export default function SubjectLoadStudio() {
                             </Text>
                             <Badge
                               size="sm"
-                              className={`border-2 border-black font-bold text-[10px] px-2 py-0.5 shadow-[1px_1px_0_#000] ${
-                                isSectionPublished
-                                  ? "bg-emerald-200 text-emerald-950"
-                                  : "bg-amber-200 text-amber-950"
-                              }`}
+                              className={`border-2 border-black font-bold text-[10px] px-2 py-0.5 shadow-[1px_1px_0_#000] ${isSectionPublished
+                                ? "bg-emerald-200 text-emerald-950"
+                                : "bg-amber-200 text-amber-950"
+                                }`}
                             >
                               {isSectionPublished ? "🔒 PUBLISHED" : "📝 DRAFT"}
                             </Badge>
@@ -1136,17 +1116,16 @@ export default function SubjectLoadStudio() {
                                 variant="outline"
                                 disabled={isPublishSectionDisabled}
                                 onClick={() => void handleSave("publish", "section", cls.class_id)}
-                                className={`border-2 border-black font-bold text-xs shadow-[1px_1px_0_#000] ${
-                                  isPublishSectionDisabled
-                                    ? "bg-gray-200 text-gray-500 cursor-not-allowed opacity-70"
-                                    : "bg-emerald-100 hover:bg-emerald-200 text-emerald-950"
-                                }`}
+                                className={`border-2 border-black font-bold text-xs shadow-[1px_1px_0_#000] ${isPublishSectionDisabled
+                                  ? "bg-gray-200 text-gray-500 cursor-not-allowed opacity-70"
+                                  : "bg-emerald-100 hover:bg-emerald-200 text-emerald-950"
+                                  }`}
                                 title={
                                   sectionUnassignedCount > 0
                                     ? `Assign all ${sectionUnassignedCount} unassigned teacher(s) in this section before publishing`
                                     : sectionHasErrors
-                                    ? "Fix schedule conflicts in this section before publishing"
-                                    : "Publish only this section's schedule"
+                                      ? "Fix schedule conflicts in this section before publishing"
+                                      : "Publish only this section's schedule"
                                 }
                               >
                                 <Send className="size-3.5 mr-1 text-emerald-800" />
@@ -1210,15 +1189,14 @@ export default function SubjectLoadStudio() {
                                   <Table.Row
                                     key={sub.subject_id}
                                     id={`subject-row-${cls.class_id}_${sub.subject_id}`}
-                                    className={`transition-all duration-200 border-b border-black/20 ${
-                                      isHighlighted
-                                        ? "bg-amber-200 border-4 border-black ring-4 ring-amber-400 shadow-xl"
-                                        : conflict
+                                    className={`transition-all duration-200 border-b border-black/20 ${isHighlighted
+                                      ? "bg-amber-200 border-4 border-black ring-4 ring-amber-400 shadow-xl"
+                                      : conflict
                                         ? conflict.severity === "error"
                                           ? "bg-red-50/70 border-l-4 border-l-red-600"
                                           : "bg-amber-50/70 border-l-4 border-l-amber-500"
                                         : "hover:bg-gray-50/80"
-                                    }`}
+                                      }`}
                                   >
                                     {/* Subject Column */}
                                     <Table.Cell className="py-2.5 px-3 align-middle min-w-[210px]">
@@ -1229,9 +1207,8 @@ export default function SubjectLoadStudio() {
                                           </span>
                                           {conflict && (
                                             <span
-                                              className={`text-[11px] font-bold px-1.5 py-0.5 rounded border border-black ${
-                                                conflict.severity === "error" ? "bg-red-200 text-red-950" : "bg-amber-200 text-amber-950"
-                                              }`}
+                                              className={`text-[11px] font-bold px-1.5 py-0.5 rounded border border-black ${conflict.severity === "error" ? "bg-red-200 text-red-950" : "bg-amber-200 text-amber-950"
+                                                }`}
                                               title={conflict.message}
                                             >
                                               ⚠️ {conflict.severity === "error" ? "Conflict" : "15 min short"}
@@ -1273,8 +1250,8 @@ export default function SubjectLoadStudio() {
                                                         type="button"
                                                         onClick={() => handleToggleDay(slotKey, d.key)}
                                                         className={`size-6 text-[11px] font-bold border-2 border-black transition-all ${isSelected
-                                                            ? "bg-primary text-primary-foreground shadow-[1px_1px_0_#000]"
-                                                            : "bg-background text-foreground opacity-50 hover:opacity-100"
+                                                          ? "bg-primary text-primary-foreground shadow-[1px_1px_0_#000]"
+                                                          : "bg-background text-foreground opacity-50 hover:opacity-100"
                                                           }`}
                                                       >
                                                         {d.label}
@@ -1352,13 +1329,12 @@ export default function SubjectLoadStudio() {
                                                 }
                                               >
                                                 <Select.Trigger
-                                                  className={`w-[170px] h-8 border-2 border-black font-bold text-xs transition-colors ${
-                                                    !currentStaffId
-                                                      ? "bg-red-50 text-red-900 border-red-500 shadow-[1px_1px_0_#000]"
-                                                      : currentHasConflict
+                                                  className={`w-[170px] h-8 border-2 border-black font-bold text-xs transition-colors ${!currentStaffId
+                                                    ? "bg-red-50 text-red-900 border-red-500 shadow-[1px_1px_0_#000]"
+                                                    : currentHasConflict
                                                       ? "bg-red-100 text-red-950 border-red-600 font-bold"
                                                       : "bg-white text-black shadow-[1px_1px_0_#000]"
-                                                  }`}
+                                                    }`}
                                                 >
                                                   <div className="flex items-center justify-between w-full overflow-hidden">
                                                     <Select.Value placeholder="Select Teacher" />
@@ -1412,9 +1388,8 @@ export default function SubjectLoadStudio() {
                                                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
                                                   <div className="w-12 h-1.5 bg-gray-200 border border-black rounded-full overflow-hidden">
                                                     <div
-                                                      className={`h-full ${
-                                                        pct > 90 ? "bg-red-500" : pct > 70 ? "bg-amber-500" : "bg-emerald-500"
-                                                      }`}
+                                                      className={`h-full ${pct > 90 ? "bg-red-500" : pct > 70 ? "bg-amber-500" : "bg-emerald-500"
+                                                        }`}
                                                       style={{ width: `${pct}%` }}
                                                     />
                                                   </div>
@@ -1514,18 +1489,16 @@ export default function SubjectLoadStudio() {
                         return (
                           <div
                             key={group.title}
-                            className={`p-3 border-2 border-black text-xs transition-all shadow-[2px_2px_0_#000] ${
-                              group.severity === "error"
-                                ? "bg-red-50 text-red-950 border-red-800"
-                                : "bg-amber-50 text-amber-950 border-amber-800"
-                            }`}
+                            className={`p-3 border-2 border-black text-xs transition-all shadow-[2px_2px_0_#000] ${group.severity === "error"
+                              ? "bg-red-50 text-red-950 border-red-800"
+                              : "bg-amber-50 text-amber-950 border-amber-800"
+                              }`}
                           >
                             <div className="flex items-center justify-between font-bold mb-1">
                               <span className="text-sm font-bold">{group.title}</span>
                               <span
-                                className={`px-2 py-0.5 border border-black font-bold text-xs rounded ${
-                                  group.severity === "error" ? "bg-red-200 text-red-950" : "bg-amber-200 text-amber-950"
-                                }`}
+                                className={`px-2 py-0.5 border border-black font-bold text-xs rounded ${group.severity === "error" ? "bg-red-200 text-red-950" : "bg-amber-200 text-amber-950"
+                                  }`}
                               >
                                 {group.items.length}
                               </span>
@@ -1610,10 +1583,10 @@ export default function SubjectLoadStudio() {
                                 <div
                                   key={dayKey}
                                   className={`flex flex-col items-center p-1 border text-[10px] font-bold ${isOverLimit
-                                      ? "bg-red-200 border-red-700 text-red-900"
-                                      : hrs > 0
-                                        ? "bg-emerald-100 border-emerald-700 text-emerald-900"
-                                        : "bg-background border-black/30 text-muted-foreground"
+                                    ? "bg-red-200 border-red-700 text-red-900"
+                                    : hrs > 0
+                                      ? "bg-emerald-100 border-emerald-700 text-emerald-900"
+                                      : "bg-background border-black/30 text-muted-foreground"
                                     }`}
                                 >
                                   <span>{dayKey.slice(0, 2)}</span>

@@ -109,6 +109,23 @@ def ensure_default_period_templates(db: Session):
     db.commit()
 
 
+def offering_pathway_code(so: SubjectOffering) -> str:
+    pathway_links = getattr(so, "offering_pathways", None) or []
+    if not pathway_links:
+        return getattr(so, "pathway", None) or "general"
+    if len(pathway_links) == 1:
+        pw = getattr(pathway_links[0], "pathway", None)
+        if pw and getattr(pw, "code", None):
+            code = str(pw.code).lower()
+            if "medical" in code:
+                return "stem_medical"
+            if "engineering" in code:
+                return "stem_engineering"
+            return code
+        return "general"
+    return "both"
+
+
 @router.get("/studio-data")
 def get_subject_load_studio_data(
     academic_period_id: int | None = Query(None),
@@ -215,7 +232,8 @@ def get_subject_load_studio_data(
                 "academic_year_id": so.academic_year_id,
                 "academic_level_id": so.academic_level_id,
                 "academic_period_id": so.academic_period_id,
-                "pathway_ids": [op.pathway_id for op in so.offering_pathways],
+                "pathway": offering_pathway_code(so),
+                "pathway_ids": [op.pathway_id for op in (getattr(so, "offering_pathways", None) or [])],
             }
             for so in offerings
         ],
