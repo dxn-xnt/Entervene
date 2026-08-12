@@ -7,6 +7,8 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { getMySchedule, type DynamicScheduleResponse } from "@/lib/api";
 import { DynamicScheduleTable } from "@/components/dynamic-schedule-table";
 import { useEffect } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { Pencil, X } from "lucide-react";
 
 const weekDayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
@@ -146,7 +148,7 @@ export default function AdminProfile() {
               </div>
               <div className="flex flex-row gap-2">
                 <Button onClick={openModal}>
-                  <Pen className="size-4 mr-2" /> Edit Profile
+                  <Pencil className="size-4 mr-2" /> Edit Profile
                 </Button>
               </div>
             </header>

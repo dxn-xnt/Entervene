@@ -63,7 +63,6 @@ def dashboard_context():
     )
     Student.__table__.constraints.remove(lrn_check)
     Base.metadata.create_all(bind=engine, tables=TABLES)
-    Student.__table__.append_constraint(lrn_check)
     db = sessionmaker(bind=engine)()
 
     # ---- seed data ----

@@ -85,7 +85,7 @@ function pathwaysForGrade(gradeLevel: number | null | undefined, allowed: Subjec
 
 function getSuggestedHoursPlaceholder(
   gradeLevel: number | null | undefined,
-  groupName: string | null | undefined
+  _groupName: string | null | undefined
 ): string {
   if (gradeLevel != null) {
     if (gradeLevel >= 7 && gradeLevel <= 10) {

@@ -493,8 +493,8 @@ function OverviewTab({
               Average mastery per subject load
             </Text>
             <div className="grid gap-2">
-              {(classSubjects.length > 0 ? classSubjects : selectedClass.subjects).map((subject, index) => {
-                const name = subject.subject || (subject as any).name;
+              {(classSubjects.length > 0 ? classSubjects : selectedClass.subjects).map((subject: any, index: number) => {
+                const name = subject.subject || subject.name || "Subject";
                 const progress = (subject as any).progress || 90;
                 return (
                   <div key={name} className="grid grid-cols-[80px_1fr_34px] items-center gap-2 text-xs">
@@ -731,7 +731,7 @@ function StudentsTab({
   );
 }
 
-function SubjectLoadTab() {
+function SubjectLoadTab({ selectedClass: _selectedClass }: { selectedClass?: ClassRecord }) {
   const { classId } = useParams();
   const [scheduleData, setScheduleData] = useState<DynamicScheduleResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);

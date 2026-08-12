@@ -18,7 +18,17 @@ import AddAcademicPeriodModal from "./forms/add-academic-period";
 
 import { getAllSettings, updateSetting, type GroupedSettings } from "@/lib/settings-api";
 import { useSettings } from "@/context/SettingsContext";
-import { getGradingTemplates, createGradingTemplate } from "@/lib/api";
+import {
+  getGradingTemplates,
+  createGradingTemplate,
+  fetchPathways,
+  createPathway,
+  updatePathway,
+  fetchPathwayScopes,
+  updatePathwayScopes,
+  type AcademicPathwayRead,
+  type PathwayScopeRead,
+} from "@/lib/api";
 import {
   getSubjectGroups,
   createSubjectGroup,
@@ -139,7 +149,6 @@ export default function AdminSystemSettings() {
   const [isSavingScope, setIsSavingScope] = React.useState(false);
 
   // Passing grade thresholds
-  const [subjectPassing, setSubjectPassing] = React.useState("80");
   const [averagePassing, setAveragePassing] = React.useState("80");
 
   // Academic calendar
@@ -182,6 +191,14 @@ export default function AdminSystemSettings() {
     affectedSubjects: AffectedSubject[];
   } | null>(null);
 
+  // Pathways state
+  const [pathways, setPathways] = React.useState<AcademicPathwayRead[]>([]);
+  const [isLoadingPathways, setIsLoadingPathways] = React.useState(false);
+  const [isAddPathwayOpen, setIsAddPathwayOpen] = React.useState(false);
+  const [pathwayName, setPathwayName] = React.useState("");
+  const [pathwayCode, setPathwayCode] = React.useState("");
+  const [pathwayError, setPathwayError] = React.useState<string | null>(null);
+
   const loadSubjectGroups = React.useCallback(async () => {
     setIsLoadingGroups(true);
     try {
@@ -193,6 +210,85 @@ export default function AdminSystemSettings() {
       setIsLoadingGroups(false);
     }
   }, []);
+
+  const loadPathways = React.useCallback(async () => {
+    setIsLoadingPathways(true);
+    try {
+      const res = await fetchPathways();
+      setPathways(res.pathways || []);
+    } catch (err) {
+      console.error("Failed to load pathways", err);
+    } finally {
+      setIsLoadingPathways(false);
+    }
+  }, []);
+
+  const handleCreatePathway = async () => {
+    if (!pathwayName.trim() || !pathwayCode.trim()) {
+      setPathwayError("Both pathway code and name are required.");
+      return;
+    }
+    setPathwayError(null);
+    try {
+      await createPathway({ code: pathwayCode, name: pathwayName });
+      showToast("Pathway created successfully.");
+      setIsAddPathwayOpen(false);
+      setPathwayName("");
+      setPathwayCode("");
+      loadPathways();
+    } catch (err: any) {
+      setPathwayError(err?.message || "Failed to create pathway.");
+    }
+  };
+
+  // Pathway Scopes state
+  const [pathwayScopes, setPathwayScopes] = React.useState<PathwayScopeRead[]>([]);
+  const [_isLoadingScopes, setIsLoadingScopes] = React.useState(false);
+
+  const loadPathwayScopes = React.useCallback(async () => {
+    setIsLoadingScopes(true);
+    try {
+      const res = await fetchPathwayScopes(1);
+      setPathwayScopes(res.scopes || []);
+    } catch (err) {
+      console.error("Failed to load pathway scopes", err);
+    } finally {
+      setIsLoadingScopes(false);
+    }
+  }, []);
+
+  const handleTogglePathwayScope = async (scope: PathwayScopeRead) => {
+    try {
+      await updatePathwayScopes({
+        academic_year_id: scope.academic_year_id,
+        scopes: [
+          {
+            academic_level_id: scope.academic_level_id,
+            requires_pathway: !scope.requires_pathway,
+          },
+        ],
+      });
+      showToast(`Updated pathway requirement for Grade ${scope.grade_level}.`);
+      loadPathwayScopes();
+    } catch (err: any) {
+      showToast(err?.message || "Failed to update pathway scope.");
+    }
+  };
+
+  const handleTogglePathwayEnabled = async (pathway: AcademicPathwayRead) => {
+    try {
+      await updatePathway(pathway.id, { is_enabled: !pathway.is_enabled });
+      showToast(`Pathway ${pathway.is_enabled ? "disabled" : "enabled"} successfully.`);
+      loadPathways();
+    } catch (err: any) {
+      showToast(err?.message || "Failed to update pathway.");
+    }
+  };
+
+  React.useEffect(() => {
+    loadPathways();
+    loadPathwayScopes();
+  }, [loadPathways, loadPathwayScopes]);
 
   // Load Settings from Backend API
   const loadSettingsFromBackend = React.useCallback(async () => {
@@ -775,39 +871,91 @@ export default function AdminSystemSettings() {
                   </div>
 
                   <div className="border-2 border-black rounded-md p-4 flex flex-col gap-3 bg-neutral-50">
-                    <Text as="h6" className="font-sans font-bold">
-                      Senior High School Setup
-                    </Text>
+                    <div className="flex items-center justify-between">
+                      <Text as="h6" className="font-sans font-bold">
+                        Senior High School Pathways
+                      </Text>
+                      <Dialog open={isAddPathwayOpen} onOpenChange={setIsAddPathwayOpen}>
+                        <Dialog.Trigger>
+                          <Button size="sm" disabled={!shsEnabled}>
+                            Add Pathway
+                          </Button>
+                        </Dialog.Trigger>
+                        <Dialog.Content>
+                          <Dialog.Header>
+                            <Text as="h5" className="font-sans text-lg font-bold">Add New SHS Academic Pathway</Text>
+                          </Dialog.Header>
+                          <Text as="p" className="text-xs text-muted-foreground mb-4">
+                            Configure a new Senior High School academic pathway for section and subject assignment.
+                          </Text>
+                          {pathwayError && (
+                            <Alert status="error" className="mb-4">
+                              {pathwayError}
+                            </Alert>
+                          )}
+                          <div className="flex flex-col gap-4 py-2">
+                            <div className="flex flex-col gap-1.5">
+                              <Text as="p" className="text-sm font-medium">Pathway Code (Slug)</Text>
+                              <Input
+                                placeholder="e.g. ict-programming"
+                                value={pathwayCode}
+                                onChange={(e) => setPathwayCode(e.target.value)}
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                              <Text as="p" className="text-sm font-medium">Pathway Display Name</Text>
+                              <Input
+                                placeholder="e.g. ICT and Computer Programming Related"
+                                value={pathwayName}
+                                onChange={(e) => setPathwayName(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex gap-2 justify-end mt-4">
+                            <Button variant="outline" onClick={() => setIsAddPathwayOpen(false)}>
+                              Cancel
+                            </Button>
+                            <Button onClick={handleCreatePathway}>
+                              Save Pathway
+                            </Button>
+                          </div>
+                        </Dialog.Content>
+                      </Dialog>
+                    </div>
+
                     <div className="flex gap-2 flex-wrap">
-                      <Pill locked>Academic Track</Pill>
-                      <Pill locked>STEM Strand</Pill>
+                      <Pill locked>DepEd DO 017 Curriculum</Pill>
                     </div>
-                    <div className="flex items-center justify-between border-2 border-black rounded-md px-3 py-2 bg-white">
-                      <Text as="p" className="font-sans font-medium">
-                        Medical / Pre-Med Pathway
-                      </Text>
-                      <Switch
-                        checked={medicalEnabled}
-                        onCheckedChange={() => setMedicalEnabled((v) => !v)}
-                        disabled={!shsEnabled}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between border-2 border-black rounded-md px-3 py-2 bg-white">
-                      <Text as="p" className="font-sans font-medium">
-                        Engineering Pathway
-                      </Text>
-                      <Switch
-                        checked={engineeringEnabled}
-                        onCheckedChange={() => setEngineeringEnabled((v) => !v)}
-                        disabled={!shsEnabled}
-                      />
-                    </div>
+
+                    {isLoadingPathways ? (
+                      <Text as="p" className="text-xs text-muted-foreground">Loading pathways...</Text>
+                    ) : pathways.length === 0 ? (
+                      <Text as="p" className="text-xs text-muted-foreground">No pathways configured.</Text>
+                    ) : (
+                      pathways.map((p) => (
+                        <div key={p.id} className="flex items-center justify-between border-2 border-black rounded-md px-3 py-2 bg-white">
+                          <div>
+                            <Text as="p" className="font-sans font-medium text-sm">
+                              {p.name}
+                            </Text>
+                            <Text as="p" className="font-sans text-xs text-muted-foreground">
+                              Code: <code>{p.code}</code>
+                            </Text>
+                          </div>
+                          <Switch
+                            checked={p.is_enabled}
+                            onCheckedChange={() => handleTogglePathwayEnabled(p)}
+                            disabled={!shsEnabled}
+                          />
+                        </div>
+                      ))
+                    )}
+
                     <Text
                       as="p"
                       className="font-sans text-xs text-muted-foreground"
                     >
-                      Client scope is STEM only. Other strands are hidden to
-                      prevent wrong setup.
+                      Admin-configurable SHS Academic Pathways (DepEd Order No. 017 s. 2026).
                     </Text>
                   </div>
                 </div>
@@ -833,6 +981,7 @@ export default function AdminSystemSettings() {
                       <Table.Head>Level</Table.Head>
                       <Table.Head>School Stage</Table.Head>
                       <Table.Head>Available Curriculum</Table.Head>
+                      <Table.Head>DO 017 Pathways</Table.Head>
                       <Table.Head>Status</Table.Head>
                     </Table.Row>
                   </Table.Header>
@@ -840,6 +989,8 @@ export default function AdminSystemSettings() {
                     {ACADEMIC_LEVELS.map((item) => {
                       const stageEnabled =
                         item.stage === "Junior High" ? jhsEnabled : shsEnabled;
+                      const gradeNum = parseInt(item.level.replace("Grade ", ""), 10);
+                      const scope = pathwayScopes.find((s) => s.grade_level === gradeNum);
                       return (
                         <Table.Row key={item.level}>
                           <Table.Cell className="font-bold">
@@ -858,6 +1009,22 @@ export default function AdminSystemSettings() {
                               <div className="flex gap-2 flex-wrap">
                                 {pathwayPills(item.level)}
                               </div>
+                            )}
+                          </Table.Cell>
+                          <Table.Cell>
+                            {scope ? (
+                              <div className="flex items-center gap-2">
+                                <Switch
+                                  checked={scope.requires_pathway}
+                                  onCheckedChange={() => handleTogglePathwayScope(scope)}
+                                  disabled={!shsEnabled}
+                                />
+                                <Text as="p" className="text-xs text-muted-foreground">
+                                  {scope.requires_pathway ? "Required" : "General"}
+                                </Text>
+                              </div>
+                            ) : (
+                              <Text as="p" className="text-xs text-muted-foreground">Default</Text>
                             )}
                           </Table.Cell>
                           <Table.Cell>

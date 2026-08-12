@@ -95,6 +95,7 @@ def subject_to_item(subject: Subject, academic_level: AcademicLevel | None = Non
         "subject_codename": subject.subject_codename,
         "subject_group": _group_inline(group),
         "hours": subject.hours,
+        "is_core": getattr(subject, "is_core", False),
         "default_grading_template": subject.default_grading_template,
         "description": subject.description,
         "status": subject.status or DEFAULT_SUBJECT_STATUS,

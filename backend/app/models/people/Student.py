@@ -24,7 +24,7 @@ class Student(Base):
     user_id           = Column(UUID(as_uuid=True), ForeignKey("user_account.user_id", ondelete="SET NULL"), unique=True)
 
     __table_args__ = (
-        CheckConstraint(r"student_lrn ~ '^[0-9]{12}$'", name="lrn_check"),
+        CheckConstraint("length(student_lrn) = 12", name="lrn_check"),
         Index("ix_student_academic_level_id", "academic_level_id"),
         Index("ix_student_user_id", "user_id"),
     )

@@ -18,7 +18,10 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectOffering import SubjectOffering
-
+from app.models.academic.AcademicPathway import AcademicPathway
+from app.models.academic.DepedCluster import DepedCluster
+from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
+from app.models.academic.AcademicLevelPathwayScope import AcademicLevelPathwayScope
 
 TABLES = [
     AcademicYear.__table__,
@@ -26,6 +29,10 @@ TABLES = [
     AcademicPeriod.__table__,
     Subject.__table__,
     SubjectOffering.__table__,
+    AcademicPathway.__table__,
+    DepedCluster.__table__,
+    SubjectOfferingPathway.__table__,
+    AcademicLevelPathwayScope.__table__,
 ]
 
 READ_ONLY_DETAIL = "Subject offerings for inactive academic years are read-only to protect historical records."
@@ -79,7 +86,9 @@ def offering_context(db):
     grade_7 = AcademicLevel(level_name="Grade 7", grade_level=7)
     grade_11 = AcademicLevel(level_name="Grade 11", grade_level=11)
     grade_12 = AcademicLevel(level_name="Grade 12", grade_level=12)
-    db.add_all([year, other_year, grade_7, grade_11, grade_12])
+    med_pathway = AcademicPathway(code="medical-courses", name="Medical Courses", is_enabled=True)
+    eng_pathway = AcademicPathway(code="engineering-math", name="Engineering & Math", is_enabled=True)
+    db.add_all([year, other_year, grade_7, grade_11, grade_12, med_pathway, eng_pathway])
     db.flush()
 
     term_1 = AcademicPeriod(
@@ -154,7 +163,16 @@ def offering_context(db):
         status="active",
         academic_level_id=grade_12.academic_level_id,
     )
-    db.add_all([math_7, biology, precal, archived_subject, grade_12_subject])
+    genmath = Subject(
+        subject_name="General Mathematics",
+        subject_codename="GENMATH",
+        subject_group="Core",
+        is_core=True,
+        hours=80,
+        status="active",
+        academic_level_id=grade_11.academic_level_id,
+    )
+    db.add_all([math_7, biology, precal, archived_subject, grade_12_subject, genmath])
     db.commit()
     return {
         "year": year,
@@ -168,6 +186,7 @@ def offering_context(db):
         "math_7": math_7,
         "biology": biology,
         "precal": precal,
+        "genmath": genmath,
         "archived_subject": archived_subject,
         "grade_12_subject": grade_12_subject,
     }
@@ -216,10 +235,10 @@ def test_form_options_returns_usable_data(client, offering_context):
     assert response.status_code == 200
     body = response.json()
     assert [level["grade_level"] for level in body["academic_levels"]] == [7, 11, 12]
-    assert body["pathways"] == ["general", "both", "stem_medical", "stem_engineering"]
+    assert {p["code"] for p in body["pathways"]} == {"medical-courses", "engineering-math"}
     assert body["statuses"] == ["active", "archived"]
     assert body["default_status"] == "active"
-    assert [subject["subject_codename"] for subject in body["active_subjects"]] == ["MATH7", "GENBIO1", "PRECAL", "GENBIO2"]
+    assert {subject["subject_codename"] for subject in body["active_subjects"]} == {"MATH7", "GENBIO1", "PRECAL", "GENBIO2", "GENMATH"}
     assert {period["period_name"] for period in body["academic_periods"]} == {"Term 1", "Term 2"}
 
 
@@ -483,7 +502,7 @@ def test_grade_7_to_10_requires_general_pathway(client, db, offering_context):
         ),
     )
     assert invalid.status_code == 422
-    assert "Grade 7 to Grade 10" in invalid.json()["detail"]
+    assert "must use the general pathway" in invalid.json()["detail"]
 
 
 def test_grade_11_to_12_rejects_general_pathway(client, offering_context):
@@ -493,7 +512,7 @@ def test_grade_11_to_12_rejects_general_pathway(client, offering_context):
     )
 
     assert response.status_code == 422
-    assert "Grade 11 and Grade 12" in response.json()["detail"]
+    assert "require a specific pathway" in response.json()["detail"]
 
 
 def test_create_validates_subject_year_level_period_scope(client, offering_context):
@@ -534,7 +553,7 @@ def test_both_pathway_conflict_rules_work(client, db, offering_context):
 
     shared_conflict = client.post("/api/v1/subject-offerings", json=offering_payload(offering_context, pathway="both"))
     assert shared_conflict.status_code == 409
-    assert "Shared offering conflicts" in shared_conflict.json()["detail"]
+    assert "Subject offering already exists" in shared_conflict.json()["detail"]
 
     db.query(SubjectOffering).delete()
     db.commit()
@@ -543,7 +562,7 @@ def test_both_pathway_conflict_rules_work(client, db, offering_context):
 
     medical_conflict = client.post("/api/v1/subject-offerings", json=offering_payload(offering_context, pathway="stem_medical"))
     assert medical_conflict.status_code == 409
-    assert "Pathway-specific offering conflicts" in medical_conflict.json()["detail"]
+    assert "Subject offering already exists" in medical_conflict.json()["detail"]
 
 
 def test_list_offerings_and_search_work(client, db, offering_context):
@@ -648,7 +667,7 @@ def test_update_offering_works_and_revalidates_conflicts(client, db, offering_co
     assert response.status_code == 200
     body = response.json()
     assert body["academic_period"]["period_name"] == "Term 2"
-    assert body["pathway"] == "stem_engineering"
+    assert body["pathways"][0]["code"] == "engineering-math"
 
 
 def test_update_offering_in_inactive_academic_year_fails(client, db, offering_context):
@@ -742,3 +761,98 @@ def test_non_admin_cannot_create_update_or_archive(client, db, offering_context)
 
     del client.app.dependency_overrides[get_current_user]
     assert client.post("/api/v1/subject-offerings", json=offering_payload(offering_context)).status_code == 401
+
+
+def test_is_core_subject_rejects_pathway_restrictions(client, db, offering_context):
+    from app.models.academic.AcademicPathway import AcademicPathway
+    from app.services.subject_offerings.SubjectOfferingShared import validate_core_subject_pathway_restriction
+
+    ctx = offering_context
+    pathway = AcademicPathway(code="medical", name="Medical")
+    db.add(pathway)
+    db.commit()
+
+    core_subject = ctx["genmath"]
+    core_subject.is_core = True
+    db.commit()
+
+    # Attempting to create an offering for an is_core=True subject with pathway_ids should fail with 422
+    payload = offering_payload(ctx, subject_id=core_subject.subject_id)
+    payload["pathway_ids"] = [pathway.id]
+    res = client.post("/api/v1/subject-offerings", json=payload)
+    assert res.status_code == 422
+    assert "Core subjects are mandatory for all pathways" in res.json()["detail"]
+
+
+def test_is_core_toggle_blocked_if_pathway_offering_exists(db, offering_context):
+    from app.models.academic.AcademicPathway import AcademicPathway
+    from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
+    from app.services.subject_offerings.SubjectOfferingShared import validate_subject_is_core_toggle
+
+    ctx = offering_context
+    pathway = AcademicPathway(code="engineering", name="Engineering")
+    db.add(pathway)
+    db.commit()
+
+    offering = create_offering(db, ctx, subject_id=ctx["precal"].subject_id)
+    db.add(SubjectOfferingPathway(subject_offering_id=offering.subject_offering_id, pathway_id=pathway.id))
+    db.commit()
+
+    # Toggling is_core=True on precal should raise 422 because it has pathway-restricted offerings
+    with pytest.raises(Exception) as exc_info:
+        validate_subject_is_core_toggle(db, ctx["precal"].subject_id, True)
+    assert "Cannot mark subject as core" in str(exc_info.value)
+
+
+def test_multi_pathway_join_offering_and_filtering(client, db, offering_context):
+    from app.models.academic.AcademicPathway import AcademicPathway
+
+    ctx = offering_context
+    pathway1 = AcademicPathway(code="medical", name="Medical")
+    pathway2 = AcademicPathway(code="engineering", name="Engineering")
+    db.add_all([pathway1, pathway2])
+    db.commit()
+
+    payload = offering_payload(ctx, subject_id=ctx["precal"].subject_id)
+    payload["pathway_ids"] = [pathway1.id, pathway2.id]
+    res = client.post("/api/v1/subject-offerings", json=payload)
+    assert res.status_code == 201
+    data = res.json()
+    assert len(data["pathway_ids"]) == 2
+    assert data["pathway"] == "both"
+
+    # Filter by pathway_id=pathway1.id should include this offering
+    list_res = client.get(f"/api/v1/subject-offerings?pathway_id={pathway1.id}")
+    assert list_res.status_code == 200
+    assert len(list_res.json()["subject_offerings"]) == 1
+
+
+def test_grade11_section_query_returns_core_and_pathway_electives(client, db, offering_context):
+    from app.models.academic.AcademicPathway import AcademicPathway
+
+    ctx = offering_context
+    pathway = AcademicPathway(code="medical", name="Medical")
+    db.add(pathway)
+    db.commit()
+
+    # Core subject offering (pathway_ids=[])
+    ctx["genmath"].is_core = True
+    db.commit()
+    core_offering_payload = offering_payload(ctx, subject_id=ctx["genmath"].subject_id)
+    core_offering_payload["pathway_ids"] = []
+    res1 = client.post("/api/v1/subject-offerings", json=core_offering_payload)
+    assert res1.status_code == 201
+
+    # Pathway elective offering (pathway_ids=[pathway.id])
+    elective_payload = offering_payload(ctx, subject_id=ctx["biology"].subject_id)
+    elective_payload["pathway_ids"] = [pathway.id]
+    res2 = client.post("/api/v1/subject-offerings", json=elective_payload)
+    assert res2.status_code == 201
+
+    # Query for the medical pathway
+    list_res = client.get(f"/api/v1/subject-offerings?pathway_id={pathway.id}")
+    assert list_res.status_code == 200
+    offerings = list_res.json()["subject_offerings"]
+    subject_ids = {o["subject"]["subject_id"] for o in offerings}
+    assert ctx["genmath"].subject_id in subject_ids
+    assert ctx["biology"].subject_id in subject_ids

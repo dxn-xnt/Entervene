@@ -43,22 +43,35 @@ CLASS_IMPORT_HEADERS = [
 SCIENTIFIC_NOTATION_PATTERN = re.compile(r"^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$")
 
 
-def normalize_import_pathway(raw: str | None, grade_level: int) -> tuple[str | None, str | None]:
+def normalize_import_pathway(
+    raw: Any,
+    grade_level: int,
+    pathway_map: dict[str, Any] | None = None,
+    requires_pathway: bool = True,
+) -> tuple[Any | None, str | None]:
     cleaned = normalized_text(raw).casefold()
-    if grade_level <= 10:
+    if not requires_pathway:
         if cleaned and cleaned not in {"general", ""}:
-            return None, "Grades 7 to 10 must use 'general' pathway."
-        return "general", None
+            return None, f"Grade {grade_level} does not use pathway assignment."
+        return None, None  # pathway_id = None is correct when pathway is not required
 
     if not cleaned:
-        return None, f"Pathway is required for Grade {grade_level} (must be 'stem_medical' or 'stem_engineering')."
+        return None, f"Pathway is required for Grade {grade_level}."
+
+    pmap = pathway_map or {}
+    if cleaned in pmap:
+        return pmap[cleaned], None
 
     if cleaned in {"stem_medical", "medical", "med", "stem medical"}:
-        return "stem_medical", None
+        med = next((p for code, p in pmap.items() if "medical" in code), None)
+        if med:
+            return med, None
     if cleaned in {"stem_engineering", "engineering", "eng", "stem engineering"}:
-        return "stem_engineering", None
+        eng = next((p for code, p in pmap.items() if "engineering" in code), None)
+        if eng:
+            return eng, None
 
-    return None, f'Invalid pathway "{raw}" for Grade {grade_level}. Allowed values: stem_medical, stem_engineering.'
+    return None, f'Unrecognized pathway "{raw}" for Grade {grade_level}. Must match an active pathway code or name.'
 
 
 def normalized_import_row(row: dict[str, Any]) -> tuple[str, ...]:
@@ -240,6 +253,14 @@ async def validate_class_import_file(
         )
     }
 
+    from app.models.academic.AcademicPathway import AcademicPathway
+
+    active_pathways = db.query(AcademicPathway).filter(AcademicPathway.is_enabled.is_(True)).all()
+    pathway_map = {}
+    for p in active_pathways:
+        pathway_map[p.code.strip().lower()] = p
+        pathway_map[p.name.strip().lower()] = p
+
     # A class import uses one row per student, so repeated section rows are
     # grouped into the section payload expected by the batch-create endpoint.
     grouped: dict[str, dict] = {}
@@ -279,9 +300,13 @@ async def validate_class_import_file(
             ))
 
         raw_pathway = readable_text(row.get("pathway"))
-        pathway_val, pathway_err = normalize_import_pathway(raw_pathway, academic_level.grade_level)
+        from app.services.pathways.PathwayScopeService import resolve_pathway_scope
+        requires_pathway = resolve_pathway_scope(db, academic_year.academic_year_id, academic_level.academic_level_id)
+        pathway_obj, pathway_err = normalize_import_pathway(raw_pathway, academic_level.grade_level, pathway_map, requires_pathway=requires_pathway)
         if pathway_err:
             errors.append(csv_validation_error("invalid_pathway", pathway_err, row_number, "pathway"))
+
+        pathway_val = pathway_obj.code if pathway_obj else (raw_pathway.casefold() if raw_pathway else None)
 
         adviser_id = readable_text(row["adviser_staff_id"])
         adviser = advisers.get(adviser_id)

@@ -24,6 +24,7 @@ class Subject(Base):
     )
     hours: Mapped[int | None] = Column(Integer)
     is_math_or_science: Mapped[bool | None] = Column(Boolean, default=False)
+    is_core: Mapped[bool] = Column(Boolean, nullable=False, default=False)
     status: Mapped[str | None] = Column(String(20), default="active")
     default_grading_template: Mapped[str | None] = Column(String(100))
     description: Mapped[str | None] = Column(Text)
