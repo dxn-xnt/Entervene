@@ -56,8 +56,6 @@ def db():
     try:
         Base.metadata.create_all(bind=engine, tables=TABLES)
     finally:
-        if lrn_check and lrn_check not in Student.__table__.constraints:
-            Student.__table__.append_constraint(lrn_check)
     session = sessionmaker(bind=engine)()
     try:
         yield session

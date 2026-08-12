@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from app.schemas.AcademicPathway import AcademicPathwayRead
+
 
 class AcademicYearOption(BaseModel):
     academic_year_id: int
@@ -33,7 +35,8 @@ class ClassListItem(BaseModel):
     class_id: int
     section_name: str
     class_status: str
-    pathway: str = "general"
+    pathway_id: int | None = None
+    pathway: AcademicPathwayRead | None = None
     academic_year: AcademicYearOption
     academic_level: AcademicLevelOption
     adviser: AdviserOption | None
@@ -41,6 +44,9 @@ class ClassListItem(BaseModel):
     subject_count: int
     male_count: int
     female_count: int
+
+    class Config:
+        from_attributes = True
 
 
 class ClassListSummary(BaseModel):
@@ -65,12 +71,16 @@ class ClassDetailResponse(BaseModel):
     class_id: int
     section_name: str
     class_status: str
-    pathway: str = "general"
+    pathway_id: int | None = None
+    pathway: AcademicPathwayRead | None = None
     created_at: datetime | None
     academic_year: AcademicYearOption
     academic_level: AcademicLevelOption
     adviser: AdviserOption | None
     statistics: ClassDetailStatistics
+
+    class Config:
+        from_attributes = True
 
 
 class ArchiveClassResponse(BaseModel):
@@ -83,6 +93,7 @@ class ArchiveClassResponse(BaseModel):
 class ClassUpdateRequest(BaseModel):
     section_name: str | None = None
     adviser_staff_id: str | None = None
+    pathway_id: int | None = None
     pathway: str | None = None
 
 

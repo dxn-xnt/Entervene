@@ -7,6 +7,7 @@ from app.models.academic.Class_ import Class
 from app.models.academic.PeriodTemplateSlot import PeriodTemplateSlot
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.academic.SubjectOffering import SubjectOffering
+from app.services.classes.ClassQueryService import class_pathway_code
 from app.schemas.SubjectLoad import (
     ConflictItem,
     SubjectLoadItem,
@@ -232,7 +233,7 @@ class ConflictDetectorService:
                     class_obj = classes_map.get(load.class_id)
                     if class_obj:
                         cls_level_id = class_obj.academic_level_id
-                        cls_pathway = (getattr(class_obj, "pathway", None) or "general").casefold()
+                        cls_pathway = class_pathway_code(class_obj).casefold()
                         subject_obj = subjects_map.get(load.subject_id)
                         s_name = subject_obj.subject_name if subject_obj else f"Subject #{load.subject_id}"
                         c_name = class_obj.section_name if class_obj else f"Class #{load.class_id}"
@@ -344,4 +345,3 @@ class ConflictDetectorService:
             total_checks_count=total_rules,
             can_publish=not has_errors,
         )
-

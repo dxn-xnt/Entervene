@@ -2,7 +2,7 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getClassFormOptions } from "@/lib/api";
+import { getClassFormOptions, fetchPathways, type AcademicPathwayRead } from "@/lib/api";
 import type { AdviserOption, ClassFormOptions, ManualClassSetup, ManualSectionDraft } from "@/types/adminClasses";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/retroui/Button";
@@ -37,6 +37,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
   onBack: () => void;
 }) {
   const [options, setOptions] = useState<ClassFormOptions | null>(null);
+  const [activePathways, setActivePathways] = useState<AcademicPathwayRead[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [academicLevelId, setAcademicLevelId] = useState(initialSetup?.academicLevelId ? String(initialSetup.academicLevelId) : "");
@@ -47,11 +48,12 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
   useEffect(() => {
     let cancelled = false;
 
-    getClassFormOptions()
-      .then((data) => {
+    Promise.all([getClassFormOptions(), fetchPathways(true)])
+      .then(([classData, pathwayData]) => {
         if (cancelled) return;
-        setOptions(data);
-        setAcademicLevelId((current) => current || String(data.academic_levels[0]?.academic_level_id ?? ""));
+        setOptions(classData);
+        setActivePathways(pathwayData.pathways || []);
+        setAcademicLevelId((current) => current || String(classData.academic_levels[0]?.academic_level_id ?? ""));
       })
       .catch((error: unknown) => {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : "Unable to load class options.");
@@ -207,16 +209,19 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
               {isSeniorHigh && (
                 <div>
                   <Select
-                    value={section.pathway || "stem_medical"}
-                    onChange={(e) => updateSection(section.localId, { pathway: e.target.value })}
+                    value={section.pathway || activePathways[0]?.code || "medical-courses"}
+                    onValueChange={(val) => updateSection(section.localId, { pathway: val })}
                   >
                     <Select.Trigger className="w-full">
                       <Select.Value placeholder="Select pathway" />
                     </Select.Trigger>
                     <Select.Content>
                       <Select.Group>
-                        <Select.Item value="stem_medical">STEM - Medical</Select.Item>
-                        <Select.Item value="stem_engineering">STEM - Engineering</Select.Item>
+                        {activePathways.map((p) => (
+                          <Select.Item key={p.id} value={p.code}>
+                            {p.name}
+                          </Select.Item>
+                        ))}
                       </Select.Group>
                     </Select.Content>
                   </Select>

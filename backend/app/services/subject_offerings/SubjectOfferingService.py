@@ -9,21 +9,63 @@ from app.schemas.SubjectOffering import (
     SubjectOfferingCreate,
     SubjectOfferingUpdate,
 )
+from sqlalchemy import func
+from app.models.academic.AcademicPathway import AcademicPathway
+from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
 from app.services.subject_offerings.SubjectOfferingShared import (
     DEFAULT_OFFERING_STATUS,
     ensure_academic_year_is_active,
     ensure_offering_available,
     get_academic_year_or_404,
     normalize_offering_status,
-    normalize_pathway,
     offering_to_item,
-    validate_pathway_for_grade,
+    validate_core_subject_pathway_restriction,
     validate_offering_scope,
 )
 
 
+def _resolve_pathway_ids(db: Session, pathway_ids: list[int] | None, legacy_pathway: str | None, academic_level: AcademicLevel, academic_year_id: int, subject: Subject | None = None) -> list[int]:
+    if subject and getattr(subject, "is_core", False):
+        if pathway_ids is not None and len(pathway_ids) > 0:
+            raise HTTPException(status_code=422, detail="Core subjects are mandatory for all pathways and cannot have pathway restrictions.")
+        if pathway_ids is None and legacy_pathway is not None and legacy_pathway.strip().lower() not in ("general", ""):
+            raise HTTPException(status_code=422, detail="Core subjects are mandatory for all pathways and cannot have pathway restrictions.")
+        return []
+
+    from app.services.pathways.PathwayScopeService import resolve_pathway_scope
+    requires_pathway = resolve_pathway_scope(db, academic_year_id, academic_level.academic_level_id)
+
+    if pathway_ids is not None and len(pathway_ids) > 0:
+        if not requires_pathway:
+            raise HTTPException(status_code=422, detail=f"Grade {academic_level.grade_level} offerings must use the general pathway for this academic year.")
+        return pathway_ids
+    if legacy_pathway is not None:
+        norm = legacy_pathway.strip().lower()
+        if not requires_pathway and norm not in ("general", ""):
+            raise HTTPException(status_code=422, detail=f"Grade {academic_level.grade_level} offerings must use the general pathway for this academic year.")
+        if requires_pathway and norm in ("general", ""):
+            raise HTTPException(status_code=422, detail=f"Grade {academic_level.grade_level} offerings require a specific pathway for this academic year.")
+        if norm in ("general", ""):
+            return []
+        if norm == "both":
+            return [p.id for p in db.query(AcademicPathway).filter(AcademicPathway.is_enabled.is_(True)).all()]
+        if norm in ("stem_medical", "medical"):
+            p = db.query(AcademicPathway).filter(AcademicPathway.code.like("%medical%")).first()
+            return [p.id] if p else []
+        if norm in ("stem_engineering", "engineering"):
+            p = db.query(AcademicPathway).filter(AcademicPathway.code.like("%engineering%")).first()
+            return [p.id] if p else []
+        p = db.query(AcademicPathway).filter(func.lower(AcademicPathway.code) == norm).first()
+        if p:
+            return [p.id]
+    if requires_pathway:
+        raise HTTPException(status_code=422, detail=f"Grade {academic_level.grade_level} offerings require a specific pathway for this academic year.")
+    return []
+
+
 def create_subject_offering_record(db: Session, payload: SubjectOfferingCreate) -> dict:
-    _subject, academic_year, academic_level, _period = validate_offering_scope(
+    subject, academic_year, academic_level, _period = validate_offering_scope(
         db,
         payload.subject_id,
         payload.academic_year_id,
@@ -31,15 +73,16 @@ def create_subject_offering_record(db: Session, payload: SubjectOfferingCreate) 
         payload.academic_period_id,
     )
     ensure_academic_year_is_active(academic_year)
-    pathway = normalize_pathway(payload.pathway)
-    validate_pathway_for_grade(pathway, academic_level)
+    pathway_ids = _resolve_pathway_ids(db, payload.pathway_ids, payload.pathway, academic_level, payload.academic_year_id, subject)
+    validate_core_subject_pathway_restriction(subject, pathway_ids)
+
     ensure_offering_available(
         db,
         payload.subject_id,
         payload.academic_year_id,
         payload.academic_level_id,
         payload.academic_period_id,
-        pathway,
+        pathway_ids=pathway_ids,
     )
 
     offering = SubjectOffering(
@@ -47,10 +90,14 @@ def create_subject_offering_record(db: Session, payload: SubjectOfferingCreate) 
         academic_year_id=payload.academic_year_id,
         academic_level_id=payload.academic_level_id,
         academic_period_id=payload.academic_period_id,
-        pathway=pathway,
         status=normalize_offering_status(payload.status),
     )
     db.add(offering)
+    db.flush()
+
+    for pid in pathway_ids:
+        db.add(SubjectOfferingPathway(subject_offering_id=offering.subject_offering_id, pathway_id=pid))
+
     try:
         db.commit()
     except IntegrityError as exc:
@@ -71,18 +118,24 @@ def update_subject_offering_record(db: Session, subject_offering_id: int, payloa
     target_year_id = data.get("academic_year_id", offering.academic_year_id)
     target_level_id = data.get("academic_level_id", offering.academic_level_id)
     target_period_id = data.get("academic_period_id", offering.academic_period_id)
-    target_pathway = normalize_pathway(data.get("pathway", offering.pathway))
 
-    _subject, academic_year, academic_level, _period = validate_offering_scope(db, target_subject_id, target_year_id, target_level_id, target_period_id)
+    subject, academic_year, academic_level, _period = validate_offering_scope(db, target_subject_id, target_year_id, target_level_id, target_period_id)
     ensure_academic_year_is_active(academic_year)
-    validate_pathway_for_grade(target_pathway, academic_level)
+
+    if "pathway_ids" in data or "pathway" in data:
+        target_pathway_ids = _resolve_pathway_ids(db, data.get("pathway_ids"), data.get("pathway"), academic_level, target_year_id, subject)
+    else:
+        target_pathway_ids = [link.pathway_id for link in offering.offering_pathways]
+
+    validate_core_subject_pathway_restriction(subject, target_pathway_ids)
+
     ensure_offering_available(
         db,
         target_subject_id,
         target_year_id,
         target_level_id,
         target_period_id,
-        target_pathway,
+        pathway_ids=target_pathway_ids,
         exclude_subject_offering_id=offering.subject_offering_id,
     )
 
@@ -90,9 +143,13 @@ def update_subject_offering_record(db: Session, subject_offering_id: int, payloa
     offering.academic_year_id = target_year_id
     offering.academic_level_id = target_level_id
     offering.academic_period_id = target_period_id
-    offering.pathway = target_pathway
     if "status" in data:
         offering.status = normalize_offering_status(data["status"])
+
+    if "pathway_ids" in data or "pathway" in data:
+        db.query(SubjectOfferingPathway).filter(SubjectOfferingPathway.subject_offering_id == offering.subject_offering_id).delete()
+        for pid in target_pathway_ids:
+            db.add(SubjectOfferingPathway(subject_offering_id=offering.subject_offering_id, pathway_id=pid))
 
     try:
         db.commit()
@@ -128,7 +185,8 @@ def restore_subject_offering_record(db: Session, subject_offering_id: int) -> di
         offering.academic_period_id,
     )
     ensure_academic_year_is_active(academic_year)
-    validate_pathway_for_grade(offering.pathway, academic_level)
+    pathway_ids = [p.pathway_id for p in db.query(SubjectOfferingPathway).filter(SubjectOfferingPathway.subject_offering_id == offering.subject_offering_id).all()]
+    validate_core_subject_pathway_restriction(_subject, pathway_ids)
     offering.status = "active"
     db.commit()
     db.refresh(offering)
@@ -145,6 +203,9 @@ def copy_subject_offerings_between_academic_years(
 
     if source_year.academic_year_id == target_year.academic_year_id:
         raise HTTPException(status_code=409, detail="Source and target academic years must be different.")
+
+    from app.services.pathways.PathwayScopeService import clone_prior_year_pathway_scopes
+    clone_prior_year_pathway_scopes(db, target_year.academic_year_id)
 
     target_periods_by_sequence = {
         period.period_sequence: period

@@ -18,7 +18,7 @@ import { SidebarConfigs } from "@/context/sidebar-config"
 import { formatPeriodLabel } from "@/lib/academic-periods"
 
 const periods = [
-  `${formatPeriodLabel({ period_type: "TERM", period_sequence: 1 })} (2025-2026)`,
+  `Active Period: ${formatPeriodLabel({ period_type: "TERM", period_sequence: 1 })} (2025-2026)`,
   `${formatPeriodLabel({ period_type: "TERM", period_sequence: 2 })} (2025-2026)`,
   `${formatPeriodLabel({ period_type: "TERM", period_sequence: 3 })} (2025-2026)`,
 ]
@@ -48,7 +48,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <Select defaultValue={periods[0]}>
           <Select.Trigger className="w-full border-x-background m-0 shadow-none mb-1">
-            <Select.Value placeholder="Select Academic Year" />
+            <Select.Value placeholder="Active Period" />
           </Select.Trigger>
           <Select.Content>
             <Select.Group>

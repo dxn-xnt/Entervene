@@ -47,6 +47,18 @@ export type AdviserOption = {
   suffix: string | null;
 };
 
+export type AcademicPathwayRead = {
+  id: number;
+  code: string;
+  name: string;
+  is_enabled: boolean;
+  sort_order: number;
+  deped_cluster_id?: number | null;
+  deped_cluster?: unknown | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 export type ClassFormOptions = {
   academic_year: AcademicYearOption;
   academic_levels: AcademicLevelOption[];
@@ -63,7 +75,8 @@ export type ClassListItem = {
   class_id: number;
   section_name: string;
   class_status: string;
-  pathway?: string;
+  pathway_id?: number | null;
+  pathway?: AcademicPathwayRead | null;
   academic_year: ClassListAcademicYear;
   academic_level: ClassListAcademicLevel;
   adviser: ClassListAdviser | null;
@@ -95,7 +108,8 @@ export type ClassDetailResponse = {
   class_id: number;
   section_name: string;
   class_status: string;
-  pathway?: string;
+  pathway_id?: number | null;
+  pathway?: AcademicPathwayRead | null;
   created_at: string | null;
   academic_year: AcademicYearOption;
   academic_level: AcademicLevelOption;
@@ -113,6 +127,8 @@ export type ArchiveClassResponse = {
 export type UpdateClassRequest = {
   section_name?: string;
   adviser_staff_id?: string | null;
+  pathway_id?: number | null;
+  pathway?: string | null;
 };
 
 export type ClassStudentListItem = {

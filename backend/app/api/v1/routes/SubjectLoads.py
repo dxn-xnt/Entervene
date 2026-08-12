@@ -27,6 +27,7 @@ from app.schemas.SubjectLoad import (
 from sqlalchemy import text
 from app.services.academic.ConflictDetectorService import ConflictDetectorService
 from app.services.academic.AutoSchedulerService import AutoSchedulerService
+from app.services.classes.ClassQueryService import class_pathway_code
 
 router = APIRouter()
 
@@ -159,6 +160,7 @@ def get_subject_load_studio_data(
             .all()
         )
     except Exception:
+        db.rollback()
         offerings = []
 
     return {
@@ -181,7 +183,7 @@ def get_subject_load_studio_data(
                 "section_name": c.section_name,
                 "academic_level_id": c.academic_level_id,
                 "academic_year_id": c.academic_year_id,
-                "pathway": getattr(c, "pathway", None) or "general",
+                "pathway": class_pathway_code(c),
                 "paired_class_id": getattr(c, "paired_class_id", None),
                 "period_template_group": getattr(c, "period_template_group", None) or "JHS_45MIN",
             }
@@ -213,7 +215,7 @@ def get_subject_load_studio_data(
                 "academic_year_id": so.academic_year_id,
                 "academic_level_id": so.academic_level_id,
                 "academic_period_id": so.academic_period_id,
-                "pathway": so.pathway,
+                "pathway_ids": [op.pathway_id for op in so.offering_pathways],
             }
             for so in offerings
         ],
@@ -727,4 +729,3 @@ def get_my_schedule(
         return {"is_published": True, "schedule": slots}
 
     return {"is_published": False, "schedule": []}
-

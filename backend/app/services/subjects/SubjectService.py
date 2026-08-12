@@ -15,6 +15,9 @@ from app.services.subjects.SubjectShared import (
 )
 
 
+from app.services.subject_offerings.SubjectOfferingShared import validate_subject_is_core_toggle
+
+
 def create_subject_record(db: Session, payload: SubjectCreate) -> dict:
     get_academic_level_or_404(db, payload.academic_level_id)
     get_subject_group_or_404(db, payload.subject_group_id)
@@ -30,6 +33,7 @@ def create_subject_record(db: Session, payload: SubjectCreate) -> dict:
         subject_codename=code,
         subject_group_id=payload.subject_group_id,
         hours=payload.hours,
+        is_core=payload.is_core,
         default_grading_template=normalize_optional_text(payload.default_grading_template),
         description=normalize_optional_text(payload.description),
         status=normalize_subject_status(payload.status),
@@ -58,6 +62,9 @@ def update_subject_record(db: Session, subject_id: int, payload: SubjectUpdate) 
     if "subject_group_id" in data and data["subject_group_id"] is not None:
         get_subject_group_or_404(db, data["subject_group_id"])
 
+    if "is_core" in data and data["is_core"] is not None:
+        validate_subject_is_core_toggle(db, subject.subject_id, data["is_core"])
+
     target_code = normalize_optional_text(data.get("subject_codename", subject.subject_codename))
     ensure_subject_code_available(db, target_code, target_level_id, exclude_subject_id=subject.subject_id)
 
@@ -72,6 +79,8 @@ def update_subject_record(db: Session, subject_id: int, payload: SubjectUpdate) 
         subject.subject_group_id = data["subject_group_id"]
     if "hours" in data:
         subject.hours = data["hours"]
+    if "is_core" in data and data["is_core"] is not None:
+        subject.is_core = data["is_core"]
     if "default_grading_template" in data:
         subject.default_grading_template = normalize_optional_text(data["default_grading_template"])
     if "description" in data:

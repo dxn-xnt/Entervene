@@ -3,11 +3,15 @@ from datetime import date, datetime
 from pydantic import BaseModel
 
 
+from app.schemas.AcademicPathway import AcademicPathwayRead
+
+
 class SubjectOfferingSubject(BaseModel):
     subject_id: int
     subject_name: str
     subject_codename: str | None
     subject_group: str | None
+    is_core: bool = False
 
 
 class SubjectOfferingAcademicYear(BaseModel):
@@ -35,7 +39,8 @@ class SubjectOfferingCreate(BaseModel):
     academic_year_id: int
     academic_level_id: int
     academic_period_id: int
-    pathway: str
+    pathway: str | None = None
+    pathway_ids: list[int] = []
     status: str = "active"
 
 
@@ -45,6 +50,7 @@ class SubjectOfferingUpdate(BaseModel):
     academic_level_id: int | None = None
     academic_period_id: int | None = None
     pathway: str | None = None
+    pathway_ids: list[int] | None = None
     status: str | None = None
 
 
@@ -75,7 +81,9 @@ class SubjectOfferingListItem(BaseModel):
     academic_year: SubjectOfferingAcademicYear
     academic_level: SubjectOfferingAcademicLevel
     academic_period: SubjectOfferingAcademicPeriod
-    pathway: str
+    pathway: str | None = None
+    pathway_ids: list[int] = []
+    pathways: list[AcademicPathwayRead] = []
     status: str
     created_at: datetime | None
     updated_at: datetime | None
@@ -102,6 +110,7 @@ class SubjectOfferingFormSubject(BaseModel):
     subject_codename: str | None
     subject_group: str | None
     academic_level_id: int
+    is_core: bool = False
 
 
 class SubjectOfferingFormAcademicYear(SubjectOfferingAcademicYear):
@@ -113,7 +122,7 @@ class SubjectOfferingFormOptions(BaseModel):
     academic_years: list[SubjectOfferingFormAcademicYear]
     academic_levels: list[SubjectOfferingAcademicLevel]
     academic_periods: list[SubjectOfferingAcademicPeriod]
-    pathways: list[str]
+    pathways: list[AcademicPathwayRead]
     statuses: list[str]
     default_status: str
     active_subjects: list[SubjectOfferingFormSubject]

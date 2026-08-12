@@ -91,11 +91,12 @@ export function subjectCode(subject: SubjectListItem | SubjectOfferingListItem["
   return subject.subject_codename || "No code";
 }
 
-export function pathwayLabel(pathway: SubjectOfferingPathway) {
-  if (pathway === "general") return "General";
-  if (pathway === "stem_medical") return "STEM Medical";
-  if (pathway === "stem_engineering") return "STEM Engineering";
-  return "Shared / Both";
+export function pathwayLabel(pathway: string) {
+  if (!pathway || pathway === "general") return "General / Unrestricted";
+  if (pathway === "stem_medical") return "Medical Courses and Sciences Related";
+  if (pathway === "stem_engineering") return "Engineering and Mathematics Related";
+  if (pathway === "both") return "Shared / All Pathways";
+  return pathway;
 }
 
 export function statusBadge(status: SubjectStatus) {

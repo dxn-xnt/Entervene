@@ -140,7 +140,16 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
         if subject.subject_codename
     }
 
-    existing_by_scope: dict[tuple[int, int, int, int], set[str]] = {}
+    from app.models.academic.AcademicPathway import AcademicPathway
+    from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
+
+    active_pathways_list = db.query(AcademicPathway).filter(AcademicPathway.is_enabled.is_(True)).all()
+    pathway_map: dict[str, int] = {}
+    for p in active_pathways_list:
+        pathway_map[p.code.strip().lower()] = p.id
+        pathway_map[p.name.strip().lower()] = p.id
+
+    existing_by_scope: dict[tuple[int, int, int, int], set[tuple[int, ...]]] = {}
     for offering in db.query(SubjectOffering).all():
         key = (
             offering.subject_id,
@@ -148,9 +157,10 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
             offering.academic_level_id,
             offering.academic_period_id,
         )
-        existing_by_scope.setdefault(key, set()).add(offering.pathway)
+        pset = tuple(sorted(link.pathway_id for link in offering.offering_pathways))
+        existing_by_scope.setdefault(key, set()).add(pset)
 
-    created: list[SubjectOffering] = []
+    created: list[tuple[SubjectOffering, list[int]]] = []
     errors = []
 
     for row_number, row in rows:
@@ -187,20 +197,31 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
             if academic_period is None:
                 row_errors.append("term must match an academic period in the selected academic year.")
 
-        pathway = None
+        pathway_ids: list[int] = []
         if not pathway_text:
             row_errors.append("pathway cannot be blank.")
         else:
-            try:
-                pathway = normalize_pathway(pathway_text)
-            except Exception:
-                row_errors.append(f"pathway must be one of: {', '.join(ALLOWED_PATHWAYS)}.")
-
-        if pathway is not None and academic_level is not None:
-            try:
-                validate_pathway_for_grade(pathway, academic_level)
-            except Exception as exc:
-                row_errors.append(getattr(exc, "detail", "pathway is not valid for the selected grade level."))
+            norm_text = pathway_text.strip().lower()
+            if norm_text == "general":
+                pathway_ids = []
+            elif norm_text == "both":
+                pathway_ids = list(pathway_map.values())
+            elif norm_text == "stem_medical":
+                med_id = next((pid for pcode, pid in pathway_map.items() if "medical" in pcode), None)
+                if med_id:
+                    pathway_ids = [med_id]
+                else:
+                    row_errors.append(f"Unrecognized pathway '{pathway_text}'. Must match an active pathway code or name.")
+            elif norm_text == "stem_engineering":
+                eng_id = next((pid for pcode, pid in pathway_map.items() if "engineering" in pcode), None)
+                if eng_id:
+                    pathway_ids = [eng_id]
+                else:
+                    row_errors.append(f"Unrecognized pathway '{pathway_text}'. Must match an active pathway code or name.")
+            elif norm_text in pathway_map:
+                pathway_ids = [pathway_map[norm_text]]
+            else:
+                row_errors.append(f"Unrecognized pathway '{pathway_text}'. Must match an active pathway code or name.")
 
         subject = None
         if not subject_code:
@@ -210,16 +231,22 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
             if subject is None:
                 row_errors.append("subject_code must exist for the selected grade level.")
 
-        if subject is not None and academic_year is not None and academic_level is not None and academic_period is not None and pathway is not None:
+        if subject is not None and getattr(subject, "is_core", False) and pathway_ids:
+            row_errors.append("Core subjects are mandatory for all pathways and cannot have pathway restrictions.")
+
+        if subject is not None and academic_year is not None and academic_level is not None and academic_period is not None:
             scope_key = (
                 subject.subject_id,
                 academic_year.academic_year_id,
                 academic_level.academic_level_id,
                 academic_period.academic_period_id,
             )
-            conflict = _offering_conflict(existing_by_scope.get(scope_key, set()), pathway)
-            if conflict:
-                row_errors.append(conflict)
+            existing_sets = existing_by_scope.get(scope_key, set())
+            new_set = set(pathway_ids)
+            for existing_set in existing_sets:
+                if not new_set or not existing_set or (new_set & set(existing_set)):
+                    row_errors.append("Duplicate or conflicting subject offering for this scope.")
+                    break
 
         if row_errors:
             errors.extend(_import_error(row_number, message) for message in row_errors)
@@ -231,18 +258,23 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
             academic_level.academic_level_id,
             academic_period.academic_period_id,
         )
-        existing_by_scope.setdefault(scope_key, set()).add(pathway)
-        created.append(SubjectOffering(
+        existing_by_scope.setdefault(scope_key, set()).add(tuple(sorted(pathway_ids)))
+
+        offering = SubjectOffering(
             subject_id=subject.subject_id,
             academic_year_id=academic_year.academic_year_id,
             academic_level_id=academic_level.academic_level_id,
             academic_period_id=academic_period.academic_period_id,
-            pathway=pathway,
             status="active",
-        ))
+        )
+        created.append((offering, pathway_ids))
 
-    for offering in created:
+    for offering, p_ids in created:
         db.add(offering)
+        db.flush()
+        for pid in p_ids:
+            db.add(SubjectOfferingPathway(subject_offering_id=offering.subject_offering_id, pathway_id=pid))
+
     if created:
         db.commit()
 

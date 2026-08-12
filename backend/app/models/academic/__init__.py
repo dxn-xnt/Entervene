@@ -1,3 +1,7 @@
+from .DepedCluster  import DepedCluster
+from .AcademicPathway import AcademicPathway
+from .SubjectOfferingPathway import SubjectOfferingPathway
+from .AcademicLevelPathwayScope import AcademicLevelPathwayScope
 from .AcademicYear   import AcademicYear
 from .AcademicPeriod import AcademicPeriod
 from .AcademicLevel  import AcademicLevel

@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.people.AcademicStaff import AcademicStaff
@@ -24,12 +25,41 @@ from app.services.classes.ClassShared import (
 # This module owns class creation, editing, and archiving. It validates business
 # rules before commit and rolls back multi-record operations when any part fails.
 
+LEGACY_PATHWAY_ALIASES = {
+    "stem_medical": "medical-courses",
+    "medical": "medical-courses",
+    "stem_engineering": "engineering-math",
+    "engineering": "engineering-math",
+}
+
 
 def _get_class_or_404(db: Session, class_id: int) -> Class:
     class_ = db.query(Class).filter(Class.class_id == class_id).first()
     if class_ is None:
         raise HTTPException(status_code=404, detail="Class not found.")
     return class_
+
+
+def _resolve_class_pathway_id(db: Session, pathway: str | None = None, pathway_id: int | None = None) -> int | None:
+    if pathway_id is not None:
+        existing = db.query(AcademicPathway.id).filter(AcademicPathway.id == pathway_id).first()
+        if existing is None:
+            raise HTTPException(status_code=400, detail="Pathway not found.")
+        return pathway_id
+
+    value = normalized_text(pathway)
+    if not value or value == "general":
+        return None
+
+    code = LEGACY_PATHWAY_ALIASES.get(value, value)
+    pathway_obj = (
+        db.query(AcademicPathway)
+        .filter(func.lower(AcademicPathway.code) == code)
+        .first()
+    )
+    if pathway_obj is None:
+        raise HTTPException(status_code=400, detail="Pathway not found.")
+    return pathway_obj.id
 
 
 def archive_class_record(db: Session, class_id: int) -> dict:
@@ -115,8 +145,12 @@ def update_class_record(
                 )
             class_.adviser_staff_id = adviser_staff_id
 
-    if "pathway" in changes and changes["pathway"]:
-        class_.pathway = changes["pathway"]
+    if "pathway_id" in changes or "pathway" in changes:
+        class_.pathway_id = _resolve_class_pathway_id(
+            db,
+            pathway=changes.get("pathway"),
+            pathway_id=changes.get("pathway_id"),
+        )
 
     try:
         db.commit()
@@ -288,7 +322,7 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                     "section_name": section_name,
                     "section_key": section_key,
                     "adviser_staff_id": adviser_id,
-                    "pathway": getattr(section, "pathway", "general") or "general",
+                    "pathway_id": _resolve_class_pathway_id(db, pathway=getattr(section, "pathway", None)),
                     "student_ids": section_student_ids,
                 }
             )
@@ -421,7 +455,7 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                 academic_year_id=academic_year.academic_year_id,
                 academic_level_id=academic_level.academic_level_id,
                 academic_period_id=None,
-                pathway=section.get("pathway", "general"),
+                pathway_id=section.get("pathway_id"),
                 class_status="active",
             )
             db.add(class_)
@@ -443,7 +477,7 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                     "class_id": class_.class_id,
                     "section_name": class_.section_name,
                     "adviser_staff_id": class_.adviser_staff_id,
-                    "pathway": class_.pathway or "general",
+                    "pathway": class_.pathway.code if class_.pathway else "general",
                     "student_count": len(section["student_ids"]),
                 }
                 for class_, section in created
