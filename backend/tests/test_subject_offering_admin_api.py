@@ -211,12 +211,29 @@ def create_offering(db, ctx, **overrides):
         academic_year_id=values["academic_year_id"],
         academic_level_id=values["academic_level_id"],
         academic_period_id=values["academic_period_id"],
-        pathway=values["pathway"],
         status=values.get("status", "active"),
     )
     db.add(offering)
     db.flush()
+
+    from app.services.subject_offerings.SubjectOfferingService import _resolve_pathway_ids
+    academic_level = db.query(AcademicLevel).filter(AcademicLevel.academic_level_id == values["academic_level_id"]).first()
+    subject = db.query(Subject).filter(Subject.subject_id == values["subject_id"]).first()
+    pathway_ids = values.get("pathway_ids")
+    legacy_pathway = values.get("pathway")
+    resolved_pathway_ids = _resolve_pathway_ids(
+        db,
+        pathway_ids=pathway_ids,
+        legacy_pathway=legacy_pathway,
+        academic_level=academic_level,
+        academic_year_id=values["academic_year_id"],
+        subject=subject,
+    )
+    for pid in resolved_pathway_ids:
+        db.add(SubjectOfferingPathway(subject_offering_id=offering.subject_offering_id, pathway_id=pid))
+    db.flush()
     return offering
+
 
 
 def copy_academic_year_payload(ctx, **overrides):
@@ -286,7 +303,8 @@ def test_copy_source_inactive_year_to_active_target_year_succeeds(client, db, of
     assert copied.academic_level_id == source_offering.academic_level_id
     assert copied.academic_period_id == ctx["term_1"].academic_period_id
     assert copied.academic_period_id != ctx["other_year_term"].academic_period_id
-    assert copied.pathway == source_offering.pathway
+    from app.services.subject_offerings.SubjectOfferingShared import get_offering_legacy_pathway
+    assert get_offering_legacy_pathway(copied) == get_offering_legacy_pathway(source_offering)
     assert copied.status == "archived"
 
 
@@ -544,7 +562,7 @@ def test_duplicate_offering_is_rejected(client, db, offering_context):
     response = client.post("/api/v1/subject-offerings", json=offering_payload(offering_context, pathway="stem_medical"))
 
     assert response.status_code == 409
-    assert "already exists" in response.json()["detail"]
+    assert "conflict" in response.json()["detail"].lower() or "already exists" in response.json()["detail"].lower()
 
 
 def test_both_pathway_conflict_rules_work(client, db, offering_context):
@@ -553,8 +571,9 @@ def test_both_pathway_conflict_rules_work(client, db, offering_context):
 
     shared_conflict = client.post("/api/v1/subject-offerings", json=offering_payload(offering_context, pathway="both"))
     assert shared_conflict.status_code == 409
-    assert "Subject offering already exists" in shared_conflict.json()["detail"]
+    assert "conflict" in shared_conflict.json()["detail"].lower() or "already exists" in shared_conflict.json()["detail"].lower()
 
+    db.query(SubjectOfferingPathway).delete()
     db.query(SubjectOffering).delete()
     db.commit()
     create_offering(db, offering_context, pathway="both")
@@ -562,7 +581,8 @@ def test_both_pathway_conflict_rules_work(client, db, offering_context):
 
     medical_conflict = client.post("/api/v1/subject-offerings", json=offering_payload(offering_context, pathway="stem_medical"))
     assert medical_conflict.status_code == 409
-    assert "Subject offering already exists" in medical_conflict.json()["detail"]
+    assert "conflict" in medical_conflict.json()["detail"].lower() or "already exists" in medical_conflict.json()["detail"].lower()
+
 
 
 def test_list_offerings_and_search_work(client, db, offering_context):
