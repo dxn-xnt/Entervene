@@ -165,3 +165,8 @@ export function scopeLabel(template: GradingTemplateListItem) {
   const subject = template.subject?.subject_name ?? "Any subject";
   return `${level} - ${subject}`;
 }
+
+export function formatSubjectHours(hours: number | null | undefined): string {
+  if (hours == null) return "Unset";
+  return `${hours} hrs`;
+}

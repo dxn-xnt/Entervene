@@ -59,13 +59,16 @@ def db_and_engine():
         poolclass=StaticPool,
     )
     lrn_check = next(
-        constraint
-        for constraint in Student.__table__.constraints
-        if isinstance(constraint, CheckConstraint) and constraint.name == "lrn_check"
+        (c for c in Student.__table__.constraints if isinstance(c, CheckConstraint) and c.name == "lrn_check"),
+        None,
     )
-    Student.__table__.constraints.remove(lrn_check)
-    Base.metadata.create_all(bind=engine, tables=TABLES)
-    Student.__table__.append_constraint(lrn_check)
+    if lrn_check and lrn_check in Student.__table__.constraints:
+        Student.__table__.constraints.remove(lrn_check)
+    try:
+        Base.metadata.create_all(bind=engine, tables=TABLES)
+    finally:
+        if lrn_check and lrn_check not in Student.__table__.constraints:
+            Student.__table__.append_constraint(lrn_check)
     session = sessionmaker(bind=engine)()
     try:
         yield session, engine

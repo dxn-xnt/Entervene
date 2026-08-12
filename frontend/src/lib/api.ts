@@ -157,11 +157,16 @@ export type SubjectAcademicLevel = {
   level_name: string;
   grade_level: number;
 };
+export type SubjectGroupInline = {
+  subject_group_id: number;
+  name: string;
+  passing_threshold: number;
+};
 export type SubjectListItem = {
   subject_id: number;
   subject_name: string;
   subject_codename: string | null;
-  subject_group: string | null;
+  subject_group: SubjectGroupInline | null;
   hours: number | null;
   default_grading_template: string | null;
   description: string | null;
@@ -181,7 +186,7 @@ export type SubjectListResponse = {
 };
 export type SubjectFormOptions = {
   academic_levels: SubjectAcademicLevel[];
-  subject_groups: string[];
+  subject_groups: SubjectGroupInline[];
   statuses: SubjectStatus[];
   default_status: SubjectStatus;
   grading_templates: string[];
@@ -192,11 +197,12 @@ export type SubjectImportResult = {
   skipped_count: number;
   error_count: number;
   errors: Array<{ row: number | null; message: string }>;
+  warnings?: string[];
 };
 export type SubjectCreatePayload = {
   subject_name: string;
   subject_codename?: string | null;
-  subject_group?: string | null;
+  subject_group_id: number;
   hours?: number | null;
   default_grading_template?: string | null;
   description?: string | null;
@@ -210,7 +216,7 @@ export type SubjectOfferingSubject = {
   subject_id: number;
   subject_name: string;
   subject_codename: string | null;
-  subject_group: string | null;
+  subject_group: SubjectGroupInline | null;
   default_grading_template?: string | null;
 };
 export type SubjectOfferingAcademicYear = {
@@ -757,13 +763,13 @@ export async function getSubjectFormOptions(): Promise<SubjectFormOptions> {
 export async function getSubjects(params: {
   status?: SubjectStatus;
   academic_level_id?: number;
-  subject_group?: string;
+  subject_group_id?: number;
   search?: string;
 } = {}): Promise<SubjectListResponse> {
   const query = new URLSearchParams();
   if (params.status) query.set("status", params.status);
   if (params.academic_level_id) query.set("academic_level_id", String(params.academic_level_id));
-  if (params.subject_group?.trim()) query.set("subject_group", params.subject_group.trim());
+  if (params.subject_group_id) query.set("subject_group_id", String(params.subject_group_id));
   if (params.search?.trim()) query.set("search", params.search.trim());
   const response = await apiFetch(`/api/v1/subjects${query.toString() ? `?${query.toString()}` : ""}`);
   if (!response.ok) {

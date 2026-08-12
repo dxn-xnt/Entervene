@@ -21,6 +21,9 @@ from app.models.academic.SubjectOffering import SubjectOffering
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.auth.UserAccount import UserAccount
 from app.models.settings.Setting import Setting, SettingType
+from app.models.academic.PeriodTemplate import PeriodTemplate
+from app.models.academic.PeriodTemplateSlot import PeriodTemplateSlot
+from app.models.academic.SubjectGroup import SubjectGroup
 
 
 TABLES = [
@@ -34,6 +37,9 @@ TABLES = [
     AcademicStaff.__table__,
     SubjectLoad.__table__,
     UserAccount.__table__,
+    SubjectGroup.__table__,
+    PeriodTemplate.__table__,
+    PeriodTemplateSlot.__table__,
 ]
 
 

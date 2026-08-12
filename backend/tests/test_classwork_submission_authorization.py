@@ -42,6 +42,8 @@ from app.models.quiz.QuizQuestion import QuizQuestion
 from app.models.quiz.QuizSetting import QuizSetting
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.models.submissions.SubmissionAttachment import SubmissionAttachment
+from app.models.notifications.Notification import Notification
+from app.models.academic.SubjectGroup import SubjectGroup
 
 
 TABLES = [
@@ -68,6 +70,8 @@ TABLES = [
     StudentSubmission.__table__,
     QuizAnswer.__table__,
     SubmissionAttachment.__table__,
+    Notification.__table__,
+    SubjectGroup.__table__,
 ]
 
 
@@ -79,13 +83,16 @@ def authz_context(tmp_path):
         poolclass=StaticPool,
     )
     lrn_check = next(
-        constraint
-        for constraint in Student.__table__.constraints
-        if isinstance(constraint, CheckConstraint) and constraint.name == "lrn_check"
+        (c for c in Student.__table__.constraints if isinstance(c, CheckConstraint) and c.name == "lrn_check"),
+        None,
     )
-    Student.__table__.constraints.remove(lrn_check)
-    Base.metadata.create_all(bind=engine, tables=TABLES)
-    Student.__table__.append_constraint(lrn_check)
+    if lrn_check and lrn_check in Student.__table__.constraints:
+        Student.__table__.constraints.remove(lrn_check)
+    try:
+        Base.metadata.create_all(bind=engine, tables=TABLES)
+    finally:
+        if lrn_check and lrn_check not in Student.__table__.constraints:
+            Student.__table__.append_constraint(lrn_check)
     db = sessionmaker(bind=engine)()
 
     year = AcademicYear(

@@ -44,7 +44,7 @@ def get_subject_form_options(
 def list_subjects(
     status: str | None = Query(None),
     academic_level_id: int | None = Query(None),
-    subject_group: str | None = Query(None),
+    subject_group_id: int | None = Query(None),
     search: str = "",
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
@@ -53,7 +53,7 @@ def list_subjects(
         db=db,
         status=status,
         academic_level_id=academic_level_id,
-        subject_group=subject_group,
+        subject_group_id=subject_group_id,
         search=search,
     )
 
@@ -61,9 +61,10 @@ def list_subjects(
 @router.get("/import-template")
 def download_subject_import_template(
     current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
 ):
     return Response(
-        content=subject_import_template_csv(),
+        content=subject_import_template_csv(db=db),
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="subject_catalog_import_template.csv"'},
     )
