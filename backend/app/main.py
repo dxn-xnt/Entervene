@@ -29,6 +29,7 @@ from app.api.v1.routes.Settings import router as settings_router
 from app.api.v1.routes.Notifications import router as notifications_router
 from app.api.v1.routes.SubjectGroups import router as subject_groups_router
 from app.api.v1.routes.Pathways import router as pathways_router
+from app.api.v1.routes.Attendance import router as attendance_router
 
 
 app = FastAPI(
@@ -92,6 +93,7 @@ app.include_router(activities_router,    prefix="/api/v1/activities",       tags
 app.include_router(notifications_router, prefix="/api/v1/notifications",    tags=["Notifications"])
 app.include_router(subject_groups_router, prefix="/api/v1/subject-groups",  tags=["Subject Groups"])
 app.include_router(pathways_router,       prefix="/api/v1/pathways",        tags=["Pathways"])
+app.include_router(attendance_router,     prefix="/api/v1/attendance",      tags=["Attendance"])
 
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):

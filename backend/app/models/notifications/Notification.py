@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlalchemy import Column, String, Text, Boolean, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
-from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.Base import Base
 
@@ -32,5 +32,6 @@ class Notification(Base):
     # Whether the user has seen/dismissed this notification
     is_read = Column(Boolean, nullable=False, default=False)
 
-    created_at: Mapped[datetime | None] = Column(DateTime(timezone=True), server_default=func.now())
-    read_at: Mapped[datetime | None] = Column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
