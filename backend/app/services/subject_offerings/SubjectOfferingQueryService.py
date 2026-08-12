@@ -146,7 +146,6 @@ def list_subject_offerings_data(
                 SubjectOffering.offering_pathways.any(
                     SubjectOfferingPathway.pathway.has(func.lower(AcademicPathway.code) == norm)
                 ),
-                func.lower(func.coalesce(SubjectOffering.pathway, "")) == norm,
             )
         )
 
@@ -168,7 +167,6 @@ def list_subject_offerings_data(
             AcademicYear.start_date.desc(),
             AcademicLevel.grade_level,
             AcademicPeriod.period_sequence,
-            SubjectOffering.pathway,
             func.lower(Subject.subject_name),
         )
         .all()

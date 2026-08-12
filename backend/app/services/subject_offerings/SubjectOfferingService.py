@@ -18,6 +18,7 @@ from app.services.subject_offerings.SubjectOfferingShared import (
     ensure_academic_year_is_active,
     ensure_offering_available,
     get_academic_year_or_404,
+    get_offering_legacy_pathway,
     normalize_offering_status,
     offering_to_item,
     validate_core_subject_pathway_restriction,
@@ -231,7 +232,7 @@ def copy_subject_offerings_between_academic_years(
             offering.subject_id,
             offering.academic_level_id,
             offering.academic_period_id,
-            offering.pathway,
+            get_offering_legacy_pathway(offering),
         ): offering
         for offering in existing_target_offerings
     }
@@ -242,7 +243,7 @@ def copy_subject_offerings_between_academic_years(
             offering.academic_level_id,
             offering.academic_period_id,
         )
-        pathways_by_base_scope.setdefault(base_key, set()).add(offering.pathway)
+        pathways_by_base_scope.setdefault(base_key, set()).add(get_offering_legacy_pathway(offering))
 
     created_count = 0
     updated_count = 0
@@ -259,11 +260,12 @@ def copy_subject_offerings_between_academic_years(
             })
             continue
 
+        src_pw = get_offering_legacy_pathway(source_offering)
         scope_key = (
             source_offering.subject_id,
             source_offering.academic_level_id,
             target_period.academic_period_id,
-            source_offering.pathway,
+            src_pw,
         )
         base_scope_key = (
             source_offering.subject_id,
@@ -285,11 +287,11 @@ def copy_subject_offerings_between_academic_years(
 
         existing_pathways = pathways_by_base_scope.setdefault(base_scope_key, set())
         conflict_reason = None
-        if source_offering.pathway in existing_pathways:
+        if src_pw in existing_pathways:
             conflict_reason = "Subject offering already exists for this scope and pathway."
-        elif source_offering.pathway == "both" and ({"stem_medical", "stem_engineering"} & existing_pathways):
+        elif src_pw == "both" and ({"stem_medical", "stem_engineering"} & existing_pathways):
             conflict_reason = "Shared offering conflicts with an existing pathway-specific offering."
-        elif source_offering.pathway in {"stem_medical", "stem_engineering"} and "both" in existing_pathways:
+        elif src_pw in {"stem_medical", "stem_engineering"} and "both" in existing_pathways:
             conflict_reason = "Pathway-specific offering conflicts with an existing shared offering."
 
         if conflict_reason:
@@ -307,7 +309,7 @@ def copy_subject_offerings_between_academic_years(
                 target_year.academic_year_id,
                 source_offering.academic_level_id,
                 target_period.academic_period_id,
-                source_offering.pathway,
+                src_pw,
             )
         except HTTPException as exc:
             skipped.append({
@@ -322,12 +324,16 @@ def copy_subject_offerings_between_academic_years(
             academic_year_id=target_year.academic_year_id,
             academic_level_id=source_offering.academic_level_id,
             academic_period_id=target_period.academic_period_id,
-            pathway=source_offering.pathway,
             status=normalize_offering_status(source_offering.status),
         )
         db.add(offering)
+        db.flush()
+
+        for link in source_offering.offering_pathways or []:
+            db.add(SubjectOfferingPathway(subject_offering_id=offering.subject_offering_id, pathway_id=link.pathway_id))
+
         existing_by_scope[scope_key] = offering
-        existing_pathways.add(source_offering.pathway)
+        existing_pathways.add(src_pw)
         created_count += 1
 
     try:

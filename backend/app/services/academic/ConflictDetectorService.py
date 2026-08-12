@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.academic.Subject import Subject
 from app.models.academic.Class_ import Class
 from app.models.academic.PeriodTemplateSlot import PeriodTemplateSlot
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.academic.SubjectOffering import SubjectOffering
+from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
 from app.services.classes.ClassQueryService import class_pathway_code
 from app.schemas.SubjectLoad import (
     ConflictItem,
@@ -216,6 +217,7 @@ class ConflictDetectorService:
             try:
                 period_offerings = (
                     db.query(SubjectOffering)
+                    .options(joinedload(SubjectOffering.offering_pathways).joinedload(SubjectOfferingPathway.pathway))
                     .filter(
                         SubjectOffering.academic_period_id == academic_period.academic_period_id,
                         SubjectOffering.status == "active",
@@ -224,9 +226,26 @@ class ConflictDetectorService:
                 )
             except Exception:
                 period_offerings = []
+
             if period_offerings:
+                def _get_offering_pathway_code(so: SubjectOffering) -> str:
+                    pathway_links = getattr(so, "offering_pathways", None) or []
+                    if not pathway_links:
+                        return (getattr(so, "pathway", None) or "general").casefold()
+                    if len(pathway_links) == 1:
+                        pw = getattr(pathway_links[0], "pathway", None)
+                        if pw and getattr(pw, "code", None):
+                            code = str(pw.code).casefold()
+                            if "medical" in code or "health" in code:
+                                return "stem_medical"
+                            if "engineering" in code or "math" in code:
+                                return "stem_engineering"
+                            return code
+                        return "general"
+                    return "both"
+
                 offered_tuples = {
-                    (so.subject_id, so.academic_level_id, (so.pathway or "general").casefold())
+                    (so.subject_id, so.academic_level_id, _get_offering_pathway_code(so))
                     for so in period_offerings
                 }
                 for load in loads:
@@ -245,6 +264,8 @@ class ConflictDetectorService:
                                 so_pw == "both"
                                 or so_pw == cls_pathway
                                 or (so_pw == "general" and cls_pathway == "general")
+                                or (so_pw in ("medical-courses", "stem_medical") and cls_pathway in ("medical-courses", "stem_medical"))
+                                or (so_pw in ("engineering-math", "stem_engineering") and cls_pathway in ("engineering-math", "stem_engineering"))
                             )
                             for (so_sub, so_lvl, so_pw) in offered_tuples
                         )
