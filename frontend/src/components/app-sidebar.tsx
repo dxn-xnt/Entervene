@@ -18,7 +18,7 @@ import { SidebarConfigs } from "@/context/sidebar-config"
 import { formatPeriodLabel } from "@/lib/academic-periods"
 
 const periods = [
-  `Active Period: ${formatPeriodLabel({ period_type: "TERM", period_sequence: 1 })} (2025-2026)`,
+  `${formatPeriodLabel({ period_type: "TERM", period_sequence: 1 })} (2025-2026)`,
   `${formatPeriodLabel({ period_type: "TERM", period_sequence: 2 })} (2025-2026)`,
   `${formatPeriodLabel({ period_type: "TERM", period_sequence: 3 })} (2025-2026)`,
 ]

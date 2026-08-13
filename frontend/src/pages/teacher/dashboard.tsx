@@ -99,7 +99,6 @@ const Dashboard = () => {
               </div>
               <Button
                 onClick={() => navigate(routes.teacher.profile)}
-                className="border-2 border-black bg-amber-200 hover:bg-amber-300 text-amber-950 font-bold text-xs shadow-[2px_2px_0_#000]"
               >
                 <Calendar className="size-3.5 mr-1.5" />
                 View My Schedule
