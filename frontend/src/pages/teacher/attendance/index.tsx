@@ -4,6 +4,10 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
+import { Input } from "@/components/retroui/Input";
+import { Tabs } from "@/components/retroui/Tabs";
+import { Table } from "@/components/retroui/Table";
+import { Label } from "@/components/retroui/Label";
 import { apiFetch, getTeacherAdvisoryClasses } from "@/lib/api";
 import {
   getClassAttendanceLogs,
@@ -86,6 +90,12 @@ export default function TeacherAttendancePage() {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const attendanceTabs = [
+    { id: "marking" as const, label: "Mark attendance", icon: Users },
+    { id: "summary" as const, label: "Attendance summary", icon: BarChart3 },
+    { id: "leaves" as const, label: "Leave requests", icon: FileText },
+  ];
 
   // Fetch Teacher Classes
   useEffect(() => {
@@ -316,80 +326,36 @@ export default function TeacherAttendancePage() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col gap-6 p-4 md:p-6 w-full max-w-7xl mx-auto">
-        {/* Header Title */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b-2 border-black pb-4">
-          <div className="flex items-center gap-3">
-            <SidebarTrigger />
-            <div>
-              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-                Daily Class Attendance & Summary
-              </h1>
-              <p className="text-sm text-muted-foreground font-medium">
-                Mark daily attendance, view overall student summary reports, and manage leave requests.
-              </p>
-            </div>
-          </div>
+      <div className="flex flex-1 flex-col">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
+            <header className="flex items-center gap-3">
+              <SidebarTrigger className="md:hidden" />
+              <div>
+                <h1 className="text-2xl font-bold md:text-4xl">Class attendance</h1>
+              </div>
+            </header>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => setActiveTab("marking")}
-              className={`px-4 py-2 text-sm font-bold border-2 border-black transition-all ${
-                activeTab === "marking"
-                  ? "bg-black text-white shadow-none"
-                  : "bg-white text-black hover:bg-neutral-100 shadow-md"
-              }`}
-            >
-              <Users className="w-4 h-4 inline mr-2" />
-              Mark Attendance
-            </button>
-
-            <button
-              onClick={() => setActiveTab("summary")}
-              className={`px-4 py-2 text-sm font-bold border-2 border-black transition-all ${
-                activeTab === "summary"
-                  ? "bg-black text-white shadow-none"
-                  : "bg-white text-black hover:bg-neutral-100 shadow-md"
-              }`}
-            >
-              <BarChart3 className="w-4 h-4 inline mr-2" />
-              Attendance Summary
-            </button>
-
-            <button
-              onClick={() => setActiveTab("leaves")}
-              className={`px-4 py-2 text-sm font-bold border-2 border-black transition-all relative ${
-                activeTab === "leaves"
-                  ? "bg-black text-white shadow-none"
-                  : "bg-white text-black hover:bg-neutral-100 shadow-md"
-              }`}
-            >
-              <FileText className="w-4 h-4 inline mr-2" />
-              Leave Requests
-              {leaveRequests.filter((l) => l.status === "pending").length > 0 && (
-                <span className="ml-2 px-1.5 py-0.5 text-xs bg-red-500 text-white rounded-full font-bold">
-                  {leaveRequests.filter((l) => l.status === "pending").length}
-                </span>
-              )}
-            </button>
-          </div>
-        </div>
+            <Tabs
+              tabs={attendanceTabs}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              counts={{ leaves: leaveRequests.filter((l) => l.status === "pending").length }}
+            />
 
         {/* Filters & Control Bar */}
-        <Card className="p-4 border-2 border-black bg-card shadow-md">
+        <Card className="block border-border p-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-center">
             {/* Class Selector */}
             <div>
-              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
-                Select Class
-              </label>
+              <Label className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted-foreground">Select class</Label>
               {loadingClasses ? (
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <Loader2 className="w-4 h-4 animate-spin" /> Loading classes...
                 </div>
               ) : (
                 <select
-                  className="w-full border-2 border-black p-2 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-black"
+                  className="h-10 w-full rounded border-2 border-input bg-background px-3 text-sm font-semibold shadow-md outline-none focus:shadow-none"
                   value={selectedClassId || ""}
                   onChange={(e) => setSelectedClassId(Number(e.target.value))}
                 >
@@ -405,31 +371,27 @@ export default function TeacherAttendancePage() {
             {/* Date Selector (Only shown for Marking tab) */}
             {activeTab === "marking" && (
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
-                  Attendance Date
-                </label>
-                <input
+                <Label className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted-foreground">Attendance date</Label>
+                <Input
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full border-2 border-black p-2 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-black"
+                  className="h-10 w-full bg-background text-sm font-semibold"
                 />
               </div>
             )}
 
             {/* Search */}
             <div className={activeTab !== "marking" ? "sm:col-span-2" : ""}>
-              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
-                Search Student
-              </label>
+              <Label className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted-foreground">Search student</Label>
               <div className="relative">
                 <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
-                <input
+                <Input
                   type="text"
                   placeholder="Search name or LRN..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full border-2 border-black pl-9 p-2 text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-black"
+                  className="h-10 w-full bg-background pl-9 text-sm"
                 />
               </div>
             </div>
@@ -439,37 +401,37 @@ export default function TeacherAttendancePage() {
         {activeTab === "marking" ? (
           <>
             {/* Stats Overview */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              <Card className="p-3 border-2 border-black bg-emerald-50 text-emerald-900 flex flex-col items-center justify-center">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+              <Card className="flex w-full flex-col items-center justify-center border-border bg-card p-2.5">
                 <div className="flex items-center gap-1 text-xs font-bold uppercase">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Present
+                  <CheckCircle2 className="w-4 h-4" /> Present
                 </div>
                 <span className="text-2xl font-black">{stats.present}</span>
               </Card>
 
-              <Card className="p-3 border-2 border-black bg-red-50 text-red-900 flex flex-col items-center justify-center">
+              <Card className="flex w-full flex-col items-center justify-center border-border bg-card p-2.5">
                 <div className="flex items-center gap-1 text-xs font-bold uppercase">
-                  <XCircle className="w-4 h-4 text-red-600" /> Absent
+                  <XCircle className="w-4 h-4" /> Absent
                 </div>
                 <span className="text-2xl font-black">{stats.absent}</span>
               </Card>
 
-              <Card className="p-3 border-2 border-black bg-amber-50 text-amber-900 flex flex-col items-center justify-center">
+              <Card className="flex w-full flex-col items-center justify-center border-border bg-card p-2.5">
                 <div className="flex items-center gap-1 text-xs font-bold uppercase">
-                  <Clock className="w-4 h-4 text-amber-600" /> Late
+                  <Clock className="w-4 h-4" /> Late
                 </div>
                 <span className="text-2xl font-black">{stats.late}</span>
               </Card>
 
-              <Card className="p-3 border-2 border-black bg-blue-50 text-blue-900 flex flex-col items-center justify-center">
+              <Card className="flex w-full flex-col items-center justify-center border-border bg-card p-2.5">
                 <div className="flex items-center gap-1 text-xs font-bold uppercase">
-                  <UserCheck className="w-4 h-4 text-blue-600" /> Excused
+                  <UserCheck className="w-4 h-4" /> Excused
                 </div>
                 <span className="text-2xl font-black">{stats.excused}</span>
               </Card>
 
-              <Card className="p-3 border-2 border-black bg-neutral-900 text-white col-span-2 sm:col-span-1 flex flex-col items-center justify-center">
-                <div className="text-xs font-bold uppercase text-neutral-300">
+              <Card className="col-span-2 flex w-full flex-col items-center justify-center border-border bg-card p-2.5 sm:col-span-1">
+                <div className="text-xs font-bold uppercase text-muted-foreground">
                   Daily Rate
                 </div>
                 <span className="text-2xl font-black">{stats.rate}%</span>
@@ -477,7 +439,7 @@ export default function TeacherAttendancePage() {
             </div>
 
             {/* Quick Bulk Actions & Save Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/40 p-3 border-2 border-black rounded-none">
+            <Card className="flex w-full flex-wrap items-center justify-between gap-3  p-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold uppercase text-muted-foreground mr-1">
                   Bulk Mark:
@@ -503,7 +465,7 @@ export default function TeacherAttendancePage() {
               <Button
                 onClick={handleSaveAttendance}
                 disabled={saving || studentList.length === 0}
-                className="bg-black text-white hover:bg-neutral-800 font-bold text-sm flex items-center gap-2 border-2 border-black"
+                className=" flex items-center gap-2"
               >
                 {saving ? (
                   <>
@@ -519,7 +481,7 @@ export default function TeacherAttendancePage() {
                   </>
                 )}
               </Button>
-            </div>
+            </Card>
 
             {/* Attendance Roster Table */}
             {loadingLogs ? (
@@ -534,18 +496,17 @@ export default function TeacherAttendancePage() {
                 <p className="text-sm">Select a valid class or clear search term.</p>
               </div>
             ) : (
-              <div className="border-2 border-black bg-card overflow-x-auto shadow-md">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b-2 border-black bg-muted text-xs font-extrabold uppercase">
+              <Table wrapperClassName="overflow-x-auto" className="min-w-[850px] border-collapse bg-card">
+                  <Table.Header>
+                    <Table.Row className="hover:bg-primary hover:text-primary-foreground">
                       <th className="p-3 border-r-2 border-black">#</th>
                       <th className="p-3 border-r-2 border-black">LRN</th>
                       <th className="p-3 border-r-2 border-black">Student Name</th>
                       <th className="p-3 border-r-2 border-black text-center">Status</th>
                       <th className="p-3">Remarks / Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y-2 divide-black text-sm">
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body className="text-sm">
                     {filteredStudents.map((student, index) => (
                       <tr
                         key={student.student_id}
@@ -634,9 +595,8 @@ export default function TeacherAttendancePage() {
                         </td>
                       </tr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </Table.Body>
+              </Table>
             )}
           </>
         ) : activeTab === "summary" ? (
@@ -663,10 +623,9 @@ export default function TeacherAttendancePage() {
                 <p className="text-sm">Mark attendance for this class to populate the summary report.</p>
               </div>
             ) : (
-              <div className="border-2 border-black bg-card overflow-x-auto shadow-md">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b-2 border-black bg-muted text-xs font-extrabold uppercase">
+              <Table wrapperClassName="overflow-x-auto" className="min-w-[950px] border-collapse bg-card">
+                  <Table.Header>
+                    <Table.Row className="hover:bg-primary hover:text-primary-foreground">
                       <th className="p-3 border-r-2 border-black">#</th>
                       <th className="p-3 border-r-2 border-black">Student Name</th>
                       <th className="p-3 border-r-2 border-black text-center">Total Days</th>
@@ -676,9 +635,9 @@ export default function TeacherAttendancePage() {
                       <th className="p-3 border-r-2 border-black text-center text-blue-800">Excused</th>
                       <th className="p-3 border-r-2 border-black text-center">Attendance Rate</th>
                       <th className="p-3 text-center">History</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y-2 divide-black text-sm">
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body className="text-sm">
                     {summaryMatrix.map((item, index) => {
                       const isExpanded = expandedStudentId === item.student_id;
                       return (
@@ -734,9 +693,8 @@ export default function TeacherAttendancePage() {
                         </tr>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
+                  </Table.Body>
+              </Table>
             )}
           </div>
         ) : (
@@ -809,6 +767,8 @@ export default function TeacherAttendancePage() {
             )}
           </div>
         )}
+          </div>
+        </div>
       </div>
     </AppLayout>
   );
