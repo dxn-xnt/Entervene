@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 const Switch = ({ className, ...props }: SwitchPrimitives.SwitchProps) => (
   <SwitchPrimitives.Root
     className={cn(
-      "peer inline-flex h-6 w-11 shrink-0 cursor-pointer border-2 border-foreground items-center disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary",
+      "peer inline-flex h-6 w-11 shrink-0 cursor-pointer border-2 border-foreground items-center disabled:cursor-default disabled:opacity-50 data-[state=checked]:bg-primary",
       className,
     )}
     {...props}

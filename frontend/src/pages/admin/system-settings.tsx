@@ -15,6 +15,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
 import { ArrowUpRight, Lock, Pencil, Loader2 } from "lucide-react";
 import AddAcademicPeriodModal from "./forms/add-academic-period";
+import AddGradingTemplateModal from "./forms/add-grading-template";
 
 import { getAllSettings, updateSetting, type GroupedSettings } from "@/lib/settings-api";
 import { useSettings } from "@/context/SettingsContext";
@@ -166,11 +167,6 @@ export default function AdminSystemSettings() {
   const [templates, setTemplates] =
     React.useState<Template[]>(DEFAULT_TEMPLATES);
   const [templateModalOpen, setTemplateModalOpen] = React.useState(false);
-  const [tplName, setTplName] = React.useState("");
-  const [tplWw, setTplWw] = React.useState("25");
-  const [tplPt, setTplPt] = React.useState("45");
-  const [tplQa, setTplQa] = React.useState("30");
-  const [tplError, setTplError] = React.useState<string | null>(null);
 
   // Toast
   const [toastMsg, setToastMsg] = React.useState<string | null>(null);
@@ -310,38 +306,13 @@ export default function AdminSystemSettings() {
       if (flatSettings["medical_pathway_enabled"]) setMedicalEnabled(flatSettings["medical_pathway_enabled"] === "true");
       if (flatSettings["engineering_pathway_enabled"]) setEngineeringEnabled(flatSettings["engineering_pathway_enabled"] === "true");
 
-      // Fetch dynamic grading templates from DB
-      try {
-        const templatesRes = await getGradingTemplates({ status: "active" });
-        const list = templatesRes.grading_templates || [];
-        if (list.length > 0) {
-          const mappedTemplates: Template[] = list.map((gt) => {
-            const wwComp = gt.components.find((c) => c.component_name.toLowerCase().includes("written"))?.weight ?? 0;
-            const ptComp = gt.components.find((c) => c.component_name.toLowerCase().includes("performance"))?.weight ?? 0;
-            const qaComp = gt.components.find((c) => 
-              c.component_name.toLowerCase().includes("quarter") || 
-              c.component_name.toLowerCase().includes("term") || 
-              c.component_name.toLowerCase().includes("exam")
-            )?.weight ?? 0;
-            return {
-              name: gt.template_name,
-              ww: wwComp,
-              pt: ptComp,
-              qa: qaComp,
-              scope: gt.description || "Database Template",
-            };
-          });
-          setTemplates(mappedTemplates);
-        }
-      } catch {
-        // Fallback to default templates if table empty or unseeded
-      }
+      await fetchGradingTemplatesList();
     } catch {
       // Graceful fallback to default state if backend settings are missing/unseeded
     } finally {
       setIsLoadingSettings(false);
     }
-  }, []);
+  }, [fetchGradingTemplatesList]);
 
   React.useEffect(() => {
     loadSettingsFromBackend();
@@ -459,99 +430,28 @@ export default function AdminSystemSettings() {
     setPendingTerm(null);
   };
 
-  const openTemplateModal = () => {
-    setTplName("");
-    setTplWw("25");
-    setTplPt("45");
-    setTplQa("30");
-    setTplError(null);
-    setTemplateModalOpen(true);
-  };
 
-  const addTemplate = async () => {
-    const name = tplName.trim();
-    const ww = Number(tplWw) || 0;
-    const pt = Number(tplPt) || 0;
-    const qa = Number(tplQa) || 0;
-
-    if (!name) {
-      setTplError("Template name is required.");
-      return;
-    }
-    if (ww + pt + qa !== 100) {
-      setTplError(
-        `Weights must total 100%. Current total is ${ww + pt + qa}%.`,
-      );
-      return;
-    }
-
-    try {
-      await createGradingTemplate({
-        template_name: name,
-        description: "Custom template",
-        components: [
-          { component_name: "Written Work", weight: ww, display_order: 1 },
-          { component_name: "Performance Task", weight: pt, display_order: 2 },
-          { component_name: "Quarterly Assessment", weight: qa, display_order: 3 },
-        ],
-      });
-
-      // Re-fetch dynamic template list from DB
-      const templatesRes = await getGradingTemplates({ status: "active" });
-      const list = templatesRes.grading_templates || [];
-      if (list.length > 0) {
-        const mappedTemplates: Template[] = list.map((gt) => {
-          const wwComp = gt.components.find((c) => c.component_name.toLowerCase().includes("written"))?.weight ?? 0;
-          const ptComp = gt.components.find((c) => c.component_name.toLowerCase().includes("performance"))?.weight ?? 0;
-          const qaComp = gt.components.find((c) => 
-            c.component_name.toLowerCase().includes("quarter") || 
-            c.component_name.toLowerCase().includes("term") || 
-            c.component_name.toLowerCase().includes("exam")
-          )?.weight ?? 0;
-          return {
-            name: gt.template_name,
-            ww: wwComp,
-            pt: ptComp,
-            qa: qaComp,
-            scope: gt.description || "Database Template",
-          };
-        });
-        setTemplates(mappedTemplates);
-      } else {
-        setTemplates((prev) => [
-          ...prev,
-          { name, ww, pt, qa, scope: "Custom template" },
-        ]);
-      }
-
-      setTemplateModalOpen(false);
-      showToast("New grading template saved to database");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to save template";
-      setTplError(msg);
-    }
-  };
 
   const pathwayPills = (level: string) => {
     if (level !== "Grade 11" && level !== "Grade 12") return null;
     const pills: React.ReactNode[] = [];
     if (medicalEnabled)
       pills.push(
-        <Pill tone="blue" key="med">
+        <Badge size="sm" variant="surface" key="med">
           STEM Medical
-        </Pill>,
+        </Badge>,
       );
     if (engineeringEnabled)
       pills.push(
-        <Pill tone="blue" key="eng">
+        <Badge size="sm" variant="surface" key="eng">
           STEM Engineering
-        </Pill>,
+        </Badge>,
       );
     if (pills.length === 0)
       pills.push(
-        <Pill tone="gray" key="none">
+        <Badge size="sm" variant="default" key="none">
           No pathway enabled
-        </Pill>,
+        </Badge>,
       );
     return pills;
   };
@@ -676,21 +576,23 @@ export default function AdminSystemSettings() {
                   General Average Passing Grade
                   <Button
                     size="sm"
+                    className="whitespace-nowrap"
                     onClick={handleSaveThresholds}
                     disabled={isSavingThresholds}
                   >
                     {isSavingThresholds ? "Saving..." : "Save Threshold"}
                   </Button>
-                </Card.Title>
+                </div>
+
               </Card.Header>
-              <Card.Content className="px-4 pt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card.Content className="flex flex-col gap-4">
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-row justify-between w-full items-center">
                     <Text as="h6" className="font-sans font-medium">
                       General Average Passing Grade
                     </Text>
                     <Input
-                      className="w-20"
+                      className="w-20 shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md transition-all"
                       type="number"
                       min={0}
                       max={100}
@@ -700,49 +602,35 @@ export default function AdminSystemSettings() {
                       }
                     />
                   </div>
-                  <Text
-                    as="p"
-                    className="font-sans text-sm text-muted-foreground"
-                  >
-                    Used for general promotion/completion reports. Adjust only
-                    if the client confirms a different rule.
-                  </Text>
+
                 </div>
               </Card.Content>
             </Card>
 
             {/* Academic Calendar */}
             <Card className="@container/card w-full">
-              <Card.Header>
-                <Card.Title className="flex flex-row justify-between w-full items-center">
+              <Card.Header className="flex flex-row justify-between items-start">
+                <Card.Title className="flex flex-col w-full gap-1 mb-4">
                   Academic Calendar
-                  <div className="flex items-center gap-4">
-                    <Button
-                      size="sm"
-                      variant="link"
-                      className="p-0! shadow-none flex-row gap-2"
-                      onClick={() => navigate(`/admin/academic-periods`)}
-                    >
-                      View All Periods
-                      <ArrowUpRight className="w-4 h-4" />
-                    </Button>
-                    <Dialog>
-                      <Dialog.Trigger>
-                        <Button size="sm">New Academic Period</Button>
-                      </Dialog.Trigger>
-                      <AddAcademicPeriodModal />
-                    </Dialog>
-                  </div>
+                  <Text
+                    as="p"
+                    className="text-sm font-normal text-muted-foreground"
+                  >
+                    Set the active school year and active term. This is the only
+                    current-period selector for both JHS and SHS.
+                  </Text>
+
                 </Card.Title>
+                <div className="flex items-center gap-4">
+                  <Dialog>
+                    <Dialog.Trigger>
+                      <Button size="sm" className="whitespace-nowrap">New Academic Period</Button>
+                    </Dialog.Trigger>
+                    <AddAcademicPeriodModal />
+                  </Dialog>
+                </div>
               </Card.Header>
-              <Card.Content className="px-4 pt-4 flex flex-col gap-4">
-                <Text
-                  as="p"
-                  className="font-sans text-sm text-muted-foreground -mt-2"
-                >
-                  Set the active school year and active term. This is the only
-                  current-period selector for both JHS and SHS.
-                </Text>
+              <Card.Content className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="flex flex-col gap-2">
                     <Text as="h6" className="font-sans font-medium">
@@ -755,7 +643,7 @@ export default function AdminSystemSettings() {
                         saveSingleSetting("current_school_year", val);
                       }}
                     >
-                      <Select.Trigger className="w-full">
+                      <Select.Trigger className="w-full shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md data-[state=open]:shadow-md transition-all">
                         <Select.Value placeholder="2026 - 2027" />
                       </Select.Trigger>
                       <Select.Content>
@@ -770,15 +658,15 @@ export default function AdminSystemSettings() {
 
                   <div className="flex flex-col gap-2">
                     <Text as="h6" className="font-sans font-medium">
-                      Calendar Type
+                      Period Type
                     </Text>
-                    <div className="h-10 border-2 border-black flex items-center gap-2 px-3 text-sm bg-neutral-50 shadow-[4px_4px_0_#000]">
+                    <div className="h-10 border-2 border-black flex items-center gap-2 px-3 text-md">
                       <Lock className="w-3.5 h-3.5" />
                       Three-Term Calendar
                     </div>
                     <Text
                       as="p"
-                      className="font-sans text-xs text-muted-foreground"
+                      className="font-sans text-sm text-muted-foreground"
                     >
                       Locked for the current implementation.
                     </Text>
@@ -789,7 +677,7 @@ export default function AdminSystemSettings() {
                       Active Period
                     </Text>
                     <Select value={activeTerm} onValueChange={handleTermChange}>
-                      <Select.Trigger className="w-full">
+                      <Select.Trigger className="w-full shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md data-[state=open]:shadow-md transition-all">
                         <Select.Value placeholder="Term 1" />
                       </Select.Trigger>
                       <Select.Content>
@@ -803,48 +691,77 @@ export default function AdminSystemSettings() {
                   </div>
                 </div>
 
-                <div className="border-2 border-black bg-neutral-50 rounded-md p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <Text as="p" className="font-sans text-sm">
-                      <strong>Active:</strong> {TERM_LABELS[activeTerm]} ·
-                      Progress Ratio {ratio.toFixed(4)} · Applies to JHS and SHS
-                    </Text>
-                    <Pill tone="green">TERM</Pill>
+                <div className="border-2 border-black rounded-md bg-background p-4 flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Text as="p" className="text-sm font-semibold">
+                        {Math.round(ratio * 100)}% Complete
+                      </Text>
+
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2">
+                        <Text as="p" className="text-sm font-semibold">
+                          Active:
+                        </Text>
+                        <Badge size="sm" variant="secondary">
+                          {TERM_LABELS[activeTerm] || `Term ${activeTerm}`}
+                        </Badge>
+                      </div>
+                    </div>
                   </div>
-                  <Progress value={ratio * 100} className="mt-2" />
+                  <Progress value={ratio * 100} className="w-full" />
+                </div>
+                <div className="flex flex-row justify-between w-full items-center -my-2">
+                  <Text as="p" className="font-sans text-sm text-muted-foreground">
+                    Applies to Junior High School and Senior High School.
+                  </Text>
+                  <Button
+                    size="sm"
+                    variant="link"
+                    className="shadow-none -mr-2"
+                    onClick={() => navigate(`/admin/academic-periods`)}
+                  >
+                    View All Periods
+                    <ArrowUpRight className="w-4 h-4 ml-1" />
+                  </Button>
                 </div>
               </Card.Content>
             </Card>
 
             {/* School Curriculum Scope */}
             <Card className="@container/card w-full">
-              <Card.Header>
-                <Card.Title className="flex flex-row justify-between w-full items-center">
+              <Card.Header className="flex flex-row justify-between items-start">
+                <Card.Title className="flex flex-col w-full gap-1 mb-4">
                   School Curriculum Scope
+                  <Text
+                    as="p"
+                    className="text-sm font-normal text-muted-foreground"
+                  >
+                    Define what the school offers. Actual pathway subjects belong
+                    in the Subjects module.
+                  </Text>
+
+                </Card.Title>
+                <div className="flex items-center gap-4">
                   <Button
                     size="sm"
+                    className="whitespace-nowrap"
                     onClick={handleSaveScope}
                     disabled={isSavingScope}
                   >
-                    {isSavingScope ? "Saving..." : "Save Scope"}
+                    Save Scope
                   </Button>
-                </Card.Title>
+                </div>
               </Card.Header>
-              <Card.Content className="px-4 pt-4 flex flex-col gap-4">
-                <Text
-                  as="p"
-                  className="font-sans text-sm text-muted-foreground -mt-2"
-                >
-                  Define what the school offers. Actual pathway subjects belong
-                  in the Subjects module.
-                </Text>
+              <Card.Content className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="border-2 border-black rounded-md p-4 flex flex-col gap-3">
-                    <Text as="h6" className="font-sans font-bold">
+                  <div className="border-2 border-black p-4 flex flex-col gap-3">
+                    <Text as="h6" className="text-xl font-bold">
                       School Levels
                     </Text>
-                    <div className="flex items-center justify-between border-2 border-black rounded-md px-3 py-2">
-                      <Text as="p" className="font-sans font-medium">
+                    <div className="flex items-center justify-between">
+                      <Text as="p" className="font-medium">
                         Junior High School
                       </Text>
                       <Switch
@@ -852,7 +769,7 @@ export default function AdminSystemSettings() {
                         onCheckedChange={() => setJhsEnabled((v) => !v)}
                       />
                     </div>
-                    <div className="flex items-center justify-between border-2 border-black rounded-md px-3 py-2">
+                    <div className="flex items-center justify-between">
                       <Text as="p" className="font-sans font-medium">
                         Senior High School
                       </Text>
@@ -972,9 +889,9 @@ export default function AdminSystemSettings() {
             {/* Academic Levels */}
             <Card className="@container/card w-full">
               <Card.Header>
-                <Card.Title>Academic Levels</Card.Title>
+                <Card.Title className="flex flex-row justify-between w-full items-center mb-4">Academic Levels</Card.Title>
               </Card.Header>
-              <Card.Content className="px-4 pt-4">
+              <Card.Content className="flex flex-col gap-4">
                 <Table>
                   <Table.Header>
                     <Table.Row>
@@ -997,16 +914,16 @@ export default function AdminSystemSettings() {
                             {item.level}
                           </Table.Cell>
                           <Table.Cell>{item.stage}</Table.Cell>
-                          <Table.Cell>
+                          <Table.Cell className="text-center">
                             {item.stage === "Junior High" ? (
-                              <Text
-                                as="p"
-                                className="text-muted-foreground text-sm"
+                              <Badge
+                                size="sm"
+                                variant="default"
                               >
                                 Standard JHS setup
-                              </Text>
+                              </Badge>
                             ) : (
-                              <div className="flex gap-2 flex-wrap">
+                              <div className="flex gap-2 flex-wrap justify-center">
                                 {pathwayPills(item.level)}
                               </div>
                             )}
@@ -1036,7 +953,7 @@ export default function AdminSystemSettings() {
                           <Table.Cell>
                             <Pill tone={stageEnabled ? "green" : "gray"}>
                               {stageEnabled ? "Enabled" : "Disabled"}
-                            </Pill>
+                            </Badge>
                           </Table.Cell>
                         </Table.Row>
                       );
@@ -1048,132 +965,58 @@ export default function AdminSystemSettings() {
 
             {/* Default Grading Templates */}
             <Card className="@container/card w-full">
-              <Card.Header>
-                <Card.Title className="flex flex-row justify-between w-full items-center">
+              <Card.Header className="flex flex-row justify-between items-start">
+                <Card.Title className="flex flex-col w-full gap-1 mb-4">
                   Default Grading Templates
+                  <Text
+                    as="p"
+                    className="text-sm font-normal text-muted-foreground"
+                  >
+                    Subjects will choose one template or override it in the
+                    Subjects module.
+                  </Text>
+
+                </Card.Title>
+                <div className="flex items-center gap-4">
                   <Dialog
                     open={templateModalOpen}
                     onOpenChange={setTemplateModalOpen}
                   >
                     <Dialog.Trigger>
-                      <Button size="sm" onClick={openTemplateModal}>
+                      <Button size="sm"
+                        className="whitespace-nowrap">
                         New Template
                       </Button>
                     </Dialog.Trigger>
-                    <Dialog.Content size="md">
-                      <Dialog.Header position="static">
-                        <Text as="h5" className="font-sans text-xl font-bold">
-                          New Grading Template
-                        </Text>
-                      </Dialog.Header>
-                      <section className="flex flex-col gap-4 p-4 text-sm">
-                        <Text as="p" className="text-muted-foreground text-xs">
-                          Weights must total 100%. This creates a reusable
-                          template only; subject assignment happens in Subjects.
-                        </Text>
-                        <div className="flex flex-col gap-2">
-                          <Text as="h6" className="font-sans font-medium">
-                            Template Name
-                          </Text>
-                          <Input
-                            value={tplName}
-                            onChange={(
-                              e: React.ChangeEvent<HTMLInputElement>,
-                            ) => setTplName(e.target.value)}
-                          />
-                        </div>
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="flex flex-col gap-2">
-                            <Text
-                              as="h6"
-                              className="font-sans text-sm font-medium"
-                            >
-                              Written Work %
-                            </Text>
-                            <Input
-                              type="number"
-                              value={tplWw}
-                              onChange={(
-                                e: React.ChangeEvent<HTMLInputElement>,
-                              ) => setTplWw(e.target.value)}
-                            />
-                          </div>
-                          <div className="flex flex-col gap-2">
-                            <Text
-                              as="h6"
-                              className="font-sans text-sm font-medium"
-                            >
-                              Performance Task %
-                            </Text>
-                            <Input
-                              type="number"
-                              value={tplPt}
-                              onChange={(
-                                e: React.ChangeEvent<HTMLInputElement>,
-                              ) => setTplPt(e.target.value)}
-                            />
-                          </div>
-                          <div className="flex flex-col gap-2">
-                            <Text
-                              as="h6"
-                              className="font-sans text-sm font-medium"
-                            >
-                              Quarterly/Term Assessment %
-                            </Text>
-                            <Input
-                              type="number"
-                              value={tplQa}
-                              onChange={(
-                                e: React.ChangeEvent<HTMLInputElement>,
-                              ) => setTplQa(e.target.value)}
-                            />
-                          </div>
-                        </div>
-                        {tplError && (
-                          <Alert status="error" className="text-sm">
-                            {tplError}
-                          </Alert>
-                        )}
-                      </section>
-                      <Dialog.Footer position="static">
-                        <Button onClick={addTemplate}>Save Template</Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => setTemplateModalOpen(false)}
-                        >
-                          Cancel
-                        </Button>
-                      </Dialog.Footer>
-                    </Dialog.Content>
+                    <AddGradingTemplateModal
+                      onClose={() => setTemplateModalOpen(false)}
+                      onSaved={async () => {
+                        await fetchGradingTemplatesList();
+                        setTemplateModalOpen(false);
+                        showToast("New grading template saved to database");
+                      }}
+                    />
                   </Dialog>
-                </Card.Title>
+                </div>
               </Card.Header>
-              <Card.Content className="px-4 pt-4 flex flex-col gap-4">
-                <Text
-                  as="p"
-                  className="font-sans text-sm text-muted-foreground -mt-2"
-                >
-                  Subjects will choose one template or override it in the
-                  Subjects module.
-                </Text>
+
+              <Card.Content className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {templates.map((t, i) => (
-                    <Card key={i} className="p-3 flex flex-col gap-3 w-full">
+                    <Card key={i} className="shadow-none bg-primary p-3 flex flex-col gap-3 w-full">
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <Text as="h6" className="font-sans font-bold">
                             {t.name}
                           </Text>
-                          <Text
-                            as="p"
-                            className="font-sans text-xs text-muted-foreground"
-                          >
+                          <Text as="p" className="font-sans text-xs text-foreground">
                             {t.scope}
                           </Text>
                         </div>
                         <Button
                           size="sm"
                           variant="outline"
+                          className="bg-background"
                           onClick={() =>
                             showToast(
                               `Edit workflow opened for ${t.name} (preview only)`,
@@ -1184,39 +1027,30 @@ export default function AdminSystemSettings() {
                         </Button>
                       </div>
                       <div className="grid grid-cols-3 gap-2">
-                        <div className="border-2 border-black rounded-md bg-neutral-50 text-center py-2">
+                        <Card className="flex flex-col shadow-none p-2 items-center justify-center w-full ">
                           <Text as="p" className="font-bold text-lg">
                             {t.ww}%
                           </Text>
-                          <Text
-                            as="p"
-                            className="text-xs text-muted-foreground"
-                          >
+                          <Text as="p" className="text-xs text-muted-foreground">
                             WW
                           </Text>
-                        </div>
-                        <div className="border-2 border-black rounded-md bg-neutral-50 text-center py-2">
+                        </Card>
+                        <Card className="flex flex-col shadow-none p-2 items-center justify-center w-full">
                           <Text as="p" className="font-bold text-lg">
                             {t.pt}%
                           </Text>
-                          <Text
-                            as="p"
-                            className="text-xs text-muted-foreground"
-                          >
+                          <Text as="p" className="text-xs text-muted-foreground">
                             PT
                           </Text>
-                        </div>
-                        <div className="border-2 border-black rounded-md bg-neutral-50 text-center py-2">
+                        </Card>
+                        <Card className="flex flex-col shadow-none p-2 items-center justify-center w-full">
                           <Text as="p" className="font-bold text-lg">
                             {t.qa}%
                           </Text>
-                          <Text
-                            as="p"
-                            className="text-xs text-muted-foreground"
-                          >
+                          <Text as="p" className="text-xs text-muted-foreground">
                             QA
                           </Text>
-                        </div>
+                        </Card>
                       </div>
                     </Card>
                   ))}
@@ -1233,9 +1067,9 @@ export default function AdminSystemSettings() {
             {/* Module Responsibility Map */}
             <Card className="@container/card w-full">
               <Card.Header>
-                <Card.Title>Module Responsibility Map</Card.Title>
+                <Card.Title className="flex flex-row justify-between w-full items-center mb-4">Module Responsibility Map</Card.Title>
               </Card.Header>
-              <Card.Content className="px-4 pt-4">
+              <Card.Content className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                   {[
                     {
@@ -1259,11 +1093,11 @@ export default function AdminSystemSettings() {
                       body: "Teacher assignment per subject, section, and term.",
                     },
                   ].map((s) => (
-                    <Card key={s.n} className="p-3 w-full">
+                    <Card key={s.n} className="p-3 w-full shadow-none">
                       <div className="flex items-center gap-2 mb-1">
                         <Badge
                           variant="secondary"
-                          className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-yellow-300 border-2 border-black p-0 text-xs font-bold"
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-yellow-300 border-1 border-black p-0 text-xs font-bold"
                         >
                           {s.n}
                         </Badge>

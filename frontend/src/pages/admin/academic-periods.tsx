@@ -1,17 +1,18 @@
 import * as React from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AppLayout from "@/layouts/app-layout";
+import { Text } from "@/components/retroui/Text";
 import { Button } from "@/components/retroui/Button";
 import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
-import { ArrowUpRight, Calendar, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowUpRight, AlertCircle, Loader2 } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
 import ViewPreviousPeriodsModal from "./forms/view-previous-periods";
 import { API_URL } from "@/lib/api";
 import { useSettings } from "@/context/SettingsContext";
 import { toast } from "sonner";
+import { Card } from "@/components/retroui/Card";
 
 type DBPeriodItem = {
   id: number;
@@ -118,7 +119,7 @@ export default function AdminAcademicPeriods() {
                     </Breadcrumb.Item>
                     <Breadcrumb.Separator />
                     <Breadcrumb.Item>
-                      <Breadcrumb.Page className="text-4xl font-bold">Academic Periods</Breadcrumb.Page>
+                      <Breadcrumb.Page>Academic Periods</Breadcrumb.Page>
                     </Breadcrumb.Item>
                   </Breadcrumb.List>
                 </Breadcrumb>
@@ -128,22 +129,24 @@ export default function AdminAcademicPeriods() {
 
             {/* Single Consolidated Card for Unified JHS & SHS */}
             <Card className="@container/card">
-              <CardHeader>
-                <CardTitle className="flex flex-row justify-between w-full items-center">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-primary" />
-                    <span>Academic Periods (Unified JHS & SHS)</span>
-                  </div>
-                  <Button size="sm" onClick={handleMarkComplete}>
+              <Card.Header className="flex flex-row justify-between items-start">
+                <Card.Title className="flex flex-col w-full gap-1">
+                  Academic Periods
+                  <Text
+                    as="p"
+                    className="text-sm font-normal text-muted-foreground"
+                  >
+                    Unified three-term academic schedule applying to both Junior High School and Senior High School grade levels.
+                  </Text>
+                </Card.Title>
+                <div className="flex items-center gap-4">
+                  <Button size="sm" onClick={handleMarkComplete} className="whitespace-nowrap">
                     Mark as Complete
                   </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pt-2 flex flex-col gap-4">
-                <p className="text-xs text-muted-foreground -mt-2">
-                  Unified three-term academic schedule applying to both Junior High School and Senior High School grade levels.
-                </p>
+                </div>
+              </Card.Header>
 
+              <Card.Content className="flex flex-col gap-4">
                 {isLoading ? (
                   <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -177,8 +180,8 @@ export default function AdminAcademicPeriods() {
                                 item.is_active || item.status === "Active"
                                   ? "surface"
                                   : item.status === "Passed"
-                                  ? "default"
-                                  : "outline"
+                                    ? "default"
+                                    : "outline"
                               }
                               size="sm"
                             >
@@ -200,7 +203,7 @@ export default function AdminAcademicPeriods() {
                   </Dialog.Trigger>
                   <ViewPreviousPeriodsModal yearLevel="unified" />
                 </Dialog>
-              </CardContent>
+              </Card.Content>
             </Card>
 
           </div>

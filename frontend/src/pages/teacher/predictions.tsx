@@ -152,14 +152,6 @@ export default function PredictionsDashboard() {
 
             {/* ── Chart + Filters row ── */}
             <div className="flex flex-col lg:flex-row gap-5">
-              {/* Chart card */}
-              <div className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] px-5 py-4 bg-white lg:w-[360px] shrink-0">
-                <h2 className="text-base font-extrabold uppercase text-black mb-3 tracking-wide border-b-2 border-black pb-2">
-                  Risk Distribution
-                </h2>
-                <RiskDistributionChart summary={summary} />
-              </div>
-
               {/* Filters + table */}
               <div className="flex-1 flex flex-col gap-4 min-w-0">
                 <PredictionFilters
