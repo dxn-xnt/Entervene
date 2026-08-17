@@ -494,9 +494,14 @@ export default function AdminSystemSettings() {
             <Card className="@container/card w-full">
               <Card.Header>
                 <Card.Title className="flex flex-row justify-between w-full items-center">
-                  Subject Groups & Passing Thresholds
-                  <Button size="sm" onClick={() => setIsAddGroupOpen(true)}>
-                    <Plus className="size-3 mr-1" /> Add Group
+                  General Average Passing Grade
+                  <Button
+                    size="sm"
+                    className="whitespace-nowrap"
+                    onClick={handleSaveThresholds}
+                    disabled={isSavingThresholds}
+                  >
+                    Save Threshold
                   </Button>
                 </Card.Title>
               </Card.Header>
@@ -622,42 +627,6 @@ export default function AdminSystemSettings() {
                       )}
                     </Table.Body>
                   </Table>
-                </div>
-              </Card.Content>
-            </Card>
-
-            {/* General Average Threshold */}
-            <Card className="@container/card w-full">
-              <Card.Header>
-                <Card.Title className="flex flex-row justify-between w-full items-center">
-                  General Average Passing Grade
-                  <Button
-                    size="sm"
-                    className="whitespace-nowrap"
-                    onClick={handleSaveThresholds}
-                    disabled={isSavingThresholds}
-                  >
-                    {isSavingThresholds ? "Saving..." : "Save Threshold"}
-                  </Button>
-                </Card.Title>
-              </Card.Header>
-              <Card.Content className="flex flex-col gap-4">
-                <div className="flex flex-col gap-2">
-                  <div className="flex flex-row justify-between w-full items-center">
-                    <Text as="h6" className="font-sans font-medium">
-                      General Average Passing Grade
-                    </Text>
-                    <Input
-                      className="w-20 shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md transition-all"
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={averagePassing}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                        setAveragePassing(e.target.value)
-                      }
-                    />
-                  </div>
                 </div>
               </Card.Content>
             </Card>
@@ -847,13 +816,13 @@ export default function AdminSystemSettings() {
 
                   <div className="border-2 border-black p-4 flex flex-col gap-3 bg-neutral-50">
                     <div className="flex items-center justify-between">
-                      <Text as="h6" className="font-sans font-bold">
+                      <Text as="h6" className="text-xl font-bold">
                         Senior High School Pathways
                       </Text>
                       <Dialog open={isAddPathwayOpen} onOpenChange={setIsAddPathwayOpen}>
                         <Dialog.Trigger>
                           <Button size="sm" disabled={!shsEnabled}>
-                            <Plus className="size-3 mr-1" /> Add Pathway
+                            Add Pathway
                           </Button>
                         </Dialog.Trigger>
                         <Dialog.Content>
@@ -898,13 +867,6 @@ export default function AdminSystemSettings() {
                       </Dialog>
                     </div>
 
-                    <div className="flex gap-2 flex-wrap">
-                      <Badge variant="outline" size="sm" className="inline-flex items-center gap-1">
-                        <Lock className="w-3 h-3" />
-                        DepEd DO 017 Curriculum
-                      </Badge>
-                    </div>
-
                     {isLoadingPathways ? (
                       <Text as="p" className="text-xs text-muted-foreground">Loading pathways...</Text>
                     ) : pathways.length === 0 ? (
@@ -912,12 +874,12 @@ export default function AdminSystemSettings() {
                     ) : (
                       pathways.map((p) => (
                         <div key={p.id} className="flex items-center justify-between border-2 border-black px-3 py-2 bg-white">
-                          <div>
+                          <div className="flex flex-row gap-2 items-end">
                             <Text as="p" className="font-sans font-medium text-sm">
                               {p.name}
                             </Text>
-                            <Text as="p" className="font-sans text-xs text-muted-foreground">
-                              Code: <code>{p.code}</code>
+                            <Text as="p" className="font-sans text-xs text-muted-foreground pb-0.5">
+                              ({p.code})
                             </Text>
                           </div>
                           <Switch

@@ -3,7 +3,7 @@ import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
-import { Card as RetroCard } from "@/components/retroui/Card";
+import { Card, Card as RetroCard } from "@/components/retroui/Card";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
 import { Text } from "@/components/retroui/Text";
@@ -35,7 +35,9 @@ import {
   Globe,
   Layers,
   ChevronDown,
+  Search,
 } from "lucide-react";
+import { Input } from "@/components/retroui/Input";
 
 function stringToTimeValue(str?: string | null, fallbackHour = 8): TimeValue {
   if (!str) return { hour: fallbackHour, minute: 0, period: "AM" };
@@ -59,6 +61,13 @@ function timeValueToString(tv: TimeValue): string {
   if (tv.period === "AM" && h === 12) h = 0;
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(h)}:${pad(tv.minute)}`;
+}
+
+function formatTime12h(str?: string | null): string {
+  if (!str) return "";
+  const tv = stringToTimeValue(str);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${tv.hour}:${pad(tv.minute)} ${tv.period}`;
 }
 
 function isSubjectOfferedForClass(
@@ -132,19 +141,6 @@ export default function SubjectLoadStudio() {
     return new Set((studioData?.classes || []).filter((c) => String(c.academic_level_id) === selectedGradeId).map((c) => c.class_id));
   }, [selectedGradeId, studioData]);
 
-  const isCurrentPublished = useMemo(() => {
-    const targetLoads = selectedGradeId !== "all"
-      ? loads.filter((l) => levelClassIds.has(l.class_id))
-      : loads;
-    if (targetLoads.length === 0) return false;
-    const hasUnassigned = targetLoads.some((l) => !l.staff_id);
-    if (hasUnassigned) return false;
-    return targetLoads.every((l) => l.status === "published");
-  }, [loads, selectedGradeId, levelClassIds]);
-
-  const currentVersionNumber = useMemo(() => {
-    return loads[0]?.version || 1;
-  }, [loads]);
 
   const prePublishChecklistCount = useMemo(() => {
     const errorRules = new Set(conflicts.filter((c) => c.severity === "error").map((c) => c.rule));
@@ -860,7 +856,6 @@ export default function SubjectLoadStudio() {
               </div>
             </header>
 
-
             <div className="-mx-4 md:-mx-6 border-b border-black/40" />
 
             {/* Notice Alert */}
@@ -878,134 +873,110 @@ export default function SubjectLoadStudio() {
               </div>
             )}
 
-            {/* Filters & Status Bar */}
-            <section className="grid grid-cols-1 md:grid-cols-4 gap-3 items-center">
-              <div>
-                <Text as="h6" className="font-sans font-medium mb-1">
-                  Academic Period
-                </Text>
-                <Select
-                  value={String(selectedPeriodId || "")}
-                  onValueChange={(val) => {
-                    const pId = Number(val);
-                    setSelectedPeriodId(pId);
-                    void loadStudio(pId);
-                  }}
-                >
-                  <Select.Trigger className="w-full h-9 border-2 border-black">
-                    <Select.Value placeholder="Select Period" />
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Group>
-                      {studioData?.academic_periods.map((p) => (
-                        <Select.Item key={p.academic_period_id} value={String(p.academic_period_id)}>
-                          {p.period_name} {p.is_active ? "(Active)" : ""}
-                        </Select.Item>
-                      ))}
-                    </Select.Group>
-                  </Select.Content>
-                </Select>
-              </div>
-
-              <div>
-                <Text as="h6" className="font-sans font-medium mb-1">
-                  Grade Level
-                </Text>
-                <Select
-                  value={selectedGradeId}
-                  onValueChange={(val) => setSelectedGradeId(val)}
-                >
-                  <Select.Trigger className="w-full h-9 border-2 border-black">
-                    <Select.Value placeholder="All Grade Levels" />
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Group>
-                      <Select.Item value="all">All Grade Levels</Select.Item>
-                      {studioData?.academic_levels.map((lvl) => (
-                        <Select.Item key={lvl.academic_level_id} value={String(lvl.academic_level_id)}>
-                          {lvl.level_name}
-                        </Select.Item>
-                      ))}
-                    </Select.Group>
-                  </Select.Content>
-                </Select>
-              </div>
-
-              <div className="md:col-span-2 flex flex-wrap items-center justify-end gap-2 pt-4 md:pt-0">
-                <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-                  <span
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 border-2 border-black font-bold shadow-[1px_1px_0_#000] ${prePublishChecklistCount === 6 ? "bg-emerald-100 text-emerald-950" : "bg-amber-100 text-amber-950"
-                      }`}
-                  >
-                    <CheckCircle2 className="size-3.5 text-emerald-700" />
-                    <span>Checklist <strong>{prePublishChecklistCount}/6 passed</strong></span>
-                  </span>
-
-                  {errorConflictsCount > 0 ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 border-2 border-black bg-red-100 text-red-950 font-bold shadow-[1px_1px_0_#000]">
-                      <AlertCircle className="size-3.5 text-red-700" />
-                      <span>✕ <strong>{errorConflictsCount} conflicts</strong> — must resolve to publish</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 border-2 border-black bg-emerald-50 text-emerald-900 font-bold shadow-[1px_1px_0_#000]">
-                      <span>Conflicts: <strong>0</strong></span>
-                    </span>
-                  )}
-
-                  {warningConflictsCount > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 border-2 border-black bg-amber-100 text-amber-950 font-bold shadow-[1px_1px_0_#000]">
-                      <AlertTriangle className="size-3.5 text-amber-700" />
-                      <span>⚠️ <strong>{warningConflictsCount} warnings</strong></span>
-                    </span>
-                  )}
-
-                  {unassignedTotal > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 border-2 border-black bg-red-50 text-red-900 font-bold shadow-[1px_1px_0_#000]">
-                      <span><strong>{unassignedTotal}</strong> unassigned</span>
-                    </span>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            {/* Section Group Timetable Control Bar */}
-            <section className="flex flex-wrap items-center justify-between gap-3 bg-purple-50/90 p-3.5 border-2 border-black shadow-[3px_3px_0_#000]">
-              <div className="flex items-center gap-2">
-                <Clock className="size-4 text-purple-900" />
-                <span className="text-xs font-bold uppercase tracking-wider text-purple-950">
-                  Active Section Group Break Schedule ({activeGroupKey}):
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {activeGroupBreakSlots.length === 0 ? (
-                  <span className="text-xs text-muted-foreground font-semibold">Standard Defaults Active</span>
-                ) : (
-                  activeGroupBreakSlots.map((b) => (
-                    <Badge key={`${b.template_group}_${b.display_order}`} size="sm" className="border-2 border-black font-bold bg-white text-black shadow-[1px_1px_0_#000]">
-                      {b.slot_type === "HOMEROOM" ? "🌅 " : b.slot_type === "LUNCH" ? "🍱 " : "☕ "}
-                      {b.slot_name}: {b.start_time}–{b.end_time}
-                    </Badge>
-                  ))
-                )}
-                <button
-                  type="button"
-                  onClick={() => setIsBreakDrawerOpen(true)}
-                  className="text-xs font-bold border border-black bg-purple-200 hover:bg-purple-300 text-purple-950 px-2 py-0.5 rounded shadow-[1px_1px_0_#000] ml-1"
-                >
-                  ⚙️ Adjust Breaks
-                </button>
-              </div>
-            </section>
-
             {isLoading ? (
               <RetroCard className="p-8 text-center border-2 border-black bg-accent font-bold">
                 Loading Subject Load Studio...
               </RetroCard>
             ) : (
               /* Two Pane Layout */
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
                 {/* LEFT PANE: Section Schedule List */}
-                <main className="lg:col-span-8 flex flex-col gap-6">
+                <main className="lg:col-span-9 flex flex-col gap-3">
+                  {/* Filters & Status Bar */}
+                  <section className="flex flex-col gap-3 w-full">
+                    <div className="flex flex-row gap-2 w-full">
+                      <label className="relative shadow-md hover:shadow-none transition-shadow w-full">
+                        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+                        <Input
+                          // value={search}
+                          // onChange={(event) => setSearch(event.target.value)}
+                          placeholder="Search class"
+                          className="h-10 w-full shadow-none border-black pl-9 pr-3"
+                        />
+                      </label>
+                      <div>
+                        <Select
+                          value={String(selectedPeriodId || "")}
+                          onValueChange={(val) => {
+                            const pId = Number(val);
+                            setSelectedPeriodId(pId);
+                            void loadStudio(pId);
+                          }}
+                        >
+                          <Select.Trigger className="w-full whitespace-nowrap">
+                            <Select.Value placeholder="Select Period" />
+                          </Select.Trigger>
+                          <Select.Content>
+                            <Select.Group>
+                              {studioData?.academic_periods.map((p) => (
+                                <Select.Item key={p.academic_period_id} value={String(p.academic_period_id)} className="whitespace-nowrap">
+                                  {p.period_name} {p.is_active ? "(Active)" : ""}
+                                </Select.Item>
+                              ))}
+                            </Select.Group>
+                          </Select.Content>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Select
+                          value={selectedGradeId}
+                          onValueChange={(val) => setSelectedGradeId(val)}
+                        >
+                          <Select.Trigger className="w-full whitespace-nowrap">
+                            <Select.Value placeholder="All Grade Levels" />
+                          </Select.Trigger>
+                          <Select.Content>
+                            <Select.Group>
+                              <Select.Item value="all" className="whitespace-nowrap">All Grade Levels</Select.Item>
+                              {studioData?.academic_levels.map((lvl) => (
+                                <Select.Item key={lvl.academic_level_id} value={String(lvl.academic_level_id)} className="whitespace-nowrap">
+                                  {lvl.level_name}
+                                </Select.Item>
+                              ))}
+                            </Select.Group>
+                          </Select.Content>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2 font-bold">
+                        <Badge
+                          size="sm"
+                          variant={prePublishChecklistCount === 6 ? "surface" : "default"}
+                          className="inline-flex items-center gap-1.5"
+                        >
+                          <CheckCircle2 className="size-3.5" />
+                          Checklist {prePublishChecklistCount}/6 passed
+                        </Badge>
+
+                        {errorConflictsCount > 0 ? (
+                          <Badge size="sm" variant="solid" className="inline-flex items-center gap-1.5">
+                            <AlertCircle className="size-3.5" />
+                            ✕ {errorConflictsCount} conflicts — must resolve to publish
+                          </Badge>
+                        ) : (
+                          <Badge size="sm" variant="outline">
+                            0 Conflicts
+                          </Badge>
+                        )}
+
+                        {warningConflictsCount > 0 && (
+                          <Badge size="sm" variant="solid" className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                            <AlertTriangle className="size-3.5" />
+                            {warningConflictsCount} warnings
+                          </Badge>
+                        )}
+
+                        {unassignedTotal > 0 && (
+                          <Badge size="sm" variant="default">
+                            {unassignedTotal} unassigned
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+
                   {filteredClasses.length === 0 ? (
                     <RetroCard className="p-8 text-center border-2 border-black bg-accent">
                       <Text as="h3" className="font-bold text-lg">
@@ -1035,21 +1006,24 @@ export default function SubjectLoadStudio() {
                       return (
                         <RetroCard
                           key={cls.class_id}
-                          className="border-2 border-black shadow-[4px_4px_0_#000] p-4 bg-background"
+                          className="border-2 border-black p-4 "
                         >
-                          <div className="flex items-center justify-between border-b-2 border-black pb-3 mb-4 flex-wrap gap-2">
+                          <div className="flex items-center justify-between pb-4 flex-wrap gap-2">
                             <div className="flex items-center gap-2 flex-wrap">
                               <Text as="h3" className="font-bold text-xl">
-                                Section: {cls.section_name}
+                                {cls.section_name}
                               </Text>
                               <Badge
                                 size="sm"
-                                className={`border-2 border-black font-bold text-[10px] px-2 py-0.5 shadow-[1px_1px_0_#000] ${isSectionPublished
-                                  ? "bg-emerald-200 text-emerald-950"
-                                  : "bg-amber-200 text-amber-950"
-                                  }`}
+                                variant={isSectionPublished ? "surface" : "default"}
                               >
-                                {isSectionPublished ? "🔒 PUBLISHED" : "📝 DRAFT"}
+                                {isSectionPublished ? "Published" : "Draft"}
+                              </Badge>
+                              <Badge
+                                size="sm"
+                                variant="outline"
+                              >
+                                {classSubjects.length} Subjects
                               </Badge>
                               {(() => {
                                 if (!cls.pathway || cls.pathway === "general") return null;
@@ -1066,13 +1040,23 @@ export default function SubjectLoadStudio() {
                               })()}
                             </div>
                             <div className="flex items-center gap-2 flex-wrap">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => void handleAutoSchedule(cls.class_id)}
+                                className="gap-2"
+                              >
+                                <Wand2 className="size-3.5 text-primary" />
+                                Auto-Fit Section
+                              </Button>
+
                               {isSectionPublished ? (
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   disabled={isSaving}
                                   onClick={() => void handleSave("draft", "section", cls.class_id)}
-                                  className="border-2 border-black bg-amber-100 hover:bg-amber-200 text-amber-950 text-xs font-bold shadow-[1px_1px_0_#000]"
+
                                   title="Revert this section to draft status to allow edits"
                                 >
                                   <Unlock className="size-3.5 mr-1 text-amber-800" />
@@ -1081,13 +1065,10 @@ export default function SubjectLoadStudio() {
                               ) : (
                                 <Button
                                   size="sm"
-                                  variant="outline"
+                                  variant={isPublishSectionDisabled ? "default" : "default"}
                                   disabled={isPublishSectionDisabled}
+                                  className="gap-2"
                                   onClick={() => void handleSave("publish", "section", cls.class_id)}
-                                  className={`border-2 border-black font-bold text-xs shadow-[1px_1px_0_#000] ${isPublishSectionDisabled
-                                    ? "bg-gray-200 text-gray-500 cursor-not-allowed opacity-70"
-                                    : "bg-emerald-100 hover:bg-emerald-200 text-emerald-950"
-                                    }`}
                                   title={
                                     sectionUnassignedCount > 0
                                       ? `Assign all ${sectionUnassignedCount} unassigned teacher(s) in this section before publishing`
@@ -1096,27 +1077,17 @@ export default function SubjectLoadStudio() {
                                         : "Publish only this section's schedule"
                                   }
                                 >
-                                  <Send className="size-3.5 mr-1 text-emerald-800" />
+                                  <Send className="size-3.5" />
                                   Publish Section
                                 </Button>
                               )}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => void handleAutoSchedule(cls.class_id)}
-                                className="border-2 border-black bg-amber-50 hover:bg-amber-100 text-xs font-bold shadow-[1px_1px_0_#000]"
-                              >
-                                <Wand2 className="size-3.5 mr-1 text-amber-800" />
-                                Auto-Fit Section
-                              </Button>
-                              <Text as="p" className="text-xs text-muted-foreground font-bold">
-                                {classSubjects.length} Curriculum Subjects
-                              </Text>
+
+
                             </div>
                           </div>
 
                           {classSubjects.length === 0 ? (
-                            <div className="p-6 text-center border-2 border-dashed border-black/30 bg-muted/20 my-2">
+                            <div className="p-6 text-center border-2 border-dashed my-2">
                               <Text as="p" className="text-sm font-bold text-muted-foreground">
                                 No subjects offered in Curriculum Plan for {cls.section_name} in this term.
                               </Text>
@@ -1125,12 +1096,11 @@ export default function SubjectLoadStudio() {
                               </Text>
                             </div>
                           ) : (
-                            <Table wrapperClassName="overflow-visible">
-                              <Table.Header className="font-sans border-b-2 border-black bg-muted/30">
+                            <Table className="overflow-none shadow-none ">
+                              <Table.Header className="">
                                 <Table.Row>
                                   <Table.Head className="font-bold text-black">Subject</Table.Head>
-                                  <Table.Head className="font-bold text-black">Days & Presets</Table.Head>
-                                  <Table.Head className="font-bold text-black">Time Slot</Table.Head>
+                                  <Table.Head className="font-bold text-black ">Schedule</Table.Head>
                                   <Table.Head className="font-bold text-black">Assigned Teacher</Table.Head>
                                 </Table.Row>
                               </Table.Header>
@@ -1197,7 +1167,7 @@ export default function SubjectLoadStudio() {
                                       </Table.Cell>
 
                                       {/* Days & Time Slot Columns */}
-                                      <Table.Cell colSpan={2} className="py-2.5 px-2 align-middle">
+                                      <Table.Cell className="py-2.5 px-2 align-middle">
                                         {subjectSlots.length === 0 ? (
                                           <span className="text-xs italic text-muted-foreground font-semibold py-1 inline-block">
                                             Unscheduled — click &quot;+ Add Slot&quot; to assign schedule
@@ -1356,7 +1326,7 @@ export default function SubjectLoadStudio() {
                                                   <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
                                                     <div className="w-12 h-1.5 bg-gray-200 border border-black rounded-full overflow-hidden">
                                                       <div
-                                                        className={`h-full ${pct > 90 ? "bg-red-500" : pct > 70 ? "bg-amber-500" : "bg-emerald-500"
+                                                        className={` ${pct > 90 ? "bg-red-500" : pct > 70 ? "bg-amber-500" : "bg-emerald-500"
                                                           }`}
                                                         style={{ width: `${pct}%` }}
                                                       />
@@ -1367,7 +1337,7 @@ export default function SubjectLoadStudio() {
                                               </div>
 
                                               {/* Row Action Overflow Menu (⋯) */}
-                                              <div className="relative">
+                                              <div className="flex">
                                                 <button
                                                   type="button"
                                                   onClick={() => setOpenRowKey(isRowMenuOpen ? null : rowKey)}
@@ -1433,10 +1403,42 @@ export default function SubjectLoadStudio() {
                 </main>
 
                 {/* RIGHT PANE: Live Conflict Tracker & Teacher Workload */}
-                <aside className="lg:col-span-4 flex flex-col gap-6">
+                <aside className="lg:col-span-3 flex flex-col gap-3">
+                  {/* Section Group Break Schedule */}
+                  <Card className="flex flex-col justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-md font-bold">
+                        Active Break Schedule
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {activeGroupBreakSlots.length === 0 ? (
+                        <span className="text-xs text-muted-foreground font-semibold">Standard Defaults Active</span>
+                      ) : (
+                        activeGroupBreakSlots.map((b) => (
+                          <Badge key={`${b.template_group}_${b.display_order}`} size="md" variant="outline">
+                            <Text as="p" className="text-sm font-normal">
+                              {b.slot_name}:
+                            </Text>
+                            <Text as="p" className="text-base font-semibold">
+                              {formatTime12h(b.start_time)} – {formatTime12h(b.end_time)}
+                            </Text>
+                          </Badge>
+                        ))
+                      )}
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => setIsBreakDrawerOpen(true)}
+                      >
+                        Adjust Breaks
+                      </Button>
+                    </div>
+                  </Card>
+
                   {/* Grouped Issues Card (Root-Cause Aggregated) */}
-                  <RetroCard className="border-2 border-black shadow-[4px_4px_0_#000] p-4 bg-background">
-                    <div className="flex items-center justify-between border-b-2 border-black pb-3 mb-3">
+                  <RetroCard className="p-4 bg-background">
+                    <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
                         <AlertTriangle className="size-5 text-amber-600" />
                         <Text as="h3" className="font-bold text-lg">
