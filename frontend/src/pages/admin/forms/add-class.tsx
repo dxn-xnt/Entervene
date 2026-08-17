@@ -205,7 +205,11 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
         ) : (
           <div className={`grid gap-4 ${manualStep === "assignment" ? "h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]" : ""}`}>
             <div className={manualStep === "details" ? "" : "hidden"}>
-              <ImportClassWizard onContinue={continueFromImport} onValidationStale={clearImportHydration} />
+              <ImportClassWizard
+                onContinue={continueFromImport}
+                onValidationStale={clearImportHydration}
+                onBack={() => setMode("choice")}
+              />
             </div>
             {manualStep === "assignment" && manualSetup ? (
               <StudentAssignmentWorkspace
@@ -230,21 +234,6 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
           </div>
         )}
       </section>
-
-      {!saveSuccess && (
-        <Dialog.Footer>
-          {manualStep === "details" ? (
-            <Button variant={"outline"} onClick={() => setMode("choice")}>Back</Button>
-          ) : manualStep === "assignment" ? (
-            <>
-              <Button variant={"outline"} onClick={() => setManualStep("details")}>Back</Button>
-              <Button variant={"default"} onClick={() => setManualStep("review")}>Next</Button>
-            </>
-          ) : (
-            <Button variant={"outline"} onClick={() => setManualStep("assignment")}>Back</Button>
-          )}
-        </Dialog.Footer>
-      )}
     </Dialog.Content>
   );
 }
@@ -259,7 +248,7 @@ function sameImportedSetup(current: ManualClassSetup, next: ManualClassSetup) {
     });
 }
 
-function ManualReview({ setup, assignmentState, onSaved }: {
+function ManualReview({ setup, assignmentState, onSaved, onBack }: {
   setup: ManualClassSetup;
   assignmentState: ManualAssignmentWorkspaceState;
   onBack: () => void;
@@ -325,7 +314,8 @@ function ManualReview({ setup, assignmentState, onSaved }: {
         </div>
       )}
 
-      <div className="flex justify-end pt-2">
+      <div className="flex justify-between items-center pt-2">
+        <Button variant={"outline"} onClick={onBack}>Back</Button>
         <Button variant={"default"} disabled={isSaving} onClick={saveClasses}>
           {isSaving ? "Saving classes..." : saveError?.retryable ? "Retry Save Classes" : "Save Classes"}
         </Button>
