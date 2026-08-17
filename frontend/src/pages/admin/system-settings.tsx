@@ -13,15 +13,25 @@ import { Switch } from "@/components/retroui/Switch";
 import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
-import { ArrowUpRight, Lock, Pencil, Loader2 } from "lucide-react";
+import { ArrowUpRight, Lock, Pencil, Loader2, Plus, Calendar } from "lucide-react";
 import AddAcademicPeriodModal from "./forms/add-academic-period";
 import AddGradingTemplateModal from "./forms/add-grading-template";
 
-import { getAllSettings, updateSetting, type GroupedSettings } from "@/lib/settings-api";
+import {
+  getAllSettings,
+  updateSetting,
+  getAcademicYearsSettings,
+  setActiveAcademicYear,
+  getAcademicLevelsSettings,
+  getAcademicPeriodsSettings,
+  setActivePeriod,
+  type AcademicYearSettingItem,
+  type AcademicLevelSettingItem,
+  type AcademicPeriodSettingItem,
+} from "@/lib/settings-api";
 import { useSettings } from "@/context/SettingsContext";
 import {
   getGradingTemplates,
-  createGradingTemplate,
   fetchPathways,
   createPathway,
   updatePathway,
@@ -39,76 +49,45 @@ import {
   type AffectedSubject,
 } from "@/lib/subject-groups-api";
 
-
-/* ---------------------------------------------------------------- */
-/* Data                                                              */
-/* ---------------------------------------------------------------- */
+function Pill({
+  children,
+  tone = "default",
+  locked = false,
+}: {
+  children: React.ReactNode;
+  tone?: "default" | "green" | "blue" | "yellow" | "gray";
+  locked?: boolean;
+}) {
+  const variantMap: Record<
+    string,
+    "default" | "secondary" | "outline" | "solid" | "surface"
+  > = {
+    default: "outline",
+    green: "secondary",
+    blue: "surface",
+    yellow: "secondary",
+    gray: "default",
+  };
+  return (
+    <Badge
+      size="sm"
+      variant={variantMap[tone] || "default"}
+      className="inline-flex items-center gap-1"
+    >
+      {locked && <Lock className="w-3 h-3" />}
+      {children}
+    </Badge>
+  );
+}
 
 type Template = {
+  id?: number;
   name: string;
   ww: number;
   pt: number;
   qa: number;
   scope: string;
 };
-
-const DEFAULT_TEMPLATES: Template[] = [
-  {
-    name: "JHS Enhanced Academic",
-    ww: 40,
-    pt: 40,
-    qa: 20,
-    scope: "JHS enhanced subjects",
-  },
-  {
-    name: "JHS Language / Social Studies",
-    ww: 30,
-    pt: 50,
-    qa: 20,
-    scope: "English, Filipino, AP, similar",
-  },
-  {
-    name: "JHS Performance-Based",
-    ww: 20,
-    pt: 60,
-    qa: 20,
-    scope: "MAPEH, technology, output-heavy",
-  },
-  { name: "SHS Core Subject", ww: 25, pt: 50, qa: 25, scope: "Core subjects" },
-  {
-    name: "SHS Academic Elective",
-    ww: 25,
-    pt: 45,
-    qa: 30,
-    scope: "STEM Medical / Engineering electives",
-  },
-  {
-    name: "SHS Work Immersion / Field Exposure",
-    ww: 35,
-    pt: 40,
-    qa: 25,
-    scope: "Work immersion, field exposure",
-  },
-];
-
-const ACADEMIC_LEVELS = [
-  { level: "Grade 7", stage: "Junior High" },
-  { level: "Grade 8", stage: "Junior High" },
-  { level: "Grade 9", stage: "Junior High" },
-  { level: "Grade 10", stage: "Junior High" },
-  { level: "Grade 11", stage: "Senior High" },
-  { level: "Grade 12", stage: "Senior High" },
-];
-
-const TERM_LABELS: Record<string, string> = {
-  "1": "Term 1",
-  "2": "Term 2",
-  "3": "Term 3",
-};
-
-/* ---------------------------------------------------------------- */
-/* Main component                                                    */
-/* ---------------------------------------------------------------- */
 
 export default function AdminSystemSettings() {
   const navigate = useNavigate();
@@ -122,10 +101,15 @@ export default function AdminSystemSettings() {
   // Passing grade thresholds
   const [averagePassing, setAveragePassing] = React.useState("80");
 
-  // Academic calendar
-  const [schoolYear, setSchoolYear] = React.useState("AP26-27");
-  const [activeTerm, setActiveTerm] = React.useState("1");
-  const [pendingTerm, setPendingTerm] = React.useState<string | null>(null);
+  // Academic calendar & periods
+  const [academicYears, setAcademicYears] = React.useState<AcademicYearSettingItem[]>([]);
+  const [selectedYearId, setSelectedYearId] = React.useState<string>("");
+  const [academicPeriods, setAcademicPeriods] = React.useState<AcademicPeriodSettingItem[]>([]);
+  const [selectedPeriodId, setSelectedPeriodId] = React.useState<string>("");
+  const [pendingPeriodId, setPendingPeriodId] = React.useState<string | null>(null);
+
+  // Academic Levels
+  const [academicLevels, setAcademicLevels] = React.useState<AcademicLevelSettingItem[]>([]);
 
   // Curriculum scope
   const [jhsEnabled, setJhsEnabled] = React.useState(true);
@@ -134,8 +118,7 @@ export default function AdminSystemSettings() {
   const [engineeringEnabled, setEngineeringEnabled] = React.useState(true);
 
   // Grading templates
-  const [templates, setTemplates] =
-    React.useState<Template[]>(DEFAULT_TEMPLATES);
+  const [templates, setTemplates] = React.useState<Template[]>([]);
   const [templateModalOpen, setTemplateModalOpen] = React.useState(false);
 
   // Toast
@@ -164,6 +147,10 @@ export default function AdminSystemSettings() {
   const [pathwayName, setPathwayName] = React.useState("");
   const [pathwayCode, setPathwayCode] = React.useState("");
   const [pathwayError, setPathwayError] = React.useState<string | null>(null);
+
+  // Pathway Scopes state
+  const [pathwayScopes, setPathwayScopes] = React.useState<PathwayScopeRead[]>([]);
+  const [_isLoadingScopes, setIsLoadingScopes] = React.useState(false);
 
   const loadSubjectGroups = React.useCallback(async () => {
     setIsLoadingGroups(true);
@@ -207,14 +194,10 @@ export default function AdminSystemSettings() {
     }
   };
 
-  // Pathway Scopes state
-  const [pathwayScopes, setPathwayScopes] = React.useState<PathwayScopeRead[]>([]);
-  const [_isLoadingScopes, setIsLoadingScopes] = React.useState(false);
-
-  const loadPathwayScopes = React.useCallback(async () => {
+  const loadPathwayScopes = React.useCallback(async (yearId?: number) => {
     setIsLoadingScopes(true);
     try {
-      const res = await fetchPathwayScopes(1);
+      const res = await fetchPathwayScopes(yearId || 1);
       setPathwayScopes(res.scopes || []);
     } catch (err) {
       console.error("Failed to load pathway scopes", err);
@@ -225,8 +208,9 @@ export default function AdminSystemSettings() {
 
   const handleTogglePathwayScope = async (scope: PathwayScopeRead) => {
     try {
-      await updatePathwayScopes({
-        academic_year_id: scope.academic_year_id,
+      const yearId = Number(selectedYearId) || 1;
+      const updatedScopes = await updatePathwayScopes({
+        academic_year_id: yearId,
         scopes: [
           {
             academic_level_id: scope.academic_level_id,
@@ -234,84 +218,113 @@ export default function AdminSystemSettings() {
           },
         ],
       });
-      showToast(`Updated pathway requirement for Grade ${scope.grade_level}.`);
-      loadPathwayScopes();
-    } catch (err: any) {
-      showToast(err?.message || "Failed to update pathway scope.");
+      setPathwayScopes(updatedScopes.scopes);
+      showToast(`Grade ${scope.grade_level} pathway assignment updated.`);
+    } catch (err) {
+      console.error("Failed to update pathway scope", err);
+      showToast("Failed to update pathway scope.");
     }
   };
 
   const handleTogglePathwayEnabled = async (pathway: AcademicPathwayRead) => {
     try {
-      await updatePathway(pathway.id, { is_enabled: !pathway.is_enabled });
-      showToast(`Pathway ${pathway.is_enabled ? "disabled" : "enabled"} successfully.`);
-      loadPathways();
-    } catch (err: any) {
-      showToast(err?.message || "Failed to update pathway.");
+      const updated = await updatePathway(pathway.id, {
+        is_enabled: !pathway.is_enabled,
+      });
+      setPathways((prev) =>
+        prev.map((p) => (p.id === pathway.id ? updated : p))
+      );
+      showToast(`Pathway ${pathway.name} ${updated.is_enabled ? "enabled" : "disabled"}.`);
+    } catch (err) {
+      console.error("Failed to toggle pathway", err);
+      showToast("Failed to toggle pathway.");
     }
   };
-
-  React.useEffect(() => {
-    loadPathways();
-    loadPathwayScopes();
-  }, [loadPathways, loadPathwayScopes]);
 
   const fetchGradingTemplatesList = React.useCallback(async () => {
     try {
       const templatesRes = await getGradingTemplates({ status: "active" });
       const list = templatesRes.grading_templates || [];
-      if (list.length > 0) {
-        const mappedTemplates: Template[] = list.map((gt) => {
-          const wwComp = gt.components.find((c) => c.component_name.toLowerCase().includes("written"))?.weight ?? 0;
-          const ptComp = gt.components.find((c) => c.component_name.toLowerCase().includes("performance"))?.weight ?? 0;
-          const qaComp = gt.components.find((c) =>
-            c.component_name.toLowerCase().includes("quarter") ||
-            c.component_name.toLowerCase().includes("term") ||
-            c.component_name.toLowerCase().includes("exam")
-          )?.weight ?? 0;
-          return {
-            name: gt.template_name,
-            ww: wwComp,
-            pt: ptComp,
-            qa: qaComp,
-            scope: gt.description || "Database Template",
-          };
-        });
-        setTemplates(mappedTemplates);
-      }
+      const mappedTemplates: Template[] = list.map((gt) => {
+        const wwComp = gt.components.find((c) => c.component_name.toLowerCase().includes("written"))?.weight ?? 0;
+        const ptComp = gt.components.find((c) => c.component_name.toLowerCase().includes("performance"))?.weight ?? 0;
+        const qaComp = gt.components.find((c) =>
+          c.component_name.toLowerCase().includes("quarter") ||
+          c.component_name.toLowerCase().includes("term") ||
+          c.component_name.toLowerCase().includes("exam")
+        )?.weight ?? 0;
+        return {
+          id: gt.grading_template_id,
+          name: gt.template_name,
+          ww: wwComp,
+          pt: ptComp,
+          qa: qaComp,
+          scope: gt.description || (gt.academic_level?.level_name ? `Level: ${gt.academic_level.level_name}` : "General Template"),
+        };
+      });
+      setTemplates(mappedTemplates);
     } catch (err) {
-      console.error("Failed to load grading templates", err);
+      console.error("Failed to fetch grading templates", err);
     }
   }, []);
 
-  // Load Settings from Backend API
+  const loadAcademicPeriodsForYear = React.useCallback(async (yearId?: number) => {
+    try {
+      const periods = await getAcademicPeriodsSettings(yearId);
+      setAcademicPeriods(periods);
+      const active = periods.find((p) => p.is_active) || periods[0];
+      if (active) {
+        setSelectedPeriodId(String(active.id));
+      }
+    } catch (err) {
+      console.error("Failed to load academic periods", err);
+    }
+  }, []);
+
   const loadSettingsFromBackend = React.useCallback(async () => {
     setIsLoadingSettings(true);
     try {
-      const data: GroupedSettings = await getAllSettings();
+      const [settingsData, yearsData, levelsData] = await Promise.all([
+        getAllSettings(),
+        getAcademicYearsSettings(),
+        getAcademicLevelsSettings(),
+      ]);
+
       const flatSettings: Record<string, string> = {};
-      Object.values(data.groups || {}).forEach((items) => {
+      Object.values(settingsData.groups || {}).forEach((items) => {
         items.forEach((item) => {
           flatSettings[item.key] = item.value;
         });
       });
 
       if (flatSettings["general_average_passing_grade"]) setAveragePassing(flatSettings["general_average_passing_grade"]);
-      if (flatSettings["current_school_year"]) setSchoolYear(flatSettings["current_school_year"]);
-      if (flatSettings["active_term"]) setActiveTerm(flatSettings["active_term"]);
       if (flatSettings["jhs_enabled"]) setJhsEnabled(flatSettings["jhs_enabled"] === "true");
       if (flatSettings["shs_enabled"]) setShsEnabled(flatSettings["shs_enabled"] === "true");
       if (flatSettings["medical_pathway_enabled"]) setMedicalEnabled(flatSettings["medical_pathway_enabled"] === "true");
       if (flatSettings["engineering_pathway_enabled"]) setEngineeringEnabled(flatSettings["engineering_pathway_enabled"] === "true");
 
-      // Fetch dynamic grading templates from DB
-      await fetchGradingTemplatesList();
-    } catch {
-      // Graceful fallback to default state if backend settings are missing/unseeded
+      setAcademicYears(yearsData);
+      setAcademicLevels(levelsData);
+
+      const activeYear = yearsData.find((y) => y.is_active) || yearsData[0];
+      if (activeYear) {
+        setSelectedYearId(String(activeYear.academic_year_id));
+        await Promise.all([
+          loadAcademicPeriodsForYear(activeYear.academic_year_id),
+          loadPathwayScopes(activeYear.academic_year_id),
+        ]);
+      }
+
+      await Promise.all([
+        fetchGradingTemplatesList(),
+        loadPathways(),
+      ]);
+    } catch (err) {
+      console.error("Failed to load system settings", err);
     } finally {
       setIsLoadingSettings(false);
     }
-  }, [fetchGradingTemplatesList]);
+  }, [fetchGradingTemplatesList, loadAcademicPeriodsForYear, loadPathwayScopes, loadPathways]);
 
   React.useEffect(() => {
     loadSettingsFromBackend();
@@ -349,7 +362,6 @@ export default function AdminSystemSettings() {
 
   const handleToggleGroupActive = async (groupId: number, currentActive: boolean) => {
     if (currentActive) {
-      // Try deactivating
       try {
         await deactivateSubjectGroup(groupId);
         showToast("Subject group deactivated");
@@ -366,7 +378,6 @@ export default function AdminSystemSettings() {
         }
       }
     } else {
-      // Re-activate
       try {
         await updateSubjectGroup(groupId, { is_active: true });
         showToast("Subject group activated");
@@ -417,42 +428,76 @@ export default function AdminSystemSettings() {
     }
   };
 
-  const ratio = Number(activeTerm) / 3;
-
-  const handleTermChange = (value: string) => setPendingTerm(value);
-  const confirmTermChange = async () => {
-    if (pendingTerm) {
-      setActiveTerm(pendingTerm);
-      await saveSingleSetting("active_term", pendingTerm);
-      showToast(`Active term changed to ${TERM_LABELS[pendingTerm]}`);
+  const handleYearChange = async (yearIdStr: string) => {
+    const yearId = Number(yearIdStr);
+    setSelectedYearId(yearIdStr);
+    try {
+      await setActiveAcademicYear(yearId);
+      const selectedYear = academicYears.find((y) => y.academic_year_id === yearId);
+      setAcademicYears((prev) =>
+        prev.map((y) => ({
+          ...y,
+          is_active: y.academic_year_id === yearId,
+        }))
+      );
+      await loadAcademicPeriodsForYear(yearId);
+      await loadPathwayScopes(yearId);
+      showToast(`Active academic year changed to ${selectedYear?.year_label || yearIdStr}`);
+    } catch (err) {
+      console.error("Failed to change academic year", err);
+      showToast("Failed to change academic year.");
     }
-    setPendingTerm(null);
   };
 
+  const handlePeriodSelect = (periodIdStr: string) => {
+    setPendingPeriodId(periodIdStr);
+  };
 
+  const confirmPeriodChange = async () => {
+    if (pendingPeriodId) {
+      const periodId = Number(pendingPeriodId);
+      try {
+        await setActivePeriod(periodId);
+        setSelectedPeriodId(pendingPeriodId);
+        setAcademicPeriods((prev) =>
+          prev.map((p) => ({
+            ...p,
+            is_active: p.id === periodId,
+            status: p.id === periodId ? "Active" : p.status,
+          }))
+        );
+        const selectedP = academicPeriods.find((p) => p.id === periodId);
+        showToast(`Active period changed to ${selectedP?.period || `Period ${periodId}`}`);
+      } catch (err) {
+        console.error("Failed to change academic period", err);
+        showToast("Failed to change academic period.");
+      }
+    }
+    setPendingPeriodId(null);
+  };
 
-  const pathwayPills = (level: string) => {
-    if (level !== "Grade 11" && level !== "Grade 12") return null;
-    const pills: React.ReactNode[] = [];
-    if (medicalEnabled)
-      pills.push(
-        <Badge size="sm" variant="surface" key="med">
-          STEM Medical
-        </Badge>,
-      );
-    if (engineeringEnabled)
-      pills.push(
-        <Badge size="sm" variant="surface" key="eng">
-          STEM Engineering
-        </Badge>,
-      );
-    if (pills.length === 0)
-      pills.push(
-        <Badge size="sm" variant="default" key="none">
+  // Dynamic progress calculation based on active period
+  const activePeriod = academicPeriods.find((p) => String(p.id) === selectedPeriodId || p.is_active) || academicPeriods[0];
+  const progressRatio = activePeriod
+    ? Math.min(1, Math.max(0, activePeriod.period_sequence / (activePeriod.total_periods || 3)))
+    : 0.33;
+  const progressPercent = Math.round(progressRatio * 100);
+
+  const pathwayPills = (stage: string) => {
+    if (stage !== "Senior High") return null;
+    const activePathways = pathways.filter((p) => p.is_enabled);
+    if (!activePathways.length) {
+      return (
+        <Badge size="sm" variant="default">
           No pathway enabled
-        </Badge>,
+        </Badge>
       );
-    return pills;
+    }
+    return activePathways.map((p) => (
+      <Badge size="sm" variant="surface" key={p.id}>
+        {p.name}
+      </Badge>
+    ));
   };
 
   return (
@@ -480,13 +525,9 @@ export default function AdminSystemSettings() {
             <Card className="@container/card w-full">
               <Card.Header>
                 <Card.Title className="flex flex-row justify-between w-full items-center">
-                  General Average Passing Grade
-                  <Button
-                    size="sm"
-                    onClick={handleSaveThresholds}
-                    disabled={isSavingThresholds}
-                  >
-                    Save Threshold
+                  Subject Groups & Passing Thresholds
+                  <Button size="sm" onClick={() => setIsAddGroupOpen(true)}>
+                    <Plus className="size-3 mr-1" /> Add Group
                   </Button>
                 </Card.Title>
               </Card.Header>
@@ -616,6 +657,42 @@ export default function AdminSystemSettings() {
               </Card.Content>
             </Card>
 
+            {/* General Average Threshold */}
+            <Card className="@container/card w-full">
+              <Card.Header>
+                <Card.Title className="flex flex-row justify-between w-full items-center">
+                  General Average Passing Grade
+                  <Button
+                    size="sm"
+                    className="whitespace-nowrap"
+                    onClick={handleSaveThresholds}
+                    disabled={isSavingThresholds}
+                  >
+                    {isSavingThresholds ? "Saving..." : "Save Threshold"}
+                  </Button>
+                </Card.Title>
+              </Card.Header>
+              <Card.Content className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-row justify-between w-full items-center">
+                    <Text as="h6" className="font-sans font-medium">
+                      General Average Passing Grade
+                    </Text>
+                    <Input
+                      className="w-20 shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md transition-all"
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={averagePassing}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setAveragePassing(e.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+              </Card.Content>
+            </Card>
+
             {/* Academic Calendar */}
             <Card className="@container/card w-full">
               <Card.Header className="flex flex-row justify-between items-start">
@@ -625,15 +702,15 @@ export default function AdminSystemSettings() {
                     as="p"
                     className="text-sm font-normal text-muted-foreground"
                   >
-                    Set the active school year and active term. This is the only
-                    current-period selector for both JHS and SHS.
+                    Set the active school year and active term. This determines the current academic period system-wide.
                   </Text>
-
                 </Card.Title>
                 <div className="flex items-center gap-4">
                   <Dialog>
                     <Dialog.Trigger>
-                      <Button size="sm" className="whitespace-nowrap">New Academic Period</Button>
+                      <Button size="sm" className="whitespace-nowrap">
+                        <Calendar className="size-3 mr-1" /> New Academic Period
+                      </Button>
                     </Dialog.Trigger>
                     <AddAcademicPeriodModal />
                   </Dialog>
@@ -646,20 +723,23 @@ export default function AdminSystemSettings() {
                       Current Academic Year
                     </Text>
                     <Select
-                      value={schoolYear}
-                      onValueChange={(val) => {
-                        setSchoolYear(val);
-                        saveSingleSetting("current_school_year", val);
-                      }}
+                      value={selectedYearId}
+                      onValueChange={handleYearChange}
                     >
                       <Select.Trigger className="w-full shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md data-[state=open]:shadow-md transition-all">
-                        <Select.Value placeholder="2026 - 2027" />
+                        <Select.Value placeholder="Select Academic Year" />
                       </Select.Trigger>
                       <Select.Content>
                         <Select.Group>
-                          <Select.Item value="AP25-26">2025 - 2026</Select.Item>
-                          <Select.Item value="AP26-27">2026 - 2027</Select.Item>
-                          <Select.Item value="AP27-28">2027 - 2028</Select.Item>
+                          {academicYears.length === 0 ? (
+                            <Select.Item value="0" disabled>No Academic Years found</Select.Item>
+                          ) : (
+                            academicYears.map((y) => (
+                              <Select.Item key={y.academic_year_id} value={String(y.academic_year_id)}>
+                                {y.year_label} {y.is_active ? "(Active)" : ""}
+                              </Select.Item>
+                            ))
+                          )}
                         </Select.Group>
                       </Select.Content>
                     </Select>
@@ -669,15 +749,15 @@ export default function AdminSystemSettings() {
                     <Text as="h6" className="font-sans font-medium">
                       Period Type
                     </Text>
-                    <div className="h-10 border-2 border-black flex items-center gap-2 px-3 text-md">
+                    <div className="h-10 border-2 border-black flex items-center gap-2 px-3 text-md font-medium">
                       <Lock className="w-3.5 h-3.5" />
-                      Three-Term Calendar
+                      Three-Term Academic Calendar
                     </div>
                     <Text
                       as="p"
-                      className="font-sans text-sm text-muted-foreground"
+                      className="font-sans text-xs text-muted-foreground"
                     >
-                      Locked for the current implementation.
+                      Standard DepEd trimestral schedule.
                     </Text>
                   </div>
 
@@ -685,15 +765,21 @@ export default function AdminSystemSettings() {
                     <Text as="h6" className="font-sans font-medium">
                       Active Period
                     </Text>
-                    <Select value={activeTerm} onValueChange={handleTermChange}>
+                    <Select value={selectedPeriodId} onValueChange={handlePeriodSelect}>
                       <Select.Trigger className="w-full shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md data-[state=open]:shadow-md transition-all">
-                        <Select.Value placeholder="Term 1" />
+                        <Select.Value placeholder="Select Active Period" />
                       </Select.Trigger>
                       <Select.Content>
                         <Select.Group>
-                          <Select.Item value="1">Term 1</Select.Item>
-                          <Select.Item value="2">Term 2</Select.Item>
-                          <Select.Item value="3">Term 3</Select.Item>
+                          {academicPeriods.length === 0 ? (
+                            <Select.Item value="0" disabled>No periods for this year</Select.Item>
+                          ) : (
+                            academicPeriods.map((p) => (
+                              <Select.Item key={p.id} value={String(p.id)}>
+                                {p.period} {p.is_active ? "(Active)" : ""}
+                              </Select.Item>
+                            ))
+                          )}
                         </Select.Group>
                       </Select.Content>
                     </Select>
@@ -704,22 +790,19 @@ export default function AdminSystemSettings() {
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-2">
                       <Text as="p" className="text-sm font-semibold">
-                        {Math.round(ratio * 100)}% Complete
+                        {progressPercent}% Complete
                       </Text>
-
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-2">
-                        <Text as="p" className="text-sm font-semibold">
-                          Active:
-                        </Text>
-                        <Badge size="sm" variant="secondary">
-                          {TERM_LABELS[activeTerm] || `Term ${activeTerm}`}
-                        </Badge>
-                      </div>
+                      <Text as="p" className="text-sm font-semibold">
+                        Active Period:
+                      </Text>
+                      <Badge size="sm" variant="secondary">
+                        {activePeriod?.period || "No Active Period"}
+                      </Badge>
                     </div>
                   </div>
-                  <Progress value={ratio * 100} className="w-full" />
+                  <Progress value={progressPercent} className="w-full" />
                 </div>
                 <div className="flex flex-row justify-between w-full items-center -my-2">
                   <Text as="p" className="font-sans text-sm text-muted-foreground">
@@ -747,10 +830,8 @@ export default function AdminSystemSettings() {
                     as="p"
                     className="text-sm font-normal text-muted-foreground"
                   >
-                    Define what the school offers. Actual pathway subjects belong
-                    in the Subjects module.
+                    Define school levels and Senior High School pathways.
                   </Text>
-
                 </Card.Title>
                 <div className="flex items-center gap-4">
                   <Button
@@ -791,8 +872,7 @@ export default function AdminSystemSettings() {
                       as="p"
                       className="font-sans text-xs text-muted-foreground"
                     >
-                      Enabled levels control the available grade levels,
-                      dashboards, and reports.
+                      Enabled levels control available grade levels across classes, subjects, and reports.
                     </Text>
                   </div>
 
@@ -804,7 +884,7 @@ export default function AdminSystemSettings() {
                       <Dialog open={isAddPathwayOpen} onOpenChange={setIsAddPathwayOpen}>
                         <Dialog.Trigger>
                           <Button size="sm" disabled={!shsEnabled}>
-                            Add Pathway
+                            <Plus className="size-3 mr-1" /> Add Pathway
                           </Button>
                         </Dialog.Trigger>
                         <Dialog.Content>
@@ -888,13 +968,6 @@ export default function AdminSystemSettings() {
                     </Text>
                   </div>
                 </div>
-
-                <Alert status="warning" className="border-2 border-dashed border-black bg-yellow-50 text-foreground text-sm">
-                  <strong>Design rule:</strong> Settings only says the school
-                  offers STEM Medical and STEM Engineering. The different
-                  subjects for each pathway should be configured in{" "}
-                  <strong>Subjects → Subject Offerings</strong>, not here.
-                </Alert>
               </Card.Content>
             </Card>
 
@@ -915,15 +988,13 @@ export default function AdminSystemSettings() {
                     </Table.Row>
                   </Table.Header>
                   <Table.Body>
-                    {ACADEMIC_LEVELS.map((item) => {
-                      const stageEnabled =
-                        item.stage === "Junior High" ? jhsEnabled : shsEnabled;
-                      const gradeNum = parseInt(item.level.replace("Grade ", ""), 10);
-                      const scope = pathwayScopes.find((s) => s.grade_level === gradeNum);
+                    {academicLevels.map((item) => {
+                      const stageEnabled = item.stage === "Junior High" ? jhsEnabled : shsEnabled;
+                      const scope = pathwayScopes.find((s) => s.grade_level === item.grade_level);
                       return (
-                        <Table.Row key={item.level}>
+                        <Table.Row key={item.academic_level_id}>
                           <Table.Cell className="font-bold">
-                            {item.level}
+                            {item.level_name}
                           </Table.Cell>
                           <Table.Cell>{item.stage}</Table.Cell>
                           <Table.Cell className="text-center">
@@ -936,12 +1007,12 @@ export default function AdminSystemSettings() {
                               </Badge>
                             ) : (
                               <div className="flex gap-2 flex-wrap justify-center">
-                                {pathwayPills(item.level)}
+                                {pathwayPills(item.stage)}
                               </div>
                             )}
                           </Table.Cell>
                           <Table.Cell>
-                            {gradeNum < 11 ? (
+                            {item.grade_level < 11 ? (
                               <Text as="p" className="text-xs text-muted-foreground">
                                 N/A (SHS only)
                               </Text>
@@ -958,14 +1029,14 @@ export default function AdminSystemSettings() {
                               </div>
                             ) : (
                               <Text as="p" className="text-xs text-muted-foreground">
-                                {gradeNum === 11 ? "Required" : "General"}
+                                {item.grade_level === 11 ? "Required" : "General"}
                               </Text>
                             )}
                           </Table.Cell>
                           <Table.Cell>
                             <Badge variant={stageEnabled ? "secondary" : "outline"} size="sm">
                               {stageEnabled ? "Enabled" : "Disabled"}
-                            </Badge>
+                            </Pill>
                           </Table.Cell>
                         </Table.Row>
                       );
@@ -984,10 +1055,8 @@ export default function AdminSystemSettings() {
                     as="p"
                     className="text-sm font-normal text-muted-foreground"
                   >
-                    Subjects will choose one template or override it in the
-                    Subjects module.
+                    Reusable grade-weight templates stored in database. Assigned to subjects during grading setup.
                   </Text>
-
                 </Card.Title>
                 <div className="flex items-center gap-4">
                   <Dialog
@@ -995,9 +1064,8 @@ export default function AdminSystemSettings() {
                     onOpenChange={setTemplateModalOpen}
                   >
                     <Dialog.Trigger>
-                      <Button size="sm"
-                        className="whitespace-nowrap">
-                        New Template
+                      <Button size="sm" className="whitespace-nowrap">
+                        <Plus className="size-3 mr-1" /> New Template
                       </Button>
                     </Dialog.Trigger>
                     <AddGradingTemplateModal
@@ -1013,65 +1081,70 @@ export default function AdminSystemSettings() {
               </Card.Header>
 
               <Card.Content className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {templates.map((t, i) => (
-                    <Card key={i} className="shadow-none bg-primary p-3 flex flex-col gap-3 w-full">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <Text as="h6" className="font-sans font-bold">
-                            {t.name}
-                          </Text>
-                          <Text as="p" className="font-sans text-xs text-foreground">
-                            {t.scope}
-                          </Text>
+                {templates.length === 0 ? (
+                  <div className="border-2 border-dashed border-black/30 rounded-md p-6 text-center text-sm text-muted-foreground bg-muted/10">
+                    No active grading templates found in database. Click &ldquo;New Template&rdquo; to configure one.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {templates.map((t, i) => (
+                      <Card key={t.id || i} className="shadow-none bg-primary p-3 flex flex-col gap-3 w-full">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <Text as="h6" className="font-sans font-bold">
+                              {t.name}
+                            </Text>
+                            <Text as="p" className="font-sans text-xs text-foreground">
+                              {t.scope}
+                            </Text>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="bg-background"
+                            onClick={() =>
+                              showToast(
+                                `Template: ${t.name} (WW: ${t.ww}%, PT: ${t.pt}%, QA: ${t.qa}%)`
+                              )
+                            }
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="bg-background"
-                          onClick={() =>
-                            showToast(
-                              `Edit workflow opened for ${t.name} (preview only)`,
-                            )
-                          }
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <Card className="flex flex-col shadow-none p-2 items-center justify-center w-full ">
-                          <Text as="p" className="font-bold text-lg">
-                            {t.ww}%
-                          </Text>
-                          <Text as="p" className="text-xs text-muted-foreground">
-                            WW
-                          </Text>
-                        </Card>
-                        <Card className="flex flex-col shadow-none p-2 items-center justify-center w-full">
-                          <Text as="p" className="font-bold text-lg">
-                            {t.pt}%
-                          </Text>
-                          <Text as="p" className="text-xs text-muted-foreground">
-                            PT
-                          </Text>
-                        </Card>
-                        <Card className="flex flex-col shadow-none p-2 items-center justify-center w-full">
-                          <Text as="p" className="font-bold text-lg">
-                            {t.qa}%
-                          </Text>
-                          <Text as="p" className="text-xs text-muted-foreground">
-                            QA
-                          </Text>
-                        </Card>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <Card className="flex flex-col shadow-none p-2 items-center justify-center w-full">
+                            <Text as="p" className="font-bold text-lg">
+                              {t.ww}%
+                            </Text>
+                            <Text as="p" className="text-xs text-muted-foreground">
+                              WW
+                            </Text>
+                          </Card>
+                          <Card className="flex flex-col shadow-none p-2 items-center justify-center w-full">
+                            <Text as="p" className="font-bold text-lg">
+                              {t.pt}%
+                            </Text>
+                            <Text as="p" className="text-xs text-muted-foreground">
+                              PT
+                            </Text>
+                          </Card>
+                          <Card className="flex flex-col shadow-none p-2 items-center justify-center w-full">
+                            <Text as="p" className="font-bold text-lg">
+                              {t.qa}%
+                            </Text>
+                            <Text as="p" className="text-xs text-muted-foreground">
+                              QA
+                            </Text>
+                          </Card>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
                 <Alert status="warning" className="border-2 border-dashed border-black bg-yellow-50 text-foreground text-sm">
-                  <strong>Important:</strong> Do not assign Medical or
-                  Engineering subjects in Settings. Settings stores reusable
-                  grade-weight templates only. Actual grading setup per subject
-                  belongs in <strong>Subjects → Grading Setup</strong>.
+                  <strong>Grading Architecture:</strong> Settings stores reusable
+                  grade-weight templates. Subject-specific weights and assessments are configured in{" "}
+                  <strong>Subjects → Grading Setup</strong>.
                 </Alert>
               </Card.Content>
             </Card>
@@ -1087,22 +1160,22 @@ export default function AdminSystemSettings() {
                     {
                       n: 1,
                       title: "Settings",
-                      body: "Academic year, active term, STEM scope, pathways, default templates.",
+                      body: "Academic year, active term, grade levels, pathways, default templates.",
                     },
                     {
                       n: 2,
                       title: "Subjects",
-                      body: "Subject catalog, Medical/Engineering offerings per grade and term, grading template assignment.",
+                      body: "Subject catalog, pathway offerings per grade and term, grading template assignment.",
                     },
                     {
                       n: 3,
                       title: "Classes",
-                      body: "Sections such as Grade 11 STEM Medical or Grade 11 STEM Engineering.",
+                      body: "Section management, adviser assignment, and student roster enrollments.",
                     },
                     {
                       n: 4,
                       title: "Subject Load",
-                      body: "Teacher assignment per subject, section, and term.",
+                      body: "Teacher assignment per subject, section, and term schedule.",
                     },
                   ].map((s) => (
                     <Card key={s.n} className="p-3 w-full shadow-none">
@@ -1132,11 +1205,11 @@ export default function AdminSystemSettings() {
         </div>
       </div>
 
-      {/* Confirm term change */}
+      {/* Confirm period change */}
       <Dialog
-        open={pendingTerm !== null}
+        open={pendingPeriodId !== null}
         onOpenChange={(open) => {
-          if (!open) setPendingTerm(null);
+          if (!open) setPendingPeriodId(null);
         }}
       >
         <Dialog.Content size="md">
@@ -1147,15 +1220,16 @@ export default function AdminSystemSettings() {
           </Dialog.Header>
           <section className="flex flex-col gap-4 p-4 text-sm">
             <p>
-              Change the active period to{" "}
-              <strong>{pendingTerm ? TERM_LABELS[pendingTerm] : ""}</strong>?
-              This applies to both Junior and Senior High School, and will mark{" "}
-              <strong>{TERM_LABELS[activeTerm]}</strong> as completed.
+              Change the active academic period to{" "}
+              <strong>
+                {academicPeriods.find((p) => String(p.id) === pendingPeriodId)?.period || "selected period"}
+              </strong>?
+              This will update the active term system-wide across all student, teacher, and admin views.
             </p>
           </section>
           <Dialog.Footer position="static">
-            <Button onClick={confirmTermChange}>Confirm</Button>
-            <Button variant="outline" onClick={() => setPendingTerm(null)}>
+            <Button onClick={confirmPeriodChange}>Confirm</Button>
+            <Button variant="outline" onClick={() => setPendingPeriodId(null)}>
               Cancel
             </Button>
           </Dialog.Footer>

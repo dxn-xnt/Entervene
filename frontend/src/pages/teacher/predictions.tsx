@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import RiskSummaryCards from "@/components/predictions/RiskSummaryCards";
-import RiskDistributionChart from "@/components/predictions/RiskDistributionChart";
 import PredictionFilters from "@/components/predictions/PredictionFilters";
 import PredictionTable from "@/components/predictions/PredictionTable";
 import PredictionDetailSheet from "@/components/predictions/PredictionDetailSheet";
