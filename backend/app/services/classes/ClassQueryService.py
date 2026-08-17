@@ -21,6 +21,7 @@ from app.services.classes.ClassShared import (
     resolve_active_academic_year,
     student_sort_key,
 )
+from app.services.pathways.PathwayScopeService import resolve_pathway_scope
 
 # READ SIDE OF CLASS MANAGEMENT
 # Functions in this module assemble data for admin pages without changing class
@@ -34,11 +35,12 @@ def _academic_year_option(academic_year) -> dict:
     }
 
 
-def _academic_level_option(academic_level) -> dict:
+def _academic_level_option(academic_level, requires_pathway: bool = False) -> dict:
     return {
         "academic_level_id": academic_level.academic_level_id,
         "level_name": academic_level.level_name,
         "grade_level": academic_level.grade_level,
+        "requires_pathway": requires_pathway,
     }
 
 
@@ -198,7 +200,13 @@ def get_class_form_options_data(db: Session) -> dict:
     )
     return {
         "academic_year": _academic_year_option(academic_year),
-        "academic_levels": [_academic_level_option(level) for level in academic_levels],
+        "academic_levels": [
+            _academic_level_option(
+                level,
+                requires_pathway=resolve_pathway_scope(db, academic_year.academic_year_id, level.academic_level_id),
+            )
+            for level in academic_levels
+        ],
         "eligible_advisers": [_adviser_option(adviser) for adviser in eligible_advisers],
     }
 

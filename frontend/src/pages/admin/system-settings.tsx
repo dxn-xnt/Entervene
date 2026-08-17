@@ -1012,7 +1012,11 @@ export default function AdminSystemSettings() {
                             )}
                           </Table.Cell>
                           <Table.Cell>
-                            {scope ? (
+                            {gradeNum < 11 ? (
+                              <Text as="p" className="text-xs text-muted-foreground">
+                                N/A (SHS only)
+                              </Text>
+                            ) : scope ? (
                               <div className="flex items-center gap-2">
                                 <Switch
                                   checked={scope.requires_pathway}
@@ -1024,7 +1028,9 @@ export default function AdminSystemSettings() {
                                 </Text>
                               </div>
                             ) : (
-                              <Text as="p" className="text-xs text-muted-foreground">Default</Text>
+                              <Text as="p" className="text-xs text-muted-foreground">
+                                {gradeNum === 11 ? "Required" : "General"}
+                              </Text>
                             )}
                           </Table.Cell>
                           <Table.Cell>
