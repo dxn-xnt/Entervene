@@ -162,7 +162,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--csv-path",
-        default="data/live_predictions/final_student_risk_predictions.csv",
+        default=None,
+        help="Path to final_student_risk_predictions.csv",
     )
     parser.add_argument("--model-version-id", type=int, default=1)
     parser.add_argument("--batch-size", type=int, default=100)
@@ -172,7 +173,22 @@ def main() -> None:
                         help="Delete existing predictions for this model version first.")
     args = parser.parse_args()
 
-    csv_path = Path(args.csv_path)
+    default_csv = Path(__file__).resolve().parents[1] / "data" / "live_predictions" / "final_student_risk_predictions.csv"
+
+    if args.csv_path:
+        csv_path = Path(args.csv_path)
+        if not csv_path.exists() and (Path("app") / csv_path).exists():
+            csv_path = Path("app") / csv_path
+    else:
+        if default_csv.exists():
+            csv_path = default_csv
+        elif Path("data/live_predictions/final_student_risk_predictions.csv").exists():
+            csv_path = Path("data/live_predictions/final_student_risk_predictions.csv")
+        elif Path("app/data/live_predictions/final_student_risk_predictions.csv").exists():
+            csv_path = Path("app/data/live_predictions/final_student_risk_predictions.csv")
+        else:
+            csv_path = default_csv
+
     if not csv_path.exists():
         print(f"ERROR: CSV not found: {csv_path}", file=sys.stderr)
         sys.exit(1)

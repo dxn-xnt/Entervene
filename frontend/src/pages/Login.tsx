@@ -52,23 +52,23 @@ const Login = () => {
   return (
     <div className="flex flex-col items-center justify-center h-screen">
       <Card className="w-md p-8">
-        <Card.Header className="flex flex-col justify-center">
+        <Card.Header className="flex flex-col justify-center mb-8">
           <Card.Title className="font-sans font-bold mb-1">
             Entervene
           </Card.Title>
-          <Card.Description className="font-normal text-muted-foreground text-md">
+          <Card.Description className="font-normal text-muted-foreground text-sm">
             Enter your details to access your account
           </Card.Description>
         </Card.Header>
         <Card.Content>
-          <div className="flex flex-col gap-5">
-            <div className="grid w-full max-w-sm items-center gap-2 mb-4">
+          <div className="flex flex-col gap-2">
+            <div className="grid w-full max-w-sm items-center gap-2 mb-2">
               <Label htmlFor="email">Email Address</Label>
               <Input type="email" id="email" placeholder="Email" value={username}
                 onChange={(e) => setUsername(e.target.value)} />
             </div>
 
-            <div className="grid w-full max-w-sm items-center gap-2">
+            <div className="grid w-full max-w-sm items-center gap-2 mb-2">
               <div className="flex flex-row justify-between items-center">
                 <Label htmlFor="password">Password</Label>
                 <Button variant="link" className="font-regular p-0 text-sm font-normal font-underline"
@@ -86,14 +86,13 @@ const Login = () => {
               <Text>Remember me</Text>
             </div>
 
-
             <Button variant="default" className="mt-4"
               onClick={handleLogin}
               disabled={loading}
             >
               Sign In
             </Button>
-            <div className="flex flex-row items-center gap-1">
+            <div className="flex flex-row items-center gap-1 mt-1">
               <Text as="p" className="text-center">Don't have an account?</Text>
               <Button variant="link" className="font-regular p-0"
                 onClick={() => navigate("/forgot-password")}>
