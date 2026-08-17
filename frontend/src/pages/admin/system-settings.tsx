@@ -39,7 +39,36 @@ import {
   type AffectedSubject,
 } from "@/lib/subject-groups-api";
 
-
+function Pill({
+  children,
+  tone = "default",
+  locked = false,
+}: {
+  children: React.ReactNode;
+  tone?: "default" | "green" | "blue" | "yellow" | "gray";
+  locked?: boolean;
+}) {
+  const variantMap: Record<
+    string,
+    "default" | "secondary" | "outline" | "solid" | "surface"
+  > = {
+    default: "outline",
+    green: "secondary",
+    blue: "surface",
+    yellow: "secondary",
+    gray: "default",
+  };
+  return (
+    <Badge
+      size="sm"
+      variant={variantMap[tone] || "default"}
+      className="inline-flex items-center gap-1"
+    >
+      {locked && <Lock className="w-3 h-3" />}
+      {children}
+    </Badge>
+  );
+}
 
 /* ---------------------------------------------------------------- */
 /* Data                                                              */
