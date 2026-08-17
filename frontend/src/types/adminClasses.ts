@@ -37,6 +37,7 @@ export type AcademicLevelOption = {
   academic_level_id: number;
   level_name: string;
   grade_level: number;
+  requires_pathway?: boolean;
 };
 
 export type AdviserOption = {

@@ -52,8 +52,18 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
       .then(([classData, pathwayData]) => {
         if (cancelled) return;
         setOptions(classData);
-        setActivePathways(pathwayData.pathways || []);
-        setAcademicLevelId((current) => current || String(classData.academic_levels[0]?.academic_level_id ?? ""));
+        const active = pathwayData.pathways || [];
+        setActivePathways(active);
+        const defaultLevelId = initialSetup?.academicLevelId ? String(initialSetup.academicLevelId) : String(classData.academic_levels[0]?.academic_level_id ?? "");
+        setAcademicLevelId((current) => current || defaultLevelId);
+
+        if (!initialSetup?.sections) {
+          const initialLevel = classData.academic_levels.find((l) => String(l.academic_level_id) === (academicLevelId || defaultLevelId));
+          const isSHS = initialLevel ? initialLevel.grade_level >= 11 : false;
+          const needsPw = isSHS && (initialLevel?.requires_pathway ?? false) && active.length > 0;
+          const initialPathway = needsPw ? (active[0]?.code || "general") : "general";
+          setSections([createSectionDraft("", "", initialPathway)]);
+        }
       })
       .catch((error: unknown) => {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : "Unable to load class options.");
@@ -75,6 +85,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
 
   const selectedLevel = options?.academic_levels.find((item) => String(item.academic_level_id) === academicLevelId);
   const isSeniorHigh = selectedLevel ? selectedLevel.grade_level >= 11 : false;
+  const showPathwayColumn = isSeniorHigh && (selectedLevel?.requires_pathway ?? false) && activePathways.length > 0;
 
   function updateSection(localId: string, changes: Partial<ManualSectionDraft>) {
     setSections((current) => current.map((section) => section.localId === localId ? { ...section, ...changes } : section));
@@ -116,7 +127,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
       sections: sections.map((section) => ({
         ...section,
         sectionName: section.sectionName.trim(),
-        pathway: isSeniorHigh ? (section.pathway || "stem_medical") : "general",
+        pathway: showPathwayColumn ? (section.pathway || activePathways[0]?.code || "general") : "general",
         adviserName: adviserName(options.eligible_advisers.find((adviser) => adviser.staff_id === section.adviserStaffId)),
       })),
     });
@@ -150,10 +161,14 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
           disabled={noLevels}
           value={academicLevelId}
           onChange={(e) => {
-            setAcademicLevelId(e.target.value);
-            const nextLvl = options.academic_levels.find((item) => String(item.academic_level_id) === e.target.value);
-            if (nextLvl && nextLvl.grade_level >= 11) {
-              setSections((current) => current.map((s) => ({ ...s, pathway: s.pathway && s.pathway !== "general" ? s.pathway : "stem_medical" })));
+            const newLevelId = e.target.value;
+            setAcademicLevelId(newLevelId);
+            const nextLvl = options.academic_levels.find((item) => String(item.academic_level_id) === newLevelId);
+            const isSHS = nextLvl ? nextLvl.grade_level >= 11 : false;
+            const needsPw = isSHS && (nextLvl?.requires_pathway ?? false) && activePathways.length > 0;
+            const targetPathway = needsPw ? (activePathways[0]?.code || "general") : "general";
+            if (needsPw) {
+              setSections((current) => current.map((s) => ({ ...s, pathway: s.pathway && s.pathway !== "general" ? s.pathway : targetPathway })));
             } else {
               setSections((current) => current.map((s) => ({ ...s, pathway: "general" })));
             }
@@ -181,9 +196,9 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
           {errors.sections && <InlineError message={errors.sections} />}
         </div>
 
-        <div className={`grid ${isSeniorHigh ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} gap-2 text-xs font-semibold text-muted-foreground px-1`}>
+        <div className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} gap-2 text-xs font-semibold text-muted-foreground px-1`}>
           <span>Section Name</span>
-          {isSeniorHigh && <span>Strand / Pathway</span>}
+          {showPathwayColumn && <span>Strand / Pathway</span>}
           <span>Adviser</span>
           <span />
         </div>
@@ -197,19 +212,19 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
               .filter(Boolean)
           );
           return (
-            <div key={section.localId} className={`grid ${isSeniorHigh ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} items-start gap-2`}>
+            <div key={section.localId} className={`grid ${showPathwayColumn ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_36px]" : "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_36px]"} items-start gap-2`}>
               <div>
                 <Input
                   value={section.sectionName}
                   onChange={(event) => updateSection(section.localId, { sectionName: event.target.value })}
-                  placeholder="e.g. STEM Med A"
+                  placeholder="e.g. Sapphire"
                 />
                 {rowErrors?.sectionName && <InlineError message={rowErrors.sectionName} />}
               </div>
-              {isSeniorHigh && (
+              {showPathwayColumn && (
                 <div>
                   <Select
-                    value={section.pathway || activePathways[0]?.code || "medical-courses"}
+                    value={section.pathway || activePathways[0]?.code || "general"}
                     onValueChange={(val) => updateSection(section.localId, { pathway: val })}
                   >
                     <Select.Trigger className="w-full">
@@ -265,7 +280,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
         <Button
           variant={"outline"}
           className="w-fit mt-1"
-          onClick={() => setSections((current) => [...current, createSectionDraft("", "", isSeniorHigh ? "stem_medical" : "general")])}
+          onClick={() => setSections((current) => [...current, createSectionDraft("", "", showPathwayColumn ? (activePathways[0]?.code || "general") : "general")])}
         >
           <Plus className="size-4 mr-2" />Add Another Section
         </Button>
