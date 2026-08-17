@@ -17,11 +17,21 @@ from app.schemas.AcademicLevelPathwayScope import (
 def resolve_pathway_scope(db: Session, academic_year_id: int, academic_level_id: int) -> bool:
     """
     Resolves whether a grade level requires DO 017 pathway assignment for a given academic year.
+    Only Senior High School (grade_level >= 11) can have pathways.
     Fallback priority:
-    1. Explicit scope row for (academic_year_id, academic_level_id).
-    2. Prior year scope row for the same academic_level_id (carries forward prior year settings).
-    3. Static bootstrap default: Grade 11 requires pathway, all others do not.
+    1. If grade_level < 11 (JHS), always False.
+    2. Explicit scope row for (academic_year_id, academic_level_id).
+    3. Prior year scope row for the same academic_level_id (carries forward prior year settings).
+    4. Static bootstrap default: Grade 11 requires pathway, all others do not.
     """
+    level = (
+        db.query(AcademicLevel)
+        .filter(AcademicLevel.academic_level_id == academic_level_id)
+        .first()
+    )
+    if level is None or level.grade_level < 11:
+        return False
+
     scope = (
         db.query(AcademicLevelPathwayScope)
         .filter(
@@ -53,15 +63,7 @@ def resolve_pathway_scope(db: Session, academic_year_id: int, academic_level_id:
         if prior_scope is not None:
             return prior_scope.requires_pathway
 
-    level = (
-        db.query(AcademicLevel)
-        .filter(AcademicLevel.academic_level_id == academic_level_id)
-        .first()
-    )
-    if level is not None:
-        return level.grade_level == 11
-
-    return False
+    return level.grade_level == 11
 
 
 def get_pathway_scopes_for_year(db: Session, academic_year_id: int) -> PathwayScopeListResponse:

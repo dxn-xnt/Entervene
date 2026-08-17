@@ -15,6 +15,7 @@ class AcademicLevelOption(BaseModel):
     academic_level_id: int
     level_name: str
     grade_level: int
+    requires_pathway: bool = False
 
 
 class AdviserOption(BaseModel):
