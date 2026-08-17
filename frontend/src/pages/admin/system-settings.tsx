@@ -257,6 +257,34 @@ export default function AdminSystemSettings() {
     loadPathwayScopes();
   }, [loadPathways, loadPathwayScopes]);
 
+  const fetchGradingTemplatesList = React.useCallback(async () => {
+    try {
+      const templatesRes = await getGradingTemplates({ status: "active" });
+      const list = templatesRes.grading_templates || [];
+      if (list.length > 0) {
+        const mappedTemplates: Template[] = list.map((gt) => {
+          const wwComp = gt.components.find((c) => c.component_name.toLowerCase().includes("written"))?.weight ?? 0;
+          const ptComp = gt.components.find((c) => c.component_name.toLowerCase().includes("performance"))?.weight ?? 0;
+          const qaComp = gt.components.find((c) => 
+            c.component_name.toLowerCase().includes("quarter") || 
+            c.component_name.toLowerCase().includes("term") || 
+            c.component_name.toLowerCase().includes("exam")
+          )?.weight ?? 0;
+          return {
+            name: gt.template_name,
+            ww: wwComp,
+            pt: ptComp,
+            qa: qaComp,
+            scope: gt.description || "Database Template",
+          };
+        });
+        setTemplates(mappedTemplates);
+      }
+    } catch (err) {
+      console.error("Failed to load grading templates", err);
+    }
+  }, []);
+
   // Load Settings from Backend API
   const loadSettingsFromBackend = React.useCallback(async () => {
     setIsLoadingSettings(true);
@@ -278,31 +306,7 @@ export default function AdminSystemSettings() {
       if (flatSettings["engineering_pathway_enabled"]) setEngineeringEnabled(flatSettings["engineering_pathway_enabled"] === "true");
 
       // Fetch dynamic grading templates from DB
-      try {
-        const templatesRes = await getGradingTemplates({ status: "active" });
-        const list = templatesRes.grading_templates || [];
-        if (list.length > 0) {
-          const mappedTemplates: Template[] = list.map((gt) => {
-            const wwComp = gt.components.find((c) => c.component_name.toLowerCase().includes("written"))?.weight ?? 0;
-            const ptComp = gt.components.find((c) => c.component_name.toLowerCase().includes("performance"))?.weight ?? 0;
-            const qaComp = gt.components.find((c) => 
-              c.component_name.toLowerCase().includes("quarter") || 
-              c.component_name.toLowerCase().includes("term") || 
-              c.component_name.toLowerCase().includes("exam")
-            )?.weight ?? 0;
-            return {
-              name: gt.template_name,
-              ww: wwComp,
-              pt: ptComp,
-              qa: qaComp,
-              scope: gt.description || "Database Template",
-            };
-          });
-          setTemplates(mappedTemplates);
-        }
-      } catch {
-        // Fallback to default templates if table empty or unseeded
-      }
+      await fetchGradingTemplatesList();
     } catch {
       // Graceful fallback to default state if backend settings are missing/unseeded
     } finally {
@@ -481,7 +485,7 @@ export default function AdminSystemSettings() {
                   <Button size="sm" onClick={() => setIsAddGroupOpen(true)}>
                     Add Group
                   </Button>
-                </div>
+                </Card.Title >
 
               </Card.Header>
               <Card.Content className="px-4 pt-4 flex flex-col gap-4">
@@ -846,7 +850,10 @@ export default function AdminSystemSettings() {
                     </div>
 
                     <div className="flex gap-2 flex-wrap">
-                      <Pill locked>DepEd DO 017 Curriculum</Pill>
+                      <Badge variant="outline" size="sm" className="inline-flex items-center gap-1">
+                        <Lock className="w-3 h-3" />
+                        DepEd DO 017 Curriculum
+                      </Badge>
                     </div>
 
                     {isLoadingPathways ? (
@@ -950,7 +957,7 @@ export default function AdminSystemSettings() {
                             )}
                           </Table.Cell>
                           <Table.Cell>
-                            <Pill tone={stageEnabled ? "green" : "gray"}>
+                            <Badge variant={stageEnabled ? "secondary" : "outline"} size="sm">
                               {stageEnabled ? "Enabled" : "Disabled"}
                             </Badge>
                           </Table.Cell>
