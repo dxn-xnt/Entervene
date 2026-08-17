@@ -35,13 +35,29 @@ def normalize_pathway(value: Any) -> str:
     return pathway
 
 
-def validate_pathway_for_grade(pathway: str, academic_level: AcademicLevel) -> None:
+def validate_pathway_for_grade(
+    pathway: str,
+    academic_level: AcademicLevel,
+    academic_year_id: int | None = None,
+    db: Session | None = None,
+) -> None:
     pathway = normalize_pathway(pathway)
-    grade_level = academic_level.grade_level
-    if 7 <= grade_level <= 10 and pathway != GENERAL_PATHWAY:
-        raise HTTPException(status_code=422, detail="Grade 7 to Grade 10 offerings must use the general pathway.")
-    if 11 <= grade_level <= 12 and pathway == GENERAL_PATHWAY:
-        raise HTTPException(status_code=422, detail="Grade 11 and Grade 12 offerings must use both, stem_medical, or stem_engineering.")
+    if db is not None and academic_year_id is not None:
+        from app.services.pathways.PathwayScopeService import resolve_pathway_scope
+        requires_pathway = resolve_pathway_scope(db, academic_year_id, academic_level.academic_level_id)
+    else:
+        requires_pathway = (academic_level.grade_level == 11)
+
+    if not requires_pathway and pathway != GENERAL_PATHWAY:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Grade {academic_level.grade_level} offerings must use the general pathway for this academic year.",
+        )
+    if requires_pathway and pathway == GENERAL_PATHWAY:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Grade {academic_level.grade_level} offerings require a specific pathway for this academic year.",
+        )
 
 
 def normalize_offering_status(value: Any) -> str:
@@ -111,16 +127,42 @@ def validate_offering_scope(
     return subject, academic_year, academic_level, academic_period
 
 
+def validate_core_subject_pathway_restriction(subject: Subject, pathway_ids: list[int] | None) -> None:
+    if getattr(subject, "is_core", False) and pathway_ids:
+        raise HTTPException(
+            status_code=422,
+            detail="Core subjects are mandatory for all pathways and cannot have pathway restrictions.",
+        )
+
+
+def validate_subject_is_core_toggle(db: Session, subject_id: int, new_is_core: bool) -> None:
+    if new_is_core:
+        from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
+        conflict = (
+            db.query(SubjectOfferingPathway)
+            .join(SubjectOffering, SubjectOfferingPathway.subject_offering_id == SubjectOffering.subject_offering_id)
+            .filter(SubjectOffering.subject_id == subject_id)
+            .first()
+        )
+        if conflict:
+            raise HTTPException(
+                status_code=422,
+                detail="Cannot mark subject as core while active pathway-restricted offerings exist for it. Remove pathway restrictions from its offerings first.",
+            )
+
+
 def ensure_offering_available(
     db: Session,
     subject_id: int,
     academic_year_id: int,
     academic_level_id: int,
     academic_period_id: int,
-    pathway: str,
+    pathway_ids: list[int] | None = None,
     exclude_subject_offering_id: int | None = None,
 ) -> None:
-    pathway = normalize_pathway(pathway)
+    from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
+    new_set = set(pathway_ids or [])
+
     query = db.query(SubjectOffering).filter(
         SubjectOffering.subject_id == subject_id,
         SubjectOffering.academic_year_id == academic_year_id,
@@ -130,15 +172,37 @@ def ensure_offering_available(
     if exclude_subject_offering_id is not None:
         query = query.filter(SubjectOffering.subject_offering_id != exclude_subject_offering_id)
 
-    existing_pathways = {row.pathway for row in query.all()}
-    if pathway in existing_pathways:
-        raise HTTPException(status_code=409, detail="Subject offering already exists for this scope and pathway.")
-    if pathway == GENERAL_PATHWAY:
-        return
-    if pathway == "both" and ({"stem_medical", "stem_engineering"} & existing_pathways):
-        raise HTTPException(status_code=409, detail="Shared offering conflicts with an existing pathway-specific offering.")
-    if pathway in {"stem_medical", "stem_engineering"} and "both" in existing_pathways:
-        raise HTTPException(status_code=409, detail="Pathway-specific offering conflicts with an existing shared offering.")
+    existing_offerings = query.all()
+    for offering in existing_offerings:
+        existing_set = {link.pathway_id for link in offering.offering_pathways}
+        if not new_set or not existing_set:
+            raise HTTPException(
+                status_code=409,
+                detail="Subject offering already exists for this scope and pathway.",
+            )
+        if new_set & existing_set:
+            raise HTTPException(
+                status_code=409,
+                detail="Subject offering conflicts with an existing pathway-specific offering.",
+            )
+
+
+def get_offering_legacy_pathway(offering: SubjectOffering) -> str:
+    pathway_links = getattr(offering, "offering_pathways", None) or []
+    pathway_ids = [p.pathway_id for p in pathway_links if p]
+    if not pathway_ids:
+        return getattr(offering, "pathway", None) or "general"
+    if len(pathway_ids) == 1:
+        pw = getattr(pathway_links[0], "pathway", None)
+        if pw and getattr(pw, "code", None):
+            code = str(pw.code).lower()
+            if "medical" in code:
+                return "stem_medical"
+            if "engineering" in code:
+                return "stem_engineering"
+            return code
+        return "general"
+    return "both"
 
 
 def offering_to_item(
@@ -152,6 +216,23 @@ def offering_to_item(
     academic_year = academic_year or offering.academic_year
     academic_level = academic_level or offering.academic_level
     academic_period = academic_period or offering.academic_period
+
+    pathway_links = offering.offering_pathways or []
+    pathways_data = [
+        {
+            "id": p.pathway.id,
+            "code": p.pathway.code,
+            "name": p.pathway.name,
+            "is_enabled": p.pathway.is_enabled,
+            "sort_order": p.pathway.sort_order,
+            "deped_cluster_id": p.pathway.deped_cluster_id,
+        }
+        for p in pathway_links
+        if p.pathway
+    ]
+    pathway_ids = [p["id"] for p in pathways_data]
+    legacy_pathway = get_offering_legacy_pathway(offering)
+
     return {
         "subject_offering_id": offering.subject_offering_id,
         "subject": {
@@ -160,6 +241,7 @@ def offering_to_item(
             "subject_codename": subject.subject_codename,
             "subject_group": subject.subject_group,
             "default_grading_template": subject.default_grading_template,
+            "is_core": getattr(subject, "is_core", False),
         },
         "academic_year": {
             "academic_year_id": academic_year.academic_year_id,
@@ -178,7 +260,9 @@ def offering_to_item(
             "period_sequence": academic_period.period_sequence,
             "academic_year_id": academic_period.academic_year_id,
         },
-        "pathway": offering.pathway,
+        "pathway": legacy_pathway,
+        "pathway_ids": pathway_ids,
+        "pathways": pathways_data,
         "status": offering.status or DEFAULT_OFFERING_STATUS,
         "created_at": offering.created_at,
         "updated_at": offering.updated_at,

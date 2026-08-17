@@ -1,0 +1,10 @@
+[33m23245c4[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mroy-dev[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Merge pull request #177 from dxn-xnt/jayson
+[33m67b6aa2[m[33m ([m[1;31morigin/jayson[m[33m)[m adjusted ui in teacher dashboard and also in attendance page teacher side
+[33m93a4a3b[m Merge pull request #176 from dxn-xnt/ian_dev
+[33m5dc1a58[m[33m ([m[1;31morigin/ian_dev[m[33m)[m feat: implement teacher attendance tracking, class management, and leave request handling modules
+[33mf9599c7[m feat: implement attendance tracking with associated API routes and database migrations, and fixed notification system and classwork models issues
+[33m492ab70[m Merge pull request #175 from dxn-xnt/ian_dev
+[33mac1dda6[m feat: implement attendance management schemas and fixed errors caised by subject offering query services
+[33m7ae9b12[m Merge pull request #174 from dxn-xnt/roy-dev
+[33m5f730e8[m[33m ([m[1;31morigin/roy-dev[m[33m)[m Merge branch 'main' of https://github.com/dxn-xnt/Entervene into roy-dev
+[33md21d313[m feat: implement backend services and API routes for subject offering management with pathway validation logic

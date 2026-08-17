@@ -418,6 +418,13 @@ def build_prediction_features_from_records(
         "data_coverage_ratio": _round_or_none(data_coverage_ratio),
         "grade_trend_vs_previous_period": trend,
         "has_previous_period": has_previous,
+        # Per-group passing threshold resolved from SubjectGroup FK.
+        # Available for future model features; not used in current risk rules.
+        "passing_threshold": (
+            float(subject.subject_group_rel.passing_threshold)
+            if hasattr(subject, "subject_group_rel") and subject.subject_group_rel is not None
+            else None
+        ),
     }
     # FIX: previously filtered by academic_period_id <= source_period_id, which
     # relied on PK integer ordering.  That breaks when two period types coexist

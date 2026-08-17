@@ -107,9 +107,25 @@ def get_class_students(
     search: str = "",
     page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=200),
-    current_user: dict = Depends(require_role("admin")),
+    current_user: dict = Depends(require_role("admin", "teacher")),
     db: Session = Depends(get_db),
 ):
+    if current_user.get("role") == "teacher":
+        from uuid import UUID
+        from app.models.people.AcademicStaff import AcademicStaff
+        from app.models.academic.Class_ import Class
+        from app.models.academic.SubjectLoad import SubjectLoad
+
+        staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == UUID(current_user["sub"])).first()
+        if not staff:
+            raise HTTPException(status_code=403, detail="Staff profile not found")
+
+        is_adviser = db.query(Class).filter(Class.class_id == class_id, Class.adviser_staff_id == staff.staff_id).first()
+        is_subject_teacher = db.query(SubjectLoad).filter(SubjectLoad.class_id == class_id, SubjectLoad.staff_id == staff.staff_id).first()
+
+        if not is_adviser and not is_subject_teacher:
+            raise HTTPException(status_code=403, detail="You are not assigned to this class")
+
     return get_class_students_data(db=db, class_id=class_id, search=search, page=page, page_size=page_size)
 
 

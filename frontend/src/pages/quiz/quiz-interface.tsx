@@ -24,7 +24,7 @@ const StudentQuizTake = () => {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
 
   return (
-    <div className="min-h-screen p-6">
+    <div className="min-h-screen py-4 md:py-5 px-4 md:px-6">
       {/* Top bar */}
       <div className="flex items-center justify-between mb-6">
         <button

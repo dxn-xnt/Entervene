@@ -60,6 +60,7 @@ interface ClassworkDetail {
   due_date?: string | null;
   allow_late_submissions?: boolean;
   is_published: boolean;
+  show_scores?: boolean;
   is_locked?: boolean;
   max_attempts?: number;
   teacher_name?: string | null;
@@ -282,7 +283,9 @@ export default function SubjectLessonTab({
     subject_name: string;
     teacher_name: string;
   } | null>(null);
-  const [subjectAssignments, setSubjectAssignments] = useState<ClassworkDetail[]>([]);
+  const [subjectAssignments, setSubjectAssignments] = useState<
+    ClassworkDetail[]
+  >([]);
   const [sortAsc, setSortAsc] = useState(false);
   const [selectedLessonDetail, setSelectedLessonDetail] =
     useState<Lesson | null>(null);
@@ -378,7 +381,9 @@ export default function SubjectLessonTab({
       void apiFetch(
         `/api/v1/classwork-assignments/class/${classId}/subject/${subjectId}`,
       )
-        .then(async (r) => (r.ok ? ((await r.json()) as ClassworkDetail[]) : []))
+        .then(async (r) =>
+          r.ok ? ((await r.json()) as ClassworkDetail[]) : [],
+        )
         .then((cwData) => setSubjectAssignments(cwData || []))
         .catch(() => setSubjectAssignments([]));
     } catch (err) {
@@ -783,7 +788,9 @@ export default function SubjectLessonTab({
             <div className="text-center">
               <p className="text-xl font-black leading-none">
                 {isSummaryMode
-                  ? `${selectedQuizAttempt.grade ?? 0}/${totalPoints}`
+                  ? selectedClasswork.show_scores
+                    ? `${selectedQuizAttempt.grade ?? 0}/${totalPoints}`
+                    : "Hidden"
                   : formatExamTimer(quizRemainingSeconds)}
               </p>
               <p className="text-xs font-semibold text-gray-700">
@@ -887,7 +894,9 @@ export default function SubjectLessonTab({
                           {index + 1}. {question.question_text}
                         </h2>
                         <span className="shrink-0 rounded-full border border-gray-300 px-3 py-1 text-xs font-bold">
-                          {question.points_awarded ?? 0}/{question.points} pts
+                          {selectedClasswork.show_scores
+                            ? `${question.points_awarded ?? 0}/${question.points} pts`
+                            : `${question.points} pts`}
                         </span>
                       </div>
                       {question.question_type === "MULTIPLE_CHOICE" ? (
@@ -1320,29 +1329,41 @@ export default function SubjectLessonTab({
           )}
 
           {/* ════════════════ DEDICATED SECTION: Quarterly Assessments ════════════════ */}
-          <div className="rounded-xl border border-black bg-[#FFFBEE] p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <Card className="block">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-black bg-[#F6E9B2] shadow-sm">
+                <div className="flex h-9 w-9 items-center justify-center border border-black bg-primary shadow-sm">
                   <GraduationCap size={20} />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold tracking-tight text-black">Quarterly Assessments</h3>
+                  <h3 className="text-xl font-bold tracking-tight text-black">
+                    Quarterly Assessments
+                  </h3>
                   <p className="text-xs font-medium text-gray-600">
                     Periodical exams and summative assessments for this subject.
                   </p>
                 </div>
               </div>
-              <span className="rounded-full border border-black bg-[#F6E9B2] px-3 py-1 text-xs font-bold shadow-sm">
-                {quarterlyAssessments.length} {quarterlyAssessments.length === 1 ? "Assessment" : "Assessments"}
-              </span>
+              <Badge
+                variant="secondary"
+                className="px-3 py-1 text-xs font-bold shadow-sm"
+              >
+                {quarterlyAssessments.length}{" "}
+                {quarterlyAssessments.length === 1
+                  ? "Assessment"
+                  : "Assessments"}
+              </Badge>
             </div>
 
             {quarterlyAssessments.length > 0 ? (
               <div className="mt-4 space-y-3">
                 {quarterlyAssessments.map((cw) => {
-                  const badge = getStatusBadge(cw.submission_status, cw.due_date);
-                  const isLoading = detailLoadingId === cw.classwork_assignment_id;
+                  const badge = getStatusBadge(
+                    cw.submission_status,
+                    cw.due_date,
+                  );
+                  const isLoading =
+                    detailLoadingId === cw.classwork_assignment_id;
                   return (
                     <button
                       key={`qa-${cw.classwork_assignment_id}`}
@@ -1357,13 +1378,17 @@ export default function SubjectLessonTab({
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h4 className="font-bold text-lg leading-tight truncate">{cw.title}</h4>
+                            <h4 className="font-bold text-lg leading-tight truncate">
+                              {cw.title}
+                            </h4>
                             <span className="rounded-full border border-black bg-[#7ABA78] px-2.5 py-0.5 text-[10px] font-bold text-white">
                               Quarterly Assessment
                             </span>
                           </div>
                           <p className="text-xs font-medium text-gray-600 mt-1">
-                            {cw.due_date ? `Scheduled ${fmtDate(cw.due_date)}` : "No due date"}
+                            {cw.due_date
+                              ? `Scheduled ${fmtDate(cw.due_date)}`
+                              : "No due date"}
                             {cw.total_points ? ` • ${cw.total_points} pts` : ""}
                           </p>
                         </div>
@@ -1371,7 +1396,9 @@ export default function SubjectLessonTab({
 
                       <div className="flex items-center gap-3 shrink-0">
                         {badge && (
-                          <span className={`rounded-full border px-3 py-1 text-xs font-bold ${badge.cls}`}>
+                          <span
+                            className={`rounded-full border px-3 py-1 text-xs font-bold ${badge.cls}`}
+                          >
                             {badge.label}
                           </span>
                         )}
@@ -1381,14 +1408,14 @@ export default function SubjectLessonTab({
                 })}
               </div>
             ) : (
-              <div className="mt-3 flex items-center gap-3 rounded-lg border border-dashed border-gray-400 bg-white px-4 py-3">
+              <div className="mt-3 flex items-center gap-3 border border-dashed border-gray-400 bg-white px-4 py-3">
                 <GraduationCap size={20} className="shrink-0 text-gray-400" />
                 <p className="text-xs font-semibold text-gray-500">
                   No quarterly assessments scheduled yet for this subject.
                 </p>
               </div>
             )}
-          </div>
+          </Card>
 
           {/* ── Empty state ── */}
           {lessons.length === 0 ? (
@@ -1415,7 +1442,8 @@ export default function SubjectLessonTab({
                       classworksByLesson[lesson.lesson_id] ?? []
                     ).filter(
                       (classwork) =>
-                        classwork.classwork_category !== "QUARTERLY_ASSESSMENT" &&
+                        classwork.classwork_category !==
+                          "QUARTERLY_ASSESSMENT" &&
                         (!isQuizType(classwork.classwork_type) ||
                           (classworkLessonCounts.get(
                             classwork.classwork_assignment_id,
@@ -1585,7 +1613,7 @@ export default function SubjectLessonTab({
                               isLast={orderedClassworks.length === 0}
                               dot="filled"
                             >
-                              <div className="rounded-sm text-center border px-3 py-2">
+                              <div className="text-center border-2 px-3 py-2">
                                 <p className="text-md">Lesson Completion</p>
                               </div>
                             </TimelineItem>
@@ -1609,7 +1637,7 @@ export default function SubjectLessonTab({
                                     }
                                     dot="empty"
                                   >
-                                    <div className="flex items-center justify-between gap-2 w-full rounded-sm border px-3 py-2">
+                                    <div className="flex items-center justify-between gap-2 w-full border-2 px-3 py-2">
                                       <div className="flex items-center gap-1.5 min-w-0">
                                         <span className="shrink-0">
                                           <ClassworkIcon
@@ -1622,11 +1650,12 @@ export default function SubjectLessonTab({
                                         </p>
                                       </div>
                                       {badge && (
-                                        <span
-                                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 whitespace-nowrap ${badge.cls}`}
+                                        <Badge
+                                          variant="secondary"
+                                          className={`text-[10px] font-bold px-1.5 py-0.5 shrink-0 whitespace-nowrap ${badge.cls}`}
                                         >
                                           {badge.label}
-                                        </span>
+                                        </Badge>
                                       )}
                                     </div>
                                   </TimelineItem>
@@ -1656,7 +1685,10 @@ export default function SubjectLessonTab({
         >
           <Dialog.Content size="3xl" className="max-h-[90vh] p-0">
             {/* Modal header */}
-            <Dialog.Header position="fixed" className="bg-[#F6E9B2] px-5 py-4 text-black">
+            <Dialog.Header
+              position="fixed"
+              className="bg-[#F6E9B2] px-5 py-4 text-black"
+            >
               <div>
                 <p className="text-xs">Student classwork detail</p>
                 <h2 className="text-xl font-bold">
@@ -1681,10 +1713,18 @@ export default function SubjectLessonTab({
                   {/* Status + title card */}
                   <Card className="block w-full shadow-none">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="surface" size="sm" className="bg-[#7ABA78] text-black">
+                      <Badge
+                        variant="surface"
+                        size="sm"
+                        className="bg-[#7ABA78] text-black"
+                      >
                         {selectedClasswork.classwork_type || "Classwork"}
                       </Badge>
-                      <Badge variant="outline" size="sm" className="border-gray-300 capitalize">
+                      <Badge
+                        variant="outline"
+                        size="sm"
+                        className="border-gray-300 capitalize"
+                      >
                         {statusLabel(
                           selectedQuizAttempt?.status ??
                             selectedSubmission?.status ??
@@ -1835,10 +1875,18 @@ export default function SubjectLessonTab({
                             {selectedQuizAttempt.grade !== null &&
                             selectedQuizAttempt.grade !== undefined ? (
                               <p className="mt-2 text-sm font-bold">
-                                Score: {selectedQuizAttempt.grade}/
-                                {selectedQuizAttempt.total_points ??
-                                  selectedClasswork.total_points ??
-                                  0}
+                                {selectedClasswork.show_scores ? (
+                                  <>
+                                    Score: {selectedQuizAttempt.grade}/
+                                    {selectedQuizAttempt.total_points ??
+                                      selectedClasswork.total_points ??
+                                      0}
+                                  </>
+                                ) : (
+                                  <span className="rounded-full bg-gray-200 px-2 py-1 text-xs text-gray-700">
+                                    Score hidden
+                                  </span>
+                                )}
                               </p>
                             ) : null}
                           </div>
@@ -1925,6 +1973,7 @@ export default function SubjectLessonTab({
                         selectedClasswork.allow_late_submissions
                       }
                       maxAttempts={selectedClasswork.max_attempts}
+                      showScores={selectedClasswork.show_scores}
                       onDeleteSubmission={() =>
                         handleDeleteSubmission(
                           selectedClasswork.classwork_assignment_id,

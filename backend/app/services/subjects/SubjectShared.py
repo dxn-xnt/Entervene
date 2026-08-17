@@ -6,15 +6,9 @@ from sqlalchemy.orm import Session
 
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.Subject import Subject
+from app.models.academic.SubjectGroup import SubjectGroup
 
 
-ALLOWED_SUBJECT_GROUPS = [
-    "Core",
-    "Applied",
-    "Specialized",
-    "Research",
-    "Other",
-]
 ALLOWED_SUBJECT_STATUSES = ["active", "archived"]
 DEFAULT_SUBJECT_STATUS = "active"
 DEFAULT_GRADING_TEMPLATES = [
@@ -43,19 +37,18 @@ def normalize_subject_status(value: Any) -> str:
     return status
 
 
-def normalize_subject_group(value: Any) -> str | None:
-    group = normalize_optional_text(value)
-    if group is None:
-        return None
-    allowed_by_key = {normalized_text(item): item for item in ALLOWED_SUBJECT_GROUPS}
-    return allowed_by_key.get(normalized_text(group), group)
-
-
 def get_academic_level_or_404(db: Session, academic_level_id: int) -> AcademicLevel:
     academic_level = db.query(AcademicLevel).filter(AcademicLevel.academic_level_id == academic_level_id).first()
     if academic_level is None:
         raise HTTPException(status_code=404, detail="Academic level not found.")
     return academic_level
+
+
+def get_subject_group_or_404(db: Session, subject_group_id: int) -> SubjectGroup:
+    group = db.get(SubjectGroup, subject_group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Subject group not found.")
+    return group
 
 
 def ensure_subject_code_available(
@@ -83,14 +76,26 @@ def ensure_subject_code_available(
         )
 
 
+def _group_inline(group: SubjectGroup | None) -> dict | None:
+    if group is None:
+        return None
+    return {
+        "subject_group_id": group.subject_group_id,
+        "name": group.name,
+        "passing_threshold": float(group.passing_threshold),
+    }
+
+
 def subject_to_item(subject: Subject, academic_level: AcademicLevel | None = None) -> dict:
     level = academic_level or subject.academic_level
+    group = getattr(subject, "subject_group_rel", None)
     return {
         "subject_id": subject.subject_id,
         "subject_name": subject.subject_name,
         "subject_codename": subject.subject_codename,
-        "subject_group": subject.subject_group,
+        "subject_group": _group_inline(group),
         "hours": subject.hours,
+        "is_core": getattr(subject, "is_core", False),
         "default_grading_template": subject.default_grading_template,
         "description": subject.description,
         "status": subject.status or DEFAULT_SUBJECT_STATUS,

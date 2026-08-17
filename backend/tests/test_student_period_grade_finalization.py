@@ -28,6 +28,9 @@ from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 
 
+from app.models.academic.SubjectGroup import SubjectGroup
+
+
 TABLES = [
     AcademicYear.__table__,
     AcademicLevel.__table__,
@@ -36,6 +39,7 @@ TABLES = [
     Student.__table__,
     AcademicPeriod.__table__,
     Class.__table__,
+    SubjectGroup.__table__,
     Subject.__table__,
     AIModelVersion.__table__,
     AIPrediction.__table__,
@@ -52,13 +56,14 @@ def finalization_context():
         poolclass=StaticPool,
     )
     lrn_check = next(
-        constraint
-        for constraint in Student.__table__.constraints
-        if isinstance(constraint, CheckConstraint) and constraint.name == "lrn_check"
+        (constraint for constraint in Student.__table__.constraints if isinstance(constraint, CheckConstraint) and constraint.name == "lrn_check"),
+        None,
     )
-    Student.__table__.constraints.remove(lrn_check)
-    Base.metadata.create_all(bind=engine, tables=TABLES)
-    Student.__table__.append_constraint(lrn_check)
+    if lrn_check and lrn_check in Student.__table__.constraints:
+        Student.__table__.constraints.remove(lrn_check)
+    try:
+        Base.metadata.create_all(bind=engine, tables=TABLES)
+    finally:
     db = sessionmaker(bind=engine)()
 
     year = AcademicYear(
@@ -114,7 +119,15 @@ def finalization_context():
         academic_year_id=year.academic_year_id,
         academic_level_id=level.academic_level_id,
     )
-    subject = Subject(subject_name="Science", academic_level_id=level.academic_level_id)
+    group = SubjectGroup(name="Core", passing_threshold=85.0, display_order=1)
+    db.add(group)
+    db.flush()
+
+    subject = Subject(
+        subject_name="Science",
+        subject_group_id=group.subject_group_id,
+        academic_level_id=level.academic_level_id,
+    )
     model_version = AIModelVersion(
         model_version_id=1,
         model_name="entervene_next_period_grade_rf",
@@ -320,3 +333,21 @@ def test_missing_period_grade_returns_404(finalization_context):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Student period grade not found"
+
+
+def test_finalization_uses_subject_group_passing_threshold(finalization_context):
+    # Subject has Core group with passing_threshold = 85.0
+    prediction = add_prediction(finalization_context)
+    period_grade = add_period_grade(finalization_context)
+
+    # Finalize with grade = 84.0 (below 85.0 threshold -> should set actual_passed = False)
+    response = finalization_context["client"].post(
+        finalize_url(period_grade.period_grade_id),
+        json={"final_period_grade": 84.0},
+    )
+
+    assert response.status_code == 200
+    outcome = finalization_context["db"].query(PredictionOutcome).filter(PredictionOutcome.prediction_id == prediction.prediction_id).one()
+    assert outcome.actual_passed is False
+    assert outcome.actual_risk_label == "HIGH_RISK"
+

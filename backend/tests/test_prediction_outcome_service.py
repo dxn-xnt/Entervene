@@ -23,6 +23,9 @@ from app.models.people.Student import Student
 from app.services.prediction.PredictionOutcomeService import evaluate_prediction_outcome
 
 
+from app.models.academic.SubjectGroup import SubjectGroup
+
+
 TABLES = [
     AcademicYear.__table__,
     AcademicLevel.__table__,
@@ -31,6 +34,7 @@ TABLES = [
     Student.__table__,
     AcademicPeriod.__table__,
     Class.__table__,
+    SubjectGroup.__table__,
     Subject.__table__,
     AIModelVersion.__table__,
     AIPrediction.__table__,
@@ -46,13 +50,14 @@ def outcome_context():
         poolclass=StaticPool,
     )
     lrn_check = next(
-        constraint
-        for constraint in Student.__table__.constraints
-        if isinstance(constraint, CheckConstraint) and constraint.name == "lrn_check"
+        (constraint for constraint in Student.__table__.constraints if isinstance(constraint, CheckConstraint) and constraint.name == "lrn_check"),
+        None,
     )
-    Student.__table__.constraints.remove(lrn_check)
-    Base.metadata.create_all(bind=engine, tables=TABLES)
-    Student.__table__.append_constraint(lrn_check)
+    if lrn_check and lrn_check in Student.__table__.constraints:
+        Student.__table__.constraints.remove(lrn_check)
+    try:
+        Base.metadata.create_all(bind=engine, tables=TABLES)
+    finally:
     db = sessionmaker(bind=engine)()
 
     year = AcademicYear(
@@ -97,7 +102,15 @@ def outcome_context():
         academic_year_id=year.academic_year_id,
         academic_level_id=level.academic_level_id,
     )
-    subject = Subject(subject_name="Science", academic_level_id=level.academic_level_id)
+    group = SubjectGroup(name="Core", passing_threshold=75.0, display_order=1)
+    db.add(group)
+    db.flush()
+
+    subject = Subject(
+        subject_name="Science",
+        subject_group_id=group.subject_group_id,
+        academic_level_id=level.academic_level_id,
+    )
     model_version = AIModelVersion(
         model_version_id=1,
         model_name="entervene_next_period_grade_rf",
@@ -189,13 +202,11 @@ def test_marks_actual_passed_based_on_passing_grade(outcome_context):
         outcome_context["db"],
         outcome_context["prediction"].prediction_id,
         actual_period_grade=75.0,
-        passing_grade=75.0,
     )
     failed = evaluate_prediction_outcome(
         outcome_context["db"],
         outcome_context["prediction"].prediction_id,
         actual_period_grade=74.99,
-        passing_grade=75.0,
     )
 
     assert passed["actual_passed"] is True

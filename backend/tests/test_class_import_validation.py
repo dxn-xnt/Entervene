@@ -27,6 +27,10 @@ from app.services.classes.ClassService import build_student_class_assignment
 from app.services.classes.ClassShared import ClassManagementError, class_management_error_handler
 
 
+from app.models.academic.AcademicPathway import AcademicPathway
+from app.models.academic.DepedCluster import DepedCluster
+from app.models.academic.AcademicLevelPathwayScope import AcademicLevelPathwayScope
+
 TABLES = [
     AcademicYear.__table__,
     AcademicLevel.__table__,
@@ -37,6 +41,9 @@ TABLES = [
     Student.__table__,
     Class.__table__,
     StudentClass.__table__,
+    AcademicPathway.__table__,
+    DepedCluster.__table__,
+    AcademicLevelPathwayScope.__table__,
 ]
 HEADER = ",".join(CLASS_IMPORT_HEADERS)
 OLD_HEADER = ",".join(header for header in CLASS_IMPORT_HEADERS if header != "grade_level")
@@ -50,13 +57,12 @@ def db():
         poolclass=StaticPool,
     )
     lrn_check = next(
-        constraint
-        for constraint in Student.__table__.constraints
-        if isinstance(constraint, CheckConstraint) and constraint.name == "lrn_check"
+        (c for c in Student.__table__.constraints if isinstance(c, CheckConstraint) and c.name == "lrn_check"),
+        None,
     )
-    Student.__table__.constraints.remove(lrn_check)
+    if lrn_check and lrn_check in Student.__table__.constraints:
+        Student.__table__.constraints.remove(lrn_check)
     Base.metadata.create_all(bind=engine, tables=TABLES)
-    Student.__table__.append_constraint(lrn_check)
     session = sessionmaker(bind=engine)()
     try:
         yield session
@@ -527,6 +533,7 @@ def test_shs_pathway_validation_in_class_import(client, db):
     shs_level = add_level(db, "Grade 11", 11)
     teacher = add_staff(db, "T-SHS-1")
     student = add_student(db, shs_level, "100000000099", "Medical", "Student", "Female")
+    db.add(AcademicPathway(code="medical-courses", name="Medical Courses", is_enabled=True))
     db.commit()
 
     # Valid SHS import with stem_medical
@@ -544,7 +551,7 @@ def test_shs_pathway_validation_in_class_import(client, db):
     )
     res = upload(client, shs_level.academic_level_id, valid_csv)
     assert res.status_code == 200
-    assert res.json()["sections"][0]["pathway"] == "stem_medical"
+    assert res.json()["sections"][0]["pathway"] == "medical-courses"
 
     # Invalid SHS import without pathway
     invalid_csv = HEADER + "\n" + csv_row(
@@ -562,4 +569,29 @@ def test_shs_pathway_validation_in_class_import(client, db):
     res_invalid = upload(client, shs_level.academic_level_id, invalid_csv)
     assert res_invalid.status_code == 422
     assert "invalid_pathway" in error_codes(res_invalid)
+
+
+def test_grade12_and_jhs_class_permits_null_pathway(client, db):
+    add_year(db, "2025-2026", True)
+    g12_level = add_level(db, "Grade 12", 12)
+    teacher = add_staff(db, "T-G12-1")
+    student = add_student(db, g12_level, "100000000088", "G12", "Student", "Male")
+    db.commit()
+
+    g12_csv = HEADER + "\n" + csv_row(
+        section="12-OldCurr",
+        grade="12",
+        pathway="",
+        adviser_id=teacher.staff_id,
+        adviser_first=teacher.first_name,
+        adviser_last=teacher.last_name,
+        lrn=student.student_lrn,
+        student_first=student.first_name,
+        student_last=student.last_name,
+        gender="Male",
+    )
+    res = upload(client, g12_level.academic_level_id, g12_csv)
+    assert res.status_code == 200
+    assert res.json()["sections"][0]["pathway"] == "general"
+
 

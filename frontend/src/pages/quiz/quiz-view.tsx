@@ -3,6 +3,7 @@ import { ChevronLeft, FileEdit } from "lucide-react";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Card } from "@/components/retroui/Card";
 import { routes } from "@/../routes";
 import AppLayout from "@/layouts/app-layout";
 
@@ -28,7 +29,7 @@ const StudentQuizView = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6 flex-1">
+          <div className="flex flex-1 flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
               <Breadcrumb>
@@ -53,7 +54,8 @@ const StudentQuizView = () => {
 
             <div className="-mx-4 md:-mx-6 border-b border-gray-500" />
 
-            <div className="flex items-center justify-between">
+            <main className="flex flex-1 flex-col gap-3 py-3">
+              <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => navigate(-1)}
@@ -79,17 +81,17 @@ const StudentQuizView = () => {
               </Button>
             </div>
 
-            <div className="flex flex-1 flex-col gap-6 p-6">
+              <div className="flex flex-1 flex-col gap-6 p-6">
               <div className="flex flex-col items-center gap-3">
                 <span className="text-sm">Lessons Covered</span>
                 <div className="flex flex-wrap justify-center gap-3">
                   {quizInfo.lessonsCovered.map((lesson) => (
-                    <span
+                    <Card
                       key={lesson}
-                      className="rounded-lg border-2 border-black bg-[#F6E9B2] px-4 py-2 text-sm font-medium shadow-md hover:shadow-none transition-all"
+                      className="bg-[#F6E9B2] px-4 py-2 text-sm"
                     >
                       {lesson}
-                    </span>
+                    </Card>
                   ))}
                 </div>
               </div>
@@ -114,7 +116,8 @@ const StudentQuizView = () => {
                   </div>
                 </div>
               </div>
-            </div>
+              </div>
+            </main>
           </div>
         </div>
       </div>

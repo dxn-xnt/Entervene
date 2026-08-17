@@ -13,6 +13,7 @@ export const emptyClassworkDraft: ClassworkDraft = {
   due_date: "",
   allow_late_submissions: false,
   is_published: true,
+  show_scores: true,
 };
 
 export const allowedMaterialExtensions = [".pdf", ".docx", ".pptx", ".jpg", ".jpeg", ".png"];

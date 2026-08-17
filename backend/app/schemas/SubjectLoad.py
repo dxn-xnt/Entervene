@@ -71,6 +71,9 @@ class BatchSaveSubjectLoadRequest(BaseModel):
     academic_period_id: int
     academic_level_id: int
     action: str  # "draft" | "publish"
+    publish_scope: str = "all"  # "all" | "level" | "section"
+    target_level_id: int | None = None
+    target_class_id: int | None = None
     loads: list[SubjectLoadItem]
 
 

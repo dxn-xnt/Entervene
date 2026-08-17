@@ -12,6 +12,7 @@ export const emptyClassworkDraft: CreateDraft = {
   allow_late_submissions: false,
   max_attempts: "1",
   is_published: true,
+  show_scores: true,
 };
 
 export const allowedClassworkMaterialExtensions = [".pdf", ".docx", ".pptx", ".jpg", ".jpeg", ".png"];
@@ -76,6 +77,7 @@ export const classworkToEditDraft = (item: TeacherClasswork): EditDraft => ({
       allow_late_submissions: firstAssignment?.allow_late_submissions ?? false,
       max_attempts: firstAssignment?.max_attempts ? String(firstAssignment.max_attempts) : "1",
       is_published: firstAssignment?.is_published ?? item.is_published,
+      show_scores: item.show_scores ?? true,
     };
   })(),
   title: item.title,

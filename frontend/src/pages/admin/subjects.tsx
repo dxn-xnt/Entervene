@@ -249,7 +249,7 @@ export default function AdminSubjects() {
       return [
         subject.subject_name,
         subject.subject_codename,
-        subject.subject_group,
+        subject.subject_group?.name,
         subject.academic_level.level_name,
       ].some((value) => value?.toLowerCase().includes(query));
     });
@@ -682,6 +682,9 @@ export default function AdminSubjects() {
 
             {activeSection === "catalog" ? (
               <section className="flex flex-col gap-4">
+                <p className="text-xs text-black/70 -mb-2">
+                  CSV import format — Required: <span className="font-semibold">subject_code, subject_name, grade_level, subject_group</span>. Optional: <span className="font-semibold">hours, default_grading_template, description</span> (leave blank if unknown).
+                </p>
                 <div className="grid gap-3 md:grid-cols-[1fr_160px_160px] py-2">
 
                   <label className="relative shadow-md hover:shadow-none transition-shadow">
@@ -726,6 +729,14 @@ export default function AdminSubjects() {
                     <p>
                       {catalogImportResult.created_count} created, {catalogImportResult.skipped_count} skipped, {catalogImportResult.error_count} errors from {catalogImportResult.total_rows} rows.
                     </p>
+                    {catalogImportResult.warnings?.length ? (
+                      <div className="mt-2 max-h-32 overflow-y-auto rounded border border-amber-300 bg-amber-50 p-2 text-amber-900">
+                        <p className="font-semibold">Needs Review / Notes ({catalogImportResult.warnings.length}):</p>
+                        {catalogImportResult.warnings.map((warn, index) => (
+                          <p key={`warn-${index}`}>{warn}</p>
+                        ))}
+                      </div>
+                    ) : null}
                     {catalogImportResult.errors.length ? (
                       <div className="mt-2 max-h-32 overflow-y-auto">
                         {catalogImportResult.errors.map((item, index) => (

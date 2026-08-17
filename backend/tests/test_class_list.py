@@ -14,8 +14,10 @@ from app.api.v1.routes.Classes import router as classes_router
 from app.db.Base import Base
 from app.db.Session import get_db
 from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
+from app.models.academic.DepedCluster import DepedCluster
 from app.models.academic.StudentCLass import StudentClass
 from app.models.auth.Role import Role
 from app.models.auth.UserAccount import UserAccount
@@ -29,6 +31,8 @@ from app.services.classes.ClassShared import ClassManagementError, class_managem
 TABLES = [
     AcademicYear.__table__,
     AcademicLevel.__table__,
+    DepedCluster.__table__,
+    AcademicPathway.__table__,
     Role.__table__,
     UserAccount.__table__,
     UserRoles.__table__,
@@ -47,13 +51,16 @@ def db():
         poolclass=StaticPool,
     )
     lrn_check = next(
-        constraint
-        for constraint in Student.__table__.constraints
-        if isinstance(constraint, CheckConstraint) and constraint.name == "lrn_check"
+        (c for c in Student.__table__.constraints if isinstance(c, CheckConstraint) and c.name == "lrn_check"),
+        None,
     )
-    Student.__table__.constraints.remove(lrn_check)
-    Base.metadata.create_all(bind=engine, tables=TABLES)
-    Student.__table__.append_constraint(lrn_check)
+    if lrn_check and lrn_check in Student.__table__.constraints:
+        Student.__table__.constraints.remove(lrn_check)
+    try:
+        Base.metadata.create_all(bind=engine, tables=TABLES)
+    finally:
+        if lrn_check and lrn_check not in Student.__table__.constraints:
+            Student.__table__.append_constraint(lrn_check)
     session = sessionmaker(bind=engine)()
     try:
         yield session
@@ -235,6 +242,42 @@ def test_list_classes_returns_real_rows_counts_null_adviser_and_sorted_order(cli
     assert archived_body["summary"] == body["summary"]
     assert [item["section_name"] for item in archived_body["classes"]] == ["Aristotle"]
     assert archived_body["classes"][0]["class_status"] == "archived"
+
+
+def test_list_classes_serializes_assigned_pathway_as_nested_object(client, db):
+    year = add_year(db, "2025-2026")
+    grade_11 = add_level(db, "Grade 11", 11)
+    pathway = AcademicPathway(
+        code="medical-courses",
+        name="Medical Courses and Sciences Related",
+        is_enabled=True,
+        sort_order=1,
+    )
+    db.add(pathway)
+    db.flush()
+    class_ = Class(
+        section_name="Mendel",
+        class_status="active",
+        academic_year_id=year.academic_year_id,
+        academic_level_id=grade_11.academic_level_id,
+        pathway_id=pathway.id,
+    )
+    db.add(class_)
+    db.commit()
+
+    response = client.get("/api/v1/classes?status=active")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["classes"]) == 1
+    item = body["classes"][0]
+    assert item["pathway_id"] == pathway.id
+    assert item["pathway"]["id"] == pathway.id
+    assert item["pathway"]["code"] == "medical-courses"
+    assert item["pathway"]["name"] == "Medical Courses and Sciences Related"
+    assert item["pathway"]["is_enabled"] is True
+    assert item["pathway"]["sort_order"] == 1
+    assert item["pathway"]["deped_cluster_id"] is None
 
 
 def test_list_classes_rejects_unknown_status_filter(client):

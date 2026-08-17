@@ -3,6 +3,7 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.Base import Base
 
+
 class Class(Base):
     __tablename__ = "class"
     __table_args__ = (
@@ -17,7 +18,7 @@ class Class(Base):
     academic_year_id      = Column(Integer, ForeignKey("academic_year.academic_year_id"), nullable=False)
     academic_level_id     = Column(Integer, ForeignKey("academic_level.academic_level_id"), nullable=False)
     academic_period_id    = Column(Integer, ForeignKey("academic_period.academic_period_id"), nullable=True)
-    pathway               = Column(String(30), nullable=False, default="general")
+    pathway_id            = Column(Integer, ForeignKey("academic_pathway.id", ondelete="SET NULL"), nullable=True)
     paired_class_id       = Column(Integer, ForeignKey("class.class_id", ondelete="SET NULL"), nullable=True)
     period_template_group = Column(String(50), nullable=False, default="JHS_45MIN")
     created_at            = Column(DateTime(timezone=True), server_default=func.now())
@@ -27,5 +28,6 @@ class Class(Base):
     academic_year   = relationship("AcademicYear", back_populates="classes")
     academic_level  = relationship("AcademicLevel", back_populates="classes")
     academic_period = relationship("AcademicPeriod", back_populates="classes")
+    pathway         = relationship("AcademicPathway", back_populates="classes")
     subject_loads   = relationship("SubjectLoad", back_populates="class_")
     student_classes = relationship("StudentClass", back_populates="class_")

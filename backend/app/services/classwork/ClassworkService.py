@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from typing import Optional, cast
+from typing import Any, Optional, cast
+from app.schemas.Notification import NotificationType
 
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -55,6 +56,82 @@ from app.services.classwork.ClassworkShared import (
     validate_schedule,
 )
 from app.services.quiz.QuizBuilderService import upsert_quiz_builder
+
+
+def build_classwork_notification_details(
+    db: Session,
+    classwork_title: str,
+    staff_id: str,
+    subject_id: int,
+    lesson_ids: list[int] | None = None,
+    due_date: datetime | None = None,
+    action_type: str = "New",
+) -> tuple[str, str]:
+    from app.models.academic.Subject import Subject
+    from app.models.people.AcademicStaff import AcademicStaff
+    from app.models.academic.Lesson import Lesson
+
+    subj = db.query(Subject).filter(Subject.subject_id == subject_id).first()
+    subject_name = subj.subject_name if subj else "Subject"
+
+    staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == staff_id).first()
+    teacher_name = f"{staff.first_name} {staff.last_name}".strip() if staff else "Teacher"
+
+    lesson_str = ""
+    if lesson_ids:
+        lessons = db.query(Lesson.title).filter(Lesson.lesson_id.in_(lesson_ids)).all()
+        titles = [l[0] for l in lessons if l[0]]
+        if titles:
+            lesson_str = f" • Lesson: {', '.join(titles)}"
+
+    due_str = f" • Due: {due_date.strftime('%b %d, %Y')}" if due_date else ""
+
+    notif_title = f"{subject_name}: {classwork_title}"
+    notif_body = f"{action_type} classwork assigned by {teacher_name}{lesson_str}{due_str}."
+
+    return notif_title, notif_body
+
+
+def notify_students_for_classwork(
+    db: Session,
+    class_ids: list[int],
+    title: str,
+    body_text: str,
+    notification_type: NotificationType = "assignment_due",
+    action_url: str | None = "/student/todo",
+):
+    if not class_ids:
+        return
+    try:
+        from app.models.people.Student import Student
+        from app.models.academic.StudentCLass import StudentClass
+        from app.services.NotificationService import create_notification
+        from app.schemas.Notification import NotificationCreate
+
+        student_users = (
+            db.query(Student.user_id)
+            .join(StudentClass, StudentClass.student_id == Student.student_id)
+            .filter(StudentClass.class_id.in_(class_ids))
+            .filter(Student.user_id.isnot(None))
+            .distinct()
+            .all()
+        )
+
+        for (user_id,) in student_users:
+            if user_id:
+                create_notification(
+                    db,
+                    NotificationCreate(
+                        user_id=user_id,
+                        notification_type=notification_type,
+                        title=title,
+                        body=body_text,
+                        action_url=action_url,
+                    ),
+                )
+    except Exception as err:
+        print(f"[Notification Error] Failed to send classwork notification: {err}")
+
 
 
 def create_classwork_record(body: ClassworkCreate, staff_id: str, db: Session) -> ClassworkResponse:
@@ -177,6 +254,25 @@ async def create_classwork_wizard_record(
 
         db.commit()
         db.refresh(classwork)
+
+        if is_published and selected_class_ids:
+            notif_title, notif_body = build_classwork_notification_details(
+                db=db,
+                classwork_title=title.strip(),
+                staff_id=staff_id,
+                subject_id=subject_id,
+                lesson_ids=selected_lesson_ids,
+                due_date=due_date,
+                action_type="New",
+            )
+            notify_students_for_classwork(
+                db=db,
+                class_ids=selected_class_ids,
+                title=notif_title,
+                body_text=notif_body,
+                notification_type="assignment_due",
+            )
+
         return build_classwork_response(classwork)
     except Exception:
         db.rollback()
@@ -200,7 +296,77 @@ def _parse_quiz_payload(raw_payload: Optional[str], normalized_type: str) -> Qui
         raise HTTPException(status_code=400, detail="Invalid quiz payload") from exc
 
 
+def check_and_notify_post_deadline_summaries(db: Session, staff_id: str):
+    try:
+        from datetime import datetime, timezone
+        from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+        from app.models.academic.Subject import Subject
+        from app.models.submissions.StudentSubmission import StudentSubmission
+        from app.models.academic.StudentCLass import StudentClass
+        from app.models.people.AcademicStaff import AcademicStaff
+        from app.services.NotificationService import create_notification
+        from app.schemas.Notification import NotificationCreate
+        from app.models.notifications.Notification import Notification
+
+        staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == staff_id).first()
+        if not staff or not staff.user_id:
+            return
+
+        now = datetime.now(timezone.utc)
+        past_due_assignments = (
+            db.query(ClassworkAssignment, Classwork)
+            .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
+            .filter(
+                Classwork.created_by_staff_id == staff_id,
+                ClassworkAssignment.is_published == True,
+                ClassworkAssignment.due_date.isnot(None),
+                ClassworkAssignment.due_date < now,
+            )
+            .all()
+        )
+
+        for assignment, cw in past_due_assignments:
+            title_tag = f"Deadline Summary: {cw.title}"
+            existing = (
+                db.query(Notification)
+                .filter(
+                    Notification.user_id == staff.user_id,
+                    Notification.title == title_tag,
+                )
+                .first()
+            )
+            if existing:
+                continue
+
+            total_students = db.query(StudentClass).filter(
+                StudentClass.class_id == assignment.class_id,
+                StudentClass.enrollment_status == "enrolled",
+            ).count()
+
+            submitted_students = db.query(StudentSubmission).filter(
+                StudentSubmission.classwork_assignment_id == assignment.classwork_assignment_id,
+                StudentSubmission.status.in_(["submitted", "late", "graded"]),
+            ).count()
+
+            subj = db.query(Subject).filter(Subject.subject_id == cw.subject_id).first()
+            subject_name = subj.subject_name if subj else "Subject"
+
+            create_notification(
+                db,
+                NotificationCreate(
+                    user_id=staff.user_id,
+                    notification_type="assignment_due",
+                    title=title_tag,
+                    body=f"{subject_name} — Classwork '{cw.title}' deadline has passed. {submitted_students}/{total_students} students turned in their work.",
+                    action_url="/teacher/classworks",
+                ),
+            )
+    except Exception as err:
+        print(f"[Notification Error] Failed to generate post-deadline summary: {err}")
+
+
 def teacher_classworks(staff_id: str, db: Session) -> list[ClassworkResponse]:
+    check_and_notify_post_deadline_summaries(db, staff_id)
     classworks = (
         db.query(Classwork)
         .options(
@@ -246,7 +412,7 @@ def classwork_detail(
         if assignment:
             due_date = assignment.due_date
 
-    result = build_classwork_response(classwork).dict()
+    result = build_classwork_response(classwork).model_dump()
     result["due_date"] = due_date
     return result
 
@@ -289,6 +455,27 @@ def update_classwork_record(
                 db.add(ClassworkLesson(classwork_id=classwork_id, lesson_id=lesson_id))
         db.commit()
         db.refresh(classwork)
+
+        assigned_class_ids = [a.class_id for a in classwork.assignments if a.is_published]
+        if assigned_class_ids:
+            cw_lessons = db.query(ClassworkLesson.lesson_id).filter(ClassworkLesson.classwork_id == classwork_id).all()
+            lesson_ids_list = [l[0] for l in cw_lessons] if cw_lessons else None
+            notif_title, notif_body = build_classwork_notification_details(
+                db=db,
+                classwork_title=classwork.title,
+                staff_id=staff_id,
+                subject_id=classwork.subject_id,
+                lesson_ids=lesson_ids_list,
+                due_date=None,
+                action_type="Updated",
+            )
+            notify_students_for_classwork(
+                db=db,
+                class_ids=assigned_class_ids,
+                title=notif_title,
+                body_text=notif_body,
+                notification_type="assignment_due",
+            )
     except Exception:
         db.rollback()
         raise
@@ -467,6 +654,27 @@ def assign_classwork_to_classes(
             for assignment in new_assignments:
                 assignment.max_attempts = None
         db.commit()
+
+        if class_ids:
+            cw_lessons = db.query(ClassworkLesson.lesson_id).filter(ClassworkLesson.classwork_id == classwork_id).all()
+            lesson_ids_list = [l[0] for l in cw_lessons] if cw_lessons else None
+            notif_title, notif_body = build_classwork_notification_details(
+                db=db,
+                classwork_title=classwork.title,
+                staff_id=staff_id,
+                subject_id=classwork.subject_id,
+                lesson_ids=lesson_ids_list,
+                due_date=body.due_date,
+                action_type="Assigned",
+            )
+            notify_students_for_classwork(
+                db=db,
+                class_ids=class_ids,
+                title=notif_title,
+                body_text=notif_body,
+                notification_type="assignment_due",
+            )
+
     except Exception:
         db.rollback()
         raise
@@ -683,22 +891,23 @@ def _assignment_response(
     submission_status: Optional[str],
 ) -> ClassworkAssignmentResponse:
     return ClassworkAssignmentResponse(
-        classwork_assignment_id=assignment.classwork_assignment_id,
-        classwork_id=classwork.classwork_id,
-        class_id=assignment.class_id,
+        classwork_assignment_id=cast(int, assignment.classwork_assignment_id),
+        classwork_id=cast(int, classwork.classwork_id),
+        class_id=cast(int, assignment.class_id),
         section_name=_class_section_name(class_),
-        title=classwork.title,
-        description=classwork.description,
-        instructions=classwork.instructions,
-        classwork_type=classwork.classwork_type,
-        classwork_category=classwork.classwork_category,
-        total_points=float(classwork.total_points) if classwork.total_points else None,
-        due_date=assignment.due_date,
-        lock_date=assignment.lock_date,
-        allow_late_submissions=assignment.allow_late_submissions,
-        is_published=assignment.is_published,
+        title=cast(str, classwork.title),
+        description=cast(Optional[str], classwork.description),
+        instructions=cast(Optional[str], classwork.instructions),
+        classwork_type=cast(str, classwork.classwork_type),
+        classwork_category=cast(Optional[str], classwork.classwork_category),
+        total_points=float(cast(Any, classwork.total_points)) if classwork.total_points else None,
+        due_date=cast(Optional[datetime], assignment.due_date),
+        lock_date=cast(Optional[datetime], assignment.lock_date),
+        allow_late_submissions=cast(bool, assignment.allow_late_submissions),
+        is_published=cast(bool, assignment.is_published),
+        show_scores=cast(bool, classwork.show_scores),
         is_locked=assignment_is_locked(assignment),
-        max_attempts=assignment.max_attempts,
+        max_attempts=cast(Optional[int], assignment.max_attempts),
         teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
         attachments=[build_attachment_response(attachment) for attachment in classwork.attachments],
         submission_status=submission_status,

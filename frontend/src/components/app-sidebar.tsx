@@ -48,7 +48,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <Select defaultValue={periods[0]}>
           <Select.Trigger className="w-full border-x-background m-0 shadow-none mb-1">
-            <Select.Value placeholder="Select Academic Year" />
+            <Select.Value placeholder="Active Period" />
           </Select.Trigger>
           <Select.Content>
             <Select.Group>
