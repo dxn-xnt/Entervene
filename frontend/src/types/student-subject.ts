@@ -14,6 +14,7 @@ export interface StudentLesson {
   subject_name?: string;
   teacher_name?: string;
   is_published: boolean;
+  show_scores: boolean;
   created_at?: string;
   updated_at?: string;
   attachments: StudentLessonAttachment[];

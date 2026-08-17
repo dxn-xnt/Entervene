@@ -1,8 +1,9 @@
 from fastapi import HTTPException
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
@@ -53,6 +54,28 @@ def _adviser_option(adviser) -> dict | None:
     }
 
 
+def _pathway_option(pathway) -> dict | None:
+    if pathway is None:
+        return None
+    return {
+        "id": pathway.id,
+        "code": pathway.code,
+        "name": pathway.name,
+        "is_enabled": pathway.is_enabled,
+        "sort_order": pathway.sort_order,
+        "deped_cluster_id": pathway.deped_cluster_id,
+        "deped_cluster": pathway.deped_cluster,
+        "created_at": pathway.created_at,
+        "updated_at": pathway.updated_at,
+    }
+
+
+def class_pathway_code(class_: Class | None) -> str:
+    if class_ is None or class_.pathway is None:
+        return "general"
+    return class_.pathway.code
+
+
 def _student_full_name(student: Student) -> str:
     first_name = readable_text(student.first_name)
     middle_name = readable_text(student.middle_name)
@@ -91,6 +114,9 @@ def _student_list_item(student: Student) -> dict:
     full_name = _student_full_name(student)
     return {
         "student_id": student.student_id,
+        "student_lrn": student.student_lrn,
+        "first_name": student.first_name,
+        "last_name": student.last_name,
         "full_name": full_name,
         "gender": _student_gender_group(student.gender),
         "avatar_initial": (readable_text(student.first_name)[:1] or "?").upper(),
@@ -188,6 +214,7 @@ def list_classes_data(db: Session, status: str) -> dict:
             AcademicLevel,
             AcademicYear,
             AcademicStaff,
+            AcademicPathway,
             func.count(StudentClass.student_class_id).label("student_count"),
             func.sum(case((func.lower(Student.gender).in_(["male", "m", "boy"]), 1), else_=0)).label("male_count"),
             func.sum(case((func.lower(Student.gender).in_(["female", "f", "girl"]), 1), else_=0)).label("female_count"),
@@ -195,9 +222,16 @@ def list_classes_data(db: Session, status: str) -> dict:
         .join(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
         .join(AcademicYear, Class.academic_year_id == AcademicYear.academic_year_id)
         .outerjoin(AcademicStaff, Class.adviser_staff_id == AcademicStaff.staff_id)
+        .outerjoin(AcademicPathway, Class.pathway_id == AcademicPathway.id)
         .outerjoin(StudentClass, Class.class_id == StudentClass.class_id)
         .outerjoin(Student, StudentClass.student_id == Student.student_id)
-        .group_by(Class.class_id, AcademicLevel.academic_level_id, AcademicYear.academic_year_id, AcademicStaff.staff_id)
+        .group_by(
+            Class.class_id,
+            AcademicLevel.academic_level_id,
+            AcademicYear.academic_year_id,
+            AcademicStaff.staff_id,
+            AcademicPathway.id,
+        )
         .order_by(AcademicLevel.grade_level, func.lower(Class.section_name))
         .all()
     )
@@ -206,7 +240,7 @@ def list_classes_data(db: Session, status: str) -> dict:
     total_students = 0
     active_classes = 0
     archived_classes = 0
-    for class_, academic_level, academic_year, adviser, student_count, male_count, female_count in class_rows:
+    for class_, academic_level, academic_year, adviser, pathway, student_count, male_count, female_count in class_rows:
         count = int(student_count or 0)
         total_students += count
         class_status = readable_text(class_.class_status) or "active"
@@ -221,7 +255,8 @@ def list_classes_data(db: Session, status: str) -> dict:
                 "class_id": class_.class_id,
                 "section_name": class_.section_name,
                 "class_status": class_status,
-                "pathway": class_.pathway or "general",
+                "pathway_id": class_.pathway_id,
+                "pathway": _pathway_option(pathway),
                 "academic_year": _academic_year_option(academic_year),
                 "academic_level": _academic_level_option(academic_level),
                 "adviser": _adviser_option(adviser),
@@ -483,6 +518,7 @@ def get_class_transfer_options_data(db: Session, class_id: int) -> dict:
 def get_class_detail_data(db: Session, class_id: int) -> dict:
     class_row = (
         db.query(Class, AcademicLevel, AcademicYear, AcademicStaff)
+        .options(joinedload(Class.pathway))
         .join(AcademicLevel, Class.academic_level_id == AcademicLevel.academic_level_id)
         .join(AcademicYear, Class.academic_year_id == AcademicYear.academic_year_id)
         .outerjoin(AcademicStaff, Class.adviser_staff_id == AcademicStaff.staff_id)
@@ -499,7 +535,8 @@ def get_class_detail_data(db: Session, class_id: int) -> dict:
         "class_id": class_.class_id,
         "section_name": class_.section_name,
         "class_status": readable_text(class_.class_status) or "active",
-        "pathway": class_.pathway or "general",
+        "pathway_id": class_.pathway_id,
+        "pathway": _pathway_option(class_.pathway),
         "created_at": class_.created_at,
         "academic_year": _academic_year_option(academic_year),
         "academic_level": _academic_level_option(academic_level),

@@ -28,6 +28,7 @@ interface SubmissionViewerProps {
   onResubmit?: () => void;
   onDeleteSubmission?: (submissionId: number) => Promise<void>;
   isDeleting?: boolean;
+  showScores?: boolean;
 }
 
 function getStatusColor(status: string): string {
@@ -60,6 +61,7 @@ export default function SubmissionViewer({
   onResubmit,
   onDeleteSubmission,
   isDeleting = false,
+  showScores = true,
 }: SubmissionViewerProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -85,7 +87,7 @@ export default function SubmissionViewer({
             <div className="text-right">
               <p className="text-sm text-gray-600 mb-1">Grade</p>
               <p className="text-2xl font-bold text-green-600">
-                {submission.grade}
+                {showScores ? submission.grade : "Hidden"}
               </p>
             </div>
           )}

@@ -43,6 +43,7 @@ import CreateLesson from "./pages/teacher/create-lesson";
 import TeacherGrades from "./pages/teacher/grades";
 import TeacherGradeView from "./pages/teacher/grade-view";
 import TeacherNotifications from "./pages/teacher/notifications";
+import TeacherAttendance from "./pages/teacher/attendance";
 import PredictionsDashboard from "./pages/teacher/predictions";
 import LessonPlannerPage from "./pages/teacher/LessonPlanner/LessonPlannerPage";
 import LessonPlannerListPage from "./pages/teacher/LessonPlanner/LessonPlannerListPage";
@@ -57,6 +58,7 @@ import StudentGrades from "./pages/student/Grades/grades";
 import StudentTodo from "./pages/student/todo";
 import StudentTodoView from "./pages/student/todo-view";
 import StudentNotifications from "./pages/student/notifications";
+import StudentAttendance from "./pages/student/attendance";
 import AdminStudentView from "./pages/admin/student-view";
 
 // TEMP
@@ -120,6 +122,7 @@ const App = () => {
               <Route path={routes.teacher.grades} element={<TeacherGrades />} />
               <Route path={routes.teacher.gradeView} element={<TeacherGradeView />} />
               <Route path={routes.teacher.notifications} element={<TeacherNotifications />} />
+              <Route path={routes.teacher.attendance} element={<TeacherAttendance />} />
               <Route path={routes.teacher.predictions} element={<PredictionsDashboard />} />
               <Route path={routes.teacher.lessonPlanner} element={<LessonPlannerListPage />} />
               <Route path={routes.teacher.lessonPlannerCreate} element={<LessonPlannerPage />} />
@@ -138,6 +141,7 @@ const App = () => {
               <Route path={routes.student.todo} element={<StudentTodo />} />
               <Route path={routes.student.todoView} element={<StudentTodoView />} />
               <Route path={routes.student.notifications} element={<StudentNotifications />} />
+              <Route path={routes.student.attendance} element={<StudentAttendance />} />
             </Route>
 
             {/* TEMP  */}

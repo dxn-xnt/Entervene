@@ -84,7 +84,7 @@ def authorize_submission_access(submission: StudentSubmission, current_user: dic
     if role == "teacher":
         staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == current_user_id).first()
         if staff:
-            teacher_owns_assignment(submission.classwork_assignment_id, cast(str, staff.staff_id), db)
+            teacher_owns_assignment(cast(int, submission.classwork_assignment_id), cast(str, staff.staff_id), db)
             return
     raise HTTPException(status_code=403, detail="Access denied")
 
@@ -171,6 +171,34 @@ def assert_student_can_modify_submission(
     return assignment, submission
 
 
+def student_has_excused_exemption(db: Session, student_id: UUID, class_id: int, check_date: datetime) -> bool:
+    try:
+        from app.models.attendance.Attendance import AttendanceRecord, LeaveRequest
+
+        d_val = check_date.date()
+        att = db.query(AttendanceRecord).filter(
+            AttendanceRecord.student_id == student_id,
+            AttendanceRecord.class_id == class_id,
+            AttendanceRecord.date == d_val,
+            AttendanceRecord.status == "excused",
+        ).first()
+        if att:
+            return True
+
+        leave = db.query(LeaveRequest).filter(
+            LeaveRequest.student_id == student_id,
+            LeaveRequest.class_id == class_id,
+            LeaveRequest.status == "approved",
+            LeaveRequest.start_date <= d_val,
+            LeaveRequest.end_date >= d_val,
+        ).first()
+        if leave:
+            return True
+    except Exception as err:
+        print(f"[Attendance Exemption Check Error] {err}")
+    return False
+
+
 async def submit_student_work(
     assignment_id: int,
     request: Request,
@@ -214,6 +242,13 @@ async def submit_student_work(
 
     due_date = aware_utc(assignment.due_date)
     is_late = bool(due_date and now > due_date)
+
+    # Check Excused Attendance / Approved Leave Exemption
+    if is_late:
+        has_excused = student_has_excused_exemption(db, cast(UUID, getattr(student, "student_id")), cast(int, assignment.class_id), due_date or now)
+        if has_excused:
+            is_late = False  # Excused exemption applied: bypass late penalty & restriction
+
     if is_late and not assignment.allow_late_submissions:
         raise HTTPException(status_code=403, detail="Cannot submit after due date")
     enforce_attempt_limit = classwork_uses_attempt_limit(classwork)
@@ -259,6 +294,32 @@ async def submit_student_work(
             db.add(SubmissionAttachment(submission_id=submission.submission_id, **info))
         db.commit()
         db.refresh(submission)
+
+        if is_late and classwork and classwork.created_by_staff_id:
+            try:
+                from app.models.people.AcademicStaff import AcademicStaff
+                from app.models.academic.Subject import Subject
+                from app.services.NotificationService import create_notification
+                from app.schemas.Notification import NotificationCreate
+
+                staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == classwork.created_by_staff_id).first()
+                if staff and staff.user_id:
+                    subj = db.query(Subject).filter(Subject.subject_id == classwork.subject_id).first()
+                    subject_name = subj.subject_name if subj else "Subject"
+                    s_name = f"{student.first_name} {student.last_name}"
+
+                    create_notification(
+                        db,
+                        NotificationCreate(
+                            user_id=staff.user_id,
+                            notification_type="assignment_due",
+                            title=f"Late Submission: {subject_name} - {classwork.title}",
+                            body=f"{s_name} turned in their work late after the due date.",
+                            action_url="/teacher/classworks",
+                        ),
+                    )
+            except Exception as err:
+                print(f"[Notification Error] Failed to send late submission notification: {err}")
     except Exception:
         db.rollback()
         cleanup_saved_files(saved_paths)
@@ -277,8 +338,8 @@ def unsubmit_student_work(assignment_id: int, student: Student, db: Session) -> 
     if not submission.attachments:
         raise HTTPException(status_code=400, detail="No files to keep; upload work first")
 
-    submission.status = "pending"
-    submission.submitted_at = None
+    setattr(submission, "status", "pending")
+    setattr(submission, "submitted_at", None)
     db.commit()
     db.refresh(submission)
     return build_submission_response(submission, db)
@@ -551,7 +612,41 @@ def grade_student_submission(
     submission.graded_by_staff_id = staff_id
     db.commit()
     db.refresh(submission)
+
+    # Notify student that their grade was released
+    try:
+        student = db.query(Student).filter(Student.student_id == submission.student_id).first()
+        if student and student.user_id:
+            from app.services.NotificationService import create_notification
+            from app.schemas.Notification import NotificationCreate
+            from app.models.academic.Subject import Subject
+            from app.models.people.AcademicStaff import AcademicStaff
+
+            subj = db.query(Subject).filter(Subject.subject_id == classwork.subject_id).first() if classwork else None
+            subject_name = subj.subject_name if subj else "Subject"
+
+            staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == staff_id).first()
+            teacher_name = f"{staff.first_name} {staff.last_name}".strip() if staff else "Teacher"
+
+            cw_title = classwork.title if classwork else "Classwork"
+            notif_title = f"{subject_name}: {cw_title}"
+            notif_body = f"Graded by {teacher_name} • Score: {body.grade} points."
+
+            create_notification(
+                db,
+                NotificationCreate(
+                    user_id=student.user_id,
+                    notification_type="grade_released",
+                    title=notif_title,
+                    body=notif_body,
+                    action_url="/student/todo",
+                ),
+            )
+    except Exception as err:
+        print(f"[Notification Error] Failed to send grade notification: {err}")
+
     return build_submission_response(submission, db)
+
 
 
 def get_submission_for_user(submission_id: int, current_user: dict, db: Session) -> SubmissionResponse:

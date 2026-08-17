@@ -58,6 +58,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
+import QuizAnalysisView from "./classworks/QuizAnalysisView";
 
 const tabs: Array<TabItem<TabId>> = [
   { id: "all", label: "All", icon: ClipboardList },
@@ -409,6 +410,7 @@ export default function Classworks() {
             classwork_category: editDraft.classwork_category || null,
             total_points: totalPoints,
             is_published: editDraft.is_published,
+            show_scores: editDraft.show_scores,
           }),
         },
       );
@@ -1139,6 +1141,28 @@ export default function Classworks() {
                               Published
                             </span>
                           </label>
+                          <label className="block text-xs font-bold">
+                            <span className="invisible">Show Scores</span>
+                            <span className="mt-1 flex h-10 w-full items-center gap-2 border-2 border-black px-3 text-sm font-normal">
+                              <Input
+                                type="checkbox"
+                                checked={editDraft.show_scores}
+                                onChange={(event) =>
+                                  setEditDraft((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          show_scores: event.target.checked,
+                                        }
+                                      : current,
+                                  )
+                                }
+                                disabled={isSavingEdit}
+                                className="h-4 w-4 rounded-none border-black p-0 shadow-none accent-black"
+                              />
+                              Show Scores to Students
+                            </span>
+                          </label>
                         </div>
 
                         <Card className="block w-full border-black p-3 shadow-none transition-none hover:shadow-none">
@@ -1458,197 +1482,13 @@ export default function Classworks() {
                     ) : (
                       <>
                         {isQuizType(selected.classwork_type) && (
-                          <div className="rounded-lg border border-black bg-white p-4 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-                            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                              <div>
-                                <h2 className="text-xl font-bold">
-                                  Quiz Analysis
-                                </h2>
-                                <p className="text-xs font-medium text-gray-600">
-                                  Participation, accuracy, and question
-                                  performance.
-                                </p>
-                              </div>
-                              {quizAnalysis?.class_accuracy_percent !== null &&
-                                quizAnalysis?.class_accuracy_percent !==
-                                  undefined && (
-                                  <span className="rounded-full border border-black bg-[#7ABA78] px-3 py-1 text-xs font-bold">
-                                    Class accuracy{" "}
-                                    {quizAnalysis.class_accuracy_percent}%
-                                  </span>
-                                )}
-                            </div>
-
-                            {isQuizAnalysisLoading ? (
-                              <p className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-sm font-semibold text-gray-500">
-                                Loading quiz analysis...
-                              </p>
-                            ) : quizAnalysisError ? (
-                              <p className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                                {quizAnalysisError}
-                              </p>
-                            ) : quizAnalysis ? (
-                              <div className="space-y-4">
-                                <div className="grid gap-3 sm:grid-cols-5">
-                                  {[
-                                    ["Students", quizAnalysis.total_students],
-                                    ["Submitted", quizAnalysis.submitted_count],
-                                    ["Missing", quizAnalysis.missing_count],
-                                    [
-                                      "Needs grading",
-                                      quizAnalysis.needs_grading_count,
-                                    ],
-                                    [
-                                      "Average",
-                                      quizAnalysis.average_score !== null &&
-                                      quizAnalysis.average_score !== undefined
-                                        ? `${quizAnalysis.average_score}/${quizAnalysis.total_points ?? selected.total_points ?? 0}`
-                                        : "N/A",
-                                    ],
-                                  ].map(([label, value]) => (
-                                    <div
-                                      key={label}
-                                      className="rounded-lg border border-black bg-[#F8F6ED] p-3"
-                                    >
-                                      <p className="text-xs font-semibold text-gray-600">
-                                        {label}
-                                      </p>
-                                      <p className="mt-1 text-xl font-bold">
-                                        {value}
-                                      </p>
-                                    </div>
-                                  ))}
-                                </div>
-
-                                <div className="grid gap-3 lg:grid-cols-2">
-                                  {quizAnalysis.questions.map(
-                                    (question, index) => (
-                                      <div
-                                        key={question.quiz_question_id}
-                                        className="rounded-lg border border-black p-3"
-                                      >
-                                        <div className="mb-2 flex items-start justify-between gap-3">
-                                          <div>
-                                            <p className="text-sm font-bold">
-                                              {index + 1}.{" "}
-                                              {question.question_text}
-                                            </p>
-                                            <p className="text-xs font-medium text-gray-600">
-                                              {question.answered_count} answered
-                                              | {question.points} pts
-                                            </p>
-                                          </div>
-                                          <span className="rounded-full border border-gray-300 px-2 py-1 text-xs font-bold">
-                                            {question.question_type ===
-                                            "MULTIPLE_CHOICE"
-                                              ? `${question.accuracy_percent ?? 0}%`
-                                              : `${question.needs_grading_count} to grade`}
-                                          </span>
-                                        </div>
-                                        {question.option_distribution.length >
-                                        0 ? (
-                                          <div className="space-y-2">
-                                            {question.option_distribution.map(
-                                              (option) => (
-                                                <div
-                                                  key={option.option_id}
-                                                  className={`flex items-center justify-between rounded border px-2 py-1 text-xs ${
-                                                    option.is_correct
-                                                      ? "border-green-400 bg-green-50"
-                                                      : "border-gray-200"
-                                                  }`}
-                                                >
-                                                  <span className="font-semibold">
-                                                    {option.option_text}
-                                                  </span>
-                                                  <span>
-                                                    {option.selected_count}
-                                                  </span>
-                                                </div>
-                                              ),
-                                            )}
-                                          </div>
-                                        ) : (
-                                          <p className="text-xs font-medium text-gray-600">
-                                            Short-answer responses are counted
-                                            for manual grading.
-                                          </p>
-                                        )}
-                                      </div>
-                                    ),
-                                  )}
-                                </div>
-
-                                 <div className="overflow-hidden rounded-lg border border-black">
-                                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 border-b border-black bg-[#F6E9B2] px-3 py-2 text-xs font-bold">
-                                    <span>Student</span>
-                                    <span>Attempts</span>
-                                    <span>Score</span>
-                                    <span className="text-right">Action</span>
-                                  </div>
-                                  {quizAnalysis.students.map((student) => (
-                                    <div
-                                      key={student.student_id}
-                                      className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 border-b border-black px-3 py-2 text-sm last:border-b-0"
-                                    >
-                                      <div>
-                                        <p className="font-bold">
-                                          {student.student_name}
-                                        </p>
-                                        <p className="text-xs capitalize text-gray-600">
-                                          {submissionStatusLabel(
-                                            student.status,
-                                          )}
-                                          {student.needs_grading
-                                            ? " | Needs grading"
-                                            : ""}
-                                        </p>
-                                      </div>
-                                      <span className="text-xs font-bold">
-                                        {student.attempt_count}
-                                      </span>
-                                      <span className="text-right text-xs font-bold">
-                                        {student.grade !== null &&
-                                        student.grade !== undefined
-                                          ? `${student.grade}/${quizAnalysis.total_points ?? selected.total_points ?? 0}`
-                                          : `0/${quizAnalysis.total_points ?? selected.total_points ?? 0}`}
-                                      </span>
-                                      <div className="text-right">
-                                        {student.submission_id ? (
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setSelectedGradingSubmissionId(
-                                                student.submission_id!,
-                                              )
-                                            }
-                                            className={`inline-flex items-center gap-1 rounded border border-black px-2.5 py-1 text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] transition-colors ${
-                                              student.needs_grading
-                                                ? "bg-amber-300 hover:bg-amber-400 text-black font-extrabold"
-                                                : "bg-white hover:bg-gray-100 text-black"
-                                            }`}
-                                          >
-                                            <Pencil size={12} />
-                                            {student.needs_grading
-                                              ? "Grade"
-                                              : "Score"}
-                                          </button>
-                                        ) : (
-                                          <span className="text-xs italic text-gray-400">
-                                            No attempt
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            ) : (
-                              <p className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-sm font-semibold text-gray-500">
-                                Quiz analysis is not available yet.
-                              </p>
-                            )}
-                          </div>
+                          <QuizAnalysisView
+                            quizAnalysis={quizAnalysis}
+                            isQuizAnalysisLoading={isQuizAnalysisLoading}
+                            quizAnalysisError={quizAnalysisError}
+                            selected={selected}
+                            setSelectedGradingSubmissionId={setSelectedGradingSubmissionId}
+                          />
                         )}
 
                         <Card className="block">

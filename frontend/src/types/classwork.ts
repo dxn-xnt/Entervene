@@ -22,6 +22,7 @@ export type ClassworkAssignment = {
   allow_late_submissions?: boolean;
   max_attempts?: number | null;
   is_published: boolean;
+  show_scores: boolean;
   is_locked?: boolean | null;
 };
 
@@ -34,6 +35,7 @@ export type TeacherClasswork = {
   classwork_category?: string | null;
   total_points?: number | null;
   is_published: boolean;
+  show_scores: boolean;
   is_locked: boolean;
   is_archived: boolean;
   subject_id: number;
@@ -58,6 +60,7 @@ export type TeacherLesson = {
   title: string;
   order_index?: number;
   is_published: boolean;
+  show_scores: boolean;
   is_draft: boolean;
   subject_id: number;
 };
@@ -115,6 +118,7 @@ export type CreateDraft = {
   allow_late_submissions: boolean;
   max_attempts: string;
   is_published: boolean;
+  show_scores: boolean;
 };
 
 export type EditDraft = {
@@ -129,4 +133,5 @@ export type EditDraft = {
   allow_late_submissions: boolean;
   max_attempts: string;
   is_published: boolean;
+  show_scores: boolean;
 };

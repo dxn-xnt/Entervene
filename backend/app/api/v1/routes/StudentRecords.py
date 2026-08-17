@@ -41,7 +41,6 @@ def finalize_period_grade(
         period_grade_id=period_grade_id,
         final_period_grade=payload.final_period_grade,
         finalized_by_staff_id=staff_id,
-        passing_grade=payload.passing_grade,
     )
 
 

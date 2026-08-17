@@ -6,12 +6,12 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectOffering import SubjectOffering
+from app.models.academic.AcademicPathway import AcademicPathway
+from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
 from app.services.subject_offerings.SubjectOfferingShared import (
     ALLOWED_OFFERING_STATUSES,
-    ALLOWED_PATHWAYS,
     DEFAULT_OFFERING_STATUS,
     normalize_offering_status,
-    normalize_pathway,
     normalized_text,
     offering_to_item,
     readable_text,
@@ -38,6 +38,12 @@ def get_subject_offering_form_options_data(db: Session) -> dict:
         db.query(Subject)
         .filter(func.lower(func.coalesce(Subject.status, "active")) == "active")
         .order_by(Subject.academic_level_id, func.lower(Subject.subject_name))
+        .all()
+    )
+    active_pathways = (
+        db.query(AcademicPathway)
+        .filter(AcademicPathway.is_enabled.is_(True))
+        .order_by(AcademicPathway.sort_order, func.lower(AcademicPathway.name))
         .all()
     )
     return {
@@ -69,7 +75,17 @@ def get_subject_offering_form_options_data(db: Session) -> dict:
             }
             for period in academic_periods
         ],
-        "pathways": ALLOWED_PATHWAYS,
+        "pathways": [
+            {
+                "id": p.id,
+                "code": p.code,
+                "name": p.name,
+                "is_enabled": p.is_enabled,
+                "sort_order": p.sort_order,
+                "deped_cluster_id": p.deped_cluster_id,
+            }
+            for p in active_pathways
+        ],
         "statuses": ALLOWED_OFFERING_STATUSES,
         "default_status": DEFAULT_OFFERING_STATUS,
         "active_subjects": [
@@ -79,6 +95,7 @@ def get_subject_offering_form_options_data(db: Session) -> dict:
                 "subject_codename": subject.subject_codename,
                 "subject_group": subject.subject_group,
                 "academic_level_id": subject.academic_level_id,
+                "is_core": getattr(subject, "is_core", False),
             }
             for subject in active_subjects
         ],
@@ -91,6 +108,7 @@ def list_subject_offerings_data(
     academic_level_id: int | None = None,
     academic_period_id: int | None = None,
     pathway: str | None = None,
+    pathway_id: int | None = None,
     status: str | None = None,
     search: str = "",
 ) -> dict:
@@ -109,14 +127,44 @@ def list_subject_offerings_data(
         query = query.filter(SubjectOffering.academic_level_id == academic_level_id)
     if academic_period_id is not None:
         query = query.filter(SubjectOffering.academic_period_id == academic_period_id)
-    if pathway is not None and pathway != "all":
-        norm_pathway = normalize_pathway(pathway)
-        if norm_pathway == "stem_medical":
-            query = query.filter(SubjectOffering.pathway.in_(["stem_medical", "both"]))
-        elif norm_pathway == "stem_engineering":
-            query = query.filter(SubjectOffering.pathway.in_(["stem_engineering", "both"]))
+
+    if pathway_id is not None:
+        query = query.filter(
+            or_(
+                Subject.is_core.is_(True),
+                ~SubjectOffering.offering_pathways.any(),
+                SubjectOffering.offering_pathways.any(SubjectOfferingPathway.pathway_id == pathway_id),
+            )
+        )
+    elif pathway is not None and pathway != "all":
+        # Match by pathway code or legacy string
+        norm = normalized_text(pathway)
+        if norm == "both":
+            query = query.filter(
+                or_(
+                    Subject.is_core.is_(True),
+                    ~SubjectOffering.offering_pathways.any(),
+                    SubjectOffering.offering_pathways.any(
+                        SubjectOfferingPathway.pathway.has(func.lower(AcademicPathway.code) == "both")
+                    ),
+                    SubjectOffering.subject_offering_id.in_(
+                        db.query(SubjectOfferingPathway.subject_offering_id)
+                        .group_by(SubjectOfferingPathway.subject_offering_id)
+                        .having(func.count(SubjectOfferingPathway.pathway_id) > 1)
+                    ),
+                )
+            )
         else:
-            query = query.filter(SubjectOffering.pathway == norm_pathway)
+            query = query.filter(
+                or_(
+                    Subject.is_core.is_(True),
+                    ~SubjectOffering.offering_pathways.any(),
+                    SubjectOffering.offering_pathways.any(
+                        SubjectOfferingPathway.pathway.has(func.lower(AcademicPathway.code) == norm)
+                    ),
+                )
+            )
+
     if status is not None:
         query = query.filter(func.lower(func.coalesce(SubjectOffering.status, DEFAULT_OFFERING_STATUS)) == normalize_offering_status(status))
     search_term = readable_text(search)
@@ -135,7 +183,6 @@ def list_subject_offerings_data(
             AcademicYear.start_date.desc(),
             AcademicLevel.grade_level,
             AcademicPeriod.period_sequence,
-            SubjectOffering.pathway,
             func.lower(Subject.subject_name),
         )
         .all()

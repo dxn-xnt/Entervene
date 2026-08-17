@@ -73,22 +73,36 @@ const studentActivity = [
   },
 ];
 
+import { Button } from "@/components/retroui/Button";
+import { Calendar } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { routes } from "@/../routes";
+
 const Dashboard = () => {
+  const navigate = useNavigate();
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
-            <header className="flex items-center gap-3">
-              <SidebarTrigger className="md:hidden" />
-              <div>
-                <h1 className="text-2xl md:text-4xl font-bold">
-                  Dashboard
-                </h1>
-                <p className="text-sm text-gray-500">
-                  Good morning, teacher Dan!
-                </p>
+            <header className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="md:hidden" />
+                <div>
+                  <h1 className="text-2xl md:text-4xl font-bold">
+                    Dashboard
+                  </h1>
+                  <p className="text-sm text-gray-500">
+                    Good morning, teacher!
+                  </p>
+                </div>
               </div>
+              <Button
+                onClick={() => navigate(routes.teacher.profile)}
+              >
+                <Calendar className="size-3.5 mr-1.5" />
+                View My Schedule
+              </Button>
             </header>
 
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />

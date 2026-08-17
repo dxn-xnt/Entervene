@@ -68,7 +68,8 @@ const Subjects = () => {
 
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
-            {isLoading ? (
+            <main className="py-3">
+              {isLoading ? (
               <div className="flex items-center justify-center w-full py-20">
                 <Loader2 className="animate-spin text-gray-400" size={40} />
               </div>
@@ -101,7 +102,8 @@ const Subjects = () => {
                   />
                 ))}
               </div>
-            )}
+              )}
+            </main>
           </div>
         </div>
       </div>

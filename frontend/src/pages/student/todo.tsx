@@ -91,13 +91,14 @@ export default function ToDo() {
               </h1>
             </header>
 
-            <Tabs
+            <main className="flex flex-col gap-3">
+              <Tabs
               tabs={todoTabs}
               activeTab={activeTab}
               onTabChange={setActiveTab}
             />
 
-            {isLoading ? (
+              {isLoading ? (
               <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
                 <Loader2 className="animate-spin" size={36} />
                 <p className="text-sm">Loading your to-do items...</p>
@@ -228,7 +229,8 @@ export default function ToDo() {
                   </section>
                 )}
               </>
-            )}
+              )}
+            </main>
           </div>
         </div>
       </div>

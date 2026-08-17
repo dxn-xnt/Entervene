@@ -4,68 +4,11 @@ import AppLayout from "@/layouts/app-layout";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Table } from "@/components/retroui/Table";
+import { getMySchedule, type DynamicScheduleResponse } from "@/lib/api";
+import { DynamicScheduleTable } from "@/components/dynamic-schedule-table";
+import { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { Pen, X } from "lucide-react";
-
-type ScheduleRow =
-  | {
-    type: "class";
-    subject: string;
-    time: string;
-    days: string[];
-  }
-  | {
-    type: "break";
-    label: string;
-  };
-
-const schedule: ScheduleRow[] = [
-  {
-    type: "class",
-    subject: "Computer Programming",
-    time: "7:45 am - 8:45 am",
-    days: ["M", "T", "W", "Th", "F"],
-  },
-  {
-    type: "class",
-    subject: "Filipino",
-    time: "8:45 am - 9:45 am",
-    days: ["M", "T", "W", "Th", "F"],
-  },
-  { type: "break", label: "Break" },
-  {
-    type: "class",
-    subject: "Science",
-    time: "10:00 am - 11:00 am",
-    days: ["M", "T", "W", "Th", "F"],
-  },
-  {
-    type: "class",
-    subject: "English",
-    time: "11:00 am - 12:00 nn",
-    days: ["M", "T", "W", "Th", "F"],
-  },
-  { type: "break", label: "Lunch Break" },
-  {
-    type: "class",
-    subject: "Mathematics",
-    time: "1:00 pm - 2:00 pm",
-    days: ["M", "T", "W", "Th", "F"],
-  },
-  {
-    type: "class",
-    subject: "MAPEH",
-    time: "2:00 pm - 3:00 pm",
-    days: ["M", "T", "W", "Th", "F"],
-  },
-  {
-    type: "class",
-    subject: "System Designs",
-    time: "3:00 pm - 4:00 pm",
-    days: ["M", "T", "W", "Th", "F"],
-  },
-];
+import { Pencil, X } from "lucide-react";
 
 const weekDayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
@@ -162,6 +105,27 @@ export default function AdminProfile() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tempSelectedAvatar, setTempSelectedAvatar] = useState(user?.avatar || "/avatars/teacher-avatars/12.svg");
+  const [scheduleData, setScheduleData] = useState<DynamicScheduleResponse | null>(null);
+  const [isScheduleLoading, setIsScheduleLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadSchedule() {
+      setIsScheduleLoading(true);
+      try {
+        const data = await getMySchedule();
+        if (isMounted) setScheduleData(data);
+      } catch (err) {
+        console.error("Failed to fetch schedule:", err);
+      } finally {
+        if (isMounted) setIsScheduleLoading(false);
+      }
+    }
+    void loadSchedule();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const openModal = () => {
     setTempSelectedAvatar(user?.avatar || "/avatars/teacher-avatars/12.svg");
@@ -184,7 +148,7 @@ export default function AdminProfile() {
               </div>
               <div className="flex flex-row gap-2">
                 <Button onClick={openModal}>
-                  <Pen className="size-4 mr-2" /> Edit Profile
+                  <Pencil className="size-4 mr-2" /> Edit Profile
                 </Button>
               </div>
             </header>
@@ -199,58 +163,11 @@ export default function AdminProfile() {
                   <p className="text-2xl md:text-3xl font-bold tracking-tight">
                     My Schedule
                   </p>
-                  <Table
-                    wrapperClassName="shadow-md transition-all hover:shadow-none"
-                    className="table-fixed rounded-lg bg-white"
-                  >
-                    <Table.Header className="">
-                      <Table.Row className="">
-                        <Table.Head className="w-2/5">Subject</Table.Head>
-                        <Table.Head className="text-center">Time</Table.Head>
-                        <Table.Head className="text-right w-48">Days</Table.Head>
-                      </Table.Row>
-                    </Table.Header>
-                    <Table.Body>
-                      {schedule.map((row, idx) =>
-                        row.type === "break" ? (
-                          <Table.Row
-                            key={idx}
-                            className="hover:bg-white bg-white"
-                          >
-                            <Table.Cell
-                              colSpan={3}
-                              className="text-center text-sm text-muted-foreground"
-                            >
-                              {row.label}
-                            </Table.Cell>
-                          </Table.Row>
-                        ) : (
-                          <Table.Row key={idx} className="hover:bg-white">
-                            <Table.Cell className="font-semibold">
-                              {row.subject}
-                            </Table.Cell>
-                            <Table.Cell className="text-center">
-                              <span className="inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs">
-                                {row.time}
-                              </span>
-                            </Table.Cell>
-                            <Table.Cell>
-                              <div className="flex flex-row justify-end gap-1">
-                                {row.days.map((day) => (
-                                  <span
-                                    key={day}
-                                    className="flex size-6 items-center justify-center rounded-full border text-xs"
-                                  >
-                                    {day}
-                                  </span>
-                                ))}
-                              </div>
-                            </Table.Cell>
-                          </Table.Row>
-                        ),
-                      )}
-                    </Table.Body>
-                  </Table>
+                  <DynamicScheduleTable
+                    schedule={scheduleData?.schedule || []}
+                    isPublished={scheduleData?.is_published}
+                    isLoading={isScheduleLoading}
+                  />
                 </div>
 
                 <div className="flex flex-col gap-3 w-full lg:w-80">

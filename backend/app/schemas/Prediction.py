@@ -47,6 +47,7 @@ class PredictionPreviewResponse(BaseModel):
 
 
 class PredictionPersistResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     prediction_id: int
     model_version_id: int | None = None
     student_id: UUID
@@ -66,6 +67,7 @@ class PredictionPersistResponse(BaseModel):
 
 
 class PredictionSummaryResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     prediction_id: int
     student_id: UUID
     class_id: int
@@ -141,7 +143,8 @@ class PredictionRecommendedActionRead(BaseModel):
 
 class PredictionOutcomeEvaluateRequest(BaseModel):
     actual_period_grade: float
-    passing_grade: float = 75.0
+    # passing_grade is intentionally removed — resolved server-side from
+    # SubjectGroup.passing_threshold via AIPrediction.subject_id.
 
 
 class PredictionOutcomeResponse(BaseModel):
@@ -187,6 +190,7 @@ class PredictionTeacherReviewListResponse(BaseModel):
 
 
 class PredictionDetailResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     prediction_id: int
     student_id: UUID
     class_id: int

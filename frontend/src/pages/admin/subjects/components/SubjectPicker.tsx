@@ -39,7 +39,7 @@ export function SubjectPicker({
       [
         subject.subject_name,
         subject.subject_codename,
-        subject.subject_group,
+        subject.subject_group?.name,
       ].some((value) => value?.toLowerCase().includes(normalizedQuery))
     );
   }, [query, subjects]);
@@ -143,7 +143,7 @@ export function SubjectPicker({
                 <span className="grid min-w-0 flex-1 grid-cols-1 gap-1 text-sm md:grid-cols-[1.5fr_120px_140px_80px]">
                   <strong className="truncate">{subject.subject_name}</strong>
                   <span>{subjectCode(subject)}</span>
-                  <span>{subject.subject_group || "Ungrouped"}</span>
+                  <span>{subject.subject_group?.name || "Ungrouped"}</span>
                   <span>{subject.hours ?? "-"} hrs</span>
                 </span>
               </label>

@@ -36,9 +36,12 @@ class ClassManagementError(Exception):
 
 async def class_management_error_handler(
     request: Request,
-    exc: ClassManagementError,
+    exc: Exception,
 ) -> JSONResponse:
-    return JSONResponse(status_code=exc.status_code, content=exc.payload)
+    if isinstance(exc, ClassManagementError):
+        return JSONResponse(status_code=exc.status_code, content=exc.payload)
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+
 
 
 def resolve_active_academic_year(db: Session) -> AcademicYear:

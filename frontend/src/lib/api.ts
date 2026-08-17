@@ -130,6 +130,7 @@ export type TodoItem = {
   is_submitted: boolean;
   submission_status: string | null;
   grade: number | null;
+  show_scores?: boolean;
 };
 
 export type StudentTodosResponse = {
@@ -156,11 +157,16 @@ export type SubjectAcademicLevel = {
   level_name: string;
   grade_level: number;
 };
+export type SubjectGroupInline = {
+  subject_group_id: number;
+  name: string;
+  passing_threshold: number;
+};
 export type SubjectListItem = {
   subject_id: number;
   subject_name: string;
   subject_codename: string | null;
-  subject_group: string | null;
+  subject_group: SubjectGroupInline | null;
   hours: number | null;
   default_grading_template: string | null;
   description: string | null;
@@ -180,7 +186,7 @@ export type SubjectListResponse = {
 };
 export type SubjectFormOptions = {
   academic_levels: SubjectAcademicLevel[];
-  subject_groups: string[];
+  subject_groups: SubjectGroupInline[];
   statuses: SubjectStatus[];
   default_status: SubjectStatus;
   grading_templates: string[];
@@ -191,11 +197,12 @@ export type SubjectImportResult = {
   skipped_count: number;
   error_count: number;
   errors: Array<{ row: number | null; message: string }>;
+  warnings?: string[];
 };
 export type SubjectCreatePayload = {
   subject_name: string;
   subject_codename?: string | null;
-  subject_group?: string | null;
+  subject_group_id: number;
   hours?: number | null;
   default_grading_template?: string | null;
   description?: string | null;
@@ -209,7 +216,7 @@ export type SubjectOfferingSubject = {
   subject_id: number;
   subject_name: string;
   subject_codename: string | null;
-  subject_group: string | null;
+  subject_group: SubjectGroupInline | null;
   default_grading_template?: string | null;
 };
 export type SubjectOfferingAcademicYear = {
@@ -756,13 +763,13 @@ export async function getSubjectFormOptions(): Promise<SubjectFormOptions> {
 export async function getSubjects(params: {
   status?: SubjectStatus;
   academic_level_id?: number;
-  subject_group?: string;
+  subject_group_id?: number;
   search?: string;
 } = {}): Promise<SubjectListResponse> {
   const query = new URLSearchParams();
   if (params.status) query.set("status", params.status);
   if (params.academic_level_id) query.set("academic_level_id", String(params.academic_level_id));
-  if (params.subject_group?.trim()) query.set("subject_group", params.subject_group.trim());
+  if (params.subject_group_id) query.set("subject_group_id", String(params.subject_group_id));
   if (params.search?.trim()) query.set("search", params.search.trim());
   const response = await apiFetch(`/api/v1/subjects${query.toString() ? `?${query.toString()}` : ""}`);
   if (!response.ok) {
@@ -1439,12 +1446,23 @@ export async function batchSaveSubjectLoads(
   periodId: number,
   levelId: number,
   action: "draft" | "publish",
-  loads: SubjectLoadItem[]
+  loads: SubjectLoadItem[],
+  publishScope: "all" | "level" | "section" = "all",
+  targetLevelId?: number | null,
+  targetClassId?: number | null
 ): Promise<{ message: string; saved_count: number; status: string; is_valid: boolean; conflicts: ConflictItem[] }> {
   const response = await apiFetch("/api/v1/subject-loads/batch-save", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ academic_period_id: periodId, academic_level_id: levelId, action, loads }),
+    body: JSON.stringify({
+      academic_period_id: periodId,
+      academic_level_id: levelId,
+      action,
+      publish_scope: publishScope,
+      target_level_id: targetLevelId ?? (publishScope === "level" ? levelId : null),
+      target_class_id: targetClassId ?? null,
+      loads,
+    }),
   });
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null);
@@ -1455,4 +1473,181 @@ export async function batchSaveSubjectLoads(
   }
   return (await response.json()) as { message: string; saved_count: number; status: string; is_valid: boolean; conflicts: ConflictItem[] };
 }
+
+export interface DynamicScheduleRow {
+  type: "class" | "break";
+  subject_load_id?: number;
+  subject?: string;
+  subject_codename?: string;
+  teacher?: string;
+  section_name?: string;
+  time: string;
+  start_time?: string;
+  end_time?: string;
+  days?: string[];
+  label?: string;
+  slot_type?: "HOMEROOM" | "RECESS" | "LUNCH" | "CLASS";
+}
+
+export interface DynamicScheduleResponse {
+  is_published: boolean;
+  class_id?: number;
+  section_name?: string;
+  grade_level?: string;
+  schedule: DynamicScheduleRow[];
+}
+
+export async function getClassSchedule(
+  classId: number | string,
+  academicPeriodId?: number
+): Promise<DynamicScheduleResponse> {
+  const query = academicPeriodId ? `?academic_period_id=${academicPeriodId}` : "";
+  const response = await apiFetch(`/api/v1/subject-loads/class-schedule/${classId}${query}`);
+  if (!response.ok) {
+    throw new ApiRequestError("Failed to fetch class schedule", response.status, null);
+  }
+  return (await response.json()) as DynamicScheduleResponse;
+}
+
+export async function getMySchedule(
+  academicPeriodId?: number
+): Promise<DynamicScheduleResponse> {
+  const query = academicPeriodId ? `?academic_period_id=${academicPeriodId}` : "";
+  const response = await apiFetch(`/api/v1/subject-loads/my-schedule${query}`);
+  if (!response.ok) {
+    throw new ApiRequestError("Failed to fetch schedule", response.status, null);
+  }
+  return (await response.json()) as DynamicScheduleResponse;
+}
+
+export interface DepedClusterRead {
+  id: number;
+  code: string;
+  name: string;
+  category: string;
+  sort_order: number;
+}
+
+export interface AcademicPathwayRead {
+  id: number;
+  code: string;
+  name: string;
+  is_enabled: boolean;
+  sort_order: number;
+  deped_cluster_id?: number | null;
+  deped_cluster?: DepedClusterRead | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface PathwayCreatePayload {
+  code: string;
+  name: string;
+  is_enabled?: boolean;
+  sort_order?: number;
+  deped_cluster_id?: number | null;
+}
+
+export interface PathwayUpdatePayload {
+  code?: string;
+  name?: string;
+  is_enabled?: boolean;
+  sort_order?: number;
+  deped_cluster_id?: number | null;
+}
+
+export interface PathwayListResponse {
+  pathways: AcademicPathwayRead[];
+}
+
+export async function fetchPathways(isEnabled?: boolean): Promise<PathwayListResponse> {
+  const query = isEnabled !== undefined ? `?is_enabled=${isEnabled}` : "";
+  const response = await apiFetch(`/api/v1/pathways${query}`);
+  if (!response.ok) {
+    throw new ApiRequestError("Failed to fetch academic pathways", response.status, null);
+  }
+  return (await response.json()) as PathwayListResponse;
+}
+
+export async function createPathway(payload: PathwayCreatePayload): Promise<AcademicPathwayRead> {
+  const response = await apiFetch("/api/v1/pathways", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    const msg = data && typeof data === "object" && "detail" in data && typeof data.detail === "string"
+      ? data.detail
+      : "Failed to create academic pathway";
+    throw new ApiRequestError(msg, response.status, data);
+  }
+  return (await response.json()) as AcademicPathwayRead;
+}
+
+export async function updatePathway(id: number, payload: PathwayUpdatePayload): Promise<AcademicPathwayRead> {
+  const response = await apiFetch(`/api/v1/pathways/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    const msg = data && typeof data === "object" && "detail" in data && typeof data.detail === "string"
+      ? data.detail
+      : "Failed to update academic pathway";
+    throw new ApiRequestError(msg, response.status, data);
+  }
+  return (await response.json()) as AcademicPathwayRead;
+}
+
+export interface PathwayScopeRead {
+  id?: number | null;
+  academic_year_id: number;
+  academic_level_id: number;
+  grade_level: number;
+  level_name: string;
+  requires_pathway: boolean;
+}
+
+export interface PathwayScopeItemUpdate {
+  academic_level_id: number;
+  requires_pathway: boolean;
+}
+
+export interface PathwayScopeBatchPayload {
+  academic_year_id: number;
+  scopes: PathwayScopeItemUpdate[];
+}
+
+export interface PathwayScopeListResponse {
+  academic_year_id: number;
+  scopes: PathwayScopeRead[];
+}
+
+export async function fetchPathwayScopes(academicYearId: number): Promise<PathwayScopeListResponse> {
+  const response = await apiFetch(`/api/v1/pathways/scopes?academic_year_id=${academicYearId}`);
+  if (!response.ok) {
+    throw new ApiRequestError("Failed to fetch pathway scopes", response.status, null);
+  }
+  return (await response.json()) as PathwayScopeListResponse;
+}
+
+export async function updatePathwayScopes(payload: PathwayScopeBatchPayload): Promise<PathwayScopeListResponse> {
+  const response = await apiFetch("/api/v1/pathways/scopes", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    const msg = data && typeof data === "object" && "detail" in data && typeof data.detail === "string"
+      ? data.detail
+      : "Failed to update pathway scopes";
+    throw new ApiRequestError(msg, response.status, data);
+  }
+  return (await response.json()) as PathwayScopeListResponse;
+}
+
+
 

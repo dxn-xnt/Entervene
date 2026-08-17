@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.academic.Subject import Subject
 from app.models.academic.Class_ import Class
 from app.models.academic.PeriodTemplateSlot import PeriodTemplateSlot
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.academic.SubjectOffering import SubjectOffering
+from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
+from app.services.classes.ClassQueryService import class_pathway_code
 from app.schemas.SubjectLoad import (
     ConflictItem,
     SubjectLoadItem,
@@ -67,6 +69,24 @@ class ConflictDetectorService:
             if academic_period.start_date and academic_period.end_date:
                 delta = academic_period.end_date - academic_period.start_date
                 num_weeks = max(1, delta.days // 7)
+
+        # ---------------------------------------------------------
+        # 0. Unassigned Teacher Check
+        # ---------------------------------------------------------
+        for load in loads:
+            if not load.staff_id:
+                c_name = classes_map[load.class_id].section_name if load.class_id in classes_map else f"Section #{load.class_id}"
+                s_name = subjects_map[load.subject_id].subject_name if load.subject_id in subjects_map else f"Subject #{load.subject_id}"
+                conflicts.append(
+                    ConflictItem(
+                        rule="UNASSIGNED_TEACHER",
+                        severity="warning",
+                        message=f"Subject '{s_name}' in section '{c_name}' has no assigned teacher.",
+                        class_id=load.class_id,
+                        subject_id=load.subject_id,
+                        affected_key=f"{load.class_id}_{load.subject_id}",
+                    )
+                )
 
         # ---------------------------------------------------------
         # 1. Teacher Time Overlap & 2. Section Timetable Overlap
@@ -197,6 +217,7 @@ class ConflictDetectorService:
             try:
                 period_offerings = (
                     db.query(SubjectOffering)
+                    .options(joinedload(SubjectOffering.offering_pathways).joinedload(SubjectOfferingPathway.pathway))
                     .filter(
                         SubjectOffering.academic_period_id == academic_period.academic_period_id,
                         SubjectOffering.status == "active",
@@ -205,16 +226,33 @@ class ConflictDetectorService:
                 )
             except Exception:
                 period_offerings = []
+
             if period_offerings:
+                def _get_offering_pathway_code(so: SubjectOffering) -> str:
+                    pathway_links = getattr(so, "offering_pathways", None) or []
+                    if not pathway_links:
+                        return (getattr(so, "pathway", None) or "general").casefold()
+                    if len(pathway_links) == 1:
+                        pw = getattr(pathway_links[0], "pathway", None)
+                        if pw and getattr(pw, "code", None):
+                            code = str(pw.code).casefold()
+                            if "medical" in code or "health" in code:
+                                return "stem_medical"
+                            if "engineering" in code or "math" in code:
+                                return "stem_engineering"
+                            return code
+                        return "general"
+                    return "both"
+
                 offered_tuples = {
-                    (so.subject_id, so.academic_level_id, (so.pathway or "general").casefold())
+                    (so.subject_id, so.academic_level_id, _get_offering_pathway_code(so))
                     for so in period_offerings
                 }
                 for load in loads:
                     class_obj = classes_map.get(load.class_id)
                     if class_obj:
                         cls_level_id = class_obj.academic_level_id
-                        cls_pathway = (getattr(class_obj, "pathway", None) or "general").casefold()
+                        cls_pathway = class_pathway_code(class_obj).casefold()
                         subject_obj = subjects_map.get(load.subject_id)
                         s_name = subject_obj.subject_name if subject_obj else f"Subject #{load.subject_id}"
                         c_name = class_obj.section_name if class_obj else f"Class #{load.class_id}"
@@ -226,6 +264,8 @@ class ConflictDetectorService:
                                 so_pw == "both"
                                 or so_pw == cls_pathway
                                 or (so_pw == "general" and cls_pathway == "general")
+                                or (so_pw in ("medical-courses", "stem_medical") and cls_pathway in ("medical-courses", "stem_medical"))
+                                or (so_pw in ("engineering-math", "stem_engineering") and cls_pathway in ("engineering-math", "stem_engineering"))
                             )
                             for (so_sub, so_lvl, so_pw) in offered_tuples
                         )
@@ -326,4 +366,3 @@ class ConflictDetectorService:
             total_checks_count=total_rules,
             can_publish=not has_errors,
         )
-

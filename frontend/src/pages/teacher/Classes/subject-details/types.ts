@@ -24,6 +24,7 @@ export type Lesson = {
   created_at?: string;
   updated_at?: string;
   is_published: boolean;
+  show_scores: boolean;
   is_draft: boolean;
   is_archived: boolean;
   attachments: LessonAttachment[];
@@ -35,6 +36,7 @@ export type LessonDraft = {
   content: string;
   order_index: string;
   is_published: boolean;
+  show_scores: boolean;
 };
 
 export type LinkedClasswork = {
@@ -68,6 +70,7 @@ export type ClassworkDetail = {
   total_points?: number | null;
   due_date?: string | null;
   is_published: boolean;
+  show_scores: boolean;
   is_locked?: boolean;
   teacher_name?: string | null;
   attachments: ClassworkAttachment[];
@@ -100,4 +103,5 @@ export type ClassworkDraft = {
   due_date: string;
   allow_late_submissions: boolean;
   is_published: boolean;
+  show_scores: boolean;
 };

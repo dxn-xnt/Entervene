@@ -61,6 +61,7 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
             "allow_late_submissions": assignment.allow_late_submissions,
             "max_attempts": assignment.max_attempts,
             "is_published": assignment.is_published,
+            "show_scores": cw.show_scores,
             "is_locked": assignment_is_locked(assignment),
         })
 
@@ -73,6 +74,7 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
         classwork_category=cw.classwork_category,
         total_points=float(cw.total_points) if cw.total_points else None,
         is_published=cw.is_published,
+        show_scores=cw.show_scores,
         is_locked=cw.is_locked,
         is_archived=cw.is_archived,
         subject_id=cw.subject_id,

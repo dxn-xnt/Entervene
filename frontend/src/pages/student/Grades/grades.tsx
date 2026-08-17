@@ -1,21 +1,110 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/retroui/Card";
 import SubjectGrade from "./subject-grade";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { getMySubjects, getStudentTodos, type StudentSubjectItem, type TodoItem } from "@/lib/api";
+import {
+  getMySubjects,
+  getStudentTodos,
+  type StudentSubjectItem,
+  type TodoItem,
+} from "@/lib/api";
 
-const subjectPerformanceData = [
-  { subject: "Mathematic..", score: 87 },
-  { subject: "System Des..", score: 89 },
-  { subject: "Science", score: 94 },
-  { subject: "Filipino", score: 94 },
-  { subject: "English", score: 97 },
-  { subject: "Computer P..", score: 99 },
-];
+// ─── Color palette for donut / legends ───────────────────────────────────────
+const TYPE_COLORS: Record<string, string> = {
+  QUIZ: "#F59E0B",
+  ASSIGNMENT: "#3B82F6",
+  ACTIVITY: "#22C55E",
+  EXAM: "#EF4444",
+  PROJECT: "#8B5CF6",
+};
+const FALLBACK_COLOR = "#94A3B8";
+
+function colorForType(type: string): string {
+  return TYPE_COLORS[type.toUpperCase()] ?? FALLBACK_COLOR;
+}
+
+// ─── Computed analytics helpers ──────────────────────────────────────────────
+
+/** Completion rate across all todos */
+function computeCompletion(todos: TodoItem[]) {
+  const total = todos.length;
+  const completed = todos.filter(
+    (t) => t.is_submitted || t.status === "completed" || t.grade !== null,
+  ).length;
+  const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
+  return { total, completed, rate };
+}
+
+/** Group todos by classwork type for donut chart */
+function computeDistribution(todos: TodoItem[]) {
+  const counts: Record<string, number> = {};
+  for (const t of todos) {
+    const key = t.type || "Other";
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  const total = todos.length || 1; // avoid div-by-zero
+  return Object.entries(counts)
+    .map(([type, count]) => ({
+      type,
+      count,
+      percent: Math.round((count / total) * 100),
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+/** Per-subject average score (only graded items with total_points) */
+function computeSubjectPerformance(todos: TodoItem[]) {
+  const buckets: Record<
+    string,
+    { subject: string; subjectId: number; earned: number; possible: number }
+  > = {};
+  for (const t of todos) {
+    if (t.grade === null || !t.total_points) continue;
+    const key = t.subject_id;
+    if (!buckets[key]) {
+      buckets[key] = {
+        subject: t.subject,
+        subjectId: t.subject_id,
+        earned: 0,
+        possible: 0,
+      };
+    }
+    buckets[key].earned += t.grade;
+    buckets[key].possible += t.total_points;
+  }
+  return Object.values(buckets)
+    .map((b) => ({
+      ...b,
+      score: b.possible > 0 ? Math.round((b.earned / b.possible) * 100) : 0,
+    }))
+    .sort((a, b) => a.score - b.score); // lowest first so "recommended attention" is [0]
+}
+
+// ─── SVG donut builder ───────────────────────────────────────────────────────
+const DONUT_RADIUS = 40;
+const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
+
+function donutSegments(distribution: ReturnType<typeof computeDistribution>) {
+  let offset = 0;
+  return distribution.map((d) => {
+    const arc =
+      (d.count / distribution.reduce((s, x) => s + x.count, 0)) *
+      DONUT_CIRCUMFERENCE;
+    const segment = { ...d, arc, offset, color: colorForType(d.type) };
+    offset -= arc; // negative offset moves clockwise
+    return segment;
+  });
+}
+
+// ─── Main component ──────────────────────────────────────────────────────────
 
 const Grades = () => {
-  const [selectedSubject, setSelectedSubject] = useState<{ id: number; name: string } | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<{
+    id: number;
+    classId?: number;
+    name: string;
+  } | null>(null);
   const [subjects, setSubjects] = useState<StudentSubjectItem[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,7 +117,9 @@ const Grades = () => {
         setSubjects(subjectsData);
         setTodos(todosData.all || []);
       })
-      .catch((err) => console.error("Error loading student grades overview:", err))
+      .catch((err) =>
+        console.error("Error loading student grades overview:", err),
+      )
       .finally(() => {
         if (isMounted) setLoading(false);
       });
@@ -37,10 +128,18 @@ const Grades = () => {
     };
   }, []);
 
+  // ── Derived analytics (recompute only when todos change) ──
+  const completion = useMemo(() => computeCompletion(todos), [todos]);
+  const distribution = useMemo(() => computeDistribution(todos), [todos]);
+  const segments = useMemo(() => donutSegments(distribution), [distribution]);
+  const subjectPerf = useMemo(() => computeSubjectPerformance(todos), [todos]);
+  const weakestSubject = subjectPerf.length > 0 ? subjectPerf[0] : null;
+
   if (selectedSubject) {
     return (
       <SubjectGrade
         subjectId={selectedSubject.id}
+        classId={selectedSubject.classId}
         subject={selectedSubject.name}
         onBack={() => setSelectedSubject(null)}
       />
@@ -49,9 +148,16 @@ const Grades = () => {
 
   const getGradedCount = (subjectId: number) => {
     return todos.filter(
-      (t) => t.subject_id === subjectId && (t.status === "completed" || t.is_submitted || t.grade !== null)
+      (t) =>
+        t.subject_id === subjectId &&
+        (t.status === "completed" || t.is_submitted || t.grade !== null),
     ).length;
   };
+
+  // Ring arc for the completion widget
+  const RING_R = 54;
+  const RING_C = 2 * Math.PI * RING_R;
+  const ringStroke = RING_C * (1 - completion.rate / 100);
 
   return (
     <AppLayout>
@@ -67,224 +173,253 @@ const Grades = () => {
 
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              <div className="border-2 border-black p-4 shadow-md bg-card">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold">Performance Rate</h2>
-                  <select className="border border-black rounded px-2 py-1 text-xs bg-white">
-                    <option>Science</option>
-                    <option>English</option>
-                    <option>Mathematics</option>
-                    <option>Computer Programming</option>
-                    <option>System Designs</option>
-                    <option>Filipino</option>
-                  </select>
-                </div>
-                <div className="h-36 flex items-end gap-1 border-b border-l border-gray-300 relative px-2">
-                  <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
-                    <div className="border-b border-gray-200 border-dashed w-full"></div>
-                    <div className="border-b border-gray-200 border-dashed w-full"></div>
-                    <div className="border-b border-gray-200 border-dashed w-full"></div>
-                    <div className="border-b border-gray-200 border-dashed w-full"></div>
-                  </div>
-                  <svg
-                    className="absolute inset-0 w-full h-full"
-                    viewBox="0 0 300 140"
-                    preserveAspectRatio="none"
-                  >
-                    <polyline
-                      points="20,100 100,80 180,50 260,70"
-                      fill="none"
-                      stroke="#F59E0B"
-                      strokeWidth="2"
-                    />
-                    <polyline
-                      points="20,110 100,90 180,70 260,40"
-                      fill="none"
-                      stroke="#EF4444"
-                      strokeWidth="2"
-                    />
-                    <polyline
-                      points="20,90 100,60 180,40 260,30"
-                      fill="none"
-                      stroke="#22C55E"
-                      strokeWidth="2"
-                    />
-                    <polyline
-                      points="20,120 100,100 180,85 260,60"
-                      fill="none"
-                      stroke="#EAB308"
-                      strokeWidth="2"
-                    />
-                    <polyline
-                      points="20,80 100,70 180,90 260,50"
-                      fill="none"
-                      stroke="#3B82F6"
-                      strokeWidth="2"
-                    />
-                  </svg>
-                </div>
-                <div className="flex justify-between mt-1 text-[10px] text-gray-600 px-2">
-                  <span>Jan</span>
-                  <span>Feb</span>
-                  <span>Mar</span>
-                  <span>Apr</span>
-                </div>
-                <div className="flex flex-wrap gap-x-2 gap-y-1 mt-2 text-[9px]">
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#F59E0B] inline-block"></span>
-                    Computer Programming
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#EF4444] inline-block"></span>
-                    English
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#22C55E] inline-block"></span>
-                    Science
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#EAB308] inline-block"></span>
-                    Mathematics
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#3B82F6] inline-block"></span>
-                    System
-                  </span>
-                </div>
-              </div>
+            <main className="flex flex-col gap-3 py-3">
+              {/* ── Analytics Widgets ── */}
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {/* Widget 1 — Overall Completion Rate */}
+                <Card className="w-full">
+                  <Card.Header>
+                    <Card.Title>Completion Rate</Card.Title>
+                  </Card.Header>
 
-              <div className="border-2 border-black p-4 shadow-md bg-card">
-                <h2 className="text-lg font-semibold mb-4">
-                  Classwork Distribution
-                </h2>
-                <div className="flex items-center justify-center">
-                  <div className="relative w-36 h-36">
-                    <svg
-                      viewBox="0 0 100 100"
-                      className="w-full h-full -rotate-90"
-                    >
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="40"
-                        fill="transparent"
-                        stroke="#EF4444"
-                        strokeWidth="20"
-                        strokeDasharray="62.8 188.4"
-                        strokeDashoffset="0"
-                      />
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="40"
-                        fill="transparent"
-                        stroke="#F59E0B"
-                        strokeWidth="20"
-                        strokeDasharray="50.2 200.9"
-                        strokeDashoffset="-62.8"
-                      />
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="40"
-                        fill="transparent"
-                        stroke="#22C55E"
-                        strokeWidth="20"
-                        strokeDasharray="75.4 175.8"
-                        strokeDashoffset="-113"
-                      />
-                      <circle
-                        cx="50"
-                        cy="50"
-                        r="40"
-                        fill="transparent"
-                        stroke="#F97316"
-                        strokeWidth="20"
-                        strokeDasharray="62.8 188.4"
-                        strokeDashoffset="-188.4"
-                      />
-                    </svg>
-                  </div>
-                </div>
-                <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-3 text-xs">
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#EF4444] inline-block"></span>
-                    Readings
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#F59E0B] inline-block"></span>
-                    Quizzes
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#22C55E] inline-block"></span>
-                    Assignments
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#F97316] inline-block"></span>
-                    Activities
-                  </span>
-                </div>
-              </div>
+                  <Card.Content>
+                    <div className="flex items-center justify-center">
+                      <div className="relative w-36 h-36">
+                        <svg viewBox="0 0 120 120" className="w-full h-full">
+                          {/* Background ring */}
+                          <circle
+                            cx="60"
+                            cy="60"
+                            r={RING_R}
+                            fill="transparent"
+                            stroke="#E5E7EB"
+                            strokeWidth="10"
+                          />
 
-              <div className="border-2 border-black p-4 shadow-md bg-card">
-                <h2 className="text-lg font-semibold mb-3">
-                  Subject Performance
-                </h2>
-                <div className="flex flex-col gap-2">
-                  {subjectPerformanceData.map((item) => (
-                    <div key={item.subject} className="flex items-center gap-2">
-                      <span className="text-[10px] w-20 truncate">
-                        {item.subject}
-                      </span>
-                      <div className="flex-1 bg-gray-200 rounded-full h-3 relative">
-                        <div
-                          className="bg-[#D4A017] h-3 rounded-full"
-                          style={{ width: `${item.score}%` }}
-                        ></div>
+                          {/* Filled arc */}
+                          <circle
+                            cx="60"
+                            cy="60"
+                            r={RING_R}
+                            fill="transparent"
+                            stroke={
+                              completion.rate >= 80
+                                ? "#22C55E"
+                                : completion.rate >= 50
+                                  ? "#F59E0B"
+                                  : "#EF4444"
+                            }
+                            strokeWidth="10"
+                            strokeDasharray={RING_C}
+                            strokeDashoffset={ringStroke}
+                            strokeLinecap="round"
+                            className="transition-all duration-700 ease-out"
+                            style={{
+                              transform: "rotate(-90deg)",
+                              transformOrigin: "60px 60px",
+                            }}
+                          />
+                        </svg>
+
+                        {/* Center label */}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <span className="text-3xl font-bold leading-none">
+                            {completion.rate}
+                          </span>
+                          <span className="text-[10px] text-gray-500 -mt-0.5">
+                            %
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-[10px] font-semibold w-6 text-right">
-                        {item.score}
-                      </span>
                     </div>
-                  ))}
-                </div>
-                <p className="text-[10px] mt-3 text-gray-600">
-                  Recommended Attention:{" "}
-                  <span className="font-bold">Mathematics</span>
-                </p>
+
+                    <p className="text-center text-xs text-gray-600 mt-2">
+                      {completion.completed} of {completion.total} activities
+                      done
+                    </p>
+                  </Card.Content>
+                </Card>
+
+                {/* Widget 2 — Classwork Distribution (donut) */}
+                <Card className="w-full">
+                  <Card.Header>
+                    <Card.Title>Classwork Distribution</Card.Title>
+                  </Card.Header>
+
+                  <Card.Content>
+                    {todos.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-8">
+                        No classwork data yet
+                      </p>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-center">
+                          <div className="relative w-36 h-36">
+                            <svg
+                              viewBox="0 0 100 100"
+                              className="w-full h-full -rotate-90"
+                            >
+                              {segments.map((seg) => (
+                                <circle
+                                  key={seg.type}
+                                  cx="50"
+                                  cy="50"
+                                  r={DONUT_RADIUS}
+                                  fill="transparent"
+                                  stroke={seg.color}
+                                  strokeWidth="20"
+                                  strokeDasharray={`${seg.arc} ${
+                                    DONUT_CIRCUMFERENCE - seg.arc
+                                  }`}
+                                  strokeDashoffset={seg.offset}
+                                  className="transition-all duration-500"
+                                />
+                              ))}
+                            </svg>
+
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                              <span className="text-2xl font-bold leading-none">
+                                {todos.length}
+                              </span>
+                              <span className="text-[9px] text-gray-500">
+                                total
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-3 text-xs">
+                          {distribution.map((d) => (
+                            <span
+                              key={d.type}
+                              className="flex items-center gap-1"
+                            >
+                              <span
+                                className="w-2 h-2 rounded-full inline-block"
+                                style={{
+                                  backgroundColor: colorForType(d.type),
+                                }}
+                              />
+                              {d.type} ({d.count})
+                            </span>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </Card.Content>
+                </Card>
+
+                {/* Widget 3 — Subject Performance */}
+                <Card className="w-full">
+                  <Card.Header>
+                    <Card.Title>Subject Performance</Card.Title>
+                  </Card.Header>
+
+                  <Card.Content>
+                    {subjectPerf.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-8">
+                        No graded classwork yet
+                      </p>
+                    ) : (
+                      <>
+                        <div className="flex flex-col gap-2">
+                          {[...subjectPerf]
+                            .sort((a, b) => b.score - a.score)
+                            .map((item) => (
+                              <div
+                                key={item.subjectId}
+                                className="flex items-center gap-2"
+                              >
+                                <span
+                                  className="text-[10px] w-20 truncate"
+                                  title={item.subject}
+                                >
+                                  {item.subject}
+                                </span>
+
+                                <div className="flex-1 bg-gray-200 rounded-full h-3 relative overflow-hidden">
+                                  <div
+                                    className="h-3 rounded-full transition-all duration-500"
+                                    style={{
+                                      width: `${item.score}%`,
+                                      backgroundColor:
+                                        item.score >= 80
+                                          ? "#22C55E"
+                                          : item.score >= 60
+                                            ? "#F59E0B"
+                                            : "#EF4444",
+                                    }}
+                                  />
+                                </div>
+
+                                <span className="text-[10px] font-semibold w-8 text-right">
+                                  {item.score}%
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+
+                        {weakestSubject && (
+                          <p className="text-[10px] mt-3 text-gray-600">
+                            Recommended Attention:{" "}
+                            <span className="font-bold">
+                              {weakestSubject.subject}
+                            </span>
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </Card.Content>
+                </Card>
               </div>
-            </div>
 
-            <div className="flex flex-col gap-4">
-              {loading ? (
-                <div className="py-6 text-center text-sm text-gray-500">Loading subjects...</div>
-              ) : subjects.length === 0 ? (
-                <div className="py-6 text-center text-sm text-gray-500">No subjects enrolled.</div>
-              ) : (
-                subjects.map((sub) => (
-                  <Card
-                    key={sub.subject_load_id}
-                    className="block w-full cursor-pointer hover:border-black transition-colors"
-                    onClick={() => setSelectedSubject({ id: sub.subject_id, name: sub.subject_name })}
-                  >
-                    <Card.Content className="flex items-center justify-between">
-                      <div>
-                        <Card.Title className="mb-1 text-lg">
-                          {sub.subject_name}
-                        </Card.Title>
-                        <p className="text-sm text-gray-600">{sub.teacher_name}</p>
-                      </div>
+              {/* ── Subject list ── */}
+              <div className="flex flex-col gap-4">
+                {loading ? (
+                  <div className="py-6 text-center text-sm text-gray-500">
+                    Loading subjects...
+                  </div>
+                ) : subjects.length === 0 ? (
+                  <div className="py-6 text-center text-sm text-gray-500">
+                    No subjects enrolled.
+                  </div>
+                ) : (
+                  subjects.map((sub) => (
+                    <Card
+                      key={sub.subject_load_id}
+                      className="block w-full cursor-pointer hover:border-black transition-colors"
+                      onClick={() =>
+                        setSelectedSubject({
+                          id: sub.subject_id,
+                          classId: sub.class_id,
+                          name: sub.subject_name,
+                        })
+                      }
+                    >
+                      <Card.Content className="flex items-center justify-between">
+                        <div>
+                          <Card.Title className="mb-1 text-lg">
+                            {sub.subject_name}
+                          </Card.Title>
+                          <p className="text-sm text-gray-600">
+                            {sub.teacher_name}
+                          </p>
+                        </div>
 
-                      <div className="text-right">
-                        <Card.Description>{getGradedCount(sub.subject_id)}</Card.Description>
-                        <p className="text-xs text-gray-600">Graded Classwork</p>
-                      </div>
-                    </Card.Content>
-                  </Card>
-                ))
-              )}
-            </div>
+                        <div className="text-right">
+                          <Card.Description>
+                            {getGradedCount(sub.subject_id)}
+                          </Card.Description>
+                          <p className="text-xs text-gray-600">
+                            Graded Classwork
+                          </p>
+                        </div>
+                      </Card.Content>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </main>
           </div>
         </div>
       </div>

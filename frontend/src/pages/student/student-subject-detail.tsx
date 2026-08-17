@@ -80,7 +80,7 @@ const StudentSubjectDetail = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
+          <div className="flex flex-1 flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
             {/* ── Page header: breadcrumb ── */}
             {!isLessonDetailScreen ? (
               <>
@@ -129,7 +129,7 @@ const StudentSubjectDetail = () => {
             ) : null}
 
             {/* ── Tab content ── */}
-            <main>
+            <main className="py-3">
               {activeTab === "lessons" && (
                 <SubjectLessonTab
                   classId={numericClassId}
