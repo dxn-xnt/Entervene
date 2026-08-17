@@ -51,8 +51,8 @@ const Login = () => {
 
   return (
     <div className="flex flex-col items-center justify-center h-screen">
-      <Card className="p-8 w-md">
-        <Card.Header className="flex flex-col justify-center mb-8">
+      <Card className="w-md p-8">
+        <Card.Header className="flex flex-col justify-center">
           <Card.Title className="font-sans font-bold mb-1">
             Entervene
           </Card.Title>
@@ -60,10 +60,9 @@ const Login = () => {
             Enter your details to access your account
           </Card.Description>
         </Card.Header>
-
         <Card.Content>
           <div className="flex flex-col gap-5">
-            <div className="grid w-full max-w-sm items-center gap-2">
+            <div className="grid w-full max-w-sm items-center gap-2 mb-4">
               <Label htmlFor="email">Email Address</Label>
               <Input type="email" id="email" placeholder="Email" value={username}
                 onChange={(e) => setUsername(e.target.value)} />

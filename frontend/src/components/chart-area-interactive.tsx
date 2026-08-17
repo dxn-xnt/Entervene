@@ -165,7 +165,7 @@ export function ChartAreaInteractive() {
   })
 
   return (
-    <Card className="@container/card">
+    <Card className="@container/card rounded-none shadow-md hover:shadow-none transition-all ">
       <CardHeader>
         <CardTitle>Total Visitors</CardTitle>
         <CardDescription>
