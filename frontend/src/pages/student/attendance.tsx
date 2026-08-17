@@ -15,8 +15,6 @@ import {
   XCircle,
   Clock,
   UserCheck,
-  Calendar,
-  FileText,
   Loader2,
   Plus,
   Check,

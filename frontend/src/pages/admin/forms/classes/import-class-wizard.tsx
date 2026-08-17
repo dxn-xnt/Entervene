@@ -38,9 +38,10 @@ const CLASS_IMPORT_TEMPLATE_HEADERS = [
 ];
 const CLASS_IMPORT_TEMPLATE_HEADER_ROW = CLASS_IMPORT_TEMPLATE_HEADERS.join(",");
 
-export default function ImportClassWizard({ onContinue, onValidationStale }: {
+export default function ImportClassWizard({ onContinue, onValidationStale, onBack }: {
   onContinue: (setup: ManualClassSetup, assignmentState: ManualAssignmentWorkspaceState) => void;
   onValidationStale?: () => void;
+  onBack?: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [options, setOptions] = useState<ClassFormOptions | null>(null);
@@ -251,7 +252,10 @@ export default function ImportClassWizard({ onContinue, onValidationStale }: {
       {validationResult && <ValidationSuccessPanel result={validationResult} canContinue={canContinueToAssignments(validationResult) && !isValidating && !validationError} onContinue={continueToAssignments} />}
 
       <Dialog.Footer className="px-0 border-t-0 pt-2 flex justify-between w-full">
-        <Button variant={"outline"} onClick={downloadTemplate}><Download className="size-4 mr-2" /> Download Template</Button>
+        <div className="flex gap-2">
+          {onBack && <Button variant={"outline"} onClick={onBack}>Back</Button>}
+          <Button variant={"outline"} onClick={downloadTemplate}><Download className="size-4 mr-2" /> Download Template</Button>
+        </div>
         <Button disabled={!canValidate} onClick={validateCsv}>
           {isValidating ? "Validating CSV..." : "Validate CSV"}
         </Button>
