@@ -3,7 +3,7 @@
 .no-scrollbar {
   scrollbar-width: none !important;
   -ms-overflow-style: none !important;
-  overflow-y: auto !important;
+  overflow: -moz-scrollbars-none !important;
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none !important;
@@ -116,13 +116,14 @@ body[data-scroll-locked] {
 @supports (overflow-y: overlay) {
 
   html,
-  body,
-  [style*="overflow"],
-  .overflow-auto,
-  .overflow-y-auto,
-  .overflow-x-auto,
-  .overflow-scroll,
-  .overflow-y-scroll {
+  body {
+    overflow-y: overlay !important;
+  }
+
+  .overflow-auto:not(.no-scrollbar),
+  .overflow-y-auto:not(.no-scrollbar),
+  .overflow-scroll:not(.no-scrollbar),
+  .overflow-y-scroll:not(.no-scrollbar) {
     overflow-y: overlay !important;
   }
 }

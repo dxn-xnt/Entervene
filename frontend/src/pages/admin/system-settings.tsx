@@ -39,36 +39,6 @@ import {
   type AffectedSubject,
 } from "@/lib/subject-groups-api";
 
-function Pill({
-  children,
-  tone = "default",
-  locked = false,
-}: {
-  children: React.ReactNode;
-  tone?: "default" | "green" | "blue" | "yellow" | "gray";
-  locked?: boolean;
-}) {
-  const variantMap: Record<
-    string,
-    "default" | "secondary" | "outline" | "solid" | "surface"
-  > = {
-    default: "outline",
-    green: "secondary",
-    blue: "surface",
-    yellow: "secondary",
-    gray: "default",
-  };
-  return (
-    <Badge
-      size="sm"
-      variant={variantMap[tone] || "default"}
-      className="inline-flex items-center gap-1"
-    >
-      {locked && <Lock className="w-3 h-3" />}
-      {children}
-    </Badge>
-  );
-}
 
 /* ---------------------------------------------------------------- */
 /* Data                                                              */
@@ -294,9 +264,9 @@ export default function AdminSystemSettings() {
         const mappedTemplates: Template[] = list.map((gt) => {
           const wwComp = gt.components.find((c) => c.component_name.toLowerCase().includes("written"))?.weight ?? 0;
           const ptComp = gt.components.find((c) => c.component_name.toLowerCase().includes("performance"))?.weight ?? 0;
-          const qaComp = gt.components.find((c) => 
-            c.component_name.toLowerCase().includes("quarter") || 
-            c.component_name.toLowerCase().includes("term") || 
+          const qaComp = gt.components.find((c) =>
+            c.component_name.toLowerCase().includes("quarter") ||
+            c.component_name.toLowerCase().includes("term") ||
             c.component_name.toLowerCase().includes("exam")
           )?.weight ?? 0;
           return {
@@ -506,21 +476,68 @@ export default function AdminSystemSettings() {
             </header>
             <div className="-mx-4 md:-mx-6 border-b border-black/40" />
 
-            {/* Subject Groups & Passing Thresholds */}
+            {/* General Average Threshold */}
             <Card className="@container/card w-full">
               <Card.Header>
                 <Card.Title className="flex flex-row justify-between w-full items-center">
-                  Subject Groups & Passing Thresholds
-                  <Button size="sm" onClick={() => setIsAddGroupOpen(true)}>
-                    Add Group
+                  General Average Passing Grade
+                  <Button
+                    size="sm"
+                    onClick={handleSaveThresholds}
+                    disabled={isSavingThresholds}
+                  >
+                    Save Threshold
                   </Button>
-                </Card.Title >
-
+                </Card.Title>
               </Card.Header>
-              <Card.Content className="px-4 pt-4 flex flex-col gap-4">
-                <Text as="p" className="font-sans text-sm text-muted-foreground">
-                  Threshold changes apply to grades finalized from this point forward. Already-finalized period grades are not re-evaluated.
-                </Text>
+              <Card.Content className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-row justify-between w-full items-center">
+                    <div className="flex flex-col gap-1">
+                      <Text as="h6" className="font-sans font-medium">
+                        General Average Passing Grade
+                      </Text>
+                      <Text
+                        as="p"
+                        className="font-sans text-sm text-muted-foreground"
+                      >
+                        Used for general promotion/completion reports. Adjust only
+                        if the client confirms a different rule.
+                      </Text>
+                    </div>
+
+                    <Input
+                      className="w-20 shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md transition-all"
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={averagePassing}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setAveragePassing(e.target.value)
+                      }
+                    />
+                  </div>
+
+                </div>
+              </Card.Content>
+            </Card>
+
+            {/* Subject Groups & Passing Thresholds */}
+            <Card className="@container/card w-full">
+              <Card.Header className="flex flex-row justify-between items-start">
+                <Card.Title className="flex flex-col w-full gap-1">
+                  Subject Groups & Passing Thresholds
+                  <Text as="p" className="text-sm font-normal text-muted-foreground">
+                    Threshold changes apply to grades finalized from this point forward. Already-finalized period grades are not re-evaluated.
+                  </Text>
+
+                </Card.Title >
+                <Button size="sm" className="whitespace-nowrap" onClick={() => setIsAddGroupOpen(true)}>
+                  Add Group
+                </Button>
+              </Card.Header>
+
+              <Card.Content className="flex flex-col gap-4">
                 <div className="overflow-x-auto">
                   <Table className="w-full">
                     <Table.Header>
@@ -552,7 +569,7 @@ export default function AdminSystemSettings() {
                             <Table.Cell>
                               <div className="flex items-center gap-2">
                                 <Input
-                                  className="w-20"
+                                  className="w-20 shadow-none text-center"
                                   type="number"
                                   min={0}
                                   max={100}
@@ -581,7 +598,7 @@ export default function AdminSystemSettings() {
                                 {g.is_active ? "Active" : "Inactive"}
                               </Badge>
                             </Table.Cell>
-                            <Table.Cell className="text-right">
+                            <Table.Cell className="text-right flex flex-row justify-end items-center">
                               <Button
                                 size="sm"
                                 variant={g.is_active ? "outline" : "default"}
@@ -595,52 +612,6 @@ export default function AdminSystemSettings() {
                       )}
                     </Table.Body>
                   </Table>
-                </div>
-              </Card.Content>
-            </Card>
-
-            {/* General Average Threshold */}
-            <Card className="@container/card w-full">
-              <Card.Header>
-                <Card.Title className="flex flex-row justify-between w-full items-center">
-                  General Average Passing Grade
-                  <Button
-                    size="sm"
-                    onClick={handleSaveThresholds}
-                    disabled={isSavingThresholds}
-                  >
-                    {isSavingThresholds ? "Saving..." : "Save Threshold"}
-                  </Button>
-                </Card.Title>
-              </Card.Header>
-              <Card.Content className="px-4 pt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="flex flex-col gap-2">
-                  <div className="flex flex-row justify-between w-full items-center">
-                    <div className="flex flex-col gap-1">
-                      <Text as="h6" className="font-sans font-medium">
-                        General Average Passing Grade
-                      </Text>
-                      <Text
-                        as="p"
-                        className="font-sans text-sm text-muted-foreground"
-                      >
-                        Used for general promotion/completion reports. Adjust only
-                        if the client confirms a different rule.
-                      </Text>
-                    </div>
-
-                    <Input
-                      className="w-20 shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md transition-all"
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={averagePassing}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                        setAveragePassing(e.target.value)
-                      }
-                    />
-                  </div>
-
                 </div>
               </Card.Content>
             </Card>
@@ -729,7 +700,7 @@ export default function AdminSystemSettings() {
                   </div>
                 </div>
 
-                <div className="border-2 border-black rounded-md bg-background p-4 flex flex-col gap-3">
+                <div className="border-2 border-black bg-background p-4 flex flex-col gap-3">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-2">
                       <Text as="p" className="text-sm font-semibold">
@@ -825,7 +796,7 @@ export default function AdminSystemSettings() {
                     </Text>
                   </div>
 
-                  <div className="border-2 border-black rounded-md p-4 flex flex-col gap-3 bg-neutral-50">
+                  <div className="border-2 border-black p-4 flex flex-col gap-3 bg-neutral-50">
                     <div className="flex items-center justify-between">
                       <Text as="h6" className="font-sans font-bold">
                         Senior High School Pathways
@@ -891,7 +862,7 @@ export default function AdminSystemSettings() {
                       <Text as="p" className="text-xs text-muted-foreground">No pathways configured.</Text>
                     ) : (
                       pathways.map((p) => (
-                        <div key={p.id} className="flex items-center justify-between border-2 border-black rounded-md px-3 py-2 bg-white">
+                        <div key={p.id} className="flex items-center justify-between border-2 border-black px-3 py-2 bg-white">
                           <div>
                             <Text as="p" className="font-sans font-medium text-sm">
                               {p.name}
@@ -1286,7 +1257,7 @@ export default function AdminSystemSettings() {
       {/* Toast */}
       {toastMsg && (
         <div
-          className="fixed right-6 bottom-6 z-50 border-2 border-black bg-white rounded-md px-4 py-3 font-bold text-sm max-w-sm"
+          className="fixed right-6 bottom-6 z-50 border-2 border-black bg-white px-4 py-3 font-bold text-sm max-w-sm"
           style={{ boxShadow: "5px 5px 0 #000" }}
         >
           {toastMsg}
