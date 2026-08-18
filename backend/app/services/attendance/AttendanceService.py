@@ -31,13 +31,21 @@ def _get_student_id_from_user_id(db: Session, user_id: UUID) -> UUID:
     return student.student_id
 
 
-def _to_attendance_response(record: AttendanceRecord, student_name: str | None = None) -> AttendanceRecordResponse:
+def _to_attendance_response(
+    record: AttendanceRecord,
+    student_name: str | None = None,
+    subject_name: str | None = None,
+) -> AttendanceRecordResponse:
+    resolved_subject_name = subject_name
+    if not resolved_subject_name and getattr(record, "subject", None):
+        resolved_subject_name = record.subject.subject_name
     return AttendanceRecordResponse(
         attendance_id=getattr(record, "attendance_id"),
         student_id=getattr(record, "student_id"),
         student_name=student_name,
         class_id=getattr(record, "class_id"),
         subject_id=getattr(record, "subject_id"),
+        subject_name=resolved_subject_name,
         date=getattr(record, "date"),
         status=getattr(record, "status"),
         remarks=getattr(record, "remarks"),
@@ -142,11 +150,14 @@ def get_student_attendance_summary(
     db: Session,
     student_id: UUID,
     class_id: Optional[int] = None,
+    subject_id: Optional[int] = None,
 ) -> AttendanceSummaryResponse:
     """Calculate attendance statistics and overall rate for a student."""
     query = db.query(AttendanceRecord).filter(AttendanceRecord.student_id == student_id)
     if class_id:
         query = query.filter(AttendanceRecord.class_id == class_id)
+    if subject_id:
+        query = query.filter(AttendanceRecord.subject_id == subject_id)
 
     records = query.all()
     total_days = len(records)
@@ -239,4 +250,59 @@ def update_leave_request_status(
     student_name = f"{student.first_name} {student.last_name}" if student else None
 
     return _to_leave_request_response(leave_req, student_name=student_name)
+
+
+def get_student_attendance_logs(
+    db: Session,
+    student_id: UUID,
+    class_id: Optional[int] = None,
+    subject_id: Optional[int] = None,
+) -> list[AttendanceRecordResponse]:
+    """Retrieve attendance record history for a specific student."""
+    from app.models.academic.Subject import Subject
+    query = (
+        db.query(AttendanceRecord, Student, Subject)
+        .join(Student, Student.student_id == AttendanceRecord.student_id)
+        .outerjoin(Subject, Subject.subject_id == AttendanceRecord.subject_id)
+        .filter(AttendanceRecord.student_id == student_id)
+    )
+    if class_id:
+        query = query.filter(AttendanceRecord.class_id == class_id)
+    if subject_id:
+        query = query.filter(AttendanceRecord.subject_id == subject_id)
+
+    query = query.order_by(AttendanceRecord.date.desc())
+    rows = query.all()
+
+    return [
+        _to_attendance_response(
+            record,
+            student_name=f"{student.first_name} {student.last_name}",
+            subject_name=subject.subject_name if subject else None,
+        )
+        for record, student, subject in rows
+    ]
+
+
+def get_student_leave_requests(
+    db: Session,
+    student_id: UUID,
+    class_id: Optional[int] = None,
+) -> list[LeaveRequestResponse]:
+    """Retrieve submitted leave requests for a specific student."""
+    query = (
+        db.query(LeaveRequest, Student)
+        .join(Student, Student.student_id == LeaveRequest.student_id)
+        .filter(LeaveRequest.student_id == student_id)
+    )
+    if class_id:
+        query = query.filter(LeaveRequest.class_id == class_id)
+
+    query = query.order_by(LeaveRequest.created_at.desc())
+    rows = query.all()
+
+    return [
+        _to_leave_request_response(req, student_name=f"{student.first_name} {student.last_name}")
+        for req, student in rows
+    ]
 
