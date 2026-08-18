@@ -341,12 +341,6 @@ export default function CreateClassworkQuizModal({
         ) {
             return "Choose when the quiz summary should be released.";
         }
-        if (
-            quizSettings.summary_release_mode === "AFTER_DUE_DATE" &&
-            !draft.due_date
-        ) {
-            return "Set a quiz due date before releasing the summary after the due date.";
-        }
 
         for (const [index, question] of quizQuestions.entries()) {
             const questionNumber = index + 1;
@@ -551,6 +545,7 @@ export default function CreateClassworkQuizModal({
             }
             formData.append("total_points", String(Number(draft.total_points)));
             formData.append("is_published", String(draft.is_published));
+            formData.append("subject_id", String(draft.subject_id));
             formData.append("show_scores", String(draft.show_scores));
             formData.append("class_ids", JSON.stringify(selectedClassIds));
             formData.append("lesson_ids", JSON.stringify(selectedLessonIds));
@@ -577,8 +572,17 @@ export default function CreateClassworkQuizModal({
 
             if (!createResponse.ok) {
                 const body = await createResponse.json().catch(() => ({}));
-                throw new Error(body.detail || "Unable to create quiz.");
+                // FastAPI 422 returns { detail: [{loc, msg, type}] }
+                const detail = body.detail;
+                if (Array.isArray(detail)) {
+                    const msgs = detail.map((e: { loc?: string[]; msg?: string }) =>
+                        `${(e.loc || []).slice(1).join(".")}: ${e.msg}`
+                    ).join("; ");
+                    throw new Error(msgs || "Validation error");
+                }
+                throw new Error(typeof detail === "string" ? detail : "Unable to create quiz.");
             }
+
             await createResponse.json();
 
             onSuccess();
@@ -991,7 +995,7 @@ export default function CreateClassworkQuizModal({
                                                 <Select.Item value="SCHEDULED">
                                                     At a specific date & time
                                                 </Select.Item>
-                                                <Select.Item value="AFTER_DUE_DATE" disabled={!draft.due_date}>
+                                                <Select.Item value="AFTER_DUE_DATE">
                                                     After the quiz due date
                                                 </Select.Item>
                                                 <Select.Item value="NEVER">Never</Select.Item>
@@ -1027,6 +1031,12 @@ export default function CreateClassworkQuizModal({
                                                 : "Students can view the summary right after submitting."}
                                     </div>
                                 )}
+                                {quizSettings.summary_release_mode === "AFTER_DUE_DATE" && !draft.due_date && (
+                                    <p className="text-xs text-amber-600 font-medium mt-1">
+                                        ⚠ Remember to set a due date in the next step so this release mode takes effect.
+                                    </p>
+                                )}
+
                             </div>
 
                             <div className="mt-4 grid gap-3 sm:grid-cols-2">

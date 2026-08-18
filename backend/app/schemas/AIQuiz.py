@@ -5,8 +5,9 @@ from app.schemas.Quiz import QuizQuestionIn
 
 
 class AIQuizTestPart(BaseModel):
-    type: Literal["MULTIPLE_CHOICE", "SHORT_ANSWER"] = "MULTIPLE_CHOICE"
+    type: Literal["MULTIPLE_CHOICE", "TRUE_FALSE", "SHORT_ANSWER", "ESSAY"] = "MULTIPLE_CHOICE"
     count: int = Field(default=5, ge=1, le=50)
+    points_per_item: float = Field(default=1.0, ge=0.5, le=100.0)
 
 
 class AIQuizGenerateRequest(BaseModel):

@@ -8,7 +8,7 @@ Fallback provider: Google Gemini API via httpx.
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import Literal, Any
 
 import httpx
 from fastapi import HTTPException
@@ -17,7 +17,14 @@ from openai import AsyncOpenAI, APIError, APIConnectionError, RateLimitError
 from app.core.Config import settings
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-GROQ_DEFAULT_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODELS = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "llama-3.1-70b-versatile",
+    "llama3-70b-8192",
+    "llama3-8b-8192",
+    "mixtral-8x7b-32768",
+]
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
 AISuggestField = Literal[
@@ -176,26 +183,37 @@ async def _generate_with_groq(groq_key: str, prompt: str) -> str:
         api_key=groq_key,
         base_url=GROQ_BASE_URL,
     )
-    try:
-        response = await client.chat.completions.create(
-            model=GROQ_DEFAULT_MODEL,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.4,
-            max_tokens=512,
-        )
-        content = response.choices[0].message.content
-        if not content:
-            raise HTTPException(status_code=502, detail="Empty response from Groq AI service.")
-        return clean_ai_output(content)
-    except RateLimitError:
-        raise HTTPException(status_code=429, detail="Groq API rate limit exceeded. Please try again in a moment.")
-    except APIConnectionError:
-        raise HTTPException(status_code=502, detail="Unable to connect to Groq AI service.")
-    except APIError as exc:
-        raise HTTPException(status_code=502, detail=f"Groq API error: {exc.message}")
+    last_err: Exception | None = None
+    for model_name in GROQ_MODELS:
+        try:
+            response: Any = await client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.4,
+                max_tokens=512,
+                stream=False,
+            )
+            content = response.choices[0].message.content
+            if content:
+                return clean_ai_output(content)
+        except RateLimitError as exc:
+            last_err = exc
+            continue
+        except APIError as exc:
+            last_err = exc
+            if "model_not_found" in str(exc) or "does not exist" in str(exc):
+                continue
+            break
+        except Exception as exc:
+            last_err = exc
+            break
+
+    if last_err:
+        raise last_err
+    raise HTTPException(status_code=502, detail="Groq AI service failed across all models.")
 
 
 async def _generate_with_gemini(gemini_key: str, prompt: str) -> str:

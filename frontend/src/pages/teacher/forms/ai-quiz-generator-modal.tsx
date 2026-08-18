@@ -23,10 +23,17 @@ import type {
   QuizQuestionType,
 } from "../classworks/quiz-builder-types";
 
+export type AIQuizPartType =
+  | "MULTIPLE_CHOICE"
+  | "TRUE_FALSE"
+  | "SHORT_ANSWER"
+  | "ESSAY";
+
 export type TestPartRow = {
   id: string;
-  type: QuizQuestionType;
+  type: AIQuizPartType;
   count: number;
+  points_per_item: number;
 };
 
 export interface AIQuizGeneratorModalProps {
@@ -76,7 +83,8 @@ export default function AIQuizGeneratorModal({
   const [isLoadingLessons, setIsLoadingLessons] = useState(false);
 
   const [testParts, setTestParts] = useState<TestPartRow[]>([
-    { id: "part-1", type: "MULTIPLE_CHOICE", count: 5 },
+    { id: "part-1", type: "MULTIPLE_CHOICE", count: 5, points_per_item: 1 },
+    { id: "part-2", type: "TRUE_FALSE", count: 5, points_per_item: 1 },
   ]);
   const [difficulty, setDifficulty] = useState<QuizDifficulty>("MEDIUM");
 
@@ -119,6 +127,16 @@ export default function AIQuizGeneratorModal({
     [testParts]
   );
 
+  const totalPointsCount = useMemo(
+    () =>
+      testParts.reduce(
+        (sum, p) =>
+          sum + (Number(p.count) || 0) * (Number(p.points_per_item) || 1),
+        0
+      ),
+    [testParts]
+  );
+
   const toggleLesson = (lessonId: number) => {
     setSelectedLessonIds((prev) =>
       prev.includes(lessonId)
@@ -128,12 +146,19 @@ export default function AIQuizGeneratorModal({
   };
 
   const addTestPart = () => {
-    const nextType: QuizQuestionType = testParts.some((p) => p.type === "MULTIPLE_CHOICE")
-      ? "SHORT_ANSWER"
-      : "MULTIPLE_CHOICE";
+    const cycleTypes: AIQuizPartType[] = [
+      "MULTIPLE_CHOICE",
+      "TRUE_FALSE",
+      "SHORT_ANSWER",
+      "ESSAY",
+    ];
+    const usedTypes = new Set(testParts.map((p) => p.type));
+    const nextType = cycleTypes.find((t) => !usedTypes.has(t)) || "MULTIPLE_CHOICE";
+    const defaultPts = nextType === "ESSAY" ? 5 : 1;
+
     setTestParts((prev) => [
       ...prev,
-      { id: `part-${Date.now()}`, type: nextType, count: 5 },
+      { id: `part-${Date.now()}`, type: nextType, count: 5, points_per_item: defaultPts },
     ]);
   };
 
@@ -144,7 +169,18 @@ export default function AIQuizGeneratorModal({
 
   const updateTestPart = (id: string, patch: Partial<TestPartRow>) => {
     setTestParts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, ...patch } : p))
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        const updated = { ...p, ...patch };
+        if (patch.type && patch.type !== p.type) {
+          if (patch.type === "ESSAY" && p.points_per_item === 1) {
+            updated.points_per_item = 5;
+          } else if (p.type === "ESSAY" && updated.points_per_item === 5) {
+            updated.points_per_item = 1;
+          }
+        }
+        return updated;
+      })
     );
   };
 
@@ -167,6 +203,7 @@ export default function AIQuizGeneratorModal({
           test_parts: testParts.map((p) => ({
             type: p.type,
             count: Math.max(1, Math.min(50, Number(p.count) || 1)),
+            points_per_item: Math.max(0.5, Math.min(100, Number(p.points_per_item) || 1)),
           })),
           difficulty: difficulty,
         }),
@@ -196,10 +233,10 @@ export default function AIQuizGeneratorModal({
         options:
           q.question_type === "MULTIPLE_CHOICE"
             ? (q.options || []).map((opt, oIdx) => ({
-                option_text: opt.option_text || `Option ${oIdx + 1}`,
-                is_correct: Boolean(opt.is_correct),
-                option_order: opt.option_order || oIdx + 1,
-              }))
+              option_text: opt.option_text || `Option ${oIdx + 1}`,
+              is_correct: Boolean(opt.is_correct),
+              option_order: opt.option_order || oIdx + 1,
+            }))
             : [],
       }));
 
@@ -225,14 +262,15 @@ export default function AIQuizGeneratorModal({
       }}
     >
       <Dialog.Content
-        size="lg"
-        className="border-2 border-black bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] max-h-[90vh] flex flex-col"
+        size="2xl"
+        className="border-2 border-black bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0"
         overlay={{ className: "bg-black/60 backdrop-blur-xs" }}
       >
-        {/* Header */}
+        {/* Fixed Header */}
         <Dialog.Header
+          position="fixed"
           asChild
-          className="border-b-2 border-black bg-[#F6E9B2] px-5 py-4 flex items-center justify-between"
+          className="border-b-2 border-black bg-[#F6E9B2] px-5 py-3.5"
         >
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
@@ -240,29 +278,31 @@ export default function AIQuizGeneratorModal({
                 <Sparkles className="w-5 h-5 text-amber-600" />
               </div>
               <div>
-                <h2 className="text-lg font-bold">AI Quiz Generator</h2>
-                <p className="text-xs text-muted-foreground">
+                <h2 className="text-lg font-bold text-black">AI Quiz Generator</h2>
+                <p className="text-xs text-black/70">
                   Generate curriculum-aligned quiz questions automatically
                 </p>
               </div>
             </div>
 
-            <Dialog.Close
-              title="Close"
+            <button
+              type="button"
+              onClick={onClose}
               disabled={isGenerating}
-              className="cursor-pointer p-1 border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-neutral-100 disabled:opacity-50"
+              className="cursor-pointer p-1 border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-neutral-100 disabled:opacity-50 text-black"
+              title="Close"
             >
               <X size={16} />
-            </Dialog.Close>
+            </button>
           </div>
         </Dialog.Header>
 
-        {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        {/* Scrollable Section */}
+        <section className="flex flex-col gap-4 p-5 max-h-[66vh] overflow-y-auto">
           {error && (
-            <Alert variant="destructive" className="border-2 border-red-500">
+            <Alert status="error" className="border-2 border-red-500 mb-2">
               <AlertCircle className="h-4 w-4" />
-              <div className="text-xs font-semibold">{error}</div>
+              <Alert.Description className="text-xs font-semibold">{error}</Alert.Description>
             </Alert>
           )}
 
@@ -315,17 +355,16 @@ export default function AIQuizGeneratorModal({
                 No lessons found for this subject. The AI will generate items based on the general curriculum for <strong>{subjectName}</strong>.
               </div>
             ) : (
-              <div className="max-h-36 overflow-y-auto border-2 border-black p-2 space-y-1.5 bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <div className="max-h-32 overflow-y-auto border-2 border-black p-2 space-y-1.5 bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                 {lessons.map((lesson) => {
                   const isSelected = selectedLessonIds.includes(lesson.lesson_id);
                   return (
                     <label
                       key={lesson.lesson_id}
-                      className={`flex items-center gap-2 p-2 border border-black/20 text-xs font-medium cursor-pointer transition-colors ${
-                        isSelected
+                      className={`flex items-center gap-2 p-2 border border-black/20 text-xs font-medium cursor-pointer transition-colors ${isSelected
                           ? "bg-amber-50 border-black font-bold"
                           : "hover:bg-neutral-50"
-                      }`}
+                        }`}
                     >
                       <input
                         type="checkbox"
@@ -348,74 +387,115 @@ export default function AIQuizGeneratorModal({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold uppercase tracking-wider text-black">
-                Test Parts & Item Breakdown
+                Test Parts, Items & Scores (Teacher-Configured)
               </label>
-              <Badge variant="surface" className="border-black font-extrabold text-xs">
-                {totalItemCount} Items Total
-              </Badge>
+              <div className="flex items-center gap-1.5">
+                <Badge variant="surface" className="border-black font-extrabold text-xs bg-amber-100">
+                  {totalItemCount} Items
+                </Badge>
+                <Badge variant="surface" className="border-black font-extrabold text-xs bg-[#7ABA78] text-black">
+                  {totalPointsCount} Total Pts
+                </Badge>
+              </div>
             </div>
 
             <div className="space-y-2 border-2 border-black p-3 bg-neutral-50 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-              {testParts.map((part, index) => (
-                <div
-                  key={part.id}
-                  className="flex items-center gap-2 p-2 border-2 border-black bg-white shadow-xs"
-                >
-                  <span className="text-xs font-black w-5 text-center text-muted-foreground">
-                    #{index + 1}
-                  </span>
-
-                  <select
-                    value={part.type}
-                    onChange={(e) =>
-                      updateTestPart(part.id, {
-                        type: e.target.value as QuizQuestionType,
-                      })
-                    }
-                    className="flex-1 border-2 border-black bg-white px-2 py-1 text-xs font-bold cursor-pointer focus:outline-none"
+              {testParts.map((part, index) => {
+                const rowPts = (Number(part.count) || 0) * (Number(part.points_per_item) || 1);
+                return (
+                  <div
+                    key={part.id}
+                    className="flex flex-wrap items-center gap-2 p-2.5 border-2 border-black bg-white shadow-xs"
                   >
-                    <option value="MULTIPLE_CHOICE">Multiple Choice (4 Options)</option>
-                    <option value="SHORT_ANSWER">Short Answer (Identification)</option>
-                  </select>
+                    <span className="text-xs font-black w-5 text-center text-muted-foreground shrink-0">
+                      #{index + 1}
+                    </span>
 
-                  <div className="flex items-center gap-1">
-                    <Input
-                      type="number"
-                      min={1}
-                      max={50}
-                      value={part.count}
+                    {/* Question Type Selector */}
+                    <select
+                      value={part.type}
                       onChange={(e) =>
                         updateTestPart(part.id, {
-                          count: Math.max(1, Math.min(50, Number(e.target.value) || 1)),
+                          type: e.target.value as AIQuizPartType,
                         })
                       }
-                      className="w-16 h-8 text-center text-xs font-bold border-2 border-black rounded-none shadow-none"
-                    />
-                    <span className="text-xs font-semibold text-muted-foreground">
-                      items
-                    </span>
-                  </div>
+                      className="flex-1 min-w-[160px] border-2 border-black bg-white px-2 py-1.5 text-xs font-bold cursor-pointer focus:outline-none"
+                    >
+                      <option value="MULTIPLE_CHOICE">Multiple Choice (4 Options)</option>
+                      <option value="TRUE_FALSE">True or False (2 Options)</option>
+                      <option value="SHORT_ANSWER">Short Answer / Identification</option>
+                      <option value="ESSAY">Essay / Open-ended Response</option>
+                    </select>
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={testParts.length <= 1}
-                    onClick={() => removeTestPart(part.id)}
-                    className="h-8 w-8 p-0 border-2 border-black text-red-600 hover:bg-red-50 disabled:opacity-30 cursor-pointer"
-                    title="Remove part"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              ))}
+                    {/* Item Count */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={50}
+                        value={part.count}
+                        onChange={(e) =>
+                          updateTestPart(part.id, {
+                            count: Math.max(1, Math.min(50, Number(e.target.value) || 1)),
+                          })
+                        }
+                        className="w-14 h-8 text-center text-xs font-bold border-2 border-black rounded-none shadow-none"
+                        title="Number of questions"
+                      />
+                      <span className="text-[11px] font-semibold text-muted-foreground">
+                        items
+                      </span>
+                    </div>
+
+                    {/* Score / Points per Item (Decided by Teacher) */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-xs font-black text-black">@</span>
+                      <Input
+                        type="number"
+                        min={0.5}
+                        max={100}
+                        step={0.5}
+                        value={part.points_per_item}
+                        onChange={(e) =>
+                          updateTestPart(part.id, {
+                            points_per_item: Math.max(0.5, Math.min(100, Number(e.target.value) || 1)),
+                          })
+                        }
+                        className="w-14 h-8 text-center text-xs font-bold border-2 border-black rounded-none shadow-none bg-amber-50"
+                        title="Points per question (Decided by teacher)"
+                      />
+                      <span className="text-[11px] font-semibold text-muted-foreground">
+                        pt(s)
+                      </span>
+                    </div>
+
+                    {/* Subtotal Badge */}
+                    <Badge variant="surface" className="border-black font-bold text-[10px] bg-neutral-100 shrink-0">
+                      = {rowPts} pts
+                    </Badge>
+
+                    {/* Delete Part Button */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={testParts.length <= 1}
+                      onClick={() => removeTestPart(part.id)}
+                      className="h-8 w-8 p-0 border-2 border-black text-red-600 hover:bg-red-50 disabled:opacity-30 cursor-pointer ml-auto shrink-0"
+                      title="Remove part"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                );
+              })}
 
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={addTestPart}
-                className="w-full gap-1 border-2 border-dashed border-black font-bold text-xs hover:bg-neutral-100 cursor-pointer"
+                className="w-full gap-1 border-2 border-dashed border-black font-bold text-xs hover:bg-neutral-100 cursor-pointer bg-white"
               >
                 <Plus className="w-3.5 h-3.5" /> Add Another Test Part
               </Button>
@@ -435,27 +515,30 @@ export default function AIQuizGeneratorModal({
                     key={level}
                     type="button"
                     onClick={() => setDifficulty(level)}
-                    className={`py-2 px-3 border-2 border-black text-xs font-extrabold transition-all cursor-pointer ${
-                      isSelected
+                    className={`py-2 px-3 border-2 border-black text-xs font-extrabold transition-all cursor-pointer ${isSelected
                         ? "bg-black text-white shadow-none"
                         : "bg-white text-black hover:bg-neutral-100 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                    }`}
+                      }`}
                   >
-                    {level === "EASY" && "🟢 Easy"}
-                    {level === "MEDIUM" && "🟡 Medium"}
-                    {level === "HARD" && "🔴 Hard"}
+                    {level === "EASY" && "Easy"}
+                    {level === "MEDIUM" && "Medium"}
+                    {level === "HARD" && "Hard"}
                   </button>
                 );
               })}
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Footer */}
-        <div className="border-t-2 border-black p-4 bg-neutral-100 flex items-center justify-between gap-3">
+        {/* Fixed Footer */}
+        <Dialog.Footer
+          position="fixed"
+          variant="default"
+          className="border-t-2 border-black bg-neutral-100 px-5 py-3 flex items-center justify-between"
+        >
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <HelpCircle className="w-3.5 h-3.5 text-black/60" />
-            <span>AI generates questions, options, and explanations.</span>
+            <span>AI generates questions, choices, answers, and rubrics based on your configured scores.</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -486,12 +569,12 @@ export default function AIQuizGeneratorModal({
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  Generate {totalItemCount} Questions
+                  Generate {totalItemCount} Questions ({totalPointsCount} Pts)
                 </>
               )}
             </Button>
           </div>
-        </div>
+        </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
   );
