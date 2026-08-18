@@ -26,7 +26,6 @@ import {
   isJuniorHighGrade,
   isSeniorHighGrade,
   pathwayLabel,
-  pathwaysForGrade,
   targetLevels,
   type OfferingFormState,
 } from "./subject-utils";
@@ -57,6 +56,7 @@ export function OfferingModal({
 }) {
   const [gradingTemplates, setGradingTemplates] = useState<GradingTemplateListItem[]>([]);
   const [existingSubjectOfferings, setExistingSubjectOfferings] = useState<SubjectOfferingListItem[]>([]);
+  const [alreadyOfferedSubjectIds, setAlreadyOfferedSubjectIds] = useState<Set<string>>(new Set());
   const [form, setForm] = useState<OfferingFormState>({
     subject_id: "",
     subject_ids: [],
@@ -84,10 +84,33 @@ export function OfferingModal({
   const selectedLevelId = Number(form.academic_level_id);
   const selectedLevel = gradeLevels.find((level) => level.academic_level_id === selectedLevelId);
   const selectedYear = options?.academic_years.find((year) => year.academic_year_id === selectedYearId);
-  const availablePathways = useMemo(
-    () => pathwaysForGrade(selectedLevel?.grade_level, options?.pathways),
-    [options?.pathways, selectedLevel?.grade_level]
-  );
+  const isJhsSelection = isJuniorHighGrade(selectedLevel?.grade_level);
+  const isShsSelection = isSeniorHighGrade(selectedLevel?.grade_level);
+
+  const availablePathways = useMemo<SubjectOfferingPathway[]>(() => {
+    if (!isShsSelection) return [];
+    const activePathways = options?.pathways ?? [];
+    const list: SubjectOfferingPathway[] = [];
+
+    if (activePathways.length > 1) {
+      list.push("both");
+    }
+    for (const p of activePathways) {
+      if (!list.includes(p.code as SubjectOfferingPathway)) {
+        list.push(p.code as SubjectOfferingPathway);
+      }
+    }
+    if (
+      offering?.pathway &&
+      offering.pathway !== "general" &&
+      !list.includes(offering.pathway as SubjectOfferingPathway)
+    ) {
+      list.push(offering.pathway as SubjectOfferingPathway);
+    }
+    return list;
+  }, [isShsSelection, options?.pathways, offering?.pathway]);
+
+  const requiresPathway = availablePathways.length > 0;
   const periods = useMemo(
     () => (options?.academic_periods ?? []).filter((period) => period.academic_year_id === selectedYearId),
     [options, selectedYearId]
@@ -100,8 +123,6 @@ export function OfferingModal({
   const selectedPeriodIds = new Set(form.academic_period_ids);
   const isCreateMode = !offering;
   const allTermsSelected = periods.length > 0 && periods.every((period) => selectedPeriodIds.has(String(period.academic_period_id)));
-  const isJhsSelection = isJuniorHighGrade(selectedLevel?.grade_level);
-  const isShsSelection = isSeniorHighGrade(selectedLevel?.grade_level);
   const contextPeriod = periods.find((period) => form.academic_period_ids.includes(String(period.academic_period_id)))
     ?? periods.find((period) => String(period.academic_period_id) === form.academic_period_id)
     ?? periods[0];
@@ -134,7 +155,10 @@ export function OfferingModal({
   }, [gradingTemplates, form.default_grading_template]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setAlreadyOfferedSubjectIds(new Set());
+      return;
+    }
     setError(null);
     setShowAdvancedYear(false);
     if (offering) {
@@ -196,20 +220,61 @@ export function OfferingModal({
     const initialPeriods = (options?.academic_periods ?? []).filter(
       (period) => period.academic_year_id === activeYear?.academic_year_id
     );
+    const isLevelJhs = isJuniorHighGrade(level?.grade_level);
+    const activePathwayCount = (options?.pathways ?? []).length;
+    const initialPathway: SubjectOfferingPathway = isLevelJhs
+      ? "general"
+      : activePathwayCount > 1
+      ? "both"
+      : activePathwayCount === 1
+      ? ((options?.pathways[0].code as SubjectOfferingPathway) ?? "general")
+      : "general";
+
     setForm({
       subject_id: "",
       subject_ids: [],
       academic_year_id: activeYear ? String(activeYear.academic_year_id) : "",
       academic_level_id: level ? String(level.academic_level_id) : "",
       academic_period_id: initialPeriods[0] ? String(initialPeriods[0].academic_period_id) : "",
-      academic_period_ids: isJuniorHighGrade(level?.grade_level)
+      academic_period_ids: isLevelJhs
         ? initialPeriods.map((period) => String(period.academic_period_id))
         : [],
-      pathway: pathwaysForGrade(level?.grade_level, options?.pathways)[0] ?? "general",
+      pathway: initialPathway,
       status: options?.default_status ?? "active",
       default_grading_template: "no-template",
     });
   }, [catalogSubjects, gradeLevels, offering, open, options]);
+
+  // In create mode, fetch existing active offerings for the selected year+level so
+  // the SubjectPicker can gray out already-offered subjects.
+  // The isMounted cleanup flag handles both unmount and stale responses from rapid
+  // grade/year switches (each effect invocation owns its own isMounted closure).
+  useEffect(() => {
+    if (!open || offering) return;
+    if (!selectedYearId || !selectedLevelId) {
+      setAlreadyOfferedSubjectIds(new Set());
+      return;
+    }
+    let isMounted = true;
+    getSubjectOfferings({
+      academic_year_id: selectedYearId,
+      academic_level_id: selectedLevelId,
+      status: "active",
+    })
+      .then((res) => {
+        if (!isMounted) return;
+        const ids = new Set(res.subject_offerings.map((o) => String(o.subject.subject_id)));
+        setAlreadyOfferedSubjectIds(ids);
+      })
+      .catch(() => {
+        // Fail-open: backend still rejects duplicates with HTTP 409 at submit time
+        if (!isMounted) return;
+        setAlreadyOfferedSubjectIds(new Set());
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [open, offering, selectedYearId, selectedLevelId]);
 
   const setField = <TKey extends keyof OfferingFormState>(key: TKey, value: OfferingFormState[TKey]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -229,7 +294,16 @@ export function OfferingModal({
 
   const handleLevelChange = (value: string) => {
     const nextLevel = gradeLevels.find((level) => String(level.academic_level_id) === value);
-    const nextPathways = pathwaysForGrade(nextLevel?.grade_level, options?.pathways);
+    const isNextJhs = isJuniorHighGrade(nextLevel?.grade_level);
+    const activePathwayCount = (options?.pathways ?? []).length;
+    const nextDefaultPathway: SubjectOfferingPathway = isNextJhs
+      ? "general"
+      : activePathwayCount > 1
+      ? "both"
+      : activePathwayCount === 1
+      ? ((options?.pathways[0].code as SubjectOfferingPathway) ?? "general")
+      : "general";
+
     const nextPeriods = (options?.academic_periods ?? []).filter(
       (period) => period.academic_year_id === Number(form.academic_year_id)
     );
@@ -238,10 +312,10 @@ export function OfferingModal({
       academic_level_id: value,
       subject_id: "",
       subject_ids: [],
-      academic_period_ids: isJuniorHighGrade(nextLevel?.grade_level)
+      academic_period_ids: isNextJhs
         ? nextPeriods.map((period) => String(period.academic_period_id))
         : [],
-      pathway: nextPathways.includes(current.pathway) ? current.pathway : nextPathways[0] ?? "general",
+      pathway: nextDefaultPathway,
     }));
   };
 
@@ -308,7 +382,7 @@ export function OfferingModal({
       setError("No valid academic terms are available for the selected academic year.");
       return;
     }
-    if (!availablePathways.includes(form.pathway)) {
+    if (requiresPathway && !availablePathways.includes(form.pathway)) {
       setError("Select a valid pathway for the selected grade level.");
       return;
     }
@@ -333,7 +407,7 @@ export function OfferingModal({
                 academic_year_id: Number(form.academic_year_id),
                 academic_level_id: Number(form.academic_level_id),
                 academic_period_id: Number(periodId),
-                pathway: form.pathway,
+                pathway: requiresPathway ? form.pathway : "general",
                 status: form.status,
               });
             } catch (createErr) {
@@ -349,7 +423,7 @@ export function OfferingModal({
               academic_year_id: Number(form.academic_year_id),
               academic_level_id: Number(form.academic_level_id),
               academic_period_id: Number(periodId),
-              pathway: form.pathway,
+              pathway: requiresPathway ? form.pathway : "general",
               status: form.status,
             });
           } else {
@@ -364,9 +438,10 @@ export function OfferingModal({
           });
         }
 
+        const effectivePathway = requiresPathway ? form.pathway : "general";
         const savedMeta = {
           gradeValue: String(selectedLevel?.grade_level ?? ""),
-          pathway: form.pathway,
+          pathway: effectivePathway,
           academicYearId: Number(form.academic_year_id),
         };
         await onSaved({ message: `Updated offerings for ${offering.subject.subject_name}.`, ...savedMeta });
@@ -375,6 +450,7 @@ export function OfferingModal({
         let createdCount = 0;
         let skippedCount = 0;
         const errors: string[] = [];
+        const effectivePathway = requiresPathway ? form.pathway : "general";
 
         for (const subjectId of selectedIds) {
           for (const periodId of selectedTermIds) {
@@ -384,7 +460,7 @@ export function OfferingModal({
                 academic_year_id: Number(form.academic_year_id),
                 academic_level_id: Number(form.academic_level_id),
                 academic_period_id: Number(periodId),
-                pathway: form.pathway,
+                pathway: effectivePathway,
                 status: form.status,
               });
               createdCount += 1;
@@ -400,7 +476,7 @@ export function OfferingModal({
 
         const savedMeta = {
           gradeValue: String(selectedLevel?.grade_level ?? ""),
-          pathway: form.pathway,
+          pathway: effectivePathway,
           academicYearId: Number(form.academic_year_id),
         };
 
@@ -449,8 +525,12 @@ export function OfferingModal({
               <h6 className="mb-3 font-bold">Offering Setup</h6>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="flex flex-col gap-1">
-                  <label className="text-sm" htmlFor="offering-level">Grade Level</label>
-                  <Select value={form.academic_level_id} onValueChange={handleLevelChange}>
+                  <label className="text-sm font-semibold" htmlFor="offering-level">Grade Level</label>
+                  <Select
+                    value={form.academic_level_id}
+                    onValueChange={handleLevelChange}
+                    disabled={!isCreateMode}
+                  >
                     <Select.Trigger id="offering-level" className="w-full">
                       <Select.Value placeholder="Select grade" />
                     </Select.Trigger>
@@ -464,31 +544,38 @@ export function OfferingModal({
                       </Select.Group>
                     </Select.Content>
                   </Select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-sm" htmlFor="offering-pathway">Pathway</label>
-                  <Select
-                    value={form.pathway}
-                    onValueChange={(value) => setField("pathway", value as SubjectOfferingPathway)}
-                    disabled={isJhsSelection}
-                  >
-                    <Select.Trigger id="offering-pathway" className="w-full">
-                      <Select.Value placeholder="Select pathway" />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Group>
-                        {availablePathways.map((pathway) => (
-                          <Select.Item key={pathway} value={pathway}>
-                            {pathwayLabel(pathway)}
-                          </Select.Item>
-                        ))}
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>
-                  {isJhsSelection ? (
-                    <p className="text-xs text-black/70">Grade 7 to 10 offerings use General.</p>
+                  {!isCreateMode ? (
+                    <p className="text-xs text-black/70 mt-1">
+                      Grade level is tied to the catalog subject and cannot be changed here.
+                    </p>
                   ) : null}
                 </div>
+                {requiresPathway ? (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-semibold" htmlFor="offering-pathway">Pathway</label>
+                    <Select
+                      value={form.pathway}
+                      onValueChange={(value) => setField("pathway", value as SubjectOfferingPathway)}
+                    >
+                      <Select.Trigger id="offering-pathway" className="w-full">
+                        <Select.Value placeholder="Select pathway" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Group>
+                          {availablePathways.map((pathway) => {
+                            const pathwayObj = options?.pathways.find((p) => p.code === pathway);
+                            const label = pathwayObj?.name || pathwayLabel(pathway);
+                            return (
+                              <Select.Item key={pathway} value={pathway}>
+                                {label}
+                              </Select.Item>
+                            );
+                          })}
+                        </Select.Group>
+                      </Select.Content>
+                    </Select>
+                  </div>
+                ) : null}
                 <div className="flex flex-col gap-2 md:col-span-2">
                   <label className="flex cursor-pointer items-start gap-3 rounded-md border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[2px_2px_0_#000]">
                     <Checkbox
@@ -633,6 +720,7 @@ export function OfferingModal({
                   selectedSubjectIds={form.subject_ids}
                   onChange={handleSubjectSelectionChange}
                   searchPlaceholder="Search subjects for this grade"
+                  alreadyOfferedSubjectIds={alreadyOfferedSubjectIds}
                 />
               </div>
             )}

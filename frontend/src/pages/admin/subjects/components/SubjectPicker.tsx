@@ -12,6 +12,7 @@ type SubjectPickerProps = {
   disabled?: boolean;
   singleSelect?: boolean;
   searchPlaceholder?: string;
+  alreadyOfferedSubjectIds?: Set<string>;
 };
 
 function subjectCode(subject: SubjectListItem) {
@@ -25,6 +26,7 @@ export function SubjectPicker({
   disabled = false,
   singleSelect = false,
   searchPlaceholder = "Search subject or code",
+  alreadyOfferedSubjectIds = new Set(),
 }: SubjectPickerProps) {
   const [query, setQuery] = useState("");
   const selectedIds = useMemo(() => new Set(selectedSubjectIds), [selectedSubjectIds]);
@@ -45,6 +47,7 @@ export function SubjectPicker({
   }, [query, subjects]);
 
   const toggleSubject = (subjectId: string) => {
+    if (alreadyOfferedSubjectIds.has(subjectId)) return;
     if (disabled) return;
     if (singleSelect) {
       onChange(selectedIds.has(subjectId) ? [] : [subjectId]);
@@ -67,7 +70,14 @@ export function SubjectPicker({
 
   const selectAllVisible = () => {
     if (disabled || singleSelect) return;
-    onChange([...new Set([...selectedSubjectIds, ...filteredSubjects.map((subject) => String(subject.subject_id))])]);
+    onChange([
+      ...new Set([
+        ...selectedSubjectIds,
+        ...filteredSubjects
+          .filter((s) => !alreadyOfferedSubjectIds.has(String(s.subject_id)))
+          .map((subject) => String(subject.subject_id)),
+      ]),
+    ]);
   };
 
   const clearAll = () => {
@@ -129,22 +139,32 @@ export function SubjectPicker({
         ) : (
           filteredSubjects.map((subject) => {
             const subjectId = String(subject.subject_id);
+            const isAlreadyOffered = alreadyOfferedSubjectIds.has(subjectId);
             return (
               <label
                 key={subject.subject_id}
-                className="flex cursor-pointer items-start gap-3 border-b border-black/20 p-3 last:border-b-0 hover:bg-[#fff7d6]"
+                className={`flex items-start gap-3 border-b border-black/20 p-3 last:border-b-0 ${
+                  isAlreadyOffered
+                    ? "cursor-not-allowed bg-black/5 opacity-60"
+                    : "cursor-pointer hover:bg-[#fff7d6]"
+                }`}
               >
                 <Checkbox
                   checked={selectedIds.has(subjectId)}
                   onCheckedChange={() => toggleSubject(subjectId)}
                   className="mt-1 shrink-0"
-                  disabled={disabled}
+                  disabled={disabled || isAlreadyOffered}
                 />
                 <span className="grid min-w-0 flex-1 grid-cols-1 gap-1 text-sm md:grid-cols-[1.5fr_120px_140px_80px]">
                   <strong className="truncate">{subject.subject_name}</strong>
                   <span>{subjectCode(subject)}</span>
                   <span>{subject.subject_group?.name || "Ungrouped"}</span>
                   <span>{subject.hours ?? "-"} hrs</span>
+                  {isAlreadyOffered ? (
+                    <span className="col-span-full text-xs font-semibold text-black/50">
+                      Already offered
+                    </span>
+                  ) : null}
                 </span>
               </label>
             );
