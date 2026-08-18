@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import {
   BookOpen,
@@ -449,6 +450,14 @@ export default function SubjectClassworkTab({
       setFlaggedQuizQuestionIds(new Set());
       setQuizError("");
       autoSubmitRef.current = false;
+      setSelectedClasswork((prev) =>
+        prev
+          ? {
+              ...prev,
+              submission_status: attempt.status,
+            }
+          : null,
+      );
       updateClassworkStatus(
         selectedClasswork.classwork_assignment_id,
         attempt.status,
@@ -707,7 +716,7 @@ export default function SubjectClassworkTab({
       selectedQuizAttempt.total_points ?? selectedClasswork.total_points ?? 0;
 
     return (
-      <div className="fixed inset-0 z-[80] flex flex-col bg-[#F8F6ED]">
+      <div className="fixed inset-0 z-[99999] flex flex-col bg-[#F8F6ED]">
         <header className="border-b border-black px-4 py-3">
           <div className="grid grid-cols-[auto_1fr_auto] items-start gap-3">
             <button
@@ -1187,12 +1196,13 @@ export default function SubjectClassworkTab({
 
       {/* Fullscreen Quiz Interface */}
       {isQuizFullscreen && selectedClasswork && selectedQuizAttempt
-        ? renderFullscreenQuiz()
+        ? createPortal(renderFullscreenQuiz(), document.body)
         : null}
 
       {/* Classwork Detail Modal */}
-      {(selectedClasswork || detailLoadingId !== null || detailError) && (
-        <Dialog
+      {!isQuizFullscreen &&
+        (selectedClasswork || detailLoadingId !== null || detailError) && (
+          <Dialog
           open
           onOpenChange={(open) => {
             if (!open) closeClassworkDetail();
