@@ -60,9 +60,10 @@ export const routes = {
     notifications: "/student/notifications",
     attendance: "/student/attendance",
 
-    // TEMP 
-    quizTake: "/student/quiz/:subject/:quizTitle/take",
-    quizResult: "/student/quiz/:subject/:quizTitle/result",
+    // Quiz attempt pages — assignmentId is classwork_assignment.assignment_id
+    quizView: "/student/quiz/:assignmentId",
+    quizTake: "/student/quiz/:assignmentId/take",
+    quizResult: "/student/quiz/:assignmentId/result",
   },
 
   setupPassword: {
