@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Card, Card as RetroCard } from "@/components/retroui/Card";
@@ -37,7 +47,7 @@ import {
   Layers,
   ChevronDown,
   Search,
-  X,
+  Copy,
 } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 
@@ -55,6 +65,16 @@ function stringToTimeValue(str?: string | null, fallbackHour = 8): TimeValue {
     h = 12;
   }
   return { hour: h, minute: m, period: p };
+}
+
+function timeStringToMinutes(str?: string | null): number {
+  if (!str) return Number.MAX_SAFE_INTEGER;
+  const parts = str.split(":");
+  if (parts.length < 2) return Number.MAX_SAFE_INTEGER;
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10) || 0;
+  if (isNaN(h)) return Number.MAX_SAFE_INTEGER;
+  return h * 60 + m;
 }
 
 function timeValueToString(tv: TimeValue): string {
@@ -530,6 +550,176 @@ export default function SubjectLoadStudio() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleCopyScheduleFromSection = (
+    targetClassId: number,
+    sourceClassId: number,
+    mode: "stagger" | "exact" = "stagger"
+  ) => {
+    // Extract source grid slots
+    const sourceLoads = loads.filter((l) => l.class_id === sourceClassId && l.start_time && l.end_time && l.days_of_week && l.days_of_week.length > 0);
+    if (sourceLoads.length === 0) return;
+
+    type Slot = { start_time: string; end_time: string; days_of_week: string[]; duration: number; sourceSubjectId: number };
+    const sourceGrid: Slot[] = [];
+    for (const sl of sourceLoads) {
+      if (!sl.start_time || !sl.end_time || !sl.days_of_week) continue;
+      const startMin = timeStringToMinutes(sl.start_time);
+      const endMin = timeStringToMinutes(sl.end_time);
+      const dur = endMin - startMin;
+      // check if this exact slot time/days combo already recorded
+      if (!sourceGrid.some(g => g.start_time === sl.start_time && g.end_time === sl.end_time && JSON.stringify(g.days_of_week.sort()) === JSON.stringify([...sl.days_of_week].sort()))) {
+        sourceGrid.push({
+          start_time: sl.start_time,
+          end_time: sl.end_time,
+          days_of_week: [...sl.days_of_week],
+          duration: dur,
+          sourceSubjectId: sl.subject_id
+        });
+      }
+    }
+
+    const targetClass = studioData?.classes.find((c) => c.class_id === targetClassId);
+    if (!targetClass) return;
+    const offerings = studioData?.subject_offerings || [];
+    const targetSubjects = (studioData?.subjects || []).filter((sub) => isSubjectOfferedForClass(sub, targetClass, offerings));
+
+    const currentLoads = [...loads];
+
+    // Helpers based on live currentLoads
+    const isTeacherBusy = (staffId: string | number | null | undefined, start_time: string, end_time: string, days_of_week: string[]) => {
+      if (!staffId) return false;
+      const stMin = timeStringToMinutes(start_time);
+      const enMin = timeStringToMinutes(end_time);
+      return currentLoads.some(l => {
+        if (String(l.staff_id) !== String(staffId)) return false;
+        if (!l.start_time || !l.end_time || !l.days_of_week || l.days_of_week.length === 0) return false;
+        const lSt = timeStringToMinutes(l.start_time);
+        const lEn = timeStringToMinutes(l.end_time);
+        const timeOverlap = (stMin < lEn && enMin > lSt);
+        if (!timeOverlap) return false;
+        const daysOverlap = days_of_week.some(d => l.days_of_week!.includes(d));
+        return daysOverlap;
+      });
+    };
+
+    const isSlotOccupied = (classId: number, start_time: string, end_time: string, days_of_week: string[]) => {
+      const stMin = timeStringToMinutes(start_time);
+      const enMin = timeStringToMinutes(end_time);
+      return currentLoads.some(l => {
+        if (l.class_id !== classId) return false;
+        if (!l.start_time || !l.end_time || !l.days_of_week || l.days_of_week.length === 0) return false;
+        const lSt = timeStringToMinutes(l.start_time);
+        const lEn = timeStringToMinutes(l.end_time);
+        const timeOverlap = (stMin < lEn && enMin > lSt);
+        if (!timeOverlap) return false;
+        const daysOverlap = days_of_week.some(d => l.days_of_week!.includes(d));
+        return daysOverlap;
+      });
+    };
+
+    if (mode === "exact") {
+      targetSubjects.forEach(tsub => {
+        const sourceLoad = sourceLoads.find(l => l.subject_id === tsub.subject_id);
+        const targetLoadIdx = currentLoads.findIndex(l => l.class_id === targetClassId && l.subject_id === tsub.subject_id);
+        if (sourceLoad && targetLoadIdx !== -1) {
+          currentLoads[targetLoadIdx] = {
+            ...currentLoads[targetLoadIdx],
+            start_time: sourceLoad.start_time,
+            end_time: sourceLoad.end_time,
+            days_of_week: sourceLoad.days_of_week ? [...sourceLoad.days_of_week] : [],
+            status: "draft",
+            is_locked: false
+          };
+        }
+      });
+      setNotice({
+        title: "Exact Copy Applied",
+        message: `Applied exact time slots to ${targetSubjects.length} subjects for ${targetClass.section_name}.`,
+        type: "success"
+      });
+    } else {
+      // mode === stagger
+      type SubjConstraint = { subjectId: number, loadIdx: number, validSlots: Slot[], requiredDuration: number };
+      const constraints: SubjConstraint[] = [];
+
+      targetSubjects.forEach(tsub => {
+        const loadIdx = currentLoads.findIndex(l => l.class_id === targetClassId && l.subject_id === tsub.subject_id);
+        if (loadIdx === -1) return;
+        const tload = currentLoads[loadIdx];
+        
+        // determine required duration. If this subject exists in source section, use that duration. Else fallback to 45 min for now.
+        const sload = sourceLoads.find(l => l.subject_id === tsub.subject_id);
+        const requiredDuration = sload ? timeStringToMinutes(sload.end_time) - timeStringToMinutes(sload.start_time) : 45;
+
+        // find all valid slots in sourceGrid
+        const validSlots = sourceGrid.filter(slot => {
+          if (slot.duration !== requiredDuration) return false;
+          if (isSlotOccupied(targetClassId, slot.start_time, slot.end_time, slot.days_of_week)) return false;
+          if (isTeacherBusy(tload.staff_id, slot.start_time, slot.end_time, slot.days_of_week)) return false;
+          return true;
+        });
+
+        constraints.push({ subjectId: tsub.subject_id, loadIdx, validSlots, requiredDuration });
+      });
+
+      // Sort by most-constrained first (fewest valid slots)
+      constraints.sort((a, b) => a.validSlots.length - b.validSlots.length);
+
+      let placedCount = 0;
+      for (const cons of constraints) {
+        // Re-filter valid slots based on latest state
+        const stillValidSlots = cons.validSlots.filter(slot => 
+          !isSlotOccupied(targetClassId, slot.start_time, slot.end_time, slot.days_of_week) &&
+          !isTeacherBusy(currentLoads[cons.loadIdx].staff_id, slot.start_time, slot.end_time, slot.days_of_week)
+        );
+
+        if (stillValidSlots.length === 0) {
+          // safe fallback
+          currentLoads[cons.loadIdx] = {
+            ...currentLoads[cons.loadIdx],
+            start_time: null,
+            end_time: null,
+            days_of_week: [],
+            status: "draft",
+            is_locked: false
+          };
+          continue;
+        }
+
+        // Prefer slot that differs from source slot for the same subject if possible
+        const sload = sourceLoads.find(l => l.subject_id === cons.subjectId);
+        let chosenSlot = stillValidSlots[0];
+        if (sload && stillValidSlots.length > 1) {
+          const differentSlot = stillValidSlots.find(s => s.start_time !== sload.start_time || s.end_time !== sload.end_time || JSON.stringify(s.days_of_week.sort()) !== JSON.stringify([...(sload.days_of_week || [])].sort()));
+          if (differentSlot) {
+            chosenSlot = differentSlot;
+          }
+        }
+
+        currentLoads[cons.loadIdx] = {
+          ...currentLoads[cons.loadIdx],
+          start_time: chosenSlot.start_time,
+          end_time: chosenSlot.end_time,
+          days_of_week: [...chosenSlot.days_of_week],
+          status: "draft",
+          is_locked: false
+        };
+        placedCount++;
+      }
+
+      setNotice({
+        title: placedCount === constraints.length ? "Copy & Stagger Successful" : "Copy & Stagger Partial",
+        message: placedCount === constraints.length 
+          ? `Successfully scheduled all ${constraints.length} subjects for ${targetClass.section_name} with 0 teacher conflicts.`
+          : `Scheduled ${placedCount} of ${constraints.length} subjects for ${targetClass.section_name}. ${constraints.length - placedCount} subject(s) have a teacher conflict across other sections — please place manually.`,
+        type: placedCount === constraints.length ? "success" : "error"
+      });
+    }
+
+    setLoads(currentLoads);
+    void runValidation(currentLoads);
   };
 
   // Preset pattern applications
@@ -1011,6 +1201,27 @@ export default function SubjectLoadStudio() {
                     );
 
                     const sectionLoads = loads.filter((l) => l.class_id === cls.class_id);
+
+                    const timesBySubject = new Map<string, { start: number; end: number }>();
+                    for (const l of sectionLoads) {
+                      if (!l.start_time) continue;
+                      const key = String(l.subject_id);
+                      const start = timeStringToMinutes(l.start_time);
+                      const end = timeStringToMinutes(l.end_time);
+                      const existing = timesBySubject.get(key);
+                      if (!existing || start < existing.start) {
+                        timesBySubject.set(key, { start, end });
+                      }
+                    }
+
+                    const sortedClassSubjects = [...classSubjects].sort((a, b) => {
+                      const aTimes = timesBySubject.get(String(a.subject_id)) ?? { start: Number.MAX_SAFE_INTEGER, end: Number.MAX_SAFE_INTEGER };
+                      const bTimes = timesBySubject.get(String(b.subject_id)) ?? { start: Number.MAX_SAFE_INTEGER, end: Number.MAX_SAFE_INTEGER };
+                      if (aTimes.start !== bTimes.start) return aTimes.start - bTimes.start;
+                      if (aTimes.end !== bTimes.end) return aTimes.end - bTimes.end;
+                      return (a.subject_name || "").localeCompare(b.subject_name || "");
+                    });
+
                     const sectionUnassignedCount = sectionLoads.filter((l) => !l.staff_id).length;
                     const hasUnassigned = sectionUnassignedCount > 0 || classSubjects.length === 0;
                     // Section is published when: no unassigned, has loads, every load is status="published"
@@ -1067,6 +1278,44 @@ export default function SubjectLoadStudio() {
                               Auto-Fit Section
                             </Button>
 
+                            {(() => {
+                              const siblingSections = (studioData?.classes || []).filter(c => c.class_id !== cls.class_id && c.academic_level_id === cls.academic_level_id);
+                              const configuredSiblings = siblingSections.filter(c => loads.some(l => l.class_id === c.class_id && l.start_time && l.end_time));
+                              
+                              if (configuredSiblings.length > 0) {
+                                return (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button size="sm" variant="outline" className="gap-2">
+                                        <Copy className="size-3.5 text-foreground" />
+                                        Copy Schedule From...
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      {configuredSiblings.map(sib => (
+                                        <DropdownMenuSub key={sib.class_id}>
+                                          <DropdownMenuSubTrigger className="font-bold">
+                                            {sib.section_name}
+                                          </DropdownMenuSubTrigger>
+                                          <DropdownMenuPortal>
+                                            <DropdownMenuSubContent>
+                                              <DropdownMenuItem onClick={() => void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")}>
+                                                <span className="font-bold">Conflict-Aware Fill (Recommended)</span>
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem onClick={() => void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")}>
+                                                Exact Match
+                                              </DropdownMenuItem>
+                                            </DropdownMenuSubContent>
+                                          </DropdownMenuPortal>
+                                        </DropdownMenuSub>
+                                      ))}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                );
+                              }
+                              return null;
+                            })()}
+
                             {isSectionPublished ? (
                               <Button
                                 size="sm"
@@ -1122,7 +1371,7 @@ export default function SubjectLoadStudio() {
                               </Table.Row>
                             </Table.Header>
                             <Table.Body>
-                              {classSubjects.map((sub) => {
+                              {sortedClassSubjects.map((sub) => {
                                 const subjectSlots = loads.filter(
                                   (l) => l.class_id === cls.class_id && l.subject_id === sub.subject_id
                                 );

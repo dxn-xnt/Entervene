@@ -55,9 +55,11 @@ def update_subject_record(db: Session, subject_id: int, payload: SubjectUpdate) 
         raise HTTPException(status_code=404, detail="Subject not found.")
 
     data = payload.model_dump(exclude_unset=True)
-    target_level_id = data.get("academic_level_id", subject.academic_level_id)
-    if "academic_level_id" in data:
-        get_academic_level_or_404(db, target_level_id)
+    if "academic_level_id" in data and data["academic_level_id"] != subject.academic_level_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Grade level cannot be changed after a subject is created.",
+        )
 
     if "subject_group_id" in data and data["subject_group_id"] is not None:
         get_subject_group_or_404(db, data["subject_group_id"])
@@ -66,7 +68,7 @@ def update_subject_record(db: Session, subject_id: int, payload: SubjectUpdate) 
         validate_subject_is_core_toggle(db, subject.subject_id, data["is_core"])
 
     target_code = normalize_optional_text(data.get("subject_codename", subject.subject_codename))
-    ensure_subject_code_available(db, target_code, target_level_id, exclude_subject_id=subject.subject_id)
+    ensure_subject_code_available(db, target_code, subject.academic_level_id, exclude_subject_id=subject.subject_id)
 
     if "subject_name" in data:
         subject_name = normalize_optional_text(data["subject_name"])
@@ -87,8 +89,6 @@ def update_subject_record(db: Session, subject_id: int, payload: SubjectUpdate) 
         subject.description = normalize_optional_text(data["description"])
     if "status" in data:
         subject.status = normalize_subject_status(data["status"])
-    if "academic_level_id" in data:
-        subject.academic_level_id = target_level_id
 
     try:
         db.commit()
