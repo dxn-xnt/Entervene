@@ -1879,16 +1879,16 @@ export default function Classworks() {
                 ))}
               </section>
             ) : (
-              <section className="rounded-lg border border-dashed border-gray-400 bg-white px-5 py-14 text-center">
+              <Card className="flex flex-col justify-center items-center">
                 <ClipboardList
-                  className="mx-auto mb-2 text-gray-400"
-                  size={36}
+                  className="mx-auto mb-2 "
+                  size={24}
                 />
                 <p className="font-bold">No classworks found</p>
                 <p className="mt-1 text-sm text-gray-500">
                   Try another tab, search term, or filter.
                 </p>
-              </section>
+              </Card>
             )}
           </main>
 

@@ -144,7 +144,7 @@ const StoryBoard = () => {
                 onClick={() => navigate(routes.student.profile)}
                 className="gap-2 whitespace-nowrap font-bold"
               >
-                 <Calendar className="size-3.5" />
+                 <Calendar />
                 View My Schedule
               </Button>
             </header>
