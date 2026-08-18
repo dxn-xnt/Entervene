@@ -144,7 +144,7 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
 
     return (
         <div className={`relative inline-flex items-center text-left ${isOpen ? "z-50" : "z-0"}`} ref={popoverRef}>
-            <div className="flex items-center border-2 border-black bg-white rounded-none overflow-hidden shadow-[1px_1px_0_#000]">
+            <div className="flex items-center border-2 border-black bg-white rounded-none overflow-hidden shadow-sm">
                 {/* Direct Editable Input */}
                 <input
                     type="text"
@@ -158,7 +158,7 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
                         }
                     }}
                     placeholder="08:00 am"
-                    className="w-24 px-2 py-1 text-xs font-bold font-mono text-center focus:outline-none focus:bg-amber-50"
+                    className="w-20 px-2 py-1 text-xs font-bold font-mono text-center focus:outline-none focus:bg-amber-50"
                     title="Type any custom time (e.g. 09:12 am, 10:24 am)"
                 />
 
@@ -167,23 +167,22 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
                     type="button"
                     onClick={() => setIsOpen(!isOpen)}
                     title="Open 5-minute interval picker"
-                    className="p-1 border-l-2 border-black bg-neutral-100 hover:bg-amber-200 transition-colors cursor-pointer flex items-center justify-center"
+                    className="p-1.5 border-l-2 border-black hover:bg-amber-200 transition-colors cursor-pointer flex items-center justify-center"
                 >
                     <Clock className="size-3.5 text-black" />
                 </button>
             </div>
 
             {isOpen && (
-                <div className="absolute z-50 left-0 top-full mt-1.5 bg-white border-2 border-black shadow-[4px_4px_0_#000] p-3 flex flex-col gap-2 min-w-[280px]">
-                    <div className="bg-amber-50 p-2 border border-black rounded flex items-center justify-center font-bold text-base font-mono">
-                        <Clock className="size-4 mr-2 text-amber-800" />
+                <div className="absolute z-50 left-0 top-full mt-1.5 bg-white border-2 border-black shadow-md p-3 flex flex-col gap-2 min-w-[280px]">
+                    <div className="p-1 border-2 border-black rounded flex items-center justify-center font-bold text-xl">
                         <span>{hour} : {pad(minute)} {activePeriod.toLowerCase()}</span>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 h-44">
                         {/* Hours list */}
-                        <div className="flex flex-col overflow-y-auto border border-black/20 rounded bg-white">
-                            <span className="text-[10px] font-bold text-center border-b border-black/10 py-0.5 bg-neutral-100">Hour</span>
+                        <div className="flex flex-col overflow-y-auto border-1 border-border rounded bg-white">
+                            <span className="text-[10px] font-bold text-center text-background border-b border-black/10 py-0.5 bg-foreground">Hour</span>
                             {hoursOptions.map((h) => {
                                 const valid = isHourValid(h, activePeriod);
                                 return (
@@ -192,13 +191,12 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
                                         type="button"
                                         disabled={!valid}
                                         onClick={() => handleHourSelect(h)}
-                                        className={`py-1 text-xs font-bold font-mono ${
-                                            h === hour
-                                                ? "bg-black text-white"
-                                                : valid
-                                                ? "hover:bg-neutral-100"
+                                        className={`py-1 text-xs font-bold font-mono ${h === hour
+                                            ? "bg-primary"
+                                            : valid
+                                                ? "hover:bg-accent"
                                                 : "opacity-30 cursor-not-allowed"
-                                        }`}
+                                            }`}
                                     >
                                         {h}
                                     </button>
@@ -207,16 +205,15 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
                         </div>
 
                         {/* 5-minute interval list */}
-                        <div className="flex flex-col overflow-y-auto border border-black/20 rounded bg-white">
-                            <span className="text-[10px] font-bold text-center border-b border-black/10 py-0.5 bg-neutral-100">Min (5m)</span>
+                        <div className="flex flex-col overflow-y-auto border-1 border-border rounded bg-white">
+                            <span className="text-[10px] font-bold text-center text-background border-b border-black/10 py-0.5 bg-foreground">Minutes</span>
                             {minutesOptions.map((m) => (
                                 <button
                                     key={m}
                                     type="button"
                                     onClick={() => handleMinuteSelect(m)}
-                                    className={`py-1 text-xs font-bold font-mono ${
-                                        m === minute ? "bg-black text-white" : "hover:bg-neutral-100"
-                                    }`}
+                                    className={`py-1 text-xs font-bold font-mono ${m === minute ? "bg-primary" : "hover:bg-accent"
+                                        }`}
                                 >
                                     {pad(m)}
                                 </button>
@@ -224,8 +221,8 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
                         </div>
 
                         {/* AM/PM toggle */}
-                        <div className="flex flex-col overflow-y-auto border border-black/20 rounded bg-white">
-                            <span className="text-[10px] font-bold text-center border-b border-black/10 py-0.5 bg-neutral-100">Period</span>
+                        <div className="flex flex-col overflow-y-auto border-1 border-border rounded bg-white">
+                            <span className="text-[10px] font-bold text-center text-background border-b border-black/10 py-0.5 bg-foreground">Period</span>
                             {["AM", "PM"].map((p) => {
                                 const disabled = !!lockedPeriod && p !== lockedPeriod;
                                 return (
@@ -234,13 +231,12 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
                                         type="button"
                                         disabled={disabled}
                                         onClick={() => handlePeriodSelect(p)}
-                                        className={`py-1 text-xs font-bold font-mono ${
-                                            p === activePeriod
-                                                ? "bg-black text-white"
-                                                : disabled
+                                        className={`py-1 text-xs font-bold font-mono ${p === activePeriod
+                                            ? "bg-primary"
+                                            : disabled
                                                 ? "opacity-30 cursor-not-allowed"
-                                                : "hover:bg-neutral-100"
-                                        }`}
+                                                : "hover:bg-accent"
+                                            }`}
                                     >
                                         {p.toLowerCase()}
                                     </button>

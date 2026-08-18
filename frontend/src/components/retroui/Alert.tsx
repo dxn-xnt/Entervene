@@ -1,5 +1,6 @@
-import type { HtmlHTMLAttributes } from "react";
+import { useEffect, type HtmlHTMLAttributes } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Text } from "@/components/retroui/Text";
@@ -24,25 +25,71 @@ const alertVariants = cva("relative w-full rounded border-2 p-4", {
 
 interface IAlertProps
   extends HtmlHTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof alertVariants> {}
+  VariantProps<typeof alertVariants> {
+  onClose?: () => void;
+  duration?: number;
+  position?: "inline" | "top-right";
+}
 
-const Alert = ({ className, variant, status, ...props }: IAlertProps) => (
-  <div
-    role="alert"
-    className={cn(alertVariants({ variant, status }), className)}
-    {...props}
-  />
-);
+const Alert = ({
+  className,
+  variant,
+  status,
+  onClose,
+  duration,
+  position = "inline",
+  children,
+  ...props
+}: IAlertProps) => {
+  useEffect(() => {
+    if (duration && onClose) {
+      const timer = setTimeout(() => {
+        onClose();
+      }, duration);
+      return () => clearTimeout(timer);
+    }
+  }, [duration, onClose]);
+
+  const positionClasses =
+    position === "top-right"
+      ? "fixed top-3 right-3 z-[9999] w-full max-w-sm shadow-md animate-in fade-in slide-in-from-top-2 duration-300 bg-white"
+      : "";
+
+  return (
+    <div
+      role="alert"
+      className={cn(
+        alertVariants({ variant, status }),
+        onClose && "pr-10",
+        positionClasses,
+        className
+      )}
+      {...props}
+    >
+      {children}
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-4 right-4 p-1 hover:bg-neutral-100 border border-transparent hover:border-black rounded transition-all cursor-pointer text-black"
+          aria-label="Close alert"
+        >
+          <X className="size-4" />
+        </button>
+      )}
+    </div>
+  );
+};
 Alert.displayName = "Alert";
 
-interface IAlertTitleProps extends HtmlHTMLAttributes<HTMLHeadingElement> {}
+interface IAlertTitleProps extends HtmlHTMLAttributes<HTMLHeadingElement> { }
 const AlertTitle = ({ className, ...props }: IAlertTitleProps) => (
   <Text as="h5" className={cn(className)} {...props} />
 );
 AlertTitle.displayName = "AlertTitle";
 
 interface IAlertDescriptionProps
-  extends HtmlHTMLAttributes<HTMLParagraphElement> {}
+  extends HtmlHTMLAttributes<HTMLParagraphElement> { }
 const AlertDescription = ({ className, ...props }: IAlertDescriptionProps) => (
   <div className={cn("text-muted-foreground", className)} {...props} />
 );
