@@ -251,11 +251,20 @@ export type SubjectOfferingListResponse = {
   };
   subject_offerings: SubjectOfferingListItem[];
 };
+export type AcademicPathwayItem = {
+  id: number;
+  code: string;
+  name: string;
+  is_enabled: boolean;
+  sort_order: number | null;
+  deped_cluster_id: number | null;
+};
+
 export type SubjectOfferingFormOptions = {
   academic_years: Array<SubjectOfferingAcademicYear & { start_date: string; end_date: string }>;
   academic_levels: SubjectAcademicLevel[];
   academic_periods: SubjectOfferingAcademicPeriod[];
-  pathways: SubjectOfferingPathway[];
+  pathways: AcademicPathwayItem[];
   statuses: SubjectStatus[];
   default_status: SubjectStatus;
   active_subjects: Array<SubjectOfferingSubject & { academic_level_id: number }>;

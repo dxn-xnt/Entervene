@@ -1062,6 +1062,7 @@ export default function AdminSubjects() {
 
       <Dialog open={isSubjectModalOpen} onOpenChange={setIsSubjectModalOpen}>
         <AddSubjectModal
+          open={isSubjectModalOpen}
           subjectToEdit={editingSubject}
           onCreated={async () => {
             await Promise.all([loadSubjects(), loadOfferings(), loadGradingTemplates()]);
