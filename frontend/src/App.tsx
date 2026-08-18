@@ -61,7 +61,7 @@ import StudentNotifications from "./pages/student/notifications";
 import StudentAttendance from "./pages/student/attendance";
 import AdminStudentView from "./pages/admin/student-view";
 
-// TEMP
+// Quiz pages
 import StudentQuizTake from "./pages/quiz/quiz-interface";
 import StudentQuizView from "./pages/quiz/quiz-view";
 import StudentQuizResult from "./pages/quiz/quiz-result";
@@ -80,8 +80,7 @@ const App = () => {
             <Route path={routes.auth.login} element={<Login />} />
             <Route path="/setup-password" element={<SetupPassword />} />
 
-            {/* TEMP */}
-            <Route path="/dev/preview" element={<StudentQuizView />} />
+
 
             {/* Admin */}
             <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
@@ -144,7 +143,8 @@ const App = () => {
               <Route path={routes.student.attendance} element={<StudentAttendance />} />
             </Route>
 
-            {/* TEMP  */}
+            {/* Quiz pages (outside student layout — fullscreen) */}
+            <Route path={routes.student.quizView} element={<StudentQuizView />} />
             <Route path={routes.student.quizTake} element={<StudentQuizTake />} />
             <Route path={routes.student.quizResult} element={<StudentQuizResult />} />
 
