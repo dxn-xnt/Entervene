@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs } from "../../components/retroui/Tabs";
+import { Card } from "../../components/retroui/Card";
 import ToDoItem from "../../components/to-do-item";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -212,9 +213,9 @@ export default function ToDo() {
                   <section className="flex flex-col gap-4">
                     <h3 className="text-xl md:text-3xl font-semibold">Completed</h3>
                     {completedItems.length === 0 ? (
-                      <div className="flex flex-col items-center py-12 gap-2 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg bg-white/50">
+                      <Card className="flex justify-center items-center py-12">
                         <p className="text-sm">No completed tasks yet.</p>
-                      </div>
+                      </Card>
                     ) : (
                       completedItems.map((item) => (
                         <ToDoItem

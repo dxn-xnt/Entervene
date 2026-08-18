@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Tabs } from "../../components/retroui/Tabs";
 import { Button } from "@/components/retroui/Button";
+import { Card } from "@/components/retroui/Card";
 import { NotificationCard } from "../../components/notification-card";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -58,8 +59,10 @@ const Notifications = () => {
       await markNotificationAsRead(item.notification_id);
       setNotifications((prev) =>
         prev.map((n) =>
-          n.notification_id === item.notification_id ? { ...n, is_read: true } : n
-        )
+          n.notification_id === item.notification_id
+            ? { ...n, is_read: true }
+            : n,
+        ),
       );
     } catch (err) {
       console.error("Failed to mark notification as read:", err);
@@ -67,11 +70,16 @@ const Notifications = () => {
   };
 
   const classworkItems = notifications.filter(
-    (n) => n.notification_type === "assignment_due" || n.notification_type === "submission_graded" || n.notification_type === "grade_released"
+    (n) =>
+      n.notification_type === "assignment_due" ||
+      n.notification_type === "submission_graded" ||
+      n.notification_type === "grade_released",
   );
 
   const announcementItems = notifications.filter(
-    (n) => n.notification_type === "announcement" || n.notification_type === "risk_alert"
+    (n) =>
+      n.notification_type === "announcement" ||
+      n.notification_type === "risk_alert",
   );
 
   return (
@@ -86,7 +94,12 @@ const Notifications = () => {
                   Notifications
                 </h1>
               </div>
-              <Button variant="default" size="md" onClick={handleMarkAll} disabled={markingAll || notifications.every((n) => n.is_read)}>
+              <Button
+                variant="default"
+                size="md"
+                onClick={handleMarkAll}
+                disabled={markingAll || notifications.every((n) => n.is_read)}
+              >
                 {markingAll ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-1 inline" />
                 ) : null}
@@ -108,51 +121,84 @@ const Notifications = () => {
                   <p>Loading notifications...</p>
                 </div>
               ) : notifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-12 text-muted-foreground border rounded-lg">
-                  <p className="text-lg font-medium">No notifications</p>
-                  <p className="text-sm">You are all caught up!</p>
-                </div>
+                <Card className="flex justify-center items-center py-12">
+                  <p className="text-sm">No completed tasks yet.</p>
+                </Card>
               ) : (
                 <div className="flex flex-col gap-5 w-full">
-                  {(activeTab === "all" || activeTab === "classworks") && classworkItems.length > 0 && (
-                    <section className="flex flex-col gap-3 w-full">
-                      <h2 className="text-xl md:text-3xl font-semibold">
-                        Classwork
-                      </h2>
-                      {classworkItems.map((card) => (
-                        <div key={card.notification_id} onClick={() => handleCardClick(card)} className="cursor-pointer w-full">
-                          <NotificationCard
-                            title={card.title}
-                            description={card.body ?? ""}
-                            date={card.created_at ? new Date(card.created_at).toLocaleDateString() : ""}
-                            user={card.notification_type === "assignment_due" ? "Classwork" : card.notification_type.replace(/_/g, " ").toUpperCase()}
-                            badge={card.is_read ? undefined : "Unread"}
-                            isRead={card.is_read}
-                          />
-                        </div>
-                      ))}
-                    </section>
-                  )}
+                  {(activeTab === "all" || activeTab === "classworks") &&
+                    classworkItems.length > 0 && (
+                      <section className="flex flex-col gap-3 w-full">
+                        <h2 className="text-xl md:text-3xl font-semibold">
+                          Classwork
+                        </h2>
+                        {classworkItems.map((card) => (
+                          <div
+                            key={card.notification_id}
+                            onClick={() => handleCardClick(card)}
+                            className="cursor-pointer w-full"
+                          >
+                            <NotificationCard
+                              title={card.title}
+                              description={card.body ?? ""}
+                              date={
+                                card.created_at
+                                  ? new Date(
+                                      card.created_at,
+                                    ).toLocaleDateString()
+                                  : ""
+                              }
+                              user={
+                                card.notification_type === "assignment_due"
+                                  ? "Classwork"
+                                  : card.notification_type
+                                      .replace(/_/g, " ")
+                                      .toUpperCase()
+                              }
+                              badge={card.is_read ? undefined : "Unread"}
+                              isRead={card.is_read}
+                            />
+                          </div>
+                        ))}
+                      </section>
+                    )}
 
-                  {(activeTab === "all" || activeTab === "announcements") && announcementItems.length > 0 && (
-                    <section className="flex flex-col gap-3 w-full">
-                      <h2 className="text-xl md:text-3xl font-semibold">
-                        Announcement
-                      </h2>
-                      {announcementItems.map((card) => (
-                        <div key={card.notification_id} onClick={() => handleCardClick(card)} className="cursor-pointer w-full">
-                          <NotificationCard
-                            title={card.title}
-                            description={card.body ?? ""}
-                            date={card.created_at ? new Date(card.created_at).toLocaleDateString() : ""}
-                            user={card.notification_type === "assignment_due" ? "Classwork" : card.notification_type.replace(/_/g, " ").toUpperCase()}
-                            badge={card.is_read ? undefined : "Unread"}
-                            isRead={card.is_read}
-                          />
-                        </div>
-                      ))}
-                    </section>
-                  )}
+                  {(activeTab === "all" || activeTab === "announcements") &&
+                    announcementItems.length > 0 && (
+                      <section className="flex flex-col gap-3 w-full">
+                        <h2 className="text-xl md:text-3xl font-semibold">
+                          Announcement
+                        </h2>
+                        {announcementItems.map((card) => (
+                          <div
+                            key={card.notification_id}
+                            onClick={() => handleCardClick(card)}
+                            className="cursor-pointer w-full"
+                          >
+                            <NotificationCard
+                              title={card.title}
+                              description={card.body ?? ""}
+                              date={
+                                card.created_at
+                                  ? new Date(
+                                      card.created_at,
+                                    ).toLocaleDateString()
+                                  : ""
+                              }
+                              user={
+                                card.notification_type === "assignment_due"
+                                  ? "Classwork"
+                                  : card.notification_type
+                                      .replace(/_/g, " ")
+                                      .toUpperCase()
+                              }
+                              badge={card.is_read ? undefined : "Unread"}
+                              isRead={card.is_read}
+                            />
+                          </div>
+                        ))}
+                      </section>
+                    )}
                 </div>
               )}
             </main>
@@ -164,4 +210,3 @@ const Notifications = () => {
 };
 
 export default Notifications;
-

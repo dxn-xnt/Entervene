@@ -2,7 +2,17 @@ import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SubjectCard } from "../../components/subject-card";
 import { Card } from "@/components/retroui/Card";
-import { ArrowUpRight, Loader2, BookOpen, Search, X, CheckCircle2, FileText, Calendar } from "lucide-react";
+import { Button } from "@/components/retroui/Button";
+import {
+  ArrowUpRight,
+  Loader2,
+  BookOpen,
+  Search,
+  X,
+  CheckCircle2,
+  FileText,
+  Calendar,
+} from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
@@ -128,130 +138,147 @@ const StoryBoard = () => {
                   Storyboard
                 </h1>
               </div>
-              <button
+              <Button
                 type="button"
+                size="sm"
                 onClick={() => navigate(routes.student.profile)}
-                className="h-10 flex items-center gap-2 border-2 border-black bg-[#f7c76f] px-4 text-xs sm:text-sm font-bold text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+                className="gap-2 whitespace-nowrap font-bold"
               >
-                <Calendar className="size-4" />
+                 <Calendar className="size-3.5" />
                 View My Schedule
-              </button>
+              </Button>
             </header>
 
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
             <main className="flex flex-1 flex-col gap-3 py-3">
               {myClass ? (
-              <section className="flex flex-col gap-4 border-2 border-black bg-[#f7e9aa] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 items-center gap-4">
-                  <div className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-black bg-[#79c889] text-lg font-bold">
-                    {(myClass.section_name || "?").charAt(0).toUpperCase()}
+                <section className="flex flex-col gap-4 border-2 border-black bg-[#f7e9aa] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-4">
+                    <div className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-black bg-[#79c889] text-lg font-bold">
+                      {(myClass.section_name || "?").charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="truncate text-xl font-semibold">
+                        {myClass.grade_level} · {myClass.section_name}
+                      </h2>
+                      <p className="truncate text-sm">
+                        Adviser: {myClass.adviser_name || "Not assigned"} ·{" "}
+                        {myClass.classmate_count}{" "}
+                        {myClass.classmate_count === 1
+                          ? "classmate"
+                          : "classmates"}
+                      </p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <h2 className="truncate text-xl font-semibold">
-                      {myClass.grade_level} · {myClass.section_name}
-                    </h2>
-                    <p className="truncate text-sm">
-                      Adviser: {myClass.adviser_name || "Not assigned"} ·{" "}
-                      {myClass.classmate_count}{" "}
-                      {myClass.classmate_count === 1
-                        ? "classmate"
-                        : "classmates"}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={openClassmates}
-                  className="h-10 border-2 border-black bg-white px-5 text-sm font-semibold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 active:translate-y-0"
-                >
-                  View classmates
-                </button>
-              </section>
-            ) : classError ? (
-              <p className="text-sm text-gray-500">No section assigned yet.</p>
-            ) : null}
+                  <button
+                    type="button"
+                    onClick={openClassmates}
+                    className="h-10 border-2 border-black bg-white px-5 text-sm font-semibold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 active:translate-y-0"
+                  >
+                    View classmates
+                  </button>
+                </section>
+              ) : classError ? (
+                <p className="text-sm text-gray-500">
+                  No section assigned yet.
+                </p>
+              ) : null}
 
               <div className="flex flex-col lg:flex-row lg:items-stretch gap-4 flex-1">
-              <div className="grid grid-cols-2 gap-4 flex-1 content-start">
-                {isLoading ? (
-                  <div className="col-span-2 flex justify-center py-16">
-                    <Loader2 className="animate-spin text-gray-400" size={36} />
-                  </div>
-                ) : subjects.length === 0 ? (
-                  <div className="col-span-2 flex flex-col items-center py-16 gap-3 text-gray-400">
-                    <BookOpen size={40} className="opacity-50" />
-                    <p>No enrolled subjects found</p>
-                  </div>
-                ) : (
-                  subjects.map((subject) => (
-                    <SubjectCard
-                      key={subject.subject_load_id}
-                      title={subject.subject_name}
-                      onClick={() => handleSubjectClick(subject)}
-                      teacher={subject.teacher_name}
-                      badges={[
-                        { label: subject.section_name || "Section", count: 0 },
-                      ]}
-                    />
-                  ))
-                )}
-              </div>
-
-              <Card className="block w-full lg:w-[35%]">
-                <Card.Content>
-                  <div className="flex items-center justify-between mb-4">
-                    <Card.Title className="mb-0 text-2xl md:text-3xl">
-                      To do
-                    </Card.Title>
-
-                    <button
-                      type="button"
-                      onClick={() => navigate(routes.student.todo)}
-                      className="rounded-full border-2 border-black cursor-pointer p-1 transition-all hover:shadow-none"
-                    >
-                      <ArrowUpRight size={18} />
-                    </button>
-                  </div>
-
-                  {isTodosLoading ? (
-                    <div className="flex justify-center py-8">
-                      <Loader2 className="animate-spin text-gray-400" size={28} />
+                <div className="grid grid-cols-2 gap-4 flex-1 content-start">
+                  {isLoading ? (
+                    <div className="col-span-2 flex justify-center py-16">
+                      <Loader2
+                        className="animate-spin text-gray-400"
+                        size={36}
+                      />
                     </div>
-                  ) : todos.length === 0 ? (
-                    <div className="flex flex-col items-center py-6 text-gray-500 gap-1.5">
-                      <CheckCircle2 size={32} className="text-green-500" />
-                      <p className="text-sm font-semibold">All caught up!</p>
-                      <p className="text-xs text-gray-400">No pending tasks</p>
+                  ) : subjects.length === 0 ? (
+                    <div className="col-span-2 flex flex-col items-center py-16 gap-3 text-gray-400">
+                      <BookOpen size={40} className="opacity-50" />
+                      <p>No enrolled subjects found</p>
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-2.5">
-                      {todos.map((item) => (
-                        <div
-                          key={item.assignment_id}
-                          onClick={() => openTodo(item)}
-                          className="flex items-center gap-3 border-2 border-black bg-white p-3 rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer hover:bg-yellow-50 transition-colors"
-                        >
-                          <FileText size={20} className="shrink-0 text-black/70" />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate font-semibold text-sm">
-                              {item.title}
-                            </p>
-                            <p className="truncate text-xs text-gray-600">
-                              {item.subject} · {item.deadline}
-                            </p>
-                          </div>
-                          {item.status === "pastdue" && (
-                            <span className="shrink-0 text-[10px] uppercase font-bold text-red-700 bg-red-100 border border-red-400 px-1.5 py-0.5 rounded">
-                              Past Due
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    subjects.map((subject) => (
+                      <SubjectCard
+                        key={subject.subject_load_id}
+                        title={subject.subject_name}
+                        onClick={() => handleSubjectClick(subject)}
+                        teacher={subject.teacher_name}
+                        badges={[
+                          {
+                            label: subject.section_name || "Section",
+                            count: 0,
+                          },
+                        ]}
+                      />
+                    ))
                   )}
-                </Card.Content>
-              </Card>
+                </div>
+
+                <Card className="block w-full lg:w-[35%]">
+                  <Card.Content>
+                    <div className="flex items-center justify-between mb-4">
+                      <Card.Title className="mb-0 text-2xl md:text-3xl">
+                        To do
+                      </Card.Title>
+
+                      <button
+                        type="button"
+                        onClick={() => navigate(routes.student.todo)}
+                        className="rounded-full border-2 border-black cursor-pointer p-1 transition-all hover:shadow-none"
+                      >
+                        <ArrowUpRight size={18} />
+                      </button>
+                    </div>
+
+                    {isTodosLoading ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2
+                          className="animate-spin text-gray-400"
+                          size={28}
+                        />
+                      </div>
+                    ) : todos.length === 0 ? (
+                      <div className="flex flex-col items-center py-6 text-gray-500 gap-1.5">
+                        <CheckCircle2 size={32} className="text-green-500" />
+                        <p className="text-sm font-semibold">All caught up!</p>
+                        <p className="text-xs text-gray-400">
+                          No pending tasks
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2.5">
+                        {todos.map((item) => (
+                          <div
+                            key={item.assignment_id}
+                            onClick={() => openTodo(item)}
+                            className="flex items-center gap-3 border-2 border-black bg-white p-3 rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer hover:bg-yellow-50 transition-colors"
+                          >
+                            <FileText
+                              size={20}
+                              className="shrink-0 text-black/70"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate font-semibold text-sm">
+                                {item.title}
+                              </p>
+                              <p className="truncate text-xs text-gray-600">
+                                {item.subject} · {item.deadline}
+                              </p>
+                            </div>
+                            {item.status === "pastdue" && (
+                              <span className="shrink-0 text-[10px] uppercase font-bold text-red-700 bg-red-100 border border-red-400 px-1.5 py-0.5 rounded">
+                                Past Due
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Card.Content>
+                </Card>
               </div>
             </main>
           </div>
