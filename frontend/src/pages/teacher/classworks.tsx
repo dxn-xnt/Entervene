@@ -1955,6 +1955,7 @@ export default function Classworks() {
                   selectedType={selectedType}
                   subjects={subjects}
                   loads={loads}
+                  initialSubjectId={subjectFilter !== "all" ? subjectFilter : undefined}
                   onClose={closeCreateWizard}
                   onSuccess={async () => {
                     await loadClassworks();
@@ -1967,6 +1968,7 @@ export default function Classworks() {
                   selectedType={selectedType}
                   subjects={subjects}
                   loads={loads}
+                  initialSubjectId={subjectFilter !== "all" ? subjectFilter : undefined}
                   onClose={closeCreateWizard}
                   onSuccess={async () => {
                     await loadClassworks();

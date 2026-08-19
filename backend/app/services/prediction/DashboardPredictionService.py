@@ -86,7 +86,7 @@ def _apply_filters(
         try:
             loads = (
                 db.query(SubjectLoad.class_id, SubjectLoad.subject_id)
-                .filter(SubjectLoad.staff_id == staff_id, SubjectLoad.status == "active")
+                .filter(SubjectLoad.staff_id == staff_id, SubjectLoad.status.in_(["active", "published"]))
                 .all()
             )
             if not loads:

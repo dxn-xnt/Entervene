@@ -290,6 +290,10 @@ def _lesson_belongs_to_classwork(db: Session, classwork: Classwork, lesson_id: i
 
 
 def _classwork_has_due_date(db: Session, classwork_id: int) -> bool:
+    for obj in list(db.new) + list(db.dirty):
+        if isinstance(obj, ClassworkAssignment) and getattr(obj, "classwork_id", None) == classwork_id:
+            if obj.due_date is not None:
+                return True
     return db.query(ClassworkAssignment).filter(
         ClassworkAssignment.classwork_id == classwork_id,
         ClassworkAssignment.due_date.isnot(None),

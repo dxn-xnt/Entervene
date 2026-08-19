@@ -35,6 +35,7 @@ interface CreateClassworkQuizModalProps {
     selectedType: ClassworkKind;
     subjects: Array<{ id: number; name: string }>;
     loads: TeacherClassLoad[];
+    initialSubjectId?: string;
     onClose: () => void;
     onSuccess: () => void;
     onBack: () => void;
@@ -44,6 +45,7 @@ export default function CreateClassworkQuizModal({
     selectedType,
     subjects,
     loads,
+    initialSubjectId,
     onClose,
     onSuccess,
     onBack,
@@ -52,10 +54,18 @@ export default function CreateClassworkQuizModal({
         "quiz-source" | "details" | "quiz" | "assign"
     >("quiz-source");
 
-    const [draft, setDraft] = useState<CreateDraft>({
-        ...emptyClassworkDraft,
-        classwork_category: "QUARTERLY_ASSESSMENT",
-        subject_id: subjects[0] ? String(subjects[0].id) : "",
+    const [draft, setDraft] = useState<CreateDraft>(() => {
+        const preferredId =
+            initialSubjectId && subjects.some((s) => String(s.id) === String(initialSubjectId))
+                ? String(initialSubjectId)
+                : subjects[0]
+                    ? String(subjects[0].id)
+                    : "";
+        return {
+            ...emptyClassworkDraft,
+            classwork_category: "QUARTERLY_ASSESSMENT",
+            subject_id: preferredId,
+        };
     });
 
     const [quizQuestions, setQuizQuestions] = useState<QuizQuestionDraft[]>([
@@ -66,6 +76,7 @@ export default function CreateClassworkQuizModal({
     const [quizImportWarnings, setQuizImportWarnings] = useState<string[]>([]);
     const [isImportingQuiz, setIsImportingQuiz] = useState(false);
     const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+    const [aiPromptScope, setAiPromptScope] = useState<string | undefined>(undefined);
 
     const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);
     const [availableLessons, setAvailableLessons] = useState<TeacherLesson[]>([]);
@@ -531,6 +542,10 @@ export default function CreateClassworkQuizModal({
             setCreateError("Select the lesson where this quiz should appear.");
             return;
         }
+        if (quizSettings.summary_release_mode === "AFTER_DUE_DATE" && !draft.due_date) {
+            setCreateError("A due date is required when Quiz Summary Availability is set to 'After the quiz due date'. Please specify a due date below.");
+            return;
+        }
 
         setIsCreating(true);
         setCreateError("");
@@ -607,8 +622,9 @@ export default function CreateClassworkQuizModal({
 
     return (
         <>
-            <Dialog.Content size="3xl">
-            <Dialog.Header position="fixed" asChild>
+            {!isAIModalOpen && (
+                <Dialog.Content size="3xl">
+                    <Dialog.Header position="fixed" asChild>
                 <div className="flex items-center justify-between w-full">
                     <div>
                         <Text as="h5" className="font-sans text-xl font-bold">
@@ -725,6 +741,19 @@ export default function CreateClassworkQuizModal({
 
                 {createStep === "details" && (
                     <div className="space-y-4">
+                        {aiPromptScope && (
+                            <div className="flex items-start gap-2 rounded-md border-2 border-black bg-[#F6E9B2] p-2.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                <Sparkles className="w-4 h-4 text-black shrink-0 mt-0.5" />
+                                <div className="text-xs">
+                                    <span className="font-black uppercase tracking-wider text-black">
+                                        AI Generation Scope:{" "}
+                                    </span>
+                                    <span className="font-semibold text-black/80">
+                                        "{aiPromptScope}"
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                         <div className="flex flex-col gap-1 w-full">
                             <label className="text-xs font-bold text-gray-700">Subject</label>
                             <Select
@@ -891,13 +920,25 @@ export default function CreateClassworkQuizModal({
 
                 {createStep === "quiz" && (
                     <div className="space-y-4">
+                        {aiPromptScope && (
+                            <div className="flex items-start gap-2 rounded-md border-2 border-black bg-[#F6E9B2] p-2.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                <Sparkles className="w-4 h-4 text-black shrink-0 mt-0.5" />
+                                <div className="text-xs">
+                                    <span className="font-black uppercase tracking-wider text-black">
+                                        AI Generation Scope:{" "}
+                                    </span>
+                                    <span className="font-semibold text-black/80">
+                                        "{aiPromptScope}"
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                         <div className="rounded-lg border-2 border-black bg-[#F8F6ED] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                             <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div>
-                                    <h3 className="text-lg font-bold">Manual quiz builder</h3>
+                                    <h3 className="text-lg font-bold">Quiz question builder</h3>
                                     <p className="text-xs font-medium text-gray-600">
-                                        Multiple-choice and short-answer questions only for this
-                                        MVP.
+                                        Review, edit, and organize questions for "{draft.title || "Quiz"}".
                                     </p>
                                 </div>
                                 <span className="rounded-full border-2 border-black bg-white px-3 py-1 text-xs font-bold shadow-sm">
@@ -1549,6 +1590,7 @@ export default function CreateClassworkQuizModal({
                 )}
             </Dialog.Footer>
         </Dialog.Content>
+            )}
 
         {isAIModalOpen && (
             <AIQuizGeneratorModal
@@ -1560,16 +1602,19 @@ export default function CreateClassworkQuizModal({
                     subjects[0]?.name ||
                     "Subject"
                 }
-                quizTitle={draft.title?.trim() || undefined}
-                onGenerated={(questions, warnings) => {
+                subjects={subjects}
+                onGenerated={(questions, warnings, chosenSubjectId, synthesizedTitle, associatedLessonIds, additionalCoverageScope) => {
                     setQuizQuestions(
                         questions.length > 0
                             ? questions
                             : [createEmptyQuizQuestion(1)],
                     );
                     setQuizImportWarnings(warnings || []);
+                    setAiPromptScope(additionalCoverageScope);
                     setDraft((current) => ({
                         ...current,
+                        title: current.title?.trim() ? current.title : (synthesizedTitle || current.title),
+                        subject_id: chosenSubjectId ? String(chosenSubjectId) : current.subject_id,
                         total_points: String(
                             questions.reduce(
                                 (sum, q) => sum + Number(q.points || 0),
@@ -1577,7 +1622,11 @@ export default function CreateClassworkQuizModal({
                             ) || current.total_points,
                         ),
                     }));
-                    setCreateStep("details");
+                    if (associatedLessonIds && associatedLessonIds.length > 0) {
+                        setSelectedLessonIds(associatedLessonIds);
+                    }
+                    // Fast-track straight to Step 3 (Question Review)
+                    setCreateStep("quiz");
                 }}
             />
         )}

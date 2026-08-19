@@ -11,10 +11,9 @@ def test_build_quiz_prompt():
         lessons=["Photosynthesis", "Cellular Respiration"],
         content_text="Plants convert sunlight into chemical energy.",
         test_parts=[
-            {"type": "MULTIPLE_CHOICE", "count": 5},
-            {"type": "SHORT_ANSWER", "count": 2},
+            {"type": "MULTIPLE_CHOICE", "count": 5, "difficulty_breakdown": {"EASY": 3, "MEDIUM": 2}},
+            {"type": "SHORT_ANSWER", "count": 2, "difficulty_breakdown": {"HARD": 2}},
         ],
-        difficulty="MEDIUM",
     )
     assert "Subject: Science 7" in prompt
     assert "Photosynthesis" in prompt

@@ -244,8 +244,9 @@ async def create_classwork_wizard_record(
             saved_paths.append(info["file_path"])
             db.add(ClassworkAttachment(classwork_id=classwork.classwork_id, **info))
 
+        db.flush()
+
         if is_reading_type(normalized_type):
-            db.flush()
             classwork.total_points = None
             for assignment in created_assignments:
                 assignment.max_attempts = None
@@ -749,7 +750,7 @@ def teacher_classes(staff_id: str, db: Session) -> list[dict]:
         .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
         .join(Class, Class.class_id == SubjectLoad.class_id)
         .outerjoin(AcademicLevel, AcademicLevel.academic_level_id == Class.academic_level_id)
-        .filter(SubjectLoad.staff_id == staff_id, SubjectLoad.status == "active")
+        .filter(SubjectLoad.staff_id == staff_id, SubjectLoad.status.in_(["active", "published"]))
         .all()
     )
     return [
@@ -776,7 +777,7 @@ def teacher_assignments_for_class_subject(
         SubjectLoad.staff_id == staff_id,
         SubjectLoad.class_id == class_id,
         SubjectLoad.subject_id == subject_id,
-        SubjectLoad.status == "active",
+        SubjectLoad.status.in_(["active", "published"]),
     ).first()
     if not load:
         raise HTTPException(status_code=403, detail="Not assigned to this class/subject")
