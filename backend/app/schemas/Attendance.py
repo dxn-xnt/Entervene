@@ -46,6 +46,7 @@ class AttendanceRecordResponse(BaseModel):
     student_name: str | None = None
     class_id: int
     subject_id: int | None = None
+    subject_name: str | None = None
     date: date
     status: str
     remarks: str | None = None

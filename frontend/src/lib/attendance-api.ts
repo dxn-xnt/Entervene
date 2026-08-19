@@ -9,6 +9,7 @@ export type AttendanceRecordItem = {
   student_name: string | null;
   class_id: number;
   subject_id: number | null;
+  subject_name?: string | null;
   date: string;
   status: AttendanceStatus;
   remarks: string | null;
@@ -76,6 +77,46 @@ export async function getClassAttendanceLogs(
   const queryString = params.toString() ? `?${params.toString()}` : "";
   const res = await apiFetch(`/api/v1/attendance/class/${classId}${queryString}`);
   if (!res.ok) throw new Error("Failed to fetch class attendance logs");
+  return res.json();
+}
+
+export async function getMyAttendanceSummary(
+  classId?: number,
+  subjectId?: number
+): Promise<AttendanceSummaryResponse> {
+  const params = new URLSearchParams();
+  if (classId) params.append("class_id", String(classId));
+  if (subjectId) params.append("subject_id", String(subjectId));
+
+  const queryString = params.toString() ? `?${params.toString()}` : "";
+  const res = await apiFetch(`/api/v1/attendance/student/my-summary${queryString}`);
+  if (!res.ok) throw new Error("Failed to fetch attendance summary");
+  return res.json();
+}
+
+export async function getMyAttendanceLogs(
+  classId?: number,
+  subjectId?: number
+): Promise<AttendanceRecordItem[]> {
+  const params = new URLSearchParams();
+  if (classId) params.append("class_id", String(classId));
+  if (subjectId) params.append("subject_id", String(subjectId));
+
+  const queryString = params.toString() ? `?${params.toString()}` : "";
+  const res = await apiFetch(`/api/v1/attendance/student/my-logs${queryString}`);
+  if (!res.ok) throw new Error("Failed to fetch attendance history");
+  return res.json();
+}
+
+export async function getMyLeaveRequests(
+  classId?: number
+): Promise<LeaveRequestItem[]> {
+  const params = new URLSearchParams();
+  if (classId) params.append("class_id", String(classId));
+
+  const queryString = params.toString() ? `?${params.toString()}` : "";
+  const res = await apiFetch(`/api/v1/attendance/student/my-leave-requests${queryString}`);
+  if (!res.ok) throw new Error("Failed to fetch leave requests");
   return res.json();
 }
 

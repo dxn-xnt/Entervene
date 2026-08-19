@@ -22,7 +22,9 @@ from app.services.attendance.AttendanceService import (
     create_leave_request,
     get_class_attendance_logs,
     get_class_leave_requests,
+    get_student_attendance_logs,
     get_student_attendance_summary,
+    get_student_leave_requests,
     update_leave_request_status,
 )
 
@@ -57,6 +59,50 @@ def list_class_attendance_logs(
     return get_class_attendance_logs(db=db, class_id=class_id, date_val=date_val, subject_id=subject_id)
 
 
+@router.get("/student/my-summary", response_model=AttendanceSummaryResponse)
+def get_my_attendance_summary(
+    class_id: Optional[int] = Query(None, description="Filter summary by class ID"),
+    subject_id: Optional[int] = Query(None, description="Filter summary by subject ID"),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get overall attendance statistics and rate (%) for the authenticated student.
+    """
+    user_id = UUID(current_user["sub"])
+    student_id = _get_student_id_from_user_id(db, user_id)
+    return get_student_attendance_summary(db=db, student_id=student_id, class_id=class_id, subject_id=subject_id)
+
+
+@router.get("/student/my-logs", response_model=list[AttendanceRecordResponse])
+def get_my_attendance_logs(
+    class_id: Optional[int] = Query(None, description="Filter logs by class ID"),
+    subject_id: Optional[int] = Query(None, description="Filter logs by subject ID"),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get attendance record history for the authenticated student.
+    """
+    user_id = UUID(current_user["sub"])
+    student_id = _get_student_id_from_user_id(db, user_id)
+    return get_student_attendance_logs(db=db, student_id=student_id, class_id=class_id, subject_id=subject_id)
+
+
+@router.get("/student/my-leave-requests", response_model=list[LeaveRequestResponse])
+def get_my_leave_requests(
+    class_id: Optional[int] = Query(None, description="Filter leave requests by class ID"),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get submitted leave requests for the authenticated student.
+    """
+    user_id = UUID(current_user["sub"])
+    student_id = _get_student_id_from_user_id(db, user_id)
+    return get_student_leave_requests(db=db, student_id=student_id, class_id=class_id)
+
+
 @router.get("/student/{student_id}/summary", response_model=AttendanceSummaryResponse)
 def get_student_summary(
     student_id: UUID,
@@ -65,7 +111,7 @@ def get_student_summary(
     db: Session = Depends(get_db),
 ):
     """
-    Get overall attendance statistics and rate (%) for a student.
+    Get overall attendance statistics and rate (%) for a student by UUID.
     """
     return get_student_attendance_summary(db=db, student_id=student_id, class_id=class_id)
 
