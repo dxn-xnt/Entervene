@@ -209,7 +209,7 @@ def get_my_subjects(
         .filter(
             Student.student_id == student.student_id,
             StudentClass.enrollment_status == "enrolled",
-            SubjectLoad.status == "active",
+            SubjectLoad.status.in_(["active", "published"]),
         )
         .all()
     )

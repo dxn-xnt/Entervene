@@ -82,7 +82,7 @@ def ensure_subject_owner(db: Session, staff_id: str, subject_id: int) -> None:
     load = db.query(SubjectLoad).filter(
         SubjectLoad.staff_id == staff_id,
         SubjectLoad.subject_id == subject_id,
-        SubjectLoad.status == "active",
+        SubjectLoad.status.in_(["active", "published"]),
     ).first()
     if not load:
         raise HTTPException(status_code=403, detail="You are not assigned to this subject")
@@ -111,7 +111,7 @@ def ensure_class_targets(db: Session, staff_id: str, subject_id: int, class_ids:
             SubjectLoad.staff_id == staff_id,
             SubjectLoad.subject_id == subject_id,
             SubjectLoad.class_id.in_(class_ids),
-            SubjectLoad.status == "active",
+            SubjectLoad.status.in_(["active", "published"]),
         ).all()
     }
     if set(class_ids) != valid_class_ids:

@@ -91,7 +91,7 @@ def _teacher_summaries(db: Session, teacher_ids: set[str]) -> dict[str, dict[str
         db.query(SubjectLoad.staff_id, Subject.subject_name, SubjectLoad.class_id)
         .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
         .filter(SubjectLoad.staff_id.in_(teacher_ids))
-        .filter(SubjectLoad.status == "active")
+        .filter(SubjectLoad.status.in_(["active", "published"]))
         .all()
     )
     for load in teacher_loads:
@@ -232,7 +232,7 @@ def get_user_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any]:
             db.query(Subject.subject_name, SubjectLoad.class_id)
             .join(SubjectLoad, Subject.subject_id == SubjectLoad.subject_id)
             .filter(SubjectLoad.staff_id == user.staff_id)
-            .filter(SubjectLoad.status == "active")
+            .filter(SubjectLoad.status.in_(["active", "published"]))
             .all()
         )
         item["staff_id"] = user.staff_id

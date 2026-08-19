@@ -46,7 +46,7 @@ def _student_class_ids_for_teacher_subject(db: Session, staff_id: str, student_i
             StudentClass.enrollment_status == "enrolled",
             SubjectLoad.staff_id == staff_id,
             SubjectLoad.subject_id == subject_id,
-            SubjectLoad.status == "active",
+            SubjectLoad.status.in_(["active", "published"]),
         )
         .all()
     )
@@ -115,7 +115,7 @@ def _validate_lesson_resource(
         SubjectLoad.staff_id == staff_id,
         SubjectLoad.subject_id == lesson.subject_id,
         SubjectLoad.class_id.in_(scoped_class_ids),
-        SubjectLoad.status == "active",
+        SubjectLoad.status.in_(["active", "published"]),
     ).first():
         raise HTTPException(status_code=403, detail="You cannot suggest this lesson")
     return lesson
@@ -235,7 +235,7 @@ def list_teacher_suggestions(
             return SuggestionListResponse()
         load_query = db.query(SubjectLoad.class_id, SubjectLoad.subject_id).filter(
             SubjectLoad.staff_id == staff_id,
-            SubjectLoad.status == "active",
+            SubjectLoad.status.in_(["active", "published"]),
         )
         if class_id is not None:
             load_query = load_query.filter(SubjectLoad.class_id == class_id)

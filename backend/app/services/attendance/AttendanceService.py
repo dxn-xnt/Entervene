@@ -81,15 +81,20 @@ def batch_mark_attendance(
     results: list[AttendanceRecordResponse] = []
 
     for item in payload.records:
-        existing = (
+        existing_q = (
             db.query(AttendanceRecord)
             .filter(
                 AttendanceRecord.student_id == item.student_id,
                 AttendanceRecord.class_id == payload.class_id,
                 AttendanceRecord.date == payload.date,
             )
-            .first()
         )
+        if payload.subject_id is not None:
+            existing_q = existing_q.filter(AttendanceRecord.subject_id == payload.subject_id)
+        else:
+            existing_q = existing_q.filter(AttendanceRecord.subject_id.is_(None))
+        existing = existing_q.first()
+
 
         if existing:
             existing.status = item.status

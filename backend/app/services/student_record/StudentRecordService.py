@@ -84,7 +84,7 @@ def teacher_period_options(
         db.query(AcademicPeriod, AcademicYear)
         .join(SubjectLoad, SubjectLoad.academic_period_id == AcademicPeriod.academic_period_id)
         .join(AcademicYear, AcademicYear.academic_year_id == AcademicPeriod.academic_year_id)
-        .filter(SubjectLoad.staff_id == staff_id, SubjectLoad.status == "active")
+        .filter(SubjectLoad.staff_id == staff_id, SubjectLoad.status.in_(["active", "published"]))
     )
     if class_id is not None:
         query = query.filter(SubjectLoad.class_id == class_id)
@@ -461,7 +461,7 @@ def _teacher_scope(
             SubjectLoad.class_id == class_id,
             SubjectLoad.subject_id == subject_id,
             SubjectLoad.academic_period_id == period_id,
-            SubjectLoad.status == "active",
+            SubjectLoad.status.in_(["active", "published"]),
             Class.class_status != "archived",
         )
         .first()

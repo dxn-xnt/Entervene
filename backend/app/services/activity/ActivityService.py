@@ -30,7 +30,7 @@ def _verify_teacher_scope(db: Session, staff_id: str, class_id: int, subject_id:
             SubjectLoad.staff_id == staff_id,
             SubjectLoad.class_id == class_id,
             SubjectLoad.subject_id == subject_id,
-            SubjectLoad.status == "active",
+            SubjectLoad.status.in_(["active", "published"]),
         )
         .first()
     )

@@ -749,7 +749,7 @@ def teacher_classes(staff_id: str, db: Session) -> list[dict]:
         .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
         .join(Class, Class.class_id == SubjectLoad.class_id)
         .outerjoin(AcademicLevel, AcademicLevel.academic_level_id == Class.academic_level_id)
-        .filter(SubjectLoad.staff_id == staff_id, SubjectLoad.status == "active")
+        .filter(SubjectLoad.staff_id == staff_id, SubjectLoad.status.in_(["active", "published"]))
         .all()
     )
     return [
@@ -776,7 +776,7 @@ def teacher_assignments_for_class_subject(
         SubjectLoad.staff_id == staff_id,
         SubjectLoad.class_id == class_id,
         SubjectLoad.subject_id == subject_id,
-        SubjectLoad.status == "active",
+        SubjectLoad.status.in_(["active", "published"]),
     ).first()
     if not load:
         raise HTTPException(status_code=403, detail="Not assigned to this class/subject")
