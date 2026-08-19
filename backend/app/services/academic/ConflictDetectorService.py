@@ -293,7 +293,7 @@ class ConflictDetectorService:
                 s_code = subject_obj.subject_codename or ""
                 c_name = class_obj.section_name or ""
                 is_jhs = not any(k in c_name.lower() for k in ["campos", "zara", "reyes", "del mundo"])
-                is_math_sci = getattr(subject_obj, "is_math_or_science", False) or any(k in s_name.lower() or k in s_code.lower() for k in ["math", "mathematics", "science", "physics", "chemistry", "biology"])
+                is_math_sci = getattr(subject_obj, "is_math_or_science", False)
 
                 if is_jhs and is_math_sci and load.start_time and load.end_time:
                     dur_hrs = calculate_duration_hours(load.start_time, load.end_time)

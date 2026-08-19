@@ -50,6 +50,8 @@ import {
   Copy,
 } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
+import { useSettings } from "@/context/SettingsContext";
+import { timeStringToMinutes, validatePeriodTimeRange } from "@/lib/time-utils";
 
 function stringToTimeValue(str?: string | null, fallbackHour = 8): TimeValue {
   if (!str) return { hour: fallbackHour, minute: 0, period: "AM" };
@@ -63,18 +65,9 @@ function stringToTimeValue(str?: string | null, fallbackHour = 8): TimeValue {
     if (h > 12) h -= 12;
   } else if (h === 0) {
     h = 12;
+    p = "PM"; // Auto-correct to PM for UI display
   }
   return { hour: h, minute: m, period: p };
-}
-
-function timeStringToMinutes(str?: string | null): number {
-  if (!str) return Number.MAX_SAFE_INTEGER;
-  const parts = str.split(":");
-  if (parts.length < 2) return Number.MAX_SAFE_INTEGER;
-  const h = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10) || 0;
-  if (isNaN(h)) return Number.MAX_SAFE_INTEGER;
-  return h * 60 + m;
 }
 
 function timeValueToString(tv: TimeValue): string {
@@ -123,10 +116,11 @@ const DAYS = [
   { key: "FRI", label: "F" },
 ];
 
-export default function SubjectLoadStudio() {
-  const [studioData, setStudioData] = useState<SubjectLoadStudioData | null>(null);
-  const [selectedPeriodId, setSelectedPeriodId] = useState<number | null>(null);
+export default function AdminSubjectLoadStudio() {
   const [selectedGradeId, setSelectedGradeId] = useState<string>("all");
+  const [studioData, setStudioData] = useState<SubjectLoadStudioData | null>(null);
+  const { getSetting } = useSettings();
+  const [selectedPeriodId, setSelectedPeriodId] = useState<number | null>(null);
   const [loads, setLoads] = useState<SubjectLoadItem[]>([]);
   const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
   const [teacherWorkloads, setTeacherWorkloads] = useState<TeacherWorkloadItem[]>([]);
@@ -360,6 +354,21 @@ export default function SubjectLoadStudio() {
     field: "start_time" | "end_time",
     val: string
   ) => {
+    const item = loads.find(i => i._key === slotKey);
+    if (!item) return;
+
+    const start = field === "start_time" ? val : (item.start_time || "00:00");
+    const end = field === "end_time" ? val : (item.end_time || "00:00");
+
+    const schoolDayStart = getSetting("school_day_start", "06:00");
+    const schoolDayEnd = getSetting("school_day_end", "20:00");
+
+    const errorMsg = validatePeriodTimeRange(start, end, schoolDayStart, schoolDayEnd);
+    if (errorMsg) {
+        setNotice({ type: "error", message: errorMsg });
+        return; // Reject change
+    }
+
     const updated = loads.map((item) => {
       if (item._key !== slotKey) return item;
 
@@ -557,164 +566,379 @@ export default function SubjectLoadStudio() {
     sourceClassId: number,
     mode: "stagger" | "exact" = "stagger"
   ) => {
-    // Extract source grid slots
-    const sourceLoads = loads.filter((l) => l.class_id === sourceClassId && l.start_time && l.end_time && l.days_of_week && l.days_of_week.length > 0);
-    if (sourceLoads.length === 0) return;
+    // ── Step 0: Data-driven bell-schedule compatibility guard ──
+    const sourceClass = studioData?.classes.find((c) => c.class_id === sourceClassId);
+    const targetClass = studioData?.classes.find((c) => c.class_id === targetClassId);
+    if (!sourceClass || !targetClass) return;
 
-    type Slot = { start_time: string; end_time: string; days_of_week: string[]; duration: number; sourceSubjectId: number };
-    const sourceGrid: Slot[] = [];
-    for (const sl of sourceLoads) {
-      if (!sl.start_time || !sl.end_time || !sl.days_of_week) continue;
-      const startMin = timeStringToMinutes(sl.start_time);
-      const endMin = timeStringToMinutes(sl.end_time);
-      const dur = endMin - startMin;
-      // check if this exact slot time/days combo already recorded
-      if (!sourceGrid.some(g => g.start_time === sl.start_time && g.end_time === sl.end_time && JSON.stringify(g.days_of_week.sort()) === JSON.stringify([...sl.days_of_week].sort()))) {
-        sourceGrid.push({
-          start_time: sl.start_time,
-          end_time: sl.end_time,
-          days_of_week: [...sl.days_of_week],
-          duration: dur,
-          sourceSubjectId: sl.subject_id
-        });
-      }
+    const sourceGroup = sourceClass.period_template_group;
+    const targetGroup = targetClass.period_template_group;
+
+    // Explicit error for missing period_template_group — don't silently guess
+    if (!sourceGroup) {
+      setNotice({
+        title: "Copy Blocked",
+        message: `${sourceClass.section_name} has no period template configured. Please assign a bell-schedule template in class settings before copying.`,
+        type: "error",
+      });
+      return;
+    }
+    if (!targetGroup) {
+      setNotice({
+        title: "Copy Blocked",
+        message: `${targetClass.section_name} has no period template configured. Please assign a bell-schedule template in class settings before copying.`,
+        type: "error",
+      });
+      return;
     }
 
-    const targetClass = studioData?.classes.find((c) => c.class_id === targetClassId);
-    if (!targetClass) return;
+    // Compare actual CLASS-type period durations from live periodTemplateSlots
+    const getTeachableDurations = (templateGroup: string): number[] => {
+      return periodTemplateSlots
+        .filter((s) => s.template_group === templateGroup && s.slot_type === "CLASS")
+        .map((s) => timeStringToMinutes(s.end_time) - timeStringToMinutes(s.start_time))
+        .sort((a, b) => a - b);
+    };
+
+    const sourceDurations = getTeachableDurations(sourceGroup);
+    const targetDurations = getTeachableDurations(targetGroup);
+    const sourceSet = JSON.stringify([...new Set(sourceDurations)].sort());
+    const targetSet = JSON.stringify([...new Set(targetDurations)].sort());
+
+    if (sourceSet !== targetSet) {
+      setNotice({
+        title: "Copy Blocked",
+        message: `Can't copy — ${sourceClass.section_name} and ${targetClass.section_name} use different bell schedules (${sourceGroup} vs ${targetGroup}).`,
+        type: "error",
+      });
+      return;
+    }
+
+    // ── Step 1: Build subject blueprints from source section ──
+    const sourceLoads = loads.filter(
+      (l) =>
+        l.class_id === sourceClassId &&
+        l.start_time &&
+        l.end_time &&
+        l.days_of_week &&
+        l.days_of_week.length > 0
+    );
+    if (sourceLoads.length === 0) return;
+
+    type BlueprintSlot = {
+      start_time: string;
+      end_time: string;
+      days_of_week: string[];
+      dayCount: number;
+      duration: number;
+    };
+    type SubjectBlueprint = {
+      subjectId: number;
+      slots: BlueprintSlot[];
+      totalDayCount: number;
+    };
+
+    // Group all source loads by subject_id into blueprints
+    const blueprintMap = new Map<number, SubjectBlueprint>();
+    for (const sl of sourceLoads) {
+      if (!sl.start_time || !sl.end_time || !sl.days_of_week) continue;
+      const dur = timeStringToMinutes(sl.end_time) - timeStringToMinutes(sl.start_time);
+      if (dur <= 0) continue;
+
+      let bp = blueprintMap.get(sl.subject_id);
+      if (!bp) {
+        bp = { subjectId: sl.subject_id, slots: [], totalDayCount: 0 };
+        blueprintMap.set(sl.subject_id, bp);
+      }
+      bp.slots.push({
+        start_time: sl.start_time,
+        end_time: sl.end_time,
+        days_of_week: [...sl.days_of_week],
+        dayCount: sl.days_of_week.length,
+        duration: dur,
+      });
+      bp.totalDayCount += sl.days_of_week.length;
+    }
+
     const offerings = studioData?.subject_offerings || [];
-    const targetSubjects = (studioData?.subjects || []).filter((sub) => isSubjectOfferedForClass(sub, targetClass, offerings));
+    const targetSubjects = (studioData?.subjects || []).filter((sub) =>
+      isSubjectOfferedForClass(sub, targetClass, offerings)
+    );
 
     const currentLoads = [...loads];
+    const ALL_DAYS = ["MON", "TUE", "WED", "THU", "FRI"];
 
-    // Helpers based on live currentLoads
-    const isTeacherBusy = (staffId: string | number | null | undefined, start_time: string, end_time: string, days_of_week: string[]) => {
+    // ── Conflict check helpers (read live currentLoads) ──
+    const isTeacherBusy = (
+      staffId: string | number | null | undefined,
+      start_time: string,
+      end_time: string,
+      checkDays: string[]
+    ) => {
       if (!staffId) return false;
       const stMin = timeStringToMinutes(start_time);
       const enMin = timeStringToMinutes(end_time);
-      return currentLoads.some(l => {
+      return currentLoads.some((l) => {
         if (String(l.staff_id) !== String(staffId)) return false;
-        if (!l.start_time || !l.end_time || !l.days_of_week || l.days_of_week.length === 0) return false;
+        if (!l.start_time || !l.end_time || !l.days_of_week || l.days_of_week.length === 0)
+          return false;
         const lSt = timeStringToMinutes(l.start_time);
         const lEn = timeStringToMinutes(l.end_time);
-        const timeOverlap = (stMin < lEn && enMin > lSt);
+        const timeOverlap = stMin < lEn && enMin > lSt;
         if (!timeOverlap) return false;
-        const daysOverlap = days_of_week.some(d => l.days_of_week!.includes(d));
-        return daysOverlap;
+        return checkDays.some((d) => l.days_of_week!.includes(d));
       });
     };
 
-    const isSlotOccupied = (classId: number, start_time: string, end_time: string, days_of_week: string[]) => {
+    const isSlotOccupied = (
+      classId: number,
+      start_time: string,
+      end_time: string,
+      checkDays: string[]
+    ) => {
       const stMin = timeStringToMinutes(start_time);
       const enMin = timeStringToMinutes(end_time);
-      return currentLoads.some(l => {
+      return currentLoads.some((l) => {
         if (l.class_id !== classId) return false;
-        if (!l.start_time || !l.end_time || !l.days_of_week || l.days_of_week.length === 0) return false;
+        if (!l.start_time || !l.end_time || !l.days_of_week || l.days_of_week.length === 0)
+          return false;
         const lSt = timeStringToMinutes(l.start_time);
         const lEn = timeStringToMinutes(l.end_time);
-        const timeOverlap = (stMin < lEn && enMin > lSt);
+        const timeOverlap = stMin < lEn && enMin > lSt;
         if (!timeOverlap) return false;
-        const daysOverlap = days_of_week.some(d => l.days_of_week!.includes(d));
-        return daysOverlap;
+        return checkDays.some((d) => l.days_of_week!.includes(d));
       });
     };
 
+    const isSubjectBusyGlobal = (
+      subjectId: number,
+      start_time: string,
+      end_time: string,
+      day: string
+    ) => {
+      return currentLoads.some(
+        (l) =>
+          l.subject_id === subjectId &&
+          l.class_id !== targetClassId &&
+          l.start_time &&
+          l.end_time &&
+          timeStringToMinutes(start_time) < timeStringToMinutes(l.end_time) &&
+          timeStringToMinutes(end_time) > timeStringToMinutes(l.start_time) &&
+          l.days_of_week.includes(day)
+      );
+    };
+
+    // Check if a single day is free for section slot, teacher, and globally
+    const isDayFree = (
+      classId: number,
+      subjectId: number,
+      staffId: string | number | null | undefined,
+      start_time: string,
+      end_time: string,
+      day: string
+    ) => {
+      if (isSlotOccupied(classId, start_time, end_time, [day])) return false;
+      if (staffId && isTeacherBusy(staffId, start_time, end_time, [day])) return false;
+      // ALWAYS stagger against the sibling section!
+      if (isSubjectBusyGlobal(subjectId, start_time, end_time, day)) return false;
+      return true;
+    };
+
+    const targetTimeSlots = periodTemplateSlots
+      .filter((s) => s.template_group === targetGroup && s.slot_type === "CLASS")
+      .map((s) => ({
+        start_time: s.start_time,
+        end_time: s.end_time,
+        duration: timeStringToMinutes(s.end_time) - timeStringToMinutes(s.start_time),
+      }));
+
     if (mode === "exact") {
-      targetSubjects.forEach(tsub => {
-        const sourceLoad = sourceLoads.find(l => l.subject_id === tsub.subject_id);
-        const targetLoadIdx = currentLoads.findIndex(l => l.class_id === targetClassId && l.subject_id === tsub.subject_id);
-        if (sourceLoad && targetLoadIdx !== -1) {
-          currentLoads[targetLoadIdx] = {
-            ...currentLoads[targetLoadIdx],
-            start_time: sourceLoad.start_time,
-            end_time: sourceLoad.end_time,
-            days_of_week: sourceLoad.days_of_week ? [...sourceLoad.days_of_week] : [],
-            status: "draft",
-            is_locked: false
-          };
-        }
+      // ── Exact mode: copy all slots per subject verbatim ──
+      targetSubjects.forEach((tsub) => {
+        const bp = blueprintMap.get(tsub.subject_id);
+        if (!bp) return;
+
+        // Find all target load indices for this subject
+        const targetLoadIndices = currentLoads
+          .map((l, idx) => (l.class_id === targetClassId && l.subject_id === tsub.subject_id ? idx : -1))
+          .filter((idx) => idx !== -1);
+
+        bp.slots.forEach((bpSlot, slotIdx) => {
+          if (slotIdx < targetLoadIndices.length) {
+            // Update existing slot
+            const existingStaffId = currentLoads[targetLoadIndices[slotIdx]].staff_id;
+            currentLoads[targetLoadIndices[slotIdx]] = {
+              ...currentLoads[targetLoadIndices[slotIdx]],
+              staff_id: existingStaffId,
+              start_time: bpSlot.start_time,
+              end_time: bpSlot.end_time,
+              days_of_week: [...bpSlot.days_of_week],
+              status: "draft",
+              is_locked: false,
+            };
+          } else {
+            // Need a new slot entry for multi-slot subjects
+            const uniqueId = Math.random().toString(36).substring(2, 7);
+            currentLoads.push({
+              _key: `copy_${targetClassId}_${tsub.subject_id}_${slotIdx}_${uniqueId}`,
+              class_id: targetClassId,
+              subject_id: tsub.subject_id,
+              staff_id: targetLoadIndices.length > 0 ? currentLoads[targetLoadIndices[0]].staff_id : null,
+              academic_period_id: selectedPeriodId || 1,
+              start_time: bpSlot.start_time,
+              end_time: bpSlot.end_time,
+              days_of_week: [...bpSlot.days_of_week],
+              status: "draft",
+              is_locked: false,
+            });
+          }
+        });
       });
+
       setNotice({
         title: "Exact Copy Applied",
         message: `Applied exact time slots to ${targetSubjects.length} subjects for ${targetClass.section_name}.`,
-        type: "success"
+        type: "success",
       });
     } else {
-      // mode === stagger
-      type SubjConstraint = { subjectId: number, loadIdx: number, validSlots: Slot[], requiredDuration: number };
+      // ── Stagger mode: day-count-aware conflict-aware assignment ──
+
+      // Step 2–3: Build constraints per subject, matching to blueprint
+      type SubjConstraint = {
+        subjectId: number;
+        loadIdx: number;
+        blueprint: SubjectBlueprint;
+        staffId: string | number | null | undefined;
+      };
       const constraints: SubjConstraint[] = [];
 
-      targetSubjects.forEach(tsub => {
-        const loadIdx = currentLoads.findIndex(l => l.class_id === targetClassId && l.subject_id === tsub.subject_id);
+      targetSubjects.forEach((tsub) => {
+        const loadIdx = currentLoads.findIndex(
+          (l) => l.class_id === targetClassId && l.subject_id === tsub.subject_id
+        );
         if (loadIdx === -1) return;
-        const tload = currentLoads[loadIdx];
-        
-        // determine required duration. If this subject exists in source section, use that duration. Else fallback to 45 min for now.
-        const sload = sourceLoads.find(l => l.subject_id === tsub.subject_id);
-        const requiredDuration = sload ? timeStringToMinutes(sload.end_time) - timeStringToMinutes(sload.start_time) : 45;
 
-        // find all valid slots in sourceGrid
-        const validSlots = sourceGrid.filter(slot => {
-          if (slot.duration !== requiredDuration) return false;
-          if (isSlotOccupied(targetClassId, slot.start_time, slot.end_time, slot.days_of_week)) return false;
-          if (isTeacherBusy(tload.staff_id, slot.start_time, slot.end_time, slot.days_of_week)) return false;
-          return true;
+        const bp = blueprintMap.get(tsub.subject_id);
+        if (!bp || bp.slots.length === 0) return;
+
+        constraints.push({
+          subjectId: tsub.subject_id,
+          loadIdx,
+          blueprint: bp,
+          staffId: currentLoads[loadIdx].staff_id,
         });
-
-        constraints.push({ subjectId: tsub.subject_id, loadIdx, validSlots, requiredDuration });
       });
 
-      // Sort by most-constrained first (fewest valid slots)
-      constraints.sort((a, b) => a.validSlots.length - b.validSlots.length);
+      // Sort by longest duration first (most total days) to prevent small subjects from fracturing the grid
+      constraints.sort((a, b) => b.blueprint.totalDayCount - a.blueprint.totalDayCount);
 
       let placedCount = 0;
+
       for (const cons of constraints) {
-        // Re-filter valid slots based on latest state
-        const stillValidSlots = cons.validSlots.filter(slot => 
-          !isSlotOccupied(targetClassId, slot.start_time, slot.end_time, slot.days_of_week) &&
-          !isTeacherBusy(currentLoads[cons.loadIdx].staff_id, slot.start_time, slot.end_time, slot.days_of_week)
-        );
+        const bp = cons.blueprint;
+        let allSlotsPlaced = true;
 
-        if (stillValidSlots.length === 0) {
-          // safe fallback
-          currentLoads[cons.loadIdx] = {
-            ...currentLoads[cons.loadIdx],
-            start_time: null,
-            end_time: null,
-            days_of_week: [],
-            status: "draft",
-            is_locked: false
-          };
-          continue;
-        }
+        for (let slotIdx = 0; slotIdx < bp.slots.length; slotIdx++) {
+          const bpSlot = bp.slots[slotIdx];
+          const dur = timeStringToMinutes(bpSlot.end_time) - timeStringToMinutes(bpSlot.start_time);
+          
+          const candidateSlots = targetTimeSlots.filter(ts => ts.duration === dur);
+          
+          // Reorder candidateSlots: nearest distance to original time
+          candidateSlots.sort((a, b) => {
+            const aMin = timeStringToMinutes(a.start_time);
+            const bMin = timeStringToMinutes(b.start_time);
+            const origMin = timeStringToMinutes(bpSlot.start_time);
+            return Math.abs(aMin - origMin) - Math.abs(bMin - origMin);
+          });
 
-        // Prefer slot that differs from source slot for the same subject if possible
-        const sload = sourceLoads.find(l => l.subject_id === cons.subjectId);
-        let chosenSlot = stillValidSlots[0];
-        if (sload && stillValidSlots.length > 1) {
-          const differentSlot = stillValidSlots.find(s => s.start_time !== sload.start_time || s.end_time !== sload.end_time || JSON.stringify(s.days_of_week.sort()) !== JSON.stringify([...(sload.days_of_week || [])].sort()));
-          if (differentSlot) {
-            chosenSlot = differentSlot;
+          let chosenTimeSlot = null;
+          let chosenDays: string[] = [];
+
+          for (const candSlot of candidateSlots) {
+             const daysFound: string[] = [];
+             
+             // First pass: try original days
+             for (const d of bpSlot.days_of_week) {
+               if (isDayFree(targetClassId, cons.subjectId, cons.staffId, candSlot.start_time, candSlot.end_time, d)) {
+                 daysFound.push(d);
+               }
+             }
+
+             // Second pass: try remaining days
+             if (daysFound.length < bpSlot.dayCount) {
+               for (const d of ALL_DAYS) {
+                 if (daysFound.length >= bpSlot.dayCount) break;
+                 if (!daysFound.includes(d) && isDayFree(targetClassId, cons.subjectId, cons.staffId, candSlot.start_time, candSlot.end_time, d)) {
+                   daysFound.push(d);
+                 }
+               }
+             }
+
+             if (daysFound.length >= bpSlot.dayCount) {
+               chosenTimeSlot = candSlot;
+               chosenDays = daysFound;
+               break; // found a working time slot!
+             }
+          }
+
+          if (!chosenTimeSlot) {
+            allSlotsPlaced = false;
+            if (slotIdx === 0) {
+              currentLoads[cons.loadIdx] = {
+                ...currentLoads[cons.loadIdx],
+                start_time: null,
+                end_time: null,
+                days_of_week: [],
+                status: "draft",
+                is_locked: false,
+              };
+            }
+            break;
+          }
+
+          if (slotIdx === 0) {
+            currentLoads[cons.loadIdx] = {
+              ...currentLoads[cons.loadIdx],
+              start_time: chosenTimeSlot.start_time,
+              end_time: chosenTimeSlot.end_time,
+              days_of_week: chosenDays,
+              staff_id: cons.staffId as string | null,
+              status: "draft",
+              is_locked: false,
+            };
+          } else {
+            const uniqueId = Math.random().toString(36).substring(2, 7);
+            currentLoads.push({
+              _key: `copy_${targetClassId}_${cons.subjectId}_${slotIdx}_${uniqueId}`,
+              class_id: targetClassId,
+              subject_id: cons.subjectId,
+              staff_id: cons.staffId as string | null,
+              academic_period_id: selectedPeriodId || 1,
+              start_time: chosenTimeSlot.start_time,
+              end_time: chosenTimeSlot.end_time,
+              days_of_week: chosenDays,
+              status: "draft",
+              is_locked: false,
+            });
           }
         }
 
-        currentLoads[cons.loadIdx] = {
-          ...currentLoads[cons.loadIdx],
-          start_time: chosenSlot.start_time,
-          end_time: chosenSlot.end_time,
-          days_of_week: [...chosenSlot.days_of_week],
-          status: "draft",
-          is_locked: false
-        };
-        placedCount++;
+        if (allSlotsPlaced) {
+          placedCount++;
+        }
       }
 
       setNotice({
-        title: placedCount === constraints.length ? "Copy & Stagger Successful" : "Copy & Stagger Partial",
-        message: placedCount === constraints.length 
-          ? `Successfully scheduled all ${constraints.length} subjects for ${targetClass.section_name} with 0 teacher conflicts.`
-          : `Scheduled ${placedCount} of ${constraints.length} subjects for ${targetClass.section_name}. ${constraints.length - placedCount} subject(s) have a teacher conflict across other sections — please place manually.`,
-        type: placedCount === constraints.length ? "success" : "error"
+        title:
+          placedCount === constraints.length
+            ? "Copy & Stagger Successful"
+            : "Copy & Stagger Partial",
+        message:
+          placedCount === constraints.length
+            ? `Successfully scheduled all ${constraints.length} subjects for ${targetClass.section_name} with 0 teacher conflicts.`
+            : `Scheduled ${placedCount} of ${constraints.length} subjects for ${targetClass.section_name}. ${constraints.length - placedCount} subject(s) have a teacher conflict across other sections — please place manually.`,
+        type: placedCount === constraints.length ? "success" : "error",
       });
     }
 
@@ -1282,27 +1506,49 @@ export default function SubjectLoadStudio() {
                               const siblingSections = (studioData?.classes || []).filter(c => c.class_id !== cls.class_id && c.academic_level_id === cls.academic_level_id);
                               const configuredSiblings = siblingSections.filter(c => loads.some(l => l.class_id === c.class_id && l.start_time && l.end_time));
                               
-                              if (configuredSiblings.length > 0) {
+                              if (configuredSiblings.length === 1) {
+                                const sib = configuredSiblings[0];
                                 return (
                                   <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                       <Button size="sm" variant="outline" className="gap-2">
                                         <Copy className="size-3.5 text-foreground" />
-                                        Copy Schedule From...
+                                        Copy from {sib.section_name}
                                       </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
+                                    <DropdownMenuContent align="end" className="bg-white border-2 border-black shadow-[3px_3px_0_#000] rounded p-1 min-w-[200px]">
+                                      <DropdownMenuItem className="cursor-pointer font-bold focus:bg-gray-100" onClick={() => void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")}>
+                                        Conflict-Aware Fill (Recommended)
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem className="cursor-pointer focus:bg-gray-100" onClick={() => void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")}>
+                                        Exact Match
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                );
+                              }
+
+                              if (configuredSiblings.length > 1) {
+                                return (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button size="sm" variant="outline" className="gap-2">
+                                        <Copy className="size-3.5 text-foreground" />
+                                        Copy Schedule
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="bg-white border-2 border-black shadow-[3px_3px_0_#000] rounded p-1 min-w-[200px]">
                                       {configuredSiblings.map(sib => (
                                         <DropdownMenuSub key={sib.class_id}>
-                                          <DropdownMenuSubTrigger className="font-bold">
+                                          <DropdownMenuSubTrigger className="font-bold focus:bg-gray-100 data-[state=open]:bg-gray-100">
                                             {sib.section_name}
                                           </DropdownMenuSubTrigger>
                                           <DropdownMenuPortal>
-                                            <DropdownMenuSubContent>
-                                              <DropdownMenuItem onClick={() => void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")}>
-                                                <span className="font-bold">Conflict-Aware Fill (Recommended)</span>
+                                            <DropdownMenuSubContent className="bg-white border-2 border-black shadow-[3px_3px_0_#000] rounded p-1 min-w-[200px]">
+                                              <DropdownMenuItem className="cursor-pointer font-bold focus:bg-gray-100" onClick={() => void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")}>
+                                                Conflict-Aware Fill (Recommended)
                                               </DropdownMenuItem>
-                                              <DropdownMenuItem onClick={() => void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")}>
+                                              <DropdownMenuItem className="cursor-pointer focus:bg-gray-100" onClick={() => void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")}>
                                                 Exact Match
                                               </DropdownMenuItem>
                                             </DropdownMenuSubContent>
@@ -1423,7 +1669,7 @@ export default function SubjectLoadStudio() {
                                           <Badge variant="default" size="sm">
                                             {sub.subject_codename || `SUB-${sub.subject_id}`}
                                           </Badge>
-                                          {(sub.is_math_or_science || /math|science|physics|chemistry|biology/i.test(sub.subject_name)) && (
+                                          {sub.is_math_or_science && (
                                             <Badge variant="solid" size="sm">
                                               Core
                                             </Badge>

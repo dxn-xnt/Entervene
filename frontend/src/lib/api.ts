@@ -172,6 +172,7 @@ export type SubjectListItem = {
   description: string | null;
   status: SubjectStatus;
   academic_level: SubjectAcademicLevel;
+  is_math_or_science: boolean;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -208,6 +209,7 @@ export type SubjectCreatePayload = {
   description?: string | null;
   academic_level_id: number;
   status?: SubjectStatus;
+  is_math_or_science?: boolean;
 };
 export type SubjectUpdatePayload = Partial<SubjectCreatePayload>;
 

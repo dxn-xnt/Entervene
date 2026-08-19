@@ -3,6 +3,8 @@ import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { TimePickerSingle, type TimeValue } from "@/components/retroui/TimePicker";
 import { apiFetch } from "@/lib/api";
+import { useSettings } from "@/context/SettingsContext";
+import { validatePeriodTimeRange } from "@/lib/time-utils";
 import { Clock, Save, Coffee, Utensils, Sunrise, Plus, Trash2, FolderPlus } from "lucide-react";
 
 export type PeriodTemplateSlotItem = {
@@ -66,6 +68,7 @@ export default function BreakConfigDrawer({
   initialSlots = [],
   onSaved,
 }: BreakConfigDrawerProps) {
+  const { getSetting } = useSettings();
   const [activeGroup, setActiveGroup] = useState<string>("JHS_45MIN");
   const [slots, setSlots] = useState<PeriodTemplateSlotItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -125,6 +128,27 @@ export default function BreakConfigDrawer({
     field: keyof PeriodTemplateSlotItem,
     value: any
   ) => {
+    if (field === "start_time" || field === "end_time") {
+      const s = slots.find(
+        (st) =>
+          st.template_group === activeGroup &&
+          ((slotId && st.slot_id === slotId) || st.display_order === displayOrder)
+      );
+      if (s) {
+        const start = field === "start_time" ? value : s.start_time;
+        const end = field === "end_time" ? value : s.end_time;
+        const schoolDayStart = getSetting("school_day_start", "06:00");
+        const schoolDayEnd = getSetting("school_day_end", "20:00");
+        const errorMsg = validatePeriodTimeRange(start, end, schoolDayStart, schoolDayEnd);
+        if (errorMsg) {
+          setNotice(errorMsg);
+          return;
+        } else {
+            setNotice(null);
+        }
+      }
+    }
+
     setSlots((prev) =>
       prev.map((s) => {
         if (
