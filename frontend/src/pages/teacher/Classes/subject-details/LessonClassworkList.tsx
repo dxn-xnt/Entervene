@@ -76,7 +76,7 @@ export default function LessonClassworkList({
             <Badge
               variant="secondary"
               size="sm"
-              className="border border-black bg-[#F6E9B2]"
+              className="border border-black bg-primary"
             >
               {quarterlyAssessments.length}
             </Badge>
