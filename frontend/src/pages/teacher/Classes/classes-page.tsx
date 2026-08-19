@@ -223,9 +223,9 @@ const ClassesPage = () => {
                 </Card>
 
                 {groupedSubjectLoads.length === 0 ? (
-                  <p className="rounded-lg border-2 border-black bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-600">
+                  <Card className="flex justify-center items-center border-black py-8 text-sm font-semibold">
                     No subject teaching sections assigned.
-                  </p>
+                  </Card>
                 ) : (
                   groupedSubjectLoads.map((group) => (
                     <Card
