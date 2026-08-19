@@ -68,31 +68,45 @@ def _build_quiz_prompt(
     lessons: list[str],
     content_text: str,
     test_parts: list[dict[str, Any]],
-    difficulty: str,
 ) -> str:
     parts_desc = []
     for p in test_parts:
         ptype = str(p.get("type", "MULTIPLE_CHOICE")).upper()
         count = p.get("count", 5)
         points = float(p.get("points_per_item", 1.0))
-        if ptype == "TRUE_FALSE":
-            label = f"True or False (2 choices: True and False, {points} pt(s) each)"
-        elif ptype == "ESSAY":
-            label = f"Essay / Extended Response (open-ended analytical prompt with rubric in explanation, {points} pt(s) each)"
-        elif ptype == "SHORT_ANSWER":
-            label = f"Short Answer / Identification (single concise word/phrase, {points} pt(s) each)"
+        breakdown: dict[str, int] = {k.upper(): v for k, v in p.get("difficulty_breakdown", {}).items() if v > 0}
+        if not breakdown:
+            breakdown = {"EASY": count}
+
+        # Human-readable difficulty string
+        if len(breakdown) == 1 and "EASY" in breakdown:
+            diff_str = "ALL EASY"
         else:
-            label = f"Multiple Choice (4 distinct choices with 1 correct answer, {points} pt(s) each)"
-        parts_desc.append(f"- {count} items of type {label} ({ptype}) with {points} point(s) each")
+            diff_parts = [f"{breakdown.get(d, 0)} {d}" for d in ("EASY", "MEDIUM", "HARD") if breakdown.get(d, 0) > 0]
+            diff_str = " + ".join(diff_parts)
+
+        if ptype == "TRUE_FALSE":
+            label = "True or False (exactly 2 options: True / False)"
+        elif ptype == "ESSAY":
+            label = "Essay / Open-Ended Response (rubric / key points in explanation)"
+        elif ptype == "SHORT_ANSWER":
+            label = "Short Answer / Identification (single concise word or phrase; answer in explanation)"
+        else:
+            label = "Multiple Choice (exactly 4 options, exactly 1 marked is_correct: true)"
+
+        parts_desc.append(
+            f"  • {count} × {label} ({ptype}) — Difficulty: {diff_str} — {points} pt(s) each"
+        )
 
     lessons_str = ", ".join(lessons) if lessons else "General curriculum topics"
     trimmed_content = content_text.strip()[:4000] if content_text else "No additional text provided."
 
     return (
         f"Subject: {subject or 'General'}\n"
-        f"Connected Lessons: {lessons_str}\n"
-        f"Target Difficulty: {difficulty.upper()}\n"
+        f"Connected Lessons / Source Material: {lessons_str}\n"
         f"Required Test Parts:\n" + "\n".join(parts_desc) + "\n\n"
+        f"IMPORTANT — For each difficulty bucket listed above, generate exactly that many questions "
+        f"at that difficulty_level. Set the difficulty_level field accordingly: EASY, MEDIUM, or HARD.\n\n"
         f"Reference Content:\n\"\"\"\n{trimmed_content}\n\"\"\"\n\n"
         f"Generate exactly the requested questions and return valid JSON."
     )
@@ -264,7 +278,7 @@ async def generate_quiz_questions(
     lessons: list[str],
     content_text: str,
     test_parts: list[dict[str, Any]],
-    difficulty: str = "MEDIUM",
+    difficulty: str = "EASY",  # kept for backward compat; difficulty is now per-part via difficulty_breakdown
 ) -> list[dict[str, Any]]:
     """
     Generate structured quiz questions using AI.
@@ -273,7 +287,7 @@ async def generate_quiz_questions(
     groq_key = settings.groq_api_key
     gemini_key = settings.gemini_api_key
 
-    prompt = _build_quiz_prompt(subject, lessons, content_text, test_parts, difficulty)
+    prompt = _build_quiz_prompt(subject, lessons, content_text, test_parts)
     raw = None
 
     if groq_key:

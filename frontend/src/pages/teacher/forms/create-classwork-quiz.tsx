@@ -1560,6 +1560,7 @@ export default function CreateClassworkQuizModal({
                     subjects[0]?.name ||
                     "Subject"
                 }
+                quizTitle={draft.title?.trim() || undefined}
                 onGenerated={(questions, warnings) => {
                     setQuizQuestions(
                         questions.length > 0
