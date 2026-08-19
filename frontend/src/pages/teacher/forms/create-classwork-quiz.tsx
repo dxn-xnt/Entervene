@@ -35,6 +35,7 @@ interface CreateClassworkQuizModalProps {
     selectedType: ClassworkKind;
     subjects: Array<{ id: number; name: string }>;
     loads: TeacherClassLoad[];
+    initialSubjectId?: string;
     onClose: () => void;
     onSuccess: () => void;
     onBack: () => void;
@@ -44,6 +45,7 @@ export default function CreateClassworkQuizModal({
     selectedType,
     subjects,
     loads,
+    initialSubjectId,
     onClose,
     onSuccess,
     onBack,
@@ -52,10 +54,18 @@ export default function CreateClassworkQuizModal({
         "quiz-source" | "details" | "quiz" | "assign"
     >("quiz-source");
 
-    const [draft, setDraft] = useState<CreateDraft>({
-        ...emptyClassworkDraft,
-        classwork_category: "QUARTERLY_ASSESSMENT",
-        subject_id: subjects[0] ? String(subjects[0].id) : "",
+    const [draft, setDraft] = useState<CreateDraft>(() => {
+        const preferredId =
+            initialSubjectId && subjects.some((s) => String(s.id) === String(initialSubjectId))
+                ? String(initialSubjectId)
+                : subjects[0]
+                    ? String(subjects[0].id)
+                    : "";
+        return {
+            ...emptyClassworkDraft,
+            classwork_category: "QUARTERLY_ASSESSMENT",
+            subject_id: preferredId,
+        };
     });
 
     const [quizQuestions, setQuizQuestions] = useState<QuizQuestionDraft[]>([
@@ -1560,8 +1570,9 @@ export default function CreateClassworkQuizModal({
                     subjects[0]?.name ||
                     "Subject"
                 }
+                subjects={subjects}
                 quizTitle={draft.title?.trim() || undefined}
-                onGenerated={(questions, warnings) => {
+                onGenerated={(questions, warnings, chosenSubjectId) => {
                     setQuizQuestions(
                         questions.length > 0
                             ? questions
@@ -1570,6 +1581,7 @@ export default function CreateClassworkQuizModal({
                     setQuizImportWarnings(warnings || []);
                     setDraft((current) => ({
                         ...current,
+                        subject_id: chosenSubjectId ? String(chosenSubjectId) : current.subject_id,
                         total_points: String(
                             questions.reduce(
                                 (sum, q) => sum + Number(q.points || 0),

@@ -29,6 +29,7 @@ interface CreateClassworkModalProps {
   selectedType: ClassworkKind;
   subjects: Array<{ id: number; name: string }>;
   loads: TeacherClassLoad[];
+  initialSubjectId?: string;
   onClose: () => void;
   onSuccess: () => void;
   onBack: () => void;
@@ -38,15 +39,24 @@ export default function CreateClassworkModal({
   selectedType,
   subjects,
   loads,
+  initialSubjectId,
   onClose,
   onSuccess,
   onBack,
 }: CreateClassworkModalProps) {
   const [createStep, setCreateStep] = useState<"details" | "assign">("details");
-  const [draft, setDraft] = useState<CreateDraft>({
-    ...emptyClassworkDraft,
-    classwork_category: "WRITTEN_WORK",
-    subject_id: subjects[0] ? String(subjects[0].id) : "",
+  const [draft, setDraft] = useState<CreateDraft>(() => {
+    const preferredId =
+      initialSubjectId && subjects.some((s) => String(s.id) === String(initialSubjectId))
+        ? String(initialSubjectId)
+        : subjects[0]
+          ? String(subjects[0].id)
+          : "";
+    return {
+      ...emptyClassworkDraft,
+      classwork_category: "WRITTEN_WORK",
+      subject_id: preferredId,
+    };
   });
   const [materials, setMaterials] = useState<File[]>([]);
   const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);

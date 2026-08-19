@@ -47,11 +47,15 @@ type StudentInfo = {
   full_name?: string;
 };
 
-type ClassItem = {
+type AttendanceTarget = {
+  key: string;
   class_id: number;
+  subject_id?: number;
   section_name: string;
+  subject_name?: string;
   academic_level?: string;
-  student_count?: number;
+  label: string;
+  is_advisory: boolean;
 };
 
 type StudentAttendanceState = {
@@ -77,8 +81,8 @@ type StudentSummaryStats = {
 };
 
 export default function TeacherAttendancePage() {
-  const [classes, setClasses] = useState<ClassItem[]>([]);
-  const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
+  const [targets, setTargets] = useState<AttendanceTarget[]>([]);
+  const [selectedTargetKey, setSelectedTargetKey] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0],
   );
@@ -108,24 +112,76 @@ export default function TeacherAttendancePage() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Fetch Teacher Classes
+  const selectedTarget = useMemo(
+    () => targets.find((t) => t.key === selectedTargetKey) || targets[0] || null,
+    [targets, selectedTargetKey],
+  );
+  const selectedClassId = selectedTarget?.class_id || null;
+  const selectedSubjectId = selectedTarget?.subject_id || undefined;
+
+  const advisoryTargets = useMemo(
+    () => targets.filter((t) => t.is_advisory),
+    [targets],
+  );
+  const subjectTargets = useMemo(
+    () => targets.filter((t) => !t.is_advisory),
+    [targets],
+  );
+
+  // Fetch Teacher Advisory Classes and Subject Teaching Classes
   useEffect(() => {
     async function fetchClasses() {
       try {
         setLoadingClasses(true);
-        const advisory = await getTeacherAdvisoryClasses();
-        const formatted: ClassItem[] = advisory.map((c) => ({
-          class_id: c.class_id,
-          section_name: c.section_name,
-          academic_level: c.academic_level,
-          student_count: c.student_count,
-        }));
-        setClasses(formatted);
-        if (formatted.length > 0) {
-          setSelectedClassId(formatted[0].class_id);
+        const [advisoryRes, loadsRes] = await Promise.all([
+          getTeacherAdvisoryClasses(),
+          apiFetch("/api/v1/classwork-assignments/teacher/classes"),
+        ]);
+
+        const list: AttendanceTarget[] = [];
+
+        // 1. Advisory classes (Homeroom / Daily)
+        advisoryRes.forEach((c) => {
+          list.push({
+            key: `adv-${c.class_id}`,
+            class_id: c.class_id,
+            section_name: c.section_name,
+            academic_level: c.academic_level,
+            label: `${c.section_name} (${c.academic_level || "Advisory"})`,
+            is_advisory: true,
+          });
+        });
+
+        // 2. Subject Teaching Loads
+        if (loadsRes.ok) {
+          const loads = (await loadsRes.json()) as Array<{
+            subject_load_id: number;
+            subject_id: number;
+            subject_name: string;
+            class_id: number;
+            section_name: string;
+            grade_level?: string;
+          }>;
+          loads.forEach((l) => {
+            list.push({
+              key: `subj-${l.class_id}-${l.subject_id}`,
+              class_id: l.class_id,
+              subject_id: l.subject_id,
+              section_name: l.section_name,
+              subject_name: l.subject_name,
+              academic_level: l.grade_level,
+              label: `${l.subject_name} • ${l.section_name} (${l.grade_level || "Subject"})`,
+              is_advisory: false,
+            });
+          });
+        }
+
+        setTargets(list);
+        if (list.length > 0) {
+          setSelectedTargetKey(list[0].key);
         }
       } catch (err) {
-        console.error("Failed to load advisory classes:", err);
+        console.error("Failed to load attendance classes:", err);
       } finally {
         setLoadingClasses(false);
       }
@@ -133,7 +189,7 @@ export default function TeacherAttendancePage() {
     fetchClasses();
   }, []);
 
-  // Load Attendance Logs & Students for Selected Class & Date
+  // Load Attendance Logs & Students for Selected Class & Subject & Date
   useEffect(() => {
     if (!selectedClassId) return;
 
@@ -149,8 +205,12 @@ export default function TeacherAttendancePage() {
           ? rawData
           : rawData?.students || [];
 
-        // 2. Fetch all logs for class (for overall summary matrix)
-        const fullLogs = await getClassAttendanceLogs(selectedClassId!);
+        // 2. Fetch all logs for class & subject
+        const fullLogs = await getClassAttendanceLogs(
+          selectedClassId!,
+          undefined,
+          selectedSubjectId,
+        );
         setAllClassLogs(fullLogs);
 
         // 3. Filter logs for selected date for marking view
@@ -179,7 +239,10 @@ export default function TeacherAttendancePage() {
         setStudentList(initialStates);
 
         // 5. Fetch leave requests
-        const leaves = await getClassLeaveRequests(selectedClassId!);
+        const leaves = await getClassLeaveRequests(
+          selectedClassId!,
+          selectedSubjectId,
+        );
         setLeaveRequests(leaves);
       } catch (err) {
         console.error("Failed to load attendance logs:", err);
@@ -189,7 +252,7 @@ export default function TeacherAttendancePage() {
     }
 
     loadAttendanceData();
-  }, [selectedClassId, selectedDate]);
+  }, [selectedClassId, selectedSubjectId, selectedDate]);
 
   // Unique recorded dates sorted chronologically
   const uniqueDates = useMemo(() => {
@@ -228,6 +291,7 @@ export default function TeacherAttendancePage() {
       setSaving(true);
       await recordBatchAttendance({
         class_id: selectedClassId,
+        subject_id: selectedSubjectId,
         date: selectedDate,
         records: studentList.map((s) => ({
           student_id: s.student_id,
@@ -237,7 +301,11 @@ export default function TeacherAttendancePage() {
       });
 
       // Refresh full logs after saving
-      const fullLogs = await getClassAttendanceLogs(selectedClassId);
+      const fullLogs = await getClassAttendanceLogs(
+        selectedClassId,
+        undefined,
+        selectedSubjectId,
+      );
       setAllClassLogs(fullLogs);
 
       setSaveSuccess(true);
@@ -428,7 +496,7 @@ export default function TeacherAttendancePage() {
                 {/* Class Selector */}
                 <div>
                   <Label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
-                    Select class
+                    Select class / subject
                   </Label>
                   {loadingClasses ? (
                     <div className="flex items-center gap-2 text-sm font-medium">
@@ -438,16 +506,27 @@ export default function TeacherAttendancePage() {
                   ) : (
                     <select
                       className="h-10 w-full rounded-none border-2 border-black bg-white px-3 text-sm font-semibold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] outline-none transition-none focus:shadow-none"
-                      value={selectedClassId || ""}
-                      onChange={(e) =>
-                        setSelectedClassId(Number(e.target.value))
-                      }
+                      value={selectedTargetKey}
+                      onChange={(e) => setSelectedTargetKey(e.target.value)}
                     >
-                      {classes.map((c) => (
-                        <option key={c.class_id} value={c.class_id}>
-                          {c.section_name} ({c.academic_level || "Class"})
-                        </option>
-                      ))}
+                      {advisoryTargets.length > 0 && (
+                        <optgroup label="Advisory Classes (Homeroom Attendance)">
+                          {advisoryTargets.map((t) => (
+                            <option key={t.key} value={t.key}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {subjectTargets.length > 0 && (
+                        <optgroup label="Subject Teaching Classes">
+                          {subjectTargets.map((t) => (
+                            <option key={t.key} value={t.key}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
                   )}
                 </div>

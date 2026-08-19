@@ -16,6 +16,7 @@ type TeacherClassLoad = {
   subject_codename?: string | null;
   class_id: number;
   section_name: string;
+  grade_level?: string;
 };
 
 function AdvisoryCatalogCard({
@@ -126,10 +127,15 @@ const ClassesPage = () => {
     return new Map(advisoryClasses.map((item) => [item.class_id, item]));
   }, [advisoryClasses]);
 
+  const academicYearLabel = useMemo(() => {
+    return advisoryClasses[0]?.academic_year || "2025 - 2026";
+  }, [advisoryClasses]);
+
   const groupedSubjectLoads = useMemo(() => {
     const groups = new Map<string, TeacherClassLoad[]>();
     loads.forEach((load) => {
       const gradeLabel =
+        load.grade_level ||
         advisoryByClass.get(load.class_id)?.academic_level ||
         "Teaching Sections";
       groups.set(gradeLabel, [...(groups.get(gradeLabel) || []), load]);
@@ -169,7 +175,7 @@ const ClassesPage = () => {
               <Card.Content>
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <Card.Title className="mb-0">2024 - 2025</Card.Title>
+                    <Card.Title className="mb-0">{academicYearLabel}</Card.Title>
                     <p className="text-xs font-medium">
                       Sections assigned for this academic year
                     </p>
@@ -233,7 +239,11 @@ const ClassesPage = () => {
                       className="flex flex-col"
                     >
                       <div className="flex items-center justify-between">
-                        <h2 className="text-xl font-bold">Subjects</h2>
+                        <h2 className="text-xl font-bold">
+                          {group.gradeLabel.includes("Grade") || group.gradeLabel.includes("Section")
+                            ? `${group.gradeLabel} Subjects`
+                            : `${group.gradeLabel} - Subjects`}
+                        </h2>
                         <div className="flex flex-row gap-3">
                           <Badge variant="secondary">
                             {group.loads.length} subject

@@ -59,9 +59,14 @@ export interface AIQuizGeneratorModalProps {
   isOpen: boolean;
   onClose: () => void;
   subjectId: number;
-  subjectName: string;
+  subjectName?: string;
+  subjects?: Array<{ id: number; name: string }>;
   quizTitle?: string; // draft title from parent — used in exported document
-  onGenerated: (questions: QuizQuestionDraft[], warnings?: string[]) => void;
+  onGenerated: (
+    questions: QuizQuestionDraft[],
+    warnings?: string[],
+    chosenSubjectId?: number
+  ) => void;
 }
 
 interface TeacherLessonItem {
@@ -131,9 +136,27 @@ export default function AIQuizGeneratorModal({
   onClose,
   subjectId,
   subjectName,
+  subjects,
   quizTitle,
   onGenerated,
 }: AIQuizGeneratorModalProps) {
+  // Active subject selection
+  const [currentSubjectId, setCurrentSubjectId] = useState<number>(subjectId);
+
+  useEffect(() => {
+    if (subjectId) {
+      setCurrentSubjectId(subjectId);
+    }
+  }, [subjectId, isOpen]);
+
+  const currentSubjectName = useMemo(() => {
+    return (
+      subjects?.find((s) => s.id === currentSubjectId)?.name ||
+      subjectName ||
+      `Subject #${currentSubjectId}`
+    );
+  }, [subjects, currentSubjectId, subjectName]);
+
   // Source
   const [sourceMode, setSourceMode] = useState<"lesson" | "specific">("lesson");
   const [lessons, setLessons] = useState<TeacherLessonItem[]>([]);
@@ -141,7 +164,6 @@ export default function AIQuizGeneratorModal({
   const [readingClassworks, setReadingClassworks] = useState<ReadingClassworkItem[]>([]);
   const [selectedReadingIds, setSelectedReadingIds] = useState<number[]>([]);
   const [isLoadingSource, setIsLoadingSource] = useState(false);
-  const readingsLoadedRef = useRef(false);
   const [additionalCoverage, setAdditionalCoverage] = useState("");
 
   // Test parts
@@ -164,7 +186,7 @@ export default function AIQuizGeneratorModal({
   // ── Data fetching ────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!isOpen || !subjectId) return;
+    if (!isOpen || !currentSubjectId) return;
     let active = true;
     setIsLoadingSource(true);
 
@@ -175,23 +197,21 @@ export default function AIQuizGeneratorModal({
       })
       .then((data) => {
         if (!active) return;
-        setLessons(data.filter((l) => Number(l.subject_id) === Number(subjectId)));
+        setLessons(data.filter((l) => Number(l.subject_id) === Number(currentSubjectId)));
       })
       .catch(() => { if (active) setLessons([]); })
       .finally(() => { if (active) setIsLoadingSource(false); });
 
     return () => { active = false; };
-  }, [isOpen, subjectId]);
+  }, [isOpen, currentSubjectId]);
 
   useEffect(() => {
-    if (!isOpen || !subjectId || sourceMode !== "specific") return;
-    if (readingsLoadedRef.current) return;
+    if (!isOpen || !currentSubjectId || sourceMode !== "specific") return;
 
     let active = true;
     setIsLoadingSource(true);
-    readingsLoadedRef.current = true;
 
-    apiFetch(`/api/v1/ai/reading-classworks?subject_id=${subjectId}`)
+    apiFetch(`/api/v1/ai/reading-classworks?subject_id=${currentSubjectId}`)
       .then(async (res) => {
         if (!res.ok) throw new Error();
         return (await res.json()) as ReadingClassworkItem[];
@@ -201,7 +221,7 @@ export default function AIQuizGeneratorModal({
       .finally(() => { if (active) setIsLoadingSource(false); });
 
     return () => { active = false; };
-  }, [isOpen, subjectId, sourceMode]);
+  }, [isOpen, currentSubjectId, sourceMode]);
 
   // Reset generated state when modal closes
   useEffect(() => {
@@ -318,7 +338,7 @@ export default function AIQuizGeneratorModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          subject_id: subjectId,
+          subject_id: currentSubjectId,
           lesson_ids: sourceMode === "lesson" ? selectedLessonIds : [],
           reading_classwork_ids: sourceMode === "specific" ? selectedReadingIds : [],
           additional_coverage: additionalCoverage.trim() || null,
@@ -389,9 +409,9 @@ export default function AIQuizGeneratorModal({
     setIsExporting(format);
     try {
       if (format === "pdf") {
-        await exportQuizPdf(generatedDrafts, quizTitle, subjectName, includeAnswerKey);
+        await exportQuizPdf(generatedDrafts, quizTitle, currentSubjectName, includeAnswerKey);
       } else {
-        await exportQuizDocx(generatedDrafts, quizTitle, subjectName, includeAnswerKey);
+        await exportQuizDocx(generatedDrafts, quizTitle, currentSubjectName, includeAnswerKey);
       }
     } catch (e) {
       console.error("Export error:", e);
@@ -402,7 +422,7 @@ export default function AIQuizGeneratorModal({
 
   const handleUseInBuilder = () => {
     if (!generatedDrafts) return;
-    onGenerated(generatedDrafts, generatedWarnings);
+    onGenerated(generatedDrafts, generatedWarnings, currentSubjectId);
     onClose();
   };
 
@@ -483,18 +503,45 @@ export default function AIQuizGeneratorModal({
           ════════════════════════════════════════════════════════════ */}
           {!isGenerated && (
             <>
-              {/* Subject (read-only) */}
+              {/* Subject Selection */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-black">
-                  Subject / Learning Area
-                </label>
-                <div className="flex items-center gap-2 border-2 border-black bg-neutral-100 px-3 py-2 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                  <BookOpen className="w-4 h-4 text-black/70" />
-                  <span>{subjectName || `Subject #${subjectId}`}</span>
-                  <Badge variant="surface" className="ml-auto text-[10px] uppercase font-bold">
-                    Pre-selected
-                  </Badge>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold uppercase tracking-wider text-black">
+                    Subject / Learning Area
+                  </label>
+                  <span className="text-[10px] font-semibold text-muted-foreground">
+                    Change subject to source different lessons
+                  </span>
                 </div>
+                {subjects && subjects.length > 1 ? (
+                  <div className="relative">
+                    <select
+                      value={currentSubjectId}
+                      onChange={(e) => {
+                        const newId = Number(e.target.value);
+                        setCurrentSubjectId(newId);
+                        setSelectedLessonIds([]);
+                        setSelectedReadingIds([]);
+                      }}
+                      disabled={isGenerating}
+                      className="w-full h-10 border-2 border-black bg-white px-3 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] outline-none cursor-pointer focus:shadow-none"
+                    >
+                      {subjects.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 border-2 border-black bg-neutral-100 px-3 py-2 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    <BookOpen className="w-4 h-4 text-black/70" />
+                    <span>{currentSubjectName}</span>
+                    <Badge variant="surface" className="ml-auto text-[10px] uppercase font-bold">
+                      Pre-selected
+                    </Badge>
+                  </div>
+                )}
               </div>
 
               {/* Source Mode Toggle */}
@@ -557,7 +604,7 @@ export default function AIQuizGeneratorModal({
                     ) : lessons.length === 0 ? (
                       <div className="p-3 border-2 border-dashed border-black/30 bg-neutral-50 text-xs text-muted-foreground">
                         No lessons found. AI will generate based on general curriculum for{" "}
-                        <strong>{subjectName}</strong>.
+                        <strong>{currentSubjectName}</strong>.
                       </div>
                     ) : (
                       <div className="max-h-32 overflow-y-auto border-2 border-black p-2 space-y-1.5 bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
