@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import GradeItemLine from "@/components/item-line/grade";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Card } from "@/components/retroui/Card";
 import AppLayout from "@/layouts/app-layout";
 import { useNavigate } from "react-router-dom";
 import { getTeacherClasses, type TeacherClassItem } from "@/lib/api";
@@ -41,7 +42,7 @@ const Grades = () => {
             {loading ? (
               <div className="py-12 text-center text-sm text-gray-500">Loading grades...</div>
             ) : classes.length === 0 ? (
-              <div className="py-12 text-center text-sm text-gray-500">No classes assigned.</div>
+              <Card className="py-12 text-center text-lg font-medium">No classes assigned.</Card>
             ) : (
               <div className="flex flex-col gap-3">
                 {classes.map((item) => (

@@ -1,13 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Archive,
-  Info,
-  Paperclip,
-  Plus,
-  Trash2,
-  Users,
-  X,
-} from "lucide-react";
+import { Archive, Info, Paperclip, Plus, Trash2, Users, X } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { API_URL, apiFetch } from "@/lib/api";
@@ -19,6 +11,7 @@ import {
 } from "@/lib/student-record-api";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
+import { Input } from "@/components/retroui/Input";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
@@ -57,7 +50,9 @@ export default function SubjectDetails() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<"lessons" | "students">("lessons");
   const [isCreatingLesson, setIsCreatingLesson] = useState(false);
-  const [activeLessonDetail, setActiveLessonDetail] = useState<Lesson | null>(null);
+  const [activeLessonDetail, setActiveLessonDetail] = useState<Lesson | null>(
+    null,
+  );
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [subjectAssignments, setSubjectAssignments] = useState<
@@ -784,8 +779,12 @@ export default function SubjectDetails() {
                 openLessonManager={openLessonManager}
                 openClassworkForm={openClassworkForm}
                 openClassworkDetail={openClassworkDetail}
-                linkedClassworks={linkedClassworks[activeLessonDetail.lesson_id] || []}
-                isLoadingClasswork={loadingClassworkId === activeLessonDetail.lesson_id}
+                linkedClassworks={
+                  linkedClassworks[activeLessonDetail.lesson_id] || []
+                }
+                isLoadingClasswork={
+                  loadingClassworkId === activeLessonDetail.lesson_id
+                }
               />
             </main>
           ) : (
@@ -812,19 +811,19 @@ export default function SubjectDetails() {
                   </Breadcrumb.List>
                 </Breadcrumb>
 
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              onClick={() => setIsCreatingLesson(true)}
-              className="w-full lg:w-auto gap-2 whitespace-nowrap font-semibold"
-            >
-              <Plus size={16} />
-              Add Lesson
-            </Button>
-          </div>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={() => setIsCreatingLesson(true)}
+                  className="w-full lg:w-auto gap-2 whitespace-nowrap font-semibold"
+                >
+                  <Plus size={16} />
+                  Add Lesson
+                </Button>
+              </div>
 
-              <div className="-mx-4 md:-mx-6 border-b-2 border-border" />
+              <div className="-mx-4 md:-mx-6 border-b-2 border-black" />
 
               <main className="flex flex-col gap-5 pt-5">
                 {error && (
@@ -849,40 +848,42 @@ export default function SubjectDetails() {
                   </Card.Content>
                 </Card>
 
-            <section>
-              <h2 className="mb-3 text-xl font-bold">Subject Overview</h2>
-              <div className="grid gap-4 md:grid-cols-3">
-                <Card className="block">
-                  <Card.Content className="space-y-1">
-                    <Card.Description>Lesson Mastery</Card.Description>
-                    <Card.Title>{overviewMastery}%</Card.Title>
-                    <p className="text-xs text-black">
-                      Average graded classwork performance
-                    </p>
-                  </Card.Content>
-                </Card>
+                <section>
+                  <h2 className="mb-3 text-xl font-bold">Subject Overview</h2>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <Card className="block">
+                      <Card.Content className="space-y-1">
+                        <Card.Description>Lesson Mastery</Card.Description>
+                        <Card.Title>{overviewMastery}%</Card.Title>
+                        <p className="text-xs text-black">
+                          Average graded classwork performance
+                        </p>
+                      </Card.Content>
+                    </Card>
 
-                <Card className="block">
-                  <Card.Content className="space-y-1">
-                    <Card.Description>Classwork Assigned</Card.Description>
-                    <Card.Title>{classworkCount ?? 0}</Card.Title>
-                    <p className="text-xs text-black">
-                      Active classworks in this subject
-                    </p>
-                  </Card.Content>
-                </Card>
+                    <Card className="block">
+                      <Card.Content className="space-y-1">
+                        <Card.Description>Classwork Assigned</Card.Description>
+                        <Card.Title>{classworkCount ?? 0}</Card.Title>
+                        <p className="text-xs text-black">
+                          Active classworks in this subject
+                        </p>
+                      </Card.Content>
+                    </Card>
 
-                <Card className="block">
-                  <Card.Content className="space-y-1">
-                    <Card.Description>Completion Percentage</Card.Description>
-                    <Card.Title>{overviewCompletion}%</Card.Title>
-                    <p className="text-xs text-black">
-                      Average submitted classwork completion
-                    </p>
-                  </Card.Content>
-                </Card>
-              </div>
-            </section>
+                    <Card className="block">
+                      <Card.Content className="space-y-1">
+                        <Card.Description>
+                          Completion Percentage
+                        </Card.Description>
+                        <Card.Title>{overviewCompletion}%</Card.Title>
+                        <p className="text-xs text-black">
+                          Average submitted classwork completion
+                        </p>
+                      </Card.Content>
+                    </Card>
+                  </div>
+                </section>
 
                 <Tabs
                   tabs={tabs}
@@ -891,7 +892,11 @@ export default function SubjectDetails() {
                 />
 
                 {activeTab === "students" && classId && subjectId ? (
-                  <StudentRecordsPanel classId={classId} subjectId={subjectId} subjectLoads={loads as any} />
+                  <StudentRecordsPanel
+                    classId={classId}
+                    subjectId={subjectId}
+                    subjectLoads={loads as any}
+                  />
                 ) : isLoading ? (
                   <p className="py-8 text-center text-gray-500">
                     Loading lessons...
@@ -913,42 +918,40 @@ export default function SubjectDetails() {
                     openClassworkDetail={openClassworkDetail}
                     subjectAssignments={subjectAssignments}
                     openLessonDetail={openLessonDetail}
-                      />
+                  />
                 )}
               </main>
             </>
           )}
 
           {selectedLesson && lessonDraft && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
-              <Card className="block max-h-[92vh] w-full max-w-4xl overflow-y-auto">
-                <div className="sticky top-0 z-10 flex items-center justify-between border-b border-black bg-[#F6E9B2] px-5 py-4">
+            <Dialog
+              open
+              onOpenChange={(open) => {
+                if (!open) closeLessonManager();
+              }}
+            >
+              <Dialog.Content className="block w-full max-w-4xl border-black bg-white p-0 transition-none max-h-[92vh] overflow-y-auto">
+                <Dialog.Header className="sticky top-0 z-10 flex items-center justify-between border-b-2 border-black bg-primary px-5 py-4">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wide text-gray-700">
+                    <p className="text-xs font-bold uppercase tracking-wide">
                       Teacher lesson management
                     </p>
-                    <Card.Title className="text-xl font-bold">
+                    <h2 className="text-xl font-bold">
                       {selectedLesson.title}
-                    </Card.Title>
+                    </h2>
                   </div>
-                  <button
-                    type="button"
-                    onClick={closeLessonManager}
-                    className="rounded p-1 hover:bg-white/60"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
+                </Dialog.Header>
 
-                <div className="grid gap-5 p-5 lg:grid-cols-[1.25fr_0.85fr]">
+                <div className="flex flex-col gap-5 p-5">
                   <div className="space-y-4">
                     {error && (
-                      <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                      <div className="border-2 border-red-600 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
                         {error}
                       </div>
                     )}
 
-                    <Card className="block">
+                    <Card className="block w-full shadow-none">
                       <Card.Content className="space-y-4">
                         <div className="grid gap-4 sm:grid-cols-[1fr_130px]">
                           <div>
@@ -958,7 +961,7 @@ export default function SubjectDetails() {
                             >
                               Lesson title
                             </label>
-                            <input
+                            <Input
                               id="manage-lesson-title"
                               value={lessonDraft.title}
                               onChange={(event) =>
@@ -969,7 +972,7 @@ export default function SubjectDetails() {
                                 )
                               }
                               disabled={isSavingLesson}
-                              className="w-full rounded-lg border border-gray-700 px-3 py-2"
+                              className="rounded-none border-black !shadow-none h-10 w-full"
                             />
                           </div>
                           <div>
@@ -979,7 +982,7 @@ export default function SubjectDetails() {
                             >
                               Order
                             </label>
-                            <input
+                            <Input
                               id="manage-lesson-order"
                               type="number"
                               min="1"
@@ -996,7 +999,7 @@ export default function SubjectDetails() {
                                 )
                               }
                               disabled={isSavingLesson}
-                              className="w-full rounded-lg border border-gray-700 px-3 py-2"
+                              className="rounded-none border-black !shadow-none h-10 w-full"
                             />
                           </div>
                         </div>
@@ -1022,7 +1025,7 @@ export default function SubjectDetails() {
                               )
                             }
                             disabled={isSavingLesson}
-                            className="min-h-20 w-full rounded-lg border border-gray-700 px-3 py-2"
+                            className="min-h-20 w-full rounded-none border-2 border-black px-3 py-2 text-sm"
                             placeholder="Short lesson summary"
                           />
                         </div>
@@ -1045,14 +1048,14 @@ export default function SubjectDetails() {
                               )
                             }
                             disabled={isSavingLesson}
-                            className="min-h-52 w-full rounded-lg border border-gray-700 px-3 py-2"
+                            className="min-h-52 w-full rounded-none border-2 border-black px-3 py-2 text-sm"
                             placeholder="Write the lesson notes or learning content students will read."
                           />
                         </div>
                       </Card.Content>
                     </Card>
 
-                    <Card className="block">
+                    <Card className="block w-full shadow-none">
                       <Card.Content className="space-y-3">
                         <div className="flex items-center gap-2">
                           <Paperclip size={18} />
@@ -1060,9 +1063,9 @@ export default function SubjectDetails() {
                             Current Materials
                           </Card.Title>
                           <Badge
-                            variant="secondary"
+                            variant="outline"
                             size="sm"
-                            className="ml-auto"
+                            className="ml-auto rounded-none"
                           >
                             {selectedLesson.attachments.length}
                           </Badge>
@@ -1076,11 +1079,11 @@ export default function SubjectDetails() {
                                 `${API_URL}/api/v1/lessons/${selectedLesson.lesson_id}/attachments/${attachmentId}/download`
                               }
                             />
-                            <div className="mt-3 space-y-2 border-t border-gray-200 pt-3">
+                            <div className="mt-3 space-y-2 border-t-2 border-black pt-3">
                               {selectedLesson.attachments.map((attachment) => (
                                 <div
                                   key={attachment.lesson_attachment_id}
-                                  className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2"
+                                  className="flex items-center justify-between gap-3 border-2 border-black px-3 py-2"
                                 >
                                   <p className="truncate text-sm font-semibold">
                                     {attachment.file_name}
@@ -1096,7 +1099,7 @@ export default function SubjectDetails() {
                                       removingLessonAttachmentId !== null ||
                                       isSavingLesson
                                     }
-                                    className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-red-300 bg-red-50 px-2 py-1 text-xs font-bold text-red-700 disabled:opacity-50"
+                                    className="inline-flex shrink-0 items-center gap-1 border-2 border-red-600 bg-red-50 px-2 py-1 text-xs font-bold text-red-700 disabled:opacity-50"
                                   >
                                     <Trash2 size={14} />
                                     {removingLessonAttachmentId ===
@@ -1116,20 +1119,20 @@ export default function SubjectDetails() {
                       </Card.Content>
                     </Card>
 
-                    <div className="rounded-lg border border-black bg-[#F6E9B2] p-4 text-sm font-medium shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <Card className="block w-full shadow-none">
                       Lesson file uploads now live under Reading classworks so
                       materials can be scheduled, locked, and tracked like the
                       rest of the classwork flow.
-                    </div>
+                    </Card>
                   </div>
 
                   <aside className="space-y-4">
-                    <Card className="block bg-[#F6E9B2]">
+                    <Card className="block w-full bg-primary shadow-none">
                       <Card.Content>
                         <Card.Title className="mb-0 text-base font-bold">
                           Publication
                         </Card.Title>
-                        <label className="mt-3 flex items-start gap-3 rounded-lg border border-black bg-white px-3 py-3 text-sm font-semibold">
+                        <label className="mt-3 flex items-start gap-3 border-2 border-black bg-white px-3 py-3 text-sm font-semibold">
                           <input
                             type="checkbox"
                             checked={lessonDraft.is_published}
@@ -1157,7 +1160,7 @@ export default function SubjectDetails() {
                       </Card.Content>
                     </Card>
 
-                    <Card className="block">
+                    <Card className="block w-full shadow-none">
                       <Card.Content>
                         <Card.Title className="mb-0 text-base font-bold">
                           Assigned Sections
@@ -1170,7 +1173,7 @@ export default function SubjectDetails() {
                           {classesForSubject.map((item) => (
                             <label
                               key={item.subject_load_id}
-                              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+                              className="flex items-center gap-2 border-2 border-black px-3 py-2 text-sm"
                             >
                               <input
                                 type="checkbox"
@@ -1197,7 +1200,7 @@ export default function SubjectDetails() {
                       </Card.Content>
                     </Card>
 
-                    <Card className="block border-red-300 bg-red-50">
+                    <Card className="block w-full shadow-none">
                       <Card.Content>
                         <div className="flex items-center gap-2 text-red-800">
                           <Archive size={17} />
@@ -1213,7 +1216,7 @@ export default function SubjectDetails() {
                           type="button"
                           onClick={() => setShowArchiveConfirm(true)}
                           disabled={isArchivingLesson || isSavingLesson}
-                          className="mt-3 w-full rounded-lg border border-red-400 bg-white px-3 py-2 text-sm font-bold text-red-700 transition hover:border-red-700 hover:bg-red-600 hover:text-white disabled:opacity-50 disabled:hover:border-red-400 disabled:hover:bg-white disabled:hover:text-red-700"
+                          className="mt-3 w-full border-2 border-red-600 bg-white px-3 py-2 text-sm font-bold text-red-700 transition hover:bg-red-600 hover:text-white disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-red-700"
                         >
                           {isArchivingLesson
                             ? "Archiving..."
@@ -1224,20 +1227,20 @@ export default function SubjectDetails() {
                   </aside>
                 </div>
 
-                <div className="sticky bottom-0 flex justify-end gap-3 border-t border-black bg-white px-5 py-4">
-                  <button
+                <div className="sticky bottom-0 flex justify-end gap-3 border-t-2 border-black bg-white px-5 py-4">
+                  <Button
                     type="button"
+                    variant="outline"
                     onClick={closeLessonManager}
                     disabled={
                       isSavingLesson ||
                       isArchivingLesson ||
                       removingLessonAttachmentId !== null
                     }
-                    className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
                   >
                     Close
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     onClick={saveLesson}
                     disabled={
@@ -1245,17 +1248,17 @@ export default function SubjectDetails() {
                       isArchivingLesson ||
                       removingLessonAttachmentId !== null
                     }
-                    className="rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
+                    className="bg-[#7ABA78] text-black hover:bg-[#6aa868]"
                   >
                     {isSavingLesson
                       ? "Saving..."
                       : lessonDraft.is_published
                         ? "Save and Publish"
                         : "Save Draft"}
-                  </button>
+                  </Button>
                 </div>
-              </Card>
-            </div>
+              </Dialog.Content>
+            </Dialog>
           )}
 
           {showArchiveConfirm && selectedLesson && (

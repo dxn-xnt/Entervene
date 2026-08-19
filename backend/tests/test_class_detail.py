@@ -65,14 +65,16 @@ def db():
     if lrn_check and lrn_check in Student.__table__.constraints:
         Student.__table__.constraints.remove(lrn_check)
     try:
-        Base.metadata.create_all(bind=engine, tables=TABLES)
+        Base.metadata.create_all(bind=engine)
     finally:
+        if lrn_check and lrn_check not in Student.__table__.constraints:
+            Student.__table__.append_constraint(lrn_check)
     session = sessionmaker(bind=engine)()
     try:
         yield session
     finally:
         session.close()
-        Base.metadata.drop_all(bind=engine, tables=reversed(TABLES))
+        Base.metadata.drop_all(bind=engine)
         engine.dispose()
 
 
@@ -206,6 +208,7 @@ def test_class_detail_returns_real_basic_information_counts_and_safe_fields(clie
         "academic_level_id": level.academic_level_id,
         "level_name": "Grade 7",
         "grade_level": 7,
+        "requires_pathway": False,
     }
     assert body["adviser"] == {
         "staff_id": adviser.staff_id,

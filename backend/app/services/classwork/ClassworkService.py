@@ -178,6 +178,7 @@ async def create_classwork_wizard_record(
     classwork_category: Optional[str],
     total_points: Optional[float],
     is_published: bool,
+    show_scores: bool = True,
     class_ids: str,
     lesson_ids: Optional[str],
     due_date: Optional[datetime],
@@ -213,6 +214,7 @@ async def create_classwork_wizard_record(
             total_points=total_points,
             subject_id=subject_id,
             is_published=is_published,
+            show_scores=show_scores,
             created_by_staff_id=staff_id,
         )
         db.add(classwork)

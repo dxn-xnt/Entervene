@@ -56,14 +56,16 @@ def db():
     if lrn_check and lrn_check in Student.__table__.constraints:
         Student.__table__.constraints.remove(lrn_check)
     try:
-        Base.metadata.create_all(bind=engine, tables=TABLES)
+        Base.metadata.create_all(bind=engine)
     finally:
+        if lrn_check and lrn_check not in Student.__table__.constraints:
+            Student.__table__.append_constraint(lrn_check)
     session = sessionmaker(bind=engine)()
     try:
         yield session
     finally:
         session.close()
-        Base.metadata.drop_all(bind=engine, tables=reversed(TABLES))
+        Base.metadata.drop_all(bind=engine)
         engine.dispose()
 
 

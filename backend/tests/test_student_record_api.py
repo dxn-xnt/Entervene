@@ -60,8 +60,10 @@ def student_record_context():
     if lrn_check and lrn_check in Student.__table__.constraints:
         Student.__table__.constraints.remove(lrn_check)
     try:
-        Base.metadata.create_all(bind=engine, tables=TABLES)
+        Base.metadata.create_all(bind=engine)
     finally:
+        if lrn_check and lrn_check not in Student.__table__.constraints:
+            Student.__table__.append_constraint(lrn_check)
     db = sessionmaker(bind=engine)()
 
     year = AcademicYear(

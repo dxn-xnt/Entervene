@@ -62,7 +62,7 @@ def get_notifications_for_user(
 
     return NotificationListResponse(
         unread_count=unread_count,
-        notifications=[NotificationResponse.from_orm(r) for r in records],
+        notifications=[NotificationResponse.model_validate(r) for r in records],
     )
 
 
@@ -84,7 +84,7 @@ def mark_notification_read(db: Session, notification_id: str, user_id: str) -> N
     record.read_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(record)
-    return NotificationResponse.from_orm(record)
+    return NotificationResponse.model_validate(record)
 
 
 def mark_all_notifications_read(db: Session, user_id: str) -> dict:

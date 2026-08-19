@@ -58,7 +58,7 @@ def db_session():
     for check in regex_checks:
         Student.__table__.constraints.remove(check)
 
-    Base.metadata.create_all(bind=engine, tables=TABLES)
+    Base.metadata.create_all(bind=engine)
 
     for check in regex_checks:
         Student.__table__.append_constraint(check)

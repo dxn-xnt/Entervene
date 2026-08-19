@@ -1,7 +1,10 @@
+from __future__ import annotations
+from datetime import date, datetime
+from decimal import Decimal
+
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
-    Column,
     Date,
     DateTime,
     ForeignKey,
@@ -12,7 +15,7 @@ from sqlalchemy import (
     event,
 )
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.Base import Base
 from app.services.AcademicPeriodService import normalize_academic_period_values
 
@@ -35,18 +38,19 @@ class AcademicPeriod(Base):
         ),
     )
 
-    academic_period_id = Column(Integer, primary_key=True, autoincrement=True)
-    period_name        = Column(String(100), nullable=False)
-    period_type        = Column(String(20), nullable=False, default="TERM")
-    period_sequence    = Column(Integer, nullable=False, default=1)
-    total_periods_in_year = Column(Integer, nullable=False, default=3)
-    period_progress_ratio = Column(Numeric(6, 4), nullable=False, default=0.3333)
-    start_date         = Column(Date, nullable=False)
-    end_date           = Column(Date, nullable=False)
-    is_active          = Column(Boolean, default=False)
-    academic_year_id   = Column(Integer, ForeignKey("academic_year.academic_year_id", ondelete="CASCADE"), nullable=False)
-    created_at         = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at         = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    academic_period_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    period_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    period_type: Mapped[str] = mapped_column(String(20), nullable=False, default="TERM")
+    period_sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    total_periods_in_year: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    period_progress_ratio: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False, default=0.3333)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    academic_year_id: Mapped[int] = mapped_column(Integer, ForeignKey("academic_year.academic_year_id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
 
     academic_year = relationship("AcademicYear", back_populates="periods")
     subject_loads = relationship("SubjectLoad", back_populates="period")
