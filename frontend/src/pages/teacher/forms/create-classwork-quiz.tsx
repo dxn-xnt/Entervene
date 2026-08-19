@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { X, FileText, Pencil } from "lucide-react";
+import { X, FileText, Pencil, Sparkles } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -29,6 +29,7 @@ import {
     createEmptyQuizQuestion,
     defaultQuizSettings,
 } from "../classworks/quiz-builder-utils";
+import AIQuizGeneratorModal from "./ai-quiz-generator-modal";
 
 interface CreateClassworkQuizModalProps {
     selectedType: ClassworkKind;
@@ -64,6 +65,7 @@ export default function CreateClassworkQuizModal({
         useState<QuizSettingsDraft>(defaultQuizSettings);
     const [quizImportWarnings, setQuizImportWarnings] = useState<string[]>([]);
     const [isImportingQuiz, setIsImportingQuiz] = useState(false);
+    const [isAIModalOpen, setIsAIModalOpen] = useState(false);
 
     const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);
     const [availableLessons, setAvailableLessons] = useState<TeacherLesson[]>([]);
@@ -339,12 +341,6 @@ export default function CreateClassworkQuizModal({
         ) {
             return "Choose when the quiz summary should be released.";
         }
-        if (
-            quizSettings.summary_release_mode === "AFTER_DUE_DATE" &&
-            !draft.due_date
-        ) {
-            return "Set a quiz due date before releasing the summary after the due date.";
-        }
 
         for (const [index, question] of quizQuestions.entries()) {
             const questionNumber = index + 1;
@@ -549,6 +545,7 @@ export default function CreateClassworkQuizModal({
             }
             formData.append("total_points", String(Number(draft.total_points)));
             formData.append("is_published", String(draft.is_published));
+            formData.append("subject_id", String(draft.subject_id));
             formData.append("show_scores", String(draft.show_scores));
             formData.append("class_ids", JSON.stringify(selectedClassIds));
             formData.append("lesson_ids", JSON.stringify(selectedLessonIds));
@@ -575,8 +572,17 @@ export default function CreateClassworkQuizModal({
 
             if (!createResponse.ok) {
                 const body = await createResponse.json().catch(() => ({}));
-                throw new Error(body.detail || "Unable to create quiz.");
+                // FastAPI 422 returns { detail: [{loc, msg, type}] }
+                const detail = body.detail;
+                if (Array.isArray(detail)) {
+                    const msgs = detail.map((e: { loc?: string[]; msg?: string }) =>
+                        `${(e.loc || []).slice(1).join(".")}: ${e.msg}`
+                    ).join("; ");
+                    throw new Error(msgs || "Validation error");
+                }
+                throw new Error(typeof detail === "string" ? detail : "Unable to create quiz.");
             }
+
             await createResponse.json();
 
             onSuccess();
@@ -600,7 +606,8 @@ export default function CreateClassworkQuizModal({
     const createStepTotal = 4;
 
     return (
-        <Dialog.Content size="3xl">
+        <>
+            <Dialog.Content size="3xl">
             <Dialog.Header position="fixed" asChild>
                 <div className="flex items-center justify-between w-full">
                     <div>
@@ -631,22 +638,52 @@ export default function CreateClassworkQuizModal({
 
                 {createStep === "quiz-source" && (
                     <div className="space-y-4">
-                        <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="grid gap-4 sm:grid-cols-3">
                             <button
                                 type="button"
                                 onClick={useManualQuizBuilder}
                                 disabled={isCreating || isImportingQuiz}
-                                className="rounded-lg border-2 border-black bg-[#7ABA78] p-5 text-left shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer"
+                                className="rounded-lg border-2 border-black bg-[#7ABA78] p-5 text-left shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer flex flex-col justify-between"
                             >
-                                <div className="flex items-center gap-2">
-                                    <Pencil size={19} className="text-black" />
-                                    <h3 className="text-lg font-bold text-black">
-                                        Create manually
-                                    </h3>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <Pencil size={19} className="text-black" />
+                                        <h3 className="text-lg font-bold text-black">
+                                            Create manually
+                                        </h3>
+                                    </div>
+                                    <p className="mt-2 text-xs font-medium text-black/80">
+                                        Build multiple-choice and short-answer questions yourself.
+                                    </p>
                                 </div>
-                                <p className="mt-2 text-xs font-medium text-black/80">
-                                    Build multiple-choice and short-answer questions yourself.
-                                </p>
+                                <div className="mt-4 flex items-center justify-center rounded-lg border-2 border-black bg-white px-3 py-2 text-sm font-bold shadow-md hover:bg-neutral-50 transition">
+                                    Start from Scratch
+                                </div>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setQuizImportWarnings([]);
+                                    setIsAIModalOpen(true);
+                                }}
+                                disabled={isCreating || isImportingQuiz}
+                                className="rounded-lg border-2 border-black bg-[#F6E9B2] p-5 text-left shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer flex flex-col justify-between"
+                            >
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <Sparkles size={19} className="text-amber-700" />
+                                        <h3 className="text-lg font-bold text-black">
+                                            AI Generate
+                                        </h3>
+                                    </div>
+                                    <p className="mt-2 text-xs font-medium text-black/80">
+                                        Generate structured questions from lessons and reading materials automatically with AI.
+                                    </p>
+                                </div>
+                                <div className="mt-4 flex items-center justify-center rounded-lg border-2 border-black bg-white px-3 py-2 text-sm font-bold shadow-md hover:bg-neutral-50 transition gap-1">
+                                    <Sparkles size={14} className="text-amber-600" /> Generate with AI
+                                </div>
                             </button>
 
                             <div className="rounded-lg border-2 border-black bg-[#7ABA78] p-5 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
@@ -680,9 +717,7 @@ export default function CreateClassworkQuizModal({
 
                         <Alert status="info">
                             <Alert.Description>
-                                Import reads numbered TXT/CSV/MD quizzes and text-based
-                                PDF/DOCX files with A-D options and optional answer keys.
-                                Scanned files still need OCR, which is deferred.
+                                AI Generation creates curriculum-aligned questions based on your lessons. You can also import TXT/CSV/MD or PDF/DOCX files.
                             </Alert.Description>
                         </Alert>
                     </div>
@@ -960,7 +995,7 @@ export default function CreateClassworkQuizModal({
                                                 <Select.Item value="SCHEDULED">
                                                     At a specific date & time
                                                 </Select.Item>
-                                                <Select.Item value="AFTER_DUE_DATE" disabled={!draft.due_date}>
+                                                <Select.Item value="AFTER_DUE_DATE">
                                                     After the quiz due date
                                                 </Select.Item>
                                                 <Select.Item value="NEVER">Never</Select.Item>
@@ -996,6 +1031,12 @@ export default function CreateClassworkQuizModal({
                                                 : "Students can view the summary right after submitting."}
                                     </div>
                                 )}
+                                {quizSettings.summary_release_mode === "AFTER_DUE_DATE" && !draft.due_date && (
+                                    <p className="text-xs text-amber-600 font-medium mt-1">
+                                        ⚠ Remember to set a due date in the next step so this release mode takes effect.
+                                    </p>
+                                )}
+
                             </div>
 
                             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -1508,5 +1549,37 @@ export default function CreateClassworkQuizModal({
                 )}
             </Dialog.Footer>
         </Dialog.Content>
+
+        {isAIModalOpen && (
+            <AIQuizGeneratorModal
+                isOpen={isAIModalOpen}
+                onClose={() => setIsAIModalOpen(false)}
+                subjectId={Number(draft.subject_id) || (subjects[0]?.id ?? 0)}
+                subjectName={
+                    subjects.find((s) => s.id === Number(draft.subject_id))?.name ||
+                    subjects[0]?.name ||
+                    "Subject"
+                }
+                onGenerated={(questions, warnings) => {
+                    setQuizQuestions(
+                        questions.length > 0
+                            ? questions
+                            : [createEmptyQuizQuestion(1)],
+                    );
+                    setQuizImportWarnings(warnings || []);
+                    setDraft((current) => ({
+                        ...current,
+                        total_points: String(
+                            questions.reduce(
+                                (sum, q) => sum + Number(q.points || 0),
+                                0,
+                            ) || current.total_points,
+                        ),
+                    }));
+                    setCreateStep("details");
+                }}
+            />
+        )}
+        </>
     );
 }

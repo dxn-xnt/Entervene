@@ -14,10 +14,12 @@ from app.api.v1.routes.SubjectOfferings import router as subject_offerings_route
 from app.db.Base import Base
 from app.db.Session import get_db
 from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectOffering import SubjectOffering
+from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
 
 
 TABLES = [
@@ -39,13 +41,13 @@ def db():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(bind=engine, tables=TABLES)
+    Base.metadata.create_all(bind=engine)
     session = sessionmaker(bind=engine)()
     try:
         yield session
     finally:
         session.close()
-        Base.metadata.drop_all(bind=engine, tables=reversed(TABLES))
+        Base.metadata.drop_all(bind=engine)
         engine.dispose()
 
 
@@ -105,7 +107,9 @@ def offering_data(db):
     biology = Subject(subject_name="General Biology 1", subject_codename="GENBIO1", status="active", academic_level_id=grade_11.academic_level_id)
     precal = Subject(subject_name="Pre-Calculus", subject_codename="PRECAL", status="active", academic_level_id=grade_11.academic_level_id)
     archived = Subject(subject_name="Old STEM Subject", subject_codename="OLDSTEM", status="archived", academic_level_id=grade_11.academic_level_id)
-    db.add_all([math_7, biology, precal, archived])
+    med_pw = AcademicPathway(code="stem_medical", name="STEM Medical", is_enabled=True)
+    eng_pw = AcademicPathway(code="stem_engineering", name="STEM Engineering", is_enabled=True)
+    db.add_all([math_7, biology, precal, archived, med_pw, eng_pw])
     db.commit()
     return {
         "year": year,
@@ -120,6 +124,8 @@ def offering_data(db):
         "biology": biology,
         "precal": precal,
         "archived": archived,
+        "med_pw": med_pw,
+        "eng_pw": eng_pw,
     }
 
 
@@ -223,14 +229,17 @@ def test_subject_offering_import_rejects_inactive_academic_year(client, db, offe
 
 
 def test_subject_offering_import_rejects_existing_both_conflict(client, db, offering_data):
-    db.add(SubjectOffering(
+    offering = SubjectOffering(
         subject_id=offering_data["biology"].subject_id,
         academic_year_id=offering_data["year"].academic_year_id,
         academic_level_id=offering_data["grade_11"].academic_level_id,
         academic_period_id=offering_data["term_1"].academic_period_id,
-        pathway="both",
         status="active",
-    ))
+    )
+    db.add(offering)
+    db.flush()
+    db.add(SubjectOfferingPathway(subject_offering_id=offering.subject_offering_id, pathway_id=offering_data["med_pw"].id))
+    db.add(SubjectOfferingPathway(subject_offering_id=offering.subject_offering_id, pathway_id=offering_data["eng_pw"].id))
     db.commit()
     content = "\n".join([
         HEADER,

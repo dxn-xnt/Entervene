@@ -85,7 +85,7 @@ def create_activity(db: Session, staff_id: str, payload: ActivityCreateRequest):
         "title": classwork.title,
         "classwork_category": classwork.classwork_category,
         "activity_mode": classwork.activity_mode,
-        "total_points": float(classwork.total_points or 100),
+        "total_points": float(classwork.total_points) if classwork.total_points is not None else 100.0,
     }
 
 

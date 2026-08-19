@@ -45,13 +45,13 @@ def db():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(bind=engine, tables=TABLES)
+    Base.metadata.create_all(bind=engine)
     session = sessionmaker(bind=engine)()
     try:
         yield session
     finally:
         session.close()
-        Base.metadata.drop_all(bind=engine, tables=reversed(TABLES))
+        Base.metadata.drop_all(bind=engine)
         engine.dispose()
 
 
@@ -219,8 +219,8 @@ def create_offering(db, ctx, **overrides):
     from app.services.subject_offerings.SubjectOfferingService import _resolve_pathway_ids
     academic_level = db.query(AcademicLevel).filter(AcademicLevel.academic_level_id == values["academic_level_id"]).first()
     subject = db.query(Subject).filter(Subject.subject_id == values["subject_id"]).first()
-    pathway_ids = values.get("pathway_ids")
-    legacy_pathway = values.get("pathway")
+    pathway_ids: list[int] | None = values.get("pathway_ids")
+    legacy_pathway: str | None = values.get("pathway")
     resolved_pathway_ids = _resolve_pathway_ids(
         db,
         pathway_ids=pathway_ids,

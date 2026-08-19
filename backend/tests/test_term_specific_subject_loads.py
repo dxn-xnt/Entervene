@@ -14,6 +14,7 @@ from app.core.Security import create_access_token
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectOffering import SubjectOffering
@@ -42,7 +43,7 @@ def db():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(bind=engine, tables=TABLES)
+    Base.metadata.create_all(bind=engine)
     session = sessionmaker(bind=engine)()
     
     def _override_get_db():
@@ -57,7 +58,7 @@ def db():
     finally:
         app.dependency_overrides.clear()
         session.close()
-        Base.metadata.drop_all(bind=engine, tables=reversed(TABLES))
+        Base.metadata.drop_all(bind=engine)
         engine.dispose()
 
 
@@ -103,11 +104,15 @@ def test_term_specific_subject_offering_studio_and_validation(db):
     db.add(g11)
     db.flush()
 
+    med_pathway = AcademicPathway(code="stem_medical", name="STEM Medical", is_enabled=True)
+    db.add(med_pathway)
+    db.flush()
+
     stem_class = Class(
         section_name="11-STEM-A",
         academic_level_id=g11.academic_level_id,
         academic_year_id=year.academic_year_id,
-        pathway="stem_medical",
+        pathway=med_pathway,
         class_status="active",
     )
     db.add(stem_class)
@@ -124,7 +129,6 @@ def test_term_specific_subject_offering_studio_and_validation(db):
         academic_year_id=year.academic_year_id,
         academic_level_id=g11.academic_level_id,
         academic_period_id=term1.academic_period_id,
-        pathway="both",
         status="active",
     )
     offering_t2 = SubjectOffering(
@@ -132,7 +136,6 @@ def test_term_specific_subject_offering_studio_and_validation(db):
         academic_year_id=year.academic_year_id,
         academic_level_id=g11.academic_level_id,
         academic_period_id=term2.academic_period_id,
-        pathway="both",
         status="active",
     )
     db.add_all([offering_t1, offering_t2])
