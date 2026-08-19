@@ -823,7 +823,7 @@ export default function SubjectDetails() {
                 </Button>
               </div>
 
-              <div className="-mx-4 md:-mx-6 border-b-2 border-border" />
+              <div className="-mx-4 md:-mx-6 border-b-2 border-black" />
 
               <main className="flex flex-col gap-5 pt-5">
                 {error && (

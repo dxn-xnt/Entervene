@@ -51,7 +51,7 @@ export default function TeacherLessonDetailScreen({
   isLoadingClasswork,
 }: TeacherLessonDetailScreenProps) {
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       {/* ── Breadcrumb Navigation ── */}
       <header className="flex items-center justify-between">
         <Breadcrumb>
@@ -59,7 +59,7 @@ export default function TeacherLessonDetailScreen({
             <Breadcrumb.Item>
               <Breadcrumb.Link
                 onClick={closeLessonDetail}
-                className="cursor-pointer text-xl font-bold text-black/50 hover:text-black md:text-3xl"
+                className="cursor-pointer text-2xl md:text-4xl text-black/50 hover:text-black"
               >
                 Subjects
               </Breadcrumb.Link>
@@ -68,14 +68,14 @@ export default function TeacherLessonDetailScreen({
             <Breadcrumb.Item>
               <Breadcrumb.Link
                 onClick={closeLessonDetail}
-                className="cursor-pointer text-lg font-bold text-black/50 hover:text-black md:text-2xl"
+                className="cursor-pointer text-2xl md:text-4xl text-black/50 hover:text-black"
               >
                 {subjectName}
               </Breadcrumb.Link>
             </Breadcrumb.Item>
             <Breadcrumb.Separator />
             <Breadcrumb.Item>
-              <Breadcrumb.Page className="text-lg font-extrabold md:text-2xl">
+              <Breadcrumb.Page className="text-xl md:text-3xl">
                 {lesson.title}
               </Breadcrumb.Page>
             </Breadcrumb.Item>
@@ -83,12 +83,15 @@ export default function TeacherLessonDetailScreen({
         </Breadcrumb>
       </header>
 
+      {/* ── Full-width border ── */}
+      <div className="-mx-4 border-b-2 border-border md:-mx-6" />
+
       {/* ── Hero Lesson Card ── */}
-      <Card className="block w-full bg-primary">
+      <Card className="block w-full bg-primary p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <Card.Title className="truncate text-3xl font-extrabold text-gray-950">
+              <Card.Title className="text-3xl font-extrabold text-gray-950">
                 {lesson.title}
               </Card.Title>
               <Badge
@@ -109,7 +112,7 @@ export default function TeacherLessonDetailScreen({
               )}
             </div>
 
-            <p className="mt-2 text-sm font-medium leading-relaxed text-gray-800">
+            <p className="text-sm font-medium leading-relaxed text-gray-800">
               {lesson.description ||
                 lesson.content ||
                 "No lesson description provided."}
@@ -177,16 +180,13 @@ export default function TeacherLessonDetailScreen({
                 className="block cursor-pointer"
                 onClick={() => openClassworkDetail(cw)}
               >
-                <Card.Content className="grid grid-cols-[minmax(0,1fr)_7rem_auto] items-center gap-3">
-                  <div className="flex flex-col min-w-0">
-                    <div className="flex items-center gap-2">
-                      {/* <ClassworkIcon type={cw.classwork_type} size={30} /> */}
-                      <Card.Title className="truncate text-lg font-bold text-black">
+                <Card.Content className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {/* <ClassworkIcon type={cw.classwork_type} size={24} /> */}
+                    <div className="flex flex-col min-w-0">
+                      <Card.Title className="text-lg font-bold text-black truncate">
                         {cw.title}
                       </Card.Title>
-                    </div>
-
-                    <div className="min-w-0">
                       <p className="text-xs font-medium">
                         {cw.classwork_type || "Classwork"}
                         {cw.due_date
@@ -202,23 +202,23 @@ export default function TeacherLessonDetailScreen({
                       </p>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-3">
-                    <Button className="text-xs font-bold gap-2">
+                  <div className="flex items-center gap-3 shrink-0">
+                    {cw.attachment_count ? (
+                      <Badge
+                        size="sm"
+                        className="bg-[#7ABA78] border border-black text-black font-semibold"
+                      >
+                        File {cw.attachment_count}
+                      </Badge>
+                    ) : null}
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="text-xs font-bold gap-2 bg-white shadow-none hover:bg-white"
+                    >
                       <Eye size={14} />
                       Details
                     </Button>
-                    <div className="flex justify-end min-w-0">
-                      {cw.attachment_count ? (
-                        <Badge
-                          size="sm"
-                          className="bg-[#7ABA78] border border-black text-black font-semibold"
-                        >
-                          File {cw.attachment_count}
-                        </Badge>
-                      ) : (
-                        <span aria-hidden="true" className="h-7 w-20" />
-                      )}
-                    </div>
                   </div>
                 </Card.Content>
               </Card>
