@@ -244,8 +244,9 @@ async def create_classwork_wizard_record(
             saved_paths.append(info["file_path"])
             db.add(ClassworkAttachment(classwork_id=classwork.classwork_id, **info))
 
+        db.flush()
+
         if is_reading_type(normalized_type):
-            db.flush()
             classwork.total_points = None
             for assignment in created_assignments:
                 assignment.max_attempts = None

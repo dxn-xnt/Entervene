@@ -1,6 +1,4 @@
-"use client";
-
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Sparkles,
   Plus,
@@ -65,7 +63,10 @@ export interface AIQuizGeneratorModalProps {
   onGenerated: (
     questions: QuizQuestionDraft[],
     warnings?: string[],
-    chosenSubjectId?: number
+    chosenSubjectId?: number,
+    synthesizedTitle?: string,
+    associatedLessonIds?: number[],
+    additionalCoverageScope?: string
   ) => void;
 }
 
@@ -165,6 +166,64 @@ export default function AIQuizGeneratorModal({
   const [selectedReadingIds, setSelectedReadingIds] = useState<number[]>([]);
   const [isLoadingSource, setIsLoadingSource] = useState(false);
   const [additionalCoverage, setAdditionalCoverage] = useState("");
+
+  // Smart Synthesized Title based on subject, selected lessons/readings, and coverage
+  const synthesizedQuizTitle = useMemo(() => {
+    if (quizTitle && quizTitle.trim()) {
+      return quizTitle.trim();
+    }
+
+    const sName = currentSubjectName || "Subject";
+
+    if (sourceMode === "specific" && selectedReadingIds.length > 0) {
+      const selectedItems = readingClassworks.filter((r) =>
+        selectedReadingIds.includes(r.classwork_id)
+      );
+      if (selectedItems.length === 1) {
+        return `${sName}: ${selectedItems[0].title} Quiz`;
+      }
+      if (selectedItems.length === 2) {
+        return `${sName}: ${selectedItems[0].title} & ${selectedItems[1].title} Quiz`;
+      }
+      if (selectedItems.length > 2) {
+        return `${sName}: ${selectedItems[0].title} + ${selectedItems.length - 1} Topics Quiz`;
+      }
+    }
+
+    if (sourceMode === "lesson" && selectedLessonIds.length > 0) {
+      const selectedItems = lessons.filter((l) =>
+        selectedLessonIds.includes(l.lesson_id)
+      );
+      if (selectedItems.length === 1) {
+        return `${sName}: ${selectedItems[0].title} Quiz`;
+      }
+      if (selectedItems.length === 2) {
+        return `${sName}: ${selectedItems[0].title} & ${selectedItems[1].title} Quiz`;
+      }
+      if (selectedItems.length > 2) {
+        return `${sName}: ${selectedItems[0].title} + ${selectedItems.length - 1} Lessons Quiz`;
+      }
+    }
+
+    if (additionalCoverage.trim()) {
+      const truncated =
+        additionalCoverage.trim().length > 35
+          ? `${additionalCoverage.trim().slice(0, 32)}...`
+          : additionalCoverage.trim();
+      return `${sName}: ${truncated} Quiz`;
+    }
+
+    return `${sName} Quiz`;
+  }, [
+    quizTitle,
+    currentSubjectName,
+    sourceMode,
+    selectedReadingIds,
+    readingClassworks,
+    selectedLessonIds,
+    lessons,
+    additionalCoverage,
+  ]);
 
   // Test parts
   const [testParts, setTestParts] = useState<TestPartRow[]>([
@@ -409,9 +468,9 @@ export default function AIQuizGeneratorModal({
     setIsExporting(format);
     try {
       if (format === "pdf") {
-        await exportQuizPdf(generatedDrafts, quizTitle, currentSubjectName, includeAnswerKey);
+        await exportQuizPdf(generatedDrafts, synthesizedQuizTitle, currentSubjectName, includeAnswerKey);
       } else {
-        await exportQuizDocx(generatedDrafts, quizTitle, currentSubjectName, includeAnswerKey);
+        await exportQuizDocx(generatedDrafts, synthesizedQuizTitle, currentSubjectName, includeAnswerKey);
       }
     } catch (e) {
       console.error("Export error:", e);
@@ -422,7 +481,14 @@ export default function AIQuizGeneratorModal({
 
   const handleUseInBuilder = () => {
     if (!generatedDrafts) return;
-    onGenerated(generatedDrafts, generatedWarnings, currentSubjectId);
+    onGenerated(
+      generatedDrafts,
+      generatedWarnings,
+      currentSubjectId,
+      synthesizedQuizTitle,
+      selectedLessonIds,
+      additionalCoverage.trim() || undefined
+    );
     onClose();
   };
 
@@ -841,31 +907,49 @@ export default function AIQuizGeneratorModal({
                           </Button>
                         </div>
 
-                        {/* ── Difficulty Expander ── */}
-                        <div className="mt-2 pt-2 border-t border-black/10">
-                          <div className="flex items-center justify-between">
-                            <button
-                              type="button"
-                              onClick={() => togglePartExpanded(part.id)}
-                              className="flex items-center gap-1.5 text-[11px] font-semibold text-black/60 hover:text-black cursor-pointer"
-                            >
-                              <Settings2 className="w-3 h-3" />
-                              Customize Difficulty
-                              {isExpanded
-                                ? <ChevronUp className="w-3 h-3" />
-                                : <ChevronDown className="w-3 h-3" />}
-                            </button>
-                            {/* Summary chip */}
+                        {/* ── Prominent Difficulty Customizer Toggle ── */}
+                        <div className="mt-2.5 pt-2 border-t-2 border-black/10 flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => togglePartExpanded(part.id)}
+                            className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold border-2 border-black transition-all cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
+                              isExpanded
+                                ? "bg-black text-white"
+                                : isDefaultBreakdown(part)
+                                ? "bg-white text-black hover:bg-neutral-100"
+                                : "bg-[#F6E9B2] text-black hover:bg-[#ebdca0]"
+                            }`}
+                          >
+                            <Settings2 className="w-3.5 h-3.5" />
+                            <span>Customize Difficulty</span>
                             <span
-                              className={`text-[10px] font-bold px-1.5 py-0.5 border ${
-                                bError
-                                  ? "border-red-400 text-red-600 bg-red-50"
-                                  : "border-black/20 bg-neutral-100 text-black/70"
+                              className={`px-1.5 py-0.5 text-[10px] font-extrabold uppercase ${
+                                isExpanded
+                                  ? "bg-white/20 text-white"
+                                  : bError
+                                  ? "bg-red-500 text-white"
+                                  : isDefaultBreakdown(part)
+                                  ? "bg-neutral-200 text-black/80"
+                                  : "bg-black text-white"
                               }`}
                             >
-                              {bError ? `⚠ ${breakdownSum(part)}/${part.count}` : breakdownSummary(part)}
+                              {bError
+                                ? `⚠ ${breakdownSum(part)}/${part.count}`
+                                : breakdownSummary(part)}
                             </span>
-                          </div>
+                            {isExpanded ? (
+                              <ChevronUp className="w-3.5 h-3.5 ml-0.5" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 ml-0.5" />
+                            )}
+                          </button>
+
+                          <span className="text-[11px] font-semibold text-muted-foreground hidden sm:inline-block">
+                            {isDefaultBreakdown(part)
+                              ? "Default: 100% Easy"
+                              : "Custom Easy/Med/Hard split"}
+                          </span>
+                        </div>
 
                           {isExpanded && (
                             <div className="flex flex-wrap items-center gap-3 mt-2">
@@ -908,7 +992,6 @@ export default function AIQuizGeneratorModal({
                               )}
                             </div>
                           )}
-                        </div>
                       </div>
                     );
                   })}
