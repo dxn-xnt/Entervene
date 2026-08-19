@@ -1,4 +1,11 @@
-import { BookOpen, ClipboardList, Eye, FileText, Pencil, Plus } from "lucide-react";
+import {
+  BookOpen,
+  ClipboardList,
+  Eye,
+  FileText,
+  Pencil,
+  Plus,
+} from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
@@ -16,7 +23,13 @@ interface TeacherLessonDetailScreenProps {
   isLoadingClasswork: boolean;
 }
 
-function ClassworkIcon({ type, size = 20 }: { type?: string | null; size?: number }) {
+function ClassworkIcon({
+  type,
+  size = 20,
+}: {
+  type?: string | null;
+  size?: number;
+}) {
   switch (type?.toUpperCase()) {
     case "QUIZ":
       return <ClipboardList size={size} className="shrink-0 text-black" />;
@@ -71,7 +84,7 @@ export default function TeacherLessonDetailScreen({
       </header>
 
       {/* ── Hero Lesson Card ── */}
-      <Card className="block w-full border-2 border-black bg-[#F6E9B2] p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+      <Card className="block w-full bg-primary">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -97,7 +110,9 @@ export default function TeacherLessonDetailScreen({
             </div>
 
             <p className="mt-2 text-sm font-medium leading-relaxed text-gray-800">
-              {lesson.description || lesson.content || "No lesson description provided."}
+              {lesson.description ||
+                lesson.content ||
+                "No lesson description provided."}
             </p>
 
             {lesson.content && lesson.description && (
@@ -108,21 +123,24 @@ export default function TeacherLessonDetailScreen({
 
             <p className="mt-4 text-xs font-semibold text-gray-600">
               {lesson.created_at
-                ? `Created ${new Date(lesson.created_at).toLocaleDateString("en-US", {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  })}`
+                ? `Created ${new Date(lesson.created_at).toLocaleDateString(
+                    "en-US",
+                    {
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    },
+                  )}`
                 : ""}
             </p>
           </div>
 
           <Button
             type="button"
-            variant="outline"
+            variant="default"
             size="sm"
             onClick={() => openLessonManager(lesson)}
-            className="shrink-0 gap-1.5 border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100"
+            className="shrink-0 gap-1.5 bg-white hover:bg-white font-bold"
             title="Edit lesson details"
           >
             <Pencil size={15} />
@@ -140,7 +158,7 @@ export default function TeacherLessonDetailScreen({
             variant="default"
             size="sm"
             onClick={() => openClassworkForm(lesson)}
-            className="gap-2 border-2 border-black bg-[#7ABA78] font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#68a966]"
+            className="gap-2 border-2 border-black bg-[#7ABA78] font-bold hover:bg-[#68a966]"
           >
             <Plus size={16} />
             Add Classwork
@@ -148,7 +166,7 @@ export default function TeacherLessonDetailScreen({
         </div>
 
         {isLoadingClasswork ? (
-          <Card className="block p-6 text-center text-sm font-semibold text-gray-600 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+          <Card className="block p-6 text-center text-sm font-semibold">
             Loading classwork...
           </Card>
         ) : linkedClassworks.length > 0 ? (
@@ -156,46 +174,52 @@ export default function TeacherLessonDetailScreen({
             {linkedClassworks.map((cw) => (
               <Card
                 key={cw.classwork_assignment_id}
-                className="block cursor-pointer border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
+                className="block cursor-pointer"
                 onClick={() => openClassworkDetail(cw)}
               >
-                <Card.Content className="grid grid-cols-[minmax(0,1fr)_7rem_auto] items-center gap-3 py-4 px-5">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <ClassworkIcon type={cw.classwork_type} size={22} />
-                    <div className="min-w-0">
+                <Card.Content className="grid grid-cols-[minmax(0,1fr)_7rem_auto] items-center gap-3">
+                  <div className="flex flex-col min-w-0">
+                    <div className="flex items-center gap-2">
+                      {/* <ClassworkIcon type={cw.classwork_type} size={30} /> */}
                       <Card.Title className="truncate text-lg font-bold text-black">
                         {cw.title}
                       </Card.Title>
-                      <p className="text-xs font-medium text-gray-700 mt-0.5">
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium">
                         {cw.classwork_type || "Classwork"}
                         {cw.due_date
-                          ? ` | Due ${new Date(cw.due_date).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })}`
+                          ? ` | Due ${new Date(cw.due_date).toLocaleDateString(
+                              "en-US",
+                              {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              },
+                            )}`
                           : ""}
                       </p>
                     </div>
                   </div>
-
-                  <div className="flex min-w-28 justify-center">
-                    {cw.attachment_count ? (
-                      <Badge
-                        size="sm"
-                        className="bg-[#7ABA78] border border-black text-black font-semibold"
-                      >
-                        File {cw.attachment_count}
-                      </Badge>
-                    ) : (
-                      <span aria-hidden="true" className="h-7 w-20" />
-                    )}
+                  <div className="flex flex-col gap-3">
+                    <Button className="text-xs font-bold gap-2">
+                      <Eye size={14} />
+                      Details
+                    </Button>
+                    <div className="flex justify-end min-w-0">
+                      {cw.attachment_count ? (
+                        <Badge
+                          size="sm"
+                          className="bg-[#7ABA78] border border-black text-black font-semibold"
+                        >
+                          File {cw.attachment_count}
+                        </Badge>
+                      ) : (
+                        <span aria-hidden="true" className="h-7 w-20" />
+                      )}
+                    </div>
                   </div>
-
-                  <span className="inline-flex items-center gap-1 rounded-lg border-2 border-black bg-gray-50 px-3 py-1.5 text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100">
-                    <Eye size={14} />
-                    Details
-                  </span>
                 </Card.Content>
               </Card>
             ))}
@@ -205,9 +229,12 @@ export default function TeacherLessonDetailScreen({
             <Card.Content className="flex items-center gap-3">
               <ClipboardList size={22} className="shrink-0 text-gray-400" />
               <div>
-                <Card.Title className="text-lg font-bold">No classworks yet</Card.Title>
+                <Card.Title className="text-lg font-bold">
+                  No classworks yet
+                </Card.Title>
                 <p className="text-xs font-medium text-gray-600">
-                  Click "+ Add Classwork" to assign readings, activities, or quizzes to this lesson.
+                  Click "+ Add Classwork" to assign readings, activities, or
+                  quizzes to this lesson.
                 </p>
               </div>
             </Card.Content>
