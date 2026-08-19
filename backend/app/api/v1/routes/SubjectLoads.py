@@ -282,6 +282,21 @@ def get_subject_load_studio_data(
         ],
     }
 
+def get_school_hours_settings(db: Session) -> tuple[str, str]:
+    from app.models.settings.Setting import Setting
+    settings = db.query(Setting).filter(Setting.key.in_(["school_day_start", "school_day_end"])).all()
+    s_map = {s.key: s.value for s in settings}
+    return s_map.get("school_day_start", "06:00"), s_map.get("school_day_end", "20:00")
+
+def time_str_to_mins(t_str: str) -> int:
+    if not t_str:
+        return 9999
+    try:
+        h, m = t_str.split(":")
+        return int(h) * 60 + int(m)
+    except Exception:
+        return 9999
+
 
 @router.get("/period-templates")
 def get_period_templates(
@@ -311,7 +326,18 @@ def update_period_templates(
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
+    start_str, end_str = get_school_hours_settings(db)
+    min_mins = time_str_to_mins(start_str)
+    max_mins = time_str_to_mins(end_str)
+
     for item in payload:
+        s_mins = time_str_to_mins(item.start_time)
+        e_mins = time_str_to_mins(item.end_time)
+        if e_mins <= s_mins:
+            raise HTTPException(status_code=400, detail="End time must be after start time.")
+        if s_mins < min_mins or e_mins > max_mins:
+            raise HTTPException(status_code=400, detail=f"Time falls outside configured school hours ({start_str} - {end_str}).")
+
         if item.slot_id:
             db_slot = db.query(PeriodTemplateSlot).filter(PeriodTemplateSlot.slot_id == item.slot_id).first()
             if db_slot:
@@ -376,6 +402,19 @@ def batch_save_subject_loads(
     db: Session = Depends(get_db),
 ):
     period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == payload.academic_period_id).first()
+
+    start_str, end_str = get_school_hours_settings(db)
+    min_mins = time_str_to_mins(start_str)
+    max_mins = time_str_to_mins(end_str)
+
+    for load in payload.loads:
+        if load.start_time and load.end_time:
+            s_mins = time_str_to_mins(load.start_time)
+            e_mins = time_str_to_mins(load.end_time)
+            if e_mins <= s_mins:
+                raise HTTPException(status_code=400, detail="End time must be after start time.")
+            if s_mins < min_mins or e_mins > max_mins:
+                raise HTTPException(status_code=400, detail=f"Time falls outside configured school hours ({start_str} - {end_str}).")
 
     # Identify affected classes in this payload
     affected_class_ids = set(load_item.class_id for load_item in payload.loads)

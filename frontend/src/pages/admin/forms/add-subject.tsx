@@ -41,6 +41,7 @@ type SubjectFormState = {
   default_grading_template: string;
   description: string;
   status: SubjectStatus;
+  is_math_or_science: boolean;
 };
 
 type OfferingFormState = {
@@ -58,6 +59,7 @@ const emptyForm: SubjectFormState = {
   default_grading_template: NO_TEMPLATE_VALUE,
   description: "",
   status: "active",
+  is_math_or_science: false,
 };
 
 const emptyOfferingForm: OfferingFormState = {
@@ -126,6 +128,7 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
         default_grading_template: subjectToEdit.default_grading_template || NO_TEMPLATE_VALUE,
         description: subjectToEdit.description || "",
         status: subjectToEdit.status,
+        is_math_or_science: subjectToEdit.is_math_or_science || false,
       });
       setOfferNow(false);
     }
@@ -302,6 +305,7 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
           default_grading_template: selectedTemplate,
           description: form.description.trim() || null,
           status: form.status,
+          is_math_or_science: form.is_math_or_science,
         });
         setSuccessMessage(`${form.subject_name.trim()} updated successfully.`);
         await onCreated?.();
@@ -317,6 +321,7 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
         default_grading_template: selectedTemplate,
         description: form.description.trim() || null,
         status: form.status,
+        is_math_or_science: form.is_math_or_science,
       });
       if (!offerNow) {
         setSuccessMessage(`${created.subject_name} has been added to the subject catalog.`);
@@ -522,6 +527,22 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
               type="text"
               placeholder="Optional description"
             />
+          </div>
+          <div className="flex flex-col gap-1 md:col-span-2">
+            <div className="flex items-start gap-3 mt-2 rounded border-2 border-black p-3 shadow-[2px_2px_0_#000]">
+              <Checkbox
+                id="is-math-science"
+                checked={form.is_math_or_science}
+                onCheckedChange={(checked) => setField("is_math_or_science", checked === true)}
+                className="mt-1 shrink-0"
+              />
+              <div className="flex flex-col gap-1">
+                <label htmlFor="is-math-science" className="font-bold">Is Core Math or Science? (60-min requirement)</label>
+                <p className="text-sm text-black/70">
+                  Checking this flag enforces a 60-minute duration requirement for this subject during automatic and manual scheduling to comply with core curriculum standards.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
         <section className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 shadow-[3px_3px_0_#000]">

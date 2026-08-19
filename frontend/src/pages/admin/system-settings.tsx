@@ -71,6 +71,10 @@ export default function AdminSystemSettings() {
   const [averagePassing, setAveragePassing] = React.useState("80");
 
   // Academic calendar & periods
+  const [schoolDayStart, setSchoolDayStart] = React.useState("06:00");
+  const [schoolDayEnd, setSchoolDayEnd] = React.useState("20:00");
+  const [isSavingSchoolHours, setIsSavingSchoolHours] = React.useState(false);
+
   const [academicYears, setAcademicYears] = React.useState<AcademicYearSettingItem[]>([]);
   const [selectedYearId, setSelectedYearId] = React.useState<string>("");
   const [academicPeriods, setAcademicPeriods] = React.useState<AcademicPeriodSettingItem[]>([]);
@@ -271,6 +275,8 @@ export default function AdminSystemSettings() {
       if (flatSettings["shs_enabled"]) setShsEnabled(flatSettings["shs_enabled"] === "true");
       if (flatSettings["medical_pathway_enabled"]) setMedicalEnabled(flatSettings["medical_pathway_enabled"] === "true");
       if (flatSettings["engineering_pathway_enabled"]) setEngineeringEnabled(flatSettings["engineering_pathway_enabled"] === "true");
+      if (flatSettings["school_day_start"]) setSchoolDayStart(flatSettings["school_day_start"]);
+      if (flatSettings["school_day_end"]) setSchoolDayEnd(flatSettings["school_day_end"]);
 
       setAcademicYears(yearsData);
       setAcademicLevels(levelsData);
@@ -316,6 +322,24 @@ export default function AdminSystemSettings() {
       showToast("General average threshold saved");
     } finally {
       setIsSavingThresholds(false);
+    }
+  };
+
+  const handleSaveSchoolHours = async () => {
+    setIsSavingSchoolHours(true);
+    try {
+      // Basic client-side validation to prevent obvious errors before hitting the backend
+      const startMins = (parseInt(schoolDayStart.split(":")[0]) || 0) * 60 + (parseInt(schoolDayStart.split(":")[1]) || 0);
+      const endMins = (parseInt(schoolDayEnd.split(":")[0]) || 0) * 60 + (parseInt(schoolDayEnd.split(":")[1]) || 0);
+      if (startMins >= endMins) {
+        showToast("Start time must be before end time.");
+        return;
+      }
+      await saveSingleSetting("school_day_start", schoolDayStart);
+      await saveSingleSetting("school_day_end", schoolDayEnd);
+      showToast("School operational hours saved");
+    } finally {
+      setIsSavingSchoolHours(false);
     }
   };
 
@@ -627,6 +651,58 @@ export default function AdminSystemSettings() {
                       )}
                     </Table.Body>
                   </Table>
+                </div>
+              </Card.Content>
+            </Card>
+
+            {/* School Operational Hours */}
+            <Card className="@container/card w-full">
+              <Card.Header>
+                <Card.Title className="flex flex-row justify-between w-full items-center">
+                  School Operational Hours
+                  <Button
+                    size="sm"
+                    className="whitespace-nowrap"
+                    onClick={handleSaveSchoolHours}
+                    disabled={isSavingSchoolHours}
+                  >
+                    Save Hours
+                  </Button>
+                </Card.Title>
+              </Card.Header>
+              <Card.Content className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <Text
+                    as="p"
+                    className="font-sans text-sm text-muted-foreground"
+                  >
+                    Set the bounds for valid class schedules. Attempting to schedule classes outside these bounds will be rejected.
+                  </Text>
+                  
+                  <div className="flex items-center gap-4 mt-2">
+                    <div className="flex flex-col gap-1 w-1/3">
+                      <Text as="h6" className="font-sans font-medium text-sm">
+                        Day Start (HH:MM)
+                      </Text>
+                      <Input
+                        className="shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md transition-all"
+                        type="time"
+                        value={schoolDayStart}
+                        onChange={(e) => setSchoolDayStart(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1 w-1/3">
+                      <Text as="h6" className="font-sans font-medium text-sm">
+                        Day End (HH:MM)
+                      </Text>
+                      <Input
+                        className="shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md transition-all"
+                        type="time"
+                        value={schoolDayEnd}
+                        onChange={(e) => setSchoolDayEnd(e.target.value)}
+                      />
+                    </div>
+                  </div>
                 </div>
               </Card.Content>
             </Card>

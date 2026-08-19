@@ -22,6 +22,7 @@ class SubjectBase(BaseModel):
     subject_group_id: int
     hours: int | None = Field(None, ge=0)
     is_core: bool = False
+    is_math_or_science: bool = False
     default_grading_template: str | None = Field(None, max_length=100)
     description: str | None = None
     academic_level_id: int
@@ -37,6 +38,7 @@ class SubjectUpdate(BaseModel):
     subject_group_id: int | None = None
     hours: int | None = Field(None, ge=0)
     is_core: bool | None = None
+    is_math_or_science: bool | None = None
     default_grading_template: str | None = Field(None, max_length=100)
     description: str | None = None
     status: str | None = None
@@ -50,6 +52,7 @@ class SubjectListItem(BaseModel):
     subject_group: SubjectGroupInline | None
     hours: int | None
     is_core: bool = False
+    is_math_or_science: bool = False
     default_grading_template: str | None
     description: str | None
     status: str

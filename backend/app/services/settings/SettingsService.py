@@ -54,10 +54,36 @@ def update_setting(db: Session, key: str, value: str, user_id: str) -> dict:
     """
     row = db.query(Setting).filter(Setting.key == key).first()
     if row is None:
+        if key in ("school_day_start", "school_day_end"):
+            _validate_school_hours(db, key, value)
+            row = Setting(
+                key=key,
+                value=value,
+                type=SettingType.STRING,
+                group="academic",
+                is_public=True,
+                description="School operational hours boundary",
+                updated_by=user_id,
+            )
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+            settings_cache.invalidate()
+            return {
+                "key": row.key,
+                "value": row.value,
+                "type": row.type.value,
+                "group": row.group,
+                "is_public": row.is_public,
+                "description": row.description,
+            }
         raise HTTPException(status_code=404, detail=f"Setting '{key}' not found.")
 
     # ── Strict type validation ──
     _validate_value(value, row.type)
+
+    if key in ("school_day_start", "school_day_end"):
+        _validate_school_hours(db, key, value)
 
     row.value = value
     row.updated_by = user_id
@@ -109,3 +135,42 @@ def _validate_value(value: str, setting_type: SettingType) -> None:
             )
 
     # SettingType.STRING — any value is valid, no validation needed.
+
+
+def _time_str_to_minutes(t_str: str) -> int:
+    try:
+        h, m = t_str.split(":")
+        return int(h) * 60 + int(m)
+    except Exception:
+        raise ValueError("Invalid time format. Expected HH:MM")
+
+def _validate_school_hours(db: Session, key: str, value: str) -> None:
+    """Validate school_day_start and school_day_end constraints."""
+    try:
+        new_mins = _time_str_to_minutes(value)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Time must be in HH:MM format.")
+
+    # Extreme bounds check (e.g. not before 4 AM or after 11 PM)
+    if new_mins < 4 * 60 or new_mins > 23 * 60:
+        raise HTTPException(
+            status_code=422,
+            detail="School hours must be between 04:00 and 23:00."
+        )
+
+    # Cross-field validation (start < end)
+    other_key = "school_day_end" if key == "school_day_start" else "school_day_start"
+    other_row = db.query(Setting).filter(Setting.key == other_key).first()
+    
+    # If other setting doesn't exist yet, we fall back to defaults
+    other_val = other_row.value if other_row and other_row.value else ("20:00" if other_key == "school_day_end" else "06:00")
+    
+    try:
+        other_mins = _time_str_to_minutes(other_val)
+    except ValueError:
+        other_mins = 20 * 60 if other_key == "school_day_end" else 6 * 60
+
+    if key == "school_day_start" and new_mins >= other_mins:
+        raise HTTPException(status_code=422, detail="School day start time must be before end time.")
+    if key == "school_day_end" and new_mins <= other_mins:
+        raise HTTPException(status_code=422, detail="School day end time must be after start time.")
