@@ -28,7 +28,7 @@ export const SidebarConfigs: Record<string, NavItem[]> = {
       { title: "Classes",        url: routes.teacher.classes,       icon: <School />          },
       { title: "Attendance",     url: routes.teacher.attendance,    icon: <UserCheck />       },
       { title: "Classworks",     url: routes.teacher.classworks,    icon: <ClipboardList />   },
-      { title: "Lessons",        url: routes.teacher.lessons,       icon: <Book />            },
+      // { title: "Lessons",        url: routes.teacher.lessons,       icon: <Book />            },
       { title: "Lesson Planner", url: routes.teacher.lessonPlanner, icon: <BookOpenCheck />   },
       { title: "AI Predictions", url: routes.teacher.predictions,   icon: <Sparkles />        },
       { title: "Interventions",  url: routes.teacher.interventions, icon: <Shield />          },
