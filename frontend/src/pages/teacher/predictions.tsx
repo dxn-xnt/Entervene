@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import RiskSummaryCards from "@/components/predictions/RiskSummaryCards";
-import PredictionFilters from "@/components/predictions/PredictionFilters";
-import PredictionTable from "@/components/predictions/PredictionTable";
-import PredictionDetailSheet from "@/components/predictions/PredictionDetailSheet";
+import { OverviewCard } from "@/components/overview-cards";
+import { cn } from "@/lib/utils";
+import PredictionFilters from "@/components/predictions/prediction-filters";
+import PredictionTable from "@/components/predictions/prediction-table";
+import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
+import { PredictionGradeSection, type GradeGroup } from "@/components/predictions/prediction-grade-section";
 import type {
   DashboardAtRiskResponse,
   DashboardFilters,
@@ -25,6 +27,41 @@ const EMPTY_SUMMARY: RiskSummary = {
   total: 0,
 };
 
+const MOCK_GRADE_GROUPS: GradeGroup[] = [
+  { grade: 7, classes: ["Rizal", "Mabini", "Luna"], highRisk: 8, monitoring: 14 },
+  { grade: 8, classes: ["Bonifacio", "Del Pilar"], highRisk: 5, monitoring: 9 },
+  { grade: 9, classes: ["Aguinaldo", "Jacinto", "Silang"], highRisk: 12, monitoring: 7 },
+  { grade: 10, classes: ["Lapu-Lapu", "Tupas"], highRisk: 3, monitoring: 11 },
+];
+
+const RISK_CARDS = [
+  {
+    key: "HIGH_RISK" as const,
+    label: "High Risk",
+    activeClass: "bg-red-200 ring-2 ring-black",
+  },
+  {
+    key: "MODERATE_RISK" as const,
+    label: "Moderate Risk",
+    activeClass: "bg-amber-200 ring-2 ring-black",
+  },
+  {
+    key: "NEEDS_MONITORING" as const,
+    label: "Monitoring",
+    activeClass: "bg-yellow-200 ring-2 ring-black",
+  },
+  {
+    key: "LOW_RISK" as const,
+    label: "Low Risk",
+    activeClass: "bg-emerald-200 ring-2 ring-black",
+  },
+  {
+    key: "INSUFFICIENT_DATA" as const,
+    label: "No Data",
+    activeClass: "bg-gray-200 ring-2 ring-black",
+  },
+];
+
 export default function PredictionsDashboard() {
   // ── State ──
   const [data, setData] = useState<DashboardAtRiskResponse | null>(null);
@@ -42,7 +79,7 @@ export default function PredictionsDashboard() {
   const [sortBy, setSortBy] = useState<string | undefined>("risk_score");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [offset, setOffset] = useState(0);
-  const limit = 25;
+  const limit = 5;
 
   // Detail sheet
   const [selectedPrediction, setSelectedPrediction] = useState<number | null>(
@@ -143,11 +180,33 @@ export default function PredictionsDashboard() {
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
             {/* ── Risk Summary Cards ── */}
-            <RiskSummaryCards
-              summary={summary}
-              onRiskClick={handleRiskClick}
-              activeRisk={riskLevel}
-            />
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+              {RISK_CARDS.map((card) => {
+                const count = summary[card.key];
+                const isActive = riskLevel === card.key;
+
+                return (
+                  <button
+                    key={card.key}
+                    type="button"
+                    onClick={() => handleRiskClick(isActive ? undefined : card.key)}
+                    className="text-left cursor-pointer transition-transform active:translate-x-[2px] active:translate-y-[2px] w-full"
+                  >
+                    <OverviewCard
+                      title={card.label}
+                      count={String(count)}
+                      className={cn(
+                        "w-full border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all",
+
+                        isActive
+                          ? `${card.activeClass} shadow-none translate-x-[2px] translate-y-[2px]`
+                          : "hover:translate-x-[-1px] hover:translate-y-[-1px]"
+                      )}
+                    />
+                  </button>
+                );
+              })}
+            </div>
 
             {/* ── Chart + Filters row ── */}
             <div className="flex flex-col lg:flex-row gap-5">
@@ -197,11 +256,19 @@ export default function PredictionsDashboard() {
                     onRowClick={handleRowClick}
                   />
                 )}
+
+                {/* ── Grade Groups ── */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 -mt-2">
+                  {MOCK_GRADE_GROUPS.map((group) => (
+                    <PredictionGradeSection key={group.grade} group={group} />
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
 
       {/* ── Detail Sheet ── */}
       <PredictionDetailSheet
