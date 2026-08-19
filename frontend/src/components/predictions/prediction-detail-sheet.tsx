@@ -33,6 +33,7 @@ import {
   fetchPredictionSuggestions,
   submitTeacherReview,
 } from "@/lib/prediction-api";
+import { Card } from "../retroui/Card";
 
 interface PredictionDetailSheetProps {
   predictionId: number | null;
@@ -41,11 +42,11 @@ interface PredictionDetailSheetProps {
 }
 
 const RISK_BADGE_STYLES: Record<string, string> = {
-  HIGH_RISK: "bg-red-500 text-white",
-  MODERATE_RISK: "bg-amber-500 text-white",
-  NEEDS_MONITORING: "bg-yellow-400 text-gray-900",
-  LOW_RISK: "bg-emerald-500 text-white",
-  INSUFFICIENT_DATA: "bg-gray-400 text-white",
+  HIGH_RISK: "bg-destructive text-foreground border-border",
+  MODERATE_RISK: "bg-foreground text-white border-border",
+  NEEDS_MONITORING: "bg-primary text-foreground border-border",
+  LOW_RISK: "bg-background text-white border-border",
+  INSUFFICIENT_DATA: "bg-muted text-muted-foreground border-none",
 };
 
 const RISK_LABELS: Record<string, string> = {
@@ -113,7 +114,7 @@ export default function PredictionDetailSheet({
     setReviewSuccess(false);
     setInterventionSuccess(false);
     setInterventionError(null);
-    
+
     Promise.all([
       fetchPredictionDetail(predictionId),
       fetchPredictionSuggestions(predictionId).catch(() => []),
@@ -164,10 +165,10 @@ export default function PredictionDetailSheet({
       setDetail((prev) =>
         prev
           ? {
-              ...prev,
-              teacher_reviews: [review, ...prev.teacher_reviews],
-              current_user_review: review,
-            }
+            ...prev,
+            teacher_reviews: [review, ...prev.teacher_reviews],
+            current_user_review: review,
+          }
           : prev
       );
       setReviewSuccess(true);
@@ -183,7 +184,7 @@ export default function PredictionDetailSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader className="pb-4">
+        <SheetHeader className="pb-0">
           <SheetTitle className="text-lg">Prediction Detail</SheetTitle>
         </SheetHeader>
 
@@ -192,13 +193,14 @@ export default function PredictionDetailSheet({
             <Loader2 className="animate-spin text-gray-400" size={28} />
           </div>
         ) : detail ? (
-          <div className="flex flex-col gap-5 pb-6">
+          <div className="flex flex-col gap-5 p-4">
             {/* ── Summary ── */}
-            <div className="rounded-lg border border-gray-200 p-4 bg-gray-50/50">
+            <Card className="shadow-none">
               <div className="flex items-center justify-between mb-3">
                 <Badge
                   size="sm"
-                  className={`${RISK_BADGE_STYLES[detail.risk_level] ?? "bg-gray-300"} rounded-full px-3 py-1 text-xs font-medium`}
+                  variant="surface"
+                  className={`${RISK_BADGE_STYLES[detail.risk_level] ?? "bg-gray-300"} font-medium`}
                 >
                   {RISK_LABELS[detail.risk_level] ?? detail.risk_level}
                 </Badge>
@@ -232,7 +234,7 @@ export default function PredictionDetailSheet({
                   })}
                 </p>
               )}
-            </div>
+            </Card>
 
             {/* ── Causes ── */}
             {detail.causes.length > 0 && (
@@ -346,115 +348,113 @@ export default function PredictionDetailSheet({
               </div>
             )}
 
-              {/* ── Section: Assigned Interventions ── */}
-              <div className="space-y-3 border-t-2 border-black pt-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-extrabold uppercase tracking-wide text-black flex items-center gap-1.5">
-                    <Sparkles size={16} className="text-yellow-500 fill-yellow-400" />
-                    Assigned Interventions ({suggestions.length})
-                  </h3>
-                </div>
-
-                {suggestions.length > 0 ? (
-                  <div className="flex flex-col gap-2">
-                    {suggestions.map((s) => (
-                      <div
-                        key={s.student_suggestion_id}
-                        className="rounded-none border-2 border-black bg-yellow-50/50 p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-extrabold text-xs text-black uppercase">
-                            {s.title}
-                          </span>
-                          <Badge
-                            className={`border-2 border-black text-[10px] uppercase font-bold px-2 ${
-                              s.status === "ACTIVE"
-                                ? "bg-amber-300 text-black"
-                                : "bg-emerald-400 text-black"
-                            }`}
-                          >
-                            {s.status}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-gray-700 font-medium mt-1">
-                          Priority: <strong className="text-black">{s.priority}</strong>
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-500 font-semibold italic">
-                    No persistent interventions assigned yet for this prediction.
-                  </p>
-                )}
-
-                {/* Assign New Intervention Box */}
-                {isTeacher ? (
-                  <div className="border-2 border-black p-3 bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-2.5 mt-2">
-                    <span className="text-xs font-black uppercase text-black">
-                      Quick Assign AI Intervention
-                    </span>
-                    {interventionSuccess && (
-                      <div className="text-xs font-bold text-emerald-700 flex items-center gap-1">
-                        <CheckCircle2 size={14} /> Intervention assigned successfully!
-                      </div>
-                    )}
-                    {interventionError && (
-                      <div className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 p-2 rounded">
-                        {interventionError}
-                      </div>
-                    )}
-                    <input
-                      type="text"
-                      placeholder="Intervention title (e.g. Remedial Algebra Review)..."
-                      value={interventionTitle}
-                      onChange={(e) => setInterventionTitle(e.target.value)}
-                      className="w-full text-xs font-semibold p-2 border-2 border-black bg-white focus:outline-none shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
-                    />
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value={interventionPriority}
-                        onValueChange={(v: any) => setInterventionPriority(v)}
-                      >
-                        <Select.Trigger className="w-[140px] h-8 text-xs font-bold border-2 border-black bg-white shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
-                          <Select.Value placeholder="Priority" />
-                        </Select.Trigger>
-                        <Select.Content className="border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                          <Select.Item value="NORMAL">NORMAL</Select.Item>
-                          <Select.Item value="HIGH">HIGH</Select.Item>
-                          <Select.Item value="URGENT">URGENT</Select.Item>
-                        </Select.Content>
-                      </Select>
-                      <Button
-                        size="sm"
-                        disabled={!interventionTitle.trim() || assigningIntervention}
-                        onClick={handleAssignIntervention}
-                        className="h-8 flex-1 bg-yellow-300 hover:bg-yellow-400 text-black border-2 border-black font-extrabold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                      >
-                        {assigningIntervention ? (
-                          <Loader2 size={14} className="animate-spin mr-1" />
-                        ) : (
-                          <Send size={12} className="mr-1 stroke-[2.5]" />
-                        )}
-                        Assign Intervention
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="border-2 border-black p-3 bg-sky-50 text-sky-900 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] mt-2">
-                    🔒 Read-Only (Admin View): Assigning interventions is reserved for assigned subject teachers.
-                  </div>
-                )}
+            {/* ── Section: Assigned Interventions ── */}
+            <div className="space-y-3 border-t-2 border-black pt-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-extrabold uppercase tracking-wide text-black flex items-center gap-1.5">
+                  <Sparkles size={16} className="text-yellow-500 fill-yellow-400" />
+                  Assigned Interventions ({suggestions.length})
+                </h3>
               </div>
 
-              <Separator />
+              {suggestions.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  {suggestions.map((s) => (
+                    <div
+                      key={s.student_suggestion_id}
+                      className="rounded-none border-2 border-black bg-yellow-50/50 p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold text-xs text-black uppercase">
+                          {s.title}
+                        </span>
+                        <Badge
+                          className={`border-2 border-black text-[10px] uppercase font-bold px-2 ${s.status === "ACTIVE"
+                            ? "bg-amber-300 text-black"
+                            : "bg-emerald-400 text-black"
+                            }`}
+                        >
+                          {s.status}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-gray-700 font-medium mt-1">
+                        Priority: <strong className="text-black">{s.priority}</strong>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500 font-semibold italic">
+                  No persistent interventions assigned yet for this prediction.
+                </p>
+              )}
 
-              {/* ── Section: Teacher Review ── */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                  <MessageSquare size={16} className="text-indigo-500" />
-                  Teacher Review History
-                </h3>
+              {/* Assign New Intervention Box */}
+              {isTeacher ? (
+                <div className="border-2 border-black p-3 bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-2.5 mt-2">
+                  <span className="text-xs font-black uppercase text-black">
+                    Quick Assign AI Intervention
+                  </span>
+                  {interventionSuccess && (
+                    <div className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                      <CheckCircle2 size={14} /> Intervention assigned successfully!
+                    </div>
+                  )}
+                  {interventionError && (
+                    <div className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 p-2 rounded">
+                      {interventionError}
+                    </div>
+                  )}
+                  <input
+                    type="text"
+                    placeholder="Intervention title (e.g. Remedial Algebra Review)..."
+                    value={interventionTitle}
+                    onChange={(e) => setInterventionTitle(e.target.value)}
+                    className="w-full text-xs font-semibold p-2 border-2 border-black bg-white focus:outline-none shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                  />
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={interventionPriority}
+                      onValueChange={(v: any) => setInterventionPriority(v)}
+                    >
+                      <Select.Trigger className="w-[140px] h-8 text-xs font-bold border-2 border-black bg-white shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                        <Select.Value placeholder="Priority" />
+                      </Select.Trigger>
+                      <Select.Content className="border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <Select.Item value="NORMAL">NORMAL</Select.Item>
+                        <Select.Item value="HIGH">HIGH</Select.Item>
+                        <Select.Item value="URGENT">URGENT</Select.Item>
+                      </Select.Content>
+                    </Select>
+                    <Button
+                      size="sm"
+                      disabled={!interventionTitle.trim() || assigningIntervention}
+                      onClick={handleAssignIntervention}
+                      className="h-8 flex-1 bg-yellow-300 hover:bg-yellow-400 text-black border-2 border-black font-extrabold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    >
+                      {assigningIntervention ? (
+                        <Loader2 size={14} className="animate-spin mr-1" />
+                      ) : (
+                        <Send size={12} className="mr-1 stroke-[2.5]" />
+                      )}
+                      Assign Intervention
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="border-2 border-black p-3 bg-sky-50 text-sky-900 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] mt-2">
+                  🔒 Read-Only (Admin View): Assigning interventions is reserved for assigned subject teachers.
+                </div>
+              )}
+            </div>
+
+            <Separator />
+            {/* ── Section: Teacher Review ── */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                <MessageSquare size={16} className="text-indigo-500" />
+                Teacher Review History
+              </h3>
 
               {/* Existing reviews */}
               {detail.teacher_reviews.length > 0 && (
@@ -520,7 +520,7 @@ export default function PredictionDetailSheet({
                       </Select.Content>
                     </Select>
                   </div>
-                  
+
                   <textarea
                     placeholder="Add notes (optional)..."
                     value={reviewNotes}
@@ -528,7 +528,7 @@ export default function PredictionDetailSheet({
                     className="w-full rounded-md border-2 border-black bg-white px-3 py-2 text-sm resize-none focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                     rows={3}
                   />
-                  
+
                   <Button
                     type="submit"
                     size="sm"

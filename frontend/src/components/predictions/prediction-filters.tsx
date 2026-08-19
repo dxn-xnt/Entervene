@@ -52,7 +52,7 @@ export default function PredictionFilters({
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
         {/* Search */}
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
+        <div className="relative flex-1 w-full">
           <Search
             size={16}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 z-10"
@@ -61,7 +61,7 @@ export default function PredictionFilters({
             placeholder="Search student or LRN..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-9 h-10 w-full bg-white text-sm border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:ring-0"
+            className="pl-9 h-10 w-full bg-white"
           />
         </div>
 
@@ -72,7 +72,7 @@ export default function PredictionFilters({
             onClassChange(v === "all" ? undefined : Number(v))
           }
         >
-          <Select.Trigger className="w-[160px] h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold">
+          <Select.Trigger className="w-[160px] bg-white">
             <Select.Value placeholder="All Classes" />
           </Select.Trigger>
           <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -92,7 +92,7 @@ export default function PredictionFilters({
             onSubjectChange(v === "all" ? undefined : Number(v))
           }
         >
-          <Select.Trigger className="w-[200px] h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold">
+          <Select.Trigger className="w-[200px] bg-white">
             <Select.Value placeholder="All Subjects" />
           </Select.Trigger>
           <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -112,7 +112,7 @@ export default function PredictionFilters({
             onTermChange(v === "all" ? undefined : Number(v))
           }
         >
-          <Select.Trigger className="w-[140px] h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold">
+          <Select.Trigger className="w-[140px] bg-white">
             <Select.Value placeholder="All Terms" />
           </Select.Trigger>
           <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -132,7 +132,7 @@ export default function PredictionFilters({
             onRiskChange(v === "all" ? undefined : v)
           }
         >
-          <Select.Trigger className="w-[180px] h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold">
+          <Select.Trigger className="w-[180px] bg-white">
             <Select.Value placeholder="All Risk Levels" />
           </Select.Trigger>
           <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">

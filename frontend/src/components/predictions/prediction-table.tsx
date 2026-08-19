@@ -2,7 +2,7 @@ import type { DashboardPredictionItem } from "@/lib/prediction-api";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Table } from "@/components/retroui/Table";
-import { ArrowUpDown, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { ArrowUpDown, ArrowUpRight, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 
 interface PredictionTableProps {
   items: DashboardPredictionItem[];
@@ -73,9 +73,9 @@ export default function PredictionTable({
   const totalPages = Math.ceil(total / limit) || 1;
 
   return (
-    <div className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-white rounded-none relative flex flex-col overflow-hidden">
-      <Table wrapperClassName="border-0">
-        <Table.Header className="bg-yellow-300 text-black border-b-2 border-black">
+    <div className="flex flex-col">
+      <Table wrapperClassName="border-0 shadow-md mb-2">
+        <Table.Header className="text-black">
           <Table.Row className="border-b-2 border-black hover:bg-yellow-300">
             <Table.Head className="font-extrabold text-black whitespace-nowrap">
               <SortableHeader
@@ -86,7 +86,7 @@ export default function PredictionTable({
                 onSort={onSort}
               />
             </Table.Head>
-            <Table.Head className="font-extrabold text-black whitespace-nowrap">LRN</Table.Head>
+            {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">LRN</Table.Head> */}
             <Table.Head className="font-extrabold text-black whitespace-nowrap">Class</Table.Head>
             <Table.Head className="font-extrabold text-black whitespace-nowrap">Subject</Table.Head>
             <Table.Head className="font-extrabold text-black whitespace-nowrap">Term</Table.Head>
@@ -109,9 +109,9 @@ export default function PredictionTable({
                 onSort={onSort}
               />
             </Table.Head>
-            <Table.Head className="font-extrabold text-black text-right pr-4 whitespace-nowrap">
-              Action
-            </Table.Head>
+            {/* <Table.Head className="w-16">
+
+            </Table.Head> */}
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -145,42 +145,45 @@ export default function PredictionTable({
                   className="cursor-pointer border-b border-black/20 hover:bg-yellow-50/80 transition-colors"
                   onClick={() => onRowClick(item.prediction_id)}
                 >
-                  <Table.Cell className="font-bold text-black whitespace-nowrap">
+                  <Table.Cell className="font-semibold text-md whitespace-nowrap">
                     {item.student_name}
                   </Table.Cell>
-                  <Table.Cell className="text-gray-700 text-xs font-mono font-bold whitespace-nowrap">
+                  {/* <Table.Cell className="text-gray-700 text-xs font-bold whitespace-nowrap">
                     {item.student_lrn}
-                  </Table.Cell>
-                  <Table.Cell className="text-gray-800 font-medium whitespace-nowrap">{item.class_name}</Table.Cell>
-                  <Table.Cell className="text-gray-800 font-medium whitespace-nowrap">{item.subject_name}</Table.Cell>
-                  <Table.Cell className="text-gray-800 font-semibold whitespace-nowrap">{item.term_label}</Table.Cell>
-                  <Table.Cell className="font-black text-base font-mono whitespace-nowrap">
+                  </Table.Cell> */}
+                  <Table.Cell className="font-normal whitespace-nowrap">{item.class_name}</Table.Cell>
+                  <Table.Cell className="font-normal whitespace-nowrap">{item.subject_name}</Table.Cell>
+                  <Table.Cell className="font-normal whitespace-nowrap">{item.term_label}</Table.Cell>
+                  <Table.Cell className="font-black text-base whitespace-nowrap">
                     {item.predicted_period_grade !== null
                       ? item.predicted_period_grade.toFixed(2)
                       : "—"}
                   </Table.Cell>
                   <Table.Cell className="whitespace-nowrap">
                     <Badge
-                      className={`border-2 border-black font-extrabold uppercase px-2.5 py-1 text-xs shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] whitespace-nowrap inline-flex items-center justify-center ${riskMeta.bg}`}
+                      size="sm"
+                      variant="surface"
+                      className="whitespace-nowrap"
                     >
                       {riskMeta.text}
                     </Badge>
                   </Table.Cell>
-                  <Table.Cell className="font-mono font-bold text-gray-900 whitespace-nowrap">
+                  <Table.Cell className="font-bold text-gray-900 whitespace-nowrap">
                     {item.risk_score !== null ? item.risk_score.toFixed(1) : "—"}
                   </Table.Cell>
-                  <Table.Cell className="text-right pr-4 whitespace-nowrap">
+                  {/* <Table.Cell className="text-right whitespace-nowrap">
                     <Button
                       size="sm"
-                      className="h-8 px-2 border-2 border-black bg-white hover:bg-yellow-300 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      variant="outline"
+                      className="h-8 w-8 p-1.5"
                       onClick={(e) => {
                         e.stopPropagation();
                         onRowClick(item.prediction_id);
                       }}
                     >
-                      <Eye size={14} className="stroke-[2.5]" />
+                      <ArrowUpRight className="w-12 h-12" />
                     </Button>
-                  </Table.Cell>
+                  </Table.Cell> */}
                 </Table.Row>
               );
             })
@@ -190,33 +193,35 @@ export default function PredictionTable({
 
       {/* Bottom Sticky Pagination Footer */}
       {total > 0 && (
-        <div className="sticky bottom-0 z-20 flex flex-col sm:flex-row items-center justify-between border-t-2 border-black px-4 py-3 bg-white gap-3 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
-          <p className="text-xs font-extrabold text-black uppercase tracking-wide">
-            Showing <span className="font-mono font-black text-sm">{offset + 1}</span>–
-            <span className="font-mono font-black text-sm">{Math.min(offset + limit, total)}</span> of{" "}
-            <span className="font-mono font-black text-sm">{total}</span> predictions
+        <div className="sticky bottom-0 z-20 flex flex-col sm:flex-row items-center justify-between px-1 py-3 bg-white gap-3 shrink-0">
+          <p className="text-md font-normal tracking-wide">
+            Showing <span className="font-bold text-md">{offset + 1} </span>–
+            <span className="font-bold text-md"> {Math.min(offset + limit, total)}</span> of{" "}
+            <span className="font-bold text-md">{total} Predictions</span>
           </p>
           <div className="flex items-center gap-2">
             <Button
               size="sm"
+              variant="default"
               disabled={offset === 0}
               onClick={() => onPageChange(Math.max(0, offset - limit))}
-              className="h-8 px-3 border-2 border-black bg-white hover:bg-yellow-300 text-black disabled:opacity-40 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold text-xs cursor-pointer"
+              className="disabled:opacity-40 cursor-pointer"
             >
-              <ChevronLeft size={16} className="mr-1 stroke-[2.5]" />
+              <ChevronLeft size={12} className="mr-2 stroke-[2.5]" />
               Previous
             </Button>
-            <span className="text-xs font-black text-black px-2.5 py-1 bg-yellow-100 border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] whitespace-nowrap">
+            <span className="text-sm font-semibold text-black px-2.5 py-1 whitespace-nowrap">
               Page {currentPage} of {totalPages}
             </span>
             <Button
               size="sm"
+              variant="default"
               disabled={offset + limit >= total}
               onClick={() => onPageChange(offset + limit)}
-              className="h-8 px-3 border-2 border-black bg-white hover:bg-yellow-300 text-black disabled:opacity-40 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-bold text-xs cursor-pointer"
+              className="disabled:opacity-40 cursor-pointer"
             >
               Next
-              <ChevronRight size={16} className="ml-1 stroke-[2.5]" />
+              <ChevronRight size={12} className="ml-2 stroke-[2.5]" />
             </Button>
           </div>
         </div>

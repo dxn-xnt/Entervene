@@ -152,11 +152,10 @@ export default function AdminInterventions() {
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <h1 className="text-4xl font-black  flex items-center gap-2 text-black">
-                  <Shield className="size-8 text-black fill-yellow-300" />
                   Interventions Dashboard
                 </h1>
                 {isAdmin && (
-                  <Badge className="bg-sky-200 border-2 border-black font-extrabold text-xs text-black px-2.5 py-1">
+                  <Badge size="sm" className="">
                     Read-Only (Admin View)
                   </Badge>
                 )}
@@ -202,12 +201,12 @@ export default function AdminInterventions() {
                           value={search}
                           onChange={(event) => setSearch(event.target.value)}
                           placeholder="Search student, title, or subject..."
-                          className="h-10 w-full border-2 border-black bg-white pl-9 pr-3 font-semibold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                          className="h-10 w-full border-black pl-9 pr-3"
                         />
                       </label>
 
                       <Select value={classFilter} onValueChange={setClassFilter}>
-                        <Select.Trigger className="w-full h-10 border-2 border-black bg-white font-bold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <Select.Trigger className="w-full">
                           <Select.Value placeholder="Class Filter" />
                         </Select.Trigger>
                         <Select.Content className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
@@ -223,7 +222,7 @@ export default function AdminInterventions() {
                       </Select>
 
                       <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <Select.Trigger className="w-full h-10 border-2 border-black bg-white font-bold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <Select.Trigger className="w-full">
                           <Select.Value placeholder="Status Filter" />
                         </Select.Trigger>
                         <Select.Content className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
@@ -289,30 +288,28 @@ export default function AdminInterventions() {
                                     </Table.Cell>
                                     <Table.Cell>
                                       <Badge
-                                        className={`border-2 border-black text-[10px] font-extrabold px-2 uppercase ${
-                                          item.priority === "URGENT"
-                                            ? "bg-rose-400 text-black"
-                                            : item.priority === "HIGH"
+                                        className={`border-2 border-black text-[10px] font-extrabold px-2 uppercase ${item.priority === "URGENT"
+                                          ? "bg-rose-400 text-black"
+                                          : item.priority === "HIGH"
                                             ? "bg-amber-300 text-black"
                                             : item.priority === "NORMAL"
-                                            ? "bg-sky-300 text-black"
-                                            : "bg-gray-200 text-black"
-                                        }`}
+                                              ? "bg-sky-300 text-black"
+                                              : "bg-gray-200 text-black"
+                                          }`}
                                       >
                                         {item.priority}
                                       </Badge>
                                     </Table.Cell>
                                     <Table.Cell>
                                       <Badge
-                                        className={`border-2 border-black text-[10px] font-extrabold px-2 uppercase ${
-                                          item.status === "ACTIVE"
-                                            ? "bg-amber-300 text-black"
-                                            : item.status === "COMPLETED"
+                                        className={`border-2 border-black text-[10px] font-extrabold px-2 uppercase ${item.status === "ACTIVE"
+                                          ? "bg-amber-300 text-black"
+                                          : item.status === "COMPLETED"
                                             ? "bg-emerald-400 text-black"
                                             : item.status === "DISMISSED"
-                                            ? "bg-rose-300 text-black"
-                                            : "bg-gray-200 text-black"
-                                        }`}
+                                              ? "bg-rose-300 text-black"
+                                              : "bg-gray-200 text-black"
+                                          }`}
                                       >
                                         {item.status}
                                       </Badge>
