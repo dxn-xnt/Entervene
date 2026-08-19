@@ -227,7 +227,7 @@ def _average(values: Iterable[float]) -> float | None:
 
 def _student_name(student: Student) -> str:
     return " ".join(
-        part
+        str(part)
         for part in [
             student.first_name,
             student.middle_name,

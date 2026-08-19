@@ -50,7 +50,7 @@ def db():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(bind=engine, tables=TABLES)
+    Base.metadata.create_all(bind=engine)
     session = sessionmaker(bind=engine)()
     
     def _override_get_db():
@@ -65,7 +65,7 @@ def db():
     finally:
         app.dependency_overrides.clear()
         session.close()
-        Base.metadata.drop_all(bind=engine, tables=reversed(TABLES))
+        Base.metadata.drop_all(bind=engine)
         engine.dispose()
 
 

@@ -72,8 +72,10 @@ def suggestion_api_context():
     if lrn_check and lrn_check in Student.__table__.constraints:
         Student.__table__.constraints.remove(lrn_check)
     try:
-        Base.metadata.create_all(bind=engine, tables=TABLES)
+        Base.metadata.create_all(bind=engine)
     finally:
+        if lrn_check and lrn_check not in Student.__table__.constraints:
+            Student.__table__.append_constraint(lrn_check)
     db = sessionmaker(bind=engine)()
 
     year = AcademicYear(
@@ -254,7 +256,7 @@ def suggestion_api_context():
             "locked_assignment": locked_assignment,
         }
     db.close()
-    Base.metadata.drop_all(bind=engine, tables=reversed(TABLES))
+    Base.metadata.drop_all(bind=engine)
     engine.dispose()
 
 

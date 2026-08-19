@@ -72,7 +72,7 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
         instructions=cw.instructions,
         classwork_type=cw.classwork_type,
         classwork_category=cw.classwork_category,
-        total_points=float(cw.total_points) if cw.total_points else None,
+        total_points=float(cw.total_points) if cw.total_points is not None else None,
         is_published=cw.is_published,
         show_scores=cw.show_scores,
         is_locked=cw.is_locked,

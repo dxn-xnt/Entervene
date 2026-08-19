@@ -33,7 +33,7 @@ def db():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(bind=engine, tables=TABLES)
+    Base.metadata.create_all(bind=engine)
     session = sessionmaker(bind=engine)()
 
     # Seed required default groups
@@ -47,7 +47,7 @@ def db():
         yield session
     finally:
         session.close()
-        Base.metadata.drop_all(bind=engine, tables=reversed(TABLES))
+        Base.metadata.drop_all(bind=engine)
         engine.dispose()
 
 

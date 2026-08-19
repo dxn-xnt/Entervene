@@ -357,11 +357,11 @@ def _deped_transmuted(initial_grade: float) -> float:
 
 
 def _deped_grade(
-    written_scores: list[float],
+    written_scores: list[float | None],
     written_assignments: list[ClassworkAssignment],
-    performance_scores: list[float],
+    performance_scores: list[float | None],
     performance_assignments: list[ClassworkAssignment],
-    quarterly_scores: list[float],
+    quarterly_scores: list[float | None],
     quarterly_assignments: list[ClassworkAssignment],
 ) -> tuple[float | None, float | None, float | None, float | None, float | None]:
     """
@@ -543,7 +543,7 @@ def _assignment_in_period(assignment: ClassworkAssignment, period: AcademicPerio
     if anchor is None:
         return True
     anchor_date = anchor.date() if isinstance(anchor, datetime) else anchor
-    return period.start_date <= anchor_date <= period.end_date
+    return bool(period.start_date <= anchor_date <= period.end_date)
 
 
 def _submissions_by_student(
@@ -597,7 +597,7 @@ def _metrics_for_student(
         if status == "late":
             late_count += 1
         # Quiz submissions can be auto-scored before their status is marked as graded.
-        if has_score:
+        if submission is not None and submission.grade is not None and assignment.classwork.total_points is not None:
             graded_count += 1
             earned += Decimal(str(submission.grade))
             possible += Decimal(str(assignment.classwork.total_points))
@@ -648,7 +648,8 @@ def _status_for_assignment(
         if status == "submitted" and _is_late(assignment, submission):
             return "late"
         return status
-    if assignment.due_date and _as_aware(assignment.due_date) < now:
+    due_aware = _as_aware(assignment.due_date) if assignment.due_date else None
+    if due_aware and due_aware < now:
         return "missing"
     return "pending"
 
@@ -656,10 +657,16 @@ def _status_for_assignment(
 def _is_late(assignment: ClassworkAssignment, submission: StudentSubmission) -> bool:
     if not assignment.due_date or not submission.submitted_at:
         return False
-    return _as_aware(submission.submitted_at) > _as_aware(assignment.due_date)
+    sub_aware = _as_aware(submission.submitted_at)
+    due_aware = _as_aware(assignment.due_date)
+    if not sub_aware or not due_aware:
+        return False
+    return sub_aware > due_aware
 
 
-def _as_aware(value: datetime) -> datetime:
+def _as_aware(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
@@ -735,7 +742,7 @@ def _percentage(earned: Decimal, possible: Decimal) -> float | None:
 
 def _student_name(student: Student) -> str:
     return " ".join(
-        part
+        str(part)
         for part in [
             student.first_name,
             student.middle_name,
@@ -749,4 +756,5 @@ def _student_name(student: Student) -> str:
 def _academic_level_label(level: AcademicLevel | None) -> str | None:
     if not level:
         return None
-    return level.level_name or f"Grade {level.grade_level}"
+    return str(level.level_name) if level.level_name else f"Grade {level.grade_level}"
+

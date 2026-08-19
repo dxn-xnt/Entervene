@@ -24,6 +24,7 @@ __pycache__/
 *.py[cod]
 *.pyc
 .pytest_cache/
+backend/test_temp/
 
 # React / Vite
 frontend/node_modules/

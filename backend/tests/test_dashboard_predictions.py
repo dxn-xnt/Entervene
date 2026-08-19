@@ -58,11 +58,16 @@ def dashboard_context():
         poolclass=StaticPool,
     )
     lrn_check = next(
-        c for c in Student.__table__.constraints
-        if isinstance(c, CheckConstraint) and c.name == "lrn_check"
+        (c for c in Student.__table__.constraints if isinstance(c, CheckConstraint) and c.name == "lrn_check"),
+        None,
     )
-    Student.__table__.constraints.remove(lrn_check)
-    Base.metadata.create_all(bind=engine, tables=TABLES)
+    if lrn_check and lrn_check in Student.__table__.constraints:
+        Student.__table__.constraints.remove(lrn_check)
+    try:
+        Base.metadata.create_all(bind=engine)
+    finally:
+        if lrn_check and lrn_check not in Student.__table__.constraints:
+            Student.__table__.append_constraint(lrn_check)
     db = sessionmaker(bind=engine)()
 
     # ---- seed data ----

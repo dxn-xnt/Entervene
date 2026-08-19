@@ -205,7 +205,7 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
             if norm_text == "general":
                 pathway_ids = []
             elif norm_text == "both":
-                pathway_ids = list(pathway_map.values())
+                pathway_ids = list(dict.fromkeys(pathway_map.values()))
             elif norm_text == "stem_medical":
                 med_id = next((pid for pcode, pid in pathway_map.items() if "medical" in pcode), None)
                 if med_id:
@@ -223,6 +223,12 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
             else:
                 row_errors.append(f"Unrecognized pathway '{pathway_text}'. Must match an active pathway code or name.")
 
+        if academic_level is not None and not row_errors:
+            if academic_level.grade_level <= 10 and norm_text != "general":
+                row_errors.append(f"Grade {academic_level.grade_level} offerings must use the general pathway (Grade 7 to Grade 10).")
+            elif academic_level.grade_level >= 11 and norm_text == "general":
+                row_errors.append(f"Grade {academic_level.grade_level} offerings require a specific pathway (Grade 11 and Grade 12).")
+
         subject = None
         if not subject_code:
             row_errors.append("subject_code cannot be blank.")
@@ -234,7 +240,7 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
         if subject is not None and getattr(subject, "is_core", False) and pathway_ids:
             row_errors.append("Core subjects are mandatory for all pathways and cannot have pathway restrictions.")
 
-        if subject is not None and academic_year is not None and academic_level is not None and academic_period is not None:
+        if not row_errors and subject is not None and academic_year is not None and academic_level is not None and academic_period is not None:
             scope_key = (
                 subject.subject_id,
                 academic_year.academic_year_id,
@@ -245,7 +251,14 @@ async def import_subject_offering_csv(db: Session, file: UploadFile) -> dict:
             new_set = set(pathway_ids)
             for existing_set in existing_sets:
                 if not new_set or not existing_set or (new_set & set(existing_set)):
-                    row_errors.append("Duplicate or conflicting subject offering for this scope.")
+                    if len(existing_set) > 1 and len(new_set) == 1:
+                        row_errors.append("Pathway-specific offering conflicts with an existing shared offering.")
+                    elif len(existing_set) == 1 and len(new_set) > 1:
+                        row_errors.append("Shared offering conflicts with an existing pathway-specific offering.")
+                    elif set(existing_set) == new_set:
+                        row_errors.append("Duplicate subject offering.")
+                    else:
+                        row_errors.append("Duplicate or conflicting subject offering for this scope.")
                     break
 
         if row_errors:

@@ -57,7 +57,7 @@ def db():
     if lrn_check and lrn_check in Student.__table__.constraints:
         Student.__table__.constraints.remove(lrn_check)
     try:
-        Base.metadata.create_all(bind=engine, tables=TABLES)
+        Base.metadata.create_all(bind=engine)
     finally:
         if lrn_check and lrn_check not in Student.__table__.constraints:
             Student.__table__.append_constraint(lrn_check)
@@ -66,7 +66,7 @@ def db():
         yield session
     finally:
         session.close()
-        Base.metadata.drop_all(bind=engine, tables=reversed(TABLES))
+        Base.metadata.drop_all(bind=engine)
         engine.dispose()
 
 
@@ -224,6 +224,7 @@ def test_list_classes_returns_real_rows_counts_null_adviser_and_sorted_order(cli
         "academic_level_id": grade_7.academic_level_id,
         "level_name": "Grade 7",
         "grade_level": 7,
+        "requires_pathway": False,
     }
     assert sapphire_item["adviser"] == {
         "staff_id": adviser.staff_id,
