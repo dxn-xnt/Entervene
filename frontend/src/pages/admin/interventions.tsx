@@ -228,11 +228,11 @@ export default function AdminInterventions() {
                         <Select.Content className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                           <Select.Group>
                             <Select.Item value="All">All Statuses</Select.Item>
-                            <Select.Item value="ACTIVE">ACTIVE</Select.Item>
-                            <Select.Item value="COMPLETED">COMPLETED</Select.Item>
-                            <Select.Item value="DISMISSED">DISMISSED</Select.Item>
-                            <Select.Item value="DRAFT">DRAFT</Select.Item>
-                            <Select.Item value="ARCHIVED">ARCHIVED</Select.Item>
+                            <Select.Item value="ACTIVE">Active</Select.Item>
+                            <Select.Item value="COMPLETED">Completed</Select.Item>
+                            <Select.Item value="DISMISSED">Dismissed</Select.Item>
+                            <Select.Item value="DRAFT">Draft</Select.Item>
+                            <Select.Item value="ARCHIVED">Archived</Select.Item>
                           </Select.Group>
                         </Select.Content>
                       </Select>

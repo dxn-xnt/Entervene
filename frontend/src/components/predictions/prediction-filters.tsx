@@ -11,7 +11,8 @@ interface PredictionFiltersProps {
   term?: number;
   riskLevel?: string;
   search: string;
-  onClassChange: (value: number | undefined) => void;
+  hideClassFilter?: boolean;
+  onClassChange?: (value: number | undefined) => void;
   onSubjectChange: (value: number | undefined) => void;
   onTermChange: (value: number | undefined) => void;
   onRiskChange: (value: string | undefined) => void;
@@ -34,6 +35,7 @@ export default function PredictionFilters({
   term,
   riskLevel,
   search,
+  hideClassFilter = false,
   onClassChange,
   onSubjectChange,
   onTermChange,
@@ -42,7 +44,7 @@ export default function PredictionFilters({
   onClearAll,
 }: PredictionFiltersProps) {
   const hasActiveFilters =
-    classId !== undefined ||
+    (!hideClassFilter && classId !== undefined) ||
     subjectId !== undefined ||
     term !== undefined ||
     riskLevel !== undefined ||
@@ -66,24 +68,26 @@ export default function PredictionFilters({
         </div>
 
         {/* Class */}
-        <Select
-          value={classId !== undefined ? String(classId) : "all"}
-          onValueChange={(v) =>
-            onClassChange(v === "all" ? undefined : Number(v))
-          }
-        >
-          <Select.Trigger className="w-[160px] bg-white">
-            <Select.Value placeholder="All Classes" />
-          </Select.Trigger>
-          <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <Select.Item value="all">All Classes</Select.Item>
-            {filters?.classes.map((c) => (
-              <Select.Item key={c.class_id} value={String(c.class_id)}>
-                {c.section_name}
-              </Select.Item>
-            ))}
-          </Select.Content>
-        </Select>
+        {!hideClassFilter && (
+          <Select
+            value={classId !== undefined ? String(classId) : "all"}
+            onValueChange={(v) =>
+              onClassChange?.(v === "all" ? undefined : Number(v))
+            }
+          >
+            <Select.Trigger className="w-[160px] bg-white">
+              <Select.Value placeholder="All Classes" />
+            </Select.Trigger>
+            <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <Select.Item value="all">All Classes</Select.Item>
+              {filters?.classes.map((c) => (
+                <Select.Item key={c.class_id} value={String(c.class_id)}>
+                  {c.section_name}
+                </Select.Item>
+              ))}
+            </Select.Content>
+          </Select>
+        )}
 
         {/* Subject */}
         <Select

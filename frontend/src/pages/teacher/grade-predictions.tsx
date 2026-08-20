@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { useParams, Link } from "react-router-dom";
+import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { OverviewCard } from "@/components/overview-cards";
@@ -7,6 +9,7 @@ import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
 import { PredictionGradeSection, type GradeGroup } from "@/components/predictions/prediction-grade-section";
+import { useAuth } from "@/context/AuthContext";
 import type {
   DashboardAtRiskResponse,
   DashboardFilters,
@@ -62,7 +65,11 @@ const RISK_CARDS = [
   },
 ];
 
-export default function PredictionsDashboard() {
+export default function GradePredictions() {
+  const { role } = useAuth();
+  const baseRole = role === "admin" ? "admin" : "teacher";
+  const { grade } = useParams<{ grade: string }>();
+
   // ── State ──
   const [data, setData] = useState<DashboardAtRiskResponse | null>(null);
   const [filters, setFilters] = useState<DashboardFilters | null>(null);
@@ -174,7 +181,25 @@ export default function PredictionsDashboard() {
             {/* ── Header ── */}
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
-              <h1 className="text-2xl md:text-4xl font-bold">AI Predictions</h1>
+              <Breadcrumb>
+                <Breadcrumb.List>
+                  <Breadcrumb.Item>
+                    <Breadcrumb.Link asChild className="text-2xl md:text-4xl font-bold">
+                      <Link to={`/${baseRole}/predictions`}>AI Predictions</Link>
+                    </Breadcrumb.Link>
+                  </Breadcrumb.Item>
+                  {grade && (
+                    <>
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Page className="text-2xl md:text-4xl font-bold font-black">
+                          Grade {grade}
+                        </Breadcrumb.Page>
+                      </Breadcrumb.Item>
+                    </>
+                  )}
+                </Breadcrumb.List>
+              </Breadcrumb>
             </header>
 
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
