@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { X, FileText, Pencil, Sparkles } from "lucide-react";
+import { X, FileText, Pencil, Sparkles, FileDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -29,6 +29,7 @@ import {
     createEmptyQuizQuestion,
     defaultQuizSettings,
 } from "../classworks/quiz-builder-utils";
+import { exportQuizPdf, exportQuizDocx } from "@/lib/quiz-export";
 import AIQuizGeneratorModal from "./ai-quiz-generator-modal";
 
 interface CreateClassworkQuizModalProps {
@@ -63,7 +64,7 @@ export default function CreateClassworkQuizModal({
                     : "";
         return {
             ...emptyClassworkDraft,
-            classwork_category: "QUARTERLY_ASSESSMENT",
+            classwork_category: "WRITTEN_WORK",
             subject_id: preferredId,
         };
     });
@@ -77,6 +78,11 @@ export default function CreateClassworkQuizModal({
     const [isImportingQuiz, setIsImportingQuiz] = useState(false);
     const [isAIModalOpen, setIsAIModalOpen] = useState(false);
     const [aiPromptScope, setAiPromptScope] = useState<string | undefined>(undefined);
+    const [aiLinkedSubjectName, setAiLinkedSubjectName] = useState<string | undefined>(undefined);
+    const [aiLinkedLessonTitles, setAiLinkedLessonTitles] = useState<string[]>([]);
+
+    const [isExporting, setIsExporting] = useState<"pdf" | "docx" | null>(null);
+    const [includeExportAnswerKey, setIncludeExportAnswerKey] = useState(false);
 
     const [selectedClassIds, setSelectedClassIds] = useState<number[]>([]);
     const [availableLessons, setAvailableLessons] = useState<TeacherLesson[]>([]);
@@ -404,6 +410,27 @@ export default function CreateClassworkQuizModal({
         setCreateStep("assign");
     };
 
+    const handleExportQuiz = async (format: "pdf" | "docx") => {
+        if (quizQuestions.length === 0) return;
+        setIsExporting(format);
+        try {
+            const activeSubjectName =
+                subjects.find((s) => String(s.id) === String(draft.subject_id))?.name ||
+                aiLinkedSubjectName ||
+                "Subject";
+            if (format === "pdf") {
+                await exportQuizPdf(quizQuestions, draft.title || "Quiz", activeSubjectName, includeExportAnswerKey);
+            } else {
+                await exportQuizDocx(quizQuestions, draft.title || "Quiz", activeSubjectName, includeExportAnswerKey);
+            }
+        } catch (err) {
+            console.error("Export error:", err);
+            setCreateError(err instanceof Error ? err.message : "Failed to export questionnaire.");
+        } finally {
+            setIsExporting(null);
+        }
+    };
+
     useEffect(() => {
         if (
             createStep !== "assign" ||
@@ -411,7 +438,6 @@ export default function CreateClassworkQuizModal({
             selectedClassIds.length === 0
         ) {
             setAvailableLessons([]);
-            setSelectedLessonIds([]);
             return;
         }
 
@@ -741,17 +767,39 @@ export default function CreateClassworkQuizModal({
 
                 {createStep === "details" && (
                     <div className="space-y-4">
-                        {aiPromptScope && (
-                            <div className="flex items-start gap-2 rounded-md border-2 border-black bg-[#F6E9B2] p-2.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                                <Sparkles className="w-4 h-4 text-black shrink-0 mt-0.5" />
-                                <div className="text-xs">
-                                    <span className="font-black uppercase tracking-wider text-black">
-                                        AI Generation Scope:{" "}
-                                    </span>
-                                    <span className="font-semibold text-black/80">
-                                        "{aiPromptScope}"
+                        {(aiLinkedSubjectName || (aiLinkedLessonTitles && aiLinkedLessonTitles.length > 0) || aiPromptScope) && (
+                            <div className="rounded-lg border-2 border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
+                                        <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+                                        <span>AI Generation & Curriculum Context</span>
+                                    </div>
+                                    <span className="text-[10px] font-extrabold uppercase bg-black text-white px-2 py-0.5">
+                                        Auto-Linked
                                     </span>
                                 </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                    <div className="flex items-start gap-1.5 bg-white/80 border border-black/20 p-2">
+                                        <span className="font-bold text-black/70 shrink-0">Subject:</span>
+                                        <span className="font-extrabold text-black truncate">
+                                            {aiLinkedSubjectName || subjects.find((s) => String(s.id) === String(draft.subject_id))?.name || "Subject"}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-start gap-1.5 bg-white/80 border border-black/20 p-2">
+                                        <span className="font-bold text-black/70 shrink-0">Linked Lessons:</span>
+                                        <span className="font-extrabold text-black">
+                                            {aiLinkedLessonTitles && aiLinkedLessonTitles.length > 0
+                                                ? aiLinkedLessonTitles.join(", ")
+                                                : `${selectedLessonIds.length} lesson(s) selected`}
+                                        </span>
+                                    </div>
+                                </div>
+                                {aiPromptScope && (
+                                    <div className="text-xs bg-white/80 border border-black/20 p-2 flex items-start gap-1.5">
+                                        <span className="font-bold text-black/70 shrink-0">Custom Scope:</span>
+                                        <span className="font-semibold text-black/90">"{aiPromptScope}"</span>
+                                    </div>
+                                )}
                             </div>
                         )}
                         <div className="flex flex-col gap-1 w-full">
@@ -880,6 +928,7 @@ export default function CreateClassworkQuizModal({
                                     step="1"
                                     inputMode="decimal"
                                     value={draft.total_points}
+                                    onFocus={(event) => event.target.select()}
                                     onChange={(event) =>
                                         setDraft((current) => ({
                                             ...current,
@@ -900,6 +949,7 @@ export default function CreateClassworkQuizModal({
                                     min="1"
                                     step="1"
                                     value={draft.max_attempts}
+                                    onFocus={(event) => event.target.select()}
                                     onChange={(event) => {
                                         setDraft((current) => ({
                                             ...current,
@@ -920,17 +970,39 @@ export default function CreateClassworkQuizModal({
 
                 {createStep === "quiz" && (
                     <div className="space-y-4">
-                        {aiPromptScope && (
-                            <div className="flex items-start gap-2 rounded-md border-2 border-black bg-[#F6E9B2] p-2.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                                <Sparkles className="w-4 h-4 text-black shrink-0 mt-0.5" />
-                                <div className="text-xs">
-                                    <span className="font-black uppercase tracking-wider text-black">
-                                        AI Generation Scope:{" "}
-                                    </span>
-                                    <span className="font-semibold text-black/80">
-                                        "{aiPromptScope}"
+                        {(aiLinkedSubjectName || (aiLinkedLessonTitles && aiLinkedLessonTitles.length > 0) || aiPromptScope) && (
+                            <div className="rounded-lg border-2 border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
+                                        <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+                                        <span>AI Generation & Curriculum Context</span>
+                                    </div>
+                                    <span className="text-[10px] font-extrabold uppercase bg-black text-white px-2 py-0.5">
+                                        Auto-Linked
                                     </span>
                                 </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                    <div className="flex items-start gap-1.5 bg-white/80 border border-black/20 p-2">
+                                        <span className="font-bold text-black/70 shrink-0">Subject:</span>
+                                        <span className="font-extrabold text-black truncate">
+                                            {aiLinkedSubjectName || subjects.find((s) => String(s.id) === String(draft.subject_id))?.name || "Subject"}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-start gap-1.5 bg-white/80 border border-black/20 p-2">
+                                        <span className="font-bold text-black/70 shrink-0">Linked Lessons:</span>
+                                        <span className="font-extrabold text-black">
+                                            {aiLinkedLessonTitles && aiLinkedLessonTitles.length > 0
+                                                ? aiLinkedLessonTitles.join(", ")
+                                                : `${selectedLessonIds.length} lesson(s) selected`}
+                                        </span>
+                                    </div>
+                                </div>
+                                {aiPromptScope && (
+                                    <div className="text-xs bg-white/80 border border-black/20 p-2 flex items-start gap-1.5">
+                                        <span className="font-bold text-black/70 shrink-0">Custom Scope:</span>
+                                        <span className="font-semibold text-black/90">"{aiPromptScope}"</span>
+                                    </div>
+                                )}
                             </div>
                         )}
                         <div className="rounded-lg border-2 border-black bg-[#F8F6ED] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
@@ -968,6 +1040,7 @@ export default function CreateClassworkQuizModal({
                                             min="1"
                                             step="1"
                                             value={quizSettings.duration_minutes}
+                                            onFocus={(event) => event.target.select()}
                                             onChange={(event) =>
                                                 setQuizSettings((current) => ({
                                                     ...current,
@@ -991,6 +1064,7 @@ export default function CreateClassworkQuizModal({
                                         min="1"
                                         step="1"
                                         value={quizSettings.max_attempts}
+                                        onFocus={(event) => event.target.select()}
                                         onChange={(event) => {
                                             setQuizSettings((current) => ({
                                                 ...current,
@@ -1212,6 +1286,7 @@ export default function CreateClassworkQuizModal({
                                                     step="1"
                                                     inputMode="decimal"
                                                     value={question.points}
+                                                    onFocus={(event) => event.target.select()}
                                                     onChange={(event) =>
                                                         updateQuizQuestion(question.id, {
                                                             points: event.target.value,
@@ -1325,6 +1400,65 @@ export default function CreateClassworkQuizModal({
                             >
                                 Add short answer
                             </Button>
+                        </div>
+
+                        {/* ── Export Questionnaire Card (Post-Review Snapshot) ── */}
+                        <div className="rounded-lg border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-wrap items-center justify-between gap-3 mt-4">
+                            <div>
+                                <div className="flex items-center gap-1.5 font-black text-sm text-black">
+                                    <FileDown className="w-4 h-4 text-black" />
+                                    <span>Export Finalized Questionnaire</span>
+                                </div>
+                                <p className="text-xs text-gray-600 mt-0.5">
+                                    Export a snapshot of your reviewed and edited questions (Legal size 8.5×13in) for paper exams.
+                                </p>
+                            </div>
+
+                            <div className="flex items-center gap-3 flex-wrap">
+                                <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-semibold">
+                                    <input
+                                        type="checkbox"
+                                        checked={includeExportAnswerKey}
+                                        onChange={(e) => setIncludeExportAnswerKey(e.target.checked)}
+                                        className="w-4 h-4 border-2 border-black accent-black cursor-pointer"
+                                    />
+                                    <span>Include Answer Key</span>
+                                </label>
+
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => void handleExportQuiz("pdf")}
+                                        disabled={isExporting !== null || quizQuestions.length === 0}
+                                        className="gap-1.5 border-2 border-black font-bold text-xs cursor-pointer hover:bg-neutral-100 shadow-xs"
+                                    >
+                                        {isExporting === "pdf" ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                            <FileDown className="w-3.5 h-3.5" />
+                                        )}
+                                        Download PDF
+                                    </Button>
+
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => void handleExportQuiz("docx")}
+                                        disabled={isExporting !== null || quizQuestions.length === 0}
+                                        className="gap-1.5 border-2 border-black font-bold text-xs cursor-pointer hover:bg-neutral-100 shadow-xs"
+                                    >
+                                        {isExporting === "docx" ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                            <FileText className="w-3.5 h-3.5" />
+                                        )}
+                                        Download Word (.docx)
+                                    </Button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -1534,6 +1668,65 @@ export default function CreateClassworkQuizModal({
                                 </p>
                             )}
                         </div>
+
+                        {/* ── Export Questionnaire Card in Step 4 ── */}
+                        <div className="rounded-lg border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-wrap items-center justify-between gap-3 mt-4">
+                            <div>
+                                <div className="flex items-center gap-1.5 font-black text-sm text-black">
+                                    <FileDown className="w-4 h-4 text-black" />
+                                    <span>Export Questionnaire</span>
+                                </div>
+                                <p className="text-xs text-gray-600 mt-0.5">
+                                    Download a printable questionnaire (Legal size) of this finalized quiz.
+                                </p>
+                            </div>
+
+                            <div className="flex items-center gap-3 flex-wrap">
+                                <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-semibold">
+                                    <input
+                                        type="checkbox"
+                                        checked={includeExportAnswerKey}
+                                        onChange={(e) => setIncludeExportAnswerKey(e.target.checked)}
+                                        className="w-4 h-4 border-2 border-black accent-black cursor-pointer"
+                                    />
+                                    <span>Include Answer Key</span>
+                                </label>
+
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => void handleExportQuiz("pdf")}
+                                        disabled={isExporting !== null || quizQuestions.length === 0}
+                                        className="gap-1.5 border-2 border-black font-bold text-xs cursor-pointer hover:bg-neutral-100 shadow-xs"
+                                    >
+                                        {isExporting === "pdf" ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                            <FileDown className="w-3.5 h-3.5" />
+                                        )}
+                                        Download PDF
+                                    </Button>
+
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => void handleExportQuiz("docx")}
+                                        disabled={isExporting !== null || quizQuestions.length === 0}
+                                        className="gap-1.5 border-2 border-black font-bold text-xs cursor-pointer hover:bg-neutral-100 shadow-xs"
+                                    >
+                                        {isExporting === "docx" ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                            <FileText className="w-3.5 h-3.5" />
+                                        )}
+                                        Download Word (.docx)
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
             </section>
@@ -1603,7 +1796,7 @@ export default function CreateClassworkQuizModal({
                     "Subject"
                 }
                 subjects={subjects}
-                onGenerated={(questions, warnings, chosenSubjectId, synthesizedTitle, associatedLessonIds, additionalCoverageScope) => {
+                onGenerated={(questions, warnings, chosenSubjectId, synthesizedTitle, associatedLessonIds, additionalCoverageScope, associatedLessonTitles) => {
                     setQuizQuestions(
                         questions.length > 0
                             ? questions
@@ -1611,6 +1804,9 @@ export default function CreateClassworkQuizModal({
                     );
                     setQuizImportWarnings(warnings || []);
                     setAiPromptScope(additionalCoverageScope);
+                    setAiLinkedLessonTitles(associatedLessonTitles || []);
+                    const subjName = subjects.find((s) => s.id === chosenSubjectId)?.name;
+                    setAiLinkedSubjectName(subjName);
                     setDraft((current) => ({
                         ...current,
                         title: current.title?.trim() ? current.title : (synthesizedTitle || current.title),
