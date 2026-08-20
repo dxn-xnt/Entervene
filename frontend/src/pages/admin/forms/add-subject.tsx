@@ -30,6 +30,7 @@ type AddSubjectModalProps = {
   open?: boolean;
   subjectToEdit?: SubjectListItem | null;
   onCreated?: () => void | Promise<void>;
+  lockedGradeLevel?: string;
 };
 
 type SubjectFormState = {
@@ -77,7 +78,7 @@ function pathwayLabel(pathway: SubjectOfferingPathway) {
 
 function getSuggestedHoursPlaceholder(
   gradeLevel: number | null | undefined,
-  _groupName: string | null | undefined
+  _groupName: string | null | undefined,
 ): string {
   if (gradeLevel != null) {
     if (gradeLevel >= 7 && gradeLevel <= 10) {
@@ -90,26 +91,43 @@ function getSuggestedHoursPlaceholder(
   return "e.g. 40 or 80";
 }
 
-function formWithDefaults(options: SubjectFormOptions | null): SubjectFormState {
+function formWithDefaults(
+  options: SubjectFormOptions | null,
+): SubjectFormState {
   return {
     ...emptyForm,
-    academic_level_id: String(options?.academic_levels[0]?.academic_level_id ?? ""),
-    subject_group: options?.subject_groups[0] ? String(options.subject_groups[0].subject_group_id) : "",
+    academic_level_id: String(
+      options?.academic_levels[0]?.academic_level_id ?? "",
+    ),
+    subject_group: options?.subject_groups[0]
+      ? String(options.subject_groups[0].subject_group_id)
+      : "",
     status: options?.default_status ?? "active",
   };
 }
 
-export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddSubjectModalProps) {
+export default function AddSubjectModal({
+  open,
+  subjectToEdit,
+  onCreated,
+  lockedGradeLevel,
+}: AddSubjectModalProps) {
   const [options, setOptions] = React.useState<SubjectFormOptions | null>(null);
-  const [offeringOptions, setOfferingOptions] = React.useState<SubjectOfferingFormOptions | null>(null);
-  const [gradingTemplates, setGradingTemplates] = React.useState<GradingTemplateListItem[]>([]);
+  const [offeringOptions, setOfferingOptions] =
+    React.useState<SubjectOfferingFormOptions | null>(null);
+  const [gradingTemplates, setGradingTemplates] = React.useState<
+    GradingTemplateListItem[]
+  >([]);
   const [form, setForm] = React.useState<SubjectFormState>(emptyForm);
   const [offerNow, setOfferNow] = React.useState(false);
-  const [offeringForm, setOfferingForm] = React.useState<OfferingFormState>(emptyOfferingForm);
+  const [offeringForm, setOfferingForm] =
+    React.useState<OfferingFormState>(emptyOfferingForm);
   const [isLoadingOptions, setIsLoadingOptions] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = React.useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = React.useState<string | null>(
+    null,
+  );
 
   React.useEffect(() => {
     // Clear transient UI state unconditionally whenever the modal opens or the
@@ -120,19 +138,24 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
     setError(null);
     if (subjectToEdit) {
       setForm({
-        academic_level_id: String(subjectToEdit.academic_level.academic_level_id),
+        academic_level_id: String(
+          subjectToEdit.academic_level.academic_level_id,
+        ),
         subject_name: subjectToEdit.subject_name,
         subject_codename: subjectToEdit.subject_codename || "",
-        subject_group: subjectToEdit.subject_group ? String(subjectToEdit.subject_group.subject_group_id) : "",
+        subject_group: subjectToEdit.subject_group
+          ? String(subjectToEdit.subject_group.subject_group_id)
+          : "",
         hours: subjectToEdit.hours ? String(subjectToEdit.hours) : "",
-        default_grading_template: subjectToEdit.default_grading_template || NO_TEMPLATE_VALUE,
+        default_grading_template:
+          subjectToEdit.default_grading_template || NO_TEMPLATE_VALUE,
         description: subjectToEdit.description || "",
         status: subjectToEdit.status,
         is_math_or_science: subjectToEdit.is_math_or_science || false,
       });
       setOfferNow(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, subjectToEdit]);
 
   React.useEffect(() => {
@@ -142,41 +165,58 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
       setIsLoadingOptions(true);
       setError(null);
       try {
-        const [subjectOptions, templateData, subjectOfferingOptions] = await Promise.all([
-          getSubjectFormOptions(),
-          getGradingTemplates({ status: "active" }),
-          getSubjectOfferingFormOptions(),
-        ]);
+        const [subjectOptions, templateData, subjectOfferingOptions] =
+          await Promise.all([
+            getSubjectFormOptions(),
+            getGradingTemplates({ status: "active" }),
+            getSubjectOfferingFormOptions(),
+          ]);
         if (!isMounted) return;
 
         const targetLevels = subjectOptions.academic_levels.filter((level) =>
-          [7, 8, 9, 10, 11, 12].includes(level.grade_level)
+          [7, 8, 9, 10, 11, 12].includes(level.grade_level),
         );
         const nextOptions = {
           ...subjectOptions,
-          academic_levels: targetLevels.length ? targetLevels : subjectOptions.academic_levels,
+          academic_levels: targetLevels.length
+            ? targetLevels
+            : subjectOptions.academic_levels,
         };
 
         setOptions(nextOptions);
         setOfferingOptions(subjectOfferingOptions);
         setGradingTemplates(templateData.grading_templates);
-        const activeYear = subjectOfferingOptions.academic_years.find((year) => year.is_active)
-          ?? subjectOfferingOptions.academic_years[0];
+        const activeYear =
+          subjectOfferingOptions.academic_years.find(
+            (year) => year.is_active,
+          ) ?? subjectOfferingOptions.academic_years[0];
         setForm((current) => ({
           ...current,
           academic_level_id:
-            current.academic_level_id || String(nextOptions.academic_levels[0]?.academic_level_id ?? ""),
+            current.academic_level_id ||
+            String(nextOptions.academic_levels[0]?.academic_level_id ?? ""),
           subject_group:
-            current.subject_group || (nextOptions.subject_groups[0] ? String(nextOptions.subject_groups[0].subject_group_id) : ""),
+            current.subject_group ||
+            (nextOptions.subject_groups[0]
+              ? String(nextOptions.subject_groups[0].subject_group_id)
+              : ""),
           status: nextOptions.default_status,
-          default_grading_template: current.default_grading_template || NO_TEMPLATE_VALUE,
+          default_grading_template:
+            current.default_grading_template || NO_TEMPLATE_VALUE,
         }));
         setOfferingForm((current) => ({
           ...current,
-          academic_year_id: current.academic_year_id || String(activeYear?.academic_year_id ?? ""),
+          academic_year_id:
+            current.academic_year_id ||
+            String(activeYear?.academic_year_id ?? ""),
         }));
       } catch (err) {
-        if (isMounted) setError(err instanceof Error ? err.message : "Unable to load subject options.");
+        if (isMounted)
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load subject options.",
+          );
       } finally {
         if (isMounted) setIsLoadingOptions(false);
       }
@@ -188,24 +228,42 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
     };
   }, []);
 
-  const setField = <TKey extends keyof SubjectFormState>(key: TKey, value: SubjectFormState[TKey]) => {
+  const lockedLevel = React.useMemo(() => {
+    if (!lockedGradeLevel || !options) return null;
+    const normalized = lockedGradeLevel.trim().toLowerCase();
+    return (
+      options.academic_levels.find(
+        (level) => level.level_name.toLowerCase() === normalized,
+      ) ?? null
+    );
+  }, [lockedGradeLevel, options]);
+
+  const isLevelLocked = !!subjectToEdit || !!lockedLevel;
+
+  const setField = <TKey extends keyof SubjectFormState>(
+    key: TKey,
+    value: SubjectFormState[TKey],
+  ) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
   const selectedLevel = options?.academic_levels.find(
-    (level) => String(level.academic_level_id) === form.academic_level_id
+    (level) => String(level.academic_level_id) === form.academic_level_id,
   );
   const selectedGroup = options?.subject_groups.find(
-    (group) => String(group.subject_group_id) === form.subject_group
+    (group) => String(group.subject_group_id) === form.subject_group,
   );
   const hoursPlaceholder = getSuggestedHoursPlaceholder(
     selectedLevel?.grade_level,
-    selectedGroup?.name
+    selectedGroup?.name,
   );
   const selectedYearId = Number(offeringForm.academic_year_id);
   const availablePeriods = React.useMemo(
-    () => (offeringOptions?.academic_periods ?? []).filter((period) => period.academic_year_id === selectedYearId),
-    [offeringOptions, selectedYearId]
+    () =>
+      (offeringOptions?.academic_periods ?? []).filter(
+        (period) => period.academic_year_id === selectedYearId,
+      ),
+    [offeringOptions, selectedYearId],
   );
   const isShsSelection = isSeniorHighGrade(selectedLevel?.grade_level);
   const availablePathways = React.useMemo<SubjectOfferingPathway[]>(() => {
@@ -227,17 +285,25 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
   const requiresPathway = availablePathways.length > 0;
 
   React.useEffect(() => {
+    if (subjectToEdit || !lockedLevel) return;
+    setForm((current) => ({
+      ...current,
+      academic_level_id: String(lockedLevel.academic_level_id),
+    }));
+  }, [lockedLevel, subjectToEdit]);
+
+  React.useEffect(() => {
     setOfferingForm((current) => {
       const nextPathway = availablePathways.includes(current.pathway)
         ? current.pathway
-        : availablePathways[0] ?? "general";
+        : (availablePathways[0] ?? "general");
       return { ...current, pathway: nextPathway };
     });
   }, [availablePathways]);
 
   const setOfferingField = <TKey extends keyof OfferingFormState>(
     key: TKey,
-    value: OfferingFormState[TKey]
+    value: OfferingFormState[TKey],
   ) => {
     setOfferingForm((current) => ({ ...current, [key]: value }));
   };
@@ -294,7 +360,9 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
     setIsSaving(true);
     try {
       const selectedTemplate =
-        form.default_grading_template === NO_TEMPLATE_VALUE ? null : form.default_grading_template;
+        form.default_grading_template === NO_TEMPLATE_VALUE
+          ? null
+          : form.default_grading_template;
 
       if (subjectToEdit) {
         await updateSubject(subjectToEdit.subject_id, {
@@ -324,7 +392,9 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
         is_math_or_science: form.is_math_or_science,
       });
       if (!offerNow) {
-        setSuccessMessage(`${created.subject_name} has been added to the subject catalog.`);
+        setSuccessMessage(
+          `${created.subject_name} has been added to the subject catalog.`,
+        );
         setForm(formWithDefaults(options));
         await onCreated?.();
         return;
@@ -340,11 +410,11 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
               academic_period_id: Number(periodId),
               pathway: requiresPathway ? offeringForm.pathway : "general",
               status: "active",
-            })
-          )
+            }),
+          ),
         );
         setSuccessMessage(
-          `Subject created and ${offeringForm.academic_period_ids.length} offering(s) added.`
+          `Subject created and ${offeringForm.academic_period_ids.length} offering(s) added.`,
         );
         setForm(formWithDefaults(options));
         setOfferNow(false);
@@ -354,9 +424,11 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
         setError(
           offeringErr instanceof Error
             ? `Subject was created, but offering setup failed. You can finish it in Subject Offerings. ${offeringErr.message}`
-            : "Subject was created, but offering setup failed. You can finish it in Subject Offerings."
+            : "Subject was created, but offering setup failed. You can finish it in Subject Offerings.",
         );
-        setSuccessMessage(`${created.subject_name} has been added to the subject catalog.`);
+        setSuccessMessage(
+          `${created.subject_name} has been added to the subject catalog.`,
+        );
         setForm(formWithDefaults(options));
         await onCreated?.();
       }
@@ -372,14 +444,18 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
       <Dialog.Content size="lg">
         <Dialog.Header asChild>
           <div className="flex w-full items-center justify-between">
-            <Text as="h5" className="font-sans text-xl font-bold">{subjectToEdit ? "Subject Updated" : "Subject Added"}</Text>
+            <Text as="h5" className="font-sans text-xl font-bold">
+              {subjectToEdit ? "Subject Updated" : "Subject Added"}
+            </Text>
           </div>
         </Dialog.Header>
         <section className="flex flex-col gap-4 p-4">
           <Text as="p" className="text-sm">
             {successMessage}
           </Text>
-          {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
+          {error ? (
+            <p className="text-sm font-semibold text-red-700">{error}</p>
+          ) : null}
         </section>
         <Dialog.Footer>
           {!subjectToEdit ? (
@@ -405,34 +481,53 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
     <Dialog.Content size="2xl">
       <Dialog.Header asChild>
         <div className="flex w-full items-center justify-between">
-          <Text as="h5" className="font-sans text-xl font-bold">{subjectToEdit ? "Edit Subject" : "Add Subject"}</Text>
+          <Text as="h5" className="font-sans text-xl font-bold">
+            {subjectToEdit ? "Edit Subject" : "Add Subject"}
+          </Text>
         </div>
       </Dialog.Header>
       <section className="flex max-h-[72vh] flex-col gap-4 overflow-y-auto p-4">
         <div>
-          <Text as="h6" className="font-sans text-lg font-bold">Subject Details</Text>
+          <Text as="h6" className="font-sans text-lg font-bold">
+            Subject Details
+          </Text>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="flex flex-col gap-1">
-            <label htmlFor="subject-level" className="text-sm">Grade Level</label>
+            <label htmlFor="subject-level" className="text-sm">
+              Grade Level
+            </label>
             <Select
               value={form.academic_level_id}
               onValueChange={(value) => setField("academic_level_id", value)}
-              disabled={!!subjectToEdit}
+              disabled={isLevelLocked}
             >
               <Select.Trigger id="subject-level" className="w-full min-w-0">
-                <Select.Value placeholder={isLoadingOptions ? "Loading levels..." : "Select grade level"} />
+                <Select.Value
+                  placeholder={
+                    isLoadingOptions
+                      ? "Loading levels..."
+                      : "Select grade level"
+                  }
+                />
               </Select.Trigger>
-              <Select.Content position="item-aligned" className="max-h-72 overflow-y-auto">
+              <Select.Content
+                position="item-aligned"
+                className="max-h-72 overflow-y-auto"
+              >
                 <Select.Group>
                   {options?.academic_levels.map((level) => (
-                    <Select.Item key={level.academic_level_id} value={String(level.academic_level_id)}>
+                    <Select.Item
+                      key={level.academic_level_id}
+                      value={String(level.academic_level_id)}
+                    >
                       {level.level_name}
                     </Select.Item>
                   ))}
                 </Select.Group>
               </Select.Content>
             </Select>
+
             {subjectToEdit ? (
               <Text as="p" className="text-xs text-black/70 mt-1">
                 Grade level can&apos;t be changed after a subject is created.
@@ -440,7 +535,9 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
             ) : null}
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="subject-name" className="text-sm">Subject Name</label>
+            <label htmlFor="subject-name" className="text-sm">
+              Subject Name
+            </label>
             <Input
               id="subject-name"
               value={form.subject_name}
@@ -450,25 +547,40 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="subject-code" className="text-sm">Subject Code</label>
+            <label htmlFor="subject-code" className="text-sm">
+              Subject Code
+            </label>
             <Input
               id="subject-code"
               value={form.subject_codename}
-              onChange={(event) => setField("subject_codename", event.target.value)}
+              onChange={(event) =>
+                setField("subject_codename", event.target.value)
+              }
               type="text"
               placeholder="Enter code"
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="subject-group" className="text-sm">Subject Group</label>
-            <Select value={form.subject_group} onValueChange={(value) => setField("subject_group", value)}>
+            <label htmlFor="subject-group" className="text-sm">
+              Subject Group
+            </label>
+            <Select
+              value={form.subject_group}
+              onValueChange={(value) => setField("subject_group", value)}
+            >
               <Select.Trigger id="subject-group" className="w-full min-w-0">
                 <Select.Value placeholder="Select group" />
               </Select.Trigger>
-              <Select.Content position="item-aligned" className="max-h-72 overflow-y-auto">
+              <Select.Content
+                position="item-aligned"
+                className="max-h-72 overflow-y-auto"
+              >
                 <Select.Group>
                   {options?.subject_groups.map((group) => (
-                    <Select.Item key={group.subject_group_id} value={String(group.subject_group_id)}>
+                    <Select.Item
+                      key={group.subject_group_id}
+                      value={String(group.subject_group_id)}
+                    >
                       {group.name} (Passing: {group.passing_threshold})
                     </Select.Item>
                   ))}
@@ -477,7 +589,9 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
             </Select>
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="subject-hours" className="text-sm">Hours</label>
+            <label htmlFor="subject-hours" className="text-sm">
+              Hours
+            </label>
             <Input
               id="subject-hours"
               value={form.hours}
@@ -487,24 +601,39 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
               placeholder={hoursPlaceholder}
             />
             <Text as="p" className="text-xs text-black/70">
-              Total instructional hours for the term. Leave blank if unknown — you can update this later.
+              Total instructional hours for the term. Leave blank if unknown —
+              you can update this later.
             </Text>
           </div>
           <div className="flex flex-col gap-1 md:col-span-2">
-            <Text as="h6" className="font-sans text-base font-bold">Grading Template optional</Text>
-            <label htmlFor="grading-template" className="text-sm">Grading Template</label>
+            <Text as="h6" className="font-sans text-base font-bold">
+              Grading Template optional
+            </Text>
+            <label htmlFor="grading-template" className="text-sm">
+              Grading Template
+            </label>
             <Select
               value={form.default_grading_template}
-              onValueChange={(value) => setField("default_grading_template", value)}
+              onValueChange={(value) =>
+                setField("default_grading_template", value)
+              }
             >
               <Select.Trigger id="grading-template" className="w-full min-w-0">
                 <Select.Value placeholder="No template yet" />
               </Select.Trigger>
-              <Select.Content position="item-aligned" className="max-h-72 overflow-y-auto">
+              <Select.Content
+                position="item-aligned"
+                className="max-h-72 overflow-y-auto"
+              >
                 <Select.Group>
-                  <Select.Item value={NO_TEMPLATE_VALUE}>No template yet</Select.Item>
+                  <Select.Item value={NO_TEMPLATE_VALUE}>
+                    No template yet
+                  </Select.Item>
                   {gradingTemplates.map((template) => (
-                    <Select.Item key={template.grading_template_id} value={template.template_name}>
+                    <Select.Item
+                      key={template.grading_template_id}
+                      value={template.template_name}
+                    >
                       {template.template_name}
                     </Select.Item>
                   ))}
@@ -512,14 +641,17 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
               </Select.Content>
             </Select>
             <Text as="p" className="text-xs text-black/70">
-              Optional. Select a reusable grading setup if this subject already has known grading weights.
+              Optional. Select a reusable grading setup if this subject already
+              has known grading weights.
             </Text>
             <Text as="p" className="text-xs text-black/70">
               Create or edit templates in the Grading Setup tab.
             </Text>
           </div>
           <div className="flex flex-col gap-1 md:col-span-2">
-            <label htmlFor="subject-description" className="text-sm">Description</label>
+            <label htmlFor="subject-description" className="text-sm">
+              Description
+            </label>
             <Input
               id="subject-description"
               value={form.description}
@@ -533,13 +665,19 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
               <Checkbox
                 id="is-math-science"
                 checked={form.is_math_or_science}
-                onCheckedChange={(checked) => setField("is_math_or_science", checked === true)}
+                onCheckedChange={(checked) =>
+                  setField("is_math_or_science", checked === true)
+                }
                 className="mt-1 shrink-0"
               />
               <div className="flex flex-col gap-1">
-                <label htmlFor="is-math-science" className="font-bold">Is Core Math or Science? (60-min requirement)</label>
+                <label htmlFor="is-math-science" className="font-bold">
+                  Is Core Math or Science? (60-min requirement)
+                </label>
                 <p className="text-sm text-black/70">
-                  Checking this flag enforces a 60-minute duration requirement for this subject during automatic and manual scheduling to comply with core curriculum standards.
+                  Checking this flag enforces a 60-minute duration requirement
+                  for this subject during automatic and manual scheduling to
+                  comply with core curriculum standards.
                 </p>
               </div>
             </div>
@@ -554,10 +692,13 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
               className="mt-1 shrink-0"
             />
             <div className="flex flex-col gap-1">
-              <label htmlFor="offer-now" className="font-bold">Offer This Subject Now optional</label>
+              <label htmlFor="offer-now" className="font-bold">
+                Offer This Subject Now optional
+              </label>
               <p className="text-sm text-black/70">
-                Offering means this subject will be available for a school year, term, grade, and pathway.
-                Teacher and schedule setup is still done later in Classes.
+                Offering means this subject will be available for a school year,
+                term, grade, and pathway. Teacher and schedule setup is still
+                done later in Classes.
               </p>
             </div>
           </div>
@@ -565,15 +706,26 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
           {offerNow ? (
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="flex flex-col gap-1">
-                <label htmlFor="offering-year" className="text-sm">Academic Year</label>
-                <Select value={offeringForm.academic_year_id} onValueChange={handleYearChange}>
+                <label htmlFor="offering-year" className="text-sm">
+                  Academic Year
+                </label>
+                <Select
+                  value={offeringForm.academic_year_id}
+                  onValueChange={handleYearChange}
+                >
                   <Select.Trigger id="offering-year" className="w-full min-w-0">
                     <Select.Value placeholder="Select academic year" />
                   </Select.Trigger>
-                  <Select.Content position="item-aligned" className="max-h-72 overflow-y-auto">
+                  <Select.Content
+                    position="item-aligned"
+                    className="max-h-72 overflow-y-auto"
+                  >
                     <Select.Group>
                       {offeringOptions?.academic_years.map((year) => (
-                        <Select.Item key={year.academic_year_id} value={String(year.academic_year_id)}>
+                        <Select.Item
+                          key={year.academic_year_id}
+                          value={String(year.academic_year_id)}
+                        >
                           {year.year_label}
                         </Select.Item>
                       ))}
@@ -583,19 +735,38 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
               </div>
               {requiresPathway ? (
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="offering-pathway" className="text-sm font-semibold">Pathway</label>
+                  <label
+                    htmlFor="offering-pathway"
+                    className="text-sm font-semibold"
+                  >
+                    Pathway
+                  </label>
                   <Select
                     value={offeringForm.pathway}
-                    onValueChange={(value) => setOfferingField("pathway", value as SubjectOfferingPathway)}
+                    onValueChange={(value) =>
+                      setOfferingField(
+                        "pathway",
+                        value as SubjectOfferingPathway,
+                      )
+                    }
                   >
-                    <Select.Trigger id="offering-pathway" className="w-full min-w-0">
+                    <Select.Trigger
+                      id="offering-pathway"
+                      className="w-full min-w-0"
+                    >
                       <Select.Value placeholder="Select pathway" />
                     </Select.Trigger>
-                    <Select.Content position="item-aligned" className="max-h-72 overflow-y-auto">
+                    <Select.Content
+                      position="item-aligned"
+                      className="max-h-72 overflow-y-auto"
+                    >
                       <Select.Group>
                         {availablePathways.map((pathway) => {
-                          const pathwayObj = offeringOptions?.pathways.find((p) => p.code === pathway);
-                          const label = pathwayObj?.name || pathwayLabel(pathway);
+                          const pathwayObj = offeringOptions?.pathways.find(
+                            (p) => p.code === pathway,
+                          );
+                          const label =
+                            pathwayObj?.name || pathwayLabel(pathway);
                           return (
                             <Select.Item key={pathway} value={pathway}>
                               {label}
@@ -611,7 +782,8 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
                 <div>
                   <p className="text-sm font-semibold">Term(s)</p>
                   <p className="text-xs text-black/70">
-                    Grade level is inherited from {selectedLevel?.level_name || "the selected subject grade"}.
+                    Grade level is inherited from{" "}
+                    {selectedLevel?.level_name || "the selected subject grade"}.
                   </p>
                 </div>
                 {availablePeriods.length === 0 ? (
@@ -628,8 +800,12 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
                           className="flex items-center gap-2 rounded border-2 border-black bg-background p-2 text-sm"
                         >
                           <Checkbox
-                            checked={offeringForm.academic_period_ids.includes(value)}
-                            onCheckedChange={(checked) => togglePeriod(value, checked === true)}
+                            checked={offeringForm.academic_period_ids.includes(
+                              value,
+                            )}
+                            onCheckedChange={(checked) =>
+                              togglePeriod(value, checked === true)
+                            }
                           />
                           <span>{period.period_name}</span>
                         </label>
@@ -643,14 +819,21 @@ export default function AddSubjectModal({ open, subjectToEdit, onCreated }: AddS
         </section>
         <div className="flex flex-col gap-1">
           <Text as="p" className="text-sm">
-            Grade Level: <span className="font-bold">{selectedLevel?.level_name || "Select grade level"}</span>
+            Grade Level:{" "}
+            <span className="font-bold">
+              {selectedLevel?.level_name || "Select grade level"}
+            </span>
           </Text>
-          {error ? <p className="text-sm font-semibold text-red-700">{error}</p> : null}
+          {error ? (
+            <p className="text-sm font-semibold text-red-700">{error}</p>
+          ) : null}
         </div>
       </section>
       <Dialog.Footer>
         <Dialog.Close>
-          <Button variant="outline" disabled={isSaving}>Cancel</Button>
+          <Button variant="outline" disabled={isSaving}>
+            Cancel
+          </Button>
         </Dialog.Close>
         <Button onClick={handleSubmit} disabled={isSaving || isLoadingOptions}>
           {subjectToEdit ? "Save Changes" : "Add Subject"}
