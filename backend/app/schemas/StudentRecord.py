@@ -131,6 +131,7 @@ class GradebookCategoryHeaderGroup(BaseModel):
 class StudentGradebookRow(BaseModel):
     student_id: str
     name: str
+    gender: Optional[str] = None
     writtenWork: list[Optional[float]]
     performanceTask: list[Optional[float]]
     quarterlyAssessment: list[Optional[float]]
@@ -149,3 +150,33 @@ class StudentGradebookResponse(BaseModel):
     classwork: list[GradebookCategoryHeaderGroup]
     studentGrades: list[StudentGradebookRow]
 
+
+class TermGradeSummaryRow(BaseModel):
+    student_id: str
+    name: str
+    gender: Optional[str] = None
+    term_grades: dict[int, Optional[float]]  # {academic_period_id: grade}
+    final_grade: Optional[float] = None
+    remark: Optional[str] = None  # "PASSED" | "FAILED" | "INCOMPLETE"
+
+
+class TermGradeSummaryScope(BaseModel):
+    class_id: int
+    subject_id: int
+    academic_year_id: int
+    section_name: str
+    subject_name: str
+    year_label: str
+
+
+class TermPeriodInfo(BaseModel):
+    academic_period_id: int
+    period_name: str
+    period_sequence: int
+
+
+class TermGradeSummaryResponse(BaseModel):
+    scope: TermGradeSummaryScope
+    periods: list[TermPeriodInfo]
+    students: list[TermGradeSummaryRow]
+    passing_threshold: float

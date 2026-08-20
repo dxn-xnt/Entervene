@@ -172,6 +172,10 @@ def attach_staff_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
 
 
 def attach_student_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
+    gender = data.get("gender", "").strip()
+    if not gender:
+        raise HTTPException(status_code=400, detail="Gender is required for student profiles")
+        
     db.add(Student(
         student_id=uuid.uuid4(),
         user_id=user_id,
@@ -181,7 +185,7 @@ def attach_student_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
         last_name=capitalize_name(data.get("last_name")),
         dob=parse_optional_date(data),
         suffix=data.get("suffix", ""),
-        gender=data.get("gender", ""),
+        gender=gender,
         contact_number=data.get("contact_number", ""),
         address=data.get("address", ""),
         email=data.get("email", ""),

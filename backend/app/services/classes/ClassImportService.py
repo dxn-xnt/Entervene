@@ -399,7 +399,11 @@ async def validate_class_import_file(
                     or normalized_text(row["student_last_name"]) != normalized_text(student.last_name)
                 ):
                     errors.append(csv_validation_error("student_name_mismatch", f"Student name does not match student LRN {student_lrn}.", row_number, "student_lrn"))
-                if normalized_text(row["student_gender"]) != normalized_text(student.gender):
+                
+                raw_gender = normalized_text(row["student_gender"])
+                if not raw_gender:
+                    errors.append(csv_validation_error("student_gender_required", "Student gender is required.", row_number, "student_gender"))
+                elif raw_gender != normalized_text(student.gender):
                     errors.append(csv_validation_error("student_gender_mismatch", f"Student gender does not match student LRN {student_lrn}.", row_number, "student_gender"))
                 if student_lrn in assigned_lrns:
                     errors.append(csv_validation_error("student_already_assigned", f"Student LRN {student_lrn} is already assigned during the active academic year.", row_number, "student_lrn"))

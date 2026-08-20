@@ -45,6 +45,7 @@ type StudentInfo = {
   first_name?: string;
   last_name?: string;
   full_name?: string;
+  gender?: string;
 };
 
 type AttendanceTarget = {
@@ -62,9 +63,23 @@ type StudentAttendanceState = {
   student_id: string;
   student_name: string;
   student_lrn: string;
+  gender: string;
   status: AttendanceStatus;
   remarks: string;
 };
+
+function groupStudentsByGender<T extends { gender?: string | null }>(students: T[]) {
+  const males: T[] = [];
+  const females: T[] = [];
+  students.forEach((s) => {
+    if (s.gender?.toLowerCase() === "male") {
+      males.push(s);
+    } else {
+      females.push(s);
+    }
+  });
+  return { males, females };
+}
 
 type StudentSummaryStats = {
   student_id: string;
@@ -231,6 +246,7 @@ export default function TeacherAttendancePage() {
             student_id: s.student_id,
             student_name: name,
             student_lrn: s.student_lrn || "N/A",
+            gender: s.gender || "Unspecified",
             status: (log?.status as AttendanceStatus) || "present",
             remarks: log?.remarks || "",
           };
@@ -240,8 +256,7 @@ export default function TeacherAttendancePage() {
 
         // 5. Fetch leave requests
         const leaves = await getClassLeaveRequests(
-          selectedClassId!,
-          selectedSubjectId,
+          selectedClassId!
         );
         setLeaveRequests(leaves);
       } catch (err) {
@@ -660,7 +675,7 @@ export default function TeacherAttendancePage() {
                 ) : filteredStudents.length === 0 ? (
                   <div className="flex flex-col items-center justify-center p-12 text-gray-500 border-2 border-black bg-white">
                     <Users className="w-10 h-10 mb-2 opacity-50" />
-                    <p className="text-lg font-bold">No students found</p>
+<p className="text-lg font-bold">No students found</p>
                     <p className="text-sm">
                       Select a valid class or clear search term.
                     </p>
@@ -673,7 +688,6 @@ export default function TeacherAttendancePage() {
                     <Table.Header>
                       <Table.Row className="hover:bg-primary hover:text-primary-foreground">
                         <th className="p-3 border-r-2 border-black">#</th>
-                        <th className="p-3 border-r-2 border-black">LRN</th>
                         <th className="p-3 border-r-2 border-black">
                           Student Name
                         </th>
@@ -684,104 +698,139 @@ export default function TeacherAttendancePage() {
                       </Table.Row>
                     </Table.Header>
                     <Table.Body className="text-sm">
-                      {filteredStudents.map((student, index) => (
-                        <tr
-                          key={student.student_id}
-                          className={`border-b-2 border-black hover:bg-gray-50 transition-colors ${
-                            student.status === "absent"
-                              ? "bg-red-50/50"
-                              : student.status === "late"
-                                ? "bg-amber-50/50"
-                                : student.status === "excused"
-                                  ? "bg-blue-50/50"
-                                  : ""
-                          }`}
-                        >
-                          <td className="p-3 font-bold text-xs border-r-2 border-black text-gray-500">
-                            {index + 1}
-                          </td>
-                          <td className="p-3 font-mono text-xs font-semibold border-r-2 border-black">
-                            {student.student_lrn}
-                          </td>
-                          <td className="p-3 font-bold border-r-2 border-black">
-                            {student.student_name}
-                          </td>
+                      {(() => {
+                        const { males, females } = groupStudentsByGender(filteredStudents);
 
-                          {/* Status Buttons */}
-                          <td className="p-3 border-r-2 border-black">
-                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setStatus(student.student_id, "present")
+                        const renderRow = (student: StudentAttendanceState, index: number) => (
+                          <tr
+                            key={student.student_id}
+                            className={`border-b-2 border-black hover:bg-gray-50 transition-colors ${
+                              student.status === "absent"
+                                ? "bg-red-50/50"
+                                : student.status === "late"
+                                  ? "bg-amber-50/50"
+                                  : student.status === "excused"
+                                    ? "bg-blue-50/50"
+                                    : ""
+                            }`}
+                          >
+                            <td className="p-3 font-bold text-xs border-r-2 border-black text-gray-500">
+                              {index + 1}
+                            </td>
+                            <td className="p-3 font-bold border-r-2 border-black">
+                              {student.student_name}
+                            </td>
+
+                            {/* Status Buttons */}
+                            <td className="p-3 border-r-2 border-black">
+                              <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setStatus(student.student_id, "present")
+                                  }
+                                  className={`px-3 py-1 text-xs font-bold border-2 border-black rounded-none transition-all ${
+                                    student.status === "present"
+                                      ? "bg-emerald-600 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                      : "bg-white text-emerald-800 hover:bg-emerald-50"
+                                  }`}
+                                >
+                                  Present
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setStatus(student.student_id, "absent")
+                                  }
+                                  className={`px-3 py-1 text-xs font-bold border-2 border-black rounded-none transition-all ${
+                                    student.status === "absent"
+                                      ? "bg-red-600 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                      : "bg-white text-red-800 hover:bg-red-50"
+                                  }`}
+                                >
+                                  Absent
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setStatus(student.student_id, "late")
+                                  }
+                                  className={`px-3 py-1 text-xs font-bold border-2 border-black rounded-none transition-all ${
+                                    student.status === "late"
+                                      ? "bg-amber-500 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                      : "bg-white text-amber-800 hover:bg-amber-50"
+                                  }`}
+                                >
+                                  Late
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setStatus(student.student_id, "excused")
+                                  }
+                                  className={`px-3 py-1 text-xs font-bold border-2 border-black rounded-none transition-all ${
+                                    student.status === "excused"
+                                      ? "bg-blue-500 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                      : "bg-white text-blue-800 hover:bg-blue-50"
+                                  }`}
+                                >
+                                  Excused
+                                </button>
+                              </div>
+                            </td>
+
+                            <td className="p-2">
+                              <input
+                                type="text"
+                                className="w-full text-sm p-1.5 border-b-2 border-transparent hover:border-gray-300 focus:border-black outline-none bg-transparent transition-colors placeholder:text-gray-400"
+                                placeholder={
+                                  student.status !== "present"
+                                    ? "Add remarks..."
+                                    : "-"
                                 }
-                                className={`px-3 py-1 text-xs font-bold border-2 border-black rounded-none transition-all ${
-                                  student.status === "present"
-                                    ? "bg-emerald-600 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                                    : "bg-white text-emerald-800 hover:bg-emerald-50"
-                                }`}
-                              >
-                                Present
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setStatus(student.student_id, "absent")
+                                value={student.remarks}
+                                onChange={(e) =>
+                                  setRemarks(student.student_id, e.target.value)
                                 }
-                                className={`px-3 py-1 text-xs font-bold border-2 border-black rounded-none transition-all ${
-                                  student.status === "absent"
-                                    ? "bg-red-600 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                                    : "bg-white text-red-800 hover:bg-red-50"
-                                }`}
-                              >
-                                Absent
-                              </button>
+                              />
+                            </td>
+                          </tr>
+                        );
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setStatus(student.student_id, "late")
-                                }
-                                className={`px-3 py-1 text-xs font-bold border-2 border-black rounded-none transition-all ${
-                                  student.status === "late"
-                                    ? "bg-amber-500 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                                    : "bg-white text-amber-800 hover:bg-amber-50"
-                                }`}
-                              >
-                                Late
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setStatus(student.student_id, "excused")
-                                }
-                                className={`px-3 py-1 text-xs font-bold border-2 border-black rounded-none transition-all ${
-                                  student.status === "excused"
-                                    ? "bg-blue-600 text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                                    : "bg-white text-blue-800 hover:bg-blue-50"
-                                }`}
-                              >
-                                Excused
-                              </button>
-                            </div>
-                          </td>
-
-                          {/* Remarks Input */}
-                          <td className="p-2">
-                            <input
-                              type="text"
-                              placeholder="Add optional note..."
-                              value={student.remarks}
-                              onChange={(e) =>
-                                setRemarks(student.student_id, e.target.value)
-                              }
-                              className="w-full text-xs font-medium p-1.5 border-2 border-gray-300 rounded-none focus:border-black focus:outline-none"
-                            />
-                          </td>
-                        </tr>
-                      ))}
+                        return (
+                          <>
+                            {males.length > 0 && (
+                              <>
+                                <tr className="bg-gray-100 border-b-2 border-black">
+                                  <td
+                                    colSpan={4}
+                                    className="p-2 font-bold text-xs uppercase tracking-wider text-gray-500 text-center bg-gray-200"
+                                  >
+                                    Male
+                                  </td>
+                                </tr>
+                                {males.map((student, index) => renderRow(student, index))}
+                              </>
+                            )}
+                            {females.length > 0 && (
+                              <>
+                                <tr className="bg-gray-100 border-b-2 border-black">
+                                  <td
+                                    colSpan={4}
+                                    className="p-2 font-bold text-xs uppercase tracking-wider text-gray-500 text-center bg-gray-200"
+                                  >
+                                    Female
+                                  </td>
+                                </tr>
+                                {females.map((student, index) => renderRow(student, index))}
+                              </>
+                            )}
+                          </>
+                        );
+                      })()}
                     </Table.Body>
                   </Table>
                 )}

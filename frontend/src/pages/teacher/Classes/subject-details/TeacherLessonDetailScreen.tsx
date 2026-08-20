@@ -1,8 +1,6 @@
 import {
-  BookOpen,
   ClipboardList,
   Eye,
-  FileText,
   Pencil,
   Plus,
 } from "lucide-react";
@@ -23,22 +21,7 @@ interface TeacherLessonDetailScreenProps {
   isLoadingClasswork: boolean;
 }
 
-function ClassworkIcon({
-  type,
-  size = 20,
-}: {
-  type?: string | null;
-  size?: number;
-}) {
-  switch (type?.toUpperCase()) {
-    case "QUIZ":
-      return <ClipboardList size={size} className="shrink-0 text-black" />;
-    case "ASSIGNMENT":
-      return <BookOpen size={size} className="shrink-0 text-black" />;
-    default:
-      return <FileText size={size} className="shrink-0 text-black" />;
-  }
-}
+
 
 export default function TeacherLessonDetailScreen({
   lesson,

@@ -36,8 +36,13 @@ from app.schemas.StudentRecord import (
     StudentRecordRosterRow,
     StudentRecordScope,
     StudentRecordSummary,
+    TermGradeSummaryResponse,
+    TermGradeSummaryScope,
+    TermPeriodInfo,
+    TermGradeSummaryRow,
 )
 from app.services.prediction.PredictionOutcomeService import evaluate_outcomes_for_finalized_period_grade
+from app.services.classes.ClassQueryService import _student_full_name
 
 
 COMPLETED_STATUSES = {"submitted", "graded", "late"}
@@ -247,6 +252,7 @@ def teacher_student_gradebook(
             StudentGradebookRow(
                 student_id=str(student.student_id),
                 name=_student_name(student),
+                gender=student.gender,
                 writtenWork=written_scores,
                 performanceTask=performance_scores,
                 quarterlyAssessment=quarterly_scores,
@@ -741,20 +747,94 @@ def _percentage(earned: Decimal, possible: Decimal) -> float | None:
 
 
 def _student_name(student: Student) -> str:
-    return " ".join(
-        str(part)
-        for part in [
-            student.first_name,
-            student.middle_name,
-            student.last_name,
-            student.suffix,
-        ]
-        if part
-    )
+    return _student_full_name(student)
 
 
 def _academic_level_label(level: AcademicLevel | None) -> str | None:
     if not level:
         return None
     return str(level.level_name) if level.level_name else f"Grade {level.grade_level}"
+
+
+def teacher_term_grade_summary(
+    db: Session,
+    staff_id: str,
+    class_id: int,
+    subject_id: int,
+) -> TermGradeSummaryResponse:
+    options = teacher_period_options(db, staff_id, class_id, subject_id)
+    if not options.periods:
+        raise HTTPException(status_code=403, detail="Student records are outside your teaching scope")
+        
+    base_scope = _teacher_scope(db, staff_id, class_id, subject_id, options.default_academic_period_id)
+    
+    # Sort periods by start_date to assign sequence
+    sorted_periods = sorted(options.periods, key=lambda p: p.start_date)
+    handled_period_ids = {p.academic_period_id for p in sorted_periods}
+    
+    periods_info = [
+        TermPeriodInfo(
+            academic_period_id=p.academic_period_id,
+            period_name=p.period_name,
+            period_sequence=i + 1
+        )
+        for i, p in enumerate(sorted_periods)
+    ]
+    
+    students = _roster(db, base_scope)
+    
+    passing_grade: float = 75.0
+    if base_scope.subject is not None and hasattr(base_scope.subject, "subject_group_rel") and base_scope.subject.subject_group_rel is not None:
+        passing_grade = float(base_scope.subject.subject_group_rel.passing_threshold)
+        
+    student_rows = {}
+    for student in students:
+        student_rows[student.student_id] = TermGradeSummaryRow(
+            student_id=str(student.student_id),
+            name=_student_name(student),
+            gender=student.gender,
+            term_grades={},
+            final_grade=None,
+            remark=None,
+        )
+        
+    for p in sorted_periods:
+        gradebook = teacher_student_gradebook(db, staff_id, class_id, subject_id, p.academic_period_id)
+        for gb_row in gradebook.studentGrades:
+            sid = UUID(gb_row.student_id)
+            if sid in student_rows:
+                grade_val = float(gb_row.total) if gb_row.total and gb_row.total != "0" else None
+                student_rows[sid].term_grades[p.academic_period_id] = grade_val
+                
+    for sid, row in student_rows.items():
+        missing_any = False
+        grades = []
+        for pid in handled_period_ids:
+            g = row.term_grades.get(pid)
+            if g is None:
+                missing_any = True
+            else:
+                grades.append(g)
+                
+        if grades:
+            row.final_grade = round(sum(grades) / len(grades), 1)
+            
+        if missing_any:
+            row.remark = "INCOMPLETE"
+        elif row.final_grade is not None:
+            row.remark = "PASSED" if row.final_grade >= passing_grade else "FAILED"
+            
+    return TermGradeSummaryResponse(
+        scope=TermGradeSummaryScope(
+            class_id=base_scope.class_.class_id,
+            subject_id=base_scope.subject.subject_id,
+            academic_year_id=base_scope.year.academic_year_id,
+            section_name=base_scope.class_.section_name,
+            subject_name=base_scope.subject.subject_name,
+            year_label=base_scope.year.year_label,
+        ),
+        periods=periods_info,
+        students=list(student_rows.values()),
+        passing_threshold=passing_grade,
+    )
 

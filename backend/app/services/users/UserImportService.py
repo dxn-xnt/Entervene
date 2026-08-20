@@ -156,6 +156,10 @@ def _validate_import_rows(
             if resolve_academic_level_id(db, normalized) is None:
                 grade_value = normalized.get("grade_level") or normalized.get("academic_level") or normalized.get("academic_level_id") or ""
                 errors.append(_import_error(index, "grade_level", grade_value, "Grade level does not match an existing academic level"))
+                
+            raw_gender = normalized.get("gender", "").strip()
+            if not raw_gender:
+                errors.append(_import_error(index, "gender", raw_gender, "Gender is required"))
 
         valid_rows.append(normalized)
 
