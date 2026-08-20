@@ -11,6 +11,7 @@ interface PredictionTableProps {
   offset: number;
   sortBy?: string;
   sortOrder?: "asc" | "desc";
+  hideClass?: boolean;
   onSort: (column: string) => void;
   onPageChange: (newOffset: number) => void;
   onRowClick: (predictionId: number) => void;
@@ -65,6 +66,7 @@ export default function PredictionTable({
   offset,
   sortBy,
   sortOrder,
+  hideClass = false,
   onSort,
   onPageChange,
   onRowClick,
@@ -87,7 +89,7 @@ export default function PredictionTable({
               />
             </Table.Head>
             {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">LRN</Table.Head> */}
-            <Table.Head className="font-extrabold text-black whitespace-nowrap">Class</Table.Head>
+            {!hideClass && <Table.Head className="font-extrabold text-black whitespace-nowrap">Class</Table.Head>}
             <Table.Head className="font-extrabold text-black whitespace-nowrap">Subject</Table.Head>
             <Table.Head className="font-extrabold text-black whitespace-nowrap">Term</Table.Head>
             <Table.Head className="font-extrabold text-black whitespace-nowrap">
@@ -118,7 +120,7 @@ export default function PredictionTable({
           {items.length === 0 ? (
             <Table.Row>
               <Table.Cell
-                colSpan={9}
+                colSpan={hideClass ? 6 : 7}
                 className="text-center py-12"
               >
                 <div className="flex flex-col items-center justify-center gap-2">
@@ -151,7 +153,7 @@ export default function PredictionTable({
                   {/* <Table.Cell className="text-gray-700 text-xs font-bold whitespace-nowrap">
                     {item.student_lrn}
                   </Table.Cell> */}
-                  <Table.Cell className="font-normal whitespace-nowrap">{item.class_name}</Table.Cell>
+                  {!hideClass && <Table.Cell className="font-normal whitespace-nowrap">{item.class_name}</Table.Cell>}
                   <Table.Cell className="font-normal whitespace-nowrap">{item.subject_name}</Table.Cell>
                   <Table.Cell className="font-normal whitespace-nowrap">{item.term_label}</Table.Cell>
                   <Table.Cell className="font-black text-base whitespace-nowrap">

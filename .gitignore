@@ -26,13 +26,16 @@ __pycache__/
 .pytest_cache/
 backend/test_temp/
 
+# Dependencies / Node
+node_modules/
+**/node_modules/
+package-lock.json
+
 # React / Vite
-frontend/node_modules/
 frontend/.env
 frontend/dist/
 
-#mobile-app
-mobile-app/node_modules/
+# mobile-app
 mobile-app/.env
 mobile-app/dist/
 

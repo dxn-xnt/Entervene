@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useParams, Link } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { OverviewCard } from "@/components/overview-cards";
@@ -6,7 +7,8 @@ import { cn } from "@/lib/utils";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
-import { PredictionGradeSection, type GradeGroup } from "@/components/predictions/prediction-grade-section";
+import { type GradeGroup } from "@/components/predictions/prediction-grade-section";
+import { useAuth } from "@/context/AuthContext";
 import type {
   DashboardAtRiskResponse,
   DashboardFilters,
@@ -17,6 +19,7 @@ import {
   fetchDashboardAtRisk,
   fetchDashboardFilters,
 } from "@/lib/prediction-api";
+import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 
 const EMPTY_SUMMARY: RiskSummary = {
   HIGH_RISK: 0,
@@ -62,7 +65,11 @@ const RISK_CARDS = [
   },
 ];
 
-export default function PredictionsDashboard() {
+export default function SectionPredictions() {
+  const { role } = useAuth();
+  const baseRole = role === "admin" ? "admin" : "teacher";
+  const { grade, classId: classSlug } = useParams<{ grade: string; classId: string }>();
+
   // ── State ──
   const [data, setData] = useState<DashboardAtRiskResponse | null>(null);
   const [filters, setFilters] = useState<DashboardFilters | null>(null);
@@ -79,7 +86,7 @@ export default function PredictionsDashboard() {
   const [sortBy, setSortBy] = useState<string | undefined>("risk_score");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [offset, setOffset] = useState(0);
-  const limit = 5;
+  const limit = 10;
 
   // Detail sheet
   const [selectedPrediction, setSelectedPrediction] = useState<number | null>(
@@ -174,44 +181,43 @@ export default function PredictionsDashboard() {
             {/* ── Header ── */}
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
-              <h1 className="text-2xl md:text-4xl font-bold">AI Predictions</h1>
+              <Breadcrumb>
+                <Breadcrumb.List>
+                  <Breadcrumb.Item>
+                    <Breadcrumb.Link asChild className="text-2xl md:text-4xl font-bold">
+                      <Link to={`/${baseRole}/predictions`}>AI Predictions</Link>
+                    </Breadcrumb.Link>
+                  </Breadcrumb.Item>
+                  {grade && (
+                    <>
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Link asChild className="text-2xl font-bold">
+                          <Link to={`/${baseRole}/predictions/${grade}`}>Grade {grade}</Link>
+                        </Breadcrumb.Link>
+                      </Breadcrumb.Item>
+                    </>
+                  )}
+                  {classSlug && (
+                    <>
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Page className="text-2xl font-bold font-black">
+                          {decodeURIComponent(classSlug)}
+                        </Breadcrumb.Page>
+                      </Breadcrumb.Item>
+                    </>
+                  )}
+                </Breadcrumb.List>
+              </Breadcrumb>
             </header>
 
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
-            {/* ── Risk Summary Cards ── */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-              {RISK_CARDS.map((card) => {
-                const count = summary[card.key];
-                const isActive = riskLevel === card.key;
-
-                return (
-                  <button
-                    key={card.key}
-                    type="button"
-                    onClick={() => handleRiskClick(isActive ? undefined : card.key)}
-                    className="text-left cursor-pointer transition-transform active:translate-x-[2px] active:translate-y-[2px] w-full"
-                  >
-                    <OverviewCard
-                      title={card.label}
-                      count={String(count)}
-                      className={cn(
-                        "w-full border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all",
-
-                        isActive
-                          ? `${card.activeClass} shadow-none translate-x-[2px] translate-y-[2px]`
-                          : "hover:translate-x-[-1px] hover:translate-y-[-1px]"
-                      )}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* ── Chart + Filters row ── */}
-            <div className="flex flex-col lg:flex-row gap-5">
-              {/* Filters + table */}
-              <div className="flex-1 flex flex-col gap-4 min-w-0">
+            {/* ── Main Content: Table on Left + Risk Cards on Right ── */}
+            <div className="flex flex-col lg:flex-row gap-5 items-start">
+              {/* Left Column: Filters + Table */}
+              <div className="flex-1 flex flex-col gap-4 min-w-0 w-full">
                 <PredictionFilters
                   filters={filters}
                   classId={classId}
@@ -219,10 +225,7 @@ export default function PredictionsDashboard() {
                   term={term}
                   riskLevel={riskLevel}
                   search={search}
-                  onClassChange={(v) => {
-                    setClassId(v);
-                    setOffset(0);
-                  }}
+                  hideClassFilter
                   onSubjectChange={(v) => {
                     setSubjectId(v);
                     setOffset(0);
@@ -251,24 +254,45 @@ export default function PredictionsDashboard() {
                     offset={data?.offset ?? 0}
                     sortBy={sortBy}
                     sortOrder={sortOrder}
+                    hideClass
                     onSort={handleSort}
                     onPageChange={setOffset}
                     onRowClick={handleRowClick}
                   />
                 )}
+              </div>
 
-                {/* ── Grade Groups ── */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 -mt-2">
-                  {MOCK_GRADE_GROUPS.map((group) => (
-                    <PredictionGradeSection key={group.grade} group={group} />
-                  ))}
-                </div>
+              {/* Right Column: Risk Summary Cards */}
+              <div className="w-full lg:w-64 xl:w-72 shrink-0 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-3">
+                {RISK_CARDS.map((card) => {
+                  const count = summary[card.key];
+                  const isActive = riskLevel === card.key;
+
+                  return (
+                    <button
+                      key={card.key}
+                      type="button"
+                      onClick={() => handleRiskClick(isActive ? undefined : card.key)}
+                      className="text-left cursor-pointer transition-transform active:translate-x-[2px] active:translate-y-[2px] w-full"
+                    >
+                      <OverviewCard
+                        title={card.label}
+                        count={String(count)}
+                        className={cn(
+                          "w-full border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all",
+                          isActive
+                            ? `${card.activeClass} shadow-none translate-x-[2px] translate-y-[2px]`
+                            : "hover:translate-x-[-1px] hover:translate-y-[-1px]"
+                        )}
+                      />
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
         </div>
       </div>
-
 
       {/* ── Detail Sheet ── */}
       <PredictionDetailSheet

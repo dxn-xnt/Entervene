@@ -3,6 +3,7 @@ import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { ArrowUpRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 import { GradeCard } from "./grade-card";
 
 export interface GradeGroup {
@@ -14,9 +15,12 @@ export interface GradeGroup {
 
 interface PredictionGradeSectionProps {
   group: GradeGroup;
+  role?: "teacher" | "admin";
 }
 
-export function PredictionGradeSection({ group }: PredictionGradeSectionProps) {
+export function PredictionGradeSection({ group, role }: PredictionGradeSectionProps) {
+  const { role: authRole } = useAuth();
+  const activeRole = role ?? (authRole === "admin" ? "admin" : "teacher");
   const navigate = useNavigate();
 
   return (
@@ -38,7 +42,7 @@ export function PredictionGradeSection({ group }: PredictionGradeSectionProps) {
             variant="secondary"
             className="shadow-none h-6 w-6 p-1"
             size="sm"
-            onClick={() => navigate(`/teacher/predictions?grade=${group.grade}`)}
+            onClick={() => navigate(`/${activeRole}/predictions/${group.grade}`)}
             title={`View Grade ${group.grade}`}
           >
             <ArrowUpRight className="size-4" />
@@ -47,7 +51,7 @@ export function PredictionGradeSection({ group }: PredictionGradeSectionProps) {
       </div>
       <div className="pt-3 flex gap-3 overflow-auto pb-2">
         {group.classes.map((cls) => (
-          <GradeCard key={cls} name={cls} grade={group.grade} />
+          <GradeCard key={cls} name={cls} grade={group.grade} role={activeRole} />
         ))}
       </div>
     </Card>
