@@ -220,7 +220,8 @@ export default function SubjectClassworkTab({
   classId,
   subjectId,
 }: SubjectClassworkTabProps) {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoOpenedAssignmentRef = useRef<number | null>(null);
   const [classworks, setClassworks] = useState<ClassworkAssignment[]>([]);
   const [submissions, setSubmissions] = useState<Record<number, Submission>>(
     {},
@@ -314,14 +315,25 @@ export default function SubjectClassworkTab({
   }, [classId, subjectId, fetchClassworks]);
 
   useEffect(() => {
-    const targetId = Number(searchParams.get("classworkAssignmentId"));
-    if (!targetId || classworks.length === 0) return;
+    const rawTarget = searchParams.get("classworkAssignmentId");
+    if (!rawTarget || classworks.length === 0) return;
+    const targetId = Number(rawTarget);
+    if (!targetId || autoOpenedAssignmentRef.current === targetId) return;
+
     const targetCw = classworks.find(
       (cw) => cw.classwork_assignment_id === targetId,
     );
     if (!targetCw) return;
+
+    autoOpenedAssignmentRef.current = targetId;
+
+    // Clean classworkAssignmentId from URL so state updates and future clicks don't re-open stale classwork
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("classworkAssignmentId");
+    setSearchParams(nextParams, { replace: true });
+
     void openClassworkDetail(targetCw);
-  }, [classworks, searchParams]);
+  }, [classworks, searchParams, setSearchParams]);
 
   const updateClassworkStatus = (assignmentId: number, status: string) => {
     setClassworks((prev) =>
@@ -578,6 +590,11 @@ export default function SubjectClassworkTab({
     autoSubmitRef.current = false;
     setQuizError("");
     setDetailError("");
+    if (searchParams.get("classworkAssignmentId")) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("classworkAssignmentId");
+      setSearchParams(nextParams, { replace: true });
+    }
   };
 
   const handleSubmit = async (assignmentId: number, files: File[]) => {
