@@ -285,8 +285,8 @@ def list_classes_data(db: Session, status: str) -> dict:
     }
 
 
-def list_teacher_advisory_classes_data(db: Session, staff_id: str) -> list[dict]:
-    rows = (
+def list_teacher_advisory_classes_data(db: Session, staff_id: str, academic_period_id: int | None = None) -> list[dict]:
+    query = (
         db.query(
             Class,
             AcademicLevel,
@@ -303,6 +303,16 @@ def list_teacher_advisory_classes_data(db: Session, staff_id: str) -> list[dict]
         )
         .outerjoin(SubjectLoad, Class.class_id == SubjectLoad.class_id)
         .filter(Class.adviser_staff_id == staff_id)
+    )
+
+    if academic_period_id is not None:
+        from app.models.academic.AcademicPeriod import AcademicPeriod
+        period = db.query(AcademicPeriod).filter(AcademicPeriod.academic_period_id == academic_period_id).first()
+        if period:
+            query = query.filter(Class.academic_year_id == period.academic_year_id)
+
+    rows = (
+        query
         .group_by(Class.class_id, AcademicLevel.academic_level_id, AcademicYear.academic_year_id)
         .order_by(AcademicLevel.grade_level, func.lower(Class.section_name))
         .all()

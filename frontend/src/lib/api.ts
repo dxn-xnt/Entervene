@@ -498,8 +498,9 @@ export async function getMyClassmates(): Promise<StudentClassmatesResponse> {
   return (await response.json()) as StudentClassmatesResponse;
 }
 
-export async function getStudentTodos(): Promise<StudentTodosResponse> {
-  const response = await apiFetch("/api/v1/students/me/todos");
+export async function getStudentTodos(academicPeriodId?: number): Promise<StudentTodosResponse> {
+  const query = academicPeriodId ? `?academic_period_id=${academicPeriodId}` : "";
+  const response = await apiFetch(`/api/v1/students/me/todos${query}`);
 
   if (!response.ok) {
     throw new Error("Unable to load your to-do items. Please try again.");
@@ -536,8 +537,9 @@ export type StudentSubjectItem = {
   year_label: string;
 };
 
-export async function getMySubjects(): Promise<StudentSubjectItem[]> {
-  const response = await apiFetch("/api/v1/students/me/subjects");
+export async function getMySubjects(academicPeriodId?: number): Promise<StudentSubjectItem[]> {
+  const query = academicPeriodId ? `?academic_period_id=${academicPeriodId}` : "";
+  const response = await apiFetch(`/api/v1/students/me/subjects${query}`);
 
   if (!response.ok) {
     throw new Error("Unable to load your subjects. Please try again.");
@@ -554,8 +556,9 @@ export type TeacherClassItem = {
   grade_level?: string;
 };
 
-export async function getTeacherClasses(): Promise<TeacherClassItem[]> {
-  const response = await apiFetch("/api/v1/classwork-assignments/teacher/classes");
+export async function getTeacherClasses(academicPeriodId?: number): Promise<TeacherClassItem[]> {
+  const query = academicPeriodId ? `?academic_period_id=${academicPeriodId}` : "";
+  const response = await apiFetch(`/api/v1/classwork-assignments/teacher/classes${query}`);
 
   if (!response.ok) {
     throw new Error("Unable to load teacher classes. Please try again.");
@@ -1223,8 +1226,9 @@ export async function getClassStudents(
   return (await response.json()) as ClassStudentListResponse;
 }
 
-export async function getTeacherAdvisoryClasses(): Promise<TeacherAdvisoryClassListItem[]> {
-  const response = await apiFetch("/api/v1/classes/teacher/advisory");
+export async function getTeacherAdvisoryClasses(academicPeriodId?: number): Promise<TeacherAdvisoryClassListItem[]> {
+  const query = academicPeriodId ? `?academic_period_id=${academicPeriodId}` : "";
+  const response = await apiFetch(`/api/v1/classes/teacher/advisory${query}`);
 
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null);

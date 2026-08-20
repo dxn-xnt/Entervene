@@ -5,15 +5,17 @@ import { Card } from "@/components/retroui/Card";
 import AppLayout from "@/layouts/app-layout";
 import { useNavigate } from "react-router-dom";
 import { getTeacherClasses, type TeacherClassItem } from "@/lib/api";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 const Grades = () => {
   const navigate = useNavigate();
   const [classes, setClasses] = useState<TeacherClassItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { selectedPeriodId } = useAcademicPeriod();
 
   useEffect(() => {
     let isMounted = true;
-    getTeacherClasses()
+    getTeacherClasses(selectedPeriodId ?? undefined)
       .then((data) => {
         if (!isMounted) return;
         setClasses(data);
@@ -25,7 +27,7 @@ const Grades = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [selectedPeriodId]);
 
   return (
     <AppLayout>

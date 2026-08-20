@@ -161,6 +161,7 @@ def get_my_classmates(
 
 @router.get("/me/subjects")
 def get_my_subjects(
+    academic_period_id: int | None = None,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -211,8 +212,12 @@ def get_my_subjects(
             StudentClass.enrollment_status == "enrolled",
             SubjectLoad.status.in_(["active", "published"]),
         )
-        .all()
     )
+
+    if academic_period_id is not None:
+        rows = rows.filter(SubjectLoad.academic_period_id == academic_period_id)
+
+    rows = rows.all()
 
     return [
         {
@@ -327,6 +332,7 @@ def get_active_period(
 
 @router.get("/me/todos")
 def get_my_todos(
+    academic_period_id: int | None = None,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -388,9 +394,16 @@ def get_my_todos(
             ClassworkAssignment.is_published == True,
             Classwork.is_archived == False,
         )
-        .order_by(ClassworkAssignment.due_date.asc().nulls_last())
-        .all()
     )
+
+    if academic_period_id is not None:
+        # We need to join SubjectLoad to filter by period
+        results = results.join(
+            SubjectLoad, 
+            (SubjectLoad.class_id == ClassworkAssignment.class_id) & (SubjectLoad.subject_id == Classwork.subject_id)
+        ).filter(SubjectLoad.academic_period_id == academic_period_id)
+
+    results = results.order_by(ClassworkAssignment.due_date.asc().nulls_last()).all()
 
     pending_items = []
     pastdue_items = []

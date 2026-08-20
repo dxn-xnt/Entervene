@@ -199,8 +199,12 @@ def get_cw_assignment(
 
 
 @router.get("/teacher/classes")
-def get_teacher_classes(staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db)):
-    return teacher_classes(staff_id, db)
+def get_teacher_classes(
+    staff_id: str = Depends(get_staff_id),
+    academic_period_id: int | None = None,
+    db: Session = Depends(get_db)
+):
+    return teacher_classes(staff_id, db, academic_period_id)
 
 
 @router.get("/teacher/class/{class_id}/subject/{subject_id}/assignments", response_model=List[ClassworkAssignmentResponse])

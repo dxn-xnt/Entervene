@@ -3,9 +3,10 @@ import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { TimePickerSingle, type TimeValue } from "@/components/retroui/TimePicker";
 import { apiFetch } from "@/lib/api";
+import type { SubjectLoadStudioData } from "@/lib/api";
 import { useSettings } from "@/context/SettingsContext";
 import { validatePeriodTimeRange } from "@/lib/time-utils";
-import { Clock, Save, Coffee, Utensils, Sunrise, Plus, Trash2, FolderPlus } from "lucide-react";
+import { Clock, Save, Coffee, Utensils, Sunrise, Plus, Trash2, FolderPlus, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 export type PeriodTemplateSlotItem = {
   slot_id?: number | null;
@@ -23,6 +24,7 @@ interface BreakConfigDrawerProps {
   onClose: () => void;
   initialSlots?: PeriodTemplateSlotItem[];
   onSaved: () => void;
+  studioData?: SubjectLoadStudioData | null;
 }
 
 function stringToTimeValue(str?: string | null, fallbackHour = 8): TimeValue {
@@ -67,6 +69,7 @@ export default function BreakConfigDrawer({
   onClose,
   initialSlots = [],
   onSaved,
+  studioData,
 }: BreakConfigDrawerProps) {
   const { getSetting } = useSettings();
   const [activeGroup, setActiveGroup] = useState<string>("JHS_45MIN");
@@ -121,6 +124,84 @@ export default function BreakConfigDrawer({
   const activeSlots = slots
     .filter((s) => s.template_group === activeGroup)
     .sort((a, b) => a.display_order - b.display_order);
+
+  // --- Capacity Analyzer ---
+  const capacityAnalysis = useMemo(() => {
+    if (!studioData) return null;
+
+    // 1. Calculate Available Minutes
+    // Find all CLASS slots for the active group
+    const classSlots = activeSlots.filter(s => s.slot_type === "CLASS");
+    let availableDailyMinutes = 0;
+    classSlots.forEach(slot => {
+      const partsStart = slot.start_time.split(":");
+      const partsEnd = slot.end_time.split(":");
+      if (partsStart.length === 2 && partsEnd.length === 2) {
+        const startMins = parseInt(partsStart[0]) * 60 + parseInt(partsStart[1]);
+        const endMins = parseInt(partsEnd[0]) * 60 + parseInt(partsEnd[1]);
+        if (endMins > startMins) {
+          availableDailyMinutes += (endMins - startMins);
+        }
+      }
+    });
+    const availableWeeklyMinutes = availableDailyMinutes * 5; // Assuming 5-day week
+
+    // 2. Calculate Required Minutes
+    // Find a representative class that uses this template group
+    // In our system, JHS_45MIN is typically Grades 7-10, etc.
+    // For a more accurate estimation, we find any class that defaults to this group
+    // Or we just calculate the max required minutes across any class that might use it
+    let maxRequiredMinutes = 0;
+    let representativeClassName = "";
+
+    const candidateClasses = studioData.classes.filter(c => {
+      const cGroup = (c as any).period_template_group; // Check if the backend sends this
+      if (cGroup) return cGroup === activeGroup;
+      
+      // Fallback inference if backend doesn't send it directly on class
+      const name = c.section_name.toLowerCase();
+      if (activeGroup === "SHS_CAMPOS_ZARA" && (name.includes("campos") || name.includes("zara"))) return true;
+      if (activeGroup === "SHS_DELMUNDO_REYES" && (name.includes("del mundo") || name.includes("reyes"))) return true;
+      if (activeGroup === "JHS_45MIN" && c.academic_level_id >= 7 && c.academic_level_id <= 10) return true;
+      return false;
+    });
+
+    for (const cls of candidateClasses) {
+      // Find all subjects offered for this class, respecting pathway/electives
+      let requiredMinutes = 0;
+      studioData.subjects.forEach(sub => {
+        if (sub.academic_level_id !== cls.academic_level_id) return;
+        
+        let isOffered = true;
+        const offerings = (studioData as any).subject_offerings || [];
+        if (offerings.length > 0) {
+          const clsPathway = ((cls as any).pathway || "general").toLowerCase();
+          const hasOffering = offerings.some((so: any) => {
+            if (so.subject_id !== sub.subject_id || so.academic_level_id !== cls.academic_level_id) return false;
+            const soPathway = (so.pathway || "general").toLowerCase();
+            return soPathway === "both" || soPathway === clsPathway || (soPathway === "general" && clsPathway === "general");
+          });
+          if (!hasOffering) isOffered = false;
+        }
+
+        if (isOffered) {
+          requiredMinutes += (sub.hours * 60);
+        }
+      });
+      if (requiredMinutes > maxRequiredMinutes) {
+        maxRequiredMinutes = requiredMinutes;
+        representativeClassName = cls.section_name;
+      }
+    }
+
+    return {
+      available: availableWeeklyMinutes,
+      required: maxRequiredMinutes,
+      representativeClass: representativeClassName,
+      isDeficient: maxRequiredMinutes > availableWeeklyMinutes
+    };
+  }, [activeSlots, activeGroup, studioData]);
+  // -------------------------
 
   const handleSlotFieldChange = (
     slotId: number | undefined,
@@ -445,6 +526,44 @@ export default function BreakConfigDrawer({
                   <span>+ Add Time Slot to {formatGroupName(activeGroup)}</span>
                 </button>
               </div>
+
+              {/* Capacity Analyzer UI */}
+              {capacityAnalysis && capacityAnalysis.required > 0 && (
+                <div className={`mt-6 p-4 border-2 border-black rounded ${capacityAnalysis.isDeficient ? 'bg-red-50' : 'bg-emerald-50'}`}>
+                  <h3 className="text-sm font-bold flex items-center gap-2 mb-2">
+                    <Clock className="size-4" /> Capacity Analyzer
+                  </h3>
+                  <p className="text-xs text-black/80 mb-3">
+                    Based on typical subject loads for <strong>{capacityAnalysis.representativeClass}</strong>, this template requires <strong>{capacityAnalysis.required}</strong> minutes per week.
+                  </p>
+                  
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs font-bold">
+                      <span>Available: {capacityAnalysis.available} mins</span>
+                      <span>Required: {capacityAnalysis.required} mins</span>
+                    </div>
+                    <div className="h-4 w-full bg-gray-200 border border-black rounded overflow-hidden flex">
+                      <div 
+                        className={`h-full ${capacityAnalysis.isDeficient ? 'bg-red-500' : 'bg-emerald-500'}`} 
+                        style={{ width: `${Math.min((capacityAnalysis.available / Math.max(capacityAnalysis.required, 1)) * 100, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                  
+                  {capacityAnalysis.isDeficient && (
+                    <div className="mt-2 text-xs font-bold text-red-700 flex items-start gap-1.5">
+                      <AlertTriangle className="size-4 shrink-0" />
+                      <span>Warning: The configured time slots do not provide enough minutes to schedule all required subjects. Please add more CLASS slots or extend durations.</span>
+                    </div>
+                  )}
+                  {!capacityAnalysis.isDeficient && capacityAnalysis.available > 0 && (
+                    <div className="mt-2 text-xs font-bold text-emerald-700 flex items-start gap-1.5">
+                      <CheckCircle2 className="size-4 shrink-0" />
+                      <span>Sufficient capacity to schedule all subjects.</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -101,6 +101,32 @@ DEFAULTS: list[tuple[str, str, SettingType, str, bool, str]] = [
         "Enable STEM Engineering strand pathway",
     ),
 
+    # ── Teacher Workload Caps ──
+    (
+        "min_subjects_per_day",
+        "4",
+        SettingType.INTEGER,
+        "workload",
+        True,
+        "Minimum number of subjects a teacher should be assigned per day",
+    ),
+    (
+        "max_subjects_per_day",
+        "6",
+        SettingType.INTEGER,
+        "workload",
+        True,
+        "Maximum number of subjects a teacher can be assigned per day",
+    ),
+    (
+        "max_hours_per_day",
+        "6.0",
+        SettingType.STRING,
+        "workload",
+        True,
+        "Maximum total teaching hours per day",
+    ),
+
     # ── Random Forest ML Risk Model ──
     (
         "risk_threshold_high",

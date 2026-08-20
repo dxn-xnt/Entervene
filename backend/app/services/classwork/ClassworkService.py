@@ -744,15 +744,18 @@ def classwork_assignment_detail(assignment_id: int, current_user: dict, db: Sess
     return _assignment_response(assignment, classwork, class_, staff, None)
 
 
-def teacher_classes(staff_id: str, db: Session) -> list[dict]:
-    rows = (
+def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None = None) -> list[dict]:
+    query = (
         db.query(SubjectLoad, Subject, Class, AcademicLevel)
         .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
         .join(Class, Class.class_id == SubjectLoad.class_id)
         .outerjoin(AcademicLevel, AcademicLevel.academic_level_id == Class.academic_level_id)
         .filter(SubjectLoad.staff_id == staff_id, SubjectLoad.status.in_(["active", "published"]))
-        .all()
     )
+    if academic_period_id is not None:
+        query = query.filter(SubjectLoad.academic_period_id == academic_period_id)
+    
+    rows = query.all()
     return [
         {
             "subject_load_id": subject_load.subject_load_id,

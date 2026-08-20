@@ -9,6 +9,7 @@ import {
   type StudentSubjectItem,
   type TodoItem,
 } from "@/lib/api";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 // ─── Color palette for donut / legends ───────────────────────────────────────
 const TYPE_COLORS: Record<string, string> = {
@@ -108,10 +109,11 @@ const Grades = () => {
   const [subjects, setSubjects] = useState<StudentSubjectItem[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { selectedPeriodId } = useAcademicPeriod();
 
   useEffect(() => {
     let isMounted = true;
-    Promise.all([getMySubjects(), getStudentTodos()])
+    Promise.all([getMySubjects(selectedPeriodId ?? undefined), getStudentTodos(selectedPeriodId ?? undefined)])
       .then(([subjectsData, todosData]) => {
         if (!isMounted) return;
         setSubjects(subjectsData);
@@ -126,7 +128,7 @@ const Grades = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [selectedPeriodId]);
 
   // ── Derived analytics (recompute only when todos change) ──
   const completion = useMemo(() => computeCompletion(todos), [todos]);

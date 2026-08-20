@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { SettingsProvider } from "./context/SettingsContext";
+import { AcademicPeriodProvider } from "./context/AcademicPeriodContext";
 import ProtectedRoute from "./components/protected-route";
 import Login from "./pages/Login";
 import { routes } from "@/../routes";
@@ -76,8 +77,9 @@ const App = () => {
   return (
     <SettingsProvider>
       <AuthProvider>
-        <BrowserRouter>
-          <NavigationProgress />
+        <AcademicPeriodProvider>
+          <BrowserRouter>
+            <NavigationProgress />
           <Routes>
             <Route path={routes.auth.login} element={<Login />} />
             <Route path="/setup-password" element={<SetupPassword />} />
@@ -159,6 +161,7 @@ const App = () => {
             />
           </Routes>
         </BrowserRouter>
+        </AcademicPeriodProvider>
       </AuthProvider>
     </SettingsProvider>
   );
