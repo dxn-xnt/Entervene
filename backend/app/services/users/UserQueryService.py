@@ -362,6 +362,7 @@ def _student_assignment_rows(db: Session, student_id: uuid.UUID) -> list[tuple[C
         .join(Subject, Subject.subject_id == Classwork.subject_id)
         .filter(ClassworkAssignment.class_id.in_(class_ids))
         .filter(Classwork.is_archived.is_(False))
+        .filter(Classwork.is_graded.is_(True))
         .filter(Classwork.classwork_type != "READING")
         .order_by(ClassworkAssignment.due_date.asc().nullslast(), Classwork.created_at.asc())
         .all()
@@ -396,6 +397,8 @@ def _student_metric_summary(
     now = datetime.now(timezone.utc)
 
     for assignment, classwork, _ in assignment_rows:
+        if not getattr(classwork, "is_graded", True) or (getattr(classwork, "classwork_type", "") or "").upper() == "READING":
+            continue
         submission = submissions_by_assignment.get(assignment.classwork_assignment_id)
         status = _submission_status(assignment, submission, now)
         if status in {"submitted", "graded", "late"}:
@@ -426,6 +429,8 @@ def _student_subject_mastery(
 ) -> list[dict[str, Any]]:
     buckets: dict[int, dict[str, Any]] = {}
     for assignment, classwork, subject in assignment_rows:
+        if not getattr(classwork, "is_graded", True) or (getattr(classwork, "classwork_type", "") or "").upper() == "READING":
+            continue
         submission = submissions_by_assignment.get(assignment.classwork_assignment_id)
         if not submission or submission.status != "graded" or submission.grade is None or not classwork.total_points:
             continue

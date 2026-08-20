@@ -373,6 +373,7 @@ def get_my_todos(
             Classwork.title,
             Classwork.classwork_type,
             Classwork.classwork_category,
+            Classwork.is_graded,
             Classwork.total_points,
             Classwork.show_scores,
             Subject.subject_name,
@@ -423,6 +424,8 @@ def get_my_todos(
 
         status = "completed" if is_submitted else ("pastdue" if is_past_due else "pending")
 
+        total_pts = float(row.total_points) if row.total_points is not None else (None if not row.is_graded or row.classwork_type == "READING" else 100.0)
+
         item = {
             "assignment_id": row.classwork_assignment_id,
             "class_id": row.class_id,
@@ -434,7 +437,8 @@ def get_my_todos(
             "deadline": row.due_date.strftime("%B %d, %Y") if row.due_date else "No deadline",
             "type": row.classwork_type,
             "category": row.classwork_category,
-            "total_points": float(row.total_points) if row.total_points is not None else 100.0,
+            "is_graded": row.is_graded,
+            "total_points": total_pts,
             "status": status,
             "is_submitted": is_submitted,
             "submission_status": row.submission_status,

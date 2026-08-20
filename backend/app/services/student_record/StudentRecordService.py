@@ -193,6 +193,9 @@ def teacher_student_gradebook(
     quarterly_assignments: list[ClassworkAssignment] = []
 
     for assignment in assignments:
+        cw = assignment.classwork
+        if not getattr(cw, "is_graded", True) or (getattr(cw, "classwork_type", "") or "").upper() == READING_TYPE:
+            continue
         cat_key = _categorize_assignment(assignment)
         header = ClassworkCategoryHeader(
             id=assignment.classwork_assignment_id,
@@ -528,6 +531,7 @@ def _classwork_assignments(db: Session, scope: TeacherRecordScope) -> list[Class
             ClassworkAssignment.class_id == scope.class_.class_id,
             Classwork.subject_id == scope.subject.subject_id,
             Classwork.is_archived.is_(False),
+            Classwork.is_graded.is_(True),
             Classwork.classwork_type != READING_TYPE,
         )
         .order_by(ClassworkAssignment.due_date.asc().nullslast(), Classwork.created_at.asc())
@@ -589,6 +593,9 @@ def _metrics_for_student(
     now = datetime.now(timezone.utc)
 
     for assignment in assignments:
+        cw = assignment.classwork
+        if not getattr(cw, "is_graded", True) or (getattr(cw, "classwork_type", "") or "").upper() == READING_TYPE:
+            continue
         submission = submissions.get(assignment.classwork_assignment_id)
         status = _status_for_assignment(assignment, submission, now)
         has_score = (

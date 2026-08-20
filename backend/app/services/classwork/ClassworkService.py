@@ -142,12 +142,14 @@ def create_classwork_record(body: ClassworkCreate, staff_id: str, db: Session) -
     lesson_ids = dedupe_ids(body.lesson_ids)
     ensure_lessons_owned(db, staff_id, body.subject_id, lesson_ids)
 
+    is_graded = False if is_reading_type(classwork_type) else True
     classwork = Classwork(
         title=body.title,
         description=body.description,
         instructions=body.instructions,
         classwork_type=classwork_type,
         classwork_category=body.classwork_category,
+        is_graded=is_graded,
         total_points=total_points,
         subject_id=body.subject_id,
         is_published=body.is_published,
@@ -205,12 +207,14 @@ async def create_classwork_wizard_record(
 
     saved_paths: list[str] = []
     try:
+        is_graded = False if is_reading_type(normalized_type) else True
         classwork = Classwork(
             title=title.strip(),
             description=description,
             instructions=instructions,
             classwork_type=normalized_type,
             classwork_category=classwork_category,
+            is_graded=is_graded,
             total_points=total_points,
             subject_id=subject_id,
             is_published=is_published,
@@ -443,6 +447,7 @@ def update_classwork_record(
     if "classwork_type" in values and values["classwork_type"]:
         values["classwork_type"] = normalize_classwork_type(values["classwork_type"])
     if is_reading_type(values.get("classwork_type", classwork.classwork_type)):
+        values["is_graded"] = False
         values["total_points"] = None
     validate_classwork_values(total_points=values.get("total_points"))
     lesson_ids = values.pop("lesson_ids", None)
@@ -906,6 +911,8 @@ def _assignment_response(
         instructions=cast(Optional[str], classwork.instructions),
         classwork_type=cast(str, classwork.classwork_type),
         classwork_category=cast(Optional[str], classwork.classwork_category),
+        activity_mode=cast(str, getattr(classwork, "activity_mode", "ONLINE")),
+        is_graded=cast(bool, getattr(classwork, "is_graded", True)),
         total_points=float(cast(Any, classwork.total_points)) if classwork.total_points else None,
         due_date=cast(Optional[datetime], assignment.due_date),
         lock_date=cast(Optional[datetime], assignment.lock_date),

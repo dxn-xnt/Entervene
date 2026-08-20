@@ -61,7 +61,14 @@ function computeSubjectPerformance(todos: TodoItem[]) {
     { subject: string; subjectId: number; earned: number; possible: number }
   > = {};
   for (const t of todos) {
-    if (t.grade === null || !t.total_points) continue;
+    if (
+      t.grade === null ||
+      !t.total_points ||
+      t.is_graded === false ||
+      t.type?.toUpperCase() === "READING"
+    ) {
+      continue;
+    }
     const key = t.subject_id;
     if (!buckets[key]) {
       buckets[key] = {
@@ -152,6 +159,8 @@ const Grades = () => {
     return todos.filter(
       (t) =>
         t.subject_id === subjectId &&
+        t.is_graded !== false &&
+        t.type?.toUpperCase() !== "READING" &&
         (t.status === "completed" || t.is_submitted || t.grade !== null),
     ).length;
   };

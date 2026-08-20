@@ -43,6 +43,7 @@ interface LessonClasswork {
   title: string;
   classwork_type?: string | null;
   classwork_category?: string | null;
+  is_graded?: boolean;
   total_points?: number | null;
   due_date?: string | null;
   allow_late_submissions?: boolean;
@@ -57,6 +58,7 @@ interface ClassworkDetail {
   instructions?: string | null;
   classwork_type?: string | null;
   classwork_category?: string | null;
+  is_graded?: boolean;
   total_points?: number | null;
   due_date?: string | null;
   allow_late_submissions?: boolean;

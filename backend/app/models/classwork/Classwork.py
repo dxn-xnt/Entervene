@@ -19,6 +19,7 @@ class Classwork(Base):
     classwork_type: Mapped[str] = mapped_column(String(50), nullable=False)   # READING, QUIZ, ASSIGNMENT, ACTIVITY
     classwork_category: Mapped[str | None] = mapped_column(String(50))        # WRITTEN_WORK, PERFORMANCE_TASK, QUARTERLY_ASSESSMENT
     activity_mode: Mapped[str] = mapped_column(String(20), default="ONLINE", server_default="ONLINE", nullable=False)  # ONLINE, MANUAL
+    is_graded: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
     total_points: Mapped[Decimal | None] = mapped_column(Numeric(8, 2), default=100)
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -153,6 +153,8 @@ def _classwork_rows(
         .filter(
             ClassworkAssignment.class_id == class_id,
             Classwork.subject_id == subject_id,
+            Classwork.is_archived.is_(False),
+            Classwork.is_graded.is_(True),
             Classwork.classwork_type != "READING",
         )
         .all()
@@ -190,6 +192,8 @@ def _component_features(
 
     if classwork_rows:
         for cw, sub in classwork_rows:
+            if not getattr(cw, "is_graded", True) or (getattr(cw, "classwork_type", "") or "").upper() == "READING":
+                continue
             component = map_classwork_category(cw.classwork_type, cw.classwork_category)
             if component not in COMPONENT_FEATURES:
                 continue

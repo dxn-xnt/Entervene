@@ -11,6 +11,7 @@ class ClassworkCreate(BaseModel):
     classwork_type: str  # READING, QUIZ, ASSIGNMENT, ACTIVITY
     classwork_category: Optional[str] = None  # WRITTEN_WORK, PERFORMANCE_TASK, QUARTERLY_ASSESSMENT
     activity_mode: Optional[str] = "ONLINE"  # ONLINE, MANUAL
+    is_graded: Optional[bool] = True
     total_points: Optional[float] = 100
     subject_id: int
     is_published: Optional[bool] = False
@@ -25,6 +26,7 @@ class ClassworkUpdate(BaseModel):
     classwork_type: Optional[str] = None
     classwork_category: Optional[str] = None
     activity_mode: Optional[str] = None
+    is_graded: Optional[bool] = None
     total_points: Optional[float] = None
     is_published: Optional[bool] = None
     show_scores: Optional[bool] = None
@@ -62,6 +64,7 @@ class ClassworkResponse(BaseModel):
     classwork_type: str
     classwork_category: Optional[str]
     activity_mode: Optional[str] = "ONLINE"
+    is_graded: bool = True
     total_points: Optional[float]
     is_published: bool
     show_scores: bool
@@ -99,6 +102,7 @@ class ClassworkAssignmentResponse(BaseModel):
     classwork_type: str
     classwork_category: Optional[str]
     activity_mode: Optional[str] = "ONLINE"
+    is_graded: bool = True
     total_points: Optional[float]
     due_date: Optional[datetime]
     lock_date: Optional[datetime] = None

@@ -125,6 +125,7 @@ export type TodoItem = {
   deadline: string;
   type: string;
   category: string | null;
+  is_graded?: boolean;
   total_points?: number;
   status: "pending" | "pastdue" | "completed";
   is_submitted: boolean;
