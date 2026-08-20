@@ -171,7 +171,11 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
                             </span>
                           </Table.Cell>
                           <Table.Cell className="text-right font-bold">
-                            {item.show_scores !== false ? (
+                            {item.is_graded === false || item.type?.toUpperCase() === "READING" ? (
+                              <span className="text-xs text-muted-foreground font-normal">
+                                {item.is_submitted || item.status === "completed" ? "Completed" : "Non-graded"}
+                              </span>
+                            ) : item.show_scores !== false ? (
                               <>
                                 {item.grade !== null ? item.grade : "-"}
                                 <span className="text-xs text-muted-foreground">

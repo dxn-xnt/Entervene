@@ -55,6 +55,7 @@ interface ClassworkAssignment {
   instructions?: string;
   classwork_type?: string;
   classwork_category?: string;
+  is_graded?: boolean;
   total_points?: number;
   due_date?: string;
   lock_date?: string;

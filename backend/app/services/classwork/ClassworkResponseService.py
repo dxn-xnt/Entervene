@@ -72,6 +72,8 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
         instructions=cw.instructions,
         classwork_type=cw.classwork_type,
         classwork_category=cw.classwork_category,
+        activity_mode=getattr(cw, "activity_mode", "ONLINE"),
+        is_graded=getattr(cw, "is_graded", True),
         total_points=float(cw.total_points) if cw.total_points is not None else None,
         is_published=cw.is_published,
         show_scores=cw.show_scores,
