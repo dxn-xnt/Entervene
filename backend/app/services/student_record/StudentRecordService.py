@@ -213,25 +213,25 @@ def teacher_student_gradebook(
             quarterly_assignments.append(assignment)
 
     student_rows: list[StudentGradebookRow] = []
+    def _extract_score(subs: dict, asgn_id: int) -> float | None:
+        sub = subs.get(asgn_id)
+        if sub is not None and sub.grade is not None:
+            return float(sub.grade)
+        return None
+
     for student in students:
         student_subs = submissions_by_student.get(student.student_id, {})
 
         written_scores = [
-            float(student_subs[asgn.classwork_assignment_id].grade)
-            if (asgn.classwork_assignment_id in student_subs and student_subs[asgn.classwork_assignment_id].grade is not None)
-            else None
+            _extract_score(student_subs, asgn.classwork_assignment_id)
             for asgn in written_assignments
         ]
         performance_scores = [
-            float(student_subs[asgn.classwork_assignment_id].grade)
-            if (asgn.classwork_assignment_id in student_subs and student_subs[asgn.classwork_assignment_id].grade is not None)
-            else None
+            _extract_score(student_subs, asgn.classwork_assignment_id)
             for asgn in performance_assignments
         ]
         quarterly_scores = [
-            float(student_subs[asgn.classwork_assignment_id].grade)
-            if (asgn.classwork_assignment_id in student_subs and student_subs[asgn.classwork_assignment_id].grade is not None)
-            else None
+            _extract_score(student_subs, asgn.classwork_assignment_id)
             for asgn in quarterly_assignments
         ]
 
@@ -417,7 +417,7 @@ def finalize_student_period_grade(
     from app.models.academic.Subject import Subject
     subject = db.get(Subject, period_grade.subject_id)
     if subject is not None and hasattr(subject, "subject_group_rel") and subject.subject_group_rel is not None:
-        passing_grade = float(subject.subject_group_rel.passing_threshold)
+        passing_grade = float(getattr(subject.subject_group_rel, "passing_threshold", 75.0))
 
     period_grade.is_finalized = True
     period_grade.finalized_at = datetime.now(timezone.utc)
@@ -439,7 +439,7 @@ def finalize_student_period_grade(
         subject_id=period_grade.subject_id,
         academic_period_id=period_grade.academic_period_id,
         final_period_grade=float(period_grade.final_period_grade),
-        is_finalized=bool(period_grade.is_finalized),
+        is_finalized=period_grade.is_finalized,
         finalized_at=period_grade.finalized_at,
         finalized_by_staff_id=period_grade.finalized_by_staff_id,
         prediction_outcomes_evaluated_count=outcome_summary["evaluated_count"],
@@ -760,7 +760,7 @@ def _student_name(student: Student) -> str:
 def _academic_level_label(level: AcademicLevel | None) -> str | None:
     if not level:
         return None
-    return str(level.level_name) if level.level_name else f"Grade {level.grade_level}"
+    return level.level_name if level.level_name else f"Grade {level.grade_level}"
 
 
 def teacher_term_grade_summary(
@@ -792,7 +792,7 @@ def teacher_term_grade_summary(
     
     passing_grade: float = 75.0
     if base_scope.subject is not None and hasattr(base_scope.subject, "subject_group_rel") and base_scope.subject.subject_group_rel is not None:
-        passing_grade = float(base_scope.subject.subject_group_rel.passing_threshold)
+        passing_grade = float(getattr(base_scope.subject.subject_group_rel, "passing_threshold", 75.0))
         
     student_rows = {}
     for student in students:

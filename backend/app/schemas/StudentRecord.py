@@ -109,7 +109,7 @@ class StudentPeriodGradeFinalizeResponse(BaseModel):
     academic_period_id: int
     final_period_grade: float
     is_finalized: bool
-    finalized_at: datetime
+    finalized_at: Optional[datetime] = None
     finalized_by_staff_id: Optional[str] = None
     prediction_outcomes_evaluated_count: int
     prediction_outcomes_skipped_count: int
