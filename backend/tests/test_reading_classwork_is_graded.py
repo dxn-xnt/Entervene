@@ -675,3 +675,219 @@ def test_unengaged_reading_classwork_excluded_from_graded_and_counts_in_completi
     possible = sum(t["total_points"] for t in todos if t.get("is_graded") is not False and t["type"].upper() != "READING" and t.get("total_points") and t.get("grade") is not None)
     subject_score = round((earned / possible) * 100)
     assert subject_score == 100
+
+
+def test_complete_reading_assignment_marks_reading_as_submitted_and_increments_completion_rate(db_session):
+    from app.models.academic.StudentCLass import StudentClass
+    from app.models.submissions.StudentSubmission import StudentSubmission
+    from app.services.submission.SubmissionService import complete_reading_assignment
+
+    db = db_session
+    teacher_account = UserAccount(user_id=uuid.uuid4(), email="t5@test.local", password_hash="x")
+    student_account = UserAccount(user_id=uuid.uuid4(), email="s5@test.local", password_hash="x")
+    db.add_all([teacher_account, student_account])
+    db.flush()
+
+    staff = AcademicStaff(
+        staff_id="STF-TEST-5",
+        first_name="Teacher",
+        last_name="Five",
+        user_id=teacher_account.user_id,
+    )
+    db.add(staff)
+
+    level = AcademicLevel(level_name="Grade 9", grade_level=9)
+    db.add(level)
+    db.flush()
+
+    year = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=True,
+    )
+    db.add(year)
+    db.flush()
+
+    cls = Class(
+        section_name="Emerald",
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    db.add(cls)
+    db.flush()
+
+    student = Student(
+        student_id=uuid.uuid4(),
+        student_lrn="123456789014",
+        first_name="Active",
+        last_name="Reader",
+        academic_level_id=level.academic_level_id,
+        user_id=student_account.user_id,
+    )
+    db.add(student)
+    db.flush()
+
+    db.add(StudentClass(
+        student_id=student.student_id,
+        class_id=cls.class_id,
+        academic_year_id=year.academic_year_id,
+        enrollment_status="enrolled",
+    ))
+
+    subject = Subject(
+        subject_name="Earth Science 9",
+        academic_level_id=level.academic_level_id,
+    )
+    db.add(subject)
+    db.flush()
+
+    cw_reading = Classwork(
+        title="Plate Tectonics Reading",
+        classwork_type="READING",
+        classwork_category="WRITTEN_WORK",
+        is_graded=False,
+        total_points=None,
+        subject_id=subject.subject_id,
+        created_by_staff_id=staff.staff_id,
+        is_published=True,
+        is_archived=False,
+    )
+    db.add(cw_reading)
+    db.flush()
+    asgn_reading = ClassworkAssignment(
+        classwork_id=cw_reading.classwork_id,
+        class_id=cls.class_id,
+        assigned_by_staff_id=staff.staff_id,
+        is_published=True,
+    )
+    db.add(asgn_reading)
+    db.commit()
+
+    # Before completion: No submission exists
+    sub_before = db.query(StudentSubmission).filter(
+        StudentSubmission.classwork_assignment_id == asgn_reading.classwork_assignment_id,
+        StudentSubmission.student_id == student.student_id,
+    ).first()
+    assert sub_before is None
+
+    # Call complete_reading_assignment
+    response = complete_reading_assignment(asgn_reading.classwork_assignment_id, student, db)
+    assert response.status == "submitted"
+    assert response.submitted_at is not None
+
+    # Query database to confirm submission record is created
+    sub_after = db.query(StudentSubmission).filter(
+        StudentSubmission.classwork_assignment_id == asgn_reading.classwork_assignment_id,
+        StudentSubmission.student_id == student.student_id,
+    ).first()
+    assert sub_after is not None
+    assert sub_after.status == "submitted"
+    assert sub_after.submitted_at is not None
+    assert sub_after.grade is None
+
+
+def test_record_reading_focus_accumulates_seconds_and_preserves_isolation(db_session):
+    from app.models.academic.StudentCLass import StudentClass
+    from app.models.submissions.StudentSubmission import StudentSubmission
+    from app.services.submission.SubmissionService import record_reading_focus
+
+    db = db_session
+    teacher_account = UserAccount(user_id=uuid.uuid4(), email="t6@test.local", password_hash="x")
+    student_account = UserAccount(user_id=uuid.uuid4(), email="s6@test.local", password_hash="x")
+    db.add_all([teacher_account, student_account])
+    db.flush()
+
+    staff = AcademicStaff(
+        staff_id="STF-TEST-6",
+        first_name="Teacher",
+        last_name="Six",
+        user_id=teacher_account.user_id,
+    )
+    db.add(staff)
+
+    level = AcademicLevel(level_name="Grade 9", grade_level=9)
+    db.add(level)
+    db.flush()
+
+    year = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=True,
+    )
+    db.add(year)
+    db.flush()
+
+    cls = Class(
+        section_name="Emerald",
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    db.add(cls)
+    db.flush()
+
+    student = Student(
+        student_id=uuid.uuid4(),
+        student_lrn="123456789015",
+        first_name="Focused",
+        last_name="Reader",
+        academic_level_id=level.academic_level_id,
+        user_id=student_account.user_id,
+    )
+    db.add(student)
+    db.flush()
+
+    db.add(StudentClass(
+        student_id=student.student_id,
+        class_id=cls.class_id,
+        academic_year_id=year.academic_year_id,
+        enrollment_status="enrolled",
+    ))
+
+    subject = Subject(
+        subject_name="Biology 9",
+        academic_level_id=level.academic_level_id,
+    )
+    db.add(subject)
+    db.flush()
+
+    cw_reading = Classwork(
+        title="Cellular Respiration Article",
+        classwork_type="READING",
+        classwork_category="WRITTEN_WORK",
+        is_graded=False,
+        total_points=None,
+        subject_id=subject.subject_id,
+        created_by_staff_id=staff.staff_id,
+        is_published=True,
+        is_archived=False,
+    )
+    db.add(cw_reading)
+    db.flush()
+    asgn_reading = ClassworkAssignment(
+        classwork_id=cw_reading.classwork_id,
+        class_id=cls.class_id,
+        assigned_by_staff_id=staff.staff_id,
+        is_published=True,
+    )
+    db.add(asgn_reading)
+    db.commit()
+
+    # 1. First focus event: 45 seconds
+    res1 = record_reading_focus(asgn_reading.classwork_assignment_id, 45, student, db)
+    assert res1.reading_focused_seconds == 45
+    assert res1.status == "pending"  # does NOT force completion or mark as completed
+
+    # 2. Second focus event: 60 seconds (should accumulate to 105)
+    res2 = record_reading_focus(asgn_reading.classwork_assignment_id, 60, student, db)
+    assert res2.reading_focused_seconds == 105
+    assert res2.status == "pending"
+
+    # 3. Verify in DB
+    sub = db.query(StudentSubmission).filter(
+        StudentSubmission.classwork_assignment_id == asgn_reading.classwork_assignment_id,
+        StudentSubmission.student_id == student.student_id,
+    ).first()
+    assert sub.reading_focused_seconds == 105
+    assert sub.grade is None

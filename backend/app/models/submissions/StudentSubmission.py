@@ -27,6 +27,7 @@ class StudentSubmission(Base):
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     graded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     graded_by_staff_id: Mapped[str | None] = mapped_column(String(20), ForeignKey("academic_staff.staff_id"), nullable=True)
+    reading_focused_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     student: Mapped[object] = relationship("Student", backref="submissions")

@@ -44,6 +44,7 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
   const totalCount = todos.length;
   const completedCount = todos.filter((t) => t.is_submitted || t.status === "completed" || t.grade !== null).length;
   const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const gradableTodos = todos.filter((t) => t.is_graded !== false && t.type?.toUpperCase() !== "READING");
 
   return (
     <AppLayout>
@@ -137,14 +138,14 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
                         Loading classworks...
                       </Table.Cell>
                     </Table.Row>
-                  ) : todos.length === 0 ? (
+                  ) : gradableTodos.length === 0 ? (
                     <Table.Row>
                       <Table.Cell colSpan={3} className="text-center py-6 text-muted-foreground">
-                        No classworks found for this subject.
+                        No graded classworks found for this subject.
                       </Table.Cell>
                     </Table.Row>
                   ) : (
-                    todos.map((item) => {
+                    gradableTodos.map((item) => {
                       const canNavigate = !!(classId ?? item.class_id) && subjectId;
                       return (
                         <Table.Row
@@ -171,11 +172,7 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
                             </span>
                           </Table.Cell>
                           <Table.Cell className="text-right font-bold">
-                            {item.is_graded === false || item.type?.toUpperCase() === "READING" ? (
-                              <span className="text-xs text-muted-foreground font-normal">
-                                {item.is_submitted || item.status === "completed" ? "Completed" : "Non-graded"}
-                              </span>
-                            ) : item.show_scores !== false ? (
+                            {item.show_scores !== false ? (
                               <>
                                 {item.grade !== null ? item.grade : "-"}
                                 <span className="text-xs text-muted-foreground">

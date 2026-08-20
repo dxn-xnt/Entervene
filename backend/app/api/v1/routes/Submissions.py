@@ -7,16 +7,18 @@ from sqlalchemy.orm import Session
 from app.api.v1.routes.Auth import ACCESS_COOKIE_NAME
 from app.core.Dependencies import get_db, get_staff_id, get_student_record, require_role
 from app.core.FileUpload import delete_file, save_file
-from app.schemas.Submission import GradeRequest, SubmissionResponse
+from app.schemas.Submission import GradeRequest, ReadingFocusPayload, SubmissionResponse
 from app.services.submission.SubmissionService import (
     assignment_submissions,
     assignment_tracking,
     auth_payload_from_request,
     classwork_tracking,
     clear_submission_files,
+    complete_reading_assignment,
     download_submission_file,
     get_submission_for_user,
     grade_student_submission,
+    record_reading_focus,
     remove_submission_attachment,
     student_submissions,
     submit_student_work,
@@ -41,6 +43,25 @@ async def submit_work(
     db: Session = Depends(get_db),
 ):
     return await submit_student_work(assignment_id, request, files, student, db, save_file)
+
+
+@router.post("/assignment/{assignment_id}/complete-reading", response_model=SubmissionResponse)
+def complete_reading(
+    assignment_id: int,
+    student=Depends(get_student_record),
+    db: Session = Depends(get_db),
+):
+    return complete_reading_assignment(assignment_id, student, db)
+
+
+@router.post("/assignment/{assignment_id}/reading-focus", response_model=SubmissionResponse)
+def log_reading_focus(
+    assignment_id: int,
+    payload: ReadingFocusPayload,
+    student=Depends(get_student_record),
+    db: Session = Depends(get_db),
+):
+    return record_reading_focus(assignment_id, payload.focused_seconds, student, db)
 
 
 @router.post("/assignment/{assignment_id}/unsubmit", response_model=SubmissionResponse)
