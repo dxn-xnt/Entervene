@@ -29,12 +29,15 @@ export default function AdminSubjectLevel() {
   const { grade } = useParams<{ grade: string }>();
   const decodedGrade = decodeURIComponent(grade || "Grade 7");
   const [subjects, setSubjects] = useState<SubjectListItem[]>([]);
-  const [offeringOptions, setOfferingOptions] = useState<SubjectOfferingFormOptions | null>(null);
+  const [offeringOptions, setOfferingOptions] =
+    useState<SubjectOfferingFormOptions | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<SubjectStatus | "all">("active");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pendingArchive, setPendingArchive] = useState<SubjectListItem | null>(null);
+  const [pendingArchive, setPendingArchive] = useState<SubjectListItem | null>(
+    null,
+  );
 
   const loadSubjects = useCallback(async () => {
     setIsLoading(true);
@@ -60,7 +63,10 @@ export default function AdminSubjectLevel() {
   const gradeSubjects = useMemo(() => {
     const normalizedGrade = decodedGrade.trim().toLowerCase();
     return subjects
-      .filter((subject) => subject.academic_level.level_name.toLowerCase() === normalizedGrade)
+      .filter(
+        (subject) =>
+          subject.academic_level.level_name.toLowerCase() === normalizedGrade,
+      )
       .sort((a, b) => a.subject_name.localeCompare(b.subject_name));
   }, [decodedGrade, subjects]);
 
@@ -68,22 +74,38 @@ export default function AdminSubjectLevel() {
     const query = search.trim().toLowerCase();
     return gradeSubjects.filter((subject) => {
       const matchesStatus = status === "all" || subject.status === status;
-      const matchesSearch = !query || [
-        subject.subject_name,
-        subject.subject_codename,
-        subject.subject_group?.name,
-        subject.default_grading_template,
-      ].some((value) => value?.toLowerCase().includes(query));
+      const matchesSearch =
+        !query ||
+        [
+          subject.subject_name,
+          subject.subject_codename,
+          subject.subject_group?.name,
+          subject.default_grading_template,
+        ].some((value) => value?.toLowerCase().includes(query));
       return matchesStatus && matchesSearch;
     });
   }, [gradeSubjects, search, status]);
 
-  const activeYearLabel = offeringOptions?.academic_years.find((year) => year.is_active)?.year_label;
-  const activeSubjects = gradeSubjects.filter((subject) => subject.status === "active");
-  const archivedSubjects = gradeSubjects.filter((subject) => subject.status === "archived");
-  const totalHours = gradeSubjects.reduce((total, subject) => total + (subject.hours ?? 0), 0);
-  const unsetHoursCount = gradeSubjects.filter((subject) => subject.hours == null).length;
-  const totalHoursDisplay = unsetHoursCount > 0 ? `${totalHours} (${unsetHoursCount} unset)` : String(totalHours);
+  const activeYearLabel = offeringOptions?.academic_years.find(
+    (year) => year.is_active,
+  )?.year_label;
+  const activeSubjects = gradeSubjects.filter(
+    (subject) => subject.status === "active",
+  );
+  const archivedSubjects = gradeSubjects.filter(
+    (subject) => subject.status === "archived",
+  );
+  const totalHours = gradeSubjects.reduce(
+    (total, subject) => total + (subject.hours ?? 0),
+    0,
+  );
+  const unsetHoursCount = gradeSubjects.filter(
+    (subject) => subject.hours == null,
+  ).length;
+  const totalHoursDisplay =
+    unsetHoursCount > 0
+      ? `${totalHours} (${unsetHoursCount} unset)`
+      : String(totalHours);
 
   const handleArchive = async () => {
     if (!pendingArchive) return;
@@ -91,7 +113,9 @@ export default function AdminSubjectLevel() {
       await archiveSubject(pendingArchive.subject_id);
       await loadSubjects();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to archive subject.");
+      setError(
+        err instanceof Error ? err.message : "Unable to archive subject.",
+      );
     } finally {
       setPendingArchive(null);
     }
@@ -127,7 +151,10 @@ export default function AdminSubjectLevel() {
                     New Subject
                   </Button>
                 </Dialog.Trigger>
-                <AddSubjectModal onCreated={loadSubjects} />
+                <AddSubjectModal
+                  onCreated={loadSubjects}
+                  lockedGradeLevel={decodedGrade}
+                />
               </Dialog>
             </header>
 
@@ -139,7 +166,11 @@ export default function AdminSubjectLevel() {
                   <Text as="h2" className="font-sansm font-bold">
                     {decodedGrade}
                   </Text>
-                  {activeYearLabel ? <p className="pb-1 text-lg font-semibold">({activeYearLabel})</p> : null}
+                  {activeYearLabel ? (
+                    <p className="pb-1 text-lg font-semibold">
+                      ({activeYearLabel})
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </RetroCard>
@@ -156,9 +187,18 @@ export default function AdminSubjectLevel() {
                 Overview
               </Text>
               <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
-                <OverviewCard title="Total Subjects" count={String(gradeSubjects.length)} />
-                <OverviewCard title="Active Subjects" count={String(activeSubjects.length)} />
-                <OverviewCard title="Archived Subjects" count={String(archivedSubjects.length)} />
+                <OverviewCard
+                  title="Total Subjects"
+                  count={String(gradeSubjects.length)}
+                />
+                <OverviewCard
+                  title="Active Subjects"
+                  count={String(activeSubjects.length)}
+                />
+                <OverviewCard
+                  title="Archived Subjects"
+                  count={String(archivedSubjects.length)}
+                />
                 <OverviewCard title="Total Hours" count={totalHoursDisplay} />
               </div>
             </section>
@@ -178,7 +218,12 @@ export default function AdminSubjectLevel() {
                       placeholder="Search name, code, group"
                     />
                   </label>
-                  <Select value={status} onValueChange={(value) => setStatus(value as SubjectStatus | "all")}>
+                  <Select
+                    value={status}
+                    onValueChange={(value) =>
+                      setStatus(value as SubjectStatus | "all")
+                    }
+                  >
                     <Select.Trigger className="h-10 w-full sm:w-40">
                       <Select.Value />
                     </Select.Trigger>
@@ -199,7 +244,9 @@ export default function AdminSubjectLevel() {
                     <Loader size="sm" /> Loading subjects...
                   </RetroCard>
                 ) : visibleSubjects.length === 0 ? (
-                  <RetroCard className="px-4 py-3">No subjects found for {decodedGrade}.</RetroCard>
+                  <RetroCard className="px-4 py-3">
+                    No subjects found for {decodedGrade}.
+                  </RetroCard>
                 ) : (
                   visibleSubjects.map((subject) => (
                     <SubjectItemLine
@@ -210,8 +257,14 @@ export default function AdminSubjectLevel() {
                       subjectCode={subject.subject_codename || "No code"}
                       subjectGroup={subject.subject_group?.name || "Ungrouped"}
                       hours={subject.hours ?? 0}
-                      gradingTemplate={subject.default_grading_template || "No template"}
-                      onView={() => navigate(`/admin/subjects/${encodeURIComponent(decodedGrade)}/${subject.subject_id}`)}
+                      gradingTemplate={
+                        subject.default_grading_template || "No template"
+                      }
+                      onView={() =>
+                        navigate(
+                          `/admin/subjects/${encodeURIComponent(decodedGrade)}/${subject.subject_id}`,
+                        )
+                      }
                       onArchive={() => setPendingArchive(subject)}
                     />
                   ))
