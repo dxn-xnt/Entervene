@@ -8,6 +8,7 @@ import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { apiFetch, getTeacherAdvisoryClasses } from "@/lib/api";
 import type { TeacherAdvisoryClassListItem } from "@/types/adminClasses";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 type TeacherClassLoad = {
   subject_load_id: number;
@@ -92,6 +93,7 @@ const ClassesPage = () => {
   >([]);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const { selectedPeriodId } = useAcademicPeriod();
 
   useEffect(() => {
     const loadTeacherClasses = async () => {
@@ -99,9 +101,10 @@ const ClassesPage = () => {
       setError("");
 
       try {
+        const query = selectedPeriodId ? `?academic_period_id=${selectedPeriodId}` : "";
         const [response, advisoryData] = await Promise.all([
-          apiFetch("/api/v1/classwork-assignments/teacher/classes"),
-          getTeacherAdvisoryClasses(),
+          apiFetch(`/api/v1/classwork-assignments/teacher/classes${query}`),
+          getTeacherAdvisoryClasses(selectedPeriodId ?? undefined),
         ]);
         if (!response.ok) {
           throw new Error("Unable to load teacher classes.");
@@ -121,7 +124,7 @@ const ClassesPage = () => {
     };
 
     loadTeacherClasses();
-  }, []);
+  }, [selectedPeriodId]);
 
   const advisoryByClass = useMemo(() => {
     return new Map(advisoryClasses.map((item) => [item.class_id, item]));

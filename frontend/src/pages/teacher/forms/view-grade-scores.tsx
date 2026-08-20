@@ -18,6 +18,7 @@ interface ViewGradeScoreModalProps {
   studentGrades: {
     name: string;
     scores: (number | null)[];
+    gender?: string | null;
   }[];
   onEnterScores?: (item: { id: number; title: string; maxScore: number }) => void;
 }
@@ -48,6 +49,53 @@ export default function ViewGradeScoreModal({
   const filteredStudents = studentGrades.filter((sg) =>
     sg.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const males: typeof filteredStudents = [];
+  const females: typeof filteredStudents = [];
+  filteredStudents.forEach((sg) => {
+    if (sg.gender?.toLowerCase() === "male") {
+      males.push(sg);
+    } else {
+      females.push(sg);
+    }
+  });
+
+  const renderGroup = (group: typeof filteredStudents, label: string) => {
+    if (group.length === 0) return null;
+    return (
+      <>
+        <Table.Row className="bg-muted/50 border-y-2 border-y-gray-400">
+          <Table.Cell colSpan={2 + paginatedItems.length} className="font-bold text-gray-700 py-1 uppercase">
+            {label}
+          </Table.Cell>
+        </Table.Row>
+        {group.map((student, idx) => {
+          const orderedScores = [...student.scores].reverse();
+          const studentPaginatedScores = orderedScores.slice(startIndex, endIndex);
+          const totalScore = student.scores.reduce<number>((sum, score) => sum + (score ?? 0), 0);
+
+          return (
+            <Table.Row key={student.name} className="hover:bg-muted/20">
+              <Table.Cell className="font-medium whitespace-nowrap">
+                {idx + 1}. {student.name}
+              </Table.Cell>
+              {paginatedItems.map((_, i) => {
+                const score = studentPaginatedScores[i];
+                return (
+                  <Table.Cell key={i} className="text-center font-semibold tabular-nums">
+                    {score !== null && score !== undefined ? score : "—"}
+                  </Table.Cell>
+                );
+              })}
+              <Table.Cell className="text-center font-bold text-primary tabular-nums">
+                {totalScore}
+              </Table.Cell>
+            </Table.Row>
+          );
+        })}
+      </>
+    );
+  };
 
   return (
     <Dialog.Content size={"2xl"}>
@@ -121,30 +169,10 @@ export default function ViewGradeScoreModal({
                   </Table.Cell>
                 </Table.Row>
               ) : (
-                filteredStudents.map((student) => {
-                  const orderedScores = [...student.scores].reverse();
-                  const studentPaginatedScores = orderedScores.slice(startIndex, endIndex);
-                  const totalScore = student.scores.reduce<number>((sum, score) => sum + (score ?? 0), 0);
-
-                  return (
-                    <Table.Row key={student.name} className="hover:bg-muted/20">
-                      <Table.Cell className="font-medium whitespace-nowrap">
-                        {student.name}
-                      </Table.Cell>
-                      {paginatedItems.map((_, idx) => {
-                        const score = studentPaginatedScores[idx];
-                        return (
-                          <Table.Cell key={idx} className="text-center font-semibold tabular-nums">
-                            {score !== null && score !== undefined ? score : "—"}
-                          </Table.Cell>
-                        );
-                      })}
-                      <Table.Cell className="text-center font-bold text-primary tabular-nums">
-                        {totalScore}
-                      </Table.Cell>
-                    </Table.Row>
-                  );
-                })
+                <>
+                  {renderGroup(males, "MALE")}
+                  {renderGroup(females, "FEMALE")}
+                </>
               )}
             </Table.Body>
           </Table>

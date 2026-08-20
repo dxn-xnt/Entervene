@@ -21,12 +21,22 @@ def parse_time_to_minutes(time_str: str | None) -> int | None:
     if not time_str:
         return None
     try:
-        parts = time_str.strip().split(":")
-        hours = int(parts[0])
-        minutes = int(parts[1]) if len(parts) > 1 else 0
-        return hours * 60 + minutes
+        h, m = time_str.split(":")
+        return int(h) * 60 + int(m)
     except Exception:
         return None
+
+
+def get_teacher_workload_settings(db: Session) -> dict[str, float]:
+    from app.models.settings.Setting import Setting
+    keys = ["min_subjects_per_day", "max_subjects_per_day", "max_hours_per_day"]
+    settings = db.query(Setting).filter(Setting.key.in_(keys)).all()
+    s_map = {s.key: s.value for s in settings}
+    return {
+        "min_subjects_per_day": float(s_map.get("min_subjects_per_day", 4)),
+        "max_subjects_per_day": float(s_map.get("max_subjects_per_day", 6)),
+        "max_hours_per_day": float(s_map.get("max_hours_per_day", 6.0)),
+    }
 
 
 def calculate_duration_hours(start_time: str | None, end_time: str | None) -> float:
@@ -164,6 +174,10 @@ class ConflictDetectorService:
                 teacher_daily_subjects[staff_id][day].add(load.subject_id)
 
         teacher_workloads: list[TeacherWorkloadItem] = []
+        caps = get_teacher_workload_settings(db)
+        min_sub = int(caps["min_subjects_per_day"])
+        max_sub = int(caps["max_subjects_per_day"])
+        max_hrs = caps["max_hours_per_day"]
 
         for staff_id, daily_hrs in teacher_daily_hours.items():
             staff_obj = staff_map.get(staff_id)
@@ -174,26 +188,37 @@ class ConflictDetectorService:
             has_warning = False
 
             for day, hrs in daily_hrs.items():
-                if hrs > 6.0:
+                if hrs > max_hrs:
                     has_warning = True
                     conflicts.append(
                         ConflictItem(
                             rule="DAILY_WORKLOAD_EXCEEDED",
                             severity="error",
-                            message=f"Teacher {staff_name} exceeds max 6 hours/day on {day} ({hrs:.1f} hrs scheduled).",
+                            message=f"Teacher {staff_name} exceeds max {max_hrs} hours/day on {day} ({hrs:.1f} hrs scheduled).",
                             staff_id=staff_id,
                             day=day,
                         )
                     )
 
             for day, count in daily_sub_counts.items():
-                if count > 4:
+                if count > max_sub:
                     has_warning = True
                     conflicts.append(
                         ConflictItem(
                             rule="DAILY_WORKLOAD_EXCEEDED",
                             severity="error",
-                            message=f"Teacher {staff_name} exceeds max 4 subjects/day on {day} ({count} subjects scheduled).",
+                            message=f"Teacher {staff_name} exceeds max {max_sub} subjects/day on {day} ({count} subjects scheduled).",
+                            staff_id=staff_id,
+                            day=day,
+                        )
+                    )
+                elif count > 0 and count < min_sub:
+                    has_warning = True
+                    conflicts.append(
+                        ConflictItem(
+                            rule="DAILY_WORKLOAD_MINIMUM",
+                            severity="warning",
+                            message=f"Teacher {staff_name} has only {count} subjects on {day} (minimum is {min_sub}).",
                             staff_id=staff_id,
                             day=day,
                         )

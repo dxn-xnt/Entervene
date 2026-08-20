@@ -15,17 +15,12 @@ import { CommandIcon } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { Select } from "./retroui/Select"
 import { SidebarConfigs } from "@/context/sidebar-config"
-import { formatPeriodLabel } from "@/lib/academic-periods"
-
-const periods = [
-  `${formatPeriodLabel({ period_type: "TERM", period_sequence: 1 })} (2025-2026)`,
-  `${formatPeriodLabel({ period_type: "TERM", period_sequence: 2 })} (2025-2026)`,
-  `${formatPeriodLabel({ period_type: "TERM", period_sequence: 3 })} (2025-2026)`,
-]
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { role } = useAuth()
   const navRole = (role ?? "student") as keyof typeof SidebarConfigs
+  const { periods, selectedPeriodId, setSelectedPeriodId, isLoading } = useAcademicPeriod()
 
   return (
     <Sidebar collapsible="offcanvas" className="no-scrollbar" {...props}>
@@ -46,15 +41,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
 
       <SidebarContent>
-        <Select defaultValue={periods[0]}>
+        <Select 
+          value={selectedPeriodId ? String(selectedPeriodId) : undefined}
+          onValueChange={(val) => setSelectedPeriodId(Number(val))}
+        >
           <Select.Trigger className="w-full border-x-background m-0 shadow-none mb-1">
-            <Select.Value placeholder="Active Period" />
+            <Select.Value placeholder={isLoading ? "Loading..." : "Active Period"} />
           </Select.Trigger>
           <Select.Content>
             <Select.Group>
               {periods.map((period) => (
-                <Select.Item key={period} value={period}>
-                  {period}
+                <Select.Item key={period.id} value={String(period.id)}>
+                  {period.period} ({period.academicyear})
                 </Select.Item>
               ))}
             </Select.Group>

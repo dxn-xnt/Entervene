@@ -358,6 +358,7 @@ const TeacherGradeView = () => {
                   studentGrades: filtered.map((sg) => ({
                     name: sg.name,
                     scores: sg.writtenWork,
+                    gender: sg.gender,
                   })),
                 })
               }
@@ -374,6 +375,7 @@ const TeacherGradeView = () => {
                   studentGrades: filtered.map((sg) => ({
                     name: sg.name,
                     scores: sg.performanceTask,
+                    gender: sg.gender,
                   })),
                 })
               }
@@ -390,6 +392,7 @@ const TeacherGradeView = () => {
                   studentGrades: filtered.map((sg) => ({
                     name: sg.name,
                     scores: sg.quarterlyAssessment,
+                    gender: sg.gender,
                   })),
                 })
               }
@@ -411,7 +414,7 @@ const TeacherGradeView = () => {
                     setSelectedCategory({
                       name: "Written Works",
                       items: cg.writtenWork,
-                      studentGrades: filtered.map((sg) => ({ name: sg.name, scores: sg.writtenWork })),
+                      studentGrades: filtered.map((sg) => ({ name: sg.name, scores: sg.writtenWork, gender: sg.gender })),
                     })
                   }
                 >
@@ -449,7 +452,7 @@ const TeacherGradeView = () => {
                     setSelectedCategory({
                       name: "Performance Tasks",
                       items: cg.performanceTask,
-                      studentGrades: filtered.map((sg) => ({ name: sg.name, scores: sg.performanceTask })),
+                      studentGrades: filtered.map((sg) => ({ name: sg.name, scores: sg.performanceTask, gender: sg.gender })),
                     })
                   }
                 >
@@ -487,7 +490,7 @@ const TeacherGradeView = () => {
                     setSelectedCategory({
                       name: "Quarterly Assessment",
                       items: cg.quarterlyAssessment,
-                      studentGrades: filtered.map((sg) => ({ name: sg.name, scores: sg.quarterlyAssessment })),
+                      studentGrades: filtered.map((sg) => ({ name: sg.name, scores: sg.quarterlyAssessment, gender: sg.gender })),
                     })
                   }
                 >

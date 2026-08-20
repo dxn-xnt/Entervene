@@ -7,7 +7,6 @@ import type {
 } from "@/types/adminClasses";
 import GenderStudentTable from "./GenderStudentTable";
 import { assignmentGenderGroup } from "./studentSorting";
-import { retroButton } from "../utils";
 import { Button } from "@/components/retroui/Button";
 
 export default function SectionAssignmentCard({

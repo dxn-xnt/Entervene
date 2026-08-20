@@ -21,6 +21,7 @@ import { Text } from "@/components/retroui/Text";
 import { Alert } from "@/components/retroui/Alert";
 import { TimePickerSingle, type TimeValue } from "@/components/retroui/TimePicker";
 import {
+  apiFetch,
   getSubjectLoadStudioData,
   validateSubjectLoads,
   autoScheduleSubjectLoads,
@@ -51,6 +52,7 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 import { useSettings } from "@/context/SettingsContext";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { timeStringToMinutes, validatePeriodTimeRange } from "@/lib/time-utils";
 
 function stringToTimeValue(str?: string | null, fallbackHour = 8): TimeValue {
@@ -120,7 +122,7 @@ export default function AdminSubjectLoadStudio() {
   const [selectedGradeId, setSelectedGradeId] = useState<string>("all");
   const [studioData, setStudioData] = useState<SubjectLoadStudioData | null>(null);
   const { getSetting } = useSettings();
-  const [selectedPeriodId, setSelectedPeriodId] = useState<number | null>(null);
+  const { selectedPeriodId } = useAcademicPeriod();
   const [loads, setLoads] = useState<SubjectLoadItem[]>([]);
   const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
   const [teacherWorkloads, setTeacherWorkloads] = useState<TeacherWorkloadItem[]>([]);
@@ -135,6 +137,11 @@ export default function AdminSubjectLoadStudio() {
   const [isPublishOpen, setIsPublishOpen] = useState<boolean>(false);
   const [openRowKey, setOpenRowKey] = useState<string | null>(null);
   const [expandedIssueRule, setExpandedIssueRule] = useState<string | null>(null);
+
+  // Copy Schedule Modal State
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState<boolean>(false);
+  const [copySourcePeriodId, setCopySourcePeriodId] = useState<string>("");
+  const [isCopying, setIsCopying] = useState<boolean>(false);
 
   const activeGroupKey = useMemo(() => {
     if (selectedGradeId === "all") return "JHS_45MIN";
@@ -157,6 +164,11 @@ export default function AdminSubjectLoadStudio() {
     if (selectedGradeId === "all") return new Set<number>();
     return new Set((studioData?.classes || []).filter((c) => String(c.academic_level_id) === selectedGradeId).map((c) => c.class_id));
   }, [selectedGradeId, studioData]);
+
+  const previousPeriods = useMemo(() => {
+    if (!studioData?.academic_periods || !selectedPeriodId) return [];
+    return studioData.academic_periods.filter(p => p.academic_period_id < selectedPeriodId);
+  }, [studioData, selectedPeriodId]);
 
 
   const prePublishChecklistCount = useMemo(() => {
@@ -240,7 +252,6 @@ export default function AdminSubjectLoadStudio() {
     try {
       const data = await getSubjectLoadStudioData(periodId);
       setStudioData(data);
-      setSelectedPeriodId(data.active_period_id);
       if ((data as any).period_template_slots) {
         setPeriodTemplateSlots((data as any).period_template_slots);
       }
@@ -320,8 +331,10 @@ export default function AdminSubjectLoadStudio() {
   }, []);
 
   useEffect(() => {
-    void loadStudio();
-  }, [loadStudio]);
+    if (selectedPeriodId) {
+      void loadStudio(selectedPeriodId);
+    }
+  }, [loadStudio, selectedPeriodId]);
 
   // Run validation whenever loads change
   const runValidation = useCallback(
@@ -558,6 +571,63 @@ export default function AdminSubjectLoadStudio() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleCopyFromTerm = async () => {
+    if (!copySourcePeriodId) {
+      alert("Please select a source term.");
+      return;
+    }
+
+    setIsCopying(true);
+    try {
+      const res = await apiFetch(`/api/v1/subject-loads/studio-data?academic_period_id=${copySourcePeriodId}`);
+      if (!res.ok) throw new Error("Failed to fetch source term data");
+      const sourceData = (await res.json()) as SubjectLoadStudioData;
+
+      let sourceLoads = sourceData.existing_loads || [];
+      if (selectedGradeId !== "all") {
+        const levelId = parseInt(selectedGradeId);
+        const classIds = new Set(sourceData.classes.filter(c => c.academic_level_id === levelId).map(c => c.class_id));
+        sourceLoads = sourceLoads.filter(l => classIds.has(l.class_id));
+      }
+
+      let currentLoads = [...loads];
+      if (selectedGradeId !== "all") {
+        const levelId = parseInt(selectedGradeId);
+        const classIds = new Set(studioData?.classes.filter(c => c.academic_level_id === levelId).map(c => c.class_id));
+        currentLoads = currentLoads.filter(l => !classIds.has(l.class_id));
+      } else {
+        currentLoads = []; 
+      }
+
+      const newLoads: SubjectLoadItem[] = sourceLoads.map(sl => ({
+        ...sl,
+        _key: `copy_${sl.class_id}_${sl.subject_id}_${Math.random().toString(36).substr(2, 5)}`,
+        academic_period_id: selectedPeriodId || 1,
+        status: "draft",
+        is_locked: false,
+      }));
+
+      const finalLoads = [...currentLoads, ...newLoads];
+      setLoads(finalLoads);
+      await runValidation(finalLoads);
+
+      setIsCopyModalOpen(false);
+      setNotice({
+        title: "Schedule Copied",
+        message: `Successfully copied ${newLoads.length} subject loads from the selected term. Please review flagged conflicts and save.`,
+        type: "success"
+      });
+    } catch (err) {
+      setNotice({
+        title: "Copy Failed",
+        message: err instanceof Error ? err.message : "Failed to copy schedule.",
+        type: "error"
+      });
+    } finally {
+      setIsCopying(false);
     }
   };
 
@@ -1164,6 +1234,19 @@ export default function AdminSubjectLoadStudio() {
                         <Settings className="size-3.5 text-purple-900" />
                         <span>Edit Break Timelines</span>
                       </button>
+                      {previousPeriods.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsToolsOpen(false);
+                            setIsCopyModalOpen(true);
+                          }}
+                          className="font-sans text-md font-semibold text-left px-2.5 py-1.5 flex gap-2 items-center"
+                        >
+                          <Copy className="size-3.5 text-indigo-900" />
+                          <span>Copy from Previous Term</span>
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => {
@@ -1325,29 +1408,6 @@ export default function AdminSubjectLoadStudio() {
                         className="h-10 w-full shadow-none border-black pl-9 pr-3"
                       />
                     </label>
-                    <div>
-                      <Select
-                        value={String(selectedPeriodId || "")}
-                        onValueChange={(val) => {
-                          const pId = Number(val);
-                          setSelectedPeriodId(pId);
-                          void loadStudio(pId);
-                        }}
-                      >
-                        <Select.Trigger className="w-full whitespace-nowrap">
-                          <Select.Value placeholder="Select Period" />
-                        </Select.Trigger>
-                        <Select.Content>
-                          <Select.Group>
-                            {studioData?.academic_periods.map((p) => (
-                              <Select.Item key={p.academic_period_id} value={String(p.academic_period_id)} className="whitespace-nowrap">
-                                {p.period_name} {p.is_active ? "(Active)" : ""}
-                              </Select.Item>
-                            ))}
-                          </Select.Group>
-                        </Select.Content>
-                      </Select>
-                    </div>
 
                     <div>
                       <Select
@@ -2026,7 +2086,7 @@ export default function AdminSubjectLoadStudio() {
                       </Text>
                     </div>
                     <span className="text-xs font-normal text-foreground">
-                      Limits: Max 6.0 hrs/day • Max 4 subjects/day
+                      Limits: Max {getSetting("max_hours_per_day", "6.0")} hrs/day • Max {getSetting("max_subjects_per_day", "6")} subjects/day
                     </span>
                   </div>
 
@@ -2036,46 +2096,65 @@ export default function AdminSubjectLoadStudio() {
                         Assign teachers to subject loads to monitor workload capacity.
                       </p>
                     ) : (
-                      teacherWorkloads.map((tw) => (
-                        <div
-                          key={tw.staff_id}
-                          className={`p-3 border-2 border-black text-xs ${tw.has_capacity_warning ? "bg-red-50 border-red-600" : "bg-muted/20"
-                            }`}
-                        >
-                          <div className="flex items-center justify-between font-bold mb-1">
-                            <span className="text-sm">{tw.staff_name}</span>
-                            <span className="font-mono">
-                              {tw.total_weekly_hours.toFixed(1)} hrs/wk
-                            </span>
-                          </div>
+                      teacherWorkloads.map((tw) => {
+                        const teacherConflicts = conflicts.filter(c => c.staff_id === tw.staff_id);
+                        const hasError = teacherConflicts.some(c => c.severity === "error");
+                        const hasWarning = teacherConflicts.some(c => c.severity === "warning");
+                        
+                        const maxHrs = parseFloat(getSetting("max_hours_per_day", "6.0"));
+                        const maxSub = parseInt(getSetting("max_subjects_per_day", "6"));
+                        const minSub = parseInt(getSetting("min_subjects_per_day", "4"));
 
-                          {/* Daily Breakdown */}
-                          <div className="grid grid-cols-5 gap-1 mt-2">
-                            {["MON", "TUE", "WED", "THU", "FRI"].map((dayKey) => {
-                              const hrs = tw.daily_hours[dayKey] || 0;
-                              const subCount = tw.daily_subjects_count[dayKey] || 0;
-                              const isOverLimit = hrs > 6.0 || subCount > 4;
+                        const cardClass = hasError 
+                          ? "bg-red-50 border-red-600" 
+                          : hasWarning 
+                            ? "bg-amber-50 border-amber-500" 
+                            : "bg-muted/20";
 
-                              return (
-                                <div
-                                  key={dayKey}
-                                  className={`flex flex-col items-center p-1 border text-[10px] font-bold ${isOverLimit
-                                    ? "bg-red-200 border-red-700 text-red-900"
+                        return (
+                          <div
+                            key={tw.staff_id}
+                            className={`p-3 border-2 border-black text-xs ${cardClass}`}
+                          >
+                            <div className="flex items-center justify-between font-bold mb-1">
+                              <span className="text-sm">{tw.staff_name}</span>
+                              <span className="font-mono">
+                                {tw.total_weekly_hours.toFixed(1)} hrs/wk
+                              </span>
+                            </div>
+
+                            {/* Daily Breakdown */}
+                            <div className="grid grid-cols-5 gap-1 mt-2">
+                              {["MON", "TUE", "WED", "THU", "FRI"].map((dayKey) => {
+                                const hrs = tw.daily_hours[dayKey] || 0;
+                                const subCount = tw.daily_subjects_count[dayKey] || 0;
+                                const isOverLimit = hrs > maxHrs || subCount > maxSub;
+                                const isUnderLimit = subCount > 0 && subCount < minSub;
+
+                                const dayClass = isOverLimit
+                                  ? "bg-red-200 border-red-700 text-red-900"
+                                  : isUnderLimit
+                                    ? "bg-amber-200 border-amber-700 text-amber-900"
                                     : hrs > 0
                                       ? "bg-emerald-100 border-emerald-700 text-emerald-900"
-                                      : "bg-background border-black/30 text-muted-foreground"
-                                    }`}
-                                >
-                                  <span>{dayKey.slice(0, 2)}</span>
-                                  <span className="font-mono text-[11px] mt-0.5">
-                                    {hrs > 0 ? `${hrs.toFixed(1)}h` : "-"}
-                                  </span>
-                                </div>
-                              );
-                            })}
+                                      : "bg-background border-black/30 text-muted-foreground";
+
+                                return (
+                                  <div
+                                    key={dayKey}
+                                    className={`flex flex-col items-center p-1 border text-[10px] font-bold ${dayClass}`}
+                                  >
+                                    <span>{dayKey.slice(0, 2)}</span>
+                                    <span className="font-mono text-[11px] mt-0.5">
+                                      {hrs > 0 ? `${hrs.toFixed(1)}h` : "-"}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </RetroCard>
@@ -2091,7 +2170,71 @@ export default function AdminSubjectLoadStudio() {
         onClose={() => setIsBreakDrawerOpen(false)}
         initialSlots={periodTemplateSlots}
         onSaved={() => void loadStudio(selectedPeriodId || undefined)}
+        studioData={studioData}
       />
+
+      {/* Copy Schedule Modal */}
+      {isCopyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white border-2 border-black p-6 rounded shadow-[4px_4px_0_#000] w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <Copy className="size-5" /> Copy Schedule from Term
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold mb-1">Source Term</label>
+                <Select
+                  value={copySourcePeriodId}
+                  onValueChange={(val) => setCopySourcePeriodId(val)}
+                >
+                  <Select.Trigger className="w-full">
+                    <Select.Value placeholder="Select a source term..." />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Group>
+                      {previousPeriods.map(p => (
+                        <Select.Item key={p.academic_period_id} value={String(p.academic_period_id)}>
+                          {p.period_name}
+                        </Select.Item>
+                      ))}
+                    </Select.Group>
+                  </Select.Content>
+                </Select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold mb-1">Scope</label>
+                <div className="p-2 bg-gray-50 border border-gray-300 rounded text-sm text-gray-700">
+                  {selectedGradeId === "all" 
+                    ? "Entire Term (All Grades & Sections)" 
+                    : `Grade ${studioData?.academic_levels?.find(l => String(l.academic_level_id) === selectedGradeId)?.grade_level} (All Sections)`
+                  }
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border-2 border-amber-900 p-3 rounded">
+                <p className="text-xs font-bold text-amber-900 flex items-start gap-1">
+                  <AlertTriangle className="size-4 shrink-0" />
+                  Warning: This will overwrite any existing unsaved drafts or published schedules for the selected scope in the current term. Teacher assignments will be pre-filled and mapped to the current bell schedule.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <Button variant="outline" onClick={() => setIsCopyModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                variant="default"
+                onClick={() => void handleCopyFromTerm()}
+                disabled={isCopying || !copySourcePeriodId}
+              >
+                {isCopying ? "Copying..." : "Yes, Overwrite & Copy"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }
