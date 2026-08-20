@@ -261,7 +261,7 @@ def test_quiz_builder_rejects_invalid_manual_questions(quiz_api_context):
     payload = _valid_payload(c["lesson"].lesson_id)
     payload["questions"][0]["options"][1]["is_correct"] = True
     payload["questions"][1]["options"] = [
-        {"option_text": "Not allowed", "is_correct": False, "option_order": 1}
+        {"option_text": "   ", "is_correct": True, "option_order": 1}
     ]
 
     response = c["client"].put(
@@ -271,7 +271,7 @@ def test_quiz_builder_rejects_invalid_manual_questions(quiz_api_context):
 
     assert response.status_code == 400
     assert "exactly one correct option" in " ".join(response.json()["detail"])
-    assert "short answer questions cannot have options" in " ".join(response.json()["detail"])
+    assert "answer key text is required" in " ".join(response.json()["detail"])
 
 
 def test_quiz_builder_uses_teacher_owned_quiz_classwork_scope(quiz_api_context):

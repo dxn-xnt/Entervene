@@ -220,19 +220,39 @@ export default function QuizGradingModal({
           </div>
         )}
 
-        {/* Student's Response Text for Essay / Short Answer */}
+        {/* Student's Response Text & Answer Key for Short Answer / Identification */}
         {ans.question_type !== "MULTIPLE_CHOICE" && (
-          <div className="mt-4 rounded-lg border-2 border-black bg-gray-50 p-4">
-            <p className="text-xs font-bold text-gray-600 uppercase mb-1">
-              Student's Written Response:
-            </p>
-            <p className="text-sm font-semibold text-black whitespace-pre-wrap">
-              {ans.answer_text ? (
-                ans.answer_text
-              ) : (
-                <span className="italic text-gray-500">No response provided</span>
-              )}
-            </p>
+          <div className="mt-4 space-y-3">
+            <div className="rounded-lg border-2 border-black bg-gray-50 p-4">
+              <p className="text-xs font-bold text-gray-600 uppercase mb-1">
+                Student's Written Response:
+              </p>
+              <p className="text-sm font-semibold text-black whitespace-pre-wrap">
+                {ans.answer_text ? (
+                  ans.answer_text
+                ) : (
+                  <span className="italic text-gray-500">No response provided</span>
+                )}
+              </p>
+            </div>
+
+            {ans.options && ans.options.length > 0 && (
+              <div className="rounded-lg border-2 border-[#3A6D38] bg-[#8BCB88]/20 p-3">
+                <p className="text-xs font-bold uppercase text-[#1d461c] mb-1.5 flex items-center gap-1">
+                  <span>✓ Expected Answer Key / Acceptable Spellings:</span>
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {ans.options.map((opt) => (
+                    <span
+                      key={opt.option_id}
+                      className="rounded bg-white border border-black px-2 py-1 text-xs font-black text-black shadow-xs"
+                    >
+                      {opt.option_text}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

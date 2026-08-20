@@ -8,6 +8,7 @@ from app.schemas.Classwork import (
     ClassworkResponse,
     LinkedLessonAttachmentResponse,
     LinkedLessonResponse,
+    LinkedReadingResponse,
 )
 from app.services.classwork.ClassworkShared import assignment_is_locked
 
@@ -50,6 +51,19 @@ def build_attachment_response(attachment: ClassworkAttachment) -> ClassworkAttac
 
 
 def build_linked_lesson_response(lesson: Lesson) -> LinkedLessonResponse:
+    readings = []
+    for cw in getattr(lesson, "linked_classworks", []) or []:
+        if getattr(cw, "classwork_type", None) == "READING" and not getattr(cw, "is_archived", False):
+            readings.append(
+                LinkedReadingResponse(
+                    classwork_id=cw.classwork_id,
+                    title=cw.title,
+                    description=cw.description,
+                    instructions=cw.instructions,
+                    activity_mode=getattr(cw, "activity_mode", "ONLINE"),
+                )
+            )
+
     return LinkedLessonResponse(
         lesson_id=lesson.lesson_id,
         title=lesson.title,
@@ -64,6 +78,7 @@ def build_linked_lesson_response(lesson: Lesson) -> LinkedLessonResponse:
             )
             for att in (getattr(lesson, "attachments", None) or [])
         ],
+        readings=readings,
     )
 
 

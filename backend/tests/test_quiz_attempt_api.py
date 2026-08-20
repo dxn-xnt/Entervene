@@ -440,3 +440,39 @@ def test_quiz_submit_validates_complete_and_scoped_answers(quiz_attempt_context)
         },
     )
     assert wrong_option.status_code == 400
+
+
+def test_quiz_identification_spelling_auto_grading(quiz_attempt_context):
+    c = quiz_attempt_context
+    assignment_id = c["assignment"].classwork_assignment_id
+
+    # Add correct option key to the short answer question (making it an Identification question)
+    sa_option = QuestionOption(
+        question_id=c["short_link"].question_id,
+        option_text="Isaac Newton",
+        is_correct=True,
+        option_order=1,
+    )
+    c["db"].add(sa_option)
+    c["db"].commit()
+
+    # Submit attempt with exact spelling (case-insensitive & trimmed)
+    res = c["client"].post(
+        f"/api/v1/quizzes/assignment/{assignment_id}/submit",
+        json={
+            "answers": [
+                {
+                    "quiz_question_id": c["mc_link"].quiz_question_id,
+                    "selected_option_id": c["correct"].option_id,
+                },
+                {
+                    "quiz_question_id": c["short_link"].quiz_question_id,
+                    "answer_text": "  isaac newton  ",
+                },
+            ]
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "graded"
+    assert float(data["grade"]) == 10.0

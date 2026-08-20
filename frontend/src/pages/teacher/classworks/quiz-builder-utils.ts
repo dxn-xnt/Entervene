@@ -33,5 +33,7 @@ export const createEmptyQuizQuestion = (
           { option_text: "", is_correct: true, option_order: 1 },
           { option_text: "", is_correct: false, option_order: 2 },
         ]
-      : [],
+      : [
+          { option_text: "", is_correct: true, option_order: 1 },
+        ],
 });

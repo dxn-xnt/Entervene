@@ -49,11 +49,20 @@ class LinkedLessonAttachmentResponse(BaseModel):
     uploaded_at: Optional[datetime] = None
 
 
+class LinkedReadingResponse(BaseModel):
+    classwork_id: int
+    title: str
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    activity_mode: Optional[str] = "ONLINE"
+
+
 class LinkedLessonResponse(BaseModel):
     lesson_id: int
     title: str
     description: Optional[str] = None
     attachments: list[LinkedLessonAttachmentResponse] = []
+    readings: list[LinkedReadingResponse] = []
 
 
 class CwAssignmentRow(BaseModel):
