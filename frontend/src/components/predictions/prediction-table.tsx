@@ -2,7 +2,7 @@ import type { DashboardPredictionItem } from "@/lib/prediction-api";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Table } from "@/components/retroui/Table";
-import { ArrowUpDown, ArrowUpRight, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 
 interface PredictionTableProps {
   items: DashboardPredictionItem[];

@@ -105,6 +105,9 @@ class ClassStudentListAcademicLevel(BaseModel):
 
 class ClassStudentListItemResponse(BaseModel):
     student_id: UUID
+    student_lrn: str
+    first_name: str
+    last_name: str
     full_name: str
     gender: str
     avatar_initial: str

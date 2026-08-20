@@ -165,7 +165,7 @@ def import_data(db):
     students = [
         add_student(db, level, "100000000001", "Zed", "Zulu", "Male", None),
         add_student(db, level, "100000000002", "Amy", "Able", "Female", "Marie"),
-        add_student(db, level, "100000000003", "Uma", "Unknown", None, None),
+        add_student(db, level, "100000000003", "Uma", "Unknown", "Female", None),
     ]
     db.commit()
     return year, level, other_level, adviser, students
@@ -244,7 +244,7 @@ def test_valid_csv_groups_sorts_summarizes_handles_bom_blank_rows_and_writes_not
                 lrn="100000000003",
                 student_first="Uma",
                 student_last="Unknown",
-                gender="",
+                gender="female",
             ),
         ]
     )

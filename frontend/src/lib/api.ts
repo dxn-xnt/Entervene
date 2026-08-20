@@ -579,6 +579,7 @@ export type GradebookCategoryHeaderGroup = {
 export type StudentGradebookRow = {
   student_id: string;
   name: string;
+  gender?: string | null;
   writtenWork: (number | null)[];
   performanceTask: (number | null)[];
   quarterlyAssessment: (number | null)[];
@@ -596,14 +597,77 @@ export type StudentGradebookResponse = {
   studentGrades: StudentGradebookRow[];
 };
 
-export async function getTeacherGradebook(classId: number | string, subjectId: number | string): Promise<StudentGradebookResponse> {
-  const response = await apiFetch(`/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/gradebook`);
+export type TermGradeSummaryRow = {
+  student_id: string;
+  name: string;
+  gender?: string | null;
+  term_grades: Record<number, number | null>; // {academic_period_id: grade}
+  final_grade: number | null;
+  remark: "PASSED" | "FAILED" | "INCOMPLETE" | null;
+};
+
+export type TermGradeSummaryScope = {
+  class_id: number;
+  subject_id: number;
+  academic_year_id: number;
+  section_name: string;
+  subject_name: string;
+  year_label: string;
+};
+
+export type TermPeriodInfo = {
+  academic_period_id: number;
+  period_name: string;
+  period_sequence: number;
+  is_active?: boolean;
+};
+
+export type StudentRecordPeriodOptionsResponse = {
+  periods: TermPeriodInfo[];
+  default_academic_period_id: number | null;
+};
+
+export type TermGradeSummaryResponse = {
+  scope: TermGradeSummaryScope;
+  periods: TermPeriodInfo[];
+  students: TermGradeSummaryRow[];
+  passing_threshold: number;
+};
+
+export async function getTeacherGradebook(classId: number | string, subjectId: number | string, academicPeriodId?: number): Promise<StudentGradebookResponse> {
+  const url = academicPeriodId
+    ? `/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/gradebook?academic_period_id=${academicPeriodId}`
+    : `/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/gradebook`;
+  const response = await apiFetch(url);
 
   if (!response.ok) {
+    await response.json().catch(() => null);
     throw new Error("Unable to load gradebook data. Please try again.");
   }
 
   return (await response.json()) as StudentGradebookResponse;
+}
+
+export async function getTeacherAvailablePeriods(
+  classId: number,
+  subjectId: number
+): Promise<StudentRecordPeriodOptionsResponse> {
+  const response = await apiFetch(`/api/v1/student-records/teacher/periods?class_id=${encodeURIComponent(String(classId))}&subject_id=${encodeURIComponent(String(subjectId))}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch available periods: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function getTeacherTermSummary(
+  classId: number,
+  subjectId: number
+): Promise<TermGradeSummaryResponse> {
+  const response = await apiFetch(`/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/term-summary`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch term summary: ${response.statusText}`);
+  }
+  return response.json();
 }
 
 export type ActivityCreatePayload = {

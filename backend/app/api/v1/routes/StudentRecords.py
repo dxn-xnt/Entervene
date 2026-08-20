@@ -12,6 +12,7 @@ from app.schemas.StudentRecord import (
     StudentRecordDetailResponse,
     StudentRecordPeriodOptionsResponse,
     StudentRecordRosterResponse,
+    TermGradeSummaryResponse,
 )
 from app.services.student_record.StudentRecordService import (
     finalize_student_period_grade,
@@ -19,6 +20,7 @@ from app.services.student_record.StudentRecordService import (
     teacher_student_gradebook,
     teacher_student_record_detail,
     teacher_student_roster,
+    teacher_term_grade_summary,
 )
 
 
@@ -111,5 +113,24 @@ def get_teacher_student_gradebook(
         class_id=class_id,
         subject_id=subject_id,
         academic_period_id=academic_period_id,
+    )
+
+
+@router.get(
+    "/teacher/classes/{class_id}/subjects/{subject_id}/term-summary",
+    response_model=TermGradeSummaryResponse,
+)
+def get_teacher_term_grade_summary(
+    class_id: int,
+    subject_id: int,
+    _teacher: dict = Depends(require_role("teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return teacher_term_grade_summary(
+        db,
+        staff_id=staff_id,
+        class_id=class_id,
+        subject_id=subject_id,
     )
 

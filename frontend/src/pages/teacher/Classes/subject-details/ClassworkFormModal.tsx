@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import { ArrowRight, FileText, Trash2, Upload, X } from "lucide-react";
+import { ArrowRight, FileText, Trash2, Upload } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ClassworkDraft, Lesson } from "./types";
 import { Button } from "@/components/retroui/Button";
@@ -46,7 +46,7 @@ export default function ClassworkFormModal({
       : isQuizDraft
         ? "Add Quiz"
         : "Add Classwork";
-  const headerBg = isQuarterlyAssessment ? "bg-[#F6E9B2]" : "bg-[#7ABA78]";
+
   const modalSubtitle = isQuarterlyAssessment
     ? "Subject-level — spans all lessons"
     : `Lesson: ${classworkLesson.title}`;
