@@ -1821,8 +1821,8 @@ export default function CreateClassworkQuizModal({
                     if (associatedLessonIds && associatedLessonIds.length > 0) {
                         setSelectedLessonIds(associatedLessonIds);
                     }
-                    // Fast-track straight to Step 3 (Question Review)
-                    setCreateStep("quiz");
+                    // Transition to Step 2 (Details) for inspection before question editor
+                    setCreateStep("details");
                 }}
             />
         )}
