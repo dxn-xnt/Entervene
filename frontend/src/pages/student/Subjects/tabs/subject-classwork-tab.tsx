@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   BookOpen,
   CalendarDays,
+  CheckCircle,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -147,6 +148,7 @@ function statusBadge(
   status?: string | null,
   dueDate?: string,
   locked?: boolean,
+  classworkType?: string,
 ) {
   if (locked)
     return {
@@ -158,11 +160,18 @@ function statusBadge(
       label: "Graded",
       cls: "bg-green-100 text-green-800 border-green-300",
     };
-  if (status === "submitted")
+  if (status === "submitted" || status === "completed") {
+    if (classworkType?.toUpperCase() === "READING") {
+      return {
+        label: "Completed",
+        cls: "bg-green-100 text-green-800 border-green-300",
+      };
+    }
     return {
       label: "Submitted",
       cls: "bg-blue-100 text-blue-800 border-blue-300",
     };
+  }
   if (status === "late")
     return { label: "Late", cls: "bg-red-100 text-red-800 border-red-300" };
   if (dueDate && new Date() > new Date(dueDate))
@@ -636,6 +645,51 @@ export default function SubjectClassworkTab({
       });
     } finally {
       setSubmittingId(null);
+    }
+  };
+
+  const [isMarkingRead, setIsMarkingRead] = useState(false);
+
+  const handleCompleteReading = async (assignmentId: number) => {
+    setIsMarkingRead(true);
+    try {
+      const response = await apiFetch(
+        `/api/v1/submissions/assignment/${assignmentId}/complete-reading`,
+        {
+          method: "POST",
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to complete reading");
+      }
+
+      const submission = (await response.json()) as Submission;
+      setSelectedSubmission(submission);
+      setSelectedClasswork((prev) =>
+        prev
+          ? {
+              ...prev,
+              submission_status: submission.status,
+            }
+          : null,
+      );
+      updateClassworkStatus(assignmentId, submission.status);
+
+      setNotice({
+        status: "success",
+        title: "Reading completed",
+        description: "You have marked this reading material as completed.",
+      });
+    } catch (err) {
+      setNotice({
+        status: "error",
+        title: "Failed to update reading status",
+        description:
+          err instanceof Error ? err.message : "Failed to mark reading as completed.",
+      });
+    } finally {
+      setIsMarkingRead(false);
     }
   };
 
@@ -1159,6 +1213,7 @@ export default function SubjectClassworkTab({
             submission?.status ?? cw.submission_status,
             cw.due_date,
             cw.is_locked,
+            cw.classwork_type,
           );
           const deadline = dueBadge(cw.due_date);
           const Icon = classworkIcon(cw.classwork_type);
@@ -1362,10 +1417,34 @@ export default function SubjectClassworkTab({
                     </h3>
                   </div>
                   {isReadingType(selectedClasswork.classwork_type) ? (
-                    <p className="text-sm font-medium">
-                      Review the content and reference files. No submission is
-                      required.
-                    </p>
+                    <div className="space-y-3">
+                      {selectedSubmission?.status === "submitted" ||
+                      selectedSubmission?.status === "graded" ||
+                      selectedClasswork.submission_status === "submitted" ||
+                      selectedClasswork.submission_status === "graded" ||
+                      selectedClasswork.submission_status === "completed" ? (
+                        <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm font-semibold text-green-800 flex items-center gap-2">
+                          <CheckCircle className="size-5 text-green-600 shrink-0" />
+                          <span>You have completed this reading material.</span>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <p className="text-sm text-gray-600 font-medium">
+                            Review the content and reference files above. When finished, mark it as completed to update your progress.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCompleteReading(selectedClasswork.classwork_assignment_id)
+                            }
+                            disabled={isMarkingRead}
+                            className="w-full rounded-lg border border-black bg-[#7ABA78] hover:bg-[#68A866] text-black px-4 py-2 text-sm font-bold transition-colors disabled:opacity-50"
+                          >
+                            {isMarkingRead ? "Marking as completed..." : "Mark as Completed"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   ) : isQuizType(selectedClasswork.classwork_type) ? (
                     <div className="space-y-3">
                       {isQuizLoading ? (

@@ -327,6 +327,58 @@ async def submit_student_work(
     return build_submission_response(submission, db)
 
 
+def complete_reading_assignment(
+    assignment_id: int,
+    student: Student,
+    db: Session,
+) -> SubmissionResponse:
+    assignment = db.query(ClassworkAssignment).filter(
+        ClassworkAssignment.classwork_assignment_id == assignment_id
+    ).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
+    if not classwork or classwork.is_archived:
+        raise HTTPException(status_code=404, detail="Classwork not found")
+    enrollment = db.query(StudentClass).filter(
+        StudentClass.student_id == student.student_id,
+        StudentClass.class_id == assignment.class_id,
+        StudentClass.enrollment_status == "enrolled",
+    ).first()
+    if not enrollment:
+        raise HTTPException(status_code=403, detail="Not enrolled in this class")
+    now = datetime.now(timezone.utc)
+    if not assignment_is_available(assignment, now):
+        raise HTTPException(status_code=403, detail="This assignment is not available")
+    if assignment_is_locked(assignment, now):
+        raise HTTPException(status_code=403, detail="This assignment is locked")
+
+    existing = db.query(StudentSubmission).filter(
+        StudentSubmission.classwork_assignment_id == assignment_id,
+        StudentSubmission.student_id == student.student_id,
+    ).first()
+
+    if existing:
+        existing.submitted_at = now
+        existing.status = "submitted"
+        existing.attempt_count = (existing.attempt_count or 0) + 1
+        db.commit()
+        db.refresh(existing)
+        return build_submission_response(existing, db)
+
+    submission = StudentSubmission(
+        student_id=student.student_id,
+        classwork_assignment_id=assignment_id,
+        submitted_at=now,
+        status="submitted",
+        attempt_count=1,
+    )
+    db.add(submission)
+    db.commit()
+    db.refresh(submission)
+    return build_submission_response(submission, db)
+
+
 def unsubmit_student_work(assignment_id: int, student: Student, db: Session) -> SubmissionResponse:
     _, submission = assert_student_can_modify_submission(assignment_id, student, db)
     if submission.status == "graded":
@@ -601,6 +653,8 @@ def grade_student_submission(
         raise HTTPException(status_code=404, detail="Submission not found")
     assignment = teacher_owns_assignment(submission.classwork_assignment_id, staff_id, db)
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first() if assignment else None
+    if classwork and (not getattr(classwork, "is_graded", True) or (classwork.classwork_type or "").upper() == "READING"):
+        raise HTTPException(status_code=400, detail="Reading classworks cannot be graded")
     if body.grade < 0:
         raise HTTPException(status_code=400, detail="Grade cannot be negative")
     if classwork and classwork.total_points is not None and body.grade > float(classwork.total_points):

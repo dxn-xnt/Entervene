@@ -14,6 +14,7 @@ from app.services.submission.SubmissionService import (
     auth_payload_from_request,
     classwork_tracking,
     clear_submission_files,
+    complete_reading_assignment,
     download_submission_file,
     get_submission_for_user,
     grade_student_submission,
@@ -41,6 +42,15 @@ async def submit_work(
     db: Session = Depends(get_db),
 ):
     return await submit_student_work(assignment_id, request, files, student, db, save_file)
+
+
+@router.post("/assignment/{assignment_id}/complete-reading", response_model=SubmissionResponse)
+def complete_reading(
+    assignment_id: int,
+    student=Depends(get_student_record),
+    db: Session = Depends(get_db),
+):
+    return complete_reading_assignment(assignment_id, student, db)
 
 
 @router.post("/assignment/{assignment_id}/unsubmit", response_model=SubmissionResponse)

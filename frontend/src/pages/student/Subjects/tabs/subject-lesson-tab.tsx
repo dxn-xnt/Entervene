@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ClipboardList,
   BookOpen,
+  CheckCircle,
   FileText,
   Info,
   CalendarDays,
@@ -738,6 +739,32 @@ export default function SubjectLessonTab({
       updateClassworkStatus(assignmentId, sub.status);
     } finally {
       setSubmittingId(null);
+    }
+  };
+
+  const [isMarkingRead, setIsMarkingRead] = useState(false);
+
+  const handleCompleteReading = async (assignmentId: number) => {
+    setIsMarkingRead(true);
+    try {
+      const res = await apiFetch(
+        `/api/v1/submissions/assignment/${assignmentId}/complete-reading`,
+        { method: "POST" },
+      );
+      if (!res.ok) throw new Error("Failed to complete reading.");
+      const sub = (await res.json()) as Submission;
+      setSelectedSubmission(sub);
+      setSelectedClasswork((prev) =>
+        prev
+          ? {
+              ...prev,
+              submission_status: sub.status,
+            }
+          : null,
+      );
+      updateClassworkStatus(assignmentId, sub.status);
+    } finally {
+      setIsMarkingRead(false);
     }
   };
 
@@ -1842,10 +1869,34 @@ export default function SubjectLessonTab({
                     </h3>
                   </div>
                   {isReadingType(selectedClasswork.classwork_type) ? (
-                    <p className="text-sm font-medium">
-                      Review the content and reference files. No submission is
-                      required.
-                    </p>
+                    <div className="space-y-3">
+                      {selectedSubmission?.status === "submitted" ||
+                      selectedSubmission?.status === "graded" ||
+                      selectedClasswork.submission_status === "submitted" ||
+                      selectedClasswork.submission_status === "graded" ||
+                      selectedClasswork.submission_status === "completed" ? (
+                        <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm font-semibold text-green-800 flex items-center gap-2">
+                          <CheckCircle className="size-5 text-green-600 shrink-0" />
+                          <span>You have completed this reading material.</span>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <p className="text-sm text-gray-600 font-medium">
+                            Review the content and reference files above. When finished, mark it as completed to update your progress.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCompleteReading(selectedClasswork.classwork_assignment_id)
+                            }
+                            disabled={isMarkingRead}
+                            className="w-full rounded-lg border border-black bg-[#7ABA78] hover:bg-[#68A866] text-black px-4 py-2 text-sm font-bold transition-colors disabled:opacity-50"
+                          >
+                            {isMarkingRead ? "Marking as completed..." : "Mark as Completed"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   ) : isQuizType(selectedClasswork.classwork_type) ? (
                     <div className="space-y-3">
                       {isQuizLoading ? (
