@@ -191,7 +191,7 @@ def _replace_questions(db: Session, quiz: Quiz, questions) -> None:
             db.add(QuestionOption(
                 question_id=question.question_id,
                 option_text=option.option_text.strip(),
-                is_correct=option.is_correct,
+                is_correct=True if question_type == QUESTION_SHORT_ANSWER else option.is_correct,
                 option_order=option.option_order,
             ))
         db.add(QuizQuestion(
@@ -244,8 +244,8 @@ def _builder_errors(db: Session, classwork: Classwork, payload: QuizBuilderUpser
 
 def _option_errors(index: int, question_type: str, options: Iterable) -> list[str]:
     errors: list[str] = []
+    options = list(options) if options else []
     if question_type == QUESTION_MULTIPLE_CHOICE:
-        options = list(options)
         if len(options) < 2:
             errors.append(f"Question {index} must have at least two options")
         if sum(1 for option in options if option.is_correct) != 1:
@@ -258,7 +258,13 @@ def _option_errors(index: int, question_type: str, options: Iterable) -> list[st
         if any(not option.option_text.strip() for option in options):
             errors.append(f"Question {index} option text is required")
     elif question_type == QUESTION_SHORT_ANSWER and options:
-        errors.append(f"Question {index} short answer questions cannot have options")
+        option_orders = [option.option_order for option in options]
+        if len(option_orders) != len(set(option_orders)):
+            errors.append(f"Question {index} answer key order must be unique")
+        if any(order <= 0 for order in option_orders):
+            errors.append(f"Question {index} answer key order must be greater than zero")
+        if any(not option.option_text.strip() for option in options):
+            errors.append(f"Question {index} answer key text is required")
     return errors
 
 

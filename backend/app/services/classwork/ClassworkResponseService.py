@@ -1,8 +1,15 @@
 from pathlib import Path
 
+from app.models.academic.Lesson import Lesson
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAttachment import ClassworkAttachment
-from app.schemas.Classwork import ClassworkAttachmentResponse, ClassworkResponse
+from app.schemas.Classwork import (
+    ClassworkAttachmentResponse,
+    ClassworkResponse,
+    LinkedLessonAttachmentResponse,
+    LinkedLessonResponse,
+    LinkedReadingResponse,
+)
 from app.services.classwork.ClassworkShared import assignment_is_locked
 
 # Project root = backend/app. Keep file resolution out of HTTP route handlers.
@@ -43,6 +50,38 @@ def build_attachment_response(attachment: ClassworkAttachment) -> ClassworkAttac
     )
 
 
+def build_linked_lesson_response(lesson: Lesson) -> LinkedLessonResponse:
+    readings = []
+    for cw in getattr(lesson, "linked_classworks", []) or []:
+        if getattr(cw, "classwork_type", None) == "READING" and not getattr(cw, "is_archived", False):
+            readings.append(
+                LinkedReadingResponse(
+                    classwork_id=cw.classwork_id,
+                    title=cw.title,
+                    description=cw.description,
+                    instructions=cw.instructions,
+                    activity_mode=getattr(cw, "activity_mode", "ONLINE"),
+                )
+            )
+
+    return LinkedLessonResponse(
+        lesson_id=lesson.lesson_id,
+        title=lesson.title,
+        description=lesson.description,
+        attachments=[
+            LinkedLessonAttachmentResponse(
+                lesson_attachment_id=att.lesson_attachment_id,
+                file_name=att.file_name,
+                file_type=att.file_type,
+                file_size=att.file_size,
+                uploaded_at=att.uploaded_at,
+            )
+            for att in (getattr(lesson, "attachments", None) or [])
+        ],
+        readings=readings,
+    )
+
+
 def build_classwork_response(cw: Classwork) -> ClassworkResponse:
     subject = cw.subject
     staff = cw.staff
@@ -65,6 +104,11 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
             "is_locked": assignment_is_locked(assignment),
         })
 
+    linked_lessons = [
+        build_linked_lesson_response(lesson)
+        for lesson in (getattr(cw, "lessons", None) or [])
+    ]
+
     return ClassworkResponse(
         classwork_id=cw.classwork_id,
         title=cw.title,
@@ -80,11 +124,12 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
         is_locked=cw.is_locked,
         is_archived=cw.is_archived,
         subject_id=cw.subject_id,
-        subject_name=subject.subject_name if subject else None,
+        subject_name=getattr(subject, "subject_name", None) if subject else None,
         created_by_staff_id=cw.created_by_staff_id,
-        teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
+        teacher_name=f"{getattr(staff, 'first_name', '')} {getattr(staff, 'last_name', '')}".strip() or None if staff else None,
         attachments=[build_attachment_response(attachment) for attachment in cw.attachments],
         assignments=assignments_data,
+        linked_lessons=linked_lessons,
         created_at=cw.created_at,
         updated_at=cw.updated_at,
     )

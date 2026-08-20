@@ -221,12 +221,20 @@ def _parse_questions(text: str) -> tuple[list[QuizQuestionIn], list[str]]:
             ))
         else:
             warnings.append(f"Question {index} was imported as short answer because it has fewer than two options.")
+            correct_key = item["answer_key"] or answer_key_map.get(item["number"])
+            sa_options = []
+            if correct_key and correct_key.strip():
+                sa_options.append(QuizOptionIn(
+                    option_text=correct_key.strip(),
+                    is_correct=True,
+                    option_order=1,
+                ))
             questions.append(QuizQuestionIn(
                 question_text=item["question_text"],
                 question_type="SHORT_ANSWER",
                 points=1,
                 display_order=len(questions) + 1,
                 difficulty_level="MEDIUM",
-                options=[],
+                options=sa_options,
             ))
     return questions, warnings

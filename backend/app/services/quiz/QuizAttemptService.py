@@ -140,8 +140,8 @@ def submit_student_quiz_attempt(
                 points_awarded=points_awarded,
             ))
         else:
-            # Blank short answers are also valid for autosubmit and receive zero points.
-            if not answer.answer_text or not answer.answer_text.strip():
+            student_ans = (answer.answer_text or "").strip()
+            if not student_ans:
                 db.add(QuizAnswer(
                     quiz_question_id=link.quiz_question_id,
                     submission_id=submission.submission_id,
@@ -150,14 +150,36 @@ def submit_student_quiz_attempt(
                     points_awarded=Decimal("0"),
                 ))
                 continue
-            has_manual = True
-            db.add(QuizAnswer(
-                quiz_question_id=link.quiz_question_id,
-                submission_id=submission.submission_id,
-                answer_text=answer.answer_text.strip(),
-                is_correct=None,
-                points_awarded=None,
-            ))
+
+            # Check if this short answer / identification question has correct answer options
+            correct_options = [
+                opt.option_text.strip()
+                for opt in (getattr(question, "options", None) or [])
+                if opt.is_correct and opt.option_text and opt.option_text.strip()
+            ]
+
+            if correct_options:
+                # Identification auto-grading: match spelling (case-insensitive & trimmed)
+                is_match = any(student_ans.lower() == opt.lower() for opt in correct_options)
+                points_awarded = Decimal(str(question.points)) if is_match else Decimal("0")
+                total_score += points_awarded
+                db.add(QuizAnswer(
+                    quiz_question_id=link.quiz_question_id,
+                    submission_id=submission.submission_id,
+                    answer_text=student_ans,
+                    is_correct=is_match,
+                    points_awarded=points_awarded,
+                ))
+            else:
+                # No answer key provided by teacher -> subjective/essay requiring manual grading
+                has_manual = True
+                db.add(QuizAnswer(
+                    quiz_question_id=link.quiz_question_id,
+                    submission_id=submission.submission_id,
+                    answer_text=student_ans,
+                    is_correct=None,
+                    points_awarded=None,
+                ))
 
     submission.attempt_count += 1
     submission.submitted_at = now

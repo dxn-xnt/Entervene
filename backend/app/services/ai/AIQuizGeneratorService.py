@@ -58,7 +58,7 @@ OUTPUT FORMAT REQUIREMENTS:
 3. Rules for Question Types:
 - MULTIPLE_CHOICE: question_type="MULTIPLE_CHOICE", exactly 4 options, exactly 1 marked is_correct: true.
 - TRUE_FALSE: question_type="MULTIPLE_CHOICE", exactly 2 options: [{"option_text": "True", "is_correct": bool, "option_order": 1}, {"option_text": "False", "is_correct": bool, "option_order": 2}], exactly 1 marked is_correct: true.
-- SHORT_ANSWER / Identification: question_type="SHORT_ANSWER", options MUST be [], explanation contains the expected word/phrase.
+- SHORT_ANSWER / Identification: question_type="SHORT_ANSWER", options MUST contain exactly 1 option with {"option_text": "Exact Answer/Term", "is_correct": true, "option_order": 1}.
 - ESSAY / Open-Ended: question_type="SHORT_ANSWER", options MUST be [], explanation contains the key rubrics/expected analysis points.
 """
 
@@ -153,15 +153,17 @@ def _extract_and_validate_json(
 
         raw_options = item.get("options", [])
         validated_options = []
-        if q_type == "MULTIPLE_CHOICE" and isinstance(raw_options, list):
+        if isinstance(raw_options, list):
             for o_idx, opt in enumerate(raw_options, start=1):
                 if isinstance(opt, dict):
-                    validated_options.append({
-                        "option_text": str(opt.get("option_text", f"Option {o_idx}")).strip(),
-                        "is_correct": bool(opt.get("is_correct", False)),
-                        "option_order": int(opt.get("option_order", o_idx)),
-                    })
-            if not any(o["is_correct"] for o in validated_options) and validated_options:
+                    opt_text = str(opt.get("option_text", "")).strip()
+                    if opt_text:
+                        validated_options.append({
+                            "option_text": opt_text,
+                            "is_correct": True if q_type == "SHORT_ANSWER" else bool(opt.get("is_correct", False)),
+                            "option_order": int(opt.get("option_order", o_idx)),
+                        })
+            if q_type == "MULTIPLE_CHOICE" and not any(o["is_correct"] for o in validated_options) and validated_options:
                 validated_options[0]["is_correct"] = True
 
         if idx - 1 < len(expected_points_sequence):
@@ -177,7 +179,7 @@ def _extract_and_validate_json(
             "difficulty_level": str(item.get("difficulty_level", "MEDIUM")).upper(),
             "explanation": item.get("explanation"),
             "lesson_id": item.get("lesson_id"),
-            "options": validated_options if q_type == "MULTIPLE_CHOICE" else [],
+            "options": validated_options,
         })
 
     if not valid_questions:

@@ -291,7 +291,20 @@ export default function QuizAnalysisView({
                               <div className="grid h-8 w-8 place-items-center rounded-full border border-black bg-[#FFD08A] text-xs font-bold shrink-0">
                                 {student.student_name.slice(0, 1)}
                               </div>
-                              <span className="font-bold whitespace-nowrap">{student.student_name}</span>
+                              {student.submission_id ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedGradingSubmissionId(student.submission_id!)}
+                                  className="font-bold whitespace-nowrap hover:underline text-left"
+                                  title="Click to view and grade quiz attempt"
+                                >
+                                  {student.student_name}
+                                </button>
+                              ) : (
+                                <span className="font-bold whitespace-nowrap text-gray-700">
+                                  {student.student_name}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="py-4 px-2">

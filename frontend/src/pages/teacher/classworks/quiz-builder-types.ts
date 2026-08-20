@@ -103,6 +103,12 @@ export type TeacherQuizAnswer = {
   question_type: string;
   max_points: number;
   answer_text?: string | null;
+  selected_option_id?: number | null;
+  options?: Array<{
+    option_id: number;
+    option_text: string;
+    is_correct: boolean;
+  }>;
   is_correct?: boolean | null;
   points_awarded?: number | null;
 };

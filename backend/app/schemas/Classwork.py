@@ -41,6 +41,30 @@ class ClassworkAttachmentResponse(BaseModel):
     uploaded_at: Optional[datetime]
 
 
+class LinkedLessonAttachmentResponse(BaseModel):
+    lesson_attachment_id: int
+    file_name: str
+    file_type: Optional[str] = None
+    file_size: int
+    uploaded_at: Optional[datetime] = None
+
+
+class LinkedReadingResponse(BaseModel):
+    classwork_id: int
+    title: str
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    activity_mode: Optional[str] = "ONLINE"
+
+
+class LinkedLessonResponse(BaseModel):
+    lesson_id: int
+    title: str
+    description: Optional[str] = None
+    attachments: list[LinkedLessonAttachmentResponse] = []
+    readings: list[LinkedReadingResponse] = []
+
+
 class CwAssignmentRow(BaseModel):
     classwork_assignment_id: int
     classwork_id: int
@@ -76,6 +100,7 @@ class ClassworkResponse(BaseModel):
     teacher_name: Optional[str] = None
     attachments: list[ClassworkAttachmentResponse] = []
     assignments: Optional[list[CwAssignmentRow]] = None
+    linked_lessons: list[LinkedLessonResponse] = []
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
 
@@ -114,4 +139,5 @@ class ClassworkAssignmentResponse(BaseModel):
     teacher_name: Optional[str] = None
     attachments: list[ClassworkAttachmentResponse] = []
     assignments: Optional[list[CwAssignmentRow]] = None
+    linked_lessons: list[LinkedLessonResponse] = []
     submission_status: Optional[str] = None  # for student view

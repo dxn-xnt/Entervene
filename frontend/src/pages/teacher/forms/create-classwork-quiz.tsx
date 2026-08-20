@@ -263,7 +263,7 @@ export default function CreateClassworkQuizModal({
         );
     };
 
-    const addQuizOption = (questionId: string) => {
+    const addQuizOption = (questionId: string, isCorrect = false) => {
         setQuizQuestions((current) =>
             current.map((question) =>
                 question.id === questionId
@@ -273,7 +273,7 @@ export default function CreateClassworkQuizModal({
                             ...question.options,
                             {
                                 option_text: "",
-                                is_correct: false,
+                                is_correct: question.question_type === "SHORT_ANSWER" ? true : isCorrect,
                                 option_order: question.options.length + 1,
                             },
                         ],
@@ -286,13 +286,18 @@ export default function CreateClassworkQuizModal({
     const removeQuizOption = (questionId: string, optionIndex: number) => {
         setQuizQuestions((current) =>
             current.map((question) => {
-                if (question.id !== questionId || question.options.length <= 2) {
+                if (question.id !== questionId) return question;
+                if (question.question_type === "MULTIPLE_CHOICE" && question.options.length <= 2) {
                     return question;
                 }
                 const nextOptions = question.options
                     .filter((_, index) => index !== optionIndex)
                     .map((option, index) => ({ ...option, option_order: index + 1 }));
-                if (!nextOptions.some((option) => option.is_correct)) {
+                if (
+                    question.question_type === "MULTIPLE_CHOICE" &&
+                    !nextOptions.some((option) => option.is_correct) &&
+                    nextOptions.length > 0
+                ) {
                     nextOptions[0] = { ...nextOptions[0], is_correct: true };
                 }
                 return { ...question, options: nextOptions };
@@ -543,7 +548,13 @@ export default function CreateClassworkQuizModal({
                         is_correct: option.is_correct,
                         option_order: optionIndex + 1,
                     }))
-                    : [],
+                    : question.options
+                        .filter((opt) => opt.option_text.trim().length > 0)
+                        .map((option, optionIndex) => ({
+                            option_text: option.option_text.trim(),
+                            is_correct: true,
+                            option_order: optionIndex + 1,
+                        })),
         })),
     });
 
@@ -1357,10 +1368,74 @@ export default function CreateClassworkQuizModal({
                                             </Button>
                                         </div>
                                     ) : (
-                                        <p className="mt-3 rounded border-2 border-dashed border-gray-400 px-3 py-3 text-xs font-medium text-gray-600 bg-gray-50">
-                                            Short-answer questions are manually graded after students
-                                            submit.
-                                        </p>
+                                        <div className="mt-4 space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-xs font-bold text-gray-700">
+                                                    Acceptable Correct Answer(s) / Key
+                                                </p>
+                                                <span className="text-[10px] text-gray-500 font-medium">
+                                                    Auto-grades student submission if spelling matches
+                                                </span>
+                                            </div>
+
+                                            {question.options.map((option, optionIndex) => (
+                                                <div
+                                                    key={`${question.id}-${option.option_order}`}
+                                                    className="flex items-center gap-2"
+                                                >
+                                                    <div className="flex h-8 w-8 items-center justify-center rounded border-2 border-black bg-[#8BCB88] text-xs font-black text-black shrink-0">
+                                                        ✓
+                                                    </div>
+                                                    <Input
+                                                        value={option.option_text}
+                                                        onChange={(event) =>
+                                                            updateQuizOption(
+                                                                question.id,
+                                                                optionIndex,
+                                                                event.target.value,
+                                                            )
+                                                        }
+                                                        disabled={isCreating}
+                                                        placeholder={
+                                                            optionIndex === 0
+                                                                ? "e.g. Isaac Newton (primary correct answer)"
+                                                                : `Alternative spelling / synonym ${optionIndex + 1}`
+                                                        }
+                                                        className="flex-1 bg-white border-2 border-black rounded shadow-md text-sm font-semibold"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            removeQuizOption(question.id, optionIndex)
+                                                        }
+                                                        disabled={isCreating}
+                                                        className="rounded border-2 border-black p-2 text-xs font-bold bg-white cursor-pointer hover:bg-gray-100 disabled:opacity-40 transition"
+                                                        title="Remove alternative answer"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                            ))}
+
+                                            <div className="flex items-center gap-2 pt-1">
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => addQuizOption(question.id, true)}
+                                                    disabled={isCreating}
+                                                    className="bg-[#8BCB88]/25 border-black border-2 rounded hover:bg-[#8BCB88]/40 text-xs font-bold"
+                                                >
+                                                    + Add Alternate Answer / Spelling
+                                                </Button>
+                                            </div>
+
+                                            {question.options.length === 0 && (
+                                                <p className="rounded border border-amber-300 bg-amber-50/70 p-2.5 text-[11px] font-medium text-amber-900">
+                                                    ℹ️ No answer key specified. This question will be marked for manual grading upon student submission. Click the button above to add acceptable spelling(s) for automatic correction.
+                                                </p>
+                                            )}
+                                        </div>
                                     )}
 
                                     <div className="mt-3 flex flex-col gap-1 w-full">
@@ -1622,10 +1697,10 @@ export default function CreateClassworkQuizModal({
                         <div>
                             <div className="mb-2">
                                 <p className="text-xs font-bold text-gray-700">
-                                    Link under lesson
+                                    Link under lesson (Coverage)
                                 </p>
                                 <p className="text-[10px] text-gray-500">
-                                    Only lessons assigned to every selected section are shown.
+                                    Links this quiz to the lesson and its associated reading materials for student coverage. Only lessons assigned to every selected section are shown.
                                 </p>
                             </div>
 

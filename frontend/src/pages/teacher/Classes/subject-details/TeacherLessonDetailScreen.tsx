@@ -74,7 +74,7 @@ export default function TeacherLessonDetailScreen({
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <Card.Title className="text-3xl font-extrabold text-gray-950">
+              <Card.Title className="text-xl md:text-2xl font-bold text-gray-950">
                 {lesson.title}
               </Card.Title>
               <Badge
@@ -138,7 +138,7 @@ export default function TeacherLessonDetailScreen({
       {/* ── Classwork Section ── */}
       <div className="flex flex-col gap-4 pt-2">
         <div className="flex items-center justify-between">
-          <h3 className="text-2xl font-bold text-black">Classwork</h3>
+          <h3 className="text-xl font-bold text-black">Classwork</h3>
           <Button
             type="button"
             variant="default"
@@ -167,10 +167,10 @@ export default function TeacherLessonDetailScreen({
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     {/* <ClassworkIcon type={cw.classwork_type} size={24} /> */}
                     <div className="flex flex-col min-w-0">
-                      <Card.Title className="text-lg font-bold text-black truncate">
+                      <Card.Title className="text-sm md:text-base font-bold text-black line-clamp-2 break-words [overflow-wrap:anywhere]">
                         {cw.title}
                       </Card.Title>
-                      <p className="text-xs font-medium">
+                      <p className="text-xs font-medium text-gray-600">
                         {cw.classwork_type || "Classwork"}
                         {cw.due_date
                           ? ` | Due ${new Date(cw.due_date).toLocaleDateString(

@@ -9,6 +9,7 @@ import {
   ChevronRight,
   ClipboardList,
   FileText,
+  GraduationCap,
   Paperclip,
   Search,
 } from "lucide-react";
@@ -30,6 +31,30 @@ interface Attachment {
   file_type?: string;
   file_size: number;
   uploaded_at?: string;
+}
+
+interface LinkedLessonAttachment {
+  lesson_attachment_id: number;
+  file_name: string;
+  file_type?: string;
+  file_size: number;
+  uploaded_at?: string;
+}
+
+interface LinkedReading {
+  classwork_id: number;
+  title: string;
+  description?: string | null;
+  instructions?: string | null;
+  activity_mode?: string;
+}
+
+interface LinkedLesson {
+  lesson_id: number;
+  title: string;
+  description?: string | null;
+  attachments?: LinkedLessonAttachment[];
+  readings?: LinkedReading[];
 }
 
 interface Submission {
@@ -68,6 +93,7 @@ interface ClassworkAssignment {
   show_scores?: boolean;
   teacher_name?: string;
   attachments: Attachment[];
+  linked_lessons?: LinkedLesson[];
   submission_status?: string;
 }
 
@@ -1238,18 +1264,18 @@ export default function SubjectClassworkTab({
               <div className="flex w-full items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Icon size={20} />
-                    <Card.Description className="truncate font-semibold text-black">
+                    <Icon size={20} className="shrink-0" />
+                    <span className="font-semibold text-base text-black line-clamp-2 break-words [overflow-wrap:anywhere]">
                       {cw.title}
-                    </Card.Description>
+                    </span>
                     <span
-                      className={`rounded-full border px-2.5 py-1 text-xs font-bold ${badge.cls}`}
+                      className={`rounded-full border px-2.5 py-1 text-xs font-bold shrink-0 ${badge.cls}`}
                     >
                       {badge.label}
                     </span>
                     {deadline && (
                       <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-bold ${deadline.cls}`}
+                        className={`rounded-full px-2.5 py-1 text-xs font-bold shrink-0 ${deadline.cls}`}
                       >
                         {deadline.label}
                       </span>
@@ -1383,13 +1409,87 @@ export default function SubjectClassworkTab({
                     </Card>
                   )}
 
-                  {/* Attachments */}
-                  <Card className="block w-full shadow-none">
-                    <div className="mb-3 flex items-center gap-2">
-                      <Paperclip size={18} />
-                      <h4 className="font-bold">Reference Files</h4>
-                    </div>
-                    {selectedClasswork.attachments?.length ? (
+                  {/* Coverage Section (Linked Lessons, Topics & Reading Classworks) - Exclusive to Quizzes */}
+                  {isQuizType(selectedClasswork.classwork_type) &&
+                    selectedClasswork.linked_lessons &&
+                    selectedClasswork.linked_lessons.length > 0 && (
+                      <Card className="block w-full shadow-none border-2 border-black bg-[#F8F6ED]">
+                      <div className="mb-2 flex items-center gap-2">
+                        <GraduationCap size={18} className="text-black" />
+                        <h4 className="font-bold text-black">Coverage</h4>
+                      </div>
+                      <div className="space-y-3">
+                        {selectedClasswork.linked_lessons.map((lesson) => (
+                          <div
+                            key={lesson.lesson_id}
+                            className="rounded-lg border border-black/20 bg-white p-3.5 shadow-sm"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold uppercase text-gray-500">Lesson:</span>
+                              <p className="text-sm font-extrabold text-black">{lesson.title}</p>
+                            </div>
+                            {lesson.description && (
+                              <div className="mt-1 flex items-start gap-2 text-xs">
+                                <span className="shrink-0 font-bold uppercase text-gray-500">Topic:</span>
+                                <p className="text-gray-700">{lesson.description}</p>
+                              </div>
+                            )}
+
+                            {/* Specific Reading Classworks under this Lesson */}
+                            {lesson.readings && lesson.readings.length > 0 && (
+                              <div className="mt-3 border-t border-black/10 pt-2.5">
+                                <div className="mb-1.5 flex items-center gap-1 text-[11px] font-bold uppercase text-gray-600">
+                                  <BookOpen size={13} className="text-black" />
+                                  <span>Reading Materials ({lesson.readings.length})</span>
+                                </div>
+                                <div className="space-y-1.5">
+                                  {lesson.readings.map((reading) => (
+                                    <div
+                                      key={reading.classwork_id}
+                                      className="flex items-center gap-2 rounded border border-black/15 bg-[#F6E9B2]/40 px-2.5 py-1.5 text-xs"
+                                    >
+                                      <BookOpen size={13} className="text-black shrink-0" />
+                                      <span className="font-bold text-black">{reading.title}</span>
+                                      {reading.description && (
+                                        <span className="text-gray-600 truncate text-[11px]">
+                                          — {reading.description}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Lesson Study File Attachments if any */}
+                            {lesson.attachments && lesson.attachments.length > 0 && (
+                              <div className="mt-3 border-t border-black/10 pt-2.5">
+                                <div className="mb-1.5 flex items-center gap-1 text-[11px] font-bold uppercase text-gray-600">
+                                  <Paperclip size={13} className="text-black" />
+                                  <span>Lesson Files ({lesson.attachments.length})</span>
+                                </div>
+                                <AttachmentDisplay
+                                  attachments={lesson.attachments}
+                                  type="lesson"
+                                  downloadUrl={(attachmentId) =>
+                                    `${API_URL}/api/v1/lessons/${lesson.lesson_id}/attachments/${attachmentId}/download`
+                                  }
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* Classwork File Attachments (Only shown when files are directly attached) */}
+                  {selectedClasswork.attachments && selectedClasswork.attachments.length > 0 && (
+                    <Card className="block w-full shadow-none">
+                      <div className="mb-3 flex items-center gap-2">
+                        <Paperclip size={18} />
+                        <h4 className="font-bold">Attached Files</h4>
+                      </div>
                       <AttachmentDisplay
                         attachments={selectedClasswork.attachments}
                         type="classwork"
@@ -1397,12 +1497,8 @@ export default function SubjectClassworkTab({
                           `${API_URL}/api/v1/classwork-assignments/classwork/${selectedClasswork.classwork_id}/attachments/${attachmentId}/download`
                         }
                       />
-                    ) : (
-                      <p className="text-sm text-gray-600">
-                        No reference files attached.
-                      </p>
-                    )}
-                  </Card>
+                    </Card>
+                  )}
                 </div>
 
                 {/* Right: submission or quiz attempt */}

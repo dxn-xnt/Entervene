@@ -37,6 +37,7 @@ from app.services.classwork.ClassworkAccessService import (
 from app.services.classwork.ClassworkResponseService import (
     build_attachment_response,
     build_classwork_response,
+    build_linked_lesson_response,
     resolve_classwork_file_path,
 )
 from app.services.classwork.ClassworkShared import (
@@ -923,6 +924,10 @@ def _assignment_response(
         max_attempts=cast(Optional[int], assignment.max_attempts),
         teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
         attachments=[build_attachment_response(attachment) for attachment in classwork.attachments],
+        linked_lessons=[
+            build_linked_lesson_response(lesson)
+            for lesson in (getattr(classwork, "lessons", None) or [])
+        ],
         submission_status=submission_status,
     )
 

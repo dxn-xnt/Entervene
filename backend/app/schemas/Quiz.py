@@ -214,6 +214,8 @@ class TeacherQuizAnswerOut(BaseModel):
     question_type: str
     max_points: float
     answer_text: Optional[str] = None
+    selected_option_id: Optional[int] = None
+    options: list[QuizOptionDistributionOut] = Field(default_factory=list)
     is_correct: Optional[bool] = None
     points_awarded: Optional[float] = None
 

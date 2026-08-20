@@ -271,6 +271,22 @@ def get_teacher_quiz_submission_detail(
     for link in links:
         question = link.question
         ans = existing_answers.get(link.quiz_question_id)
+        options_out = [
+            QuizOptionDistributionOut(
+                option_id=opt.option_id,
+                option_text=opt.option_text,
+                is_correct=opt.is_correct,
+                selected_count=0,
+            )
+            for opt in sorted(getattr(question, "options", None) or [], key=lambda o: o.option_order)
+        ]
+        selected_opt_id = None
+        if question.question_type == "MULTIPLE_CHOICE" and ans and ans.answer_text:
+            for opt in getattr(question, "options", None) or []:
+                if opt.option_text == ans.answer_text:
+                    selected_opt_id = opt.option_id
+                    break
+
         answers_out.append(
             TeacherQuizAnswerOut(
                 answer_id=ans.answer_id if ans else None,
@@ -279,6 +295,8 @@ def get_teacher_quiz_submission_detail(
                 question_type=question.question_type,
                 max_points=float(question.points),
                 answer_text=ans.answer_text if ans else None,
+                selected_option_id=selected_opt_id,
+                options=options_out,
                 is_correct=ans.is_correct if ans else None,
                 points_awarded=float(ans.points_awarded) if ans and ans.points_awarded is not None else None,
             )
