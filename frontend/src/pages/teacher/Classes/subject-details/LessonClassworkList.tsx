@@ -68,106 +68,93 @@ export default function LessonClassworkList({
   return (
     <section className="flex flex-col gap-6">
       {/* ── Quarterly Assessments section ── */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <GraduationCap size={20} />
-            <h3 className="text-lg font-bold">Quarterly Assessments</h3>
-            <Badge
-              variant="secondary"
-              size="sm"
-              className="border border-black bg-primary"
-            >
-              {quarterlyAssessments.length}
-            </Badge>
-          </div>
-          {openQuarterlyAssessmentForm && (
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              onClick={openQuarterlyAssessmentForm}
-              className="gap-2 border-black bg-[#F6E9B2] font-semibold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#f0dd9a]"
-            >
-              <Plus size={15} />
-              Add Assessment
-            </Button>
-          )}
-        </div>
-
-        <p className="text-xs font-medium text-gray-600">
-          Periodical exams and summative assessments that span multiple lessons
-          — not tied to a single lesson.
-        </p>
-
-        {quarterlyAssessments.length > 0 ? (
-          quarterlyAssessments.map((classwork) => (
-            <Card
-              key={classwork.classwork_assignment_id}
-              className="block cursor-pointer shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
-              onClick={() => openClassworkDetail(classwork)}
-            >
-              <Card.Content className="grid grid-cols-[minmax(0,1fr)_7rem_auto] items-center gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <GraduationCap size={20} className="shrink-0" />
-                  <div className="min-w-0">
-                    <Card.Title className="truncate text-lg font-bold">
-                      {classwork.title}
-                    </Card.Title>
-                    <p className="text-xs font-medium text-gray-700">
-                      Quarterly Assessment
-                      {classwork.due_date
-                        ? ` | Due ${new Date(classwork.due_date).toLocaleDateString()}`
-                        : ""}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex min-w-28 justify-center">
-                  {classwork.attachment_count ? (
-                    <Badge
-                      variant="secondary"
-                      size="sm"
-                      className="bg-[#F6E9B2]"
-                    >
-                      File {classwork.attachment_count}
-                    </Badge>
-                  ) : (
-                    <span aria-hidden="true" className="h-7 w-20" />
-                  )}
-                </div>
-                <span className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs font-semibold">
-                  <Eye size={14} />
-                  Details
-                </span>
-              </Card.Content>
-            </Card>
-          ))
-        ) : (
-          <Card className="block border-dashed shadow-none">
-            <Card.Content className="flex items-center gap-3">
-              <GraduationCap size={20} className="shrink-0 text-gray-400" />
-              <div>
-                <p className="text-sm font-semibold text-gray-700">
-                  No quarterly assessments yet
-                </p>
-                <p className="text-xs font-medium text-gray-500">
-                  Periodical exams that cover an entire quarter will appear
-                  here.
-                </p>
+      {quarterlyAssessments.length > 0 && (
+        <>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <GraduationCap size={20} />
+                <h3 className="text-lg font-bold">Quarterly Assessments</h3>
+                <Badge
+                  variant="secondary"
+                  size="sm"
+                  className="border border-black bg-primary"
+                >
+                  {quarterlyAssessments.length}
+                </Badge>
               </div>
-            </Card.Content>
-          </Card>
-        )}
-      </div>
+              {openQuarterlyAssessmentForm && (
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={openQuarterlyAssessmentForm}
+                  className="gap-2 border-black bg-[#F6E9B2] font-semibold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#f0dd9a]"
+                >
+                  <Plus size={15} />
+                  Add Assessment
+                </Button>
+              )}
+            </div>
 
-      {/* ── Separator ── */}
-      <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-black" />
-        <span className="text-xs font-bold uppercase tracking-wider text-gray-600">
-          Lessons &amp; Classwork
-        </span>
-        <div className="h-px flex-1 bg-black" />
-      </div>
+            <p className="text-xs font-medium text-gray-600">
+              Periodical exams and summative assessments that span multiple lessons
+              — not tied to a single lesson.
+            </p>
+
+            {quarterlyAssessments.map((classwork) => (
+              <Card
+                key={classwork.classwork_assignment_id}
+                className="block cursor-pointer shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
+                onClick={() => openClassworkDetail(classwork)}
+              >
+                <Card.Content className="grid grid-cols-[minmax(0,1fr)_7rem_auto] items-center gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <GraduationCap size={20} className="shrink-0" />
+                    <div className="min-w-0">
+                      <Card.Title className="truncate text-base font-bold">
+                        {classwork.title}
+                      </Card.Title>
+                      <p className="text-xs font-medium text-gray-700">
+                        Quarterly Assessment
+                        {classwork.due_date
+                          ? ` | Due ${new Date(classwork.due_date).toLocaleDateString()}`
+                          : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex min-w-28 justify-center">
+                    {classwork.attachment_count ? (
+                      <Badge
+                        variant="secondary"
+                        size="sm"
+                        className="bg-[#F6E9B2]"
+                      >
+                        File {classwork.attachment_count}
+                      </Badge>
+                    ) : (
+                      <span aria-hidden="true" className="h-7 w-20" />
+                    )}
+                  </div>
+                  <span className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs font-semibold">
+                    <Eye size={14} />
+                    Details
+                  </span>
+                </Card.Content>
+              </Card>
+            ))}
+          </div>
+
+          {/* ── Separator ── */}
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-black" />
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-600">
+              Lessons &amp; Classwork
+            </span>
+            <div className="h-px flex-1 bg-black" />
+          </div>
+        </>
+      )}
 
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <label className="relative shadow-md transition-shadow hover:shadow-none md:w-80">

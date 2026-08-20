@@ -612,6 +612,14 @@ export default function Classworks() {
   };
 
   const openStudentSubmission = async (student: TrackingStudent) => {
+    // For quizzes, open the specialized Quiz Question Grading Modal directly
+    if (selected && isQuizType(selected.classwork_type)) {
+      if (student.submission_id) {
+        setSelectedGradingSubmissionId(student.submission_id);
+      }
+      return;
+    }
+
     // Opens the teacher review view for a single student's submission.
     setSelectedStudent(student);
     setSelectedSubmissionDetail(null);
@@ -759,32 +767,56 @@ export default function Classworks() {
                     <Breadcrumb.Link asChild>
                       <button
                         type="button"
-                        onClick={
-                          selectedStudent
-                            ? closeStudentSubmission
-                            : closeClassworkDetail
-                        }
+                        onClick={() => {
+                          closeStudentSubmission();
+                          closeClassworkDetail();
+                        }}
+                        className="hover:underline"
                       >
-                        {selectedAssignment?.title ||
-                          selected.subject_name ||
-                          "Classwork"}
+                        Classworks
                       </button>
                     </Breadcrumb.Link>
                   </Breadcrumb.Item>
 
-                  <Breadcrumb.Separator />
-
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Ellipsis />
-                  </Breadcrumb.Item>
-
-                  <Breadcrumb.Separator />
-
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Page>
-                      {selectedStudent?.student_name || selected.title}
-                    </Breadcrumb.Page>
-                  </Breadcrumb.Item>
+                  {selectedStudent ? (
+                    <>
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Link asChild>
+                          <button
+                            type="button"
+                            onClick={closeStudentSubmission}
+                            className="hover:underline"
+                          >
+                            {selected.title}
+                          </button>
+                        </Breadcrumb.Link>
+                      </Breadcrumb.Item>
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Page>
+                          {selectedStudent.student_name}
+                        </Breadcrumb.Page>
+                      </Breadcrumb.Item>
+                    </>
+                  ) : (
+                    <>
+                      {selected.subject_name && (
+                        <>
+                          <Breadcrumb.Separator />
+                          <Breadcrumb.Item>
+                            <span className="text-gray-600 font-medium">
+                              {selected.subject_name}
+                            </span>
+                          </Breadcrumb.Item>
+                        </>
+                      )}
+                      <Breadcrumb.Separator />
+                      <Breadcrumb.Item>
+                        <Breadcrumb.Page>{selected.title}</Breadcrumb.Page>
+                      </Breadcrumb.Item>
+                    </>
+                  )}
                 </Breadcrumb.List>
               </Breadcrumb>
 
@@ -891,7 +923,28 @@ export default function Classworks() {
                             {submissionDetailError}
                           </p>
                         ) : selectedSubmissionDetail ? (
-                          selectedSubmissionDetail.attachments.length > 0 ? (
+                          isQuizType(selected.classwork_type) ? (
+                            <div className="flex flex-col items-start gap-3 rounded-lg border border-black bg-[#F6E9B2]/60 p-4">
+                              <div>
+                                <p className="text-sm font-bold text-black">
+                                  Quiz Attempt Responses
+                                </p>
+                                <p className="text-xs font-medium text-gray-700">
+                                  This student submitted answers to the quiz questions. You can review individual question answers, view auto-graded results, and manually assign scores for subjective questions.
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="default"
+                                size="sm"
+                                onClick={() => setSelectedGradingSubmissionId(selectedSubmissionDetail.submission_id)}
+                                className="gap-2 border-black bg-[#7ABA78] font-bold text-black hover:bg-[#68a966]"
+                              >
+                                <Eye size={15} />
+                                Review &amp; Grade Quiz Questions
+                              </Button>
+                            </div>
+                          ) : selectedSubmissionDetail.attachments.length > 0 ? (
                             <AttachmentDisplay
                               attachments={selectedSubmissionDetail.attachments.map(
                                 (attachment) => ({
@@ -969,18 +1022,33 @@ export default function Classworks() {
                             scoreBand(selected.total_points, 0.2),
                             "Work is incomplete or not submitted.",
                           ],
-                        ].map(([label, points, description], index) => (
-                          <div
-                            key={label}
-                            className={`rounded-lg border border-black p-3 ${index === 0 ? "bg-[#8BCB88]" : ""}`}
-                          >
-                            <div className="mb-3 flex items-center justify-between gap-2">
-                              <p className="font-bold">{label}</p>
-                              <p className="text-sm font-bold">{points}</p>
+                        ].map(([label, points, description]) => {
+                          const ptsNum = Number(points);
+                          const currentScore = gradeDraft !== "" ? Number(gradeDraft) : null;
+                          const isSelected = currentScore !== null && !isNaN(currentScore) && currentScore === ptsNum;
+                          return (
+                            <div
+                              key={label}
+                              onClick={() => {
+                                if (selectedSubmissionDetail && !isPostingGrade) {
+                                  setGradeDraft(String(ptsNum));
+                                  setGradeError("");
+                                  setGradeSuccess("");
+                                }
+                              }}
+                              className={`cursor-pointer rounded-lg border border-black p-3 transition-all hover:bg-gray-50 ${
+                                isSelected ? "!bg-[#8BCB88] font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "bg-white"
+                              }`}
+                              title={`Click to set score to ${points} pts`}
+                            >
+                              <div className="mb-3 flex items-center justify-between gap-2">
+                                <p className="font-bold">{label}</p>
+                                <p className="text-sm font-bold">{points} pts</p>
+                              </div>
+                              <p className="text-xs text-gray-700">{description}</p>
                             </div>
-                            <p className="text-xs">{description}</p>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                       <label className="block text-sm font-bold">
                         Comments
@@ -1502,18 +1570,16 @@ export default function Classworks() {
                         This is a reading material, so scores, attempts, and
                         student submissions are not required.
                       </div>
+                    ) : isQuizType(selected.classwork_type) ? (
+                      <QuizAnalysisView
+                        quizAnalysis={quizAnalysis}
+                        isQuizAnalysisLoading={isQuizAnalysisLoading}
+                        quizAnalysisError={quizAnalysisError}
+                        selected={selected}
+                        setSelectedGradingSubmissionId={setSelectedGradingSubmissionId}
+                      />
                     ) : (
                       <>
-                        {isQuizType(selected.classwork_type) && (
-                          <QuizAnalysisView
-                            quizAnalysis={quizAnalysis}
-                            isQuizAnalysisLoading={isQuizAnalysisLoading}
-                            quizAnalysisError={quizAnalysisError}
-                            selected={selected}
-                            setSelectedGradingSubmissionId={setSelectedGradingSubmissionId}
-                          />
-                        )}
-
                         <Card className="block">
                           <Card.Content className="space-y-6">
                             <div className="flex items-center justify-between">
@@ -1554,71 +1620,54 @@ export default function Classworks() {
                                   "Work is incomplete or not submitted.",
                                 ],
                               ].map(([label, points, description]) => (
-                                <Card key={label} className="block shadow-none">
-                                  <Card.Content className="space-y-3">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <h3 className="font-bold">{label}</h3>
-
-                                      <Badge
-                                        variant="secondary"
-                                        size="sm"
-                                        className="shrink-0 whitespace-nowrap"
-                                      >
-                                        {points}
-                                      </Badge>
-                                    </div>
-
-                                    <p className="text-sm text-muted-foreground">
-                                      {description}
-                                    </p>
-                                  </Card.Content>
-                                </Card>
+                                <div
+                                  key={label}
+                                  className="rounded-lg border border-black p-3"
+                                >
+                                  <div className="mb-3 flex items-center justify-between gap-2">
+                                    <p className="font-bold">{label}</p>
+                                    <p className="text-sm font-bold">{points}</p>
+                                  </div>
+                                  <p className="text-xs">{description}</p>
+                                </div>
                               ))}
                             </div>
                           </Card.Content>
                         </Card>
 
-                        <div>
-                          <div className="mb-2 flex items-center justify-between">
-                            <h2 className="text-2xl font-bold">
-                              Student's Submissions
-                            </h2>
-                            <Select
-                              value={submissionSort}
-                              onValueChange={(v) =>
-                                setSubmissionSort(v as "name" | "score")
-                              }
-                            >
-                              <Select.Trigger className="h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold">
-                                <ArrowUpDown size={16} className="mr-2" />
-                                <Select.Value />
-                              </Select.Trigger>
-                              <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                                <Select.Item value="name">
-                                  Sort By Name
-                                </Select.Item>
-                                <Select.Item value="score">
-                                  Sort By Score
-                                </Select.Item>
-                              </Select.Content>
-                            </Select>
+                        <div className="space-y-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <h2 className="text-xl font-bold">Submissions</h2>
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs font-bold text-gray-600">
+                                Sort by
+                              </label>
+                              <select
+                                value={submissionSort}
+                                onChange={(event) =>
+                                  setSubmissionSort(
+                                    event.target.value as "name" | "score",
+                                  )
+                                }
+                                className="rounded border border-black bg-white px-2 py-1 text-xs font-bold"
+                              >
+                                <option value="name">Name</option>
+                                <option value="score">Score</option>
+                              </select>
+                            </div>
                           </div>
 
-                          <Table
-                            wrapperClassName="overflow-x-auto"
-                            className="border-black"
-                          >
+                          <Table className="border-black">
+                            <Table.Header className="border-black">
+                              <Table.Row className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-black font-bold">
+                                <Table.Head>Student</Table.Head>
+                                <Table.Head>Status</Table.Head>
+                                <Table.Head className="min-w-20 text-right">
+                                  Grade
+                                </Table.Head>
+                              </Table.Row>
+                            </Table.Header>
                             <Table.Body>
-                              {detailError && (
-                                <Table.Row className="border-black hover:bg-transparent">
-                                  <Table.Cell
-                                    colSpan={3}
-                                    className="bg-red-50 text-sm font-semibold text-red-700"
-                                  >
-                                    {detailError}
-                                  </Table.Cell>
-                                </Table.Row>
-                              )}
                               {isTrackingLoading ? (
                                 <Table.Row className="hover:bg-transparent">
                                   <Table.Cell
@@ -1628,15 +1677,24 @@ export default function Classworks() {
                                     Loading submissions...
                                   </Table.Cell>
                                 </Table.Row>
+                              ) : trackingError ? (
+                                <Table.Row className="hover:bg-transparent">
+                                  <Table.Cell
+                                    colSpan={3}
+                                    className="py-6 text-center text-sm font-semibold text-red-600"
+                                  >
+                                    {trackingError}
+                                  </Table.Cell>
+                                </Table.Row>
                               ) : trackingRows.length > 0 ? (
                                 trackingRows.map((student) => {
                                   const isGraded =
-                                    student.status === "graded" ||
-                                    (student.grade !== null &&
-                                      student.grade !== undefined);
+                                    student.grade !== null &&
+                                    student.grade !== undefined;
                                   const scoreLabel = isGraded
-                                    ? `${student.grade ?? 0}/${selected.total_points ?? 0}`
-                                    : `0/${selected.total_points ?? 0}`;
+                                    ? `${student.grade} / ${selected.total_points ?? 0}`
+                                    : "Not graded";
+
                                   return (
                                     <Table.Row
                                       key={student.student_id}

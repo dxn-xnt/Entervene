@@ -303,7 +303,7 @@ def test_teacher_roster_returns_scoped_metrics(student_record_context):
     assert response.status_code == 200
     body = response.json()
     assert body["scope"]["section_name"] == "Sapphire"
-    assert [row["full_name"] for row in body["students"]] == ["Ana Gonzales", "Ben Santos"]
+    assert [row["full_name"] for row in body["students"]] == ["Gonzales, Ana", "Santos, Ben"]
     ana = body["students"][0]
     assert ana["official_period_grade"] == 88.5
     assert ana["running_classwork_percentage"] == 80
@@ -325,7 +325,7 @@ def test_teacher_detail_returns_classwork_history(student_record_context):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["student"]["full_name"] == "Ana Gonzales"
+    assert body["student"]["full_name"] == "Gonzales, Ana"
     assert body["summary"]["assigned_count"] == 3
     assert [item["title"] for item in body["classwork_results"]] == [
         "Assignment 1",

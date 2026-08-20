@@ -39,6 +39,21 @@ interface ClassworkAttachment {
   uploaded_at?: string;
 }
 
+interface LinkedLessonAttachment {
+  lesson_attachment_id: number;
+  file_name: string;
+  file_type?: string;
+  file_size: number;
+  uploaded_at?: string;
+}
+
+interface LinkedLesson {
+  lesson_id: number;
+  title: string;
+  description?: string | null;
+  attachments?: LinkedLessonAttachment[];
+}
+
 interface LessonClasswork {
   classwork_assignment_id: number;
   classwork_id: number;
@@ -71,6 +86,7 @@ interface ClassworkDetail {
   teacher_name?: string | null;
   submission_status?: string | null;
   attachments: ClassworkAttachment[];
+  linked_lessons?: LinkedLesson[];
 }
 
 interface Submission {
@@ -1376,33 +1392,33 @@ export default function SubjectLessonTab({
           )}
 
           {/* ════════════════ DEDICATED SECTION: Quarterly Assessments ════════════════ */}
-          <Card className="block">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center border border-black bg-primary shadow-sm">
-                  <GraduationCap size={20} />
+          {quarterlyAssessments.length > 0 && (
+            <Card className="block">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center border border-black bg-primary shadow-sm">
+                    <GraduationCap size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold tracking-tight text-black">
+                      Quarterly Assessments
+                    </h3>
+                    <p className="text-xs font-medium text-gray-600">
+                      Periodical exams and summative assessments for this subject.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-xl font-bold tracking-tight text-black">
-                    Quarterly Assessments
-                  </h3>
-                  <p className="text-xs font-medium text-gray-600">
-                    Periodical exams and summative assessments for this subject.
-                  </p>
-                </div>
+                <Badge
+                  variant="secondary"
+                  className="px-3 py-1 text-xs font-bold shadow-sm"
+                >
+                  {quarterlyAssessments.length}{" "}
+                  {quarterlyAssessments.length === 1
+                    ? "Assessment"
+                    : "Assessments"}
+                </Badge>
               </div>
-              <Badge
-                variant="secondary"
-                className="px-3 py-1 text-xs font-bold shadow-sm"
-              >
-                {quarterlyAssessments.length}{" "}
-                {quarterlyAssessments.length === 1
-                  ? "Assessment"
-                  : "Assessments"}
-              </Badge>
-            </div>
 
-            {quarterlyAssessments.length > 0 ? (
               <div className="mt-4 space-y-3">
                 {quarterlyAssessments.map((cw) => {
                   const badge = getStatusBadge(
@@ -1425,10 +1441,10 @@ export default function SubjectLessonTab({
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h4 className="font-bold text-lg leading-tight truncate">
+                            <h4 className="font-bold text-sm md:text-base leading-tight line-clamp-2 break-words [overflow-wrap:anywhere]">
                               {cw.title}
                             </h4>
-                            <span className="rounded-full border border-black bg-[#7ABA78] px-2.5 py-0.5 text-[10px] font-bold text-white">
+                            <span className="rounded-full border border-black bg-[#7ABA78] px-2.5 py-0.5 text-[10px] font-bold text-white shrink-0">
                               Quarterly Assessment
                             </span>
                           </div>
@@ -1454,15 +1470,8 @@ export default function SubjectLessonTab({
                   );
                 })}
               </div>
-            ) : (
-              <div className="mt-3 flex items-center gap-3 border border-dashed border-gray-400 bg-white px-4 py-3">
-                <GraduationCap size={20} className="shrink-0 text-gray-400" />
-                <p className="text-xs font-semibold text-gray-500">
-                  No quarterly assessments scheduled yet for this subject.
-                </p>
-              </div>
-            )}
-          </Card>
+            </Card>
+          )}
 
           {/* ── Empty state ── */}
           {lessons.length === 0 ? (
@@ -1835,25 +1844,110 @@ export default function SubjectLessonTab({
                     </Card>
                   )}
 
-                  {/* Attachments */}
+                  {/* Coverage Section (Linked Lessons & Topics) */}
+                  {selectedClasswork.linked_lessons && selectedClasswork.linked_lessons.length > 0 && (
+                    <Card className="block w-full shadow-none border-2 border-black bg-[#F8F6ED]">
+                      <div className="mb-2 flex items-center gap-2">
+                        <GraduationCap size={18} className="text-black" />
+                        <h4 className="font-bold text-black">Coverage</h4>
+                      </div>
+                      <div className="space-y-3">
+                        {selectedClasswork.linked_lessons.map((lesson) => (
+                          <div
+                            key={lesson.lesson_id}
+                            className="rounded-lg border border-black/20 bg-white p-3 shadow-sm"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold uppercase text-gray-500">Lesson:</span>
+                              <p className="text-sm font-extrabold text-black">{lesson.title}</p>
+                            </div>
+                            {lesson.description && (
+                              <div className="mt-1.5 flex items-start gap-2 text-xs">
+                                <span className="shrink-0 font-bold uppercase text-gray-500">Topic:</span>
+                                <p className="text-gray-700">{lesson.description}</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* Reference Materials */}
                   <Card className="block w-full shadow-none">
                     <div className="mb-3 flex items-center gap-2">
                       <Paperclip size={18} />
-                      <h4 className="font-bold">Reference Files</h4>
+                      <h4 className="font-bold">Reference Materials</h4>
                     </div>
-                    {selectedClasswork.attachments?.length ? (
-                      <AttachmentDisplay
-                        attachments={selectedClasswork.attachments}
-                        type="classwork"
-                        downloadUrl={(attachmentId) =>
-                          `${API_URL}/api/v1/classwork-assignments/classwork/${selectedClasswork.classwork_id}/attachments/${attachmentId}/download`
-                        }
-                      />
-                    ) : (
-                      <p className="text-sm text-gray-600">
-                        No reference files attached.
-                      </p>
-                    )}
+                    {(() => {
+                      const directAttachments = selectedClasswork.attachments || [];
+                      const linkedLessonAttachments = (selectedClasswork.linked_lessons || []).flatMap((l) =>
+                        (l.attachments || []).map((att) => ({ ...att, lesson_id: l.lesson_id, lesson_title: l.title }))
+                      );
+
+                      const uniqueLinkedAttachments = linkedLessonAttachments.filter(
+                        (la) => !directAttachments.some((da) => da.file_name === la.file_name && da.file_size === la.file_size)
+                      );
+
+                      const totalCount = directAttachments.length + uniqueLinkedAttachments.length;
+
+                      if (totalCount === 0) {
+                        return (
+                          <p className="text-sm text-gray-600">
+                            No reference files attached. Review the linked lesson materials above.
+                          </p>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-4">
+                          {directAttachments.length > 0 && (
+                            <div>
+                              {uniqueLinkedAttachments.length > 0 && (
+                                <p className="mb-1 text-xs font-bold uppercase text-gray-600">
+                                  Classwork Attachments
+                                </p>
+                              )}
+                              <AttachmentDisplay
+                                attachments={directAttachments}
+                                type="classwork"
+                                downloadUrl={(attachmentId) =>
+                                  `${API_URL}/api/v1/classwork-assignments/classwork/${selectedClasswork.classwork_id}/attachments/${attachmentId}/download`
+                                }
+                              />
+                            </div>
+                          )}
+
+                          {uniqueLinkedAttachments.length > 0 && (
+                            <div>
+                              <p className="mb-1 text-xs font-bold uppercase text-gray-600">
+                                Linked Lesson Study Materials
+                              </p>
+                              {selectedClasswork.linked_lessons?.map((lesson) => {
+                                const lessonFiles = (lesson.attachments || []).filter(
+                                  (la) => !directAttachments.some((da) => da.file_name === la.file_name && da.file_size === la.file_size)
+                                );
+                                if (lessonFiles.length === 0) return null;
+                                return (
+                                  <div key={lesson.lesson_id} className="mt-2">
+                                    <p className="mb-1 text-[11px] font-semibold text-gray-500">
+                                      From {lesson.title}:
+                                    </p>
+                                    <AttachmentDisplay
+                                      attachments={lessonFiles}
+                                      type="lesson"
+                                      downloadUrl={(attachmentId) =>
+                                        `${API_URL}/api/v1/lessons/${lesson.lesson_id}/attachments/${attachmentId}/download`
+                                      }
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </Card>
                 </div>
 
