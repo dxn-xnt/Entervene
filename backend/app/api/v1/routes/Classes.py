@@ -132,9 +132,10 @@ def get_class_students(
 @router.get("/teacher/advisory", response_model=list[TeacherAdvisoryClassListItem])
 def list_teacher_advisory_classes(
     staff_id: str = Depends(get_staff_id),
+    academic_period_id: int | None = None,
     db: Session = Depends(get_db),
 ):
-    return list_teacher_advisory_classes_data(db=db, staff_id=staff_id)
+    return list_teacher_advisory_classes_data(db=db, staff_id=staff_id, academic_period_id=academic_period_id)
 
 
 @router.get("/teacher/advisory/{class_id}", response_model=TeacherAdvisoryClassDetailResponse)

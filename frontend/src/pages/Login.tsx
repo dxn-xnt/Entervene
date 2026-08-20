@@ -7,7 +7,8 @@ import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
 import { Label } from "@/components/retroui/Label";
 import { Checkbox } from "@/components/retroui/Checkbox";
-import { routes } from "@/../routes"
+import { Eye, EyeOff } from "lucide-react";
+import { routes } from "@/../routes";
 
 const Login = () => {
   const { login } = useAuth();
@@ -16,6 +17,7 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     setError("");
@@ -48,7 +50,6 @@ const Login = () => {
     }
   };
 
-
   return (
     <div className="retro-squares-bg flex flex-col items-center justify-center h-screen">
       <Card className="w-md p-8">
@@ -64,21 +65,53 @@ const Login = () => {
           <div className="flex flex-col gap-2">
             <div className="grid w-full max-w-sm items-center gap-2 mb-2">
               <Label htmlFor="email">Email Address</Label>
-              <Input type="email" id="email" placeholder="Email" value={username}
-                onChange={(e) => setUsername(e.target.value)} />
+              <Input
+                type="email"
+                id="email"
+                placeholder="Email"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
             </div>
 
             <div className="grid w-full max-w-sm items-center gap-2 mb-2">
               <div className="flex flex-row justify-between items-center">
                 <Label htmlFor="password">Password</Label>
-                <Button variant="link" className="font-regular p-0 text-sm font-normal font-underline"
-                  onClick={() => navigate("/forgot-password")}>
+                <Button
+                  variant="link"
+                  className="font-regular p-0 text-sm font-normal font-underline"
+                  onClick={() => navigate("/forgot-password")}
+                >
                   Forget password?
                 </Button>
               </div>
-              <Input type="password" id="password" placeholder="Password" value={password}
-                onChange={(e) => setPassword(e.target.value)} />
-              {error && <Text as="p" className="text-red-500 text-sm">{error}</Text>}
+              <div className="relative">
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  id="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-none border-black !shadow-none h-10 pr-10 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              {error && (
+                <Text as="p" className="text-red-500 text-sm">
+                  {error}
+                </Text>
+              )}
             </div>
 
             <div className="flex gap-2 items-center">
@@ -86,20 +119,26 @@ const Login = () => {
               <Text>Remember me</Text>
             </div>
 
-            <Button variant="default" className="mt-4"
+            <Button
+              variant="default"
+              className="mt-4"
               onClick={handleLogin}
               disabled={loading}
             >
               Sign In
             </Button>
             <div className="flex flex-row items-center gap-1 mt-1">
-              <Text as="p" className="text-center">Don't have an account?</Text>
-              <Button variant="link" className="font-regular p-0"
-                onClick={() => navigate("/forgot-password")}>
+              <Text as="p" className="text-center">
+                Don't have an account?
+              </Text>
+              <Button
+                variant="link"
+                className="font-regular p-0"
+                onClick={() => navigate("/forgot-password")}
+              >
                 Sign Up
               </Button>
             </div>
-
           </div>
         </Card.Content>
       </Card>

@@ -75,6 +75,12 @@ export default function AdminSystemSettings() {
   const [schoolDayEnd, setSchoolDayEnd] = React.useState("20:00");
   const [isSavingSchoolHours, setIsSavingSchoolHours] = React.useState(false);
 
+  // Teacher Workload Caps
+  const [minSubjects, setMinSubjects] = React.useState("4");
+  const [maxSubjects, setMaxSubjects] = React.useState("6");
+  const [maxHours, setMaxHours] = React.useState("6.0");
+  const [isSavingTeacherCaps, setIsSavingTeacherCaps] = React.useState(false);
+
   const [academicYears, setAcademicYears] = React.useState<AcademicYearSettingItem[]>([]);
   const [selectedYearId, setSelectedYearId] = React.useState<string>("");
   const [academicPeriods, setAcademicPeriods] = React.useState<AcademicPeriodSettingItem[]>([]);
@@ -278,6 +284,10 @@ export default function AdminSystemSettings() {
       if (flatSettings["school_day_start"]) setSchoolDayStart(flatSettings["school_day_start"]);
       if (flatSettings["school_day_end"]) setSchoolDayEnd(flatSettings["school_day_end"]);
 
+      if (flatSettings["min_subjects_per_day"]) setMinSubjects(flatSettings["min_subjects_per_day"]);
+      if (flatSettings["max_subjects_per_day"]) setMaxSubjects(flatSettings["max_subjects_per_day"]);
+      if (flatSettings["max_hours_per_day"]) setMaxHours(flatSettings["max_hours_per_day"]);
+
       setAcademicYears(yearsData);
       setAcademicLevels(levelsData);
 
@@ -322,6 +332,28 @@ export default function AdminSystemSettings() {
       showToast("General average threshold saved");
     } finally {
       setIsSavingThresholds(false);
+    }
+  };
+
+  const handleSaveTeacherCaps = async () => {
+    if (parseInt(minSubjects) > parseInt(maxSubjects)) {
+      showToast("Minimum subjects cannot exceed Maximum subjects.");
+      return;
+    }
+    setIsSavingTeacherCaps(true);
+    try {
+      await Promise.all([
+        updateSetting("min_subjects_per_day", minSubjects),
+        updateSetting("max_subjects_per_day", maxSubjects),
+        updateSetting("max_hours_per_day", maxHours),
+      ]);
+      showToast("Teacher workload caps saved.");
+      refetchGlobalSettings();
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to save teacher workload caps.");
+    } finally {
+      setIsSavingTeacherCaps(false);
     }
   };
 
@@ -561,6 +593,68 @@ export default function AdminSystemSettings() {
               </Card.Content>
             </Card>
 
+            {/* Teacher Workload Caps */}
+            <Card className="@container/card w-full">
+              <Card.Header>
+                <Card.Title className="flex flex-row justify-between w-full items-center">
+                  Teacher Workload Caps
+                  <Button
+                    size="sm"
+                    className="whitespace-nowrap"
+                    onClick={handleSaveTeacherCaps}
+                    disabled={isSavingTeacherCaps || parseInt(minSubjects) > parseInt(maxSubjects)}
+                  >
+                    Save Workload Caps
+                  </Button>
+                </Card.Title>
+              </Card.Header>
+              <Card.Content className="flex flex-col gap-6">
+                <div className="flex flex-col gap-1">
+                  <Text as="p" className="font-sans text-sm text-muted-foreground">
+                    These limits are enforced globally across all subjects during scheduling.
+                  </Text>
+                  {parseInt(minSubjects) > parseInt(maxSubjects) && (
+                    <Text as="p" className="font-sans text-sm font-semibold text-red-600 mt-1">
+                      Error: Minimum subjects cannot exceed maximum subjects.
+                    </Text>
+                  )}
+                </div>
+                <div className="flex flex-row flex-wrap gap-6 items-center">
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-semibold">Min Subjects/Day</label>
+                    <Input
+                      type="number"
+                      min={0}
+                      className="w-32"
+                      value={minSubjects}
+                      onChange={(e) => setMinSubjects(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-semibold">Max Subjects/Day</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      className="w-32"
+                      value={maxSubjects}
+                      onChange={(e) => setMaxSubjects(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-semibold">Max Hours/Day</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      step={0.5}
+                      className="w-32"
+                      value={maxHours}
+                      onChange={(e) => setMaxHours(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </Card.Content>
+            </Card>
+
             {/* Subject Groups & Passing Thresholds */}
             <Card className="@container/card w-full">
               <Card.Header className="flex flex-row justify-between items-start">
@@ -678,7 +772,7 @@ export default function AdminSystemSettings() {
                   >
                     Set the bounds for valid class schedules. Attempting to schedule classes outside these bounds will be rejected.
                   </Text>
-                  
+
                   <div className="flex items-center gap-4 mt-2">
                     <div className="flex flex-col gap-1 w-1/3">
                       <Text as="h6" className="font-sans font-medium text-sm">

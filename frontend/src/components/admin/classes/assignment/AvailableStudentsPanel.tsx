@@ -2,7 +2,6 @@ import { useDroppable } from "@dnd-kit/core";
 import { useMemo, useState } from "react";
 import type { ClassAssignmentStudent } from "@/types/adminClasses";
 import { matchesStudentSearch, sortAssignmentStudents } from "./studentSorting";
-import { retroButton } from "../utils";
 import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
 import GenderStudentTable from "./GenderStudentTable";

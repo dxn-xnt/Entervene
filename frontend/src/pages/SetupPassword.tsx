@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useAuth } from "@/context/AuthContext";
 import { Eye, EyeOff, Check, X, ShieldCheck } from "lucide-react";
+import { Button } from "@/components/retroui/Button";
+import { Input } from "@/components/retroui/Input";
+import { Card } from "@/components/retroui/Card";
 
 export default function SetupPassword() {
   const [params] = useSearchParams();
@@ -21,12 +24,11 @@ export default function SetupPassword() {
   if (!token) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f5f4f0]">
-        <div
-          className="w-full max-w-sm rounded-xl p-8 text-center shadow-[4px_5px_0_#000]"
-          style={{ background: "#faf9f6", border: "2px solid #e5e3de" }}
-        >
-          <p className="text-sm font-semibold text-red-600">Invalid or missing invitation link.</p>
-        </div>
+        <Card className="block w-full max-w-sm border-black bg-white p-8 text-center transition-none">
+          <p className="text-sm font-semibold text-red-600">
+            Invalid or missing invitation link.
+          </p>
+        </Card>
       </div>
     );
   }
@@ -34,7 +36,10 @@ export default function SetupPassword() {
   // Dynamic strength criteria checks
   const criteria = [
     { label: "A minimum of 8 characters", met: password.length >= 8 },
-    { label: "Lower and upper case letters", met: /[a-z]/.test(password) && /[A-Z]/.test(password) },
+    {
+      label: "Lower and upper case letters",
+      met: /[a-z]/.test(password) && /[A-Z]/.test(password),
+    },
     { label: "At least 1 number", met: /\d/.test(password) },
     { label: "At least 1 symbol", met: /[^A-Za-z0-9]/.test(password) },
   ];
@@ -43,7 +48,8 @@ export default function SetupPassword() {
   const isAllMet = metCount === criteria.length;
   const isPasswordActive = isPasswordFocused || password.length > 0;
   const isConfirmActive = isConfirmFocused || confirm.length > 0;
-  const isMatched = isConfirmActive && confirm.length > 0 && confirm === password;
+  const isMatched =
+    isConfirmActive && confirm.length > 0 && confirm === password;
 
   const getStrengthLabel = () => {
     if (password.length === 0) return "Weak";
@@ -91,7 +97,9 @@ export default function SetupPassword() {
             : "/student/subjects";
       navigate(dashboard, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Network error. Please try again.");
+      setError(
+        err instanceof Error ? err.message : "Network error. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -99,18 +107,18 @@ export default function SetupPassword() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#f5f4f0] p-4">
-      <div
-        className="w-full max-w-md rounded-xl p-8 shadow-[4px_5px_0_#000] transition-all"
-        style={{ background: "#faf9f6", border: "2px solid #e5e3de" }}
-      >
+      <Card className="block w-full max-w-md border-black bg-white p-8 transition-none">
         <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#79bd80] text-black shadow-[2px_2px_0_#000] border border-black">
+          <div className="flex h-10 w-10 items-center justify-center border-2 border-black bg-primary text-black shadow-md">
             <ShieldCheck className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Set your password</h1>
+            <h1 className="text-xl font-bold text-gray-900">
+              Set your password
+            </h1>
             <p className="text-xs text-gray-500">
-              You've been invited. Create a secure password to activate your account.
+              You've been invited. Create a secure password to activate your
+              account.
             </p>
           </div>
         </div>
@@ -118,16 +126,17 @@ export default function SetupPassword() {
         <div className="flex flex-col gap-5">
           {/* New Password Input */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-gray-700">Enter Password</label>
+            <label className="text-xs font-semibold text-gray-700">
+              Enter Password
+            </label>
             <div className="relative">
-              <input
+              <Input
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onFocus={() => setIsPasswordFocused(true)}
                 onBlur={() => setIsPasswordFocused(false)}
-                className="w-full rounded-lg border px-3.5 py-2.5 pr-10 text-sm outline-none transition focus:border-black focus:ring-1 focus:ring-black"
-                style={{ borderColor: "#ccc" }}
+                className="w-full rounded-none border-black !shadow-none h-10 pr-10 text-sm"
                 placeholder="Enter new password"
               />
               <button
@@ -136,31 +145,40 @@ export default function SetupPassword() {
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition"
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
               </button>
             </div>
           </div>
 
           {/* Dynamic Password Strength & Progress Line (smooth height & opacity expand/collapse) */}
           <div
-            className={`grid transition-all duration-300 ease-in-out ${isPasswordActive
+            className={`grid transition-all duration-300 ease-in-out ${
+              isPasswordActive
                 ? "grid-rows-[1fr] opacity-100 pointer-events-auto"
                 : "grid-rows-[0fr] opacity-0 pointer-events-none"
-              }`}
+            }`}
           >
             <div className="overflow-hidden">
-              <div className="rounded-lg border border-gray-200 bg-white p-4">
+              <div className="border-2 border-black bg-white p-4">
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500">Password strength</span>
-                  <span className={`text-xs font-bold ${getStrengthTextColor()}`}>
+                  <span className="text-xs font-medium text-gray-500">
+                    Password strength
+                  </span>
+                  <span
+                    className={`text-xs font-bold ${getStrengthTextColor()}`}
+                  >
                     {getStrengthLabel()}
                   </span>
                 </div>
 
                 {/* Line Progress Bar */}
-                <div className="mb-4 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                <div className="mb-4 h-2 w-full overflow-hidden border-2 border-black bg-gray-100">
                   <div
-                    className={`h-full rounded-full transition-all duration-300 ease-out ${getStrengthBarColor()}`}
+                    className={`h-full transition-all duration-300 ease-out ${getStrengthBarColor()}`}
                     style={{ width: `${(metCount / criteria.length) * 100}%` }}
                   />
                 </div>
@@ -170,16 +188,20 @@ export default function SetupPassword() {
                   {criteria.map((item, idx) => (
                     <li key={idx} className="flex items-center gap-2.5">
                       <span
-                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors duration-200 ${item.met
+                        className={`flex h-4 w-4 shrink-0 items-center justify-center border-2 border-black transition-colors duration-200 ${
+                          item.met
                             ? "bg-emerald-500 text-white"
-                            : "border border-gray-300 bg-gray-100 text-transparent"
-                          }`}
+                            : "bg-gray-100 text-transparent"
+                        }`}
                       >
                         <Check className="h-3 w-3 stroke-[3]" />
                       </span>
                       <span
-                        className={`transition-colors duration-200 ${item.met ? "font-medium text-gray-800" : "text-gray-500"
-                          }`}
+                        className={`transition-colors duration-200 ${
+                          item.met
+                            ? "font-medium text-gray-800"
+                            : "text-gray-500"
+                        }`}
                       >
                         {item.label}
                       </span>
@@ -192,39 +214,50 @@ export default function SetupPassword() {
 
           {/* Confirm Password Input */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-gray-700">Confirm Password</label>
+            <label className="text-xs font-semibold text-gray-700">
+              Confirm Password
+            </label>
             <div className="relative">
-              <input
+              <Input
                 type={showConfirm ? "text" : "password"}
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 onFocus={() => setIsConfirmFocused(true)}
                 onBlur={() => setIsConfirmFocused(false)}
-                className="w-full rounded-lg border px-3.5 py-2.5 pr-10 text-sm outline-none transition focus:border-black focus:ring-1 focus:ring-black"
-                style={{ borderColor: "#ccc" }}
+                className="w-full rounded-none border-black !shadow-none h-10 pr-10 text-sm"
                 placeholder="Re-enter password"
               />
               <button
                 type="button"
                 onClick={() => setShowConfirm(!showConfirm)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition"
-                aria-label={showConfirm ? "Hide confirm password" : "Show confirm password"}
+                aria-label={
+                  showConfirm
+                    ? "Hide confirm password"
+                    : "Show confirm password"
+                }
               >
-                {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showConfirm ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
               </button>
             </div>
 
             {/* Match / Unmatch status text dependent on active input with smooth transition */}
             <div
-              className={`grid transition-all duration-300 ease-in-out ${isConfirmActive && confirm.length > 0
+              className={`grid transition-all duration-300 ease-in-out ${
+                isConfirmActive && confirm.length > 0
                   ? "grid-rows-[1fr] opacity-100"
                   : "grid-rows-[0fr] opacity-0"
-                }`}
+              }`}
             >
               <div className="overflow-hidden">
                 <p
-                  className={`mt-1 flex items-center gap-1.5 text-xs font-semibold ${isMatched ? "text-emerald-600" : "text-red-500"
-                    }`}
+                  className={`mt-1 flex items-center gap-1.5 text-xs font-semibold ${
+                    isMatched ? "text-emerald-600" : "text-red-500"
+                  }`}
                 >
                   {isMatched ? (
                     <>
@@ -243,7 +276,7 @@ export default function SetupPassword() {
           </div>
 
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-600">
+            <div className="border-2 border-red-600 bg-red-50 p-3 text-xs text-red-600">
               {error}
             </div>
           )}
@@ -251,12 +284,12 @@ export default function SetupPassword() {
           <button
             onClick={handleSubmit}
             disabled={loading || !isAllMet || !isMatched}
-            className="mt-1 w-full rounded-lg border-2 border-black bg-[#79bd80] py-2.5 text-sm font-semibold shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[3px_3px_0_#000]"
+            className="mt-1 w-full rounded-none border-2 border-black bg-primary py-2.5 text-sm font-semibold shadow-md transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[3px_3px_0_#000]"
           >
             {loading ? "Activating..." : "Activate Account"}
           </button>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

@@ -572,7 +572,7 @@ export default function AddSubjectModal({
                 <Select.Value placeholder="Select group" />
               </Select.Trigger>
               <Select.Content
-                position="item-aligned"
+                position="popper"
                 className="max-h-72 overflow-y-auto"
               >
                 <Select.Group>

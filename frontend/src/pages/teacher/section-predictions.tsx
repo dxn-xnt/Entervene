@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
-import { type GradeGroup } from "@/components/predictions/prediction-grade-section";
 import { useAuth } from "@/context/AuthContext";
 import type {
   DashboardAtRiskResponse,
@@ -30,12 +29,6 @@ const EMPTY_SUMMARY: RiskSummary = {
   total: 0,
 };
 
-const MOCK_GRADE_GROUPS: GradeGroup[] = [
-  { grade: 7, classes: ["Rizal", "Mabini", "Luna"], highRisk: 8, monitoring: 14 },
-  { grade: 8, classes: ["Bonifacio", "Del Pilar"], highRisk: 5, monitoring: 9 },
-  { grade: 9, classes: ["Aguinaldo", "Jacinto", "Silang"], highRisk: 12, monitoring: 7 },
-  { grade: 10, classes: ["Lapu-Lapu", "Tupas"], highRisk: 3, monitoring: 11 },
-];
 
 const RISK_CARDS = [
   {
