@@ -316,7 +316,7 @@ export default function LessonClassworkList({
                           <div className="flex min-w-0 items-center gap-3">
                             <FileText size={20} />
                             <div className="min-w-0">
-                              <p className="truncate text-lg font-bold">
+                              <p className="text-sm md:text-base font-bold text-black line-clamp-2 break-words [overflow-wrap:anywhere]">
                                 {classwork.title}
                               </p>
                               <p className="text-xs font-medium text-gray-700">

@@ -1238,18 +1238,18 @@ export default function SubjectClassworkTab({
               <div className="flex w-full items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Icon size={20} />
-                    <Card.Description className="truncate font-semibold text-black">
+                    <Icon size={20} className="shrink-0" />
+                    <span className="font-semibold text-base text-black line-clamp-2 break-words [overflow-wrap:anywhere]">
                       {cw.title}
-                    </Card.Description>
+                    </span>
                     <span
-                      className={`rounded-full border px-2.5 py-1 text-xs font-bold ${badge.cls}`}
+                      className={`rounded-full border px-2.5 py-1 text-xs font-bold shrink-0 ${badge.cls}`}
                     >
                       {badge.label}
                     </span>
                     {deadline && (
                       <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-bold ${deadline.cls}`}
+                        className={`rounded-full px-2.5 py-1 text-xs font-bold shrink-0 ${deadline.cls}`}
                       >
                         {deadline.label}
                       </span>

@@ -115,6 +115,7 @@ export default function Classworks() {
   const [activeTab, setActiveTab] = useState<TabId>("all");
   const [search, setSearch] = useState("");
   const [subjectFilter, setSubjectFilter] = useState("all");
+  const [classFilter, setClassFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [showFilters, setShowFilters] = useState(false);
@@ -197,6 +198,19 @@ export default function Classworks() {
     [loads],
   );
 
+  const classSections = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          loads.map((load) => [
+            load.class_id,
+            { id: load.class_id, name: load.section_name },
+          ]),
+        ).values(),
+      ).sort((a, b) => a.name.localeCompare(b.name)),
+    [loads],
+  );
+
   const filteredItems = useMemo(() => {
     const targetType = tabType[activeTab];
     const normalizedSearch = search.trim().toLowerCase();
@@ -209,10 +223,19 @@ export default function Classworks() {
         item.subject_name?.toLowerCase().includes(normalizedSearch);
       const matchesSubject =
         subjectFilter === "all" || item.subject_id === Number(subjectFilter);
+      const matchesClass =
+        classFilter === "all" ||
+        item.assignments?.some((a) => a.class_id === Number(classFilter));
       const matchesStatus =
         statusFilter === "all" ||
         (statusFilter === "published" ? item.is_published : !item.is_published);
-      return matchesType && matchesSearch && matchesSubject && matchesStatus;
+      return (
+        matchesType &&
+        matchesSearch &&
+        matchesSubject &&
+        matchesClass &&
+        matchesStatus
+      );
     });
 
     return result.sort((a, b) => {
@@ -221,7 +244,7 @@ export default function Classworks() {
       const second = new Date(b.created_at ?? 0).getTime();
       return sortMode === "oldest" ? first - second : second - first;
     });
-  }, [activeTab, items, search, sortMode, statusFilter, subjectFilter]);
+  }, [activeTab, classFilter, items, search, sortMode, statusFilter, subjectFilter]);
 
   const openCreateWizard = () => {
     const preferredType = tabType[activeTab] as ClassworkKind | undefined;
@@ -1819,6 +1842,22 @@ export default function Classworks() {
                 </Badge>
               )}
 
+              {classFilter !== "all" && (
+                <Badge
+                  variant="secondary"
+                  size="sm"
+                  className="flex w-fit items-center gap-2"
+                  onClick={() => setClassFilter("all")}
+                >
+                  {
+                    classSections.find(
+                      (section) => section.id === Number(classFilter),
+                    )?.name
+                  }
+                  <X size={13} />
+                </Badge>
+              )}
+
               {statusFilter !== "all" && (
                 <Badge
                   variant="secondary"
@@ -1833,7 +1872,7 @@ export default function Classworks() {
             </div>
 
             {showFilters && (
-              <section className="grid gap-3 rounded-lg border border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:grid-cols-2">
+              <section className="grid gap-3 rounded-lg border border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:grid-cols-3">
                 <label className="text-xs font-bold">
                   Subject
                   <select
@@ -1845,6 +1884,21 @@ export default function Classworks() {
                     {subjects.map((subject) => (
                       <option key={subject.id} value={subject.id}>
                         {subject.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-xs font-bold">
+                  Section / Class
+                  <select
+                    value={classFilter}
+                    onChange={(event) => setClassFilter(event.target.value)}
+                    className="mt-1 w-full rounded border border-gray-700 bg-white px-3 py-2 text-sm font-medium"
+                  >
+                    <option value="all">All sections</option>
+                    {classSections.map((section) => (
+                      <option key={section.id} value={section.id}>
+                        {section.name}
                       </option>
                     ))}
                   </select>
