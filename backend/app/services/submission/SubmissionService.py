@@ -118,6 +118,7 @@ def build_submission_response(submission, db: Session) -> SubmissionResponse:
         attempt_count=submission.attempt_count,
         graded_at=submission.graded_at,
         graded_by_staff_id=submission.graded_by_staff_id,
+        reading_focused_seconds=getattr(submission, "reading_focused_seconds", None),
         attachments=[build_attachment_response(attachment) for attachment in submission.attachments],
         total_points=float(classwork.total_points) if classwork and classwork.total_points is not None else None,
         created_at=submission.created_at,
@@ -372,6 +373,54 @@ def complete_reading_assignment(
         submitted_at=now,
         status="submitted",
         attempt_count=1,
+    )
+    db.add(submission)
+    db.commit()
+    db.refresh(submission)
+    return build_submission_response(submission, db)
+
+
+def record_reading_focus(
+    assignment_id: int,
+    focused_seconds: int,
+    student: Student,
+    db: Session,
+) -> SubmissionResponse:
+    if focused_seconds <= 0:
+        raise HTTPException(status_code=400, detail="focused_seconds must be positive")
+    assignment = db.query(ClassworkAssignment).filter(
+        ClassworkAssignment.classwork_assignment_id == assignment_id
+    ).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
+    if not classwork or classwork.is_archived:
+        raise HTTPException(status_code=404, detail="Classwork not found")
+    enrollment = db.query(StudentClass).filter(
+        StudentClass.student_id == student.student_id,
+        StudentClass.class_id == assignment.class_id,
+        StudentClass.enrollment_status == "enrolled",
+    ).first()
+    if not enrollment:
+        raise HTTPException(status_code=403, detail="Not enrolled in this class")
+
+    existing = db.query(StudentSubmission).filter(
+        StudentSubmission.classwork_assignment_id == assignment_id,
+        StudentSubmission.student_id == student.student_id,
+    ).first()
+
+    if existing:
+        existing.reading_focused_seconds = (existing.reading_focused_seconds or 0) + focused_seconds
+        db.commit()
+        db.refresh(existing)
+        return build_submission_response(existing, db)
+
+    submission = StudentSubmission(
+        student_id=student.student_id,
+        classwork_assignment_id=assignment_id,
+        status="pending",
+        reading_focused_seconds=focused_seconds,
+        attempt_count=0,
     )
     db.add(submission)
     db.commit()

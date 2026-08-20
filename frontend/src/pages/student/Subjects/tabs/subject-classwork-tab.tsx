@@ -22,6 +22,7 @@ import { Alert } from "@/components/retroui/Alert";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Badge } from "@/components/retroui/Badge";
 import { API_URL, apiFetch } from "@/lib/api";
+import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 
 interface Attachment {
   classwork_attachment_id: number;
@@ -272,6 +273,14 @@ export default function SubjectClassworkTab({
     ((autoSubmit?: boolean) => Promise<void>) | null
   >(null);
   const [detailError, setDetailError] = useState("");
+
+  const isReadingActive = Boolean(
+    selectedClasswork && isReadingType(selectedClasswork.classwork_type),
+  );
+  useReadingFocusTracker(
+    selectedClasswork?.classwork_assignment_id,
+    isReadingActive,
+  );
 
   const fetchClassworks = useCallback(async () => {
     if (!classId || !subjectId) return;

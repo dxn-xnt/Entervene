@@ -19,6 +19,7 @@ import SubmissionForm from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
 import { StudentLessonDetailScreen } from "@/components/student-lesson-detail-screen";
 import { API_URL, apiFetch } from "@/lib/api";
+import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -283,6 +284,14 @@ export default function SubjectLessonTab({
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [detailError, setDetailError] = useState("");
+
+  const isReadingActive = Boolean(
+    selectedClasswork && isReadingType(selectedClasswork.classwork_type),
+  );
+  useReadingFocusTracker(
+    selectedClasswork?.classwork_assignment_id,
+    isReadingActive,
+  );
   const [subjectInfo, setSubjectInfo] = useState<{
     subject_name: string;
     teacher_name: string;

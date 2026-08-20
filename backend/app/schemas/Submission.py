@@ -25,6 +25,7 @@ class SubmissionResponse(BaseModel):
     attempt_count: int
     graded_at: Optional[datetime] = None
     graded_by_staff_id: Optional[str] = None
+    reading_focused_seconds: Optional[int] = None
     attachments: list[SubmissionAttachmentResponse] = []
     total_points: Optional[float] = None
     created_at: Optional[datetime] = None
@@ -33,3 +34,7 @@ class SubmissionResponse(BaseModel):
 class GradeRequest(BaseModel):
     grade: float
     feedback: Optional[str] = None
+
+
+class ReadingFocusPayload(BaseModel):
+    focused_seconds: int
