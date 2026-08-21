@@ -250,3 +250,143 @@ def test_batch_save_multi_slot_subject_loads(db):
     ).all()
     assert len(db_loads) == 2
 
+
+def test_publish_section_isolated_conflicts(db):
+    user_id_obj = uuid.uuid4()
+    admin_user = UserAccount(user_id=user_id_obj, email="admin_section_pub@example.com", account_status="active")
+    db.add(admin_user)
+    db.commit()
+
+    token = create_access_token(str(user_id_obj), "admin")
+
+    year = AcademicYear(year_label="2025-2026", start_date=date(2025, 6, 1), end_date=date(2026, 3, 31), is_active=True)
+    db.add(year)
+    db.flush()
+
+    period = AcademicPeriod(
+        academic_year_id=year.academic_year_id,
+        period_name="Term 1",
+        period_sequence=1,
+        start_date=date(2025, 6, 1),
+        end_date=date(2025, 9, 30),
+        is_active=True,
+    )
+    db.add(period)
+    db.flush()
+
+    level = AcademicLevel(level_name="Grade 7", grade_level=7)
+    db.add(level)
+    db.flush()
+
+    cls1 = Class(section_name="7-Diamond", academic_level_id=level.academic_level_id, academic_year_id=year.academic_year_id, class_status="active")
+    cls2 = Class(section_name="7-Sapphire", academic_level_id=level.academic_level_id, academic_year_id=year.academic_year_id, class_status="active")
+    db.add_all([cls1, cls2])
+    db.flush()
+
+    sub1 = Subject(subject_name="Math 7", subject_codename="M7", hours=60, academic_level_id=level.academic_level_id, status="active")
+    sub2 = Subject(subject_name="Science 7", subject_codename="S7", hours=60, academic_level_id=level.academic_level_id, status="active")
+    db.add_all([sub1, sub2])
+    db.flush()
+
+    staff1 = AcademicStaff(staff_id="STF1001", first_name="John", last_name="Doe", employment_status="active")
+    staff2 = AcademicStaff(staff_id="STF1002", first_name="Jane", last_name="Roe", employment_status="active")
+    db.add_all([staff1, staff2])
+    db.commit()
+
+    client = TestClient(app)
+
+    # Payload has Section 1 (cls1) completely valid, and Section 2 (cls2) has an overlap error
+    payload = {
+        "academic_period_id": period.academic_period_id,
+        "academic_level_id": level.academic_level_id,
+        "action": "publish",
+        "publish_scope": "section",
+        "target_class_id": cls1.class_id,
+        "loads": [
+            # Section 1 (clean)
+            {
+                "class_id": cls1.class_id,
+                "subject_id": sub1.subject_id,
+                "staff_id": staff1.staff_id,
+                "academic_period_id": period.academic_period_id,
+                "start_time": "08:00",
+                "end_time": "09:00",
+                "days_of_week": ["MON", "TUE", "WED", "THU", "FRI"],
+                "status": "draft",
+            },
+            # Section 2 (overlapping same teacher/time in same class)
+            {
+                "class_id": cls2.class_id,
+                "subject_id": sub1.subject_id,
+                "staff_id": staff2.staff_id,
+                "academic_period_id": period.academic_period_id,
+                "start_time": "10:00",
+                "end_time": "11:00",
+                "days_of_week": ["MON"],
+                "status": "draft",
+            },
+            {
+                "class_id": cls2.class_id,
+                "subject_id": sub2.subject_id,
+                "staff_id": staff2.staff_id,
+                "academic_period_id": period.academic_period_id,
+                "start_time": "10:00",
+                "end_time": "11:00",
+                "days_of_week": ["MON"],
+                "status": "draft",
+            },
+        ],
+    }
+
+    # Publishing Section 1 must succeed even though Section 2 has conflicts
+    res = client.post(
+        "/api/v1/subject-loads/batch-save",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 200
+
+    # Verify Section 1 load is published and locked
+    sl1 = db.query(SubjectLoad).filter(SubjectLoad.class_id == cls1.class_id).first()
+    assert sl1.status == "published"
+    assert sl1.is_locked is True
+
+    # Verify Section 2 loads remained in draft
+    sl2_loads = db.query(SubjectLoad).filter(SubjectLoad.class_id == cls2.class_id).all()
+    for sl2 in sl2_loads:
+        assert sl2.status == "draft"
+        assert sl2.is_locked is False
+
+    # Now test unlocking Section 1
+    unlock_payload = {
+        "academic_period_id": period.academic_period_id,
+        "academic_level_id": level.academic_level_id,
+        "action": "draft",
+        "publish_scope": "section",
+        "target_class_id": cls1.class_id,
+        "loads": [
+            {
+                "subject_load_id": sl1.subject_load_id,
+                "class_id": cls1.class_id,
+                "subject_id": sub1.subject_id,
+                "staff_id": staff1.staff_id,
+                "academic_period_id": period.academic_period_id,
+                "start_time": "08:00",
+                "end_time": "09:00",
+                "days_of_week": ["MON", "TUE", "WED", "THU", "FRI"],
+                "status": "published",
+            }
+        ],
+    }
+    unlock_res = client.post(
+        "/api/v1/subject-loads/batch-save",
+        json=unlock_payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert unlock_res.status_code == 200
+
+    db.refresh(sl1)
+    assert sl1.status == "draft"
+    assert sl1.is_locked is False
+
+

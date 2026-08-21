@@ -486,18 +486,18 @@ def batch_save_subject_loads(
 
     # Determine target class IDs based on publish scope
     target_class_ids: set[int] = set()
-    if is_publishing:
-        scope = payload.publish_scope or "all"
-        if scope == "level":
-            target_lvl = payload.target_level_id or payload.academic_level_id
-            matching_classes = db.query(Class.class_id).filter(Class.academic_level_id == target_lvl).all()
-            target_class_ids = {c[0] for c in matching_classes}
-        elif scope == "section" and payload.target_class_id is not None:
-            target_class_ids = {payload.target_class_id}
-        else:
-            # "all" scope
-            target_class_ids = set(affected_class_ids)
+    scope = payload.publish_scope or "all"
+    if scope == "level":
+        target_lvl = payload.target_level_id or payload.academic_level_id
+        matching_classes = db.query(Class.class_id).filter(Class.academic_level_id == target_lvl).all()
+        target_class_ids = {c[0] for c in matching_classes}
+    elif scope == "section" and payload.target_class_id is not None:
+        target_class_ids = {payload.target_class_id}
+    else:
+        # "all" scope
+        target_class_ids = set(affected_class_ids)
 
+    if is_publishing:
         # Enforce that all subject loads within target_class_ids have assigned teachers
         unassigned_in_target: list[str] = []
         for load_item in merged_validation_loads:
@@ -519,12 +519,30 @@ def batch_save_subject_loads(
 
     validation_res = ConflictDetectorService.validate_loads(db=db, loads=merged_validation_loads, academic_period=period)
     
-    # If action is publish and there are error-level conflicts, block publication
-    if payload.action == "publish" and not validation_res.is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot publish schedule with unresolved conflicts. Please fix all errors before publishing.",
-        )
+    # If action is publish and there are error-level conflicts in the target scope, block publication
+    if is_publishing:
+        if scope in ("section", "level") and target_class_ids:
+            target_staff_ids = {
+                load.staff_id for load in merged_validation_loads
+                if load.class_id in target_class_ids and load.staff_id
+            }
+            target_conflicts = [
+                c for c in validation_res.conflicts
+                if c.severity == "error" and (
+                    (c.class_id is not None and c.class_id in target_class_ids)
+                    or (c.affected_key and any(c.affected_key.startswith(f"{cid}_") for cid in target_class_ids))
+                    or (c.staff_id is not None and c.staff_id in target_staff_ids and c.rule in ("TEACHER_OVERLAP", "DAILY_WORKLOAD_EXCEEDED"))
+                )
+            ]
+        else:
+            target_conflicts = [c for c in validation_res.conflicts if c.severity == "error"]
+
+        if target_conflicts:
+            sample_err = target_conflicts[0].message
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot publish schedule with unresolved conflicts: {sample_err}",
+            )
 
 
     existing_db_affected = [sl for sl in db_all_period_loads if sl.class_id in affected_class_ids]
@@ -557,14 +575,20 @@ def batch_save_subject_loads(
         db_load.last_modified_by = user_email
         db_load.continued_from_load_id = load_item.continued_from_load_id
 
-        should_publish_this_load = is_publishing and (load_item.class_id in target_class_ids) and bool(load_item.staff_id)
-        if should_publish_this_load:
+        in_target_scope = (load_item.class_id in target_class_ids)
+
+        if is_publishing and in_target_scope and bool(load_item.staff_id):
             db_load.status = "published"
             db_load.is_locked = True
             db_load.locked_at = now_time
             db_load.published_at = now_time
             db_load.published_by = user_email
-        elif payload.action == "draft" or not load_item.staff_id:
+        elif payload.action == "draft" and in_target_scope:
+            db_load.status = "draft"
+            db_load.is_locked = False
+            db_load.published_at = None
+            db_load.published_by = None
+        elif not load_item.staff_id:
             db_load.status = "draft"
             db_load.is_locked = False
             db_load.published_at = None
