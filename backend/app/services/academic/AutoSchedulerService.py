@@ -26,71 +26,53 @@ def is_math_or_science_subject(item: SubjectLoadItem, subjects_map: dict[int, Su
     sub = subjects_map.get(item.subject_id)
     if not sub:
         return False
-    if getattr(sub, "is_math_or_science", False):
-        return True
-    name = (sub.subject_name or "").lower()
-    code = (sub.subject_codename or "").lower()
-    keywords = ["math", "mathematics", "science", "physics", "chemistry", "biology"]
-    return any(k in name or k in code for k in keywords)
+    return bool(getattr(sub, "is_math_or_science", False))
 
 
 class AutoSchedulerService:
 
     @staticmethod
+    def get_group_template_slots(
+        template_group: str,
+        db: Session,
+    ) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]]:
+        """
+        Dynamically fetches (enhanced_slots, standard_class_slots, break_slots) from the DB.
+        """
+        db_slots = (
+            db.query(PeriodTemplateSlot)
+            .filter(PeriodTemplateSlot.template_group == template_group)
+            .order_by(PeriodTemplateSlot.display_order)
+            .all()
+        )
+        if not db_slots:
+            raise ValueError(f"No period template slots found in database for group: {template_group}")
+
+        enhanced_slots: list[tuple[str, str]] = []
+        standard_slots: list[tuple[str, str]] = []
+        break_slots: list[tuple[str, str]] = []
+
+        for s in db_slots:
+            if s.is_locked_break:
+                break_slots.append((s.start_time, s.end_time))
+            elif s.slot_type == "CLASS":
+                if (s.slot_name or "").lower().startswith("enhanced"):
+                    enhanced_slots.append((s.start_time, s.end_time))
+                else:
+                    standard_slots.append((s.start_time, s.end_time))
+
+        return enhanced_slots, standard_slots, break_slots
+
+    @staticmethod
     def get_group_periods(group_name: str | None, section_name: str = "", db: Session | None = None) -> list[tuple[str, str]]:
-        name_lower = section_name.lower()
-        group = (group_name or "").upper()
-        
-        target_group = "JHS_45MIN"
-        if "campos" in name_lower or "zara" in name_lower or group == "SHS_CAMPOS_ZARA":
-            target_group = "SHS_CAMPOS_ZARA"
-        elif "del mundo" in name_lower or "reyes" in name_lower or group == "SHS_DELMUNDO_REYES":
-            target_group = "SHS_DELMUNDO_REYES"
-
-        if db:
-            db_slots = (
-                db.query(PeriodTemplateSlot)
-                .filter(
-                    PeriodTemplateSlot.template_group == target_group,
-                    PeriodTemplateSlot.slot_type == "CLASS",
-                )
-                .order_by(PeriodTemplateSlot.display_order)
-                .all()
-            )
-            if db_slots:
-                return [(s.start_time, s.end_time) for s in db_slots]
-
-        if target_group == "SHS_CAMPOS_ZARA":
-            return [
-                ("08:00", "09:00"),
-                ("09:00", "10:00"),
-                ("10:24", "12:00"),  # 96m Lab Block
-                ("13:00", "14:00"),
-                ("14:00", "15:00"),
-                ("15:30", "16:30"),
-            ]
-        elif target_group == "SHS_DELMUNDO_REYES":
-            return [
-                ("08:00", "09:12"),  # 72m
-                ("09:12", "10:24"),  # 72m
-                ("10:48", "12:00"),  # 72m
-                ("13:00", "14:12"),  # 72m
-                ("14:12", "15:24"),  # 72m
-                ("15:50", "16:50"),  # 60m PE
-            ]
-        else:
-            # JHS 45-min standard + 60-min Enhanced (13:00-14:00, 14:00-15:00)
-            return [
-                ("08:00", "08:45"),
-                ("08:45", "09:30"),
-                ("09:45", "10:30"),
-                ("10:30", "11:15"),
-                ("11:15", "12:00"),
-                ("13:00", "14:00"),  # Enhanced 1 (Math/Science 1-hr)
-                ("14:00", "15:00"),  # Enhanced 2 (Math/Science 1-hr)
-                ("15:30", "16:15"),
-                ("16:15", "17:00"),
-            ]
+        """
+        Helper returning all CLASS slots for a given template group.
+        """
+        if not db:
+            raise ValueError("A database session is required to fetch period template slots.")
+        target_group = group_name or "JHS_45MIN"
+        enhanced, standard, _ = AutoSchedulerService.get_group_template_slots(target_group, db)
+        return standard + enhanced
 
     @staticmethod
     def auto_schedule_paired_swap(
@@ -99,10 +81,7 @@ class AutoSchedulerService:
         academic_period=None,
     ) -> list[SubjectLoadItem]:
         """
-        Executes CTU Paired Section Teacher-Swap scheduling logic:
-        Pairs sections (e.g. Aristotle <-> Galileo) and alternates teachers back-to-back
-        period by period with zero idle time and zero section overlap.
-        For JHS (Grades 7-10), Math and Science are routed to the 1-hr Enhanced periods (13:00-14:00 / 14:00-15:00) 5 days/week.
+        Executes CTU Paired Section Teacher-Swap scheduling logic dynamically from DB template slots.
         """
         all_subjects = db.query(Subject).all()
         subjects_map = {s.subject_id: s for s in all_subjects}
@@ -111,7 +90,6 @@ class AutoSchedulerService:
         classes = db.query(Class).filter(Class.class_id.in_(class_ids)).all() if class_ids else []
         classes_map = {c.class_id: c for c in classes}
 
-        # Identify pairs
         pairs: list[tuple[int, int]] = []
         visited = set()
 
@@ -123,7 +101,6 @@ class AutoSchedulerService:
                 visited.add(c.class_id)
                 visited.add(c.paired_class_id)
 
-        # Fallback: if explicit paired_class_id is not set, pair classes with same academic_level_id
         if not pairs and len(classes) >= 2:
             by_level: dict[int, list[int]] = {}
             for c in classes:
@@ -134,111 +111,71 @@ class AutoSchedulerService:
                     visited.add(c_list[k])
                     visited.add(c_list[k + 1])
 
-        days_5_pattern = ["MON", "TUE", "WED", "THU", "FRI"]
-        days_split_a = ["MON", "WED", "FRI"]
-        days_split_b = ["TUE", "THU"]
+        unpaired_ids = [c.class_id for c in classes if c.class_id not in visited]
 
-        # Apply paired swap logic to identified pairs
+        DAYS_5 = ["MON", "TUE", "WED", "THU", "FRI"]
+        DAYS_MWF = ["MON", "WED", "FRI"]
+        DAYS_TTH = ["TUE", "THU"]
+
         for c1_id, c2_id in pairs:
-            c1_obj = classes_map.get(c1_id)
-            c1_name = c1_obj.section_name if c1_obj else ""
-            c1_group = getattr(c1_obj, "period_template_group", None)
-            is_shs = "campos" in c1_name.lower() or "zara" in c1_name.lower() or "reyes" in c1_name.lower() or "del mundo" in c1_name.lower()
-
-            periods = AutoSchedulerService.get_group_periods(c1_group, c1_name, db)
-
             c1_loads = [l for l in loads if l.class_id == c1_id]
             c2_loads = [l for l in loads if l.class_id == c2_id]
+            c1_obj = classes_map.get(c1_id)
+            c1_group = getattr(c1_obj, "period_template_group", None) or "JHS_45MIN"
 
-            if not is_shs:
-                # Separate JHS Math/Science loads from general loads
+            enhanced_slots, standard_periods, _ = AutoSchedulerService.get_group_template_slots(c1_group, db)
+
+            if enhanced_slots:
                 c1_math_sci = [l for l in c1_loads if is_math_or_science_subject(l, subjects_map)]
                 c2_math_sci = [l for l in c2_loads if is_math_or_science_subject(l, subjects_map)]
 
-                c1_general = [l for l in c1_loads if l not in c1_math_sci]
-                c2_general = [l for l in c2_loads if l not in c2_math_sci]
+                c1_assigned_enh = c1_math_sci[:len(enhanced_slots)]
+                c2_assigned_enh = c2_math_sci[:len(enhanced_slots)]
 
-                # Assign Math & Science loads to 1-hr Enhanced periods (13:00-14:00 & 14:00-15:00) 5 days/week
-                enhanced_slots = [("13:00", "14:00"), ("14:00", "15:00")]
-                for idx, item in enumerate(c1_math_sci):
+                for idx, item in enumerate(c1_assigned_enh):
                     slot = enhanced_slots[idx % len(enhanced_slots)]
                     item.start_time = slot[0]
                     item.end_time = slot[1]
-                    item.days_of_week = days_5_pattern
+                    item.days_of_week = DAYS_5
                     item.is_math_or_science = True
 
-                for idx, item in enumerate(c2_math_sci):
-                    # Swap Enhanced Period for Section 2 (Enhanced Period 2 first, then Enhanced Period 1)
+                for idx, item in enumerate(c2_assigned_enh):
                     slot = enhanced_slots[(idx + 1) % len(enhanced_slots)]
                     item.start_time = slot[0]
                     item.end_time = slot[1]
-                    item.days_of_week = days_5_pattern
+                    item.days_of_week = DAYS_5
                     item.is_math_or_science = True
 
-                # Exclude enhanced 13:00-15:00 slots from general period pool for JHS
-                standard_periods = [p for p in periods if p not in enhanced_slots]
-
-                # Distribute general loads into standard 45-min slots with swap mechanics
-                min_gen_len = min(len(c1_general), len(c2_general))
-                for idx in range(min_gen_len):
-                    p1_start, p1_end = standard_periods[idx % len(standard_periods)]
-                    p2_start, p2_end = standard_periods[(idx + 1) % len(standard_periods)]
-
-                    days_choice = days_split_a if idx % 2 == 0 else days_split_b
-
-                    if idx % 2 == 0:
-                        c1_general[idx].start_time = p1_start
-                        c1_general[idx].end_time = p1_end
-                        c1_general[idx].days_of_week = days_choice
-
-                        c2_general[idx].start_time = p2_start
-                        c2_general[idx].end_time = p2_end
-                        c2_general[idx].days_of_week = days_choice
-                    else:
-                        c1_general[idx].start_time = p2_start
-                        c1_general[idx].end_time = p2_end
-                        c1_general[idx].days_of_week = days_choice
-
-                        c2_general[idx].start_time = p1_start
-                        c2_general[idx].end_time = p1_end
-                        c2_general[idx].days_of_week = days_choice
-
-                # For remaining unassigned general loads, assign standard periods
-                for idx, item in enumerate(c1_general[min_gen_len:]):
-                    p_start, p_end = standard_periods[idx % len(standard_periods)]
-                    item.start_time = p_start
-                    item.end_time = p_end
-                    item.days_of_week = days_split_a if idx % 2 == 0 else days_split_b
-
-                for idx, item in enumerate(c2_general[min_gen_len:]):
-                    p_start, p_end = standard_periods[(idx + 1) % len(standard_periods)]
-                    item.start_time = p_start
-                    item.end_time = p_end
-                    item.days_of_week = days_split_a if idx % 2 == 0 else days_split_b
-
+                c1_general = [l for l in c1_loads if l not in c1_assigned_enh]
+                c2_general = [l for l in c2_loads if l not in c2_assigned_enh]
             else:
-                # Standard SHS swap
-                min_len = min(len(c1_loads), len(c2_loads))
-                for idx in range(min_len):
-                    p1_start, p1_end = periods[idx % len(periods)]
-                    p2_start, p2_end = periods[(idx + 1) % len(periods)]
+                c1_general = c1_loads
+                c2_general = c2_loads
 
-                    if idx % 2 == 0:
-                        c1_loads[idx].start_time = p1_start
-                        c1_loads[idx].end_time = p1_end
-                        c1_loads[idx].days_of_week = days_5_pattern[:3]
+            # Sort general loads by is_core first
+            c1_general.sort(key=lambda l: (not bool(getattr(subjects_map.get(l.subject_id), "is_core", False)), l.subject_id))
+            c2_general.sort(key=lambda l: (not bool(getattr(subjects_map.get(l.subject_id), "is_core", False)), l.subject_id))
 
-                        c2_loads[idx].start_time = p2_start
-                        c2_loads[idx].end_time = p2_end
-                        c2_loads[idx].days_of_week = days_5_pattern[:3]
-                    else:
-                        c1_loads[idx].start_time = p2_start
-                        c1_loads[idx].end_time = p2_end
-                        c1_loads[idx].days_of_week = days_5_pattern[:3]
+            for idx, item in enumerate(c1_general):
+                if standard_periods:
+                    p = standard_periods[idx % len(standard_periods)]
+                    pattern = DAYS_5 if idx < len(standard_periods) else (DAYS_MWF if idx % 2 == 0 else DAYS_TTH)
+                    item.start_time = p[0]
+                    item.end_time = p[1]
+                    item.days_of_week = pattern
 
-                        c2_loads[idx].start_time = p1_start
-                        c2_loads[idx].end_time = p1_end
-                        c2_loads[idx].days_of_week = days_5_pattern[:3]
+            for idx, item in enumerate(c2_general):
+                if standard_periods:
+                    shift = 1 if len(standard_periods) > 1 else 0
+                    p = standard_periods[(idx + shift) % len(standard_periods)]
+                    pattern = DAYS_5 if idx < len(standard_periods) else (DAYS_TTH if idx % 2 == 0 else DAYS_MWF)
+                    item.start_time = p[0]
+                    item.end_time = p[1]
+                    item.days_of_week = pattern
+
+        if unpaired_ids:
+            unpaired_loads = [l for l in loads if l.class_id in unpaired_ids]
+            AutoSchedulerService.auto_schedule_loads(db=db, loads=unpaired_loads, academic_period=academic_period)
 
         return loads
 
@@ -250,7 +187,12 @@ class AutoSchedulerService:
     ) -> list[SubjectLoadItem]:
         """
         Automatically places start_time, end_time, and days_of_week for subject loads.
-        Math and Science subjects in JHS (Grades 7-10) are allocated 1-hr Enhanced slots 5 days/week (MON-FRI).
+        - Strictly DB-driven: queries period_template_slot per section's period_template_group.
+        - Core Math & Science (is_math_or_science=True in DB) route to DB-defined Enhanced slots.
+        - General subjects prioritize is_core=True for full 5-day slots (DAYS_5).
+        - Non-core / electives split across DAYS_MWF and DAYS_TTH when period capacity requires.
+        - Locked / published sections and loads are preserved intact and treated as fixed constraints.
+        - Shared teachers are staggered across sections to guarantee zero double-booking.
         """
         all_subjects = db.query(Subject).all()
         subjects_map = {s.subject_id: s for s in all_subjects}
@@ -263,42 +205,170 @@ class AutoSchedulerService:
         )
 
         DAYS_5 = ["MON", "TUE", "WED", "THU", "FRI"]
+        DAYS_MWF = ["MON", "WED", "FRI"]
+        DAYS_TTH = ["TUE", "THU"]
+
+        def is_item_locked(item: SubjectLoadItem) -> bool:
+            return bool(getattr(item, "is_locked", False) or getattr(item, "status", "") == "published")
+
+        # Track busy teacher schedules (from locked loads and newly scheduled loads)
+        teacher_busy: dict[str, list[tuple[list[str], str, str]]] = {}
+        for load in loads:
+            if is_item_locked(load) and load.staff_id and load.start_time and load.end_time and load.days_of_week:
+                teacher_busy.setdefault(str(load.staff_id), []).append(
+                    (load.days_of_week, load.start_time, load.end_time)
+                )
 
         loads_by_class: dict[int, list[SubjectLoadItem]] = {}
         for load in loads:
             loads_by_class.setdefault(load.class_id, []).append(load)
 
         for cid, class_loads in loads_by_class.items():
+            unlocked_class_loads = [l for l in class_loads if not is_item_locked(l)]
+            if not unlocked_class_loads:
+                continue
+
             c_obj = classes_map.get(cid)
-            c_name = c_obj.section_name if c_obj else ""
-            c_group = getattr(c_obj, "period_template_group", None)
-            is_shs = "campos" in c_name.lower() or "zara" in c_name.lower() or "reyes" in c_name.lower() or "del mundo" in c_name.lower()
+            c_group = getattr(c_obj, "period_template_group", None) or "JHS_45MIN"
 
-            periods = AutoSchedulerService.get_group_periods(c_group, c_name, db)
+            enhanced_slots, standard_periods, break_slots = AutoSchedulerService.get_group_template_slots(c_group, db)
 
-            if not is_shs:
-                math_sci = [l for l in class_loads if is_math_or_science_subject(l, subjects_map)]
-                general = [l for l in class_loads if l not in math_sci]
+            # Determine occupied slots from locked loads in this specific class
+            occupied_class_slots: list[tuple[str, str, list[str]]] = []
+            for l in class_loads:
+                if is_item_locked(l) and l.start_time and l.end_time:
+                    occupied_class_slots.append((l.start_time, l.end_time, l.days_of_week or DAYS_5))
 
-                enhanced_slots = [("13:00", "14:00"), ("14:00", "15:00")]
-                for idx, item in enumerate(math_sci):
-                    slot = enhanced_slots[idx % len(enhanced_slots)]
-                    item.start_time = slot[0]
-                    item.end_time = slot[1]
-                    item.days_of_week = DAYS_5
-                    item.is_math_or_science = True
+            def slot_conflicts_with_class(s_time: str, e_time: str, days: list[str]) -> bool:
+                for occ_s, occ_e, occ_d in occupied_class_slots:
+                    common_d = set(days) & set(occ_d)
+                    if common_d and times_overlap(s_time, e_time, occ_s, occ_e):
+                        return True
+                return False
 
-                standard_periods = [p for p in periods if p not in enhanced_slots]
-                for idx, item in enumerate(general):
-                    p_start, p_end = standard_periods[idx % len(standard_periods)]
-                    item.start_time = p_start
-                    item.end_time = p_end
-                    item.days_of_week = ["MON", "WED", "FRI"] if idx % 2 == 0 else ["TUE", "THU"]
+            def slot_conflicts_with_teacher(staff_id: str | None, days: list[str], s_time: str, e_time: str) -> bool:
+                if not staff_id or str(staff_id) not in teacher_busy:
+                    return False
+                for b_days, b_start, b_end in teacher_busy[str(staff_id)]:
+                    common_d = set(days) & set(b_days)
+                    if common_d and times_overlap(s_time, e_time, b_start, b_end):
+                        return True
+                return False
+
+            # 1. Enhanced Slots Scheduling (Strict DB is_math_or_science flag)
+            enhanced_candidates = [l for l in unlocked_class_loads if is_math_or_science_subject(l, subjects_map)]
+            assigned_enhanced = enhanced_candidates[:len(enhanced_slots)]
+            general_loads = [l for l in unlocked_class_loads if l not in assigned_enhanced]
+
+            for idx, item in enumerate(assigned_enhanced):
+                best_slot = None
+                for offset in range(len(enhanced_slots)):
+                    candidate = enhanced_slots[(idx + offset) % len(enhanced_slots)]
+                    if not slot_conflicts_with_class(candidate[0], candidate[1], DAYS_5) and not slot_conflicts_with_teacher(item.staff_id, DAYS_5, candidate[0], candidate[1]):
+                        best_slot = candidate
+                        break
+                if not best_slot:
+                    for candidate in enhanced_slots:
+                        if not slot_conflicts_with_class(candidate[0], candidate[1], DAYS_5):
+                            best_slot = candidate
+                            break
+                if not best_slot:
+                    general_loads.append(item)
+                    continue
+
+                item.start_time = best_slot[0]
+                item.end_time = best_slot[1]
+                item.days_of_week = DAYS_5
+                item.is_math_or_science = True
+                occupied_class_slots.append((best_slot[0], best_slot[1], DAYS_5))
+                if item.staff_id:
+                    teacher_busy.setdefault(str(item.staff_id), []).append((DAYS_5, best_slot[0], best_slot[1]))
+
+            # 2. General Subjects Scheduling (Prioritize is_core = True for DAYS_5)
+            # Sort general subjects: is_core=True first, non-core last
+            general_loads.sort(
+                key=lambda l: (
+                    not bool(getattr(subjects_map.get(l.subject_id), "is_core", False)),
+                    l.subject_id,
+                )
+            )
+
+            # Compute available standard slots for this class (not already locked 5-days)
+            available_standard_periods = [
+                p for p in standard_periods if not slot_conflicts_with_class(p[0], p[1], DAYS_5)
+            ]
+
+            num_subjects = len(general_loads)
+            num_free_periods = len(available_standard_periods)
+
+            # Calculate how many subjects should target 5-day slots vs split slots
+            if num_subjects <= num_free_periods:
+                num_5day_targets = num_subjects
             else:
-                for idx, item in enumerate(class_loads):
-                    p_start, p_end = periods[idx % len(periods)]
-                    item.start_time = p_start
-                    item.end_time = p_end
-                    item.days_of_week = ["MON", "WED", "FRI"] if idx % 2 == 0 else ["TUE", "THU"]
+                num_split_periods = min(num_free_periods, num_subjects - num_free_periods)
+                num_5day_targets = max(0, num_free_periods - num_split_periods)
+
+            for idx, item in enumerate(general_loads):
+                sub_obj = subjects_map.get(item.subject_id)
+                is_core = bool(getattr(sub_obj, "is_core", False))
+                wants_5day = idx < num_5day_targets
+
+                best_p = None
+                best_pattern = DAYS_5 if wants_5day else (DAYS_MWF if idx % 2 == 0 else DAYS_TTH)
+
+                if wants_5day:
+                    # Strategy A: Attempt to assign full DAYS_5
+                    for p in standard_periods:
+                        if not slot_conflicts_with_class(p[0], p[1], DAYS_5) and not slot_conflicts_with_teacher(item.staff_id, DAYS_5, p[0], p[1]):
+                            best_p = p
+                            best_pattern = DAYS_5
+                            break
+
+                    # Fallback if teacher has day conflict on 5-day: try MWF / TTH
+                    if not best_p:
+                        for pat in [DAYS_MWF, DAYS_TTH]:
+                            for p in standard_periods:
+                                if not slot_conflicts_with_class(p[0], p[1], pat) and not slot_conflicts_with_teacher(item.staff_id, pat, p[0], p[1]):
+                                    best_p = p
+                                    best_pattern = pat
+                                    break
+                            if best_p:
+                                break
+                        # Live rebalance: an unused 5-day slot remains available for subsequent subjects!
+                else:
+                    # Strategy B: Attempt split days (MWF / TTH)
+                    patterns_to_try = [DAYS_MWF, DAYS_TTH] if idx % 2 == 0 else [DAYS_TTH, DAYS_MWF]
+                    for pat in patterns_to_try:
+                        for p in standard_periods:
+                            if not slot_conflicts_with_class(p[0], p[1], pat) and not slot_conflicts_with_teacher(item.staff_id, pat, p[0], p[1]):
+                                best_p = p
+                                best_pattern = pat
+                                break
+                        if best_p:
+                            break
+
+                    # If both split patterns have teacher conflict, try any open pattern without class conflict
+                    if not best_p:
+                        for pat in patterns_to_try + [DAYS_5]:
+                            for p in standard_periods:
+                                if not slot_conflicts_with_class(p[0], p[1], pat):
+                                    best_p = p
+                                    best_pattern = pat
+                                    break
+                            if best_p:
+                                break
+
+                if not best_p and standard_periods:
+                    # Safety fallback: first period with least conflict
+                    best_p = standard_periods[idx % len(standard_periods)]
+                    best_pattern = DAYS_5 if wants_5day else DAYS_MWF
+
+                if best_p:
+                    item.start_time = best_p[0]
+                    item.end_time = best_p[1]
+                    item.days_of_week = best_pattern
+                    occupied_class_slots.append((best_p[0], best_p[1], best_pattern))
+                    if item.staff_id:
+                        teacher_busy.setdefault(str(item.staff_id), []).append((best_pattern, best_p[0], best_p[1]))
 
         return loads

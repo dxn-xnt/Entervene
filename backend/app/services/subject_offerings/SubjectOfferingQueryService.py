@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -142,10 +143,11 @@ def list_subject_offerings_data(
         if norm == "both":
             query = query.filter(
                 or_(
-                    Subject.is_core.is_(True),
                     ~SubjectOffering.offering_pathways.any(),
                     SubjectOffering.offering_pathways.any(
-                        SubjectOfferingPathway.pathway.has(func.lower(AcademicPathway.code) == "both")
+                        SubjectOfferingPathway.pathway.has(
+                            func.lower(AcademicPathway.code).in_(["both", "shared"])
+                        )
                     ),
                     SubjectOffering.subject_offering_id.in_(
                         db.query(SubjectOfferingPathway.subject_offering_id)
@@ -154,14 +156,55 @@ def list_subject_offerings_data(
                     ),
                 )
             )
-        else:
+        elif norm in ("stem_medical", "medical-courses", "medical"):
+            query = query.filter(
+                SubjectOffering.offering_pathways.any(
+                    SubjectOfferingPathway.pathway.has(
+                        or_(
+                            func.lower(AcademicPathway.code).in_(["stem_medical", "medical-courses", "medical"]),
+                            func.lower(AcademicPathway.code).like("%medical%"),
+                        )
+                    )
+                ),
+                ~SubjectOffering.subject_offering_id.in_(
+                    db.query(SubjectOfferingPathway.subject_offering_id)
+                    .group_by(SubjectOfferingPathway.subject_offering_id)
+                    .having(func.count(SubjectOfferingPathway.pathway_id) > 1)
+                ),
+            )
+        elif norm in ("stem_engineering", "engineering-math", "engineering"):
+            query = query.filter(
+                SubjectOffering.offering_pathways.any(
+                    SubjectOfferingPathway.pathway.has(
+                        or_(
+                            func.lower(AcademicPathway.code).in_(["stem_engineering", "engineering-math", "engineering"]),
+                            func.lower(AcademicPathway.code).like("%engineering%"),
+                        )
+                    )
+                ),
+                ~SubjectOffering.subject_offering_id.in_(
+                    db.query(SubjectOfferingPathway.subject_offering_id)
+                    .group_by(SubjectOfferingPathway.subject_offering_id)
+                    .having(func.count(SubjectOfferingPathway.pathway_id) > 1)
+                ),
+            )
+        elif norm == "general":
             query = query.filter(
                 or_(
-                    Subject.is_core.is_(True),
                     ~SubjectOffering.offering_pathways.any(),
                     SubjectOffering.offering_pathways.any(
-                        SubjectOfferingPathway.pathway.has(func.lower(AcademicPathway.code) == norm)
+                        SubjectOfferingPathway.pathway.has(
+                            func.lower(AcademicPathway.code) == "general"
+                        )
                     ),
+                )
+            )
+        else:
+            query = query.filter(
+                SubjectOffering.offering_pathways.any(
+                    SubjectOfferingPathway.pathway.has(
+                        func.lower(AcademicPathway.code) == norm
+                    )
                 )
             )
 

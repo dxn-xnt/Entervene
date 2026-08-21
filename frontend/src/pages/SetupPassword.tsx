@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useAuth } from "@/context/AuthContext";
 import { Eye, EyeOff, Check, X, ShieldCheck } from "lucide-react";
-import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
 import { Card } from "@/components/retroui/Card";
 

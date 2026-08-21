@@ -10,6 +10,7 @@ class SubjectLoadItem(BaseModel):
     subject_id: int
     staff_id: str | None = None
     academic_period_id: int
+    slot_id: int | None = None
     start_time: str | None = None
     end_time: str | None = None
     days_of_week: list[str] = Field(default_factory=list)

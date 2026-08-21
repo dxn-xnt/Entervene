@@ -11,6 +11,7 @@ class SubjectLoad(Base):
     subject_id             = Column(Integer, ForeignKey("subject.subject_id"), nullable=False)
     class_id               = Column(Integer, ForeignKey("class.class_id"), nullable=False)
     academic_period_id     = Column(Integer, ForeignKey("academic_period.academic_period_id"), nullable=False)
+    slot_id                = Column(Integer, ForeignKey("period_template_slot.slot_id"), nullable=True)
     start_time             = Column(String(10), nullable=True)
     end_time               = Column(String(10), nullable=True)
     days_of_week           = Column(JSON, nullable=True)
