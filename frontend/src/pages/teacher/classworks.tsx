@@ -5,6 +5,7 @@ import {
   BookOpen,
   CheckSquare,
   ClipboardList,
+  Eye,
   FileText,
   Filter,
   Pencil,
@@ -744,7 +745,6 @@ export default function Classworks() {
     );
   };
 
-  const selectedAssignment = selected?.assignments?.[0] ?? null;
   const trackingRows = useMemo(() => {
     const rows = [...(tracking?.submitted ?? []), ...(tracking?.missing ?? [])];
     return rows.sort((a, b) => {
@@ -1677,13 +1677,13 @@ export default function Classworks() {
                                     Loading submissions...
                                   </Table.Cell>
                                 </Table.Row>
-                              ) : trackingError ? (
+                              ) : detailError ? (
                                 <Table.Row className="hover:bg-transparent">
                                   <Table.Cell
                                     colSpan={3}
                                     className="py-6 text-center text-sm font-semibold text-red-600"
                                   >
-                                    {trackingError}
+                                    {detailError}
                                   </Table.Cell>
                                 </Table.Row>
                               ) : trackingRows.length > 0 ? (

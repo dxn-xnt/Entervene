@@ -336,6 +336,31 @@ class ConflictDetectorService:
                         )
 
         # ---------------------------------------------------------
+        # 5b. Core Subject Split Schedule Warning Check (JHS)
+        # ---------------------------------------------------------
+        for load in loads:
+            subject_obj = subjects_map.get(load.subject_id)
+            class_obj = classes_map.get(load.class_id)
+            if subject_obj and class_obj:
+                s_name = subject_obj.subject_name or ""
+                c_name = class_obj.section_name or ""
+                c_group = getattr(class_obj, "period_template_group", None) or "JHS_45MIN"
+                is_jhs = c_group == "JHS_45MIN"
+                is_core = getattr(subject_obj, "is_core", False)
+
+                if is_jhs and is_core and load.days_of_week and len(load.days_of_week) < 5:
+                    conflicts.append(
+                        ConflictItem(
+                            rule="CORE_SUBJECT_SPLIT_SCHEDULE",
+                            severity="warning",
+                            message=f"Core subject '{s_name}' in section '{c_name}' is scheduled for only {len(load.days_of_week)} days ({', '.join(load.days_of_week)}) instead of standard 5-day daily schedule.",
+                            class_id=load.class_id,
+                            subject_id=load.subject_id,
+                            affected_key=f"{load.class_id}_{load.subject_id}",
+                        )
+                    )
+
+        # ---------------------------------------------------------
         # 6. Break Time Violation Check (Homeroom / Recess / Lunch)
         # ---------------------------------------------------------
         all_break_slots = db.query(PeriodTemplateSlot).filter(PeriodTemplateSlot.is_locked_break == True).all()

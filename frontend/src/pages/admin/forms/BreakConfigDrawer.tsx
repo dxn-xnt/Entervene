@@ -6,7 +6,7 @@ import { apiFetch } from "@/lib/api";
 import type { SubjectLoadStudioData } from "@/lib/api";
 import { useSettings } from "@/context/SettingsContext";
 import { validatePeriodTimeRange } from "@/lib/time-utils";
-import { Clock, Save, Coffee, Utensils, Sunrise, Plus, Trash2, FolderPlus, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Clock, Save, Coffee, Utensils, Sunrise, Plus, Trash2, FolderPlus } from "lucide-react";
 
 export type PeriodTemplateSlotItem = {
   slot_id?: number | null;
@@ -69,7 +69,7 @@ export default function BreakConfigDrawer({
   onClose,
   initialSlots = [],
   onSaved,
-  studioData,
+  studioData: _studioData,
 }: BreakConfigDrawerProps) {
   const { getSetting } = useSettings();
   const [activeGroup, setActiveGroup] = useState<string>("JHS_45MIN");
@@ -77,6 +77,10 @@ export default function BreakConfigDrawer({
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showNewGroupModal, setShowNewGroupModal] = useState(false);
+  const [newGroupNameInput, setNewGroupNameInput] = useState("");
+  const [newGroupError, setNewGroupError] = useState<string | null>(null);
 
   // Fetch period templates directly from DB on open
   useEffect(() => {
@@ -125,83 +129,7 @@ export default function BreakConfigDrawer({
     .filter((s) => s.template_group === activeGroup)
     .sort((a, b) => a.display_order - b.display_order);
 
-  // --- Capacity Analyzer ---
-  const capacityAnalysis = useMemo(() => {
-    if (!studioData) return null;
 
-    // 1. Calculate Available Minutes
-    // Find all CLASS slots for the active group
-    const classSlots = activeSlots.filter(s => s.slot_type === "CLASS");
-    let availableDailyMinutes = 0;
-    classSlots.forEach(slot => {
-      const partsStart = slot.start_time.split(":");
-      const partsEnd = slot.end_time.split(":");
-      if (partsStart.length === 2 && partsEnd.length === 2) {
-        const startMins = parseInt(partsStart[0]) * 60 + parseInt(partsStart[1]);
-        const endMins = parseInt(partsEnd[0]) * 60 + parseInt(partsEnd[1]);
-        if (endMins > startMins) {
-          availableDailyMinutes += (endMins - startMins);
-        }
-      }
-    });
-    const availableWeeklyMinutes = availableDailyMinutes * 5; // Assuming 5-day week
-
-    // 2. Calculate Required Minutes
-    // Find a representative class that uses this template group
-    // In our system, JHS_45MIN is typically Grades 7-10, etc.
-    // For a more accurate estimation, we find any class that defaults to this group
-    // Or we just calculate the max required minutes across any class that might use it
-    let maxRequiredMinutes = 0;
-    let representativeClassName = "";
-
-    const candidateClasses = studioData.classes.filter(c => {
-      const cGroup = (c as any).period_template_group; // Check if the backend sends this
-      if (cGroup) return cGroup === activeGroup;
-      
-      // Fallback inference if backend doesn't send it directly on class
-      const name = c.section_name.toLowerCase();
-      if (activeGroup === "SHS_CAMPOS_ZARA" && (name.includes("campos") || name.includes("zara"))) return true;
-      if (activeGroup === "SHS_DELMUNDO_REYES" && (name.includes("del mundo") || name.includes("reyes"))) return true;
-      if (activeGroup === "JHS_45MIN" && c.academic_level_id >= 7 && c.academic_level_id <= 10) return true;
-      return false;
-    });
-
-    for (const cls of candidateClasses) {
-      // Find all subjects offered for this class, respecting pathway/electives
-      let requiredMinutes = 0;
-      studioData.subjects.forEach(sub => {
-        if (sub.academic_level_id !== cls.academic_level_id) return;
-        
-        let isOffered = true;
-        const offerings = (studioData as any).subject_offerings || [];
-        if (offerings.length > 0) {
-          const clsPathway = ((cls as any).pathway || "general").toLowerCase();
-          const hasOffering = offerings.some((so: any) => {
-            if (so.subject_id !== sub.subject_id || so.academic_level_id !== cls.academic_level_id) return false;
-            const soPathway = (so.pathway || "general").toLowerCase();
-            return soPathway === "both" || soPathway === clsPathway || (soPathway === "general" && clsPathway === "general");
-          });
-          if (!hasOffering) isOffered = false;
-        }
-
-        if (isOffered) {
-          requiredMinutes += (sub.hours * 60);
-        }
-      });
-      if (requiredMinutes > maxRequiredMinutes) {
-        maxRequiredMinutes = requiredMinutes;
-        representativeClassName = cls.section_name;
-      }
-    }
-
-    return {
-      available: availableWeeklyMinutes,
-      required: maxRequiredMinutes,
-      representativeClass: representativeClassName,
-      isDeficient: maxRequiredMinutes > availableWeeklyMinutes
-    };
-  }, [activeSlots, activeGroup, studioData]);
-  // -------------------------
 
   const handleSlotFieldChange = (
     slotId: number | undefined,
@@ -270,56 +198,40 @@ export default function BreakConfigDrawer({
   };
 
   const handleAddTemplateGroup = () => {
-    const rawGroup = prompt("Enter new section template group name (e.g. SHS_TVL or REMEDIAL_SUMMER):");
-    if (!rawGroup) return;
-    const formattedGroup = rawGroup.trim().toUpperCase().replace(/\s+/g, "_");
-    if (templateGroups.includes(formattedGroup)) {
-      alert("This template group name already exists.");
-      return;
-    }
-    const defaultSlots: PeriodTemplateSlotItem[] = [
-      {
-        template_group: formattedGroup,
-        slot_name: "Homeroom Guidance",
-        slot_type: "HOMEROOM",
-        start_time: "07:30",
-        end_time: "08:00",
-        is_locked_break: true,
-        display_order: 1,
-      },
-      {
-        template_group: formattedGroup,
-        slot_name: "Period 1",
-        slot_type: "CLASS",
-        start_time: "08:00",
-        end_time: "09:00",
-        is_locked_break: false,
-        display_order: 2,
-      },
-      {
-        template_group: formattedGroup,
-        slot_name: "Morning Recess",
-        slot_type: "RECESS",
-        start_time: "09:00",
-        end_time: "09:20",
-        is_locked_break: true,
-        display_order: 3,
-      },
-      {
-        template_group: formattedGroup,
-        slot_name: "Lunch Break",
-        slot_type: "LUNCH",
-        start_time: "12:00",
-        end_time: "13:00",
-        is_locked_break: true,
-        display_order: 4,
-      },
-    ];
-    setSlots((prev) => [...prev, ...defaultSlots]);
-    setActiveGroup(formattedGroup);
+    setNewGroupNameInput("");
+    setNewGroupError(null);
+    setShowNewGroupModal(true);
   };
 
-  const handleSave = async () => {
+  const handleConfirmAddGroup = () => {
+    if (!newGroupNameInput.trim()) {
+      setNewGroupError("Please enter a group name.");
+      return;
+    }
+    const formattedGroup = newGroupNameInput.trim().toUpperCase().replace(/\s+/g, "_");
+    if (templateGroups.includes(formattedGroup)) {
+      setNewGroupError("This template group name already exists.");
+      return;
+    }
+    // Clone base template from JHS_45MIN (or first available template group)
+    const baseGroup = templateGroups.includes("JHS_45MIN") ? "JHS_45MIN" : (templateGroups[0] || "");
+    const baseSlots = slots.filter((s) => s.template_group === baseGroup);
+    const clonedSlots: PeriodTemplateSlotItem[] = baseSlots.map((s) => ({
+      ...s,
+      slot_id: undefined,
+      template_group: formattedGroup,
+    }));
+    setSlots((prev) => [...prev, ...clonedSlots]);
+    setActiveGroup(formattedGroup);
+    setShowNewGroupModal(false);
+  };
+
+  const handleSaveClick = () => {
+    setNotice(null);
+    setShowConfirmModal(true);
+  };
+
+  const executeSave = async () => {
     setIsSaving(true);
     setNotice(null);
     try {
@@ -333,10 +245,12 @@ export default function BreakConfigDrawer({
         throw new Error("Failed to save period template break settings.");
       }
 
+      setShowConfirmModal(false);
       onSaved();
       onClose();
     } catch (err) {
       setNotice(err instanceof Error ? err.message : "Error saving break settings.");
+      setShowConfirmModal(false);
     } finally {
       setIsSaving(false);
     }
@@ -367,7 +281,7 @@ export default function BreakConfigDrawer({
           {/* Group Tab Switcher & New Group Button */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-3">
             <div className="flex flex-wrap gap-1.5">
-              {templateGroups.map((grpKey) => (
+              {templateGroups.map((grpKey: string) => (
                 <button
                   key={grpKey}
                   type="button"
@@ -527,43 +441,7 @@ export default function BreakConfigDrawer({
                 </button>
               </div>
 
-              {/* Capacity Analyzer UI */}
-              {capacityAnalysis && capacityAnalysis.required > 0 && (
-                <div className={`mt-6 p-4 border-2 border-black rounded ${capacityAnalysis.isDeficient ? 'bg-red-50' : 'bg-emerald-50'}`}>
-                  <h3 className="text-sm font-bold flex items-center gap-2 mb-2">
-                    <Clock className="size-4" /> Capacity Analyzer
-                  </h3>
-                  <p className="text-xs text-black/80 mb-3">
-                    Based on typical subject loads for <strong>{capacityAnalysis.representativeClass}</strong>, this template requires <strong>{capacityAnalysis.required}</strong> minutes per week.
-                  </p>
-                  
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs font-bold">
-                      <span>Available: {capacityAnalysis.available} mins</span>
-                      <span>Required: {capacityAnalysis.required} mins</span>
-                    </div>
-                    <div className="h-4 w-full bg-gray-200 border border-black rounded overflow-hidden flex">
-                      <div 
-                        className={`h-full ${capacityAnalysis.isDeficient ? 'bg-red-500' : 'bg-emerald-500'}`} 
-                        style={{ width: `${Math.min((capacityAnalysis.available / Math.max(capacityAnalysis.required, 1)) * 100, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                  
-                  {capacityAnalysis.isDeficient && (
-                    <div className="mt-2 text-xs font-bold text-red-700 flex items-start gap-1.5">
-                      <AlertTriangle className="size-4 shrink-0" />
-                      <span>Warning: The configured time slots do not provide enough minutes to schedule all required subjects. Please add more CLASS slots or extend durations.</span>
-                    </div>
-                  )}
-                  {!capacityAnalysis.isDeficient && capacityAnalysis.available > 0 && (
-                    <div className="mt-2 text-xs font-bold text-emerald-700 flex items-start gap-1.5">
-                      <CheckCircle2 className="size-4 shrink-0" />
-                      <span>Sufficient capacity to schedule all subjects.</span>
-                    </div>
-                  )}
-                </div>
-              )}
+
             </div>
           )}
         </div>
@@ -576,14 +454,111 @@ export default function BreakConfigDrawer({
           <Button
             variant="default"
             disabled={isSaving}
-            onClick={() => void handleSave()}
-            className="border-2 border-black bg-emerald-400 hover:bg-emerald-500 font-bold"
+            onClick={handleSaveClick}
+            className="border-2 border-black bg-emerald-400 hover:bg-emerald-500 font-bold shadow-[2px_2px_0_#000] hover:shadow-none transition-all"
           >
             <Save className="size-4 mr-2" />
             {isSaving ? "Saving..." : "Save Break Timelines"}
           </Button>
         </div>
       </Dialog.Content>
+
+      {/* Themed RetroUI Confirmation Modal */}
+      <Dialog open={showConfirmModal} onOpenChange={(val) => { if (!val && !isSaving) setShowConfirmModal(false); }}>
+        <Dialog.Content size="md" className="border-2 border-black p-0 overflow-hidden shadow-[4px_4px_0_#000] bg-white">
+          <Dialog.Header className="border-b-2 border-black bg-primary px-5 py-3.5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="size-5 text-black" />
+              <h3 className="text-base font-bold">Confirm Period Template Update</h3>
+            </div>
+          </Dialog.Header>
+
+          <div className="p-5 space-y-3 bg-white text-sm">
+            <p className="font-semibold text-black">
+              Saving changes will update the master period template for{" "}
+              <span className="bg-yellow-200 px-1.5 py-0.5 border border-black font-bold rounded">
+                {formatGroupName(activeGroup)}
+              </span>.
+            </p>
+            <p className="text-xs text-black/80 leading-relaxed">
+              This will automatically cascade any modified period times to all matching unlocked subject schedules across your classes. Locked or published sections will remain protected.
+            </p>
+          </div>
+
+          <div className="border-t-2 border-black bg-gray-50 px-5 py-3 flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={isSaving}
+              onClick={() => setShowConfirmModal(false)}
+              className="border-2 border-black font-bold shadow-[2px_2px_0_#000] hover:shadow-none transition-all"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={isSaving}
+              onClick={() => void executeSave()}
+              className="border-2 border-black bg-emerald-400 hover:bg-emerald-500 text-black font-bold shadow-[2px_2px_0_#000] hover:shadow-none transition-all"
+            >
+              <Save className="size-4 mr-1.5" />
+              {isSaving ? "Applying Changes..." : "Confirm & Save Timelines"}
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog>
+
+      {/* Themed RetroUI New Template Group Modal */}
+      <Dialog open={showNewGroupModal} onOpenChange={(val) => { if (!val) setShowNewGroupModal(false); }}>
+        <Dialog.Content size="md" className="border-2 border-black p-0 overflow-hidden shadow-[4px_4px_0_#000] bg-white">
+          <Dialog.Header className="border-b-2 border-black bg-primary px-5 py-3.5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FolderPlus className="size-5 text-black" />
+              <h3 className="text-base font-bold">New Section Template Group</h3>
+            </div>
+          </Dialog.Header>
+
+          <div className="p-5 space-y-3 bg-white text-sm">
+            <p className="text-xs text-black/80 font-medium leading-relaxed">
+              Enter a name for the new period template group (e.g. <code className="font-bold bg-gray-100 px-1 border border-black rounded">SHS_TVL</code>, <code className="font-bold bg-gray-100 px-1 border border-black rounded">REMEDIAL_SUMMER</code>). It will clone the base periods from <span className="font-bold">{formatGroupName(activeGroup)}</span>.
+            </p>
+            {newGroupError && (
+              <div className="p-2 border-2 border-black bg-red-100 text-red-900 font-bold text-xs">
+                {newGroupError}
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-bold mb-1">Group Name / Identifier:</label>
+              <input
+                type="text"
+                value={newGroupNameInput}
+                onChange={(e) => {
+                  setNewGroupNameInput(e.target.value);
+                  setNewGroupError(null);
+                }}
+                placeholder="e.g. SHS_TVL"
+                className="w-full border-2 border-black px-3 py-2 text-sm font-semibold rounded shadow-[2px_2px_0_#000] focus:outline-none focus:ring-2 focus:ring-black"
+                autoFocus
+              />
+            </div>
+          </div>
+
+          <div className="border-t-2 border-black bg-gray-50 px-5 py-3 flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowNewGroupModal(false)}
+              className="border-2 border-black font-bold shadow-[2px_2px_0_#000] hover:shadow-none transition-all"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmAddGroup}
+              className="border-2 border-black bg-purple-300 hover:bg-purple-400 text-black font-bold shadow-[2px_2px_0_#000] hover:shadow-none transition-all"
+            >
+              <Plus className="size-4 mr-1.5" />
+              Create Group
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog>
     </Dialog>
   );
 }

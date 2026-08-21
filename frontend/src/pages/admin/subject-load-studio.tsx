@@ -41,7 +41,6 @@ import {
   Trash2,
   Wand2,
   Sparkles,
-  Zap,
   Settings,
   Unlock,
   Globe,
@@ -290,6 +289,7 @@ export default function AdminSubjectLoadStudio() {
                 end_time: m.end_time || null,
                 days_of_week: m.days_of_week || [],
                 status: m.status || "draft",
+                is_locked: Boolean(m.is_locked || m.status === "published"),
               });
             });
           } else {
@@ -457,31 +457,46 @@ export default function AdminSubjectLoadStudio() {
   };
 
   // Auto-schedule entire studio or single section
-  const handleAutoSchedule = async (targetClassId?: number, mode: "standard" | "teacher_swap" = "standard") => {
+  const handleAutoSchedule = async (targetClassId?: number) => {
     if (!selectedPeriodId) return;
     setIsLoading(true);
     setNotice(null);
     try {
       let currentLoads = [...loads];
+
+      const isClassLocked = (classId: number) => {
+        const cLoads = currentLoads.filter((l) => l.class_id === classId);
+        if (cLoads.length === 0) return false;
+        return cLoads.some((l) => Boolean(l.is_locked) || l.status === "published");
+      };
+
       let targetClassIds: number[] = [];
       if (targetClassId) {
-        const targetClass = studioData?.classes.find((c) => c.class_id === targetClassId);
-        const pairedClass = studioData?.classes.find(
-          (c) =>
-            c.class_id !== targetClassId &&
-            (c.class_id === targetClass?.paired_class_id ||
-              c.academic_level_id === targetClass?.academic_level_id)
-        );
-        targetClassIds = [targetClassId, pairedClass?.class_id].filter(
-          (id): id is number => typeof id === "number"
-        );
+        targetClassIds = [targetClassId];
       }
 
-      const targetClasses = targetClassId
+      const candidateClasses = targetClassId
         ? studioData?.classes.filter((c) => targetClassIds.includes(c.class_id)) || []
-        : studioData?.classes || [];
+        : filteredClasses;
 
-      targetClasses.forEach((cls) => {
+      const lockedClassIds = new Set(
+        candidateClasses.filter((cls) => isClassLocked(cls.class_id)).map((cls) => cls.class_id)
+      );
+      const unlockedTargetClasses = candidateClasses.filter((cls) => !lockedClassIds.has(cls.class_id));
+
+      if (unlockedTargetClasses.length === 0) {
+        setNotice({
+          title: "All Sections Locked",
+          message: targetClassId
+            ? "This section is locked. Unlock the section to auto-fit."
+            : "All sections in this scope are locked. Unlock sections to auto-generate.",
+          type: "error",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      unlockedTargetClasses.forEach((cls) => {
         const offerings = studioData?.subject_offerings || [];
 
         const levelSubjects = (studioData?.subjects || []).filter((sub) =>
@@ -502,6 +517,7 @@ export default function AdminSubjectLoadStudio() {
               end_time: null,
               days_of_week: [],
               status: "draft",
+              is_locked: false,
             });
           }
         });
@@ -511,23 +527,27 @@ export default function AdminSubjectLoadStudio() {
         ? currentLoads.filter((l) => targetClassIds.includes(l.class_id))
         : currentLoads;
 
-      const effectiveMode = targetClassId ? "teacher_swap" : mode;
-      const res = await autoScheduleSubjectLoads(selectedPeriodId, loadsToProcess, effectiveMode);
+      const res = await autoScheduleSubjectLoads(selectedPeriodId, loadsToProcess, "standard");
 
-      // Merge updated scheduled loads back into full loads array
+      // Merge updated scheduled loads back into full loads array (preserving locked sections)
       const scheduledMap = new Map(
         res.scheduled_loads.map((sl) => [`${sl.class_id}_${sl.subject_id}`, sl])
       );
 
       const mergedLoads = currentLoads.map((item) => {
+        // Preserve locked sections / loads untouched
+        if (lockedClassIds.has(item.class_id) || item.is_locked || item.status === "published") {
+          return item;
+        }
+
         const key = `${item.class_id}_${item.subject_id}`;
         const match = scheduledMap.get(key);
         if (match && (targetClassId === undefined || targetClassIds.includes(item.class_id))) {
           return {
             ...item,
-            start_time: match.start_time || "08:00",
-            end_time: match.end_time || "10:00",
-            days_of_week: match.days_of_week && match.days_of_week.length > 0 ? match.days_of_week : ["MON", "WED"],
+            start_time: match.start_time || null,
+            end_time: match.end_time || null,
+            days_of_week: match.days_of_week || [],
             status: "draft",
             is_locked: false,
           };
@@ -541,17 +561,20 @@ export default function AdminSubjectLoadStudio() {
 
       const errCount = res.conflicts.filter((c) => c.severity === "error").length;
       const warnCount = res.conflicts.filter((c) => c.severity === "warning").length;
+      const unlockedCount = unlockedTargetClasses.length;
+      const lockedCount = lockedClassIds.size;
+      const preservedNotice = lockedCount > 0 ? ` (${lockedCount} locked section${lockedCount > 1 ? "s" : ""} preserved)` : "";
 
       if (errCount > 0) {
         setNotice({
           title: "Auto-fit Complete",
-          message: `Auto-fit complete. Detected ${errCount} conflict(s). Please review highlighted errors.`,
+          message: `Auto-fit complete${preservedNotice}. Detected ${errCount} conflict(s). Please review highlighted errors.`,
           type: "error",
         });
       } else if (warnCount > 0) {
         setNotice({
           title: "Auto-fit with Warnings",
-          message: `Auto-fit complete with ${warnCount} warning(s). Please check conflict tracker.`,
+          message: `Auto-fit complete${preservedNotice} with ${warnCount} warning(s). Please check conflict tracker.`,
           type: "error",
         });
       } else {
@@ -559,7 +582,7 @@ export default function AdminSubjectLoadStudio() {
           title: "Auto-fit Successful",
           message: targetClassId
             ? "Successfully auto-fitted section timetable without conflicts!"
-            : "Successfully auto-generated conflict-free timetables for all subjects!",
+            : `Successfully auto-generated timetables for ${unlockedCount} section(s).${lockedCount > 0 ? ` ${lockedCount} locked section(s) were preserved.` : ""}`,
           type: "success",
         });
       }
@@ -1018,27 +1041,25 @@ export default function AdminSubjectLoadStudio() {
 
   // Preset pattern applications
   const handleApplyPreset = (classId: number, subjectId: number, pattern: "2day" | "3day" | "4day") => {
-    let days: string[] = ["MON", "WED"];
-    let startTime = "08:00";
-    let endTime = "10:00";
+    const classObj = studioData?.classes.find((c) => c.class_id === classId);
+    const targetGroup = classObj?.period_template_group || "JHS_45MIN";
+    const groupClassSlots = periodTemplateSlots.filter((s) => s.template_group === targetGroup && !s.is_locked_break && s.slot_type === "CLASS");
+    const firstSlot = groupClassSlots[0];
+    const defaultStart = firstSlot?.start_time || null;
+    const defaultEnd = firstSlot?.end_time || null;
 
+    let days: string[] = ["MON", "WED"];
     if (pattern === "2day") {
       days = ["MON", "WED"];
-      startTime = "08:00";
-      endTime = "10:00";
     } else if (pattern === "3day") {
       days = ["MON", "WED", "FRI"];
-      startTime = "08:00";
-      endTime = "09:20";
     } else if (pattern === "4day") {
       days = ["MON", "TUE", "WED", "THU"];
-      startTime = "08:00";
-      endTime = "09:00";
     }
 
     const updated = loads.map((l) =>
       l.class_id === classId && l.subject_id === subjectId
-        ? { ...l, days_of_week: days, start_time: startTime, end_time: endTime, status: "draft", is_locked: false }
+        ? { ...l, days_of_week: days, start_time: defaultStart, end_time: defaultEnd, status: "draft", is_locked: false }
         : l
     );
     setLoads(updated);
@@ -1251,18 +1272,7 @@ export default function AdminSubjectLoadStudio() {
                         type="button"
                         onClick={() => {
                           setIsToolsOpen(false);
-                          void handleAutoSchedule(undefined, "teacher_swap");
-                        }}
-                        className="font-sans text-md font-semibold text-left px-2.5 py-1.5 flex gap-2 items-center"
-                      >
-                        <Zap className="size-3.5 text-sky-900" />
-                        <span>Auto-Teacher Swap</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsToolsOpen(false);
-                          void handleAutoSchedule(undefined, "standard");
+                          void handleAutoSchedule();
                         }}
                         className="font-sans text-md font-semibold text-left px-2.5 py-1.5 flex gap-2 items-center"
                       >
@@ -1555,8 +1565,14 @@ export default function AdminSubjectLoadStudio() {
                             <Button
                               size="sm"
                               variant="outline"
+                              disabled={isSectionPublished || isSaving}
                               onClick={() => void handleAutoSchedule(cls.class_id)}
                               className="gap-2"
+                              title={
+                                isSectionPublished
+                                  ? "Section is published/locked. Unlock section to auto-fit."
+                                  : "Auto-fit section timetable"
+                              }
                             >
                               <Wand2 className="size-3.5 text-foreground" />
                               Auto-Fit Section

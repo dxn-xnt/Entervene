@@ -70,7 +70,7 @@ export default function QuizGradingModal({
     }, 0);
   };
 
-  const getQuestionStatus = (quizQuestionId: number, maxPoints: number, isAutoCorrect?: boolean | null): QuestionGradingStatus => {
+  const getQuestionStatus = (quizQuestionId: number, maxPoints: number, _isAutoCorrect?: boolean | null): QuestionGradingStatus => {
     const rawVal = scores[quizQuestionId];
     if (rawVal === undefined || rawVal === "") {
       return "needs_grading";

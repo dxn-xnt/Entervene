@@ -39,6 +39,7 @@ def ensure_default_period_templates(db: Session):
         db.execute(text("ALTER TABLE subject ADD COLUMN IF NOT EXISTS academic_level_id INTEGER;"))
         db.execute(text("ALTER TABLE subject ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();"))
         db.execute(text("ALTER TABLE subject ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();"))
+        db.execute(text("ALTER TABLE subject_load ADD COLUMN IF NOT EXISTS slot_id INTEGER;"))
         db.commit()
     except Exception:
         db.rollback()
@@ -132,6 +133,7 @@ def get_subject_load_studio_data(
     current_user: dict = Depends(require_role("admin")),
     db: Session = Depends(get_db),
 ):
+    ensure_default_period_templates(db)
     years = db.query(AcademicYear).all()
     periods = db.query(AcademicPeriod).all()
     
@@ -253,6 +255,7 @@ def get_subject_load_studio_data(
                 "subject_id": sl.subject_id,
                 "staff_id": sl.staff_id,
                 "academic_period_id": sl.academic_period_id,
+                "slot_id": getattr(sl, "slot_id", None),
                 "start_time": getattr(sl, "start_time", None),
                 "end_time": getattr(sl, "end_time", None),
                 "days_of_week": getattr(sl, "days_of_week", []) or [],
@@ -341,6 +344,38 @@ def update_period_templates(
         if item.slot_id:
             db_slot = db.query(PeriodTemplateSlot).filter(PeriodTemplateSlot.slot_id == item.slot_id).first()
             if db_slot:
+                old_start = db_slot.start_time
+                old_end = db_slot.end_time
+                new_start = item.start_time
+                new_end = item.end_time
+                grp = db_slot.template_group
+
+                # Automatically cascade time updates to matching unlocked subject loads by slot_id or time window
+                if db_slot.slot_type == "CLASS" and (old_start != new_start or old_end != new_end):
+                    target_classes = db.query(Class).filter(
+                        (Class.period_template_group == grp) | ((Class.period_template_group == None) & (grp == "JHS_45MIN"))
+                    ).all()
+                    target_class_ids = [c.class_id for c in target_classes]
+
+                    if target_class_ids:
+                        db.query(SubjectLoad).filter(
+                            (SubjectLoad.slot_id == db_slot.slot_id) | (
+                                (SubjectLoad.slot_id == None) &
+                                (SubjectLoad.class_id.in_(target_class_ids)) &
+                                (SubjectLoad.start_time == old_start) &
+                                (SubjectLoad.end_time == old_end)
+                            ),
+                            SubjectLoad.status != "published",
+                            SubjectLoad.is_locked == False,
+                        ).update(
+                            {
+                                SubjectLoad.start_time: new_start,
+                                SubjectLoad.end_time: new_end,
+                                SubjectLoad.slot_id: db_slot.slot_id,
+                            },
+                            synchronize_session=False,
+                        )
+
                 db_slot.slot_name = item.slot_name
                 db_slot.slot_type = item.slot_type
                 db_slot.start_time = item.start_time
@@ -359,7 +394,7 @@ def update_period_templates(
             )
             db.add(new_slot)
     db.commit()
-    return {"message": "Period templates updated successfully."}
+    return {"message": "Period templates updated and cascaded to schedules successfully."}
 
 
 @router.post("/validate", response_model=ValidationResultResponse)
