@@ -518,7 +518,7 @@ CREATE TABLE classwork (
             classwork_category IN (
                 'WRITTEN_WORK',
                 'PERFORMANCE_TASK',
-                'PERIODICAL_EXAM'
+                'QUARTERLY_ASSESSMENT'
             )
         ),
 

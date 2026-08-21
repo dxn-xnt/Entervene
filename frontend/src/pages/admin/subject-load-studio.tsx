@@ -1198,8 +1198,18 @@ export default function AdminSubjectLoadStudio() {
     return unassignedTotal;
   }, [selectedGradeId, levelClassIds, loads, unassignedTotal]);
 
-  // Grade-level publish: only blocks if current scope has unassigned
-  const isGradeLevelPublishDisabled = isSaving || errorConflictsCount > 0 || unassignedInCurrentScope > 0;
+  const gradeLevelErrorsCount = useMemo(() => {
+    if (selectedGradeId === "all") return errorConflictsCount;
+    return conflicts.filter(
+      (c) => c.severity === "error" && (
+        (c.class_id && levelClassIds.has(c.class_id)) ||
+        (c.affected_key && Array.from(levelClassIds).some((cid) => c.affected_key?.startsWith(`${cid}_`)))
+      )
+    ).length;
+  }, [selectedGradeId, levelClassIds, conflicts, errorConflictsCount]);
+
+  // Grade-level publish: only blocks if current scope has unassigned or errors in this grade
+  const isGradeLevelPublishDisabled = isSaving || gradeLevelErrorsCount > 0 || unassignedInCurrentScope > 0;
   // Master Schedule publish: strictly blocks if ANY subject school-wide is unassigned
   const isMasterPublishDisabled = isSaving || errorConflictsCount > 0 || unassignedTotal > 0;
   // Alias for main header button (depends on current view)
@@ -1276,7 +1286,7 @@ export default function AdminSubjectLoadStudio() {
                         }}
                         className="font-sans text-md font-semibold text-left px-2.5 py-1.5 flex gap-2 items-center"
                       >
-                        <Sparkles className="size-3.5 text-amber-900" />
+                        <Sparkles className="size-3.5 text-emerald-900" />
                         <span>Auto-Generate All</span>
                       </button>
                     </div>
@@ -1288,16 +1298,56 @@ export default function AdminSubjectLoadStudio() {
                   <Button
                     className="gap-2"
                     variant={isHeaderPublishDisabled ? "outline" : "default"}
-                    disabled={isHeaderPublishDisabled}
+                    disabled={isSaving}
                     onClick={() => {
-                      const scope = selectedGradeId !== "all" ? "level" : "all";
-                      void handleSave("publish", scope);
+                      if (selectedGradeId !== "all") {
+                        if (unassignedInCurrentScope > 0) {
+                          setNotice({
+                            title: "Cannot Publish Grade Level",
+                            message: `There are ${unassignedInCurrentScope} unassigned subject(s) in this grade level. Please assign all teachers before publishing.`,
+                            type: "error",
+                          });
+                          return;
+                        }
+                        if (gradeLevelErrorsCount > 0) {
+                          const firstErr = conflicts.find((c) => c.severity === "error" && (
+                            (c.class_id && levelClassIds.has(c.class_id)) ||
+                            (c.affected_key && Array.from(levelClassIds).some((cid) => c.affected_key?.startsWith(`${cid}_`)))
+                          ));
+                          setNotice({
+                            title: "Cannot Publish Grade Level",
+                            message: firstErr?.message || "There are schedule conflicts in this grade level that must be resolved first.",
+                            type: "error",
+                          });
+                          return;
+                        }
+                        void handleSave("publish", "level");
+                      } else {
+                        if (unassignedTotal > 0) {
+                          setNotice({
+                            title: "Cannot Publish Master Schedule",
+                            message: `There are ${unassignedTotal} unassigned subject(s) school-wide. Please assign all teachers before publishing.`,
+                            type: "error",
+                          });
+                          return;
+                        }
+                        if (errorConflictsCount > 0) {
+                          const firstErr = conflicts.find((c) => c.severity === "error");
+                          setNotice({
+                            title: "Cannot Publish Master Schedule",
+                            message: firstErr?.message || "There are unresolved schedule conflicts school-wide.",
+                            type: "error",
+                          });
+                          return;
+                        }
+                        void handleSave("publish", "all");
+                      }
                     }}
                     title={
                       unassignedInCurrentScope > 0
                         ? `Assign all ${unassignedInCurrentScope} unassigned teacher(s) in this ${selectedGradeId !== "all" ? "grade level" : "school"} before publishing`
-                        : errorConflictsCount > 0
-                          ? `Fix ${errorConflictsCount} conflict errors before publishing`
+                        : (selectedGradeId !== "all" ? gradeLevelErrorsCount : errorConflictsCount) > 0
+                          ? `Fix ${(selectedGradeId !== "all" ? gradeLevelErrorsCount : errorConflictsCount)} conflict errors before publishing`
                           : "Publish official schedule"
                     }
                   >
@@ -1309,7 +1359,7 @@ export default function AdminSubjectLoadStudio() {
                   <Button
                     className="gap-2 border-l-0 h-9.5"
                     variant={isHeaderPublishDisabled ? "outline" : "default"}
-                    disabled={isHeaderPublishDisabled}
+                    disabled={isSaving}
                     onClick={() => setIsPublishOpen((prev) => !prev)}
                     title="Publishing options"
                   >
@@ -1520,10 +1570,32 @@ export default function AdminSubjectLoadStudio() {
                     const hasUnassigned = sectionUnassignedCount > 0 || classSubjects.length === 0;
                     // Section is published when: no unassigned, has loads, every load is status="published"
                     const isSectionPublished = !hasUnassigned && sectionLoads.length > 0 && sectionLoads.every((l) => l.status === "published");
-                    const sectionHasErrors = conflicts.some(
+                    const sectionErrors = conflicts.filter(
                       (c) => c.severity === "error" && (c.class_id === cls.class_id || (c.affected_key && c.affected_key.startsWith(`${cls.class_id}_`)))
                     );
+                    const sectionHasErrors = sectionErrors.length > 0;
                     const isPublishSectionDisabled = isSaving || sectionHasErrors || sectionUnassignedCount > 0;
+
+                    const handlePublishSectionClick = () => {
+                      if (sectionUnassignedCount > 0) {
+                        setNotice({
+                          title: "Cannot Publish Section",
+                          message: `Section "${cls.section_name}" has ${sectionUnassignedCount} subject(s) without an assigned teacher. Please assign all teachers first.`,
+                          type: "error",
+                        });
+                        return;
+                      }
+                      if (sectionHasErrors) {
+                        const errorMsg = sectionErrors[0]?.message || "This section has unresolved schedule conflicts.";
+                        setNotice({
+                          title: "Cannot Publish Section",
+                          message: `Section "${cls.section_name}" cannot be published: ${errorMsg}`,
+                          type: "error",
+                        });
+                        return;
+                      }
+                      void handleSave("publish", "section", cls.class_id);
+                    };
 
                     return (
                       <RetroCard
@@ -1644,7 +1716,6 @@ export default function AdminSubjectLoadStudio() {
                                 variant="outline"
                                 disabled={isSaving}
                                 onClick={() => void handleSave("draft", "section", cls.class_id)}
-
                                 title="Revert this section to draft status to allow edits"
                               >
                                 <Unlock className="size-3.5 mr-1 text-amber-800" />
@@ -1653,15 +1724,15 @@ export default function AdminSubjectLoadStudio() {
                             ) : (
                               <Button
                                 size="sm"
-                                variant={isPublishSectionDisabled ? "default" : "default"}
-                                disabled={isPublishSectionDisabled}
+                                variant={isPublishSectionDisabled ? "outline" : "default"}
+                                disabled={isSaving}
                                 className="gap-2"
-                                onClick={() => void handleSave("publish", "section", cls.class_id)}
+                                onClick={handlePublishSectionClick}
                                 title={
                                   sectionUnassignedCount > 0
                                     ? `Assign all ${sectionUnassignedCount} unassigned teacher(s) in this section before publishing`
                                     : sectionHasErrors
-                                      ? "Fix schedule conflicts in this section before publishing"
+                                      ? `Fix schedule conflicts in this section before publishing: ${sectionErrors[0]?.message || ""}`
                                       : "Publish only this section's schedule"
                                 }
                               >
