@@ -40,7 +40,7 @@ export function SubjectCatalogCard({
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="px-2"
+                  className="p-2 shadow-none"
                   aria-label="More options"
                   onClick={(e) => e.preventDefault()}
                 >

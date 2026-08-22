@@ -526,7 +526,7 @@ export default function AdminSystemSettings() {
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
             {/* School Operational Hours */}
             <Card className="@container/card w-full">
-              <Card.Header className="flex flex-row justify-between items-start">
+              <Card.Header className="flex flex-row justify-between items-start mb-4">
                 <Card.Title className="flex flex-col w-full gap-1">
                   School Operational Hours
                   <Text as="p" className="text-sm font-normal text-muted-foreground">
@@ -545,10 +545,9 @@ export default function AdminSystemSettings() {
                 </Button>
               </Card.Header>
 
-
               <Card.Content className="flex flex-col gap-4">
                 <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-4 mt-2">
+                  <div className="flex items-center gap-4">
                     <div className="flex flex-col gap-1 w-1/3">
                       <Text as="h6" className="font-sans font-medium text-sm">
                         Day Start
@@ -628,7 +627,7 @@ export default function AdminSystemSettings() {
 
             {/* Subject Groups & Passing Thresholds */}
             <Card className="@container/card w-full">
-              <Card.Header className="flex flex-row justify-between items-start">
+              <Card.Header className="flex flex-row justify-between items-start mb-4">
                 <Card.Title className="flex flex-col w-full gap-1">
                   Subject Groups & Passing Thresholds
                   <Text as="p" className="text-sm font-normal text-muted-foreground">
@@ -723,7 +722,7 @@ export default function AdminSystemSettings() {
 
             {/* Default Grading Templates */}
             <Card className="@container/card w-full">
-              <Card.Header className="flex flex-row justify-between items-start">
+              <Card.Header className="flex flex-row justify-between items-start mb-4">
                 <Card.Title className="flex flex-col w-full gap-1">
                   Default Grading Templates
                   <Text
@@ -826,7 +825,7 @@ export default function AdminSystemSettings() {
 
             {/* Academic Calendar */}
             <Card className="@container/card w-full">
-              <Card.Header className="flex flex-row justify-between items-start">
+              <Card.Header className="flex flex-row justify-between items-start mb-4">
                 <Card.Title className="flex flex-col w-full gap-1">
                   Academic Calendar
                   <Text
@@ -951,7 +950,7 @@ export default function AdminSystemSettings() {
 
             {/* School Curriculum Scope */}
             <Card className="@container/card w-full">
-              <Card.Header className="flex flex-row justify-between items-start">
+              <Card.Header className="flex flex-row justify-between items-start mb-4">
                 <Card.Title className="flex flex-col w-full gap-1">
                   School Curriculum Scope
                   <Text
@@ -1058,7 +1057,7 @@ export default function AdminSystemSettings() {
 
             {/* Academic Levels */}
             <Card className="@container/card w-full">
-              <Card.Header>
+              <Card.Header className="mb-4">
                 <Card.Title className="flex flex-row justify-between w-full items-center">Academic Levels</Card.Title>
               </Card.Header>
               <Card.Content className="flex flex-col gap-4">
@@ -1133,7 +1132,7 @@ export default function AdminSystemSettings() {
 
             {/* Teacher Workload Caps */}
             <Card className="@container/card w-full">
-              <Card.Header className="flex flex-row justify-between items-start mb-0">
+              <Card.Header className="flex flex-row justify-between items-start mb-4">
                 <Card.Title className="flex flex-col w-full gap-1">
                   Teacher Workload Caps
                   <Text as="p" className="text-sm font-normal text-muted-foreground">
