@@ -144,13 +144,10 @@ export function NavUser() {
             <DropdownMenuItem
               onClick={handleLogout}
               disabled={loggingOut}
-              className="p-2 text-destructive focus:text-destructive"
+              className="p-2 text-destructive "
             >
-              {loggingOut ? (
-                <Loader2Icon className="animate-spin" />
-              ) : (
-                <LogOutIcon />
-              )}
+
+              <LogOutIcon className="text-destructive" />
               Log out
             </DropdownMenuItem>
           </DropdownMenuContent>
