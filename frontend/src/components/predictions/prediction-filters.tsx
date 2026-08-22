@@ -96,7 +96,7 @@ export default function PredictionFilters({
             onSubjectChange(v === "all" ? undefined : Number(v))
           }
         >
-          <Select.Trigger className="w-[200px] bg-white">
+          <Select.Trigger className="w-[160px] bg-white">
             <Select.Value placeholder="All Subjects" />
           </Select.Trigger>
           <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -136,7 +136,7 @@ export default function PredictionFilters({
             onRiskChange(v === "all" ? undefined : v)
           }
         >
-          <Select.Trigger className="w-[180px] bg-white">
+          <Select.Trigger className="w-[170px] bg-white">
             <Select.Value placeholder="All Risk Levels" />
           </Select.Trigger>
           <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">

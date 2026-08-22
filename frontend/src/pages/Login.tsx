@@ -52,7 +52,7 @@ const Login = () => {
 
   return (
     <div className="retro-squares-bg flex flex-col items-center justify-center h-screen">
-      <Card className="w-md p-8">
+      <Card className="w-md py-10 px-8">
         <Card.Header className="flex flex-col justify-center mb-8">
           <Card.Title className="font-sans font-bold mb-1">
             Entervene
@@ -62,7 +62,13 @@ const Login = () => {
           </Card.Description>
         </Card.Header>
         <Card.Content>
-          <div className="flex flex-col gap-2">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleLogin();
+            }}
+            className="flex flex-col gap-2"
+          >
             <div className="grid w-full max-w-sm items-center gap-2 mb-2">
               <Label htmlFor="email">Email Address</Label>
               <Input
@@ -78,6 +84,7 @@ const Login = () => {
               <div className="flex flex-row justify-between items-center">
                 <Label htmlFor="password">Password</Label>
                 <Button
+                  type="button"
                   variant="link"
                   className="font-regular p-0 text-sm font-normal font-underline"
                   onClick={() => navigate("/forgot-password")}
@@ -92,7 +99,7 @@ const Login = () => {
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-none border-black !shadow-none h-10 pr-10 text-sm"
+                  className="w-full rounded-none border-black h-10 pr-10 text-sm"
                 />
                 <button
                   type="button"
@@ -120,9 +127,9 @@ const Login = () => {
             </div>
 
             <Button
+              type="submit"
               variant="default"
               className="mt-4"
-              onClick={handleLogin}
               disabled={loading}
             >
               Sign In
@@ -132,6 +139,7 @@ const Login = () => {
                 Don't have an account?
               </Text>
               <Button
+                type="button"
                 variant="link"
                 className="font-regular p-0"
                 onClick={() => navigate("/forgot-password")}
@@ -139,7 +147,7 @@ const Login = () => {
                 Sign Up
               </Button>
             </div>
-          </div>
+          </form>
         </Card.Content>
       </Card>
     </div>

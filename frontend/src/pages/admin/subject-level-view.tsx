@@ -38,6 +38,18 @@ export default function AdminSubjectLevel() {
   const [pendingArchive, setPendingArchive] = useState<SubjectListItem | null>(
     null,
   );
+  const [isSubjectModalOpen, setIsSubjectModalOpen] = useState(false);
+  const [editingSubject, setEditingSubject] = useState<SubjectListItem | null>(null);
+
+  const openCreateSubject = () => {
+    setEditingSubject(null);
+    setIsSubjectModalOpen(true);
+  };
+
+  const openEditSubject = (subject: SubjectListItem) => {
+    setEditingSubject(subject);
+    setIsSubjectModalOpen(true);
+  };
 
   const loadSubjects = useCallback(async () => {
     setIsLoading(true);
@@ -144,18 +156,10 @@ export default function AdminSubjectLevel() {
                 </Breadcrumb>
               </div>
 
-              <Dialog>
-                <Dialog.Trigger>
-                  <Button>
-                    <Plus className="mr-2 size-4" />
-                    New Subject
-                  </Button>
-                </Dialog.Trigger>
-                <AddSubjectModal
-                  onCreated={loadSubjects}
-                  lockedGradeLevel={decodedGrade}
-                />
-              </Dialog>
+              <Button onClick={openCreateSubject}>
+                <Plus className="mr-2 size-4" />
+                New Subject
+              </Button>
             </header>
 
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
@@ -265,6 +269,7 @@ export default function AdminSubjectLevel() {
                           `/admin/subjects/${encodeURIComponent(decodedGrade)}/${subject.subject_id}`,
                         )
                       }
+                      onEdit={() => openEditSubject(subject)}
                       onArchive={() => setPendingArchive(subject)}
                     />
                   ))
@@ -274,6 +279,17 @@ export default function AdminSubjectLevel() {
           </div>
         </div>
       </div>
+
+      <Dialog open={isSubjectModalOpen} onOpenChange={setIsSubjectModalOpen}>
+        <AddSubjectModal
+          open={isSubjectModalOpen}
+          subjectToEdit={editingSubject}
+          lockedGradeLevel={decodedGrade}
+          onCreated={async () => {
+            await loadSubjects();
+          }}
+        />
+      </Dialog>
 
       {pendingArchive ? (
         <ConfirmAlertDialog

@@ -78,32 +78,49 @@ const SubjectItemLine = ({
                                     {statusLabel.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())}
                                 </Badge>
                             ) : null}
-                            {(onEdit || onArchive) ? (
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button
-                                            variant="secondary"
-                                            className="p-2 shadow-none hover:shadow-none hover:translate-none"
-                                            aria-label="More options"
-                                            onClick={(e) => e.preventDefault()}
+
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        className="p-2 shadow-none"
+                                        aria-label="More options"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                        }}
+                                    >
+                                        <EllipsisIcon className="size-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="border-2">
+                                    {onEdit ? (
+                                        <DropdownMenuItem
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onEdit();
+                                            }}
+                                            className="gap-2"
                                         >
-                                            <EllipsisIcon className="size-4" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="border-2">
-                                        {onEdit ? (
-                                            <DropdownMenuItem onClick={onEdit} className="gap-2">
-                                                <PenIcon className="size-4" /> Edit
-                                            </DropdownMenuItem>
-                                        ) : null}
-                                        {onArchive ? (
-                                            <DropdownMenuItem onClick={onArchive} disabled={archived} className="gap-2">
-                                                <ArchiveIcon className="size-4" /> Archive
-                                            </DropdownMenuItem>
-                                        ) : null}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            ) : null}
+                                            <PenIcon className="size-4" /> Edit
+                                        </DropdownMenuItem>
+                                    ) : null}
+                                    {onArchive ? (
+                                        <DropdownMenuItem
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onArchive();
+                                            }}
+                                            disabled={archived}
+                                            className="gap-2"
+                                        >
+                                            <ArchiveIcon className="size-4" /> Archive
+                                        </DropdownMenuItem>
+                                    ) : null}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
 
                         </div>
 

@@ -32,7 +32,7 @@ import AdminProfile from "./pages/admin/profile-view";
 import TeacherDashboard from "./pages/teacher/dashboard";
 import TeacherProfile from "./pages/teacher/profile-view";
 // import TeacherClasses from "./pages/teacher/Classworks";
-import ClassesPage from "./pages/teacher/Classes/classes-page";
+import ClassesPage from "./pages/teacher/classes";
 import TeacherClassDetail from "./pages/teacher/Classes/class-detail";
 import ClassSections from "./pages/teacher/Classes/class-section";
 import SubjectDetails from "./pages/teacher/Classes/subject-details";

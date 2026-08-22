@@ -85,7 +85,7 @@ function SubjectClassCatalogCard({
   );
 }
 
-const ClassesPage = () => {
+const TeacherClasses = () => {
   const navigate = useNavigate();
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [advisoryClasses, setAdvisoryClasses] = useState<
@@ -288,4 +288,4 @@ const ClassesPage = () => {
   );
 };
 
-export default ClassesPage;
+export default TeacherClasses;

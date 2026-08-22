@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSub,
   DropdownMenuSubTrigger,
@@ -42,12 +42,12 @@ import {
   Wand2,
   Sparkles,
   Settings,
-  Unlock,
-  Globe,
-  Layers,
-  ChevronDown,
   Search,
   Copy,
+  Unlock,
+  EllipsisIcon,
+  PenIcon,
+  ArchiveIcon,
 } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 import { useSettings } from "@/context/SettingsContext";
@@ -132,8 +132,6 @@ export default function AdminSubjectLoadStudio() {
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [isBreakDrawerOpen, setIsBreakDrawerOpen] = useState<boolean>(false);
   const [periodTemplateSlots, setPeriodTemplateSlots] = useState<PeriodTemplateSlotItem[]>([]);
-  const [isToolsOpen, setIsToolsOpen] = useState<boolean>(false);
-  const [isPublishOpen, setIsPublishOpen] = useState<boolean>(false);
   const [openRowKey, setOpenRowKey] = useState<string | null>(null);
   const [expandedIssueRule, setExpandedIssueRule] = useState<string | null>(null);
 
@@ -378,8 +376,8 @@ export default function AdminSubjectLoadStudio() {
 
     const errorMsg = validatePeriodTimeRange(start, end, schoolDayStart, schoolDayEnd);
     if (errorMsg) {
-        setNotice({ type: "error", message: errorMsg });
-        return; // Reject change
+      setNotice({ type: "error", message: errorMsg });
+      return; // Reject change
     }
 
     const updated = loads.map((item) => {
@@ -622,7 +620,7 @@ export default function AdminSubjectLoadStudio() {
         const classIds = new Set(studioData?.classes.filter(c => c.academic_level_id === levelId).map(c => c.class_id));
         currentLoads = currentLoads.filter(l => !classIds.has(l.class_id));
       } else {
-        currentLoads = []; 
+        currentLoads = [];
       }
 
       const newLoads: SubjectLoadItem[] = sourceLoads.map(sl => ({
@@ -934,9 +932,9 @@ export default function AdminSubjectLoadStudio() {
         for (let slotIdx = 0; slotIdx < bp.slots.length; slotIdx++) {
           const bpSlot = bp.slots[slotIdx];
           const dur = timeStringToMinutes(bpSlot.end_time) - timeStringToMinutes(bpSlot.start_time);
-          
+
           const candidateSlots = targetTimeSlots.filter(ts => ts.duration === dur);
-          
+
           // Reorder candidateSlots: nearest distance to original time
           candidateSlots.sort((a, b) => {
             const aMin = timeStringToMinutes(a.start_time);
@@ -949,30 +947,30 @@ export default function AdminSubjectLoadStudio() {
           let chosenDays: string[] = [];
 
           for (const candSlot of candidateSlots) {
-             const daysFound: string[] = [];
-             
-             // First pass: try original days
-             for (const d of bpSlot.days_of_week) {
-               if (isDayFree(targetClassId, cons.subjectId, cons.staffId, candSlot.start_time, candSlot.end_time, d)) {
-                 daysFound.push(d);
-               }
-             }
+            const daysFound: string[] = [];
 
-             // Second pass: try remaining days
-             if (daysFound.length < bpSlot.dayCount) {
-               for (const d of ALL_DAYS) {
-                 if (daysFound.length >= bpSlot.dayCount) break;
-                 if (!daysFound.includes(d) && isDayFree(targetClassId, cons.subjectId, cons.staffId, candSlot.start_time, candSlot.end_time, d)) {
-                   daysFound.push(d);
-                 }
-               }
-             }
+            // First pass: try original days
+            for (const d of bpSlot.days_of_week) {
+              if (isDayFree(targetClassId, cons.subjectId, cons.staffId, candSlot.start_time, candSlot.end_time, d)) {
+                daysFound.push(d);
+              }
+            }
 
-             if (daysFound.length >= bpSlot.dayCount) {
-               chosenTimeSlot = candSlot;
-               chosenDays = daysFound;
-               break; // found a working time slot!
-             }
+            // Second pass: try remaining days
+            if (daysFound.length < bpSlot.dayCount) {
+              for (const d of ALL_DAYS) {
+                if (daysFound.length >= bpSlot.dayCount) break;
+                if (!daysFound.includes(d) && isDayFree(targetClassId, cons.subjectId, cons.staffId, candSlot.start_time, candSlot.end_time, d)) {
+                  daysFound.push(d);
+                }
+              }
+            }
+
+            if (daysFound.length >= bpSlot.dayCount) {
+              chosenTimeSlot = candSlot;
+              chosenDays = daysFound;
+              break; // found a working time slot!
+            }
           }
 
           if (!chosenTimeSlot) {
@@ -1126,7 +1124,6 @@ export default function AdminSubjectLoadStudio() {
       });
     } finally {
       setIsSaving(false);
-      setIsPublishOpen(false);
     }
   };
 
@@ -1140,6 +1137,28 @@ export default function AdminSubjectLoadStudio() {
       return true;
     });
   }, [studioData, selectedGradeId]);
+
+  // Group filtered classes by grade level
+  const groupedClassesByGrade = useMemo(() => {
+    if (!studioData) return [];
+    const groupsMap = new Map<number, { levelId: number; levelName: string; gradeLevel: number; classes: typeof filteredClasses }>();
+
+    for (const cls of filteredClasses) {
+      const levelId = cls.academic_level_id;
+      if (!groupsMap.has(levelId)) {
+        const levelObj = studioData.academic_levels.find((l) => l.academic_level_id === levelId);
+        groupsMap.set(levelId, {
+          levelId,
+          levelName: levelObj?.level_name || `Grade ${levelId}`,
+          gradeLevel: levelObj?.grade_level || levelId,
+          classes: [],
+        });
+      }
+      groupsMap.get(levelId)!.classes.push(cls);
+    }
+
+    return Array.from(groupsMap.values()).sort((a, b) => a.gradeLevel - b.gradeLevel);
+  }, [studioData, filteredClasses]);
 
   // Compute teacher availability helper
   const getTeacherAvailabilityStatus = (staffId: string, classId: number, subjectId: number) => {
@@ -1208,12 +1227,8 @@ export default function AdminSubjectLoadStudio() {
     ).length;
   }, [selectedGradeId, levelClassIds, conflicts, errorConflictsCount]);
 
-  // Grade-level publish: only blocks if current scope has unassigned or errors in this grade
-  const isGradeLevelPublishDisabled = isSaving || gradeLevelErrorsCount > 0 || unassignedInCurrentScope > 0;
   // Master Schedule publish: strictly blocks if ANY subject school-wide is unassigned
   const isMasterPublishDisabled = isSaving || errorConflictsCount > 0 || unassignedTotal > 0;
-  // Alias for main header button (depends on current view)
-  const isHeaderPublishDisabled = selectedGradeId !== "all" ? isGradeLevelPublishDisabled : isMasterPublishDisabled;
 
   return (
     <AppLayout>
@@ -1231,195 +1246,89 @@ export default function AdminSubjectLoadStudio() {
               {/* Sticky Action Controls */}
               <div className="flex flex-wrap items-center gap-3 self-end md:self-auto">
                 <Button
+                  variant="outline"
                   disabled={isSaving}
                   onClick={() => void handleSave("draft")}
                 >
                   Save Draft
                 </Button>
 
-                {/* Setup Tools Retro Dropdown */}
-                <div className="relative">
-                  <Button
-                    className="gap-2"
-                    variant="outline"
-                    disabled={isLoading || isSaving}
-                    onClick={() => setIsToolsOpen((prev) => !prev)}
-                  >
-                    <Wand2 className="size-3.5 text-black" />
-                    <span>Tools ▾</span>
-                  </Button>
-
-                  {isToolsOpen && (
-                    <div
-                      className="absolute right-0 mt-1 w-56 bg-white border-2 border-black shadow-[3px_3px_0_#000] p-1.5 z-50 flex flex-col gap-1 rounded"
-                      onMouseLeave={() => setIsToolsOpen(false)}
+                {/* Setup Tools Dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      className="gap-2"
+                      variant="outline"
+                      disabled={isLoading || isSaving}
                     >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsToolsOpen(false);
-                          setIsBreakDrawerOpen(true);
-                        }}
-                        className="font-sans text-md font-semibold text-left px-2.5 py-1.5 flex gap-2 items-center"
-                      >
-                        <Settings className="size-3.5 text-purple-900" />
-                        <span>Edit Break Timelines</span>
-                      </button>
-                      {previousPeriods.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsToolsOpen(false);
-                            setIsCopyModalOpen(true);
-                          }}
-                          className="font-sans text-md font-semibold text-left px-2.5 py-1.5 flex gap-2 items-center"
-                        >
-                          <Copy className="size-3.5 text-indigo-900" />
-                          <span>Copy from Previous Term</span>
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsToolsOpen(false);
-                          void handleAutoSchedule();
-                        }}
-                        className="font-sans text-md font-semibold text-left px-2.5 py-1.5 flex gap-2 items-center"
-                      >
-                        <Sparkles className="size-3.5 text-emerald-900" />
-                        <span>Auto-Generate All</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
+                      <Wand2 className="size-3.5 text-black" />
+                      <span>Tools ▾</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="border-2 min-w-[200px]">
+                    <DropdownMenuItem
+                      className="gap-2 cursor-pointer"
+                      onClick={() => setIsBreakDrawerOpen(true)}
+                    >
+                      <Settings className="size-3.5 text-purple-900" />
+                      <span>Edit Break Timelines</span>
+                    </DropdownMenuItem>
 
-                {/* Publish Dropdown & Action */}
-                <div className="relative flex items-center -gap-1">
-                  <Button
-                    className="gap-2"
-                    variant={isHeaderPublishDisabled ? "outline" : "default"}
-                    disabled={isSaving}
-                    onClick={() => {
-                      if (selectedGradeId !== "all") {
-                        if (unassignedInCurrentScope > 0) {
-                          setNotice({
-                            title: "Cannot Publish Grade Level",
-                            message: `There are ${unassignedInCurrentScope} unassigned subject(s) in this grade level. Please assign all teachers before publishing.`,
-                            type: "error",
-                          });
-                          return;
-                        }
-                        if (gradeLevelErrorsCount > 0) {
-                          const firstErr = conflicts.find((c) => c.severity === "error" && (
-                            (c.class_id && levelClassIds.has(c.class_id)) ||
-                            (c.affected_key && Array.from(levelClassIds).some((cid) => c.affected_key?.startsWith(`${cid}_`)))
-                          ));
-                          setNotice({
-                            title: "Cannot Publish Grade Level",
-                            message: firstErr?.message || "There are schedule conflicts in this grade level that must be resolved first.",
-                            type: "error",
-                          });
-                          return;
-                        }
-                        void handleSave("publish", "level");
-                      } else {
-                        if (unassignedTotal > 0) {
-                          setNotice({
-                            title: "Cannot Publish Master Schedule",
-                            message: `There are ${unassignedTotal} unassigned subject(s) school-wide. Please assign all teachers before publishing.`,
-                            type: "error",
-                          });
-                          return;
-                        }
-                        if (errorConflictsCount > 0) {
-                          const firstErr = conflicts.find((c) => c.severity === "error");
-                          setNotice({
-                            title: "Cannot Publish Master Schedule",
-                            message: firstErr?.message || "There are unresolved schedule conflicts school-wide.",
-                            type: "error",
-                          });
-                          return;
-                        }
-                        void handleSave("publish", "all");
-                      }
-                    }}
-                    title={
-                      unassignedInCurrentScope > 0
-                        ? `Assign all ${unassignedInCurrentScope} unassigned teacher(s) in this ${selectedGradeId !== "all" ? "grade level" : "school"} before publishing`
-                        : (selectedGradeId !== "all" ? gradeLevelErrorsCount : errorConflictsCount) > 0
-                          ? `Fix ${(selectedGradeId !== "all" ? gradeLevelErrorsCount : errorConflictsCount)} conflict errors before publishing`
-                          : "Publish official schedule"
+                    {previousPeriods.length > 0 && (
+                      <DropdownMenuItem
+                        className="gap-2 cursor-pointer"
+                        onClick={() => setIsCopyModalOpen(true)}
+                      >
+                        <Copy className="size-3.5 text-indigo-900" />
+                        <span>Copy from Previous Term</span>
+                      </DropdownMenuItem>
+                    )}
+
+                    <DropdownMenuItem
+                      className="gap-2 cursor-pointer"
+                      onClick={() => void handleAutoSchedule()}
+                    >
+                      <Sparkles className="size-3.5 text-emerald-900" />
+                      <span>Auto-Generate All</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Publish Action */}
+                <Button
+                  className="gap-2"
+                  variant={isMasterPublishDisabled ? "default" : "outline"}
+                  disabled={isSaving}
+                  onClick={() => {
+                    if (unassignedTotal > 0) {
+                      setNotice({
+                        title: "Cannot Publish Master Schedule",
+                        message: `Cannot publish master schedule: ${unassignedTotal} subject(s) school-wide have no assigned teacher`,
+                        type: "error",
+                      });
+                      return;
                     }
-                  >
-                    <Send className="size-3.5" />
-                    {selectedGradeId !== "all"
-                      ? `Publish Grade Level`
-                      : `Publish Master Schedule`}
-                  </Button>
-                  <Button
-                    className="gap-2 border-l-0 h-9.5"
-                    variant={isHeaderPublishDisabled ? "outline" : "default"}
-                    disabled={isSaving}
-                    onClick={() => setIsPublishOpen((prev) => !prev)}
-                    title="Publishing options"
-                  >
-                    <ChevronDown className="size-3.5" />
-                  </Button>
-
-                  {isPublishOpen && (
-                    <div
-                      className="absolute right-0 top-full mt-1 w-64 bg-white border-2 border-black shadow-[3px_3px_0_#000] p-1.5 z-50 flex flex-col gap-1 rounded"
-                      onMouseLeave={() => setIsPublishOpen(false)}
-                    >
-                      {selectedGradeId !== "all" && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsPublishOpen(false);
-                            void handleSave("publish", "level");
-                          }}
-                          className="text-xs font-bold text-left px-2.5 py-2 hover:bg-emerald-100 flex items-center gap-2 rounded transition-colors text-emerald-950"
-                        >
-                          <Layers className="size-3.5 text-emerald-700" />
-                          <div>
-                            <div>Publish Current Grade Level</div>
-                            <div className="text-[10px] text-muted-foreground font-normal">Publish only loads in this selected grade level</div>
-                          </div>
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={isMasterPublishDisabled}
-                        onClick={() => {
-                          if (isMasterPublishDisabled) return;
-                          setIsPublishOpen(false);
-                          void handleSave("publish", "all");
-                        }}
-                        title={
-                          unassignedTotal > 0
-                            ? `Cannot publish master schedule: ${unassignedTotal} subject(s) school-wide have no assigned teacher`
-                            : errorConflictsCount > 0
-                              ? "Fix all schedule conflicts before publishing master schedule"
-                              : "Publish all sections & grades school-wide"
-                        }
-                        className={`text-xs font-bold text-left px-2.5 py-2 flex items-center gap-2 rounded transition-colors ${isMasterPublishDisabled
-                          ? "text-gray-400 cursor-not-allowed opacity-60 bg-gray-50"
-                          : "hover:bg-purple-100 text-purple-950"
-                          }`}
-                      >
-                        <Globe className="size-3.5 text-purple-700" />
-                        <div>
-                          <div>Publish Master Schedule</div>
-                          <div className="text-[10px] text-muted-foreground font-normal">
-                            {unassignedTotal > 0
-                              ? `⚠️ ${unassignedTotal} unassigned subject(s) school-wide`
-                              : "Publish all sections & grades school-wide"}
-                          </div>
-                        </div>
-                      </button>
-                    </div>
-                  )}
-                </div>
+                    if (errorConflictsCount > 0) {
+                      setNotice({
+                        title: "Cannot Publish Master Schedule",
+                        message: "Fix all schedule conflicts before publishing master schedule",
+                        type: "error",
+                      });
+                      return;
+                    }
+                    void handleSave("publish", "all");
+                  }}
+                  title={
+                    unassignedTotal > 0
+                      ? `Cannot publish master schedule: ${unassignedTotal} subject(s) school-wide have no assigned teacher`
+                      : errorConflictsCount > 0
+                        ? "Fix all schedule conflicts before publishing master schedule"
+                        : "Publish all sections & grades school-wide"
+                  }
+                >
+                  <Send className="size-3.5" />
+                  Publish Master Schedule
+                </Button>
               </div>
             </header>
 
@@ -1538,271 +1447,316 @@ export default function AdminSubjectLoadStudio() {
                     </Text>
                   </RetroCard>
                 ) : (
-                  filteredClasses.map((cls) => {
-                    const offerings = studioData?.subject_offerings || [];
-                    const classSubjects = (studioData?.subjects || []).filter((sub) =>
-                      isSubjectOfferedForClass(sub, cls, offerings)
-                    );
+                  groupedClassesByGrade.map((group) => (
+                    <Card
+                      key={group.levelId}
+                      className="@container/card w-full flex flex-col gap-4 bg-primary"
+                    >
+                      <div className="flex items-center justify-between">
+                        <Text as="h4" className="text-xl font-bold font-sans">
+                          {group.levelName}
+                        </Text>
+                        <Badge variant="outline" className="border-border">
+                          {group.classes.length} section{group.classes.length !== 1 ? "s" : ""}
+                        </Badge>
+                      </div>
 
-                    const sectionLoads = loads.filter((l) => l.class_id === cls.class_id);
+                      <div className="flex flex-col gap-4">
+                        {group.classes.map((cls) => {
+                          const offerings = studioData?.subject_offerings || [];
+                          const classSubjects = (studioData?.subjects || []).filter((sub) =>
+                            isSubjectOfferedForClass(sub, cls, offerings)
+                          );
 
-                    const timesBySubject = new Map<string, { start: number; end: number }>();
-                    for (const l of sectionLoads) {
-                      if (!l.start_time) continue;
-                      const key = String(l.subject_id);
-                      const start = timeStringToMinutes(l.start_time);
-                      const end = timeStringToMinutes(l.end_time);
-                      const existing = timesBySubject.get(key);
-                      if (!existing || start < existing.start) {
-                        timesBySubject.set(key, { start, end });
-                      }
-                    }
+                          const sectionLoads = loads.filter((l) => l.class_id === cls.class_id);
 
-                    const sortedClassSubjects = [...classSubjects].sort((a, b) => {
-                      const aTimes = timesBySubject.get(String(a.subject_id)) ?? { start: Number.MAX_SAFE_INTEGER, end: Number.MAX_SAFE_INTEGER };
-                      const bTimes = timesBySubject.get(String(b.subject_id)) ?? { start: Number.MAX_SAFE_INTEGER, end: Number.MAX_SAFE_INTEGER };
-                      if (aTimes.start !== bTimes.start) return aTimes.start - bTimes.start;
-                      if (aTimes.end !== bTimes.end) return aTimes.end - bTimes.end;
-                      return (a.subject_name || "").localeCompare(b.subject_name || "");
-                    });
+                          const timesBySubject = new Map<string, { start: number; end: number }>();
+                          for (const l of sectionLoads) {
+                            if (!l.start_time) continue;
+                            const key = String(l.subject_id);
+                            const start = timeStringToMinutes(l.start_time);
+                            const end = timeStringToMinutes(l.end_time);
+                            const existing = timesBySubject.get(key);
+                            if (!existing || start < existing.start) {
+                              timesBySubject.set(key, { start, end });
+                            }
+                          }
 
-                    const sectionUnassignedCount = sectionLoads.filter((l) => !l.staff_id).length;
-                    const hasUnassigned = sectionUnassignedCount > 0 || classSubjects.length === 0;
-                    // Section is published when: no unassigned, has loads, every load is status="published"
-                    const isSectionPublished = !hasUnassigned && sectionLoads.length > 0 && sectionLoads.every((l) => l.status === "published");
-                    const sectionErrors = conflicts.filter(
-                      (c) => c.severity === "error" && (c.class_id === cls.class_id || (c.affected_key && c.affected_key.startsWith(`${cls.class_id}_`)))
-                    );
-                    const sectionHasErrors = sectionErrors.length > 0;
-                    const isPublishSectionDisabled = isSaving || sectionHasErrors || sectionUnassignedCount > 0;
+                          const sortedClassSubjects = [...classSubjects].sort((a, b) => {
+                            const aTimes = timesBySubject.get(String(a.subject_id)) ?? { start: Number.MAX_SAFE_INTEGER, end: Number.MAX_SAFE_INTEGER };
+                            const bTimes = timesBySubject.get(String(b.subject_id)) ?? { start: Number.MAX_SAFE_INTEGER, end: Number.MAX_SAFE_INTEGER };
+                            if (aTimes.start !== bTimes.start) return aTimes.start - bTimes.start;
+                            if (aTimes.end !== bTimes.end) return aTimes.end - bTimes.end;
+                            return (a.subject_name || "").localeCompare(b.subject_name || "");
+                          });
 
-                    const handlePublishSectionClick = () => {
-                      if (sectionUnassignedCount > 0) {
-                        setNotice({
-                          title: "Cannot Publish Section",
-                          message: `Section "${cls.section_name}" has ${sectionUnassignedCount} subject(s) without an assigned teacher. Please assign all teachers first.`,
-                          type: "error",
-                        });
-                        return;
-                      }
-                      if (sectionHasErrors) {
-                        const errorMsg = sectionErrors[0]?.message || "This section has unresolved schedule conflicts.";
-                        setNotice({
-                          title: "Cannot Publish Section",
-                          message: `Section "${cls.section_name}" cannot be published: ${errorMsg}`,
-                          type: "error",
-                        });
-                        return;
-                      }
-                      void handleSave("publish", "section", cls.class_id);
-                    };
+                          const sectionUnassignedCount = sectionLoads.filter((l) => !l.staff_id).length;
+                          const hasUnassigned = sectionUnassignedCount > 0 || classSubjects.length === 0;
+                          // Section is published when: no unassigned, has loads, every load is status="published"
+                          const isSectionPublished = !hasUnassigned && sectionLoads.length > 0 && sectionLoads.every((l) => l.status === "published");
+                          const sectionErrors = conflicts.filter(
+                            (c) => c.severity === "error" && (c.class_id === cls.class_id || (c.affected_key && c.affected_key.startsWith(`${cls.class_id}_`)))
+                          );
+                          const sectionHasErrors = sectionErrors.length > 0;
+                          const isPublishSectionDisabled = isSaving || sectionHasErrors || sectionUnassignedCount > 0;
 
-                    return (
-                      <RetroCard
-                        key={cls.class_id}
-                        className="block border-2 border-black p-4 overflow-visible"
-                      >
-                        <div className="flex items-center justify-between pb-4 flex-wrap gap-2">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Text as="h3" className="font-bold text-xl">
-                              {cls.section_name}
-                            </Text>
-                            <Badge
-                              size="sm"
-                              variant={isSectionPublished ? "surface" : "default"}
+                          const handlePublishSectionClick = () => {
+                            if (sectionUnassignedCount > 0) {
+                              setNotice({
+                                title: "Cannot Publish Section",
+                                message: `Section "${cls.section_name}" has ${sectionUnassignedCount} subject(s) without an assigned teacher. Please assign all teachers first.`,
+                                type: "error",
+                              });
+                              return;
+                            }
+                            if (sectionHasErrors) {
+                              const errorMsg = sectionErrors[0]?.message || "This section has unresolved schedule conflicts.";
+                              setNotice({
+                                title: "Cannot Publish Section",
+                                message: `Section "${cls.section_name}" cannot be published: ${errorMsg}`,
+                                type: "error",
+                              });
+                              return;
+                            }
+                            void handleSave("publish", "section", cls.class_id);
+                          };
+
+                          return (
+                            <RetroCard
+                              key={cls.class_id}
+                              className="block border-2 border-black p-4 overflow-visible shadow-none hover:-translate-y-1"
                             >
-                              {isSectionPublished ? "Published" : "Draft"}
-                            </Badge>
-                            <Badge
-                              size="sm"
-                              variant="solid"
-                            >
-                              {classSubjects.length} Subjects
-                            </Badge>
-                            {(() => {
-                              if (!cls.pathway || cls.pathway === "general") return null;
-                              const formatted = cls.pathway
-                                .replace(/_/g, " ")
-                                .replace(/\b\w/g, (l) => l.toUpperCase())
-                                .replace(/Stem/i, "STEM");
-
-                              return (
-                                <Badge variant="surface" size="sm" className="border-2 border-black font-bold uppercase text-[10px] bg-emerald-100 text-emerald-950 border-emerald-800">
-                                  {formatted}
-                                </Badge>
-                              );
-                            })()}
-                          </div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={isSectionPublished || isSaving}
-                              onClick={() => void handleAutoSchedule(cls.class_id)}
-                              className="gap-2"
-                              title={
-                                isSectionPublished
-                                  ? "Section is published/locked. Unlock section to auto-fit."
-                                  : "Auto-fit section timetable"
-                              }
-                            >
-                              <Wand2 className="size-3.5 text-foreground" />
-                              Auto-Fit Section
-                            </Button>
-
-                            {(() => {
-                              const siblingSections = (studioData?.classes || []).filter(c => c.class_id !== cls.class_id && c.academic_level_id === cls.academic_level_id);
-                              const configuredSiblings = siblingSections.filter(c => loads.some(l => l.class_id === c.class_id && l.start_time && l.end_time));
-                              
-                              if (configuredSiblings.length === 1) {
-                                const sib = configuredSiblings[0];
-                                return (
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button size="sm" variant="outline" className="gap-2">
-                                        <Copy className="size-3.5 text-foreground" />
-                                        Copy from {sib.section_name}
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="bg-white border-2 border-black shadow-[3px_3px_0_#000] rounded p-1 min-w-[200px]">
-                                      <DropdownMenuItem className="cursor-pointer font-bold focus:bg-gray-100" onClick={() => void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")}>
-                                        Conflict-Aware Fill (Recommended)
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem className="cursor-pointer focus:bg-gray-100" onClick={() => void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")}>
-                                        Exact Match
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                );
-                              }
-
-                              if (configuredSiblings.length > 1) {
-                                return (
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button size="sm" variant="outline" className="gap-2">
-                                        <Copy className="size-3.5 text-foreground" />
-                                        Copy Schedule
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="bg-white border-2 border-black shadow-[3px_3px_0_#000] rounded p-1 min-w-[200px]">
-                                      {configuredSiblings.map(sib => (
-                                        <DropdownMenuSub key={sib.class_id}>
-                                          <DropdownMenuSubTrigger className="font-bold focus:bg-gray-100 data-[state=open]:bg-gray-100">
-                                            {sib.section_name}
-                                          </DropdownMenuSubTrigger>
-                                          <DropdownMenuPortal>
-                                            <DropdownMenuSubContent className="bg-white border-2 border-black shadow-[3px_3px_0_#000] rounded p-1 min-w-[200px]">
-                                              <DropdownMenuItem className="cursor-pointer font-bold focus:bg-gray-100" onClick={() => void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")}>
-                                                Conflict-Aware Fill (Recommended)
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem className="cursor-pointer focus:bg-gray-100" onClick={() => void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")}>
-                                                Exact Match
-                                              </DropdownMenuItem>
-                                            </DropdownMenuSubContent>
-                                          </DropdownMenuPortal>
-                                        </DropdownMenuSub>
-                                      ))}
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                );
-                              }
-                              return null;
-                            })()}
-
-                            {isSectionPublished ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isSaving}
-                                onClick={() => void handleSave("draft", "section", cls.class_id)}
-                                title="Revert this section to draft status to allow edits"
-                              >
-                                <Unlock className="size-3.5 mr-1 text-amber-800" />
-                                Unlock Section
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant={isPublishSectionDisabled ? "outline" : "default"}
-                                disabled={isSaving}
-                                className="gap-2"
-                                onClick={handlePublishSectionClick}
-                                title={
-                                  sectionUnassignedCount > 0
-                                    ? `Assign all ${sectionUnassignedCount} unassigned teacher(s) in this section before publishing`
-                                    : sectionHasErrors
-                                      ? `Fix schedule conflicts in this section before publishing: ${sectionErrors[0]?.message || ""}`
-                                      : "Publish only this section's schedule"
-                                }
-                              >
-                                <Send className="size-3.5" />
-                                Publish Section
-                              </Button>
-                            )}
-
-
-                          </div>
-                        </div>
-
-                        {classSubjects.length === 0 ? (
-                          <div className="p-6 text-center border-2 border-dashed my-2">
-                            <Text as="p" className="text-sm font-bold text-muted-foreground">
-                              No subjects offered in Curriculum Plan for {cls.section_name} in this term.
-                            </Text>
-                            <Text as="p" className="text-xs text-muted-foreground mt-1">
-                              Go to &quot;Subjects &rarr; Curriculum Plan&quot; to enable subject offerings.
-                            </Text>
-                          </div>
-                        ) : (
-                          <Table className="overflow-none shadow-none" wrapperClassName="overflow-visible h-auto">
-                            <Table.Header className="">
-                              <Table.Row>
-                                <Table.Head className="font-bold text-black">Subject</Table.Head>
-                                <Table.Head className="font-bold text-black ">Schedule</Table.Head>
-                                <Table.Head className="font-bold text-black">Assigned Teacher</Table.Head>
-                              </Table.Row>
-                            </Table.Header>
-                            <Table.Body>
-                              {sortedClassSubjects.map((sub) => {
-                                const subjectSlots = loads.filter(
-                                  (l) => l.class_id === cls.class_id && l.subject_id === sub.subject_id
-                                );
-
-                                let scheduledWeeklyHours = 0;
-                                subjectSlots.forEach((sl) => {
-                                  const dur = (parseMin(sl.end_time) - parseMin(sl.start_time)) / 60;
-                                  const numDays = (sl.days_of_week || []).length;
-                                  if (dur > 0 && numDays > 0) {
-                                    scheduledWeeklyHours += dur * numDays;
-                                  }
-                                });
-
-                                const conflict = getLoadConflict(cls.class_id, sub.subject_id);
-                                const isHighlighted =
-                                  highlightedKey === `${cls.class_id}_${sub.subject_id}`;
-
-                                return (
-                                  <Table.Row
-                                    key={sub.subject_id}
-                                    id={`subject-row-${cls.class_id}_${sub.subject_id}`}
-                                    className={`transition-all duration-200 border-b border-border ${isHighlighted
-                                      ? "bg-accent border-black"
-                                      : conflict
-                                        ? conflict.severity === "error"
-                                          ? "bg-accent"
-                                          : "bg-background"
-                                        : "hover:bg-accent"
-                                      }`}
+                              <div className="flex items-center justify-between pb-4 flex-wrap gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Text as="h3" className="font-bold text-2xl">
+                                    {cls.section_name}
+                                  </Text>
+                                  <Badge
+                                    size="sm"
+                                    variant={isSectionPublished ? "surface" : "default"}
                                   >
-                                    {/* Subject Column */}
-                                    <Table.Cell className="py-2.5 px-3 align-middle">
-                                      <div className="flex flex-col gap-1">
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="font-bold text-base text-black">
-                                            {sub.subject_name}
-                                          </span>
-                                          {/* {conflict && (
+                                    {isSectionPublished ? "Published" : "Draft"}
+                                  </Badge>
+                                  <Badge
+                                    size="sm"
+                                    variant="solid"
+                                  >
+                                    {classSubjects.length} Subjects
+                                  </Badge>
+                                  {(() => {
+                                    if (!cls.pathway || cls.pathway === "general") return null;
+                                    const formatted = cls.pathway
+                                      .replace(/_/g, " ")
+                                      .replace(/\b\w/g, (l) => l.toUpperCase())
+                                      .replace(/Stem/i, "STEM");
+
+                                    return (
+                                      <Badge variant="surface" size="sm" className="border-2 border-black font-bold uppercase text-[10px] bg-emerald-100 text-emerald-950 border-emerald-800">
+                                        {formatted}
+                                      </Badge>
+                                    );
+                                  })()}
+                                </div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {isSectionPublished ? (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isSaving}
+                                      onClick={() => void handleSave("draft", "section", cls.class_id)}
+                                      title="Revert this section to draft status to allow edits"
+                                    >
+                                      <Unlock className="size-3.5 mr-1" />
+                                      Unlock Section
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      variant={isPublishSectionDisabled ? "default" : "outline"}
+                                      disabled={isSaving}
+                                      className="gap-2"
+                                      onClick={handlePublishSectionClick}
+                                      title={
+                                        sectionUnassignedCount > 0
+                                          ? `Assign all ${sectionUnassignedCount} unassigned teacher(s) in this section before publishing`
+                                          : sectionHasErrors
+                                            ? `Fix schedule conflicts in this section before publishing: ${sectionErrors[0]?.message || ""}`
+                                            : "Publish only this section's schedule"
+                                      }
+                                    >
+                                      <Send className="size-3.5" />
+                                      Publish Section
+                                    </Button>
+                                  )}
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        className="p-[7px] shadow-white"
+                                        aria-label="More options"
+                                        onClick={(e) => e.preventDefault()}
+                                      >
+                                        <EllipsisIcon className="size-3.5" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="border-2 min-w-[200px]">
+                                      <DropdownMenuItem
+                                        className="gap-2 cursor-pointer"
+                                        disabled={isSectionPublished || isSaving}
+                                        onClick={() => void handleAutoSchedule(cls.class_id)}
+                                      >
+                                        <Wand2 className="size-4" /> Auto-Fit Section
+                                      </DropdownMenuItem>
+
+                                      {(() => {
+                                        const siblingSections = (studioData?.classes || []).filter(
+                                          (c) => c.class_id !== cls.class_id && c.academic_level_id === cls.academic_level_id
+                                        );
+                                        const configuredSiblings = siblingSections.filter((c) =>
+                                          loads.some((l) => l.class_id === c.class_id && l.start_time && l.end_time)
+                                        );
+
+                                        if (configuredSiblings.length === 1) {
+                                          const sib = configuredSiblings[0];
+                                          return (
+                                            <DropdownMenuSub >
+                                              <DropdownMenuSubTrigger className="gap-2 cursor-pointer whitespace-nowrap">
+                                                <Copy className="size-4" />
+                                                <span>Copy from <span className="font-bold">{sib.section_name}</span></span>
+                                              </DropdownMenuSubTrigger>
+                                              <DropdownMenuPortal>
+                                                <DropdownMenuSubContent className="border-2 min-w-[210px]">
+                                                  <DropdownMenuItem
+                                                    className="font-bold"
+                                                    onClick={() =>
+                                                      void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")
+                                                    }
+                                                  >
+                                                    Conflict-Aware Fill (Recommended)
+                                                  </DropdownMenuItem>
+                                                  <DropdownMenuItem
+                                                    className=""
+                                                    onClick={() =>
+                                                      void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")
+                                                    }
+                                                  >
+                                                    Exact Match
+                                                  </DropdownMenuItem>
+                                                </DropdownMenuSubContent>
+                                              </DropdownMenuPortal>
+                                            </DropdownMenuSub>
+                                          );
+                                        }
+
+                                        if (configuredSiblings.length > 1) {
+                                          return (
+                                            <DropdownMenuSub>
+                                              <DropdownMenuSubTrigger className="gap-2 cursor-pointer">
+                                                <Copy className="size-4" />
+                                                <span>Copy Schedule</span>
+                                              </DropdownMenuSubTrigger>
+                                              <DropdownMenuPortal>
+                                                <DropdownMenuSubContent className="border-2 min-w-[210px]">
+                                                  {configuredSiblings.map((sib) => (
+                                                    <DropdownMenuSub key={sib.class_id}>
+                                                      <DropdownMenuSubTrigger className="cursor-pointer font-bold focus:bg-gray-100">
+                                                        {sib.section_name}
+                                                      </DropdownMenuSubTrigger>
+                                                      <DropdownMenuPortal>
+                                                        <DropdownMenuSubContent className="border-2 min-w-[210px]">
+                                                          <DropdownMenuItem
+                                                            className="cursor-pointer font-bold focus:bg-gray-100"
+                                                            onClick={() =>
+                                                              void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")
+                                                            }
+                                                          >
+                                                            Conflict-Aware Fill (Recommended)
+                                                          </DropdownMenuItem>
+                                                          <DropdownMenuItem
+                                                            className="cursor-pointer focus:bg-gray-100"
+                                                            onClick={() =>
+                                                              void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")
+                                                            }
+                                                          >
+                                                            Exact Match
+                                                          </DropdownMenuItem>
+                                                        </DropdownMenuSubContent>
+                                                      </DropdownMenuPortal>
+                                                    </DropdownMenuSub>
+                                                  ))}
+                                                </DropdownMenuSubContent>
+                                              </DropdownMenuPortal>
+                                            </DropdownMenuSub>
+                                          );
+                                        }
+
+                                        return null;
+                                      })()}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+
+                                </div>
+                              </div>
+
+                              {classSubjects.length === 0 ? (
+                                <div className="p-6 text-center border-2 border-dashed my-2">
+                                  <Text as="p" className="text-sm font-bold text-muted-foreground">
+                                    No subjects offered in Curriculum Plan for {cls.section_name} in this term.
+                                  </Text>
+                                  <Text as="p" className="text-xs text-muted-foreground mt-1">
+                                    Go to &quot;Subjects &rarr; Curriculum Plan&quot; to enable subject offerings.
+                                  </Text>
+                                </div>
+                              ) : (
+                                <Table className="overflow-none shadow-none" wrapperClassName="overflow-visible h-auto">
+                                  <Table.Header className="">
+                                    <Table.Row>
+                                      <Table.Head className="font-bold text-black">Subject</Table.Head>
+                                      <Table.Head className="font-bold text-black ">Schedule</Table.Head>
+                                      <Table.Head className="font-bold text-black">Assigned Teacher</Table.Head>
+                                    </Table.Row>
+                                  </Table.Header>
+                                  <Table.Body>
+                                    {sortedClassSubjects.map((sub) => {
+                                      const subjectSlots = loads.filter(
+                                        (l) => l.class_id === cls.class_id && l.subject_id === sub.subject_id
+                                      );
+
+                                      let scheduledWeeklyHours = 0;
+                                      subjectSlots.forEach((sl) => {
+                                        const dur = (parseMin(sl.end_time) - parseMin(sl.start_time)) / 60;
+                                        const numDays = (sl.days_of_week || []).length;
+                                        if (dur > 0 && numDays > 0) {
+                                          scheduledWeeklyHours += dur * numDays;
+                                        }
+                                      });
+
+                                      const conflict = getLoadConflict(cls.class_id, sub.subject_id);
+                                      const isHighlighted =
+                                        highlightedKey === `${cls.class_id}_${sub.subject_id}`;
+
+                                      return (
+                                        <Table.Row
+                                          key={sub.subject_id}
+                                          id={`subject-row-${cls.class_id}_${sub.subject_id}`}
+                                          className={`transition-all duration-200 border-b border-border ${isHighlighted
+                                            ? "bg-accent border-black"
+                                            : conflict
+                                              ? conflict.severity === "error"
+                                                ? "bg-accent"
+                                                : "bg-background"
+                                              : "hover:bg-accent"
+                                            }`}
+                                        >
+                                          {/* Subject Column */}
+                                          <Table.Cell className="py-2.5 px-3 align-middle">
+                                            <div className="flex flex-col gap-1">
+                                              <div className="flex items-center gap-1.5">
+                                                <span className="font-bold text-base text-black">
+                                                  {sub.subject_name}
+                                                </span>
+                                                {/* {conflict && (
                                               <span
                                                 className={`text-[11px] font-bold px-1.5 py-0.5 rounded border border-black ${conflict.severity === "error" ? "bg-red-200 text-red-950" : "bg-amber-200 text-amber-950"
                                                   }`}
@@ -1811,251 +1765,254 @@ export default function AdminSubjectLoadStudio() {
                                                 ⚠️ {conflict.severity === "error" ? "Conflict" : "15 min short"}
                                               </span>
                                             )} */}
-                                        </div>
-                                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                          <Badge variant="default" size="sm">
-                                            {sub.subject_codename || `SUB-${sub.subject_id}`}
-                                          </Badge>
-                                          {sub.is_math_or_science && (
-                                            <Badge variant="solid" size="sm">
-                                              Core
-                                            </Badge>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </Table.Cell>
-
-                                    {/* Days & Time Slot Columns */}
-                                    <Table.Cell className="py-2.5 px-2 align-middle">
-                                      {subjectSlots.length === 0 ? (
-                                        <span className="text-xs italic text-muted-foreground font-semibold py-1 inline-block">
-                                          Unscheduled — click &quot;+ Add Slot&quot; to assign schedule
-                                        </span>
-                                      ) : (
-                                        <div className="flex flex-col gap-2">
-                                          {subjectSlots.map((slot, sIdx) => {
-                                            const slotKey = slot._key || `slot_${cls.class_id}_${sub.subject_id}_${sIdx}`;
-                                            return (
-                                              <div key={slotKey} className="flex flex-wrap items-center gap-2.5">
-                                                {/* Days Chips */}
-                                                <div className="flex flex-wrap gap-0.5">
-                                                  {DAYS.map((d) => {
-                                                    const isSelected = (slot.days_of_week || []).includes(d.key);
-                                                    return (
-                                                      <button
-                                                        key={d.key}
-                                                        type="button"
-                                                        onClick={() => handleToggleDay(slotKey, d.key)}
-                                                        className={`size-6 text-[11px] font-bold border-2 border-black transition-all ${isSelected
-                                                          ? "bg-primary text-primary-foreground shadow-[1px_1px_0_#000]"
-                                                          : "bg-background text-foreground opacity-50 hover:opacity-100"
-                                                          }`}
-                                                      >
-                                                        {d.label}
-                                                      </button>
-                                                    );
-                                                  })}
-                                                </div>
-
-                                                {/* Time Picker */}
-                                                <div className="flex items-center gap-1">
-                                                  <TimePickerSingle
-                                                    value={stringToTimeValue(slot.start_time, 8)}
-                                                    onChange={(newStart) =>
-                                                      handleTimeChange(slotKey, "start_time", timeValueToString(newStart))
-                                                    }
-                                                  />
-                                                  <span className="text-xs font-bold text-muted-foreground">–</span>
-                                                  <TimePickerSingle
-                                                    value={stringToTimeValue(slot.end_time, 9)}
-                                                    lockedPeriod={stringToTimeValue(slot.start_time, 8).period === "PM" ? "PM" : undefined}
-                                                    onChange={(newEnd) =>
-                                                      handleTimeChange(slotKey, "end_time", timeValueToString(newEnd))
-                                                    }
-                                                  />
-                                                </div>
-
-                                                {/* Delete slot button */}
-                                                {subjectSlots.length > 1 && (
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveSlot(slotKey)}
-                                                    className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 border border-red-300 rounded ml-1"
-                                                    title="Remove this time slot"
-                                                  >
-                                                    <Trash2 className="size-3.5" />
-                                                  </button>
+                                              </div>
+                                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                                <Badge variant="default" size="sm">
+                                                  {sub.subject_codename || `SUB-${sub.subject_id}`}
+                                                </Badge>
+                                                {sub.is_math_or_science && (
+                                                  <Badge variant="solid" size="sm">
+                                                    Core
+                                                  </Badge>
                                                 )}
                                               </div>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
-                                    </Table.Cell>
+                                            </div>
+                                          </Table.Cell>
 
-                                    {/* Smart Teacher Dropdown & Workload Bar */}
-                                    <Table.Cell className="py-2.5 px-3 align-middle">
-                                      {(() => {
-                                        const currentStaffId = subjectSlots[0]?.staff_id;
-                                        const teacherObj = (studioData?.teachers || []).find((t) => t.staff_id === currentStaffId);
-                                        const currentStatusText = currentStaffId
-                                          ? getTeacherAvailabilityStatus(
-                                            currentStaffId,
-                                            cls.class_id,
-                                            sub.subject_id
-                                          )
-                                          : "";
-                                        const currentHasConflict = currentStatusText.includes("Conflict");
+                                          {/* Days & Time Slot Columns */}
+                                          <Table.Cell className="py-2.5 px-2 align-middle">
+                                            {subjectSlots.length === 0 ? (
+                                              <span className="text-xs italic text-muted-foreground font-semibold py-1 inline-block">
+                                                Unscheduled — click &quot;+ Add Slot&quot; to assign schedule
+                                              </span>
+                                            ) : (
+                                              <div className="flex flex-col gap-2">
+                                                {subjectSlots.map((slot, sIdx) => {
+                                                  const slotKey = slot._key || `slot_${cls.class_id}_${sub.subject_id}_${sIdx}`;
+                                                  return (
+                                                    <div key={slotKey} className="flex flex-wrap items-center gap-2.5">
+                                                      {/* Days Chips */}
+                                                      <div className="flex flex-wrap gap-0.5">
+                                                        {DAYS.map((d) => {
+                                                          const isSelected = (slot.days_of_week || []).includes(d.key);
+                                                          return (
+                                                            <button
+                                                              key={d.key}
+                                                              type="button"
+                                                              onClick={() => handleToggleDay(slotKey, d.key)}
+                                                              className={`size-6 text-[11px] font-bold border-2 border-black transition-all ${isSelected
+                                                                ? "bg-primary text-primary-foreground shadow-[1px_1px_0_#000]"
+                                                                : "bg-background text-foreground opacity-50 hover:opacity-100"
+                                                                }`}
+                                                            >
+                                                              {d.label}
+                                                            </button>
+                                                          );
+                                                        })}
+                                                      </div>
 
-                                        // Compute teacher workload hours
-                                        const tWorkload = teacherWorkloads.find((w) => w.staff_id === currentStaffId);
-                                        const weeklyHours = tWorkload?.total_weekly_hours || 0;
-                                        const maxWeeklyHours = 30.0;
-                                        const pct = Math.min(100, Math.round((weeklyHours / maxWeeklyHours) * 100));
+                                                      {/* Time Picker */}
+                                                      <div className="flex items-center gap-1">
+                                                        <TimePickerSingle
+                                                          value={stringToTimeValue(slot.start_time, 8)}
+                                                          onChange={(newStart) =>
+                                                            handleTimeChange(slotKey, "start_time", timeValueToString(newStart))
+                                                          }
+                                                        />
+                                                        <span className="text-xs font-bold text-muted-foreground">–</span>
+                                                        <TimePickerSingle
+                                                          value={stringToTimeValue(slot.end_time, 9)}
+                                                          lockedPeriod={stringToTimeValue(slot.start_time, 8).period === "PM" ? "PM" : undefined}
+                                                          onChange={(newEnd) =>
+                                                            handleTimeChange(slotKey, "end_time", timeValueToString(newEnd))
+                                                          }
+                                                        />
+                                                      </div>
 
-                                        const rowKey = `${cls.class_id}_${sub.subject_id}`;
-                                        const isRowMenuOpen = openRowKey === rowKey;
+                                                      {/* Delete slot button */}
+                                                      {subjectSlots.length > 1 && (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => handleRemoveSlot(slotKey)}
+                                                          className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 border border-red-300 rounded ml-1"
+                                                          title="Remove this time slot"
+                                                        >
+                                                          <Trash2 className="size-3.5" />
+                                                        </button>
+                                                      )}
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            )}
+                                          </Table.Cell>
 
-                                        return (
-                                          <div className="flex items-center gap-2">
-                                            <div className="flex flex-col gap-1">
-                                              <Select
-                                                value={currentStaffId || "none"}
-                                                onValueChange={(val) =>
-                                                  handleTeacherChange(cls.class_id, sub.subject_id, val)
-                                                }
-                                              >
-                                                <Select.Trigger
-                                                  className={`w-[170px] h-8 border-2 border-black font-bold text-xs shadow-sm transition-colors ${!currentStaffId
-                                                    ? ""
-                                                    : currentHasConflict
-                                                      ? "bg-destructive text-destructive border-destructive font-bold"
-                                                      : "bg-white text-black shadow-[1px_1px_0_#000]"
-                                                    }`}
-                                                >
-                                                  <div className="flex items-center justify-between w-full overflow-hidden min-w-0">
-                                                    <span className="truncate"><Select.Value placeholder="Select Teacher" /></span>
-                                                    {currentHasConflict && (
-                                                      <span className="text-red-600 text-xs font-bold shrink-0 ml-1" title={currentStatusText}>
-                                                        ⚠️
-                                                      </span>
+                                          {/* Smart Teacher Dropdown & Workload Bar */}
+                                          <Table.Cell className="py-2.5 px-3 align-middle">
+                                            {(() => {
+                                              const currentStaffId = subjectSlots[0]?.staff_id;
+                                              const teacherObj = (studioData?.teachers || []).find((t) => t.staff_id === currentStaffId);
+                                              const currentStatusText = currentStaffId
+                                                ? getTeacherAvailabilityStatus(
+                                                  currentStaffId,
+                                                  cls.class_id,
+                                                  sub.subject_id
+                                                )
+                                                : "";
+                                              const currentHasConflict = currentStatusText.includes("Conflict");
+
+                                              // Compute teacher workload hours
+                                              const tWorkload = teacherWorkloads.find((w) => w.staff_id === currentStaffId);
+                                              const weeklyHours = tWorkload?.total_weekly_hours || 0;
+                                              const maxWeeklyHours = 30.0;
+                                              const pct = Math.min(100, Math.round((weeklyHours / maxWeeklyHours) * 100));
+
+                                              const rowKey = `${cls.class_id}_${sub.subject_id}`;
+                                              const isRowMenuOpen = openRowKey === rowKey;
+
+                                              return (
+                                                <div className="flex items-center gap-2">
+                                                  <div className="flex flex-col gap-1">
+                                                    <Select
+                                                      value={currentStaffId || "none"}
+                                                      onValueChange={(val) =>
+                                                        handleTeacherChange(cls.class_id, sub.subject_id, val)
+                                                      }
+                                                    >
+                                                      <Select.Trigger
+                                                        className={`w-[170px] h-8 border-2 border-black font-bold text-xs shadow-sm transition-colors ${!currentStaffId
+                                                          ? ""
+                                                          : currentHasConflict
+                                                            ? "bg-destructive text-destructive border-destructive font-bold"
+                                                            : "bg-white text-black shadow-[1px_1px_0_#000]"
+                                                          }`}
+                                                      >
+                                                        <div className="flex items-center justify-between w-full overflow-hidden min-w-0">
+                                                          <span className="truncate"><Select.Value placeholder="Select Teacher" /></span>
+                                                          {currentHasConflict && (
+                                                            <span className="text-red-600 text-xs font-bold shrink-0 ml-1" title={currentStatusText}>
+                                                              ⚠️
+                                                            </span>
+                                                          )}
+                                                        </div>
+                                                      </Select.Trigger>
+                                                      <Select.Content>
+                                                        <Select.Group className="min-w-54">
+                                                          <Select.Item value="none">
+                                                            <span className="font-bold text-sm">
+                                                              Unassigned
+                                                            </span>
+                                                          </Select.Item>
+                                                          {(studioData?.teachers || [])
+                                                            .filter(
+                                                              (t) =>
+                                                                !t.staff_id.toUpperCase().startsWith("ADM") &&
+                                                                !t.name.toLowerCase().includes("admin")
+                                                            )
+                                                            .map((t) => {
+                                                              const statusText = getTeacherAvailabilityStatus(
+                                                                t.staff_id,
+                                                                cls.class_id,
+                                                                sub.subject_id
+                                                              );
+                                                              const hasConflict = statusText.includes("Conflict");
+
+                                                              return (
+                                                                <Select.Item key={t.staff_id} value={t.staff_id}>
+                                                                  <div className="flex flex-col text-xs py-0.5">
+                                                                    <span className="font-bold text-sm">{t.name}</span>
+                                                                    {hasConflict && (
+                                                                      <span className="text-destructive font-semibold text-sm leading-tight">
+                                                                        {statusText}
+                                                                      </span>
+                                                                    )}
+                                                                  </div>
+                                                                </Select.Item>
+                                                              );
+                                                            })}
+                                                        </Select.Group>
+                                                      </Select.Content>
+                                                    </Select>
+
+                                                    {/* Inline Teacher Workload Capacity Indicator */}
+                                                    {currentStaffId && teacherObj && (
+                                                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
+                                                        <Progress
+                                                          value={pct}
+                                                          className={`w-12 h-2 ${pct > 70 ? "[&>div]:bg-destructive" : "[&>div]:bg-primary"}`}
+                                                        />
+                                                        <span>{weeklyHours.toFixed(1)}h/wk</span>
+                                                      </div>
                                                     )}
                                                   </div>
-                                                </Select.Trigger>
-                                                <Select.Content>
-                                                  <Select.Group className="min-w-54">
-                                                    <Select.Item value="none">
-                                                      <span className="font-bold text-sm">
-                                                        Unassigned
-                                                      </span>
-                                                    </Select.Item>
-                                                    {(studioData?.teachers || [])
-                                                      .filter(
-                                                        (t) =>
-                                                          !t.staff_id.toUpperCase().startsWith("ADM") &&
-                                                          !t.name.toLowerCase().includes("admin")
-                                                      )
-                                                      .map((t) => {
-                                                        const statusText = getTeacherAvailabilityStatus(
-                                                          t.staff_id,
-                                                          cls.class_id,
-                                                          sub.subject_id
-                                                        );
-                                                        const hasConflict = statusText.includes("Conflict");
 
-                                                        return (
-                                                          <Select.Item key={t.staff_id} value={t.staff_id}>
-                                                            <div className="flex flex-col text-xs py-0.5">
-                                                              <span className="font-bold text-sm">{t.name}</span>
-                                                              {hasConflict && (
-                                                                <span className="text-destructive font-semibold text-sm leading-tight">
-                                                                  {statusText}
-                                                                </span>
-                                                              )}
-                                                            </div>
-                                                          </Select.Item>
-                                                        );
-                                                      })}
-                                                  </Select.Group>
-                                                </Select.Content>
-                                              </Select>
+                                                  {/* Row Action Overflow Menu (⋯) */}
+                                                  <div className="flex">
+                                                    <Button
+                                                      onClick={() => setOpenRowKey(isRowMenuOpen ? null : rowKey)}
+                                                      size="sm"
+                                                      variant="outline"
+                                                      className="bg-background w-8"
+                                                      title="Row Presets & Options"
+                                                    >
+                                                      ⋯
+                                                    </Button>
 
-                                              {/* Inline Teacher Workload Capacity Indicator */}
-                                              {currentStaffId && teacherObj && (
-                                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
-                                                  <Progress
-                                                    value={pct}
-                                                    className={`w-12 h-2 ${pct > 70 ? "[&>div]:bg-destructive" : "[&>div]:bg-primary"}`}
-                                                  />
-                                                  <span>{weeklyHours.toFixed(1)}h/wk</span>
+                                                    {isRowMenuOpen && (
+                                                      <div
+                                                        className="absolute right-0 mt-1 w-44 bg-white border-2 border-black shadow-[3px_3px_0_#000] p-1 z-50 flex flex-col gap-1 rounded"
+                                                        onMouseLeave={() => setOpenRowKey(null)}
+                                                      >
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => {
+                                                            setOpenRowKey(null);
+                                                            handleAddSlot(cls.class_id, sub.subject_id);
+                                                          }}
+                                                          className="text-[11px] font-bold text-left px-2 py-1 hover:bg-neutral-100 flex items-center gap-1 rounded"
+                                                        >
+                                                          <Plus className="size-3 text-primary" />
+                                                          <span>+ Add Time Slot</span>
+                                                        </button>
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => {
+                                                            setOpenRowKey(null);
+                                                            handleApplyPreset(cls.class_id, sub.subject_id, "2day");
+                                                          }}
+                                                          className="text-[11px] font-bold text-left px-2 py-1 hover:bg-sky-100 text-sky-950 rounded"
+                                                        >
+                                                          Preset: 2-Day (MW 2h)
+                                                        </button>
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => {
+                                                            setOpenRowKey(null);
+                                                            handleApplyPreset(cls.class_id, sub.subject_id, "3day");
+                                                          }}
+                                                          className="text-[11px] font-bold text-left px-2 py-1 hover:bg-purple-100 text-purple-950 rounded"
+                                                        >
+                                                          Preset: 3-Day (MWF 1.3h)
+                                                        </button>
+                                                      </div>
+                                                    )}
+                                                  </div>
                                                 </div>
-                                              )}
-                                            </div>
-
-                                            {/* Row Action Overflow Menu (⋯) */}
-                                            <div className="flex">
-                                              <Button
-                                                onClick={() => setOpenRowKey(isRowMenuOpen ? null : rowKey)}
-                                                size="sm"
-                                                variant="outline"
-                                                className="bg-background w-8"
-                                                title="Row Presets & Options"
-                                              >
-                                                ⋯
-                                              </Button>
-
-                                              {isRowMenuOpen && (
-                                                <div
-                                                  className="absolute right-0 mt-1 w-44 bg-white border-2 border-black shadow-[3px_3px_0_#000] p-1 z-50 flex flex-col gap-1 rounded"
-                                                  onMouseLeave={() => setOpenRowKey(null)}
-                                                >
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      setOpenRowKey(null);
-                                                      handleAddSlot(cls.class_id, sub.subject_id);
-                                                    }}
-                                                    className="text-[11px] font-bold text-left px-2 py-1 hover:bg-neutral-100 flex items-center gap-1 rounded"
-                                                  >
-                                                    <Plus className="size-3 text-primary" />
-                                                    <span>+ Add Time Slot</span>
-                                                  </button>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      setOpenRowKey(null);
-                                                      handleApplyPreset(cls.class_id, sub.subject_id, "2day");
-                                                    }}
-                                                    className="text-[11px] font-bold text-left px-2 py-1 hover:bg-sky-100 text-sky-950 rounded"
-                                                  >
-                                                    Preset: 2-Day (MW 2h)
-                                                  </button>
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      setOpenRowKey(null);
-                                                      handleApplyPreset(cls.class_id, sub.subject_id, "3day");
-                                                    }}
-                                                    className="text-[11px] font-bold text-left px-2 py-1 hover:bg-purple-100 text-purple-950 rounded"
-                                                  >
-                                                    Preset: 3-Day (MWF 1.3h)
-                                                  </button>
-                                                </div>
-                                              )}
-                                            </div>
-                                          </div>
-                                        );
-                                      })()}
-                                    </Table.Cell>
-                                  </Table.Row>
-                                );
-                              })}
-                            </Table.Body>
-                          </Table>
-                        )}
-                      </RetroCard>
-                    );
-                  })
+                                              );
+                                            })()}
+                                          </Table.Cell>
+                                        </Table.Row>
+                                      );
+                                    })}
+                                  </Table.Body>
+                                </Table>
+                              )}
+                            </RetroCard>
+                          );
+                        })}
+                      </div>
+                    </Card>
+                  ))
                 )}
               </main>
 
@@ -2187,15 +2144,15 @@ export default function AdminSubjectLoadStudio() {
                         const teacherConflicts = conflicts.filter(c => c.staff_id === tw.staff_id);
                         const hasError = teacherConflicts.some(c => c.severity === "error");
                         const hasWarning = teacherConflicts.some(c => c.severity === "warning");
-                        
+
                         const maxHrs = parseFloat(getSetting("max_hours_per_day", "6.0"));
                         const maxSub = parseInt(getSetting("max_subjects_per_day", "6"));
                         const minSub = parseInt(getSetting("min_subjects_per_day", "4"));
 
-                        const cardClass = hasError 
-                          ? "bg-red-50 border-red-600" 
-                          : hasWarning 
-                            ? "bg-amber-50 border-amber-500" 
+                        const cardClass = hasError
+                          ? "bg-red-50 border-red-600"
+                          : hasWarning
+                            ? "bg-amber-50 border-amber-500"
                             : "bg-muted/20";
 
                         return (
@@ -2288,12 +2245,12 @@ export default function AdminSubjectLoadStudio() {
                   </Select.Content>
                 </Select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-bold mb-1">Scope</label>
                 <div className="p-2 bg-gray-50 border border-gray-300 rounded text-sm text-gray-700">
-                  {selectedGradeId === "all" 
-                    ? "Entire Term (All Grades & Sections)" 
+                  {selectedGradeId === "all"
+                    ? "Entire Term (All Grades & Sections)"
                     : `Grade ${studioData?.academic_levels?.find(l => String(l.academic_level_id) === selectedGradeId)?.grade_level} (All Sections)`
                   }
                 </div>
@@ -2311,7 +2268,7 @@ export default function AdminSubjectLoadStudio() {
               <Button variant="outline" onClick={() => setIsCopyModalOpen(false)}>
                 Cancel
               </Button>
-              <Button 
+              <Button
                 variant="default"
                 onClick={() => void handleCopyFromTerm()}
                 disabled={isCopying || !copySourcePeriodId}
