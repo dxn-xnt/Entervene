@@ -21,7 +21,7 @@ export function OverviewCard({
   return (
     <Card className={cn("@container/card", className)}>
       <Card.Header>
-        <Card.Description>{title}</Card.Description>
+        <Card.Description className="font-semibold">{title}</Card.Description>
       </Card.Header>
       <Card.Content>
         <Card.Title className="text-4xl font-bold">{count}</Card.Title>

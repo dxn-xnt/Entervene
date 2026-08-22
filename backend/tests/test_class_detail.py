@@ -839,9 +839,18 @@ def test_subject_teacher_who_is_not_adviser_cannot_open_advisory_detail(client, 
     }
 
     response = client.get(f"/api/v1/classes/teacher/advisory/{class_.class_id}")
+    assert response.status_code == 200
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "You do not have permission to view this advisory class."
+    # Unassigned teacher should be rejected with 403
+    other_teacher = add_staff(db, "T-3")
+    db.commit()
+    client.app.dependency_overrides[get_current_user] = lambda: {
+        "sub": other_teacher.user_id,
+        "role": "teacher",
+    }
+    unassigned_resp = client.get(f"/api/v1/classes/teacher/advisory/{class_.class_id}")
+    assert unassigned_resp.status_code == 403
+    assert unassigned_resp.json()["detail"] == "You do not have permission to view this class."
 
 
 def test_teacher_advisory_detail_missing_class_returns_404(client, db):

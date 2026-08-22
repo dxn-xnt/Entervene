@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
 import { Card as RetroCard } from "@/components/retroui/Card";
@@ -15,6 +14,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import AddSubjectModal from "./forms/add-subject";
 import { OverviewCard } from "@/components/overview-cards";
 import SubjectItemLine from "@/components/item-line/subject";
+import ConfirmDialog from "@/components/confirm-dialog";
 import {
   archiveSubject,
   getSubjectOfferingFormOptions,
@@ -291,15 +291,24 @@ export default function AdminSubjectLevel() {
         />
       </Dialog>
 
-      {pendingArchive ? (
-        <ConfirmAlertDialog
-          title="Archive subject?"
-          description={`${pendingArchive.subject_name} will be moved out of active use.`}
-          confirmLabel="Archive"
-          onCancel={() => setPendingArchive(null)}
-          onConfirm={() => void handleArchive()}
-        />
-      ) : null}
+      <ConfirmDialog
+        open={Boolean(pendingArchive)}
+        onOpenChange={(open) => {
+          if (!open) setPendingArchive(null);
+        }}
+        title="Archive Subject?"
+        description={
+          <p>
+            <strong>{pendingArchive?.subject_name}</strong> will be moved out of active use.
+          </p>
+        }
+        options={{
+          confirmLabel: "Archive",
+          confirmVariant: "default",
+          onConfirm: handleArchive,
+          onCancel: () => setPendingArchive(null),
+        }}
+      />
     </AppLayout>
   );
 }

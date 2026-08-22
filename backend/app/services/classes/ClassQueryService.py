@@ -172,9 +172,17 @@ def _advisory_class_access_row(db: Session, class_id: int):
     return row
 
 
-def _ensure_adviser_access(class_: Class, staff_id: str) -> None:
-    if class_.adviser_staff_id != staff_id:
-        raise HTTPException(status_code=403, detail="You do not have permission to view this advisory class.")
+def _ensure_adviser_access(db: Session, class_: Class, staff_id: str) -> None:
+    if class_.adviser_staff_id == staff_id:
+        return
+    has_load = (
+        db.query(SubjectLoad.subject_load_id)
+        .filter(SubjectLoad.class_id == class_.class_id, SubjectLoad.staff_id == staff_id)
+        .first()
+    )
+    if has_load:
+        return
+    raise HTTPException(status_code=403, detail="You do not have permission to view this class.")
 
 
 def _active_class_filter():
@@ -335,7 +343,7 @@ def list_teacher_advisory_classes_data(db: Session, staff_id: str, academic_peri
 
 def get_teacher_advisory_class_detail_data(db: Session, class_id: int, staff_id: str) -> dict:
     class_, academic_level, academic_year = _advisory_class_access_row(db, class_id)
-    _ensure_adviser_access(class_, staff_id)
+    _ensure_adviser_access(db, class_, staff_id)
 
     student_rows = (
         db.query(Student, UserAccount)

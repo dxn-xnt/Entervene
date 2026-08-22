@@ -95,12 +95,15 @@ body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: 'Space Grotesk', sans-serif;
-  scrollbar-gutter: auto !important;
+  scrollbar-gutter: auto;
   overflow-y: auto;
-  overflow-y: overlay;
-  /* Chromium — overlays content instead of taking space; falls back to auto */
 }
 
+/* Lock scroll when any modal/dialog is active */
+html:has([data-open]),
+body:has([data-open]),
+html:has([data-state="open"]),
+body:has([data-state="open"]),
 body[data-scroll-locked] {
   padding-right: 0 !important;
   margin-right: 0 !important;
@@ -113,19 +116,19 @@ body[data-scroll-locked] {
   scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
 }
 
-/* Chromium — override auto/scroll to overlay so scrollbar doesn't take space */
+/* Chromium — overlay scrollbar so it doesn't take layout space */
 @supports (overflow-y: overlay) {
 
-  html,
-  body {
-    overflow-y: overlay !important;
+  html:not(:has([data-open])),
+  body:not(:has([data-open])) {
+    overflow-y: overlay;
   }
 
   .overflow-auto:not(.no-scrollbar),
   .overflow-y-auto:not(.no-scrollbar),
   .overflow-scroll:not(.no-scrollbar),
   .overflow-y-scroll:not(.no-scrollbar) {
-    overflow-y: overlay !important;
+    overflow-y: overlay;
   }
 }
 

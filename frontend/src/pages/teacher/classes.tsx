@@ -1,3 +1,4 @@
+import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
@@ -9,6 +10,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { apiFetch, getTeacherAdvisoryClasses } from "@/lib/api";
 import type { TeacherAdvisoryClassListItem } from "@/types/adminClasses";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { Progress } from "@/components/retroui/Progress";
 
 type TeacherClassLoad = {
   subject_load_id: number;
@@ -29,7 +31,7 @@ function AdvisoryCatalogCard({
 }) {
   return (
     <Card
-      className="group relative flex min-w-80 flex-col justify-between shadow-none p-3 hover:-translate-y-1 cursor-pointer"
+      className="group relative flex w-full min-w-0 flex-col justify-between shadow-none p-3 hover:-translate-y-1 cursor-pointer"
       onClick={onClick}
     >
       <div className="flex items-start justify-between gap-2">
@@ -72,14 +74,50 @@ function SubjectClassCatalogCard({
       className="group relative flex min-w-80 flex-col justify-between shadow-none p-3 hover:-translate-y-1 cursor-pointer"
       onClick={onClick}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-2xl font-bold leading-tight mr-5">
+      <div className="flex flex-col items-start justify-between gap-2">
+        <div className="flex flex-row w-full items-center justify-between gap-2">
+          <p className="text-2xl font-bold">
             {load.section_name}
           </p>
-          <p className="text-sm font-semibold">{load.subject_name}</p>
+          {isAdvisory && (
+            <Badge size="sm" variant="solid">
+              Advisory
+            </Badge>
+          )}
+          <Badge size="sm" variant="secondary">
+            {load.grade_level}
+          </Badge>
         </div>
-        {isAdvisory && <Badge variant="solid">Advisory</Badge>}
+        <div className="flex flex-col w-full gap-1">
+          <p className="text-xs font-normal">Progress</p>
+          <div className="flex flex-row gap-1">
+            <Progress className="w-full" value={12} />
+            <p className="text-xs font-bold">12%</p>
+          </div>
+        </div>
+        <div className="flex flex-col w-full gap-1 mt-1">
+          <Card className="bg-primary w-full shadow-none py-2 px-3">
+            <div className="flex flex-col w-full gap-2">
+              <div className="flex flex-row justify-between ">
+                <p className="text-md font-semibold">Assignments 2</p>
+                <Button
+                  variant="secondary"
+                  className="shadow-none p-1"
+                  size="sm">
+                  <ArrowUpRight className="size-3" />
+                </Button>
+              </div>
+              <div className="flex flex-row gap-2 items-center">
+                <Badge size="sm" variant="outline">
+                  Ongoing
+                </Badge>
+                <Badge size="sm" variant="solid">
+                  Due in 2 days
+                </Badge>
+              </div>
+            </div>
+          </Card>
+        </div>
       </div>
     </Card>
   );
@@ -135,25 +173,42 @@ const TeacherClasses = () => {
   }, [advisoryClasses]);
 
   const groupedSubjectLoads = useMemo(() => {
-    const groups = new Map<string, TeacherClassLoad[]>();
+    const groups = new Map<
+      number,
+      {
+        subjectId: number;
+        subjectName: string;
+        subjectCodename?: string | null;
+        gradeLabel?: string;
+        loads: TeacherClassLoad[];
+      }
+    >();
+
     loads.forEach((load) => {
       const gradeLabel =
         load.grade_level ||
-        advisoryByClass.get(load.class_id)?.academic_level ||
-        "Teaching Sections";
-      groups.set(gradeLabel, [...(groups.get(gradeLabel) || []), load]);
+        advisoryByClass.get(load.class_id)?.academic_level;
+
+      if (!groups.has(load.subject_id)) {
+        groups.set(load.subject_id, {
+          subjectId: load.subject_id,
+          subjectName: load.subject_name,
+          subjectCodename: load.subject_codename,
+          gradeLabel,
+          loads: [],
+        });
+      }
+      groups.get(load.subject_id)!.loads.push(load);
     });
 
-    return Array.from(groups.entries())
-      .map(([gradeLabel, classLoads]) => ({
-        gradeLabel,
-        loads: classLoads.sort(
-          (a, b) =>
-            a.section_name.localeCompare(b.section_name) ||
-            a.subject_name.localeCompare(b.subject_name),
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        loads: group.loads.sort((a, b) =>
+          a.section_name.localeCompare(b.section_name)
         ),
       }))
-      .sort((a, b) => a.gradeLabel.localeCompare(b.gradeLabel));
+      .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
   }, [advisoryByClass, loads]);
 
   return (
@@ -163,58 +218,105 @@ const TeacherClasses = () => {
           <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
-              <h1 className="text-2xl md:text-4xl font-bold">Classes</h1>
+              <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Classes</h1>
             </header>
 
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
             {error && (
-              <div className="rounded-lg border-2 border-red-500 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
+              <Alert
+                status="error"
+                position="top-right"
 
-            <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
-              <Card.Content>
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <Card.Title className="mb-0">{academicYearLabel}</Card.Title>
-                    <p className="text-xs font-medium">
-                      Sections assigned for this academic year
-                    </p>
-                  </div>
-                  <Info size={16} />
-                </div>
-              </Card.Content>
-            </Card>
+                duration={5000}
+                onClose={() => setError("")}
+              >
+                <Alert.Title>Error</Alert.Title>
+                <Alert.Description>{error}</Alert.Description>
+              </Alert>
+            )}
 
             {isLoading ? (
               <p className="py-8 text-center text-gray-500">
                 Loading classes...
               </p>
             ) : (
-              <>
-                <Card className="flex flex-col">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+                {/* Left: Subject Loads */}
+                <div className="lg:col-span-8 flex flex-col gap-4">
+                  {groupedSubjectLoads.length === 0 ? (
+                    <Card className="flex justify-center items-center border-black py-8 text-sm font-semibold">
+                      No subject teaching sections assigned.
+                    </Card>
+                  ) : (
+                    groupedSubjectLoads.map((group) => (
+                      <Card
+                        key={group.subjectId}
+                        className="flex flex-col"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <h2 className="text-xl font-bold">
+                              {group.subjectName}
+                            </h2>
+                            {group.subjectCodename && (
+                              <Badge variant="default" size="sm">
+                                {group.subjectCodename}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex flex-row gap-3">
+                            <Badge variant="secondary">
+                              {group.loads.length} section{group.loads.length !== 1 ? "s" : ""}
+                            </Badge>
+                            <Button
+                              variant="secondary"
+                              className="shadow-none"
+                              size="icon"
+                              title={`View ${group.subjectName}`}
+                              onClick={() => {
+                                if (group.loads[0]) {
+                                  navigate(
+                                    `/teacher/classes/${group.loads[0].class_id}/subjects/${group.subjectId}`,
+                                  );
+                                }
+                              }}
+                            >
+                              <ArrowUpRight className="size-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="pt-3 flex gap-3 overflow-auto pb-2">
+                          {group.loads.map((load) => (
+                            <SubjectClassCatalogCard
+                              key={load.subject_load_id}
+                              load={load}
+                              isAdvisory={advisoryByClass.has(load.class_id)}
+                              onClick={() =>
+                                navigate(`/teacher/classes/${load.class_id}`)
+                              }
+                            />
+                          ))}
+                        </div>
+                      </Card>
+                    ))
+                  )}
+                </div>
+
+                {/* Right: Advisory Class */}
+                <Card className="lg:col-span-4 gap-3 flex flex-col bg-primary">
                   <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold">Classes</h2>
+                    <h2 className="text-xl font-bold">Advisory Class</h2>
                     <div className="flex flex-row gap-3">
-                      <Badge variant="secondary">
+                      <Badge variant="outline">
                         {advisoryClasses.length} section
                         {advisoryClasses.length !== 1 ? "s" : ""}
                       </Badge>
-                      <Button
-                        variant="secondary"
-                        className="shadow-none"
-                        size="icon"
-                        title="View advisory classes"
-                      >
-                        <ArrowUpRight className="size-4" />
-                      </Button>
                     </div>
                   </div>
-                  <div className="pt-3 flex gap-3 overflow-auto pb-2">
+                  <div className="flex flex-col gap-3">
                     {advisoryClasses.length === 0 ? (
-                      <p className="text-sm font-semibold text-gray-700">
+                      <p className="text-sm font-semibold text-gray-700 py-4 text-center">
                         No advisory classes assigned.
                       </p>
                     ) : (
@@ -223,63 +325,14 @@ const TeacherClasses = () => {
                           key={item.class_id}
                           item={item}
                           onClick={() =>
-                            navigate(`/teacher/classes/${item.class_id}`)
+                            navigate(`/teacher/advisory-class/${item.class_id}`)
                           }
                         />
                       ))
                     )}
                   </div>
                 </Card>
-
-                {groupedSubjectLoads.length === 0 ? (
-                  <Card className="flex justify-center items-center border-black py-8 text-sm font-semibold">
-                    No subject teaching sections assigned.
-                  </Card>
-                ) : (
-                  groupedSubjectLoads.map((group) => (
-                    <Card
-                      key={group.gradeLabel}
-                      className="flex flex-col"
-                    >
-                      <div className="flex items-center justify-between">
-                        <h2 className="text-xl font-bold">
-                          {group.gradeLabel.includes("Grade") || group.gradeLabel.includes("Section")
-                            ? `${group.gradeLabel} Subjects`
-                            : `${group.gradeLabel} - Subjects`}
-                        </h2>
-                        <div className="flex flex-row gap-3">
-                          <Badge variant="secondary">
-                            {group.loads.length} subject
-                            {group.loads.length !== 1 ? "s" : ""}
-                          </Badge>
-                          <Button
-                            variant="secondary"
-                            className="shadow-none"
-                            size="icon"
-                            title={`View ${group.gradeLabel}`}
-                          >
-                            <ArrowUpRight className="size-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="pt-3 flex gap-3 overflow-auto pb-2">
-                        {group.loads.map((load) => (
-                          <SubjectClassCatalogCard
-                            key={load.subject_load_id}
-                            load={load}
-                            isAdvisory={advisoryByClass.has(load.class_id)}
-                            onClick={() =>
-                              navigate(
-                                `/teacher/classes/${load.class_id}/subjects/${load.subject_id}`,
-                              )
-                            }
-                          />
-                        ))}
-                      </div>
-                    </Card>
-                  ))
-                )}
-              </>
+              </div>
             )}
           </div>
         </div>

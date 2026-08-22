@@ -32,6 +32,7 @@ export const routes = {
     classes: "/teacher/classes",
     classSections: "/teacher/classes/sections",
     classDetail: "/teacher/classes/:classId",
+    advisoryClassDetail: "/teacher/advisory-class/:classId",
     subjects: "/teacher/classes/subjects",
     classSubjects: "/teacher/classes/:classId/subjects",
     subjectDetail: "/teacher/classes/:classId/subjects/:subjectId",
