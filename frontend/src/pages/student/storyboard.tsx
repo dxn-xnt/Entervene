@@ -55,7 +55,7 @@ const StoryBoard = () => {
     apiFetch("/api/v1/students/me/subjects")
       .then((r) => r.json())
       .then((data) => setSubjects(data))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setIsLoading(false));
 
     getMyClass()
@@ -73,7 +73,7 @@ const StoryBoard = () => {
         const urgent = [...data.pastdue, ...data.pending].slice(0, 3);
         setTodos(urgent);
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setIsTodosLoading(false));
   }, []);
 
@@ -91,7 +91,7 @@ const StoryBoard = () => {
           );
           if (match) targetClassId = match.class_id;
         }
-      } catch {}
+      } catch { }
     }
 
     if (targetClassId && item.subject_id) {
@@ -130,7 +130,7 @@ const StoryBoard = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
             <header className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
@@ -144,14 +144,14 @@ const StoryBoard = () => {
                 onClick={() => navigate(routes.student.profile)}
                 className="gap-2 whitespace-nowrap font-bold"
               >
-                 <Calendar />
+                <Calendar />
                 View My Schedule
               </Button>
             </header>
 
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
-            <main className="flex flex-1 flex-col gap-3 py-3">
+            <div className="flex flex-1 flex-col gap-3">
               {myClass ? (
                 <section className="flex flex-col gap-4 border-2 border-black bg-[#f7e9aa] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-center gap-4">
@@ -280,7 +280,7 @@ const StoryBoard = () => {
                   </Card.Content>
                 </Card>
               </div>
-            </main>
+            </div>
           </div>
         </div>
       </div>

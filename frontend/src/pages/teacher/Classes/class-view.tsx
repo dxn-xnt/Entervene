@@ -1,13 +1,14 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { BookOpen, ChevronDown, Users } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { BookOpen, ChevronDown, ClipboardList, ScrollText, Users } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
-import { Table } from "@/components/retroui/Table";
+import { Text } from "@/components/retroui/Text";
+import { OverviewCard } from "@/components/overview-cards";
 import { ManualSuggestionPanel } from "@/components/teacher/suggestions/ManualSuggestionPanel";
 import { getTeacherAdvisoryClassDetail } from "@/lib/api";
 import type {
@@ -15,12 +16,12 @@ import type {
   TeacherAdvisoryStudentItem,
 } from "@/types/adminClasses";
 
-type DetailTab = "classes" | "students" | "subjects";
+type DetailTab = "lessons" | "students" | "classwork";
 
 export default function TeacherClassDetail() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<DetailTab>("classes");
+  const [tab, setTab] = useState<DetailTab>("lessons");
   const [detail, setDetail] =
     useState<TeacherAdvisoryClassDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -117,8 +118,8 @@ export default function TeacherClassDetail() {
             <Tabs<DetailTab>
               tabs={[
                 {
-                  id: "classes",
-                  label: "Classes",
+                  id: "lessons",
+                  label: "Lessons",
                   icon: BookOpen,
                 },
                 {
@@ -127,9 +128,9 @@ export default function TeacherClassDetail() {
                   icon: Users,
                 },
                 {
-                  id: "subjects",
-                  label: "Subject Load",
-                  icon: BookOpen,
+                  id: "classwork",
+                  label: "Classwork",
+                  icon: ClipboardList,
                 },
               ]}
               activeTab={tab}
@@ -160,9 +161,9 @@ export default function TeacherClassDetail() {
               </Card.Content>
             </Card>
 
-            {tab === "classes" && <OverviewTab detail={detail} />}
+            {tab === "lessons" && <OverviewTab detail={detail} />}
             {tab === "students" && <StudentsTab detail={detail} />}
-            {tab === "subjects" && <SubjectLoadTab detail={detail} />}
+            {tab === "classwork" && <ClassworkTab detail={detail} />}
           </div>
         </div>
       </div>
@@ -179,33 +180,22 @@ function OverviewTab({
     <div className="grid gap-4">
       <div className="grid gap-4 xl:grid-cols-[1fr_300px] xl:grid-rows-[auto_1fr] items-stretch">
         <div className="flex flex-col gap-2">
-          <h3 className="text-lg font-bold">Overview</h3>
+          <h3 className="text-xl font-semibold">Overview</h3>
           <div className="grid gap-4 md:grid-cols-2">
-            <Card className="block w-full border-black">
-              <Card.Header>
-                <Card.Description>Total Students</Card.Description>
-              </Card.Header>
-              <Card.Content>
-                <Card.Title>{detail.student_count}</Card.Title>
-                <p className="text-xs text-black">Real assigned students</p>
-              </Card.Content>
-            </Card>
-
-            <Card className="block w-full border-black">
-              <Card.Header>
-                <Card.Description>Total Subjects</Card.Description>
-              </Card.Header>
-              <Card.Content>
-                <Card.Title>{detail.subject_count}</Card.Title>
-                <p className="text-xs text-black">
-                  Active and historical subject loads
-                </p>
-              </Card.Content>
-            </Card>
+            <OverviewCard
+              title="Total Students"
+              count={String(detail.student_count ?? 0)}
+              statDescription="Real assigned students"
+            />
+            <OverviewCard
+              title="Total Subjects"
+              count={String(detail.subject_count ?? 0)}
+              statDescription="Active and historical subject loads"
+            />
           </div>
         </div>
         <aside className="flex flex-col gap-2 xl:row-span-2">
-          <h3 className="text-lg font-bold">Recent Activity</h3>
+          <Text as="h3" className="text-xl font-semibold">Recent Activity</Text>
           <Card className="block w-full flex-1">
             <Card.Content className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-black/60">
               No recent activity available yet.
@@ -213,8 +203,7 @@ function OverviewTab({
           </Card>
         </aside>
         <section>
-          <h3 className="text-lg font-bold">Subjects</h3>
-
+          <Text as="h3" className="text-xl font-semibold">Lessons</Text>
         </section>
       </div>
     </div>
@@ -240,35 +229,25 @@ function StudentsTab({
 
   return (
     <div className="grid gap-4">
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="block w-full border-black">
-          <Card.Header>
-            <Card.Description>Students</Card.Description>
-          </Card.Header>
-          <Card.Content>
-            <Card.Title>{detail.student_count}</Card.Title>
-            <p className="text-xs text-black">Full advisory roster</p>
-          </Card.Content>
-        </Card>
-
-        <Card className="block w-full border-black">
-          <Card.Header>
-            <Card.Description>Male</Card.Description>
-          </Card.Header>
-          <Card.Content>
-            <Card.Title>{detail.male_count}</Card.Title>
-          </Card.Content>
-        </Card>
-
-        <Card className="block w-full border-black">
-          <Card.Header>
-            <Card.Description>Female</Card.Description>
-          </Card.Header>
-          <Card.Content>
-            <Card.Title>{detail.female_count}</Card.Title>
-          </Card.Content>
-        </Card>
+      <div className="flex flex-col gap-2">
+        <Text as="h3" className="text-xl font-semibold">Overview</Text>
+        <div className="grid gap-4 md:grid-cols-3">
+          <OverviewCard
+            title="Students"
+            count={String(detail.student_count ?? 0)}
+            statDescription="Full class roster"
+          />
+          <OverviewCard
+            title="Male"
+            count={String(detail.male_count ?? 0)}
+          />
+          <OverviewCard
+            title="Female"
+            count={String(detail.female_count ?? 0)}
+          />
+        </div>
       </div>
+
       <section>
         <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <h3 className="text-xl font-bold">Students</h3>
@@ -327,7 +306,7 @@ function StudentsTab({
   );
 }
 
-function SubjectLoadTab({
+function ClassworkTab({
   detail,
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
@@ -338,48 +317,7 @@ function SubjectLoadTab({
 
   return (
     <section>
-      <h3 className="mb-2 text-lg font-bold">Subject Load</h3>
-      <Table
-        wrapperClassName="overflow-x-auto"
-        className="border-black min-w-[720px]"
-      >
-        <Table.Header>
-          <Table.Row>
-            <Table.Head>Subject</Table.Head>
-            <Table.Head>Teacher</Table.Head>
-            <Table.Head>Schedule</Table.Head>
-            <Table.Head>Status</Table.Head>
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
-          {detail.subject_loads.map((load) => (
-            <Table.Row
-              key={load.subject_load_id}
-              className="border-black/40 text-xs"
-            >
-              <Table.Cell>
-                <b className="hover:underline">{load.subject_name}</b>
-              </Table.Cell>
-              <Table.Cell>
-                <span className="flex items-center gap-2 font-semibold">
-                  <Avatar text={load.teacher_name} />
-                  {load.teacher_name}
-                </span>
-              </Table.Cell>
-              <Table.Cell>{load.schedule || "No schedule"}</Table.Cell>
-              <Table.Cell>
-                <Badge
-                  variant="outline"
-                  size="sm"
-                  className="w-fit rounded-none font-bold"
-                >
-                  {load.status || "N/A"}
-                </Badge>
-              </Table.Cell>
-            </Table.Row>
-          ))}
-        </Table.Body>
-      </Table>
+      <Text as="h3" className="text-xl font-semibold">Classworks</Text>
     </section>
   );
 }

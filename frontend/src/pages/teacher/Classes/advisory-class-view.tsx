@@ -8,6 +8,7 @@ import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
 import { Table } from "@/components/retroui/Table";
+import { OverviewCard } from "@/components/overview-cards";
 import { ManualSuggestionPanel } from "@/components/teacher/suggestions/ManualSuggestionPanel";
 import { getTeacherAdvisoryClassDetail } from "@/lib/api";
 import type {
@@ -181,27 +182,16 @@ function OverviewTab({
         <div className="flex flex-col gap-2">
           <h3 className="text-lg font-bold">Overview</h3>
           <div className="grid gap-4 md:grid-cols-2">
-            <Card className="block w-full border-black">
-              <Card.Header>
-                <Card.Description>Total Students</Card.Description>
-              </Card.Header>
-              <Card.Content>
-                <Card.Title>{detail.student_count}</Card.Title>
-                <p className="text-xs text-black">Real assigned students</p>
-              </Card.Content>
-            </Card>
-
-            <Card className="block w-full border-black">
-              <Card.Header>
-                <Card.Description>Total Subjects</Card.Description>
-              </Card.Header>
-              <Card.Content>
-                <Card.Title>{detail.subject_count}</Card.Title>
-                <p className="text-xs text-black">
-                  Active and historical subject loads
-                </p>
-              </Card.Content>
-            </Card>
+            <OverviewCard
+              title="Total Students"
+              count={String(detail.student_count ?? 0)}
+              statDescription="Real assigned students"
+            />
+            <OverviewCard
+              title="Total Subjects"
+              count={String(detail.subject_count ?? 0)}
+              statDescription="Active and historical subject loads"
+            />
           </div>
         </div>
         <aside className="flex flex-col gap-2 xl:row-span-2">
@@ -268,33 +258,19 @@ function StudentsTab({
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 md:grid-cols-3">
-        <Card className="block w-full border-black">
-          <Card.Header>
-            <Card.Description>Students</Card.Description>
-          </Card.Header>
-          <Card.Content>
-            <Card.Title>{detail.student_count}</Card.Title>
-            <p className="text-xs text-black">Full advisory roster</p>
-          </Card.Content>
-        </Card>
-
-        <Card className="block w-full border-black">
-          <Card.Header>
-            <Card.Description>Male</Card.Description>
-          </Card.Header>
-          <Card.Content>
-            <Card.Title>{detail.male_count}</Card.Title>
-          </Card.Content>
-        </Card>
-
-        <Card className="block w-full border-black">
-          <Card.Header>
-            <Card.Description>Female</Card.Description>
-          </Card.Header>
-          <Card.Content>
-            <Card.Title>{detail.female_count}</Card.Title>
-          </Card.Content>
-        </Card>
+        <OverviewCard
+          title="Students"
+          count={String(detail.student_count ?? 0)}
+          statDescription="Full advisory roster"
+        />
+        <OverviewCard
+          title="Male"
+          count={String(detail.male_count ?? 0)}
+        />
+        <OverviewCard
+          title="Female"
+          count={String(detail.female_count ?? 0)}
+        />
       </div>
       <section>
         <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
