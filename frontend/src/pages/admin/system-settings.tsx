@@ -13,9 +13,10 @@ import { Switch } from "@/components/retroui/Switch";
 import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
-import { ArrowUpRight, Lock, Pencil, Loader2, Plus, Calendar } from "lucide-react";
+import { ArrowUpRight, Lock, Pencil, Loader2, Plus, Calendar, Save } from "lucide-react";
 import AddAcademicPeriodModal from "./forms/add-academic-period";
 import AddGradingTemplateModal from "./forms/add-grading-template";
+import AddPathwayModal from "./forms/add-pathway";
 
 import {
   getAllSettings,
@@ -33,7 +34,6 @@ import { useSettings } from "@/context/SettingsContext";
 import {
   getGradingTemplates,
   fetchPathways,
-  createPathway,
   updatePathway,
   fetchPathwayScopes,
   updatePathwayScopes,
@@ -123,9 +123,6 @@ export default function AdminSystemSettings() {
   const [pathways, setPathways] = React.useState<AcademicPathwayRead[]>([]);
   const [isLoadingPathways, setIsLoadingPathways] = React.useState(false);
   const [isAddPathwayOpen, setIsAddPathwayOpen] = React.useState(false);
-  const [pathwayName, setPathwayName] = React.useState("");
-  const [pathwayCode, setPathwayCode] = React.useState("");
-  const [pathwayError, setPathwayError] = React.useState<string | null>(null);
 
   // Pathway Scopes state
   const [pathwayScopes, setPathwayScopes] = React.useState<PathwayScopeRead[]>([]);
@@ -154,24 +151,6 @@ export default function AdminSystemSettings() {
       setIsLoadingPathways(false);
     }
   }, []);
-
-  const handleCreatePathway = async () => {
-    if (!pathwayName.trim() || !pathwayCode.trim()) {
-      setPathwayError("Both pathway code and name are required.");
-      return;
-    }
-    setPathwayError(null);
-    try {
-      await createPathway({ code: pathwayCode, name: pathwayName });
-      showToast("Pathway created successfully.");
-      setIsAddPathwayOpen(false);
-      setPathwayName("");
-      setPathwayCode("");
-      loadPathways();
-    } catch (err: any) {
-      setPathwayError(err?.message || "Failed to create pathway.");
-    }
-  };
 
   const loadPathwayScopes = React.useCallback(async (yearId?: number) => {
     setIsLoadingScopes(true);
@@ -544,7 +523,58 @@ export default function AdminSystemSettings() {
                 </div>
               )}
             </header>
-            <div className="-mx-4 md:-mx-6 border-b border-black/40" />
+            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
+            {/* School Operational Hours */}
+            <Card className="@container/card w-full">
+              <Card.Header className="flex flex-row justify-between items-start">
+                <Card.Title className="flex flex-col w-full gap-1">
+                  School Operational Hours
+                  <Text as="p" className="text-sm font-normal text-muted-foreground">
+                    Set the bounds for valid class schedules. Attempting to schedule classes outside these bounds will be rejected.
+                  </Text>
+
+                </Card.Title >
+                <Button
+                  size="sm"
+                  className="whitespace-nowrap"
+                  onClick={handleSaveSchoolHours}
+                  disabled={isSavingSchoolHours}
+                >
+                  <Save className="size-3.5 mr-2" />
+                  Save Hours
+                </Button>
+              </Card.Header>
+
+
+              <Card.Content className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-4 mt-2">
+                    <div className="flex flex-col gap-1 w-1/3">
+                      <Text as="h6" className="font-sans font-medium text-sm">
+                        Day Start
+                      </Text>
+                      <Input
+                        className="shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md transition-all"
+                        type="time"
+                        value={schoolDayStart}
+                        onChange={(e) => setSchoolDayStart(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1 w-1/3">
+                      <Text as="h6" className="font-sans font-medium text-sm">
+                        Day End
+                      </Text>
+                      <Input
+                        className="shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md transition-all"
+                        type="time"
+                        value={schoolDayEnd}
+                        onChange={(e) => setSchoolDayEnd(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </Card.Content>
+            </Card>
 
             {/* General Average Threshold */}
             <Card className="@container/card w-full">
@@ -557,6 +587,7 @@ export default function AdminSystemSettings() {
                     onClick={handleSaveThresholds}
                     disabled={isSavingThresholds}
                   >
+                    <Save className="size-3.5 mr-2" />
                     Save Threshold
                   </Button>
                 </Card.Title>
@@ -593,67 +624,7 @@ export default function AdminSystemSettings() {
               </Card.Content>
             </Card>
 
-            {/* Teacher Workload Caps */}
-            <Card className="@container/card w-full">
-              <Card.Header>
-                <Card.Title className="flex flex-row justify-between w-full items-center">
-                  Teacher Workload Caps
-                  <Button
-                    size="sm"
-                    className="whitespace-nowrap"
-                    onClick={handleSaveTeacherCaps}
-                    disabled={isSavingTeacherCaps || parseInt(minSubjects) > parseInt(maxSubjects)}
-                  >
-                    Save Workload Caps
-                  </Button>
-                </Card.Title>
-              </Card.Header>
-              <Card.Content className="flex flex-col gap-6">
-                <div className="flex flex-col gap-1">
-                  <Text as="p" className="font-sans text-sm text-muted-foreground">
-                    These limits are enforced globally across all subjects during scheduling.
-                  </Text>
-                  {parseInt(minSubjects) > parseInt(maxSubjects) && (
-                    <Text as="p" className="font-sans text-sm font-semibold text-red-600 mt-1">
-                      Error: Minimum subjects cannot exceed maximum subjects.
-                    </Text>
-                  )}
-                </div>
-                <div className="flex flex-row flex-wrap gap-6 items-center">
-                  <div className="flex flex-col gap-2">
-                    <label className="text-sm font-semibold">Min Subjects/Day</label>
-                    <Input
-                      type="number"
-                      min={0}
-                      className="w-32"
-                      value={minSubjects}
-                      onChange={(e) => setMinSubjects(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <label className="text-sm font-semibold">Max Subjects/Day</label>
-                    <Input
-                      type="number"
-                      min={1}
-                      className="w-32"
-                      value={maxSubjects}
-                      onChange={(e) => setMaxSubjects(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <label className="text-sm font-semibold">Max Hours/Day</label>
-                    <Input
-                      type="number"
-                      min={1}
-                      step={0.5}
-                      className="w-32"
-                      value={maxHours}
-                      onChange={(e) => setMaxHours(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </Card.Content>
-            </Card>
+
 
             {/* Subject Groups & Passing Thresholds */}
             <Card className="@container/card w-full">
@@ -666,7 +637,7 @@ export default function AdminSystemSettings() {
 
                 </Card.Title >
                 <Button size="sm" className="whitespace-nowrap" onClick={() => setIsAddGroupOpen(true)}>
-                  Add Group
+                  <Plus className="size-3.5 mr-2" />Add Group
                 </Button>
               </Card.Header>
 
@@ -749,408 +720,11 @@ export default function AdminSystemSettings() {
               </Card.Content>
             </Card>
 
-            {/* School Operational Hours */}
-            <Card className="@container/card w-full">
-              <Card.Header>
-                <Card.Title className="flex flex-row justify-between w-full items-center">
-                  School Operational Hours
-                  <Button
-                    size="sm"
-                    className="whitespace-nowrap"
-                    onClick={handleSaveSchoolHours}
-                    disabled={isSavingSchoolHours}
-                  >
-                    Save Hours
-                  </Button>
-                </Card.Title>
-              </Card.Header>
-              <Card.Content className="flex flex-col gap-4">
-                <div className="flex flex-col gap-2">
-                  <Text
-                    as="p"
-                    className="font-sans text-sm text-muted-foreground"
-                  >
-                    Set the bounds for valid class schedules. Attempting to schedule classes outside these bounds will be rejected.
-                  </Text>
-
-                  <div className="flex items-center gap-4 mt-2">
-                    <div className="flex flex-col gap-1 w-1/3">
-                      <Text as="h6" className="font-sans font-medium text-sm">
-                        Day Start (HH:MM)
-                      </Text>
-                      <Input
-                        className="shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md transition-all"
-                        type="time"
-                        value={schoolDayStart}
-                        onChange={(e) => setSchoolDayStart(e.target.value)}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1 w-1/3">
-                      <Text as="h6" className="font-sans font-medium text-sm">
-                        Day End (HH:MM)
-                      </Text>
-                      <Input
-                        className="shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md transition-all"
-                        type="time"
-                        value={schoolDayEnd}
-                        onChange={(e) => setSchoolDayEnd(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </Card.Content>
-            </Card>
-
-            {/* Academic Calendar */}
-            <Card className="@container/card w-full">
-              <Card.Header className="flex flex-row justify-between items-start">
-                <Card.Title className="flex flex-col w-full gap-1 mb-4">
-                  Academic Calendar
-                  <Text
-                    as="p"
-                    className="text-sm font-normal text-muted-foreground"
-                  >
-                    Set the active school year and active term. This determines the current academic period system-wide.
-                  </Text>
-                </Card.Title>
-                <div className="flex items-center gap-4">
-                  <Dialog>
-                    <Dialog.Trigger>
-                      <Button size="sm" className="whitespace-nowrap">
-                        <Calendar className="size-3 mr-1" /> New Academic Period
-                      </Button>
-                    </Dialog.Trigger>
-                    <AddAcademicPeriodModal />
-                  </Dialog>
-                </div>
-              </Card.Header>
-              <Card.Content className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="flex flex-col gap-2">
-                    <Text as="h6" className="font-sans font-medium">
-                      Current Academic Year
-                    </Text>
-                    <Select
-                      value={selectedYearId}
-                      onValueChange={handleYearChange}
-                    >
-                      <Select.Trigger className="w-full shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md data-[state=open]:shadow-md transition-all">
-                        <Select.Value placeholder="Select Academic Year" />
-                      </Select.Trigger>
-                      <Select.Content>
-                        <Select.Group>
-                          {academicYears.length === 0 ? (
-                            <Select.Item value="0" disabled>No Academic Years found</Select.Item>
-                          ) : (
-                            academicYears.map((y) => (
-                              <Select.Item key={y.academic_year_id} value={String(y.academic_year_id)}>
-                                {y.year_label} {y.is_active ? "(Active)" : ""}
-                              </Select.Item>
-                            ))
-                          )}
-                        </Select.Group>
-                      </Select.Content>
-                    </Select>
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <Text as="h6" className="font-sans font-medium">
-                      Period Type
-                    </Text>
-                    <div className="h-10 border-2 border-black flex items-center gap-2 px-3 text-md font-medium">
-                      <Lock className="w-3.5 h-3.5" />
-                      Three-Term Academic Calendar
-                    </div>
-                    <Text
-                      as="p"
-                      className="font-sans text-xs text-muted-foreground"
-                    >
-                      Standard DepEd trimestral schedule.
-                    </Text>
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <Text as="h6" className="font-sans font-medium">
-                      Active Period
-                    </Text>
-                    <Select value={selectedPeriodId} onValueChange={handlePeriodSelect}>
-                      <Select.Trigger className="w-full shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md data-[state=open]:shadow-md transition-all">
-                        <Select.Value placeholder="Select Active Period" />
-                      </Select.Trigger>
-                      <Select.Content>
-                        <Select.Group>
-                          {academicPeriods.length === 0 ? (
-                            <Select.Item value="0" disabled>No periods for this year</Select.Item>
-                          ) : (
-                            academicPeriods.map((p) => (
-                              <Select.Item key={p.id} value={String(p.id)}>
-                                {p.period} {p.is_active ? "(Active)" : ""}
-                              </Select.Item>
-                            ))
-                          )}
-                        </Select.Group>
-                      </Select.Content>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="border-2 border-black bg-background p-4 flex flex-col gap-3">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <Text as="p" className="text-sm font-semibold">
-                        {progressPercent}% Complete
-                      </Text>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Text as="p" className="text-sm font-semibold">
-                        Active Period:
-                      </Text>
-                      <Badge size="sm" variant="secondary">
-                        {activePeriod?.period || "No Active Period"}
-                      </Badge>
-                    </div>
-                  </div>
-                  <Progress value={progressPercent} className="w-full" />
-                </div>
-                <div className="flex flex-row justify-between w-full items-center -my-2">
-                  <Text as="p" className="font-sans text-sm text-muted-foreground">
-                    Applies to Junior High School and Senior High School.
-                  </Text>
-                  <Button
-                    size="sm"
-                    variant="link"
-                    className="shadow-none -mr-2"
-                    onClick={() => navigate(`/admin/academic-periods`)}
-                  >
-                    View All Periods
-                    <ArrowUpRight className="w-4 h-4 ml-1" />
-                  </Button>
-                </div>
-              </Card.Content>
-            </Card>
-
-            {/* School Curriculum Scope */}
-            <Card className="@container/card w-full">
-              <Card.Header className="flex flex-row justify-between items-start">
-                <Card.Title className="flex flex-col w-full gap-1 mb-4">
-                  School Curriculum Scope
-                  <Text
-                    as="p"
-                    className="text-sm font-normal text-muted-foreground"
-                  >
-                    Define school levels and Senior High School pathways.
-                  </Text>
-                </Card.Title>
-                <div className="flex items-center gap-4">
-                  <Button
-                    size="sm"
-                    className="whitespace-nowrap"
-                    onClick={handleSaveScope}
-                    disabled={isSavingScope}
-                  >
-                    Save Scope
-                  </Button>
-                </div>
-              </Card.Header>
-              <Card.Content className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="border-2 border-black p-4 flex flex-col gap-3">
-                    <Text as="h6" className="text-xl font-bold">
-                      School Levels
-                    </Text>
-                    <div className="flex items-center justify-between">
-                      <Text as="p" className="font-medium">
-                        Junior High School
-                      </Text>
-                      <Switch
-                        checked={jhsEnabled}
-                        onCheckedChange={() => setJhsEnabled((v) => !v)}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Text as="p" className="font-sans font-medium">
-                        Senior High School
-                      </Text>
-                      <Switch
-                        checked={shsEnabled}
-                        onCheckedChange={() => setShsEnabled((v) => !v)}
-                      />
-                    </div>
-                    <Text
-                      as="p"
-                      className="font-sans text-xs text-muted-foreground"
-                    >
-                      Enabled levels control available grade levels across classes, subjects, and reports.
-                    </Text>
-                  </div>
-
-                  <div className="border-2 border-black p-4 flex flex-col gap-3 bg-neutral-50">
-                    <div className="flex items-center justify-between">
-                      <Text as="h6" className="text-xl font-bold">
-                        Senior High School Pathways
-                      </Text>
-                      <Dialog open={isAddPathwayOpen} onOpenChange={setIsAddPathwayOpen}>
-                        <Dialog.Trigger>
-                          <Button size="sm" disabled={!shsEnabled}>
-                            Add Pathway
-                          </Button>
-                        </Dialog.Trigger>
-                        <Dialog.Content>
-                          <Dialog.Header>
-                            <Text as="h5" className="font-sans text-lg font-bold">Add New SHS Academic Pathway</Text>
-                          </Dialog.Header>
-                          <Text as="p" className="text-xs text-muted-foreground mb-4">
-                            Configure a new Senior High School academic pathway for section and subject assignment.
-                          </Text>
-                          {pathwayError && (
-                            <Alert status="error" className="mb-4">
-                              {pathwayError}
-                            </Alert>
-                          )}
-                          <div className="flex flex-col gap-4 py-2">
-                            <div className="flex flex-col gap-1.5">
-                              <Text as="p" className="text-sm font-medium">Pathway Code (Slug)</Text>
-                              <Input
-                                placeholder="e.g. ict-programming"
-                                value={pathwayCode}
-                                onChange={(e) => setPathwayCode(e.target.value)}
-                              />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                              <Text as="p" className="text-sm font-medium">Pathway Display Name</Text>
-                              <Input
-                                placeholder="e.g. ICT and Computer Programming Related"
-                                value={pathwayName}
-                                onChange={(e) => setPathwayName(e.target.value)}
-                              />
-                            </div>
-                          </div>
-                          <div className="flex gap-2 justify-end mt-4">
-                            <Button variant="outline" onClick={() => setIsAddPathwayOpen(false)}>
-                              Cancel
-                            </Button>
-                            <Button onClick={handleCreatePathway}>
-                              Save Pathway
-                            </Button>
-                          </div>
-                        </Dialog.Content>
-                      </Dialog>
-                    </div>
-
-                    {isLoadingPathways ? (
-                      <Text as="p" className="text-xs text-muted-foreground">Loading pathways...</Text>
-                    ) : pathways.length === 0 ? (
-                      <Text as="p" className="text-xs text-muted-foreground">No pathways configured.</Text>
-                    ) : (
-                      pathways.map((p) => (
-                        <div key={p.id} className="flex items-center justify-between border-2 border-black px-3 py-2 bg-white">
-                          <div className="flex flex-row gap-2 items-end">
-                            <Text as="p" className="font-sans font-medium text-sm">
-                              {p.name}
-                            </Text>
-                            <Text as="p" className="font-sans text-xs text-muted-foreground pb-0.5">
-                              ({p.code})
-                            </Text>
-                          </div>
-                          <Switch
-                            checked={p.is_enabled}
-                            onCheckedChange={() => handleTogglePathwayEnabled(p)}
-                            disabled={!shsEnabled}
-                          />
-                        </div>
-                      ))
-                    )}
-
-                    <Text
-                      as="p"
-                      className="font-sans text-xs text-muted-foreground"
-                    >
-                      Admin-configurable SHS Academic Pathways (DepEd Order No. 017 s. 2026).
-                    </Text>
-                  </div>
-                </div>
-              </Card.Content>
-            </Card>
-
-            {/* Academic Levels */}
-            <Card className="@container/card w-full">
-              <Card.Header>
-                <Card.Title className="flex flex-row justify-between w-full items-center mb-4">Academic Levels</Card.Title>
-              </Card.Header>
-              <Card.Content className="flex flex-col gap-4">
-                <Table>
-                  <Table.Header>
-                    <Table.Row>
-                      <Table.Head>Level</Table.Head>
-                      <Table.Head>School Stage</Table.Head>
-                      <Table.Head>Available Curriculum</Table.Head>
-                      <Table.Head>DO 017 Pathways</Table.Head>
-                      <Table.Head>Status</Table.Head>
-                    </Table.Row>
-                  </Table.Header>
-                  <Table.Body>
-                    {academicLevels.map((item) => {
-                      const stageEnabled = item.stage === "Junior High" ? jhsEnabled : shsEnabled;
-                      const scope = pathwayScopes.find((s) => s.grade_level === item.grade_level);
-                      return (
-                        <Table.Row key={item.academic_level_id}>
-                          <Table.Cell className="font-bold">
-                            {item.level_name}
-                          </Table.Cell>
-                          <Table.Cell>{item.stage}</Table.Cell>
-                          <Table.Cell className="text-center">
-                            {item.stage === "Junior High" ? (
-                              <Badge
-                                size="sm"
-                                variant="default"
-                              >
-                                Standard JHS setup
-                              </Badge>
-                            ) : (
-                              <div className="flex gap-2 flex-wrap justify-center">
-                                {pathwayPills(item.stage)}
-                              </div>
-                            )}
-                          </Table.Cell>
-                          <Table.Cell>
-                            {item.grade_level < 11 ? (
-                              <Text as="p" className="text-xs text-muted-foreground">
-                                N/A (SHS only)
-                              </Text>
-                            ) : scope ? (
-                              <div className="flex items-center gap-2">
-                                <Switch
-                                  checked={scope.requires_pathway}
-                                  onCheckedChange={() => handleTogglePathwayScope(scope)}
-                                  disabled={!shsEnabled}
-                                />
-                                <Text as="p" className="text-xs text-muted-foreground">
-                                  {scope.requires_pathway ? "Required" : "General"}
-                                </Text>
-                              </div>
-                            ) : (
-                              <Text as="p" className="text-xs text-muted-foreground">
-                                {item.grade_level === 11 ? "Required" : "General"}
-                              </Text>
-                            )}
-                          </Table.Cell>
-                          <Table.Cell>
-                            <Badge variant={stageEnabled ? "secondary" : "outline"} size="sm">
-                              {stageEnabled ? "Enabled" : "Disabled"}
-                            </Badge>
-                          </Table.Cell>
-                        </Table.Row>
-                      );
-                    })}
-                  </Table.Body>
-                </Table>
-              </Card.Content>
-            </Card>
 
             {/* Default Grading Templates */}
             <Card className="@container/card w-full">
               <Card.Header className="flex flex-row justify-between items-start">
-                <Card.Title className="flex flex-col w-full gap-1 mb-4">
+                <Card.Title className="flex flex-col w-full gap-1">
                   Default Grading Templates
                   <Text
                     as="p"
@@ -1166,7 +740,7 @@ export default function AdminSystemSettings() {
                   >
                     <Dialog.Trigger>
                       <Button size="sm" className="whitespace-nowrap">
-                        <Plus className="size-3 mr-1" /> New Template
+                        <Plus className="size-3.5 mr-2" /> Add Template
                       </Button>
                     </Dialog.Trigger>
                     <AddGradingTemplateModal
@@ -1242,18 +816,388 @@ export default function AdminSystemSettings() {
                     ))}
                   </div>
                 )}
-                <Alert status="warning" className="border-2 border-dashed border-black bg-yellow-50 text-foreground text-sm">
+                {/* <Alert status="warning" className="border-2 border-dashed border-black bg-yellow-50 text-foreground text-sm">
                   <strong>Grading Architecture:</strong> Settings stores reusable
                   grade-weight templates. Subject-specific weights and assessments are configured in{" "}
                   <strong>Subjects → Grading Setup</strong>.
-                </Alert>
+                </Alert> */}
+              </Card.Content>
+            </Card>
+
+            {/* Academic Calendar */}
+            <Card className="@container/card w-full">
+              <Card.Header className="flex flex-row justify-between items-start">
+                <Card.Title className="flex flex-col w-full gap-1">
+                  Academic Calendar
+                  <Text
+                    as="p"
+                    className="text-sm font-normal text-muted-foreground"
+                  >
+                    Set the active school year and active term. This determines the current academic period system-wide.
+                  </Text>
+                </Card.Title>
+                <div className="flex items-center gap-4">
+                  <Dialog>
+                    <Dialog.Trigger>
+                      <Button size="sm" className="whitespace-nowrap">
+                        <Calendar className="size-3 mr-2" /> New Academic Period
+                      </Button>
+                    </Dialog.Trigger>
+                    <AddAcademicPeriodModal />
+                  </Dialog>
+                </div>
+              </Card.Header>
+              <Card.Content className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="flex flex-col gap-2">
+                    <Text as="h6" className="font-sans font-medium">
+                      Current Academic Year
+                    </Text>
+                    <Select
+                      value={selectedYearId}
+                      onValueChange={handleYearChange}
+                    >
+                      <Select.Trigger className="w-full shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md data-[state=open]:shadow-md transition-all">
+                        <Select.Value placeholder="Select Academic Year" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Group>
+                          {academicYears.length === 0 ? (
+                            <Select.Item value="0" disabled>No Academic Years found</Select.Item>
+                          ) : (
+                            academicYears.map((y) => (
+                              <Select.Item key={y.academic_year_id} value={String(y.academic_year_id)}>
+                                {y.year_label} {y.is_active ? "(Active)" : ""}
+                              </Select.Item>
+                            ))
+                          )}
+                        </Select.Group>
+                      </Select.Content>
+                    </Select>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <Text as="h6" className="font-sans font-medium">
+                      Period Type
+                    </Text>
+                    <div className="h-10 border-2 border-black flex items-center gap-2 px-3 text-md font-medium">
+                      <Lock className="w-3.5 h-3.5" />
+                      Three-Term Academic Calendar
+                    </div>
+                    <Text as="p" className="font-sans text-xs text-muted-foreground">
+                      Standard DepEd trimestral schedule.
+                    </Text>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <Text as="h6" className="font-sans font-medium">
+                      Active Period
+                    </Text>
+                    <Select value={selectedPeriodId} onValueChange={handlePeriodSelect}>
+                      <Select.Trigger className="w-full shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md data-[state=open]:shadow-md transition-all">
+                        <Select.Value placeholder="Select Active Period" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Group>
+                          {academicPeriods.length === 0 ? (
+                            <Select.Item value="0" disabled>No periods for this year</Select.Item>
+                          ) : (
+                            academicPeriods.map((p) => (
+                              <Select.Item key={p.id} value={String(p.id)}>
+                                {p.period} {p.is_active ? "(Active)" : ""}
+                              </Select.Item>
+                            ))
+                          )}
+                        </Select.Group>
+                      </Select.Content>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="border-2 border-black bg-background p-4 flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Text as="p" className="text-sm font-semibold">
+                        {progressPercent}% Complete
+                      </Text>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Text as="p" className="text-sm font-semibold">
+                        Active Period:
+                      </Text>
+                      <Badge size="sm" variant="secondary">
+                        {activePeriod?.period || "No Active Period"}
+                      </Badge>
+                    </div>
+                  </div>
+                  <Progress value={progressPercent} className="w-full" />
+                </div>
+                <div className="flex flex-row justify-between w-full items-center -my-2">
+                  <Text as="p" className="font-sans text-sm text-muted-foreground">
+                    Applies to Junior High School and Senior High School.
+                  </Text>
+                  <Button
+                    size="sm"
+                    variant="link"
+                    className="shadow-none -mr-2"
+                    onClick={() => navigate(`/admin/academic-periods`)}
+                  >
+                    View All Periods
+                    <ArrowUpRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </div>
+              </Card.Content>
+            </Card>
+
+            {/* School Curriculum Scope */}
+            <Card className="@container/card w-full">
+              <Card.Header className="flex flex-row justify-between items-start">
+                <Card.Title className="flex flex-col w-full gap-1">
+                  School Curriculum Scope
+                  <Text
+                    as="p"
+                    className="text-sm font-normal text-muted-foreground"
+                  >
+                    Define school levels and Senior High School pathways.
+                  </Text>
+                </Card.Title>
+                <div className="flex items-center gap-4">
+                  <Button
+                    size="sm"
+                    className="whitespace-nowrap"
+                    onClick={handleSaveScope}
+                    disabled={isSavingScope}
+                  >
+                    <Save className="size-3.5 mr-2" />
+                    Save Scope
+                  </Button>
+                </div>
+              </Card.Header>
+              <Card.Content className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-primary border-2 border-black p-4 flex flex-col gap-3">
+                    <Text as="h6" className="text-xl font-bold mb-1">
+                      School Levels
+                    </Text>
+                    <div className="flex items-center justify-between border-2 border-black px-3 py-2 bg-white">
+                      <Text as="p" className="font-medium">
+                        Junior High School
+                      </Text>
+                      <Switch
+                        checked={jhsEnabled}
+                        onCheckedChange={() => setJhsEnabled((v) => !v)}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between border-2 border-black px-3 py-2 bg-white">
+                      <Text as="p" className="font-sans font-medium">
+                        Senior High School
+                      </Text>
+                      <Switch
+                        checked={shsEnabled}
+                        onCheckedChange={() => setShsEnabled((v) => !v)}
+                      />
+                    </div>
+                    <Text as="p" className="font-sans text-xs text-foreground">
+                      Enabled levels control available grade levels across classes, subjects, and reports.
+                    </Text>
+                  </div>
+
+                  <div className="bg-primary border-2 border-black p-4 flex flex-col gap-3 bg-neutral-50">
+                    <div className="flex items-center justify-between">
+                      <Text as="h6" className="text-xl font-bold">
+                        Senior High School Pathways
+                      </Text>
+                      <Dialog open={isAddPathwayOpen} onOpenChange={setIsAddPathwayOpen}>
+                        <Dialog.Trigger>
+                          <Button variant="outline" className="bg-background" size="sm" disabled={!shsEnabled}>
+                            Add Pathway
+                          </Button>
+                        </Dialog.Trigger>
+                        <AddPathwayModal
+                          onClose={() => setIsAddPathwayOpen(false)}
+                          onSaved={async () => {
+                            await loadPathways();
+                            setIsAddPathwayOpen(false);
+                            showToast("Pathway created successfully.");
+                          }}
+                        />
+                      </Dialog>
+                    </div>
+
+                    {isLoadingPathways ? (
+                      <Text as="p" className="text-xs text-muted-foreground">Loading pathways...</Text>
+                    ) : pathways.length === 0 ? (
+                      <Text as="p" className="text-xs text-muted-foreground">No pathways configured.</Text>
+                    ) : (
+                      pathways.map((p) => (
+                        <div key={p.id} className="flex items-center justify-between border-2 border-black px-3 py-2 bg-white">
+                          <div className="flex flex-row gap-2 items-end">
+                            <Text as="p" className="font-sans font-medium">
+                              {p.name}
+                            </Text>
+                            <Text as="p" className="font-sans text-xs text-muted-foreground pb-0.5">
+                              ({p.code})
+                            </Text>
+                          </div>
+                          <Switch
+                            checked={p.is_enabled}
+                            onCheckedChange={() => handleTogglePathwayEnabled(p)}
+                            disabled={!shsEnabled}
+                          />
+                        </div>
+                      ))
+                    )}
+
+                    <Text as="p" className="font-sans text-xs text-foreground">
+                      Admin-configurable SHS Academic Pathways (DepEd Order No. 017 s. 2026).
+                    </Text>
+                  </div>
+                </div>
+              </Card.Content>
+            </Card>
+
+            {/* Academic Levels */}
+            <Card className="@container/card w-full">
+              <Card.Header>
+                <Card.Title className="flex flex-row justify-between w-full items-center">Academic Levels</Card.Title>
+              </Card.Header>
+              <Card.Content className="flex flex-col gap-4">
+                <Table>
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.Head>Level</Table.Head>
+                      <Table.Head>School Stage</Table.Head>
+                      <Table.Head>Available Curriculum</Table.Head>
+                      <Table.Head>SHS Pathways </Table.Head>
+                      <Table.Head>Status</Table.Head>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {academicLevels.map((item) => {
+                      const stageEnabled = item.stage === "Junior High" ? jhsEnabled : shsEnabled;
+                      const scope = pathwayScopes.find((s) => s.grade_level === item.grade_level);
+                      return (
+                        <Table.Row key={item.academic_level_id}>
+                          <Table.Cell className="font-bold">
+                            {item.level_name}
+                          </Table.Cell>
+                          <Table.Cell>{item.stage}</Table.Cell>
+                          <Table.Cell className="text-center">
+                            {item.stage === "Junior High" ? (
+                              <Badge
+                                size="sm"
+                                variant="default"
+                              >
+                                Standard JHS setup
+                              </Badge>
+                            ) : (
+                              <div className="flex gap-2 flex-wrap justify-center">
+                                {pathwayPills(item.stage)}
+                              </div>
+                            )}
+                          </Table.Cell>
+                          <Table.Cell>
+                            {item.grade_level < 11 ? (
+                              <Text as="p" className="text-xs text-muted-foreground">
+                                N/A (SHS only)
+                              </Text>
+                            ) : scope ? (
+                              <div className="flex items-center gap-2">
+                                <Switch
+                                  checked={scope.requires_pathway}
+                                  onCheckedChange={() => handleTogglePathwayScope(scope)}
+                                  disabled={!shsEnabled}
+                                />
+                                <Text as="p" className="text-xs text-muted-foreground">
+                                  {scope.requires_pathway ? "Required" : "General"}
+                                </Text>
+                              </div>
+                            ) : (
+                              <Text as="p" className="text-xs text-muted-foreground">
+                                {item.grade_level === 11 ? "Required" : "General"}
+                              </Text>
+                            )}
+                          </Table.Cell>
+                          <Table.Cell>
+                            <Badge variant={stageEnabled ? "secondary" : "outline"} size="sm">
+                              {stageEnabled ? "Enabled" : "Disabled"}
+                            </Badge>
+                          </Table.Cell>
+                        </Table.Row>
+                      );
+                    })}
+                  </Table.Body>
+                </Table>
+              </Card.Content>
+            </Card>
+
+            {/* Teacher Workload Caps */}
+            <Card className="@container/card w-full">
+              <Card.Header className="flex flex-row justify-between items-start mb-0">
+                <Card.Title className="flex flex-col w-full gap-1">
+                  Teacher Workload Caps
+                  <Text as="p" className="text-sm font-normal text-muted-foreground">
+                    These limits are enforced globally across all subjects during scheduling.
+                  </Text>
+                </Card.Title >
+                <Button
+                  size="sm"
+                  className="whitespace-nowrap"
+                  onClick={handleSaveTeacherCaps}
+                  disabled={isSavingTeacherCaps || parseInt(minSubjects) > parseInt(maxSubjects)}
+                >
+                  <Save className="size-3.5 mr-2" />
+                  Save Workload Caps
+                </Button>
+              </Card.Header>
+              <Card.Content className="flex flex-col gap-6 w-full">
+                <div className="flex flex-col gap-1">
+                  {parseInt(minSubjects) > parseInt(maxSubjects) && (
+                    <Text as="p" className="font-sans text-sm font-semibold text-red-600 mt-1">
+                      Error: Minimum subjects cannot exceed maximum subjects.
+                    </Text>
+                  )}
+                </div>
+                <div className="flex w-full flex-row gap-4 items-center">
+                  <div className="flex flex-col gap-2 w-full">
+                    <label className="text-sm font-semibold">Min Subjects/Day</label>
+                    <Input
+                      type="number"
+                      min={0}
+                      className="w-full"
+                      value={minSubjects}
+                      onChange={(e) => setMinSubjects(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2 w-full">
+                    <label className="text-sm font-semibold">Max Subjects/Day</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      className="w-full"
+                      value={maxSubjects}
+                      onChange={(e) => setMaxSubjects(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2 w-full">
+                    <label className="text-sm font-semibold">Max Hours/Day</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      step={0.5}
+                      className="w-full"
+                      value={maxHours}
+                      onChange={(e) => setMaxHours(e.target.value)}
+                    />
+                  </div>
+                </div>
               </Card.Content>
             </Card>
 
             {/* Module Responsibility Map */}
             <Card className="@container/card w-full">
               <Card.Header>
-                <Card.Title className="flex flex-row justify-between w-full items-center mb-4">Module Responsibility Map</Card.Title>
+                <Card.Title className="flex flex-row justify-between w-full items-center">Module Responsibility Map</Card.Title>
               </Card.Header>
               <Card.Content className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">

@@ -82,8 +82,9 @@ const SubjectItemLine = ({
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button
+                                            size="sm"
                                             variant="secondary"
-                                            className="p-2 shadow-none hover:shadow-none hover:translate-none"
+                                            className="px-2"
                                             aria-label="More options"
                                             onClick={(e) => e.preventDefault()}
                                         >

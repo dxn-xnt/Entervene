@@ -19,11 +19,9 @@ npx expo start
 admin@mnsts.edu.ph
 hash_mnsts_admin_01
 
-
 #teacher
 m.cruz@school.edu.ph
 hash_poly_02
-
 
 Student Account
 Email:				Password Hash: 
@@ -35,12 +33,9 @@ ana.gonzales@student.ph, 	hash_poly_06
 carlos.mendoza@student.ph, 	hash_poly_07
 luz.fernandez@student.ph,	hash_poly_08
 
-
-
 mobile app
 npx expo start
 npx expo start --offline (if ever mag bug inig run)
-
 
 
 Password is either

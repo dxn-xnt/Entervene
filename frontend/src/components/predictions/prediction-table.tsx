@@ -91,7 +91,7 @@ export default function PredictionTable({
             {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">LRN</Table.Head> */}
             {!hideClass && <Table.Head className="font-extrabold text-black whitespace-nowrap">Class</Table.Head>}
             <Table.Head className="font-extrabold text-black whitespace-nowrap">Subject</Table.Head>
-            <Table.Head className="font-extrabold text-black whitespace-nowrap">Term</Table.Head>
+            {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">Term</Table.Head> */}
             <Table.Head className="font-extrabold text-black whitespace-nowrap">
               <SortableHeader
                 label="Predicted Grade"
@@ -155,7 +155,7 @@ export default function PredictionTable({
                   </Table.Cell> */}
                   {!hideClass && <Table.Cell className="font-normal whitespace-nowrap">{item.class_name}</Table.Cell>}
                   <Table.Cell className="font-normal whitespace-nowrap">{item.subject_name}</Table.Cell>
-                  <Table.Cell className="font-normal whitespace-nowrap">{item.term_label}</Table.Cell>
+                  {/* <Table.Cell className="font-normal whitespace-nowrap">{item.term_label}</Table.Cell> */}
                   <Table.Cell className="font-black text-base whitespace-nowrap">
                     {item.predicted_period_grade !== null
                       ? item.predicted_period_grade.toFixed(2)

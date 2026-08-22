@@ -177,8 +177,3 @@ body[data-scroll-locked] {
   background-size: 600px 600px;
   background-repeat: repeat;
 }
-
-/* Give page headers an opaque background so squares don't bleed through */
-.retro-squares-bg header {
-  background-color: var(--background);
-}

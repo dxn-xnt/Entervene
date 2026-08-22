@@ -1,4 +1,5 @@
 import { Card } from "@/components/retroui/Card";
+import { OverviewCard } from "@/components/overview-cards";
 import { Progress } from "@/components/retroui/Progress";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ArrowUpRight } from "lucide-react";
@@ -73,6 +74,33 @@ const studentActivity = [
   },
 ];
 
+const overviewCards = [
+  {
+    title: "Subjects",
+    count: "16",
+    stat: "+3",
+    statDescription: "increased from last month",
+  },
+  {
+    title: "Classes",
+    count: "12",
+    stat: "+3",
+    statDescription: "increased from last month",
+  },
+  {
+    title: "Students",
+    count: "1",
+    stat: "+1",
+    statDescription: "increased from last month",
+  },
+  {
+    title: "Ungraded Classwork",
+    count: "2",
+    stat: "+3",
+    statDescription: "increased from last month",
+  },
+];
+
 import { Button } from "@/components/retroui/Button";
 import { Calendar } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -92,9 +120,7 @@ const Dashboard = () => {
                   <h1 className="text-2xl md:text-4xl font-bold">
                     Dashboard
                   </h1>
-                  <p className="text-sm text-gray-500">
-                    Good morning, teacher!
-                  </p>
+
                 </div>
               </div>
               <Button
@@ -108,57 +134,15 @@ const Dashboard = () => {
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
-              <Card className="block w-full">
-                <Card.Header>
-                  <Card.Description>Subjects</Card.Description>
-                </Card.Header>
-                <Card.Content>
-                  <Card.Title>16</Card.Title>
-                  <p className="text-xs text-black">
-                    <span className="font-bold">+3</span> increased from last
-                    month
-                  </p>
-                </Card.Content>
-              </Card>
-
-              <Card className="block w-full">
-                <Card.Header>
-                  <Card.Description>Classes</Card.Description>
-                </Card.Header>
-                <Card.Content>
-                  <Card.Title>12</Card.Title>
-                  <p className="text-xs text-black">
-                    <span className="font-bold">+3</span> increased from last
-                    month
-                  </p>
-                </Card.Content>
-              </Card>
-
-              <Card className="block w-full">
-                <Card.Header>
-                  <Card.Description>Students</Card.Description>
-                </Card.Header>
-                <Card.Content>
-                  <Card.Title>1</Card.Title>
-                  <p className="text-xs text-black">
-                    <span className="font-bold">+1</span> increased from last
-                    month
-                  </p>
-                </Card.Content>
-              </Card>
-
-              <Card className="block w-full">
-                <Card.Header>
-                  <Card.Description>Ungraded Classwork</Card.Description>
-                </Card.Header>
-                <Card.Content>
-                  <Card.Title>2</Card.Title>
-                  <p className="text-xs text-black">
-                    <span className="font-bold">+3</span> increased from last
-                    month
-                  </p>
-                </Card.Content>
-              </Card>
+              {overviewCards.map((card) => (
+                <OverviewCard
+                  key={card.title}
+                  title={card.title}
+                  count={card.count}
+                  stat={card.stat}
+                  statDescription={card.statDescription}
+                />
+              ))}
             </div>
 
             <div className="flex flex-col lg:flex-row items-stretch gap-4">
@@ -231,9 +215,8 @@ const Dashboard = () => {
                     {classActivity.map((item) => (
                       <div
                         key={item.title}
-                        className={`border-2 border-black rounded px-3 py-2 ${
-                          item.highlighted ? "bg-primary" : "bg-transparent"
-                        }`}
+                        className={`border-2 border-black rounded px-3 py-2 ${item.highlighted ? "bg-primary" : "bg-transparent"
+                          }`}
                       >
                         <p className="text-sm font-medium">{item.title}</p>
                         <p className="text-xs text-gray-600">{item.date}</p>

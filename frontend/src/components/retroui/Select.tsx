@@ -34,20 +34,28 @@ const SelectTrigger = ({
   return (
     <SelectPrimitive.Trigger
       className={cn(
-        "flex h-10 rounded min-w-40 items-center shadow-md bg-background focus:shadow-xs justify-between border-2 border-input border-border px-4 py-2 placeholder:text-muted-foreground outline-none focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-10 rounded min-w-40 items-center shadow-md bg-background focus:shadow-xs justify-between border-2 border-input border-border px-4 py-2 placeholder:text-muted-foreground outline-none focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 [&>span]:truncate text-left",
         className,
       )}
       {...props}
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDown className="ml-2 h-4 w-4" />
+        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-70" />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );
 };
 
-const SelectValue = SelectPrimitive.Value;
+const SelectValue = ({
+  className,
+  ...props
+}: SelectPrimitive.SelectValueProps) => (
+  <SelectPrimitive.Value
+    className={cn("truncate block text-left", className)}
+    {...props}
+  />
+);
 
 const SelectIcon = SelectPrimitive.Icon;
 
@@ -102,12 +110,14 @@ const SelectItem = ({
 }: SelectPrimitive.SelectItemProps) => (
   <SelectPrimitive.Item
     className={cn(
-      "relative flex w-full cursor-default select-none items-center py-1.5 px-2 outline-none data-[highlighted]:bg-primary data-[highlighted]:text-primary-foreground focus:bg-primary focus:text-primary-foreground data-disabled:pointer-events-none data-disabled:opacity-50",
+      "relative flex w-full cursor-default select-none items-center py-1.5 pl-2 pr-8 outline-none data-[highlighted]:bg-primary data-[highlighted]:text-primary-foreground focus:bg-primary focus:text-primary-foreground data-disabled:pointer-events-none data-disabled:opacity-50",
       className,
     )}
     {...props}
   >
-    <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    <SelectPrimitive.ItemText asChild>
+      <span className="truncate block">{children}</span>
+    </SelectPrimitive.ItemText>
 
     <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
