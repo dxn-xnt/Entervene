@@ -98,7 +98,15 @@ function SubjectClassCatalogCard({
         <div className="flex flex-col w-full gap-1 mt-1">
           <Card className="bg-primary w-full shadow-none py-2 px-3">
             <div className="flex flex-col w-full gap-2">
-              <p className="text-md font-semibold">Assignments 2</p>
+              <div className="flex flex-row justify-between ">
+                <p className="text-md font-semibold">Assignments 2</p>
+                <Button
+                  variant="secondary"
+                  className="shadow-none p-1"
+                  size="sm">
+                  <ArrowUpRight className="size-3" />
+                </Button>
+              </div>
               <div className="flex flex-row gap-2 items-center">
                 <Badge size="sm" variant="outline">
                   Ongoing
@@ -210,7 +218,7 @@ const TeacherClasses = () => {
           <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
-              <h1 className="text-2xl md:text-4xl font-bold">Classes</h1>
+              <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Classes</h1>
             </header>
 
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
@@ -233,7 +241,7 @@ const TeacherClasses = () => {
                 Loading classes...
               </p>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
                 {/* Left: Subject Loads */}
                 <div className="lg:col-span-8 flex flex-col gap-4">
                   {groupedSubjectLoads.length === 0 ? (
@@ -317,7 +325,7 @@ const TeacherClasses = () => {
                           key={item.class_id}
                           item={item}
                           onClick={() =>
-                            navigate(`/teacher/classes/${item.class_id}`)
+                            navigate(`/teacher/advisory-class/${item.class_id}`)
                           }
                         />
                       ))

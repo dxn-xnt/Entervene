@@ -17,7 +17,7 @@ import type {
 
 type DetailTab = "classes" | "students" | "subjects";
 
-export default function TeacherClassDetail() {
+export default function AdvisoryClassDetail() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
   const [tab, setTab] = useState<DetailTab>("classes");
@@ -93,26 +93,20 @@ export default function TeacherClassDetail() {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col gap-2">
           <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
-            <header className="flex items-center gap-3">
+            <header className="flex items-center gap-3 -mb-[5px]">
               <Breadcrumb>
                 <Breadcrumb.List>
                   <Breadcrumb.Item>
                     <Breadcrumb.Link
                       onClick={() => navigate("/teacher/classes")}
-                      className="text-2xl md:text-4xl text-black/50 hover:text-black cursor-pointer"
+                      className="cursor-pointer"
                     >
                       Classes
                     </Breadcrumb.Link>
                   </Breadcrumb.Item>
                   <Breadcrumb.Separator />
                   <Breadcrumb.Item>
-                    <Breadcrumb.Link className="text-2xl md:text-4xl text-black/50 hover:text-black cursor-pointer">
-                      {detail.academic_level}
-                    </Breadcrumb.Link>
-                  </Breadcrumb.Item>
-                  <Breadcrumb.Separator />
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Page className="text-xl md:text-3xl">
+                    <Breadcrumb.Page className="text-2xl">
                       {detail.section_name}
                     </Breadcrumb.Page>
                   </Breadcrumb.Item>
@@ -149,10 +143,7 @@ export default function TeacherClassDetail() {
                     <Card.Title className="mb-0">
                       {detail.section_name}
                     </Card.Title>
-                    <p className="text-xs font-semibold">
-                      {detail.academic_level} - {detail.academic_year} | Active
-                      since {activeSince}
-                    </p>
+
                   </div>
                   <Badge
                     variant="outline"
@@ -162,6 +153,10 @@ export default function TeacherClassDetail() {
                     {statusLabel}
                   </Badge>
                 </div>
+                <p className="text-sm font-normal">
+                  {detail.academic_level} - {detail.academic_year} | Active
+                  since {activeSince}
+                </p>
               </Card.Content>
             </Card>
 
