@@ -17,6 +17,7 @@ import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Badge } from "@/components/retroui/Badge";
 import ClassworkFormModal from "./subject-details/ClassworkFormModal";
+import CompetencyModal from "./subject-details/CompetencyModal";
 import LessonClassworkList from "./subject-details/LessonClassworkList";
 import StudentRecordsPanel from "./subject-details/StudentRecordsPanel";
 import TeacherLessonDetailScreen from "./subject-details/TeacherLessonDetailScreen";
@@ -29,6 +30,7 @@ import {
 import type {
   ClassworkDetail,
   ClassworkDraft,
+  CompetencyItem,
   Lesson,
   LessonDraft,
   LinkedClasswork,
@@ -47,6 +49,10 @@ export default function SubjectDetails() {
     subjectId: string;
   }>();
   const navigate = useNavigate();
+  const [competencies, setCompetencies] = useState<CompetencyItem[]>([]);
+  const [isCompetencyModalOpen, setIsCompetencyModalOpen] = useState(false);
+  const [editingCompetency, setEditingCompetency] = useState<CompetencyItem | null>(null);
+  const [selectedCompetencyIdForNewLesson, setSelectedCompetencyIdForNewLesson] = useState<number | undefined>(undefined);
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<"lessons" | "students">("lessons");
   const [isCreatingLesson, setIsCreatingLesson] = useState(false);
@@ -95,6 +101,56 @@ export default function SubjectDetails() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  const openCompetencyForm = (comp?: CompetencyItem | null) => {
+    setEditingCompetency(comp || null);
+    setIsCompetencyModalOpen(true);
+  };
+
+  const handleCompetencySaved = (savedComp: CompetencyItem) => {
+    setCompetencies((prev) => {
+      const idx = prev.findIndex((c) => c.competency_id === savedComp.competency_id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = savedComp;
+        return next;
+      }
+      return [...prev, savedComp];
+    });
+  };
+
+  const handleArchiveCompetency = async (competencyId: number) => {
+    if (
+      !window.confirm(
+        "Are you sure you want to archive this learning competency? Any attached lessons will become standalone.",
+      )
+    )
+      return;
+    try {
+      const res = await apiFetch(`/api/v1/competencies/${competencyId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setCompetencies((prev) =>
+          prev.filter((c) => c.competency_id !== competencyId),
+        );
+        setLessons((prev) =>
+          prev.map((l) =>
+            l.competency_id === competencyId
+              ? { ...l, competency_id: null, competency_code: null, competency_statement: null }
+              : l,
+          ),
+        );
+      }
+    } catch {
+      alert("Failed to archive competency.");
+    }
+  };
+
+  const handleAddLessonToCompetency = (competencyId: number) => {
+    setSelectedCompetencyIdForNewLesson(competencyId);
+    setIsCreatingLesson(true);
+  };
+
   const openLessonDetail = async (lesson: Lesson) => {
     setActiveLessonDetail(lesson);
     const nextParams = new URLSearchParams(searchParams);
@@ -118,7 +174,7 @@ export default function SubjectDetails() {
       setError("");
 
       try {
-        const [classesResponse, lessonsResponse, assignmentsResponse] =
+        const [classesResponse, lessonsResponse, assignmentsResponse, competenciesResponse] =
           await Promise.all([
             apiFetch("/api/v1/classwork-assignments/teacher/classes"),
             classId && subjectId
@@ -130,6 +186,9 @@ export default function SubjectDetails() {
               ? apiFetch(
                   `/api/v1/classwork-assignments/teacher/class/${classId}/subject/${subjectId}/assignments`,
                 )
+              : Promise.resolve(null),
+            subjectId
+              ? apiFetch(`/api/v1/competencies/subject/${subjectId}`)
               : Promise.resolve(null),
           ]);
 
@@ -155,6 +214,13 @@ export default function SubjectDetails() {
             (await assignmentsResponse.json()) as LinkedClasswork[];
           setSubjectAssignments(assignmentsData);
           setClassworkCount(assignmentsData.length);
+        }
+
+        if (competenciesResponse) {
+          if (competenciesResponse.ok) {
+            const compData = (await competenciesResponse.json()) as CompetencyItem[];
+            setCompetencies(compData);
+          }
         }
 
         if (classId && subjectId) {
@@ -918,6 +984,10 @@ export default function SubjectDetails() {
                     openClassworkDetail={openClassworkDetail}
                     subjectAssignments={subjectAssignments}
                     openLessonDetail={openLessonDetail}
+                    competencies={competencies}
+                    openCompetencyForm={openCompetencyForm}
+                    onAddLessonToCompetency={handleAddLessonToCompetency}
+                    onArchiveCompetency={handleArchiveCompetency}
                   />
                 )}
               </main>
@@ -1333,11 +1403,26 @@ export default function SubjectDetails() {
             <CreateLessonModal
               classId={classId}
               subjectId={subjectId}
-              onClose={() => setIsCreatingLesson(false)}
+              initialCompetencyId={selectedCompetencyIdForNewLesson}
+              onClose={() => {
+                setIsCreatingLesson(false);
+                setSelectedCompetencyIdForNewLesson(undefined);
+              }}
               onCreated={() => {
                 setIsCreatingLesson(false);
+                setSelectedCompetencyIdForNewLesson(undefined);
                 window.location.reload();
               }}
+            />
+          )}
+
+          {subjectId && (
+            <CompetencyModal
+              isOpen={isCompetencyModalOpen}
+              onClose={() => setIsCompetencyModalOpen(false)}
+              onSaved={handleCompetencySaved}
+              subjectId={Number(subjectId)}
+              editingCompetency={editingCompetency}
             />
           )}
 

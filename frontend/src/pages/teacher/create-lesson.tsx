@@ -37,6 +37,7 @@ async function responseError(response: Response, fallback: string) {
 interface CreateLessonModalProps {
   classId?: string;
   subjectId?: string;
+  initialCompetencyId?: number;
   onClose?: () => void;
   onCreated?: () => void;
 }
@@ -44,6 +45,7 @@ interface CreateLessonModalProps {
 export default function CreateLessonModal({
   classId: initialClassId,
   subjectId: initialSubjectId,
+  initialCompetencyId,
   onClose,
   onCreated,
 }: CreateLessonModalProps) {
@@ -64,6 +66,12 @@ export default function CreateLessonModal({
   };
   const [classLoads, setClassLoads] = useState<TeacherClassLoad[]>([]);
   const [subjectId, setSubjectId] = useState("");
+  const [competencies, setCompetencies] = useState<
+    Array<{ competency_id: number; statement: string; competency_code?: string | null }>
+  >([]);
+  const [competencyId, setCompetencyId] = useState(
+    initialCompetencyId ? String(initialCompetencyId) : "",
+  );
   const [classIds, setClassIds] = useState<number[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -73,6 +81,31 @@ export default function CreateLessonModal({
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (initialCompetencyId) {
+      setCompetencyId(String(initialCompetencyId));
+    }
+  }, [initialCompetencyId]);
+
+  useEffect(() => {
+    const fetchCompetencies = async () => {
+      if (!subjectId) {
+        setCompetencies([]);
+        return;
+      }
+      try {
+        const res = await apiFetch(`/api/v1/competencies/subject/${subjectId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setCompetencies(data);
+        }
+      } catch {
+        // Silently keep empty list if competencies cannot be loaded
+      }
+    };
+    fetchCompetencies();
+  }, [subjectId]);
 
   useEffect(() => {
     const loadTeacherClasses = async () => {
@@ -178,6 +211,7 @@ export default function CreateLessonModal({
           description: description.trim() || null,
           content: content.trim() || null,
           subject_id: Number(subjectId),
+          competency_id: competencyId ? Number(competencyId) : null,
           order_index: parsedOrderIndex,
           is_published: isPublished,
           is_draft: !isPublished,
@@ -222,21 +256,9 @@ export default function CreateLessonModal({
   };
 
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open && !isSubmitting) handleClose();
-      }}
-    >
-      <Dialog.Content
-        size="4xl"
-        className="no-scrollbar h-fit max-h-[92vh] !overflow-y-auto overflow-x-hidden border-black p-0"
-        overlay={{ className: "bg-black/50" }}
-      >
-        <Dialog.Header
-          asChild
-          className="border-b-2 border-black bg-primary px-5 py-4"
-        >
+    <Dialog open onOpenChange={(open) => !open && handleClose()}>
+      <Dialog.Content className="max-w-2xl border-2 border-black bg-[#FBFBEE] p-0 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+        <Dialog.Header className="flex items-center justify-between border-b-2 border-black bg-primary px-5 py-3">
           <>
             <div className="flex items-center gap-2">
               <div>
@@ -276,6 +298,7 @@ export default function CreateLessonModal({
                 onValueChange={(v) => {
                   setSubjectId(v);
                   setClassIds([]);
+                  setCompetencyId("");
                 }}
               >
                 <Select.Trigger
@@ -315,6 +338,42 @@ export default function CreateLessonModal({
                 className="h-10 w-full rounded-none border-black !shadow-none"
               />
             </div>
+          </div>
+
+          {/* ── Competency Selection ── */}
+          <div>
+            <label
+              htmlFor="competency"
+              className="mb-1 block text-sm font-semibold"
+            >
+              Learning Competency <span className="text-xs font-normal text-gray-600">(Optional / Hierarchy Grouping)</span>
+            </label>
+            <Select
+              value={competencyId || "none"}
+              onValueChange={(v) => setCompetencyId(v === "none" ? "" : v)}
+            >
+              <Select.Trigger
+                id="competency"
+                disabled={isSubmitting || !subjectId}
+                className="h-10 w-full border-2 border-black bg-white text-sm !shadow-none"
+              >
+                <Select.Value placeholder="Select a competency (or leave standalone)" />
+              </Select.Trigger>
+              <Select.Content className="max-h-60 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <Select.Item value="none">
+                  (None — Standalone Lesson)
+                </Select.Item>
+                {competencies.map((comp) => (
+                  <Select.Item
+                    key={comp.competency_id}
+                    value={String(comp.competency_id)}
+                  >
+                    {comp.competency_code ? `[${comp.competency_code}] ` : ""}
+                    {comp.statement}
+                  </Select.Item>
+                ))}
+              </Select.Content>
+            </Select>
           </div>
 
           <div>

@@ -6,11 +6,17 @@ from sqlalchemy.orm import Session
 
 from app.core.Dependencies import get_staff_id, require_role
 from app.db.Session import get_db
-from app.schemas.Competency import CompetencyCreate, CompetencyResponse, CompetencyUpdate
+from app.schemas.Competency import (
+    CompetencyCreate,
+    CompetencyResponse,
+    CompetencyUpdate,
+    SubjectHierarchyTreeResponse,
+)
 from app.services.academic.CompetencyService import (
     archive_competency_record,
     create_competency_record,
     get_competency_detail,
+    get_subject_hierarchy_tree,
     list_subject_competencies,
     update_competency_record,
 )
@@ -44,6 +50,23 @@ def get_subject_competencies(
     )
 
 
+@router.get("/tree/subject/{subject_id}", response_model=SubjectHierarchyTreeResponse)
+def get_hierarchy_tree(
+    subject_id: int,
+    class_id: Optional[int] = Query(None, description="Optional class ID filter for assigned lessons"),
+    period_id: Optional[int] = Query(None, description="Filter by academic period (quarter)"),
+    current_user: dict = Depends(require_role("teacher", "admin", "student")),
+    db: Session = Depends(get_db),
+):
+    return get_subject_hierarchy_tree(
+        subject_id=subject_id,
+        db=db,
+        class_id=class_id,
+        period_id=period_id,
+    )
+
+
+# Note: Dynamic /{competency_id} must remain below static routes like /subject/... and /tree/...
 @router.get("/{competency_id}", response_model=CompetencyResponse)
 def get_competency(
     competency_id: int,

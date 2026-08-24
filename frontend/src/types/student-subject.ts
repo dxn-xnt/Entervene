@@ -15,6 +15,9 @@ export interface StudentLesson {
   teacher_name?: string;
   is_published: boolean;
   show_scores: boolean;
+  competency_id?: number | null;
+  competency_code?: string | null;
+  competency_statement?: string | null;
   created_at?: string;
   updated_at?: string;
   attachments: StudentLessonAttachment[];

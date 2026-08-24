@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import {
+  Award,
   ChevronRight,
   ChevronDown,
   ChevronLeft,
@@ -330,6 +331,33 @@ export default function SubjectLessonTab({
   const [lessonDetailTab, setLessonDetailTab] = useState<
     "classwork" | "suggestions"
   >("classwork");
+  const [collapsedCompetencies, setCollapsedCompetencies] = useState<
+    Record<string, boolean>
+  >({});
+  const [isUnassignedExpanded, setIsUnassignedExpanded] = useState(false);
+
+  useEffect(() => {
+    if (lessons.length > 0) {
+      setCollapsedCompetencies((prev) => {
+        const next: Record<string, boolean> = { ...prev };
+        let firstFound = false;
+        lessons.forEach((l) => {
+          if (l.competency_id || l.competency_statement) {
+            const key = String(l.competency_id || l.competency_statement);
+            if (next[key] === undefined) {
+              next[key] = firstFound;
+              firstFound = true;
+            }
+          }
+        });
+        return next;
+      });
+      const hasAnyCompetency = lessons.some(
+        (l) => l.competency_id || l.competency_statement,
+      );
+      setIsUnassignedExpanded(!hasAnyCompetency);
+    }
+  }, [lessons]);
 
   useEffect(() => {
     if (classId && subjectId) {
@@ -1229,6 +1257,155 @@ export default function SubjectLessonTab({
     return aScore - bScore;
   });
 
+  const { competencyGroups, unassignedLessons } = useMemo(() => {
+    const groupsMap = new Map<
+      string,
+      {
+        key: string;
+        competency_id?: number | null;
+        competency_code?: string | null;
+        competency_statement: string;
+        lessons: Lesson[];
+      }
+    >();
+    const unassigned: Lesson[] = [];
+
+    sortedLessons.forEach((lesson) => {
+      if (lesson.competency_statement || lesson.competency_id) {
+        const key = String(lesson.competency_id || lesson.competency_statement);
+        if (!groupsMap.has(key)) {
+          groupsMap.set(key, {
+            key,
+            competency_id: lesson.competency_id,
+            competency_code: lesson.competency_code,
+            competency_statement:
+              lesson.competency_statement || "Learning Competency",
+            lessons: [],
+          });
+        }
+        groupsMap.get(key)!.lessons.push(lesson);
+      } else {
+        unassigned.push(lesson);
+      }
+    });
+
+    return {
+      competencyGroups: Array.from(groupsMap.values()),
+      unassignedLessons: unassigned,
+    };
+  }, [sortedLessons]);
+
+  const renderStudentLessonItem = (lesson: Lesson) => {
+    const isExpanded = expandedId === lesson.lesson_id;
+    const classworks = (classworksByLesson[lesson.lesson_id] ?? []).filter(
+      (classwork) =>
+        classwork.classwork_category !== "QUARTERLY_ASSESSMENT" &&
+        (!isQuizType(classwork.classwork_type) ||
+          (classworkLessonCounts.get(classwork.classwork_assignment_id) ?? 0) <= 1),
+    );
+
+    return (
+      <div key={lesson.lesson_id} id={`student-lesson-${lesson.lesson_id}`}>
+        {/* ── Lesson card ── */}
+        <Card className="w-full bg-[#F6E9B2] flex items-center justify-between shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-black">
+          <button
+            type="button"
+            onClick={() => openLessonDetail(lesson)}
+            className="min-w-0 flex-1 text-left cursor-pointer"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <Card.Title className="font-bold text-lg leading-tight hover:underline">
+                {lesson.title}
+              </Card.Title>
+              {lesson.attachments.length > 0 && (
+                <span className="rounded-full border border-black bg-[#7ABA78] px-2 py-0.5 text-[10px] font-bold">
+                  {lesson.attachments.length} material
+                  {lesson.attachments.length === 1 ? "" : "s"}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-700 mt-0.5">
+              {lesson.description ||
+                (lesson.updated_at
+                  ? `Updated ${fmtDate(lesson.updated_at)}`
+                  : lesson.created_at
+                    ? `Created ${fmtDate(lesson.created_at)}`
+                    : "")}
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={() => toggleLesson(lesson.lesson_id)}
+            className="cursor-pointer p-1 hover:text-black"
+            aria-label={isExpanded ? "Collapse lesson" : "Expand lesson"}
+          >
+            {isExpanded ? (
+              <ChevronDown size={20} className="shrink-0" />
+            ) : (
+              <ChevronRight size={20} className="shrink-0" />
+            )}
+          </button>
+        </Card>
+
+        {/* ── Inline classwork items (expanded) ── */}
+        {isExpanded && (
+          <div className="mt-2 space-y-2 pl-3 border-l-2 border-black ml-2 my-1">
+            <div className="flex items-center">
+              <h5 className="font-bold text-xs uppercase tracking-wider text-gray-700">
+                Linked Classwork
+              </h5>
+            </div>
+            {classworkLoadingId === lesson.lesson_id ? (
+              <div className="text-center py-4 text-sm text-gray-400">
+                Loading classworks...
+              </div>
+            ) : classworks.length === 0 ? (
+              <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-400">
+                No classworks linked to this lesson.
+              </div>
+            ) : (
+              classworks.map((cw) => {
+                const badge = getStatusBadge(cw.submission_status, cw.due_date);
+                const isLoading = detailLoadingId === cw.classwork_assignment_id;
+                return (
+                  <Card
+                    key={cw.classwork_assignment_id}
+                    onClick={() => !isLoading && openClassworkDetail(cw)}
+                    className="block w-full cursor-pointer border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                  >
+                    <Card.Content className="flex items-center justify-between gap-4 py-2.5 px-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <ClassworkIcon type={cw.classwork_type} size={18} />
+                          <Card.Title className="mb-0 truncate text-base font-bold">
+                            {cw.title}
+                          </Card.Title>
+                        </div>
+                        <p className="mt-0.5 text-xs text-gray-600">
+                          {cw.due_date ? `Scheduled ${fmtDate(cw.due_date)}` : "No due date"}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {badge && (
+                          <Badge size="sm" variant="secondary" className={badge.cls}>
+                            {badge.label}
+                          </Badge>
+                        )}
+                        {isLoading && (
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+                        )}
+                      </div>
+                    </Card.Content>
+                  </Card>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const classworkLessonCounts = allClassworks.reduce((counts, classwork) => {
     counts.set(
       classwork.classwork_assignment_id,
@@ -1256,6 +1433,13 @@ export default function SubjectLessonTab({
   const quarterlyAssignmentIds = new Set(
     quarterlyAssessments.map((qa) => qa.classwork_assignment_id),
   );
+
+  const toggleStudentCompCollapse = (key: string) => {
+    setCollapsedCompetencies((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
 
   const renderLessonClassworkCards = (lesson: Lesson) => {
     const classworks = (classworksByLesson[lesson.lesson_id] ?? []).filter(
@@ -1500,145 +1684,114 @@ export default function SubjectLessonTab({
                   </SortButton>
                 </div>
 
-                <div className="space-y-2">
-                  {sortedLessons.map((lesson) => {
-                    const isExpanded = expandedId === lesson.lesson_id;
-                    const classworks = (
-                      classworksByLesson[lesson.lesson_id] ?? []
-                    ).filter(
-                      (classwork) =>
-                        classwork.classwork_category !==
-                          "QUARTERLY_ASSESSMENT" &&
-                        (!isQuizType(classwork.classwork_type) ||
-                          (classworkLessonCounts.get(
-                            classwork.classwork_assignment_id,
-                          ) ?? 0) <= 1),
-                    );
+                <div className="space-y-3">
+                  {competencyGroups.map((group) => {
+                    const isCollapsed =
+                      collapsedCompetencies[group.key] ?? false;
 
                     return (
                       <div
-                        key={lesson.lesson_id}
-                        id={`student-lesson-${lesson.lesson_id}`}
+                        key={group.key}
+                        className="flex flex-col rounded-lg border-2 border-black bg-[#F8FAFC] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
                       >
-                        {/* ── Lesson card ── */}
-                        <Card className="w-full bg-[#F6E9B2] flex items-center justify-between">
-                          <button
-                            type="button"
-                            onClick={() => openLessonDetail(lesson)}
-                            className="min-w-0 flex-1 text-left"
-                          >
-                            <div className="flex flex-wrap items-center">
-                              <Card.Title className="font-bold text-lg leading-tight hover:underline">
-                                {lesson.title}
-                              </Card.Title>
-                              {lesson.attachments.length > 0 && (
-                                <span className="rounded-full border border-black bg-[#7ABA78] px-2 py-0.5 text-[10px] font-bold">
-                                  {lesson.attachments.length} material
-                                  {lesson.attachments.length === 1 ? "" : "s"}
-                                </span>
+                        {/* ── Competency Header Accordion Bar ── */}
+                        <button
+                          type="button"
+                          onClick={() => toggleStudentCompCollapse(group.key)}
+                          className="flex items-center justify-between border-b-2 border-black bg-[#E2E8F0] px-4 py-3 text-left cursor-pointer hover:bg-[#dbe2ec] transition-colors"
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                            <div className="rounded border border-black bg-white p-1 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                              {isCollapsed ? (
+                                <ChevronRight size={16} />
+                              ) : (
+                                <ChevronDown size={16} />
                               )}
                             </div>
-                            <p className="text-xs">
-                              {lesson.description ||
-                                (lesson.updated_at
-                                  ? `Updated ${fmtDate(lesson.updated_at)}`
-                                  : lesson.created_at
-                                    ? `Created ${fmtDate(lesson.created_at)}`
-                                    : "")}
-                            </p>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => toggleLesson(lesson.lesson_id)}
-                            className="cursor-pointer"
-                            aria-label={
-                              isExpanded ? "Collapse lesson" : "Expand lesson"
-                            }
-                          >
-                            {isExpanded ? (
-                              <ChevronDown size={20} className="shrink-0" />
-                            ) : (
-                              <ChevronRight size={20} className="shrink-0" />
-                            )}
-                          </button>
-                        </Card>
-
-                        {/* ── Inline classwork items (expanded) ── */}
-                        {isExpanded && (
-                          <div className="mt-2 space-y-2 pl-3">
-                            <div className="flex items-center">
-                              <h5 className="font-bold">Linked Classwork</h5>
-                            </div>
-                            {classworkLoadingId === lesson.lesson_id ? (
-                              <div className="text-center py-4 text-sm text-gray-400">
-                                Loading classworks...
-                              </div>
-                            ) : classworks.length === 0 ? (
-                              <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-400">
-                                No classworks linked to this lesson.
-                              </div>
-                            ) : (
-                              classworks.map((cw) => {
-                                const badge = getStatusBadge(
-                                  cw.submission_status,
-                                  cw.due_date,
-                                );
-                                const isLoading =
-                                  detailLoadingId ===
-                                  cw.classwork_assignment_id;
-                                return (
-                                  <Card
-                                    key={cw.classwork_assignment_id}
-                                    onClick={() =>
-                                      !isLoading && openClassworkDetail(cw)
-                                    }
-                                    className="block w-full cursor-pointer border-black"
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                                <Award size={16} className="text-blue-700 shrink-0" />
+                                {group.competency_code && (
+                                  <Badge
+                                    size="sm"
+                                    className="bg-black text-white font-mono font-bold text-xs"
                                   >
-                                    <Card.Content className="flex items-center justify-between gap-4">
-                                      <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2">
-                                          <ClassworkIcon
-                                            type={cw.classwork_type}
-                                            size={22}
-                                          />
+                                    {group.competency_code}
+                                  </Badge>
+                                )}
+                                <Badge
+                                  variant="secondary"
+                                  size="sm"
+                                  className="border border-black bg-white text-xs font-semibold"
+                                >
+                                  {group.lessons.length} lesson
+                                  {group.lessons.length === 1 ? "" : "s"}
+                                </Badge>
+                              </div>
+                              <h4 className="text-sm font-bold text-gray-900 line-clamp-2">
+                                {group.competency_statement}
+                              </h4>
+                            </div>
+                          </div>
+                        </button>
 
-                                          <Card.Title className="mb-0 truncate text-lg">
-                                            {cw.title}
-                                          </Card.Title>
-                                        </div>
-
-                                        <p className="mt-1 text-xs text-gray-600">
-                                          {cw.due_date
-                                            ? `Scheduled ${fmtDate(cw.due_date)}`
-                                            : "No due date"}
-                                        </p>
-                                      </div>
-
-                                      <div className="flex shrink-0 items-center gap-2">
-                                        {badge && (
-                                          <Badge
-                                            size="sm"
-                                            variant="secondary"
-                                            className={badge.cls}
-                                          >
-                                            {badge.label}
-                                          </Badge>
-                                        )}
-
-                                        {isLoading && (
-                                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
-                                        )}
-                                      </div>
-                                    </Card.Content>
-                                  </Card>
-                                );
-                              })
-                            )}
+                        {/* ── Competency Lessons Body ── */}
+                        {!isCollapsed && (
+                          <div className="flex flex-col gap-2 p-3 bg-white/70">
+                            {group.lessons.map(renderStudentLessonItem)}
                           </div>
                         )}
                       </div>
                     );
                   })}
+
+                  {/* ── Standalone / Unassigned Lessons Section ── */}
+                  {unassignedLessons.length > 0 && (
+                    <div className="flex flex-col rounded-lg border-2 border-black bg-[#FFFBEB] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
+                      {competencyGroups.length > 0 ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setIsUnassignedExpanded((prev) => !prev)
+                            }
+                            className="flex items-center justify-between border-b-2 border-black bg-[#FEF3C7] px-4 py-3 text-left cursor-pointer hover:bg-[#fae8a4] transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className="rounded border border-black bg-white p-1 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                                {isUnassignedExpanded ? (
+                                  <ChevronDown size={16} />
+                                ) : (
+                                  <ChevronRight size={16} />
+                                )}
+                              </div>
+                              <BookOpen size={16} className="text-amber-800 shrink-0" />
+                              <h4 className="text-sm font-bold text-gray-900">
+                                Standalone / General Lessons
+                              </h4>
+                              <Badge
+                                variant="secondary"
+                                size="sm"
+                                className="border border-black bg-white text-xs font-semibold"
+                              >
+                                {unassignedLessons.length}
+                              </Badge>
+                            </div>
+                          </button>
+
+                          {isUnassignedExpanded && (
+                            <div className="flex flex-col gap-2 p-3 bg-white/70">
+                              {unassignedLessons.map(renderStudentLessonItem)}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="flex flex-col gap-2 p-3 bg-white/70">
+                          {unassignedLessons.map(renderStudentLessonItem)}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 

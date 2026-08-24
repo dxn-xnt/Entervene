@@ -1,7 +1,8 @@
 # app/schemas/Competency.py
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
+from app.schemas.Lesson import LessonResponse
 
 
 class CompetencyBase(BaseModel):
@@ -41,3 +42,16 @@ class CompetencyResponse(CompetencyBase):
     updated_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+class CompetencyTreeNode(CompetencyResponse):
+    lessons: List[LessonResponse] = []
+
+
+class SubjectHierarchyTreeResponse(BaseModel):
+    subject_id: int
+    subject_name: str
+    competencies: List[CompetencyTreeNode] = []
+    unassigned_lessons: List[LessonResponse] = []
+    total_competencies: int = 0
+    total_lessons: int = 0

@@ -3,10 +3,19 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.academic.Competency import Competency
+from app.models.academic.Lesson import Lesson
+from app.models.academic.LessonAssignment import LessonAssignment
 from app.models.academic.Subject import Subject
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.people.AcademicStaff import AcademicStaff
-from app.schemas.Competency import CompetencyCreate, CompetencyResponse, CompetencyUpdate
+from app.schemas.Competency import (
+    CompetencyCreate,
+    CompetencyResponse,
+    CompetencyTreeNode,
+    CompetencyUpdate,
+    SubjectHierarchyTreeResponse,
+)
+from app.services.lesson.LessonResponseService import build_lesson_response
 
 
 def build_competency_response(competency: Competency, db: Session) -> CompetencyResponse:
@@ -112,3 +121,73 @@ def archive_competency_record(
     competency.is_archived = True
     db.commit()
     return {"message": "Competency archived", "competency_id": competency_id, "is_archived": True}
+
+
+def get_subject_hierarchy_tree(
+    subject_id: int,
+    db: Session,
+    class_id: Optional[int] = None,
+    period_id: Optional[int] = None,
+) -> SubjectHierarchyTreeResponse:
+    """Build the Competency -> Lesson -> Classwork hierarchy tree."""
+    subject = db.query(Subject).filter(Subject.subject_id == subject_id).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    # 1. Fetch competencies
+    comp_query = db.query(Competency).filter(
+        Competency.subject_id == subject_id,
+        Competency.is_archived == False,
+    )
+    if period_id is not None:
+        comp_query = comp_query.filter(Competency.academic_period_id == period_id)
+    competencies = comp_query.order_by(Competency.order_index.asc(), Competency.created_at.asc()).all()
+
+    # 2. Fetch lessons for subject / class
+    lesson_query = db.query(Lesson).filter(
+        Lesson.subject_id == subject_id,
+        Lesson.is_archived == False,
+    )
+    if class_id is not None:
+        lesson_query = lesson_query.join(
+            LessonAssignment, LessonAssignment.lesson_id == Lesson.lesson_id
+        ).filter(LessonAssignment.class_id == class_id)
+
+    lessons = lesson_query.order_by(Lesson.order_index.asc(), Lesson.created_at.asc()).all()
+
+    # 3. Group lessons under competency
+    lessons_by_comp: dict[int, list] = {}
+    unassigned: list = []
+
+    for l in lessons:
+        res = build_lesson_response(l, db)
+        if l.competency_id is not None:
+            lessons_by_comp.setdefault(l.competency_id, []).append(res)
+        else:
+            unassigned.append(res)
+
+    nodes: list[CompetencyTreeNode] = []
+    for c in competencies:
+        base_resp = build_competency_response(c, db)
+        comp_lessons = lessons_by_comp.get(c.competency_id, [])
+        nodes.append(
+            CompetencyTreeNode(
+                **base_resp.model_dump(),
+                lessons=comp_lessons,
+            )
+        )
+
+    # Any lessons pointing to nonexistent/archived competencies go to unassigned
+    known_comp_ids = {c.competency_id for c in competencies}
+    for comp_id, orphan_lessons in lessons_by_comp.items():
+        if comp_id not in known_comp_ids:
+            unassigned.extend(orphan_lessons)
+
+    return SubjectHierarchyTreeResponse(
+        subject_id=subject.subject_id,
+        subject_name=subject.subject_name,
+        competencies=nodes,
+        unassigned_lessons=unassigned,
+        total_competencies=len(nodes),
+        total_lessons=len(lessons),
+    )

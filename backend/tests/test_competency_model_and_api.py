@@ -13,6 +13,8 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Competency import Competency
 from app.models.academic.Lesson import Lesson
+from app.models.academic.LessonAssignment import LessonAssignment
+from app.models.academic.LessonAttachment import LessonAttachment
 from app.models.academic.Subject import Subject
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
@@ -27,6 +29,8 @@ TABLES = [
     AcademicPeriod.__table__,
     Competency.__table__,
     Lesson.__table__,
+    LessonAssignment.__table__,
+    LessonAttachment.__table__,
 ]
 
 
@@ -133,7 +137,18 @@ def test_competency_lifecycle():
     assert len(reloaded_comp.lessons) == 1
     assert reloaded_comp.lessons[0].title == "Translating Algebraic Expressions"
 
-    # 4. Update Competency
+    # 4. Check Hierarchy Tree Endpoint
+    resp = client.get("/api/v1/competencies/tree/subject/101")
+    assert resp.status_code == 200, resp.text
+    tree = resp.json()
+    assert tree["subject_id"] == 101
+    assert len(tree["competencies"]) == 1
+    assert len(tree["competencies"][0]["lessons"]) == 1
+    assert tree["competencies"][0]["lessons"][0]["title"] == "Translating Algebraic Expressions"
+    assert len(tree["unassigned_lessons"]) == 1
+    assert tree["unassigned_lessons"][0]["title"] == "Introductory Math Games"
+
+    # 5. Update Competency
     update_payload = {
         "target_hours": 6,
         "statement": "Updated statement: Translates verbal phrases to expressions.",
@@ -144,7 +159,7 @@ def test_competency_lifecycle():
     assert updated["target_hours"] == 6
     assert updated["statement"] == update_payload["statement"]
 
-    # 5. Archive Competency
+    # 6. Archive Competency
     resp = client.delete(f"/api/v1/competencies/{comp_id}")
     assert resp.status_code == 200
     assert resp.json()["is_archived"] is True

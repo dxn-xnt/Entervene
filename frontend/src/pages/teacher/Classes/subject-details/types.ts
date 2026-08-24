@@ -7,6 +7,23 @@ export type TeacherClassLoad = {
   section_name: string;
 };
 
+export type CompetencyItem = {
+  competency_id: number;
+  competency_code?: string | null;
+  statement: string;
+  description?: string | null;
+  order_index: number;
+  target_hours?: number | null;
+  subject_id: number;
+  subject_name?: string | null;
+  academic_period_id?: number | null;
+  period_name?: string | null;
+  is_archived: boolean;
+  lesson_count?: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type LessonAttachment = {
   lesson_attachment_id: number;
   file_name: string;
@@ -27,6 +44,10 @@ export type Lesson = {
   show_scores: boolean;
   is_draft: boolean;
   is_archived: boolean;
+  subject_id?: number;
+  competency_id?: number | null;
+  competency_code?: string | null;
+  competency_statement?: string | null;
   attachments: LessonAttachment[];
 };
 
@@ -37,6 +58,7 @@ export type LessonDraft = {
   order_index: string;
   is_published: boolean;
   show_scores: boolean;
+  competency_id?: number | null;
 };
 
 export type LinkedClasswork = {
