@@ -41,6 +41,7 @@ class SubjectOfferingCreate(BaseModel):
     academic_period_id: int
     pathway: str | None = None
     pathway_ids: list[int] = []
+    minutes: int | None = None
     status: str = "active"
 
 
@@ -51,6 +52,7 @@ class SubjectOfferingUpdate(BaseModel):
     academic_period_id: int | None = None
     pathway: str | None = None
     pathway_ids: list[int] | None = None
+    minutes: int | None = None
     status: str | None = None
 
 
@@ -84,6 +86,7 @@ class SubjectOfferingListItem(BaseModel):
     pathway: str | None = None
     pathway_ids: list[int] = []
     pathways: list[AcademicPathwayRead] = []
+    minutes: int | None = None
     status: str
     created_at: datetime | None
     updated_at: datetime | None

@@ -194,7 +194,7 @@ def test_batch_save_multi_slot_subject_loads(db):
     db.add(cls)
     db.flush()
 
-    subject = Subject(subject_name="Mathematics 8", subject_codename="MATH8", hours=80, academic_level_id=level.academic_level_id, status="active")
+    subject = Subject(subject_name="Mathematics 8", subject_codename="MATH8", academic_level_id=level.academic_level_id, status="active")
     db.add(subject)
     db.flush()
 
@@ -283,8 +283,8 @@ def test_publish_section_isolated_conflicts(db):
     db.add_all([cls1, cls2])
     db.flush()
 
-    sub1 = Subject(subject_name="Math 7", subject_codename="M7", hours=60, academic_level_id=level.academic_level_id, status="active")
-    sub2 = Subject(subject_name="Science 7", subject_codename="S7", hours=60, academic_level_id=level.academic_level_id, status="active")
+    sub1 = Subject(subject_name="Math 7", subject_codename="M7", academic_level_id=level.academic_level_id, status="active")
+    sub2 = Subject(subject_name="Science 7", subject_codename="S7", academic_level_id=level.academic_level_id, status="active")
     db.add_all([sub1, sub2])
     db.flush()
 

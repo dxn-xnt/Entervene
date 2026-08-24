@@ -497,11 +497,19 @@ function EditUserModal({
                   />
                 </EditField>
                 <EditField label="Employment Status">
-                  <Input
+                  <Select
                     value={form.employment_status || ""}
-                    onChange={(event) => setField("employment_status", event.target.value)}
-                    className="w-full"
-                  />
+                    onValueChange={(val) => setField("employment_status", val)}
+                  >
+                    <Select.Trigger className="w-full bg-background border-2 border-black">
+                      <Select.Value placeholder="Select status" />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="Regular/Permanent">Regular/Permanent</Select.Item>
+                      <Select.Item value="Substitute">Substitute</Select.Item>
+                      <Select.Item value="Probationary">Probationary</Select.Item>
+                    </Select.Content>
+                  </Select>
                 </EditField>
               </>
             )}

@@ -20,7 +20,6 @@ SUBJECT_IMPORT_HEADERS = [
     "subject_name",
     "grade_level",
     "subject_group",
-    "hours",
     "default_grading_template",
     "description",
 ]
@@ -53,7 +52,6 @@ def subject_import_template_csv(db: Session | None = None) -> str:
         "General Biology 1",
         "11",
         example_group,
-        "80",
         "Default SHS",
         "STEM specialized subject",
     ])
@@ -63,8 +61,7 @@ def subject_import_template_csv(db: Session | None = None) -> str:
         "7",
         example_group,
         "",
-        "",
-        "JHS Core Mathematics (hours optional)",
+        "JHS Core Mathematics",
     ])
     return output.getvalue()
 
@@ -168,7 +165,6 @@ async def import_subject_catalog_csv(db: Session, file: UploadFile) -> dict:
         subject_name = normalize_optional_text(row["subject_name"])
         grade_level_text = normalize_optional_text(row["grade_level"])
         subject_group_text = normalize_optional_text(row["subject_group"])
-        hours_text = normalize_optional_text(row["hours"])
 
         if subject_code is None:
             row_errors.append("subject_code cannot be blank.")
@@ -201,25 +197,6 @@ async def import_subject_catalog_csv(db: Session, file: UploadFile) -> dict:
                 else:
                     row_errors.append(f"subject_group \"{subject_group_text}\" not recognised and no \"Other\" group exists.")
 
-        hours = None
-        if hours_text is not None:
-            try:
-                parsed_val = int(hours_text)
-                if parsed_val < 0:
-                    warnings.append(
-                        f"Row {row_number} ({subject_code or 'Subject'}): negative hours '{hours_text}' — saved as unset (needs review)."
-                    )
-                else:
-                    hours = parsed_val
-            except ValueError:
-                warnings.append(
-                    f"Row {row_number} ({subject_code or 'Subject'}): invalid hours value '{hours_text}' — saved as unset (needs review)."
-                )
-        else:
-            warnings.append(
-                f"Row {row_number} ({subject_code or 'Subject'}): hours column is empty — saved as unset (needs review)."
-            )
-
         duplicate_key = None
         if academic_level is not None and subject_code is not None:
             duplicate_key = (academic_level.academic_level_id, subject_code.casefold())
@@ -240,7 +217,6 @@ async def import_subject_catalog_csv(db: Session, file: UploadFile) -> dict:
             subject_name=subject_name or "",
             subject_codename=subject_code,
             subject_group_id=resolved_group.subject_group_id if resolved_group else (other_group.subject_group_id if other_group else 1),
-            hours=hours,
             default_grading_template=normalize_optional_text(row["default_grading_template"]),
             description=normalize_optional_text(row["description"]),
             status=DEFAULT_SUBJECT_STATUS,

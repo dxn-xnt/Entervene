@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { BookOpen, ChevronDown, ClipboardList, ScrollText, Users } from "lucide-react";
+import { BookOpen, ChevronDown, ClipboardList, Users } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tabs } from "@/components/retroui/Tabs";

@@ -159,7 +159,7 @@ export function SubjectPicker({
                   <strong className="truncate">{subject.subject_name}</strong>
                   <span>{subjectCode(subject)}</span>
                   <span>{subject.subject_group?.name || "Ungrouped"}</span>
-                  <span>{subject.hours ?? "-"} hrs</span>
+                  <span>Pass: {subject.subject_group?.passing_threshold ?? "—"}%</span>
                   {isAlreadyOffered ? (
                     <span className="col-span-full text-xs font-semibold text-black/50">
                       Already offered

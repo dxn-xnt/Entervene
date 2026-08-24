@@ -282,25 +282,36 @@ class ConflictDetectorService:
                         s_name = subject_obj.subject_name if subject_obj else f"Subject #{load.subject_id}"
                         c_name = class_obj.section_name if class_obj else f"Class #{load.class_id}"
 
-                        is_offered = any(
-                            so_sub == load.subject_id
-                            and so_lvl == cls_level_id
+                        matching_offerings = [
+                            so for so in period_offerings
+                            if so.subject_id == load.subject_id
+                            and so.academic_level_id == cls_level_id
                             and (
-                                so_pw == "both"
-                                or so_pw == cls_pathway
-                                or (so_pw == "general" and cls_pathway == "general")
-                                or (so_pw in ("medical-courses", "stem_medical") and cls_pathway in ("medical-courses", "stem_medical"))
-                                or (so_pw in ("engineering-math", "stem_engineering") and cls_pathway in ("engineering-math", "stem_engineering"))
+                                _get_offering_pathway_code(so) == "both"
+                                or _get_offering_pathway_code(so) == cls_pathway
+                                or (_get_offering_pathway_code(so) == "general" and cls_pathway == "general")
+                                or (_get_offering_pathway_code(so) in ("medical-courses", "stem_medical") and cls_pathway in ("medical-courses", "stem_medical"))
+                                or (_get_offering_pathway_code(so) in ("engineering-math", "stem_engineering") and cls_pathway in ("engineering-math", "stem_engineering"))
                             )
-                            for (so_sub, so_lvl, so_pw) in offered_tuples
-                        )
+                        ]
 
-                        if not is_offered:
+                        if not matching_offerings:
                             conflicts.append(
                                 ConflictItem(
                                     rule="SUBJECT_NOT_OFFERED_IN_PERIOD",
                                     severity="warning",
                                     message=f"Subject '{s_name}' is not in active subject offerings for section {c_name} in this term.",
+                                    class_id=load.class_id,
+                                    subject_id=load.subject_id,
+                                    affected_key=f"{load.class_id}_{load.subject_id}",
+                                )
+                            )
+                        elif any(so.minutes is None for so in matching_offerings):
+                            conflicts.append(
+                                ConflictItem(
+                                    rule="MISSING_OFFERING_DURATION",
+                                    severity="error",
+                                    message=f"Subject offering for '{s_name}' in section '{c_name}' has no period duration set (minutes is null). Please set the period minutes in Subject Offerings before publishing.",
                                     class_id=load.class_id,
                                     subject_id=load.subject_id,
                                     affected_key=f"{load.class_id}_{load.subject_id}",

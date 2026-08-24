@@ -2,7 +2,7 @@ import { Alert } from "@/components/retroui/Alert";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
-import { ArrowUpRight, Info } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
@@ -166,10 +166,6 @@ const TeacherClasses = () => {
 
   const advisoryByClass = useMemo(() => {
     return new Map(advisoryClasses.map((item) => [item.class_id, item]));
-  }, [advisoryClasses]);
-
-  const academicYearLabel = useMemo(() => {
-    return advisoryClasses[0]?.academic_year || "2025 - 2026";
   }, [advisoryClasses]);
 
   const groupedSubjectLoads = useMemo(() => {

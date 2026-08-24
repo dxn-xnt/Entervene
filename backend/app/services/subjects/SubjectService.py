@@ -32,8 +32,8 @@ def create_subject_record(db: Session, payload: SubjectCreate) -> dict:
         subject_name=subject_name,
         subject_codename=code,
         subject_group_id=payload.subject_group_id,
-        hours=payload.hours,
         is_core=payload.is_core,
+        is_math_or_science=payload.is_math_or_science,
         default_grading_template=normalize_optional_text(payload.default_grading_template),
         description=normalize_optional_text(payload.description),
         status=normalize_subject_status(payload.status),
@@ -79,10 +79,10 @@ def update_subject_record(db: Session, subject_id: int, payload: SubjectUpdate) 
         subject.subject_codename = target_code
     if "subject_group_id" in data and data["subject_group_id"] is not None:
         subject.subject_group_id = data["subject_group_id"]
-    if "hours" in data:
-        subject.hours = data["hours"]
     if "is_core" in data and data["is_core"] is not None:
         subject.is_core = data["is_core"]
+    if "is_math_or_science" in data and data["is_math_or_science"] is not None:
+        subject.is_math_or_science = data["is_math_or_science"]
     if "default_grading_template" in data:
         subject.default_grading_template = normalize_optional_text(data["default_grading_template"])
     if "description" in data:

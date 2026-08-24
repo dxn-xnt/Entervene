@@ -69,7 +69,6 @@ def add_subject(db, level: AcademicLevel) -> Subject:
         subject_name="General Biology 1",
         subject_codename="GENBIO1",
         subject_group="Specialized",
-        hours=80,
         default_grading_template="Default SHS",
         description="STEM subject",
         status="active",
@@ -283,7 +282,6 @@ def test_multi_subject_assignment_and_locking(client, db):
         subject_name="General Chemistry 1",
         subject_codename="GENCHEM1",
         subject_group="Specialized",
-        hours=80,
         status="active",
         academic_level_id=level.academic_level_id,
     )
