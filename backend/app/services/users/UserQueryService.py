@@ -103,11 +103,10 @@ def _teacher_summaries(db: Session, teacher_ids: set[str]) -> dict[str, dict[str
     return summaries
 
 
-def _student_summaries(db: Session, student_ids: set[uuid.UUID]) -> tuple[dict, dict]:
+def _student_summaries(db: Session, student_ids: set[uuid.UUID]) -> dict:
     latest_sections = {}
-    averages = {}
     if not student_ids:
-        return latest_sections, averages
+        return latest_sections
 
     enrollment_rows = (
         db.query(
@@ -127,20 +126,7 @@ def _student_summaries(db: Session, student_ids: set[uuid.UUID]) -> tuple[dict, 
             "section_name": enrollment.section_name,
             "grade_level": enrollment.grade_level,
         })
-
-    average_rows = (
-        db.query(
-            StudentSubmission.student_id,
-            func.avg(StudentSubmission.grade).label("average"),
-        )
-        .filter(StudentSubmission.student_id.in_(student_ids))
-        .filter(StudentSubmission.status == "graded")
-        .filter(StudentSubmission.grade.isnot(None))
-        .group_by(StudentSubmission.student_id)
-        .all()
-    )
-    averages = {row.student_id: row.average for row in average_rows}
-    return latest_sections, averages
+    return latest_sections
 
 
 def list_users(
@@ -174,7 +160,7 @@ def list_users(
     teacher_ids = {user.staff_id for user in users if user.role_name == "Teacher" and user.staff_id}
     student_ids = {user.student_id for user in users if user.role_name == "Student" and user.student_id}
     teacher_summaries = _teacher_summaries(db, teacher_ids)
-    latest_sections, averages = _student_summaries(db, student_ids)
+    latest_sections = _student_summaries(db, student_ids)
 
     response = []
     for user in users:
@@ -194,11 +180,9 @@ def list_users(
             item["subjects"] = sorted(summary["subjects"])
             item["class_count"] = len(summary["class_ids"])
         if client_role == "student" and user.student_id:
-            average = averages.get(user.student_id)
             sec_info = latest_sections.get(user.student_id)
             item["section"] = sec_info["section_name"] if sec_info else None
             item["grade_level"] = sec_info["grade_level"] if (sec_info and sec_info.get("grade_level")) else user.grade_level
-            item["average"] = round(float(average)) if average is not None else None
         response.append(item)
     return response
 

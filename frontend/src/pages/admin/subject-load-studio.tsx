@@ -46,8 +46,6 @@ import {
   Copy,
   Unlock,
   EllipsisIcon,
-  PenIcon,
-  ArchiveIcon,
 } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 import { useSettings } from "@/context/SettingsContext";
@@ -1210,23 +1208,6 @@ export default function AdminSubjectLoadStudio() {
   // School-wide unassigned count (used for Master Schedule strict guard)
   const unassignedTotal = loads.filter((l) => !l.staff_id).length;
 
-  const unassignedInCurrentScope = useMemo(() => {
-    if (selectedGradeId !== "all") {
-      return loads.filter((l) => levelClassIds.has(l.class_id) && !l.staff_id).length;
-    }
-    return unassignedTotal;
-  }, [selectedGradeId, levelClassIds, loads, unassignedTotal]);
-
-  const gradeLevelErrorsCount = useMemo(() => {
-    if (selectedGradeId === "all") return errorConflictsCount;
-    return conflicts.filter(
-      (c) => c.severity === "error" && (
-        (c.class_id && levelClassIds.has(c.class_id)) ||
-        (c.affected_key && Array.from(levelClassIds).some((cid) => c.affected_key?.startsWith(`${cid}_`)))
-      )
-    ).length;
-  }, [selectedGradeId, levelClassIds, conflicts, errorConflictsCount]);
-
   // Master Schedule publish: strictly blocks if ANY subject school-wide is unassigned
   const isMasterPublishDisabled = isSaving || errorConflictsCount > 0 || unassignedTotal > 0;
 
@@ -1770,7 +1751,7 @@ export default function AdminSubjectLoadStudio() {
                                                 <Badge variant="default" size="sm">
                                                   {sub.subject_codename || `SUB-${sub.subject_id}`}
                                                 </Badge>
-                                                {sub.is_math_or_science && (
+                                                {sub.is_math_or_science && sub.academic_level_id > 4 && (
                                                   <Badge variant="solid" size="sm">
                                                     Core
                                                   </Badge>
@@ -2148,23 +2129,28 @@ export default function AdminSubjectLoadStudio() {
                         const maxHrs = parseFloat(getSetting("max_hours_per_day", "6.0"));
                         const maxSub = parseInt(getSetting("max_subjects_per_day", "6"));
                         const minSub = parseInt(getSetting("min_subjects_per_day", "4"));
-
                         const cardClass = hasError
                           ? "bg-red-50 border-red-600"
                           : hasWarning
                             ? "bg-amber-50 border-amber-500"
                             : "bg-muted/20";
 
+                        const handledCount = new Set(
+                          loads.filter((l) => l.staff_id === tw.staff_id).map((l) => l.subject_id)
+                        ).size;
+
                         return (
                           <div
                             key={tw.staff_id}
                             className={`p-3 border-2 border-black text-xs ${cardClass}`}
                           >
-                            <div className="flex items-center justify-between font-bold mb-1">
-                              <span className="text-sm">{tw.staff_name}</span>
-                              <span className="font-mono">
-                                {tw.total_weekly_hours.toFixed(1)} hrs/wk
-                              </span>
+                            <div className="flex flex-col gap-0.5 mb-1.5">
+                              <span className="text-sm font-bold text-foreground leading-snug">{tw.staff_name}</span>
+                              <div className="font-mono text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                                <span>{handledCount} {handledCount === 1 ? "subject handled" : "subjects handled"}</span>
+                                <span>•</span>
+                                <span>{tw.total_weekly_hours.toFixed(1)} hrs/wk</span>
+                              </div>
                             </div>
 
                             {/* Daily Breakdown */}

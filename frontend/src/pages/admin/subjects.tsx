@@ -683,7 +683,7 @@ export default function AdminSubjects() {
             {activeSection === "catalog" ? (
               <section className="flex flex-col gap-4">
                 <p className="text-xs text-black/70 -mb-2">
-                  CSV import format — Required: <span className="font-semibold">subject_code, subject_name, grade_level, subject_group</span>. Optional: <span className="font-semibold">hours, default_grading_template, description</span> (leave blank if unknown).
+                  CSV import format — Required: <span className="font-semibold">subject_code, subject_name, grade_level, subject_group</span>. Optional: <span className="font-semibold">default_grading_template, description</span> (leave blank if unknown).
                 </p>
                 <div className="grid gap-3 md:grid-cols-[1fr_160px_160px] py-2">
 

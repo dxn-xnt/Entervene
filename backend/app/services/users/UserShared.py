@@ -153,6 +153,20 @@ def resolve_academic_level_id(db: Session, data: dict) -> int | None:
     return level.academic_level_id if level else None
 
 
+def normalize_employment_status(raw: str | None) -> str:
+    if not raw:
+        return ""
+    val = raw.strip()
+    val_lower = val.lower()
+    if val_lower in ("regular", "regular/permanent", "permanent"):
+        return "Regular/Permanent"
+    if val_lower in ("contractual", "probationary"):
+        return "Probationary"
+    if val_lower == "substitute":
+        return "Substitute"
+    return val
+
+
 def attach_staff_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
     db.add(AcademicStaff(
         staff_id=generate_staff_id(db),
@@ -167,7 +181,7 @@ def attach_staff_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
         address=data.get("address", ""),
         email=data.get("email", ""),
         hired_date=data.get("hired_date") or None,
-        employment_status=data.get("employment_status", ""),
+        employment_status=normalize_employment_status(data.get("employment_status", "")),
     ))
 
 

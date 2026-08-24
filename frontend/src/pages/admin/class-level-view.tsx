@@ -81,9 +81,7 @@ export default function AdminSubjectLevel() {
   const activeYearLabel = offeringOptions?.academic_years.find((year) => year.is_active)?.year_label;
   const activeSubjects = gradeSubjects.filter((subject) => subject.status === "active");
   const archivedSubjects = gradeSubjects.filter((subject) => subject.status === "archived");
-  const totalHours = gradeSubjects.reduce((total, subject) => total + (subject.hours ?? 0), 0);
-  const unsetHoursCount = gradeSubjects.filter((subject) => subject.hours == null).length;
-  const totalHoursDisplay = unsetHoursCount > 0 ? `${totalHours} (${unsetHoursCount} unset)` : String(totalHours);
+  const totalGroups = new Set(gradeSubjects.map((s) => s.subject_group?.name).filter(Boolean)).size;
 
   const handleArchive = async () => {
     if (!pendingArchive) return;
@@ -159,7 +157,7 @@ export default function AdminSubjectLevel() {
                 <OverviewCard title="Total Subjects" count={String(gradeSubjects.length)} />
                 <OverviewCard title="Active Subjects" count={String(activeSubjects.length)} />
                 <OverviewCard title="Archived Subjects" count={String(archivedSubjects.length)} />
-                <OverviewCard title="Total Hours" count={totalHoursDisplay} />
+                <OverviewCard title="Subject Groups" count={String(totalGroups)} />
               </div>
             </section>
 
@@ -209,7 +207,6 @@ export default function AdminSubjectLevel() {
                       isArchived={subject.status === "archived"}
                       subjectCode={subject.subject_codename || "No code"}
                       subjectGroup={subject.subject_group?.name || "Ungrouped"}
-                      hours={subject.hours != null ? subject.hours : undefined}
                       gradingTemplate={subject.default_grading_template || "No template"}
                       onView={() => navigate(`/admin/subjects/${encodeURIComponent(decodedGrade)}/${subject.subject_id}`)}
                       onArchive={() => setPendingArchive(subject)}

@@ -107,17 +107,9 @@ export default function AdminSubjectLevel() {
   const archivedSubjects = gradeSubjects.filter(
     (subject) => subject.status === "archived",
   );
-  const totalHours = gradeSubjects.reduce(
-    (total, subject) => total + (subject.hours ?? 0),
-    0,
-  );
-  const unsetHoursCount = gradeSubjects.filter(
-    (subject) => subject.hours == null,
-  ).length;
-  const totalHoursDisplay =
-    unsetHoursCount > 0
-      ? `${totalHours} (${unsetHoursCount} unset)`
-      : String(totalHours);
+  const totalGroups = new Set(
+    gradeSubjects.map((s) => s.subject_group?.name).filter(Boolean),
+  ).size;
 
   const handleArchive = async () => {
     if (!pendingArchive) return;
@@ -203,7 +195,7 @@ export default function AdminSubjectLevel() {
                   title="Archived Subjects"
                   count={String(archivedSubjects.length)}
                 />
-                <OverviewCard title="Total Hours" count={totalHoursDisplay} />
+                <OverviewCard title="Subject Groups" count={String(totalGroups)} />
               </div>
             </section>
 
@@ -260,7 +252,6 @@ export default function AdminSubjectLevel() {
                       isArchived={subject.status === "archived"}
                       subjectCode={subject.subject_codename || "No code"}
                       subjectGroup={subject.subject_group?.name || "Ungrouped"}
-                      hours={subject.hours ?? 0}
                       gradingTemplate={
                         subject.default_grading_template || "No template"
                       }

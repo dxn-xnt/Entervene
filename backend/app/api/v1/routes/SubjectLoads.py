@@ -214,7 +214,6 @@ def get_subject_load_studio_data(
                 "subject_name": s.subject_name,
                 "subject_codename": s.subject_codename,
                 "academic_level_id": s.academic_level_id,
-                "hours": s.hours,
                 "subject_group": s.subject_group or "General",
                 "is_math_or_science": bool(
                     getattr(s, "is_math_or_science", False)
@@ -236,6 +235,7 @@ def get_subject_load_studio_data(
                 "academic_period_id": so.academic_period_id,
                 "pathway": offering_pathway_code(so),
                 "pathway_ids": [op.pathway_id for op in (getattr(so, "offering_pathways", None) or [])],
+                "minutes": so.minutes,
             }
             for so in offerings
         ],

@@ -41,7 +41,7 @@ export type CurriculumPlanRow = {
   subjectName: string;
   subjectCode: string | null;
   subjectGroup: string | null;
-  hours: number | null;
+  minutes: number | null;
   gradingTemplate: string | null;
   status: SubjectStatus;
   primaryOffering: SubjectOfferingListItem;
@@ -128,7 +128,7 @@ export function groupOfferingsForCurriculumPlan(
         subjectName: primaryOffering.subject.subject_name,
         subjectCode: primaryOffering.subject.subject_codename,
         subjectGroup: (typeof primaryOffering.subject.subject_group === "object" ? (primaryOffering.subject.subject_group as any)?.name : primaryOffering.subject.subject_group) ?? null,
-        hours: catalogSubject?.hours ?? null,
+        minutes: primaryOffering.minutes ?? null,
         gradingTemplate: catalogSubject?.default_grading_template ?? null,
         status: rowStatus,
         primaryOffering,
@@ -185,7 +185,7 @@ export function CurriculumPlanTable({
                   {formatPeriodLabel(term)}
                 </th>
               ))}
-              <th className="px-3 py-2 font-bold">Hours</th>
+              <th className="px-3 py-2 font-bold">Minutes</th>
               <th className="px-3 py-2 font-bold">Grading Template</th>
               <th className="px-3 py-2 font-bold">Status</th>
               <th className="px-3 py-2 text-right font-bold">Actions</th>
@@ -214,7 +214,7 @@ export function CurriculumPlanTable({
                     </td>
                   );
                 })}
-                <td className="px-3 py-2">{row.hours ?? "-"}</td>
+                <td className="px-3 py-2">{row.minutes ? `${row.minutes} mins` : "—"}</td>
                 <td className="px-3 py-2">{row.gradingTemplate || "No template"}</td>
                 <td className="px-3 py-2">{statusBadge(row.status)}</td>
                 <td className="px-3 py-2">

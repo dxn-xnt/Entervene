@@ -163,7 +163,7 @@ def test_valid_manual_teacher_creation_creates_staff_profile(client, db):
         email="teacher@example.com",
         student_lrn="",
         grade_level=None,
-        employment_status="Regular",
+        employment_status="Regular/Permanent",
         dob="1985-12-30",
     )
 
@@ -173,7 +173,7 @@ def test_valid_manual_teacher_creation_creates_staff_profile(client, db):
     assert staff.staff_id.startswith(f"{date.today().year}-")
     assert (staff.first_name, staff.middle_name, staff.last_name) == ("Ada", "Byron", "Lovelace")
     assert staff.dob == date(1985, 12, 30)
-    assert staff.employment_status == "Regular"
+    assert staff.employment_status == "Regular/Permanent"
     assert db.query(Student).count() == 0
 
 

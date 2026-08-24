@@ -187,8 +187,7 @@ def test_list_users_batches_mixed_user_summaries_and_preserves_filters(client, d
     assert teacher["class_count"] == 2
     assert student["section"] == "Latest-0"
     assert student["grade_level"] == 7
-    assert student["average"] == 86
-    assert set(student) == {"id", "name", "email", "role", "created_at", "account_status", "section", "grade_level", "average"}
+    assert set(student) == {"id", "name", "email", "role", "created_at", "account_status", "section", "grade_level"}
     assert all(item["role"] == "teacher" for item in client.get("/api/v1/users?role=teacher").json())
     assert len(client.get("/api/v1/users?search=student0").json()) == 1
 

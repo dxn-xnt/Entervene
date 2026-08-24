@@ -22,7 +22,6 @@ class Subject(Base):
         ForeignKey("subject_groups.subject_group_id", ondelete="RESTRICT"),
         nullable=True,
     )
-    hours: Mapped[int | None] = mapped_column(Integer)
     is_math_or_science: Mapped[bool | None] = mapped_column(Boolean, default=False)
     is_core: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str | None] = mapped_column(String(20), default="active")
