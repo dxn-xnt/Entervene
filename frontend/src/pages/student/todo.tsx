@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs } from "../../components/retroui/Tabs";
+import { Card } from "../../components/retroui/Card";
 import ToDoItem from "../../components/to-do-item";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -146,13 +147,12 @@ export default function ToDo() {
                         </h3>
                         {regularUpcomingItems.length === 0 &&
                         interventionItems.length === 0 ? (
-                          <div className="flex flex-col items-center py-12 gap-2 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg bg-white/50">
-                            <CheckCircle2 size={40} className="text-green-500" />
+                          <Card className="flex flex-col items-center p-12">
                             <p className="font-semibold text-lg">All caught up!</p>
                             <p className="text-sm">
                               You have no pending assignments or tasks.
                             </p>
-                          </div>
+                          </Card>
                         ) : regularUpcomingItems.length === 0 ? (
                           <p className="text-sm text-gray-500">No upcoming tasks.</p>
                         ) : (

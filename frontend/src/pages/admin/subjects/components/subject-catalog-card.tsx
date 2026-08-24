@@ -3,7 +3,7 @@ import { Card as RetroCard } from "@/components/retroui/Card";
 import { Link } from "react-router-dom";
 import { ArchiveIcon, EllipsisIcon, PenIcon } from "lucide-react";
 import type { SubjectListItem } from "@/lib/api";
-import { formatSubjectHours, subjectCode, subjectRouteGrade } from "./subject-utils";
+import { subjectCode, subjectRouteGrade } from "./subject-utils";
 import { Badge } from "@/components/retroui/Badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -69,7 +69,7 @@ export function SubjectCatalogCard({
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
           <span className="font-semibold">{subject.subject_group?.name || "Ungrouped"}</span>
-          <span className="text-right font-semibold">{formatSubjectHours(subject.hours)}</span>
+          <span className="text-right font-semibold text-black/70">Passing: {subject.subject_group?.passing_threshold ?? "—"}%</span>
           <span className="col-span-2 line-clamp-1">{subject.default_grading_template || "No template"}</span>
         </div>
       </Link>

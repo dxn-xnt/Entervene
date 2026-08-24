@@ -6,13 +6,11 @@ import { Text } from "@/components/retroui/Text";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
-import { type GradeGroup } from "@/components/predictions/prediction-grade-section";
 import { useAuth } from "@/context/AuthContext";
 import type {
   DashboardAtRiskResponse,
   DashboardFilters,
   DashboardQueryParams,
-  RiskSummary,
 } from "@/lib/prediction-api";
 import {
   fetchDashboardAtRisk,
@@ -20,56 +18,11 @@ import {
 } from "@/lib/prediction-api";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
-import { Button } from "@/components/retroui/Button";
-
-const EMPTY_SUMMARY: RiskSummary = {
-  HIGH_RISK: 0,
-  MODERATE_RISK: 0,
-  NEEDS_MONITORING: 0,
-  LOW_RISK: 0,
-  INSUFFICIENT_DATA: 0,
-  total: 0,
-};
-
-const MOCK_GRADE_GROUPS: GradeGroup[] = [
-  { grade: 7, classes: ["Rizal", "Mabini", "Luna"], highRisk: 8, monitoring: 14 },
-  { grade: 8, classes: ["Bonifacio", "Del Pilar"], highRisk: 5, monitoring: 9 },
-  { grade: 9, classes: ["Aguinaldo", "Jacinto", "Silang"], highRisk: 12, monitoring: 7 },
-  { grade: 10, classes: ["Lapu-Lapu", "Tupas"], highRisk: 3, monitoring: 11 },
-];
-
-const RISK_CARDS = [
-  {
-    key: "HIGH_RISK" as const,
-    label: "High Risk",
-    activeClass: "bg-red-200 ring-2 ring-black",
-  },
-  {
-    key: "MODERATE_RISK" as const,
-    label: "Moderate Risk",
-    activeClass: "bg-amber-200 ring-2 ring-black",
-  },
-  {
-    key: "NEEDS_MONITORING" as const,
-    label: "Monitoring",
-    activeClass: "bg-yellow-200 ring-2 ring-black",
-  },
-  {
-    key: "LOW_RISK" as const,
-    label: "Low Risk",
-    activeClass: "bg-emerald-200 ring-2 ring-black",
-  },
-  {
-    key: "INSUFFICIENT_DATA" as const,
-    label: "No Data",
-    activeClass: "bg-gray-200 ring-2 ring-black",
-  },
-];
 
 export default function GradePredictions() {
   const { role } = useAuth();
   const baseRole = role === "admin" ? "admin" : "teacher";
-  const { grade, classId: classSlug } = useParams<{ grade: string; classId: string }>();
+  const { grade } = useParams<{ grade: string }>();
 
   // ── State ──
   const [data, setData] = useState<DashboardAtRiskResponse | null>(null);
@@ -153,11 +106,6 @@ export default function GradePredictions() {
     setOffset(0);
   };
 
-  const handleRiskClick = (level: string | undefined) => {
-    setRiskLevel(level);
-    setOffset(0);
-  };
-
   const handleClearAll = () => {
     setClassId(undefined);
     setSubjectId(undefined);
@@ -172,8 +120,6 @@ export default function GradePredictions() {
     setSheetOpen(true);
   };
 
-  const summary = data?.risk_summary ?? EMPTY_SUMMARY;
-
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
@@ -183,7 +129,7 @@ export default function GradePredictions() {
             <header className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
               <Breadcrumb>
-                <Breadcrumb.List>
+                <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
                   <Breadcrumb.Item>
                     <Breadcrumb.Link asChild className="text-2xl md:text-4xl font-bold">
                       <Link to={`/${baseRole}/predictions`}>AI Predictions</Link>
@@ -283,30 +229,6 @@ export default function GradePredictions() {
                     </Card>
                   </div>
                 </Card>
-                {/* {RISK_CARDS.map((card) => {
-                  const count = summary[card.key];
-                  const isActive = riskLevel === card.key;
-
-                  return (
-                    <button
-                      key={card.key}
-                      type="button"
-                      onClick={() => handleRiskClick(isActive ? undefined : card.key)}
-                      className="text-left cursor-pointer transition-transform active:translate-x-[2px] active:translate-y-[2px] w-full"
-                    >
-                      <OverviewCard
-                        title={card.label}
-                        count={String(count)}
-                        className={cn(
-                          "w-full border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all",
-                          isActive
-                            ? `${card.activeClass} shadow-none translate-x-[2px] translate-y-[2px]`
-                            : "hover:translate-x-[-1px] hover:translate-y-[-1px]"
-                        )}
-                      />
-                    </button>
-                  );
-                })} */}
               </div>
             </div>
           </div>

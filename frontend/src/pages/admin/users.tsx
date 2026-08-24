@@ -550,7 +550,6 @@ export default function AdminUsers() {
                                   <Table.Head className="text-center w-64">
                                     {isUnassigned ? "Grade level" : "Section"}
                                   </Table.Head>
-                                  <Table.Head className="text-right w-36">Average</Table.Head>
                                 </Table.Row>
                               </Table.Header>
                               <Table.Body>
@@ -689,19 +688,6 @@ function StudentRow({
             </Badge>
           ) : (
             <span className="text-xs text-muted-foreground">No section</span>
-          )}
-        </div>
-      </Table.Cell>
-
-      <Table.Cell className="text-right w-28">
-        <div className="justify-self-end text-right font-black leading-none">
-          {user.average != null ? (
-            <>
-              <span className="text-lg">{user.average}</span>
-              <span className="text-xs font-semibold">%</span>
-            </>
-          ) : (
-            <span className="text-sm font-normal text-muted-foreground">—</span>
           )}
         </div>
       </Table.Cell>

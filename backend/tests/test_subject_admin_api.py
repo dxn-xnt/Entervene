@@ -83,7 +83,6 @@ def add_subject(
         subject_name=name,
         subject_codename=code,
         subject_group_id=group.subject_group_id,
-        hours=80,
         default_grading_template="Default SHS",
         description="STEM subject",
         status=status,
@@ -99,7 +98,6 @@ def subject_payload(level: AcademicLevel, group: SubjectGroup, **overrides):
         "subject_name": "General Biology 1",
         "subject_codename": "GENBIO1",
         "subject_group_id": group.subject_group_id,
-        "hours": 80,
         "default_grading_template": "Default SHS",
         "description": "STEM subject",
         "academic_level_id": level.academic_level_id,
@@ -143,7 +141,6 @@ def test_create_subject_works(client, db):
     assert body["subject_codename"] == "GENBIO1"
     assert body["subject_group"]["name"] == "Specialized"
     assert body["subject_group"]["passing_threshold"] == 83.0
-    assert body["hours"] == 80
     assert body["status"] == "active"
     assert body["academic_level"]["academic_level_id"] == level.academic_level_id
     assert db.query(Subject).count() == 1
@@ -227,7 +224,6 @@ def test_update_subject_works_and_validates_duplicate_code(client, db):
         json={
             "subject_name": "General Biology Updated",
             "subject_codename": "GENBIO1A",
-            "hours": 90,
             "default_grading_template": "STEM Written/Performance/Exam",
         },
     )
@@ -236,7 +232,6 @@ def test_update_subject_works_and_validates_duplicate_code(client, db):
     body = response.json()
     assert body["subject_name"] == "General Biology Updated"
     assert body["subject_codename"] == "GENBIO1A"
-    assert body["hours"] == 90
 
 
 def test_non_admin_cannot_create_update_or_archive(client, db):

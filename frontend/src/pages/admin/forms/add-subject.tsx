@@ -38,7 +38,6 @@ type SubjectFormState = {
   subject_name: string;
   subject_codename: string;
   subject_group: string;
-  hours: string;
   default_grading_template: string;
   description: string;
   status: SubjectStatus;
@@ -56,7 +55,6 @@ const emptyForm: SubjectFormState = {
   subject_name: "",
   subject_codename: "",
   subject_group: "",
-  hours: "",
   default_grading_template: NO_TEMPLATE_VALUE,
   description: "",
   status: "active",
@@ -76,20 +74,7 @@ function pathwayLabel(pathway: SubjectOfferingPathway) {
   return "STEM Engineering";
 }
 
-function getSuggestedHoursPlaceholder(
-  gradeLevel: number | null | undefined,
-  _groupName: string | null | undefined,
-): string {
-  if (gradeLevel != null) {
-    if (gradeLevel >= 7 && gradeLevel <= 10) {
-      return "40";
-    }
-    if (gradeLevel >= 11 && gradeLevel <= 12) {
-      return "80";
-    }
-  }
-  return "e.g. 40 or 80";
-}
+
 
 function formWithDefaults(
   options: SubjectFormOptions | null,
@@ -146,7 +131,6 @@ export default function AddSubjectModal({
         subject_group: subjectToEdit.subject_group
           ? String(subjectToEdit.subject_group.subject_group_id)
           : "",
-        hours: subjectToEdit.hours ? String(subjectToEdit.hours) : "",
         default_grading_template:
           subjectToEdit.default_grading_template || NO_TEMPLATE_VALUE,
         description: subjectToEdit.description || "",
@@ -250,13 +234,6 @@ export default function AddSubjectModal({
   const selectedLevel = options?.academic_levels.find(
     (level) => String(level.academic_level_id) === form.academic_level_id,
   );
-  const selectedGroup = options?.subject_groups.find(
-    (group) => String(group.subject_group_id) === form.subject_group,
-  );
-  const hoursPlaceholder = getSuggestedHoursPlaceholder(
-    selectedLevel?.grade_level,
-    selectedGroup?.name,
-  );
   const selectedYearId = Number(offeringForm.academic_year_id);
   const availablePeriods = React.useMemo(
     () =>
@@ -335,13 +312,6 @@ export default function AddSubjectModal({
       setError("Subject name is required.");
       return;
     }
-    if (form.hours.trim()) {
-      const parsedHours = Number(form.hours);
-      if (isNaN(parsedHours) || parsedHours < 0) {
-        setError("Hours must be 0 or a positive whole number.");
-        return;
-      }
-    }
     if (offerNow) {
       if (!offeringForm.academic_year_id) {
         setError("Select an academic year for the offering.");
@@ -369,7 +339,6 @@ export default function AddSubjectModal({
           subject_name: form.subject_name.trim(),
           subject_codename: form.subject_codename.trim() || null,
           subject_group_id: Number(form.subject_group),
-          hours: form.hours.trim() ? Number(form.hours) : null,
           default_grading_template: selectedTemplate,
           description: form.description.trim() || null,
           status: form.status,
@@ -385,7 +354,6 @@ export default function AddSubjectModal({
         subject_codename: form.subject_codename.trim() || null,
         subject_group_id: Number(form.subject_group),
         academic_level_id: Number(form.academic_level_id),
-        hours: form.hours.trim() ? Number(form.hours) : null,
         default_grading_template: selectedTemplate,
         description: form.description.trim() || null,
         status: form.status,
@@ -587,23 +555,6 @@ export default function AddSubjectModal({
                 </Select.Group>
               </Select.Content>
             </Select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="subject-hours" className="text-sm">
-              Hours
-            </label>
-            <Input
-              id="subject-hours"
-              value={form.hours}
-              onChange={(event) => setField("hours", event.target.value)}
-              type="number"
-              min={0}
-              placeholder={hoursPlaceholder}
-            />
-            <Text as="p" className="text-xs text-black/70">
-              Total instructional hours for the term. Leave blank if unknown —
-              you can update this later.
-            </Text>
           </div>
           <div className="flex flex-col gap-1 md:col-span-2">
             <Text as="h6" className="font-sans text-base font-bold">

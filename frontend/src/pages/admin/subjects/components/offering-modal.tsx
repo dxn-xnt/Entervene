@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import type React from "react";
 import { Button } from "@/components/retroui/Button";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Dialog } from "@/components/retroui/Dialog";
+import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Text } from "@/components/retroui/Text";
 import { formatPeriodLabel } from "@/lib/academic-periods";
@@ -65,6 +67,7 @@ export function OfferingModal({
     academic_period_id: "",
     academic_period_ids: [],
     pathway: "general",
+    minutes: "",
     status: "active",
     default_grading_template: "no-template",
   });
@@ -190,6 +193,7 @@ export function OfferingModal({
               ? periodIds
               : [String(offering.academic_period.academic_period_id)],
             pathway: offering.pathway,
+            minutes: offering.minutes != null ? String(offering.minutes) : "",
             status: offering.status,
             default_grading_template: existingTemplate || "no-template",
           });
@@ -205,6 +209,7 @@ export function OfferingModal({
             academic_period_id: String(offering.academic_period.academic_period_id),
             academic_period_ids: [String(offering.academic_period.academic_period_id)],
             pathway: offering.pathway,
+            minutes: offering.minutes != null ? String(offering.minutes) : "",
             status: offering.status,
             default_grading_template: existingTemplate || "no-template",
           });
@@ -240,6 +245,7 @@ export function OfferingModal({
         ? initialPeriods.map((period) => String(period.academic_period_id))
         : [],
       pathway: initialPathway,
+      minutes: "",
       status: options?.default_status ?? "active",
       default_grading_template: "no-template",
     });
@@ -387,6 +393,12 @@ export function OfferingModal({
       return;
     }
 
+    const parsedMinutes = form.minutes.trim() ? Number(form.minutes) : null;
+    if (parsedMinutes !== null && (isNaN(parsedMinutes) || parsedMinutes <= 0)) {
+      setError("Minutes must be a positive number.");
+      return;
+    }
+
     setIsSaving(true);
     try {
       if (offering) {
@@ -408,6 +420,7 @@ export function OfferingModal({
                 academic_level_id: Number(form.academic_level_id),
                 academic_period_id: Number(periodId),
                 pathway: requiresPathway ? form.pathway : "general",
+                minutes: parsedMinutes,
                 status: form.status,
               });
             } catch (createErr) {
@@ -424,6 +437,7 @@ export function OfferingModal({
               academic_level_id: Number(form.academic_level_id),
               academic_period_id: Number(periodId),
               pathway: requiresPathway ? form.pathway : "general",
+              minutes: parsedMinutes,
               status: form.status,
             });
           } else {
@@ -461,6 +475,7 @@ export function OfferingModal({
                 academic_level_id: Number(form.academic_level_id),
                 academic_period_id: Number(periodId),
                 pathway: effectivePathway,
+                minutes: parsedMinutes,
                 status: form.status,
               });
               createdCount += 1;
@@ -576,6 +591,20 @@ export function OfferingModal({
                     </Select>
                   </div>
                 ) : null}
+                {isCreateMode ? (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-semibold" htmlFor="create-offering-minutes">Duration (Minutes)</label>
+                    <Input
+                      id="create-offering-minutes"
+                      type="number"
+                      min={1}
+                      value={form.minutes}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField("minutes", e.target.value)}
+                      placeholder="e.g. 45, 60, 72, 96 (optional)"
+                    />
+                    <p className="text-xs text-black/70">Minutes per class period (optional now, required for publishing).</p>
+                  </div>
+                ) : null}
                 <div className="flex flex-col gap-2 md:col-span-2">
                   <label className="flex cursor-pointer items-start gap-3 rounded-md border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[2px_2px_0_#000]">
                     <Checkbox
@@ -665,7 +694,19 @@ export function OfferingModal({
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-semibold" htmlFor="offering-minutes">Duration (Minutes)</label>
+                    <Input
+                      id="offering-minutes"
+                      type="number"
+                      min={1}
+                      value={form.minutes}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setField("minutes", e.target.value)}
+                      placeholder="e.g. 45, 60, 72, 96"
+                    />
+                    <p className="text-xs text-black/70">Minutes per period. Required for publishing.</p>
+                  </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-sm font-semibold" htmlFor="offering-grading-template">Grading Template</label>
                     <Select

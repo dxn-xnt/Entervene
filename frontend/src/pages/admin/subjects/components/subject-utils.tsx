@@ -74,6 +74,7 @@ export type OfferingFormState = {
   academic_period_id: string;
   academic_period_ids: string[];
   pathway: SubjectOfferingPathway;
+  minutes: string;
   status: SubjectStatus;
   default_grading_template: string;
 };
@@ -165,6 +166,11 @@ export function scopeLabel(template: GradingTemplateListItem) {
   const level = template.academic_level?.level_name ?? "Any level";
   const subject = template.subject?.subject_name ?? "Any subject";
   return `${level} - ${subject}`;
+}
+
+export function formatSubjectMinutes(minutes: number | null | undefined): string {
+  if (minutes == null) return "Unset";
+  return `${minutes} mins`;
 }
 
 export function formatSubjectHours(hours: number | null | undefined): string {

@@ -28,6 +28,7 @@ class SubjectOffering(Base):
     academic_year_id: Mapped[int] = mapped_column(Integer, ForeignKey("academic_year.academic_year_id", ondelete="CASCADE"), nullable=False)
     academic_level_id: Mapped[int] = mapped_column(Integer, ForeignKey("academic_level.academic_level_id"), nullable=False)
     academic_period_id: Mapped[int] = mapped_column(Integer, ForeignKey("academic_period.academic_period_id", ondelete="CASCADE"), nullable=False)
+    minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

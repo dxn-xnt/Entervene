@@ -14,7 +14,7 @@ from app.models.people.Student import Student
 from app.schemas.User import UpdateUserRequest
 from app.services.classes.ClassService import build_student_class_assignment
 from app.services.users.UserQueryService import get_user_detail, role_name_to_client_role
-from app.services.users.UserShared import capitalize_name, resolve_academic_level_id
+from app.services.users.UserShared import capitalize_name, resolve_academic_level_id, normalize_employment_status
 
 # EXISTING USER WRITE FLOW
 # Admin edits update UserAccount plus the matching Student or AcademicStaff
@@ -138,7 +138,7 @@ def _update_teacher(
     staff.email = email
     staff.contact_number = payload.contact_number.strip()
     staff.address = payload.address.strip()
-    staff.employment_status = payload.employment_status.strip()
+    staff.employment_status = normalize_employment_status(payload.employment_status)
 
 
 def archive_user(db: Session, user_id: uuid.UUID) -> dict[str, str]:
