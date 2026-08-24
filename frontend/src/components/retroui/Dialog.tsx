@@ -217,6 +217,7 @@ const DialogHeader = ({
 const DialogComponent = Object.assign(Dialog, {
   Trigger: DialogTrigger,
   Header: DialogHeader,
+  Title: BaseDialog.Title,
   Content: DialogContent,
   Description: DialogDescription,
   Footer: DialogFooter,
