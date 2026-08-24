@@ -234,7 +234,6 @@ const StoryBoard = () => {
                           </Text>
                         </div>
 
-
                         <Text as="p" className="text-sm font-normal">
                           1-day streak — keep going, build the habit!
                         </Text>
