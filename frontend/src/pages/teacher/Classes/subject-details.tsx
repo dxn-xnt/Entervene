@@ -791,7 +791,7 @@ export default function SubjectDetails() {
             <>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <Breadcrumb>
-                  <Breadcrumb.List>
+                  <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
                     <Breadcrumb.Item>
                       <Breadcrumb.Link asChild>
                         <button
