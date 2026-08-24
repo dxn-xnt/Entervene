@@ -544,7 +544,23 @@ export default function LessonClassworkList({
                 {!isCollapsed && (
                   <div className="flex flex-col gap-3 p-4 bg-white/60">
                     {compLessons.length > 0 ? (
-                      compLessons.map(renderLessonItem)
+                      <>
+                        {compLessons.map(renderLessonItem)}
+                        {onAddLessonToCompetency && (
+                          <div className="flex justify-end pt-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onAddLessonToCompetency(comp.competency_id)}
+                              className="gap-1 border-2 border-black bg-white hover:bg-gray-100 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                            >
+                              <Plus size={14} />
+                              Add Lesson to this Competency
+                            </Button>
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <div className="flex items-center justify-between rounded border-2 border-dashed border-gray-400 bg-white p-4">
                         <div className="flex items-center gap-2 text-xs font-medium text-gray-600">

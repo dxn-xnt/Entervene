@@ -3,6 +3,7 @@ from typing import Optional
 
 from fastapi import HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
@@ -76,12 +77,22 @@ def teacher_lessons_for_class_subject(
     db: Session,
 ) -> list[LessonResponse]:
     ensure_teacher_class_subject(db, staff_id, class_id, subject_id)
+    assigned_subquery = (
+        db.query(LessonAssignment.lesson_id)
+        .filter(LessonAssignment.class_id == class_id)
+        .subquery()
+    )
     lessons = (
         db.query(Lesson)
-        .join(LessonAssignment, LessonAssignment.lesson_id == Lesson.lesson_id)
         .filter(
-            LessonAssignment.class_id == class_id,
             Lesson.subject_id == subject_id,
+            Lesson.is_archived == False,
+            or_(
+                Lesson.lesson_id.in_(assigned_subquery),
+                ~Lesson.assignments.any(),
+                Lesson.created_by_staff_id == staff_id,
+                Lesson.created_by_staff_id.is_(None),
+            ),
         )
         .order_by(Lesson.order_index.asc(), Lesson.created_at.desc())
         .all()
@@ -104,8 +115,13 @@ def teacher_lesson_linked_classwork(
         LessonAssignment.lesson_id == lesson_id,
         LessonAssignment.class_id == class_id,
     ).first()
+    # If not explicitly in LessonAssignment, allow if it belongs to this subject and has no restricting class assignment
     if not assigned_here:
-        raise HTTPException(status_code=403, detail="Lesson is not assigned to this class")
+        has_other_assignment = db.query(LessonAssignment).filter(
+            LessonAssignment.lesson_id == lesson_id
+        ).first()
+        if has_other_assignment:
+            raise HTTPException(status_code=403, detail="Lesson is not assigned to this class")
 
     rows = (
         db.query(ClassworkAssignment, Classwork)
@@ -122,11 +138,13 @@ def teacher_lesson_linked_classwork(
     return [
         {
             "classwork_assignment_id": assignment.classwork_assignment_id,
-            "classwork_id": assignment.classwork_id,
+            "classwork_id": classwork.classwork_id,
             "title": classwork.title,
             "classwork_type": classwork.classwork_type,
             "classwork_category": classwork.classwork_category,
             "due_date": assignment.due_date.isoformat() if assignment.due_date else None,
+            "is_locked": assignment.is_locked,
+            "total_points": classwork.total_points,
             "attachment_count": len(classwork.attachments),
         }
         for assignment, classwork in rows
@@ -140,15 +158,24 @@ def student_lessons_for_class_subject(
     db: Session,
 ) -> list[LessonResponse]:
     ensure_student_enrolled(db, student.student_id, class_id)
-    lessons = (
-        db.query(Lesson)
-        .join(LessonAssignment, LessonAssignment.lesson_id == Lesson.lesson_id)
+    assigned_subquery = (
+        db.query(LessonAssignment.lesson_id)
         .filter(
             LessonAssignment.class_id == class_id,
+            LessonAssignment.is_published == True,
+        )
+        .subquery()
+    )
+    lessons = (
+        db.query(Lesson)
+        .filter(
             Lesson.subject_id == subject_id,
             Lesson.is_published == True,
-            LessonAssignment.is_published == True,
             Lesson.is_archived == False,
+            or_(
+                Lesson.lesson_id.in_(assigned_subquery),
+                ~Lesson.assignments.any(),
+            ),
         )
         .order_by(Lesson.order_index.asc(), Lesson.created_at.desc())
         .all()

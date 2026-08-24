@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Archive, Info, Paperclip, Plus, Trash2, Users, X } from "lucide-react";
+import { Archive, Award, Info, Paperclip, Plus, Trash2, Users, X } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { API_URL, apiFetch } from "@/lib/api";
@@ -101,6 +101,26 @@ export default function SubjectDetails() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  const refreshSubjectData = async () => {
+    if (!classId || !subjectId) return;
+    try {
+      const [lessonsRes, compsRes] = await Promise.all([
+        apiFetch(`/api/v1/lessons/my-class/${classId}/subject/${subjectId}`),
+        apiFetch(`/api/v1/competencies/subject/${subjectId}`),
+      ]);
+      if (lessonsRes.ok) {
+        const lessonData = (await lessonsRes.json()) as Lesson[];
+        setLessons(lessonData.filter((lesson) => !lesson.is_archived));
+      }
+      if (compsRes.ok) {
+        const compData = (await compsRes.json()) as CompetencyItem[];
+        setCompetencies(compData);
+      }
+    } catch {
+      // Ignored
+    }
+  };
+
   const openCompetencyForm = (comp?: CompetencyItem | null) => {
     setEditingCompetency(comp || null);
     setIsCompetencyModalOpen(true);
@@ -116,6 +136,7 @@ export default function SubjectDetails() {
       }
       return [...prev, savedComp];
     });
+    refreshSubjectData();
   };
 
   const handleArchiveCompetency = async (competencyId: number) => {
@@ -877,16 +898,31 @@ export default function SubjectDetails() {
                   </Breadcrumb.List>
                 </Breadcrumb>
 
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  onClick={() => setIsCreatingLesson(true)}
-                  className="w-full lg:w-auto gap-2 whitespace-nowrap font-semibold"
-                >
-                  <Plus size={16} />
-                  Add Lesson
-                </Button>
+                <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openCompetencyForm(null)}
+                    className="w-full sm:w-auto gap-2 whitespace-nowrap font-bold border-2 border-black bg-[#F6E9B2] hover:bg-[#fae498] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                  >
+                    <Award size={16} />
+                    Add Competency
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedCompetencyIdForNewLesson(undefined);
+                      setIsCreatingLesson(true);
+                    }}
+                    className="w-full sm:w-auto gap-2 whitespace-nowrap font-semibold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                  >
+                    <Plus size={16} />
+                    Add Lesson
+                  </Button>
+                </div>
               </div>
 
               <div className="-mx-4 md:-mx-6 border-b-2 border-black" />
@@ -1416,16 +1452,6 @@ export default function SubjectDetails() {
             />
           )}
 
-          {subjectId && (
-            <CompetencyModal
-              isOpen={isCompetencyModalOpen}
-              onClose={() => setIsCompetencyModalOpen(false)}
-              onSaved={handleCompetencySaved}
-              subjectId={Number(subjectId)}
-              editingCompetency={editingCompetency}
-            />
-          )}
-
           {(selectedClasswork || detailLoadingId || detailError) && (
             <Dialog
               open={Boolean(
@@ -1729,6 +1755,35 @@ export default function SubjectDetails() {
                 ) : null}
               </Dialog.Content>
             </Dialog>
+          )}
+
+          {/* ── Competency Create/Edit Modal ── */}
+          {isCompetencyModalOpen && subjectId && (
+            <CompetencyModal
+              open={isCompetencyModalOpen}
+              onOpenChange={setIsCompetencyModalOpen}
+              subjectId={Number(subjectId)}
+              initialData={editingCompetency}
+              onSuccess={handleCompetencySaved}
+            />
+          )}
+
+          {/* ── Lesson Create Modal ── */}
+          {isCreatingLesson && (
+            <CreateLessonModal
+              classId={classId}
+              subjectId={subjectId}
+              initialCompetencyId={selectedCompetencyIdForNewLesson}
+              onClose={() => {
+                setIsCreatingLesson(false);
+                setSelectedCompetencyIdForNewLesson(undefined);
+              }}
+              onCreated={async () => {
+                setIsCreatingLesson(false);
+                setSelectedCompetencyIdForNewLesson(undefined);
+                await refreshSubjectData();
+              }}
+            />
           )}
         </div>
       </div>
