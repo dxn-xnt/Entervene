@@ -59,7 +59,7 @@ const StoryBoard = () => {
     apiFetch("/api/v1/students/me/subjects")
       .then((r) => r.json())
       .then((data) => setSubjects(data))
-      .catch(() => { })
+      .catch(() => {})
       .finally(() => setIsLoading(false));
 
     getMyClass()
@@ -77,7 +77,7 @@ const StoryBoard = () => {
         const urgent = [...data.pastdue, ...data.pending].slice(0, 3);
         setTodos(urgent);
       })
-      .catch(() => { })
+      .catch(() => {})
       .finally(() => setIsTodosLoading(false));
   }, []);
 
@@ -95,7 +95,7 @@ const StoryBoard = () => {
           );
           if (match) targetClassId = match.class_id;
         }
-      } catch { }
+      } catch {}
     }
 
     if (targetClassId && item.subject_id) {
@@ -200,10 +200,9 @@ const StoryBoard = () => {
                       />
                     </div>
                   ) : subjects.length === 0 ? (
-                    <div className="col-span-2 flex flex-col items-center py-16 gap-3 text-gray-400">
-                      <BookOpen size={40} className="opacity-50" />
-                      <p>No enrolled subjects found</p>
-                    </div>
+                    <Card className="flex flex-col items-center p-12">
+                      <p className="text-sm">No enrolled subjects found.</p>
+                    </Card>
                   ) : (
                     subjects.map((subject) => (
                       <SubjectCard
@@ -240,7 +239,11 @@ const StoryBoard = () => {
                       </div>
                       <div className="flex flex-row mt-2 items-center w-full ">
                         <div className="flex flex-row gap-2 justify-between w-full">
-                          <Badge size="md" variant="secondary" className="items-center justify-center">
+                          <Badge
+                            size="md"
+                            variant="secondary"
+                            className="items-center justify-center"
+                          >
                             <Check size={17} className="mt-0.5" />
                           </Badge>
                           <Badge size="md" variant="default">
@@ -292,7 +295,9 @@ const StoryBoard = () => {
                       ) : todos.length === 0 ? (
                         <div className="flex flex-col items-center py-6 text-gray-500 gap-1.5">
                           <CheckCircle2 size={32} className="text-green-500" />
-                          <p className="text-sm font-semibold">All caught up!</p>
+                          <p className="text-sm font-semibold">
+                            All caught up!
+                          </p>
                           <p className="text-xs text-gray-400">
                             No pending tasks
                           </p>

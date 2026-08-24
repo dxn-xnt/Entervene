@@ -762,7 +762,7 @@ export default function Classworks() {
           <div className="@container/main flex flex-1 flex-col">
             <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
               <Breadcrumb>
-                <Breadcrumb.List>
+                <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
                   <Breadcrumb.Item>
                     <Breadcrumb.Link asChild>
                       <button
@@ -805,7 +805,7 @@ export default function Classworks() {
                         <>
                           <Breadcrumb.Separator />
                           <Breadcrumb.Item>
-                            <span className="text-gray-600 font-medium">
+                            <span className="text-muted-foreground font-semibold">
                               {selected.subject_name}
                             </span>
                           </Breadcrumb.Item>

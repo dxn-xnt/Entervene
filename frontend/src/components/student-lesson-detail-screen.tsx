@@ -49,7 +49,7 @@ export function StudentLessonDetailScreen({
     <div className="space-y-4">
       <header className="-mx-4 border-b border-gray-200 px-4 pb-4 md:-mx-6 md:px-6">
         <Breadcrumb>
-          <Breadcrumb.List>
+          <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
             <Breadcrumb.Item>
               <Breadcrumb.Link
                 onClick={() => navigate(routes.student.subjects)}
