@@ -76,6 +76,7 @@ export default function CompetencyModal({
       if (targetCompetency) {
         const res = await apiFetch(`/api/v1/competencies/${targetCompetency.competency_id}`, {
           method: "PUT",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             statement: statement.trim(),
             competency_code: competencyCode.trim() || null,
@@ -86,16 +87,25 @@ export default function CompetencyModal({
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => null);
-          throw new Error(errData?.detail || "Failed to update competency.");
+          const errorMsg = Array.isArray(errData?.detail)
+            ? errData.detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ")
+            : (errData?.detail || "Failed to update competency.");
+          throw new Error(errorMsg);
         }
         const updated = (await res.json()) as CompetencyItem;
         if (onSaved) onSaved(updated);
         if (onSuccess) await onSuccess(updated);
       } else {
+        const parsedSubjectId = Number(subjectId);
+        if (!parsedSubjectId || isNaN(parsedSubjectId)) {
+          throw new Error("A valid Subject must be selected to create a competency.");
+        }
+
         const res = await apiFetch("/api/v1/competencies/", {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            subject_id: subjectId,
+            subject_id: parsedSubjectId,
             statement: statement.trim(),
             competency_code: competencyCode.trim() || null,
             description: description.trim() || null,
@@ -105,7 +115,10 @@ export default function CompetencyModal({
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => null);
-          throw new Error(errData?.detail || "Failed to create competency.");
+          const errorMsg = Array.isArray(errData?.detail)
+            ? errData.detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ")
+            : (errData?.detail || "Failed to create competency.");
+          throw new Error(errorMsg);
         }
         const created = (await res.json()) as CompetencyItem;
         if (onSaved) onSaved(created);
@@ -120,7 +133,7 @@ export default function CompetencyModal({
   };
 
   return (
-    <Dialog open={isModalOpen} onOpenChange={(val) => !val && handleClose()}>
+    <Dialog open={isModalOpen} disablePointerDismissal={true} onOpenChange={(val) => !val && handleClose()}>
       <Dialog.Content
         size="md"
         className="w-[95vw] max-w-xl border-2 border-black bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-0 overflow-hidden"

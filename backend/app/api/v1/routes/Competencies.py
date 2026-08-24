@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.Dependencies import get_staff_id, require_role
+from app.core.Dependencies import get_optional_staff_id, require_role
 from app.db.Session import get_db
 from app.schemas.Competency import (
     CompetencyCreate,
@@ -28,7 +28,7 @@ router = APIRouter()
 @router.post("/", response_model=CompetencyResponse, status_code=status.HTTP_201_CREATED)
 def create_competency(
     body: CompetencyCreate,
-    staff_id: str = Depends(get_staff_id),
+    staff_id: Optional[str] = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
     return create_competency_record(body, staff_id, db)
@@ -80,7 +80,7 @@ def get_competency(
 def update_competency(
     competency_id: int,
     body: CompetencyUpdate,
-    staff_id: str = Depends(get_staff_id),
+    staff_id: Optional[str] = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
     return update_competency_record(competency_id, body, staff_id, db)
@@ -89,7 +89,7 @@ def update_competency(
 @router.delete("/{competency_id}")
 def delete_competency(
     competency_id: int,
-    staff_id: str = Depends(get_staff_id),
+    staff_id: Optional[str] = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
     return archive_competency_record(competency_id, staff_id, db)

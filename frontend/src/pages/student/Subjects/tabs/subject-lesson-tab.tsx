@@ -1689,52 +1689,49 @@ export default function SubjectLessonTab({
                     return (
                       <div
                         key={group.key}
-                        className="flex flex-col rounded-lg border-2 border-black bg-[#F8FAFC] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
+                        className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
                       >
                         {/* ── Competency Header Accordion Bar ── */}
                         <button
                           type="button"
                           onClick={() => toggleStudentCompCollapse(group.key)}
-                          className="flex items-center justify-between border-b-2 border-black bg-[#E2E8F0] px-4 py-3 text-left cursor-pointer hover:bg-[#dbe2ec] transition-colors"
+                          className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 text-left cursor-pointer hover:bg-[#fae498] transition-colors group"
                         >
                           <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                            <div className="rounded border border-black bg-white p-1 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                            <div className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors">
                               {isCollapsed ? (
-                                <ChevronRight size={16} />
+                                <ChevronRight size={16} className="text-black" />
                               ) : (
-                                <ChevronDown size={16} />
+                                <ChevronDown size={16} className="text-black" />
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                                <Award size={16} className="text-blue-700 shrink-0" />
-                                {group.competency_code && (
-                                  <Badge
-                                    size="sm"
-                                    className="bg-black text-white font-mono font-bold text-xs"
-                                  >
-                                    {group.competency_code}
-                                  </Badge>
-                                )}
+                              <div className="mb-0.5 flex flex-wrap items-center gap-2">
+                                <Award size={18} className="text-black shrink-0" />
+                                <h4 className="truncate text-base md:text-lg font-bold text-gray-950">
+                                  {group.competency_code || group.competency_statement}
+                                </h4>
                                 <Badge
                                   variant="secondary"
                                   size="sm"
-                                  className="border border-black bg-white text-xs font-semibold"
+                                  className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
                                 >
                                   {group.lessons.length} lesson
                                   {group.lessons.length === 1 ? "" : "s"}
                                 </Badge>
                               </div>
-                              <h4 className="text-sm font-bold text-gray-900 line-clamp-2">
-                                {group.competency_statement}
-                              </h4>
+                              {group.competency_code && (
+                                <p className="truncate text-xs font-medium text-gray-700">
+                                  {group.competency_statement}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </button>
 
                         {/* ── Competency Lessons Body ── */}
                         {!isCollapsed && (
-                          <div className="flex flex-col gap-2 p-3 bg-white/70">
+                          <div className="flex flex-col gap-2 p-3 bg-white">
                             {group.lessons.map(renderStudentLessonItem)}
                           </div>
                         )}
@@ -1744,7 +1741,7 @@ export default function SubjectLessonTab({
 
                   {/* ── Standalone / Unassigned Lessons Section ── */}
                   {unassignedLessons.length > 0 && (
-                    <div className="flex flex-col rounded-lg border-2 border-black bg-[#FFFBEB] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
+                    <div className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
                       {competencyGroups.length > 0 ? (
                         <>
                           <button
@@ -1752,24 +1749,24 @@ export default function SubjectLessonTab({
                             onClick={() =>
                               setIsUnassignedExpanded((prev) => !prev)
                             }
-                            className="flex items-center justify-between border-b-2 border-black bg-[#FEF3C7] px-4 py-3 text-left cursor-pointer hover:bg-[#fae8a4] transition-colors"
+                            className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 text-left cursor-pointer hover:bg-[#fae498] transition-colors group"
                           >
                             <div className="flex items-center gap-2">
-                              <div className="rounded border border-black bg-white p-1 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                              <div className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors">
                                 {isUnassignedExpanded ? (
-                                  <ChevronDown size={16} />
+                                  <ChevronDown size={16} className="text-black" />
                                 ) : (
-                                  <ChevronRight size={16} />
+                                  <ChevronRight size={16} className="text-black" />
                                 )}
                               </div>
-                              <BookOpen size={16} className="text-amber-800 shrink-0" />
-                              <h4 className="text-sm font-bold text-gray-900">
-                                Standalone / General Lessons
+                              <BookOpen size={16} className="text-black shrink-0" />
+                              <h4 className="text-sm font-bold text-black">
+                                Unassigned Lessons
                               </h4>
                               <Badge
                                 variant="secondary"
                                 size="sm"
-                                className="border border-black bg-white text-xs font-semibold"
+                                className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
                               >
                                 {unassignedLessons.length}
                               </Badge>
@@ -1777,7 +1774,7 @@ export default function SubjectLessonTab({
                           </button>
 
                           {isUnassignedExpanded && (
-                            <div className="flex flex-col gap-2 p-3 bg-white/70">
+                            <div className="flex flex-col gap-2 p-3 bg-white">
                               {unassignedLessons.map(renderStudentLessonItem)}
                             </div>
                           )}
