@@ -45,6 +45,8 @@ Sphinxclub012
 
 Sample Accounts:
 
+"ricardo.magbanua@student.ph"
+
 "dan@student.ph"
 "juan.dc@student.ph"
 "angel@student.ph"
@@ -91,7 +93,6 @@ Sample Accounts:
 "juan.delacruz+01@student.ph"
 "carlos.reyes+02@student.ph"
 "jose.reyes@student.ph"
-"ricardo.magbanua@student.ph"
 "joshua.mendoza+05@student.ph"
 "adrian.navarro+07@student.ph"
 "ethan.ramos+10@student.ph"
