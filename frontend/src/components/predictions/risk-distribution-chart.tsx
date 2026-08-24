@@ -43,7 +43,7 @@ export default function RiskDistributionChart({
   return (
     <div className="flex items-center gap-6">
       <div className="w-[180px] h-[180px]">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
           <PieChart>
             <Pie
               data={data}
