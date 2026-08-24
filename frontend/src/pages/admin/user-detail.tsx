@@ -601,7 +601,7 @@ function SubjectBars({ rows }: { rows: Array<Record<string, number | string>> })
 function SmallLineChart({ data, xKey }: { data: Array<Record<string, number | string>>; xKey: string }) {
   return (
     <div className="h-36">
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
         <LineChart data={data}>
           <CartesianGrid stroke="#e5e1d8" vertical={false} />
           <XAxis dataKey={xKey} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />

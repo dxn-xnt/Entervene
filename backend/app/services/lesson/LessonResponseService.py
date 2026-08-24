@@ -21,6 +21,7 @@ def build_lesson_response(lesson: Lesson, db: Session) -> LessonResponse:
     """Build the lesson API response outside the route handler."""
     subject = db.query(Subject).filter(Subject.subject_id == lesson.subject_id).first()
     staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == lesson.created_by_staff_id).first()
+    competency = lesson.competency if hasattr(lesson, "competency") and lesson.competency else None
 
     return LessonResponse(
         lesson_id=lesson.lesson_id,
@@ -34,6 +35,9 @@ def build_lesson_response(lesson: Lesson, db: Session) -> LessonResponse:
         is_archived=lesson.is_archived,
         subject_id=lesson.subject_id,
         subject_name=subject.subject_name if subject else None,
+        competency_id=lesson.competency_id,
+        competency_code=competency.competency_code if competency else None,
+        competency_statement=competency.statement if competency else None,
         created_by_staff_id=lesson.created_by_staff_id,
         teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
         attachments=[
@@ -43,3 +47,4 @@ def build_lesson_response(lesson: Lesson, db: Session) -> LessonResponse:
         created_at=lesson.created_at,
         updated_at=lesson.updated_at,
     )
+

@@ -165,7 +165,7 @@ const Dashboard = () => {
                   </div>
 
                   <div className="h-64 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                       <LineChart data={performanceData}>
                         <CartesianGrid vertical={false} stroke="#00000020" />
                         <XAxis

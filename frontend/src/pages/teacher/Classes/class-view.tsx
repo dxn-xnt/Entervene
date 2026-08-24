@@ -1,12 +1,15 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
+  Award,
   BookOpen,
   ChevronDown,
   ChevronRight,
   ClipboardList,
+  ExternalLink,
   FileText,
   Loader2,
   Pencil,
+  Plus,
   Search,
   Users,
 } from "lucide-react";
@@ -22,11 +25,14 @@ import { Select } from "@/components/retroui/Select";
 import { OverviewCard } from "@/components/overview-cards";
 import { ManualSuggestionPanel } from "@/components/teacher/suggestions/ManualSuggestionPanel";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
+import CompetencyModal from "./subject-details/CompetencyModal";
+import CreateLessonModal from "@/pages/teacher/create-lesson";
 import { apiFetch, getTeacherAdvisoryClassDetail } from "@/lib/api";
 import type {
   TeacherAdvisoryClassDetailResponse,
   TeacherAdvisoryStudentItem,
 } from "@/types/adminClasses";
+import type { CompetencyItem } from "./subject-details/types";
 import { Button } from "@/components/retroui/Button";
 
 interface LessonAttachment {
@@ -42,6 +48,9 @@ interface LessonItem {
   title: string;
   description?: string | null;
   content?: string | null;
+  competency_id?: number | null;
+  competency_code?: string | null;
+  competency_statement?: string | null;
   order_index: number;
   created_at?: string;
   updated_at?: string;
@@ -250,9 +259,11 @@ function OverviewTab({
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
 }) {
+  const navigate = useNavigate();
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(
     detail.subject_loads[0]?.subject_id ?? null,
   );
+  const [competencies, setCompetencies] = useState<CompetencyItem[]>([]);
   const [lessons, setLessons] = useState<LessonItem[]>([]);
   const [isLoadingLessons, setIsLoadingLessons] = useState(false);
   const [lessonsError, setLessonsError] = useState("");
@@ -265,6 +276,16 @@ function OverviewTab({
   const [lessonSort, setLessonSort] = useState<
     "order" | "newest" | "oldest" | "title"
   >("order");
+  const [collapsedCompetencies, setCollapsedCompetencies] = useState<
+    Record<number, boolean>
+  >({});
+  const [isUnassignedExpanded, setIsUnassignedExpanded] = useState(true);
+
+  // Modals state
+  const [isCompetencyModalOpen, setIsCompetencyModalOpen] = useState(false);
+  const [editingCompetency, setEditingCompetency] = useState<CompetencyItem | null>(null);
+  const [isCreatingLesson, setIsCreatingLesson] = useState(false);
+  const [selectedCompetencyIdForNewLesson, setSelectedCompetencyIdForNewLesson] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     if (!selectedSubjectId && detail.subject_loads.length > 0) {
@@ -272,45 +293,56 @@ function OverviewTab({
     }
   }, [detail.subject_loads, selectedSubjectId]);
 
-  useEffect(() => {
+  const loadLessonsAndCompetencies = async () => {
     if (!selectedSubjectId || !detail.class_id) {
       setLessons([]);
+      setCompetencies([]);
       setIsLoadingLessons(false);
       return;
     }
 
-    let isMounted = true;
     setIsLoadingLessons(true);
     setLessonsError("");
 
-    apiFetch(
-      `/api/v1/lessons/my-class/${detail.class_id}/subject/${selectedSubjectId}`,
-    )
-      .then(async (res) => {
-        if (!res.ok)
-          throw new Error("Unable to load lessons for this subject.");
-        return (await res.json()) as LessonItem[];
-      })
-      .then((data) => {
-        if (isMounted) {
-          setLessons(data.filter((l) => !l.is_archived));
-        }
-      })
-      .catch((err) => {
-        if (isMounted) {
-          setLessonsError(
-            err instanceof Error ? err.message : "Unable to load lessons.",
-          );
-          setLessons([]);
-        }
-      })
-      .finally(() => {
-        if (isMounted) setIsLoadingLessons(false);
-      });
+    try {
+      const [lessonsRes, compRes] = await Promise.all([
+        apiFetch(
+          `/api/v1/lessons/my-class/${detail.class_id}/subject/${selectedSubjectId}`,
+        ),
+        apiFetch(`/api/v1/competencies/subject/${selectedSubjectId}`),
+      ]);
 
-    return () => {
-      isMounted = false;
-    };
+      if (lessonsRes.ok) {
+        const data = (await lessonsRes.json()) as LessonItem[];
+        setLessons(data.filter((l) => !l.is_archived));
+      }
+      if (compRes.ok) {
+        const compData = (await compRes.json()) as CompetencyItem[];
+        setCompetencies(compData);
+        setCollapsedCompetencies((prev) => {
+          const next = { ...prev };
+          compData.forEach((c, idx) => {
+            if (next[c.competency_id] === undefined) {
+              next[c.competency_id] = idx !== 0;
+            }
+          });
+          return next;
+        });
+        setIsUnassignedExpanded(compData.length === 0);
+      }
+    } catch (err) {
+      setLessonsError(
+        err instanceof Error ? err.message : "Unable to load lessons.",
+      );
+      setLessons([]);
+      setCompetencies([]);
+    } finally {
+      setIsLoadingLessons(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadLessonsAndCompetencies();
   }, [detail.class_id, selectedSubjectId]);
 
   const toggleLesson = async (lessonId: number) => {
@@ -338,11 +370,23 @@ function OverviewTab({
     }
   };
 
+  const toggleCompetencyCollapse = (compId: number) => {
+    setCollapsedCompetencies((prev) => ({
+      ...prev,
+      [compId]: !prev[compId],
+    }));
+  };
+
+  const openAddLessonForCompetency = (compId?: number) => {
+    setSelectedCompetencyIdForNewLesson(compId);
+    setIsCreatingLesson(true);
+  };
+
   const filteredLessons = useMemo(() => {
     const query = lessonSearch.trim().toLowerCase();
     const list = query
       ? lessons.filter((l) =>
-        [l.title, l.description]
+        [l.title, l.description, l.competency_statement, l.competency_code]
           .filter(Boolean)
           .some((v) => v?.toLowerCase().includes(query)),
       )
@@ -368,6 +412,134 @@ function OverviewTab({
       );
     });
   }, [lessonSearch, lessonSort, lessons]);
+
+  const { lessonsByCompetency, unassignedLessons } = useMemo(() => {
+    const byComp = new Map<number, LessonItem[]>();
+    const unassigned: LessonItem[] = [];
+    const activeCompIds = new Set(competencies.map((c) => c.competency_id));
+
+    filteredLessons.forEach((lesson) => {
+      if (lesson.competency_id && activeCompIds.has(lesson.competency_id)) {
+        const list = byComp.get(lesson.competency_id) || [];
+        list.push(lesson);
+        byComp.set(lesson.competency_id, list);
+      } else {
+        unassigned.push(lesson);
+      }
+    });
+
+    return { lessonsByCompetency: byComp, unassignedLessons: unassigned };
+  }, [filteredLessons, competencies]);
+
+  const renderLessonCard = (lesson: LessonItem) => {
+    const isExpanded = expandedLessonId === lesson.lesson_id;
+    const classworks = linkedClassworks[lesson.lesson_id] || [];
+    const isLoadingCw = loadingClassworkId === lesson.lesson_id;
+
+    return (
+      <div key={lesson.lesson_id} className="flex flex-col gap-2">
+        <Card className="bg-[#F6E9B2] border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all">
+          <Card.Content className="flex items-center justify-between gap-3 p-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <Card.Title className="truncate text-lg md:text-xl font-bold text-black">
+                  {lesson.title}
+                </Card.Title>
+                <Badge
+                  variant="outline"
+                  size="sm"
+                  className="border border-black bg-white font-bold"
+                >
+                  {lesson.is_published ? "Published" : "Draft"}
+                </Badge>
+                {lesson.attachments && lesson.attachments.length > 0 && (
+                  <Badge
+                    size="sm"
+                    className="border border-black bg-[#7ABA78] text-white font-bold"
+                  >
+                    {lesson.attachments.length} material
+                    {lesson.attachments.length === 1 ? "" : "s"}
+                  </Badge>
+                )}
+              </div>
+              <p className="truncate text-xs font-medium text-black/70">
+                {lesson.description ||
+                  (lesson.created_at
+                    ? `Created ${new Date(lesson.created_at).toLocaleDateString()}`
+                    : "Lesson folder")}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => toggleLesson(lesson.lesson_id)}
+              className="p-1.5 rounded-full border border-black bg-white hover:bg-yellow-50 transition-colors cursor-pointer shrink-0"
+              title={
+                isExpanded ? "Collapse classworks" : "Expand classworks"
+              }
+            >
+              {isExpanded ? (
+                <ChevronDown size={18} />
+              ) : (
+                <ChevronRight size={18} />
+              )}
+            </button>
+          </Card.Content>
+        </Card>
+
+        {/* Expanded linked classworks */}
+        {isExpanded && (
+          <div className="ml-4 pl-3 border-l-2 border-black space-y-2 py-1">
+            {isLoadingCw ? (
+              <div className="flex items-center gap-2 py-3 text-xs text-gray-500 font-medium">
+                <Loader2 className="size-4 animate-spin" /> Loading
+                classworks...
+              </div>
+            ) : classworks.length === 0 ? (
+              <div className="rounded border border-black/20 bg-white p-3 text-xs text-gray-500 font-medium">
+                No classworks linked to this lesson.
+              </div>
+            ) : (
+              classworks.map((cw) => (
+                <div
+                  key={cw.classwork_assignment_id}
+                  className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3 rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-50 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="shrink-0">
+                      <ClassworkIcon
+                        type={cw.classwork_type}
+                        size={16}
+                      />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold truncate text-black">
+                        {cw.title}
+                      </p>
+                      <p className="text-[11px] text-gray-600 font-medium">
+                        {cw.classwork_type || "Classwork"}
+                        {cw.due_date
+                          ? ` • Due ${new Date(cw.due_date).toLocaleDateString()}`
+                          : ""}
+                      </p>
+                    </div>
+                  </div>
+                  {cw.classwork_category && (
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] font-bold shrink-0 bg-[#F6E9B2] border border-black"
+                    >
+                      {cw.classwork_category.replace(/_/g, " ")}
+                    </Badge>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="grid gap-4">
@@ -398,10 +570,80 @@ function OverviewTab({
 
         <section className="flex flex-col gap-4">
           <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-2">
-              <Text as="h3" className="text-xl font-semibold">
-                Lessons
-              </Text>
+            {/* Header toolbar with subject selector and quick actions */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3 flex-wrap">
+                <Text as="h3" className="text-xl font-semibold">
+                  Lessons & Competencies
+                </Text>
+                {detail.subject_loads && detail.subject_loads.length > 0 && (
+                  <div className="w-56">
+                    <Select
+                      value={selectedSubjectId ? String(selectedSubjectId) : ""}
+                      onValueChange={(v) => setSelectedSubjectId(Number(v))}
+                    >
+                      <Select.Trigger className="h-9 text-xs bg-white border-2 border-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <Select.Value placeholder="Select Subject" />
+                      </Select.Trigger>
+                      <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                        {detail.subject_loads.map((load) => (
+                          <Select.Item
+                            key={load.subject_id}
+                            value={String(load.subject_id)}
+                          >
+                            {load.subject_name}
+                          </Select.Item>
+                        ))}
+                      </Select.Content>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {selectedSubjectId && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        navigate(
+                          `/teacher/classes/${detail.class_id}/subjects/${selectedSubjectId}`,
+                        )
+                      }
+                      className="gap-1.5 border-2 border-black bg-white hover:bg-gray-50 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      title="Open full subject management page"
+                    >
+                      <ExternalLink size={14} />
+                      Full Subject View
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditingCompetency(null);
+                        setIsCompetencyModalOpen(true);
+                      }}
+                      className="gap-1.5 border-2 border-black bg-[#F6E9B2] hover:bg-[#fae498] text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    >
+                      <Award size={14} />
+                      Add Competency
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      onClick={() => openAddLessonForCompetency(undefined)}
+                      className="gap-1.5 border-2 border-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    >
+                      <Plus size={14} />
+                      Add Lesson
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Search & Sort Controls */}
@@ -411,7 +653,7 @@ function OverviewTab({
                 <Input
                   value={lessonSearch}
                   onChange={(e) => setLessonSearch(e.target.value)}
-                  placeholder="Search lessons..."
+                  placeholder="Search competencies or lessons..."
                   className="h-10 w-full border-2 border-black pl-9 pr-3 shadow-none bg-white font-medium"
                 />
               </label>
@@ -435,7 +677,7 @@ function OverviewTab({
             </div>
           </div>
 
-          {/* Lessons List */}
+          {/* Lessons List with Competencies Hierarchy */}
           {isLoadingLessons ? (
             <div className="flex items-center justify-center py-12 text-sm text-gray-500 font-medium">
               <Loader2 className="animate-spin mr-2 size-5" /> Loading lessons...
@@ -444,135 +686,244 @@ function OverviewTab({
             <div className="rounded border-2 border-red-300 bg-red-50 p-4 text-sm text-red-700 font-medium">
               {lessonsError}
             </div>
-          ) : filteredLessons.length === 0 ? (
-            <Card className="block w-full border-2 border-black bg-white p-8 text-center">
-              <div className="flex flex-col items-center justify-center gap-2 text-gray-500">
-                <BookOpen size={36} className="opacity-40" />
-                <p className="font-semibold text-sm">
-                  {lessonSearch.trim()
-                    ? "No lessons match your search."
-                    : "No lessons available for this subject."}
-                </p>
-              </div>
-            </Card>
           ) : (
-            <div className="space-y-3">
-              {filteredLessons.map((lesson) => {
-                const isExpanded = expandedLessonId === lesson.lesson_id;
-                const classworks = linkedClassworks[lesson.lesson_id] || [];
-                const isLoadingCw = loadingClassworkId === lesson.lesson_id;
+            <div className="space-y-4">
+              {/* Render Competency Accordions */}
+              {competencies.map((comp) => {
+                const compLessons = lessonsByCompetency.get(comp.competency_id) || [];
+                const isCollapsed = collapsedCompetencies[comp.competency_id] ?? true;
+
+                if (lessonSearch.trim()) {
+                  const query = lessonSearch.toLowerCase();
+                  const matches =
+                    comp.statement.toLowerCase().includes(query) ||
+                    (comp.competency_code && comp.competency_code.toLowerCase().includes(query));
+                  if (!matches && compLessons.length === 0) return null;
+                }
 
                 return (
-                  <div key={lesson.lesson_id} className="flex flex-col gap-2">
-                    <Card className="bg-primary border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all">
-                      <Card.Content className="flex items-center justify-between gap-3 p-4">
+                  <div
+                    key={comp.competency_id}
+                    className="flex flex-col rounded-lg border-2 border-black bg-[#F8FAFC] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
+                  >
+                    {/* Competency Header Bar */}
+                    <div className="flex items-center justify-between border-b-2 border-black bg-[#E2E8F0] px-4 py-3 gap-2 flex-wrap sm:flex-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => toggleCompetencyCollapse(comp.competency_id)}
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer group"
+                      >
+                        <div className="rounded border border-black bg-white p-1 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                          {isCollapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+                        </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2 mb-1">
-                            <Card.Title className="truncate text-lg md:text-xl font-bold text-black">
-                              {lesson.title}
-                            </Card.Title>
+                            <Award size={18} className="text-blue-700 shrink-0" />
+                            {comp.competency_code && (
+                              <Badge
+                                size="sm"
+                                className="bg-black text-white font-mono font-bold text-xs"
+                              >
+                                {comp.competency_code}
+                              </Badge>
+                            )}
                             <Badge
+                              variant="secondary"
+                              size="sm"
+                              className="border border-black bg-white text-xs font-semibold"
+                            >
+                              {compLessons.length} lesson{compLessons.length === 1 ? "" : "s"}
+                            </Badge>
+                            {(comp.target_hours || 0) > 0 && (
+                              <Badge
+                                size="sm"
+                                className="border border-black bg-[#DDF2FD] text-black text-xs font-semibold"
+                              >
+                                {comp.target_hours} hrs
+                              </Badge>
+                            )}
+                          </div>
+                          <h4 className="text-sm md:text-base font-bold text-gray-900 group-hover:text-blue-900 line-clamp-2">
+                            {comp.statement}
+                          </h4>
+                        </div>
+                      </button>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          onClick={() => openAddLessonForCompetency(comp.competency_id)}
+                          className="gap-1 border-black bg-primary text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:opacity-90"
+                        >
+                          <Plus size={14} />
+                          Add Lesson
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Competency Body */}
+                    {!isCollapsed && (
+                      <div className="flex flex-col gap-3 p-4 bg-white/60">
+                        {compLessons.length > 0 ? (
+                          <>
+                            {compLessons.map(renderLessonCard)}
+                            <div className="flex justify-end pt-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openAddLessonForCompetency(comp.competency_id)}
+                                className="gap-1 border-2 border-black bg-white hover:bg-gray-100 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                              >
+                                <Plus size={14} />
+                                Add Lesson to this Competency
+                              </Button>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex items-center justify-between rounded border-2 border-dashed border-gray-400 bg-white p-4">
+                            <div className="flex items-center gap-2 text-xs font-medium text-gray-600">
+                              <BookOpen size={16} />
+                              <span>No lessons assigned to this competency yet.</span>
+                            </div>
+                            <Button
+                              type="button"
                               variant="outline"
                               size="sm"
-                              className="border border-black bg-white font-bold"
+                              onClick={() => openAddLessonForCompetency(comp.competency_id)}
+                              className="border-black text-xs font-bold hover:bg-gray-50"
                             >
-                              {lesson.is_published ? "Published" : "Draft"}
-                            </Badge>
-                            {lesson.attachments &&
-                              lesson.attachments.length > 0 && (
-                                <Badge
-                                  size="sm"
-                                  className="border border-black bg-[#7ABA78] text-white font-bold"
-                                >
-                                  {lesson.attachments.length} material
-                                  {lesson.attachments.length === 1 ? "" : "s"}
-                                </Badge>
-                              )}
+                              <Plus size={14} />
+                              Create First Lesson
+                            </Button>
                           </div>
-                          <p className="truncate text-xs font-medium text-black/70">
-                            {lesson.description ||
-                              (lesson.created_at
-                                ? `Created ${new Date(lesson.created_at).toLocaleDateString()}`
-                                : "Lesson folder")}
-                          </p>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => toggleLesson(lesson.lesson_id)}
-                          className="p-1.5 rounded-full border border-black bg-white hover:bg-yellow-50 transition-colors cursor-pointer shrink-0"
-                          title={
-                            isExpanded
-                              ? "Collapse classworks"
-                              : "Expand classworks"
-                          }
-                        >
-                          {isExpanded ? (
-                            <ChevronDown size={18} />
-                          ) : (
-                            <ChevronRight size={18} />
-                          )}
-                        </button>
-                      </Card.Content>
-                    </Card>
-
-                    {/* Expanded linked classworks */}
-                    {isExpanded && (
-                      <div className="ml-4 pl-3 border-l-2 border-black space-y-2 py-1">
-                        {isLoadingCw ? (
-                          <div className="flex items-center gap-2 py-3 text-xs text-gray-500 font-medium">
-                            <Loader2 className="size-4 animate-spin" /> Loading
-                            classworks...
-                          </div>
-                        ) : classworks.length === 0 ? (
-                          <div className="rounded border border-black/20 bg-white p-3 text-xs text-gray-500 font-medium">
-                            No classworks linked to this lesson.
-                          </div>
-                        ) : (
-                          classworks.map((cw) => (
-                            <div
-                              key={cw.classwork_assignment_id}
-                              className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3 rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <span className="shrink-0">
-                                  <ClassworkIcon
-                                    type={cw.classwork_type}
-                                    size={16}
-                                  />
-                                </span>
-                                <div className="min-w-0">
-                                  <p className="text-sm font-bold truncate text-black">
-                                    {cw.title}
-                                  </p>
-                                  <p className="text-[11px] text-gray-600 font-medium">
-                                    {cw.classwork_type || "Classwork"}
-                                    {cw.due_date
-                                      ? ` • Due ${new Date(cw.due_date).toLocaleDateString()}`
-                                      : ""}
-                                  </p>
-                                </div>
-                              </div>
-                              {cw.classwork_category && (
-                                <Badge
-                                  variant="secondary"
-                                  className="text-[10px] font-bold shrink-0 bg-[#F6E9B2] border border-black"
-                                >
-                                  {cw.classwork_category.replace(/_/g, " ")}
-                                </Badge>
-                              )}
-                            </div>
-                          ))
                         )}
                       </div>
                     )}
                   </div>
                 );
               })}
+
+              {/* Standalone / Unassigned Lessons Section */}
+              {unassignedLessons.length > 0 && (
+                <div className="flex flex-col rounded-lg border-2 border-black bg-[#FFFBEB] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
+                  {competencies.length > 0 ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setIsUnassignedExpanded((prev) => !prev)}
+                        className="flex items-center justify-between border-b-2 border-black bg-[#FEF3C7] px-4 py-3 text-left cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="rounded border border-black bg-white p-1 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                            {isUnassignedExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                          </div>
+                          <BookOpen size={18} className="text-amber-800 shrink-0" />
+                          <h4 className="text-sm md:text-base font-bold text-gray-900">
+                            Standalone / Unassigned Lessons
+                          </h4>
+                          <Badge
+                            variant="secondary"
+                            size="sm"
+                            className="border border-black bg-white text-xs font-semibold"
+                          >
+                            {unassignedLessons.length}
+                          </Badge>
+                        </div>
+                      </button>
+
+                      {isUnassignedExpanded && (
+                        <div className="flex flex-col gap-3 p-4 bg-white/70">
+                          {unassignedLessons.map(renderLessonCard)}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex flex-col gap-3 p-4 bg-white/70">
+                      {unassignedLessons.map(renderLessonCard)}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Empty state when no competencies and no lessons */}
+              {competencies.length === 0 && unassignedLessons.length === 0 && (
+                <Card className="block w-full border-2 border-black bg-white p-8 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="flex flex-col items-center justify-center gap-3 text-gray-500">
+                    <Award size={40} className="text-gray-400" />
+                    <Card.Title className="text-2xl font-bold text-black">
+                      No Competencies or Lessons Yet
+                    </Card.Title>
+                    <p className="font-semibold text-xs text-gray-600 max-w-md">
+                      Get started by creating a Learning Competency for this subject or adding a lesson directly.
+                    </p>
+                    {selectedSubjectId && (
+                      <div className="flex gap-2 mt-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEditingCompetency(null);
+                            setIsCompetencyModalOpen(true);
+                          }}
+                          className="border-2 border-black bg-[#F6E9B2] hover:bg-[#fae498] text-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                        >
+                          <Award size={16} />
+                          Add Competency
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          onClick={() => openAddLessonForCompetency(undefined)}
+                          className="border-2 border-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                        >
+                          <Plus size={16} />
+                          Add Lesson
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              )}
             </div>
           )}
         </section>
       </div>
+
+      {/* ── Competency Modal ── */}
+      {isCompetencyModalOpen && selectedSubjectId && (
+        <CompetencyModal
+          open={isCompetencyModalOpen}
+          onOpenChange={setIsCompetencyModalOpen}
+          subjectId={selectedSubjectId}
+          initialData={editingCompetency}
+          onSuccess={async () => {
+            await loadLessonsAndCompetencies();
+          }}
+        />
+      )}
+
+      {/* ── Create Lesson Modal ── */}
+      {isCreatingLesson && (
+        <CreateLessonModal
+          classId={detail.class_id ? String(detail.class_id) : undefined}
+          subjectId={selectedSubjectId ? String(selectedSubjectId) : undefined}
+          initialCompetencyId={selectedCompetencyIdForNewLesson}
+          onClose={() => {
+            setIsCreatingLesson(false);
+            setSelectedCompetencyIdForNewLesson(undefined);
+          }}
+          onCreated={async () => {
+            setIsCreatingLesson(false);
+            setSelectedCompetencyIdForNewLesson(undefined);
+            await loadLessonsAndCompetencies();
+          }}
+        />
+      )}
     </div>
   );
 }

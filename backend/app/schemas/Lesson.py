@@ -9,6 +9,7 @@ class LessonCreate(BaseModel):
     description: Optional[str] = None
     content: Optional[str] = None
     subject_id: int
+    competency_id: Optional[int] = None
     order_index: Optional[int] = 1
     is_published: Optional[bool] = False
     is_draft: Optional[bool] = True
@@ -18,6 +19,7 @@ class LessonUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     content: Optional[str] = None
+    competency_id: Optional[int] = None
     order_index: Optional[int] = None
     is_published: Optional[bool] = None
     is_draft: Optional[bool] = None
@@ -43,11 +45,15 @@ class LessonResponse(BaseModel):
     is_archived: bool
     subject_id: int
     subject_name: Optional[str] = None
+    competency_id: Optional[int] = None
+    competency_code: Optional[str] = None
+    competency_statement: Optional[str] = None
     created_by_staff_id: Optional[str]
     teacher_name: Optional[str] = None
     attachments: list[LessonAttachmentResponse] = []
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
+
 
 
 class LessonAssignRequest(BaseModel):
