@@ -285,8 +285,8 @@ export default function StudentAttendancePage() {
               </div>
             ) : (
               <>
-                <Card className="block w-full border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                  <Card.Content className="flex flex-col items-center justify-between gap-6 md:flex-row p-6">
+                <Card className="block w-full">
+                  <Card.Content className="flex flex-col items-center justify-between gap-6 md:flex-row">
                     <div className="flex w-full items-center justify-between gap-4">
                       <div className="flex items-center gap-4">
                         <div className="flex h-20 w-20 items-center justify-center border-2 border-black bg-[#F6E9B2] text-3xl font-black shadow-sm">
