@@ -6,6 +6,7 @@ import { routes } from "@/../routes";
 import { apiFetch } from "@/lib/api";
 import { BookOpen, Loader2 } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Card } from "../../components/retroui/Card"; 
 
 interface EnrolledSubject {
   subject_load_id: number;
@@ -84,10 +85,12 @@ const Subjects = () => {
                 </button>
               </div>
             ) : subjects.length === 0 ? (
-              <div className="flex flex-col items-center justify-center w-full py-20 gap-3 text-gray-500">
-                <BookOpen size={48} className="opacity-40" />
-                <p className="text-lg">No enrolled subjects found</p>
-              </div>
+              <Card className="flex flex-col items-center p-12">
+                            
+                            <p className="text-sm">
+                              No enrolled subjects found.
+                            </p>
+                          </Card>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 {subjects.map((subject) => (

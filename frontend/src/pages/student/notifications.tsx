@@ -122,7 +122,7 @@ const Notifications = () => {
                 </div>
               ) : notifications.length === 0 ? (
                 <Card className="flex justify-center items-center py-12">
-                  <p className="text-sm">No completed tasks yet.</p>
+                  <p className="text-sm">No announcements yet.</p>
                 </Card>
               ) : (
                 <div className="flex flex-col gap-5 w-full">
