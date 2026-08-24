@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.Base import Base
 
 if TYPE_CHECKING:
+    from app.models.academic.Competency import Competency
     from app.models.academic.LessonAssignment import LessonAssignment
     from app.models.academic.LessonAttachment import LessonAttachment
 
@@ -27,10 +28,13 @@ class Lesson(Base):
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_by_staff_id: Mapped[str | None] = mapped_column(String(20), ForeignKey("academic_staff.staff_id", ondelete="SET NULL"), nullable=True)
     subject_id: Mapped[int] = mapped_column(Integer, ForeignKey("subject.subject_id", ondelete="CASCADE"), nullable=False)
+    competency_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("competency.competency_id", ondelete="SET NULL"), nullable=True, index=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     staff: Mapped[object] = relationship("AcademicStaff", backref="lessons")
     subject: Mapped[object] = relationship("Subject", backref="lessons")
+    competency: Mapped["Competency | None"] = relationship("Competency", back_populates="lessons")
     attachments: Mapped[list["LessonAttachment"]] = relationship("LessonAttachment", back_populates="lesson", cascade="all, delete-orphan")
     assignments: Mapped[list["LessonAssignment"]] = relationship("LessonAssignment", back_populates="lesson", cascade="all, delete-orphan")
+

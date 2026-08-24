@@ -33,6 +33,7 @@ def create_lesson_record(body: LessonCreate, staff_id: str, db: Session) -> Less
         description=body.description,
         content=body.content,
         subject_id=body.subject_id,
+        competency_id=body.competency_id,
         order_index=body.order_index,
         is_published=body.is_published,
         is_draft=body.is_draft if body.is_draft is not None else True,

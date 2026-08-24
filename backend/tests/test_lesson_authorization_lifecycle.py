@@ -18,6 +18,7 @@ from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
+from app.models.academic.Competency import Competency
 from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAssignment import LessonAssignment
 from app.models.academic.LessonAttachment import LessonAttachment
@@ -42,6 +43,7 @@ TABLES = [
     Class.__table__,
     StudentClass.__table__,
     SubjectLoad.__table__,
+    Competency.__table__,
     Lesson.__table__,
     LessonAssignment.__table__,
     LessonAttachment.__table__,
