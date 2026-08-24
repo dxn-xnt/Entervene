@@ -391,6 +391,14 @@ function request(path: string, init: RequestInit = {}) {
     headers.set("X-CSRF-Token", csrfToken);
   }
 
+  if (
+    init.body &&
+    typeof init.body === "string" &&
+    !headers.has("Content-Type")
+  ) {
+    headers.set("Content-Type", "application/json");
+  }
+
   const url = /^https?:\/\//i.test(path) ? path : `${API_URL}${path}`;
 
   return fetch(url, {

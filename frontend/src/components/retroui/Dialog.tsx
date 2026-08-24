@@ -98,7 +98,9 @@ const DialogContent = (inputProps: IDialogContentProps & { ref?: React.Ref<HTMLD
         {...props}
       >
         <BaseDialog.Title className="sr-only" />
-        <div className="flex flex-col relative">{children}</div>
+        <div className="flex flex-col relative max-h-full min-h-0 flex-1 h-full overflow-hidden">
+          {children}
+        </div>
       </BaseDialog.Popup>
     </BaseDialog.Portal>
   );

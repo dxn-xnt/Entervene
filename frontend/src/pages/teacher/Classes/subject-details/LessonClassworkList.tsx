@@ -459,48 +459,46 @@ export default function LessonClassworkList({
             return (
               <div
                 key={comp.competency_id}
-                className="flex flex-col rounded-lg border-2 border-black bg-[#F8FAFC] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
+                className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
               >
                 {/* ── Competency Header Accordion Bar ── */}
-                <div className="flex items-center justify-between border-b-2 border-black bg-[#E2E8F0] px-4 py-3 gap-2 flex-wrap sm:flex-nowrap">
+                <div className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 gap-3 flex-wrap sm:flex-nowrap">
                   <button
                     type="button"
                     onClick={() => toggleCompetencyCollapse(comp.competency_id)}
                     className="flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer group"
                   >
-                    <div className="rounded border border-black bg-white p-1 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
-                      {isCollapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+                    <div className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors">
+                      {isCollapsed ? <ChevronRight size={16} className="text-black" /> : <ChevronDown size={16} className="text-black" />}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <Award size={18} className="text-blue-700 shrink-0" />
-                        {comp.competency_code && (
-                          <Badge
-                            size="sm"
-                            className="bg-black text-white font-mono font-bold text-xs"
-                          >
-                            {comp.competency_code}
-                          </Badge>
-                        )}
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <Award size={20} className="text-black shrink-0" />
+                        <h4 className="truncate text-xl md:text-2xl font-bold text-gray-950">
+                          {comp.competency_code || comp.statement}
+                        </h4>
                         <Badge
                           variant="secondary"
                           size="sm"
-                          className="border border-black bg-white text-xs font-semibold"
+                          className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
                         >
                           {compLessons.length} lesson{compLessons.length === 1 ? "" : "s"}
                         </Badge>
                         {(comp.target_hours || 0) > 0 && (
                           <Badge
+                            variant="secondary"
                             size="sm"
-                            className="border border-black bg-[#DDF2FD] text-black text-xs font-semibold"
+                            className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
                           >
                             {comp.target_hours} hrs
                           </Badge>
                         )}
                       </div>
-                      <h4 className="text-sm md:text-base font-bold text-gray-900 group-hover:text-blue-900 line-clamp-2">
-                        {comp.statement}
-                      </h4>
+                      {comp.competency_code && (
+                        <p className="truncate text-xs font-medium text-gray-700">
+                          {comp.statement}
+                        </p>
+                      )}
                     </div>
                   </button>
 
@@ -511,7 +509,7 @@ export default function LessonClassworkList({
                         variant="default"
                         size="sm"
                         onClick={() => onAddLessonToCompetency(comp.competency_id)}
-                        className="gap-1 border-black bg-primary text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:opacity-90"
+                        className="gap-1 border-2 border-black bg-white hover:bg-yellow-50 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                       >
                         <Plus size={14} />
                         Add Lesson
@@ -522,7 +520,7 @@ export default function LessonClassworkList({
                         type="button"
                         onClick={() => openCompetencyForm(comp)}
                         title="Edit Competency"
-                        className="rounded border border-black bg-white p-1.5 hover:bg-gray-100 cursor-pointer shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                        className="rounded border-2 border-black bg-white p-1.5 text-black hover:bg-yellow-50 cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                       >
                         <Pencil size={14} />
                       </button>
@@ -532,7 +530,7 @@ export default function LessonClassworkList({
                         type="button"
                         onClick={() => onArchiveCompetency(comp.competency_id)}
                         title="Archive Competency"
-                        className="rounded border border-red-500 bg-white p-1.5 text-red-600 hover:bg-red-50 cursor-pointer shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                        className="rounded border-2 border-black bg-white p-1.5 text-red-600 hover:bg-red-50 cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -542,7 +540,7 @@ export default function LessonClassworkList({
 
                 {/* ── Competency Body (Lessons) ── */}
                 {!isCollapsed && (
-                  <div className="flex flex-col gap-3 p-4 bg-white/60">
+                  <div className="flex flex-col gap-3 p-4 bg-white">
                     {compLessons.length > 0 ? (
                       <>
                         {compLessons.map(renderLessonItem)}
@@ -553,7 +551,7 @@ export default function LessonClassworkList({
                               variant="outline"
                               size="sm"
                               onClick={() => onAddLessonToCompetency(comp.competency_id)}
-                              className="gap-1 border-2 border-black bg-white hover:bg-gray-100 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                              className="gap-1 border-2 border-black bg-white hover:bg-yellow-50 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                             >
                               <Plus size={14} />
                               Add Lesson to this Competency
@@ -562,9 +560,9 @@ export default function LessonClassworkList({
                         )}
                       </>
                     ) : (
-                      <div className="flex items-center justify-between rounded border-2 border-dashed border-gray-400 bg-white p-4">
-                        <div className="flex items-center gap-2 text-xs font-medium text-gray-600">
-                          <BookOpen size={16} />
+                      <div className="flex items-center justify-between rounded-lg border-2 border-dashed border-black bg-[#FFFDF0] p-4">
+                        <div className="flex items-center gap-2 text-xs font-bold text-black">
+                          <BookOpen size={16} className="text-black" />
                           <span>No lessons assigned to this competency yet.</span>
                         </div>
                         {onAddLessonToCompetency && (
@@ -573,7 +571,7 @@ export default function LessonClassworkList({
                             variant="outline"
                             size="sm"
                             onClick={() => onAddLessonToCompetency(comp.competency_id)}
-                            className="border-black text-xs font-bold hover:bg-gray-50"
+                            className="border-2 border-black bg-white hover:bg-yellow-50 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                           >
                             <Plus size={14} />
                             Create First Lesson
@@ -589,35 +587,35 @@ export default function LessonClassworkList({
 
         {/* ── Standalone / Unassigned Lessons Section (Bottom, Collapsible) ── */}
         {unassignedLessons.length > 0 && (
-          <div className="flex flex-col rounded-lg border-2 border-black bg-[#FFFBEB] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
+          <div className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
             <button
               type="button"
               onClick={() => setIsUnassignedExpanded((prev) => !prev)}
-              className="flex items-center justify-between border-b-2 border-black bg-[#FEF3C7] px-4 py-3 text-left cursor-pointer"
+              className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 text-left cursor-pointer group"
             >
               <div className="flex items-center gap-2">
-                <div className="rounded border border-black bg-white p-1 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
-                  {isUnassignedExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                <div className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors">
+                  {isUnassignedExpanded ? <ChevronDown size={16} className="text-black" /> : <ChevronRight size={16} className="text-black" />}
                 </div>
-                <BookOpen size={18} className="text-amber-800 shrink-0" />
-                <h4 className="text-sm md:text-base font-bold text-gray-900">
-                  Standalone / Unassigned Lessons
+                <BookOpen size={18} className="text-black shrink-0" />
+                <h4 className="text-sm md:text-base font-bold text-black">
+                  Unassigned Lessons
                 </h4>
                 <Badge
                   variant="secondary"
                   size="sm"
-                  className="border border-black bg-white text-xs font-semibold"
+                  className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
                 >
-                  {unassignedLessons.length}
+                  {unassignedLessons.length} to assign
                 </Badge>
               </div>
-              <p className="text-xs text-gray-600 hidden sm:block">
-                Lessons not assigned to any specific learning competency
+              <p className="text-xs text-black font-semibold hidden sm:block">
+                All lessons must belong to a learning competency.
               </p>
             </button>
 
             {isUnassignedExpanded && (
-              <div className="flex flex-col gap-3 p-4 bg-white/70">
+              <div className="flex flex-col gap-3 p-4 bg-white">
                 {unassignedLessons.map(renderLessonItem)}
               </div>
             )}

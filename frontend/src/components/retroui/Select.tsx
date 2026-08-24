@@ -75,7 +75,7 @@ const SelectContent = ({
           // This content is rendered in a Radix portal, so it must sit above both.
           "relative z-[1000] min-w-[8rem] overflow-hidden border border-border bg-background text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
           position === "popper" &&
-          "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
+          "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1 max-w-[var(--radix-select-trigger-width)] w-[var(--radix-select-trigger-width)]",
           className,
         )}
         position={position}
@@ -88,7 +88,7 @@ const SelectContent = ({
         </SelectPrimitive.ScrollUpButton>
         <SelectPrimitive.Viewport
           className={cn(
-            "p-1 max-h-40 overflow-y-auto",
+            "p-1 max-h-56 overflow-y-auto",
             position === "popper" &&
             "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]",
           )}
@@ -112,13 +112,13 @@ const SelectItem = ({
 }: SelectPrimitive.SelectItemProps) => (
   <SelectPrimitive.Item
     className={cn(
-      "relative flex w-full cursor-default select-none items-center py-1.5 pl-2 pr-8 outline-none data-[highlighted]:bg-primary data-[highlighted]:text-primary-foreground focus:bg-primary focus:text-primary-foreground data-disabled:pointer-events-none data-disabled:opacity-50",
+      "relative flex w-full max-w-full cursor-default select-none items-center py-2 pl-3 pr-8 outline-none data-[highlighted]:bg-primary data-[highlighted]:text-primary-foreground focus:bg-primary focus:text-primary-foreground data-disabled:pointer-events-none data-disabled:opacity-50 text-xs font-medium",
       className,
     )}
     {...props}
   >
     <SelectPrimitive.ItemText asChild>
-      <span className="truncate block">{children}</span>
+      <span className="truncate block w-full">{children}</span>
     </SelectPrimitive.ItemText>
 
     <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
