@@ -5,11 +5,8 @@ import {
   ChevronRight,
   ClipboardList,
   FileText,
-  GraduationCap,
   Loader2,
   Pencil,
-  Plus,
-  ScrollText,
   Search,
   Users,
 } from "lucide-react";
