@@ -92,6 +92,7 @@ def create_subject_offering_record(db: Session, payload: SubjectOfferingCreate) 
         academic_year_id=payload.academic_year_id,
         academic_level_id=payload.academic_level_id,
         academic_period_id=payload.academic_period_id,
+        minutes=payload.minutes,
         status=normalize_offering_status(payload.status),
     )
     db.add(offering)
@@ -145,6 +146,8 @@ def update_subject_offering_record(db: Session, subject_offering_id: int, payloa
     offering.academic_year_id = target_year_id
     offering.academic_level_id = target_level_id
     offering.academic_period_id = target_period_id
+    if "minutes" in data:
+        offering.minutes = data["minutes"]
     if "status" in data:
         offering.status = normalize_offering_status(data["status"])
 
@@ -277,6 +280,7 @@ def copy_subject_offerings_between_academic_years(
         if existing is not None:
             if payload.overwrite_existing:
                 existing.status = normalize_offering_status(source_offering.status)
+                existing.minutes = source_offering.minutes
                 updated_count += 1
             else:
                 skipped.append({
@@ -325,6 +329,7 @@ def copy_subject_offerings_between_academic_years(
             academic_year_id=target_year.academic_year_id,
             academic_level_id=source_offering.academic_level_id,
             academic_period_id=target_period.academic_period_id,
+            minutes=source_offering.minutes,
             status=normalize_offering_status(source_offering.status),
         )
         db.add(offering)

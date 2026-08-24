@@ -23,7 +23,7 @@ TABLES = [
     Subject.__table__,
 ]
 
-HEADER = "subject_code,subject_name,grade_level,subject_group,hours,default_grading_template,description"
+HEADER = "subject_code,subject_name,grade_level,subject_group,default_grading_template,description"
 
 
 @pytest.fixture
@@ -97,8 +97,8 @@ def test_subject_import_template_downloads_csv(client):
 def test_subject_import_creates_valid_rows(client, db, levels):
     content = "\n".join([
         HEADER,
-        "GENBIO1,General Biology 1,11,Specialized,80,Default SHS,STEM subject",
-        "PRECAL,Pre-Calculus,11,Core,80,Default SHS,Math subject",
+        "GENBIO1,General Biology 1,11,Specialized,Default SHS,STEM subject",
+        "PRECAL,Pre-Calculus,11,Core,Default SHS,Math subject",
     ])
 
     response = upload(client, content)
@@ -113,33 +113,6 @@ def test_subject_import_creates_valid_rows(client, db, levels):
     assert [subject.subject_codename for subject in db.query(Subject).order_by(Subject.subject_codename).all()] == ["GENBIO1", "PRECAL"]
 
 
-def test_subject_import_handles_blank_non_numeric_and_negative_hours_with_warnings(client, db, levels):
-    content = "\n".join([
-        HEADER,
-        "BLANKHRS,Blank Hours Subject,11,Specialized,,Default SHS,Blank hours",
-        "BADHRS,Non Numeric Hours,11,Specialized,eighty,Default SHS,Non numeric hours",
-        "NEGCHRS,Negative Hours,11,Specialized,-5,Default SHS,Negative hours",
-    ])
-
-    response = upload(client, content)
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["total_rows"] == 3
-    assert body["created_count"] == 3
-    assert body["error_count"] == 0
-    assert len(body["warnings"]) == 3
-    blank_sub = db.query(Subject).filter(Subject.subject_codename == "BLANKHRS").one()
-    bad_sub = db.query(Subject).filter(Subject.subject_codename == "BADHRS").one()
-    neg_sub = db.query(Subject).filter(Subject.subject_codename == "NEGCHRS").one()
-    assert blank_sub.hours is None
-    assert bad_sub.hours is None
-    assert neg_sub.hours is None
-    assert any("hours column is empty" in w for w in body["warnings"])
-    assert any("invalid hours value 'eighty'" in w for w in body["warnings"])
-    assert any("negative hours '-5'" in w for w in body["warnings"])
-
-
 def test_subject_import_returns_row_errors_and_warns_on_unknown_group(client, db, levels):
     grade_11, _ = levels
     other_group = db.query(SubjectGroup).filter(SubjectGroup.name == "Other").one()
@@ -147,30 +120,26 @@ def test_subject_import_returns_row_errors_and_warns_on_unknown_group(client, db
     db.commit()
     content = "\n".join([
         HEADER,
-        "GENBIO1,General Biology 1,11,Specialized,80,Default SHS,Duplicate",
-        "BADHOURS,Bad Hours,11,Specialized,eighty,Default SHS,Invalid hours",
-        "GENCHEM1,General Chemistry 1,11,Specialized,80,Default SHS,Valid",
-        ",Missing Code,11,Specialized,80,Default SHS,Missing",
-        "UNKNOWNGRP,Unknown Group Subject,11,UnknownGroup,80,Default SHS,Assigned to Other with warning",
-        "BADGRADE,Bad Grade,99,Specialized,80,Default SHS,Invalid grade",
+        "GENBIO1,General Biology 1,11,Specialized,Default SHS,Duplicate",
+        "GENCHEM1,General Chemistry 1,11,Specialized,Default SHS,Valid",
+        ",Missing Code,11,Specialized,Default SHS,Missing",
+        "UNKNOWNGRP,Unknown Group Subject,11,UnknownGroup,Default SHS,Assigned to Other with warning",
+        "BADGRADE,Bad Grade,99,Specialized,Default SHS,Invalid grade",
     ])
 
     response = upload(client, content)
 
     assert response.status_code == 200
     body = response.json()
-    assert body["total_rows"] == 6
+    assert body["total_rows"] == 5
     # GENBIO1 (duplicate), missing code, and bad grade fail -> 3 errors
-    # BADHOURS (created with hours=None + warning), GENCHEM1 (valid), UNKNOWNGRP (created with Other + warning) -> 3 created
-    assert body["created_count"] == 3
+    # GENCHEM1 (valid), UNKNOWNGRP (created with Other + warning) -> 2 created
+    assert body["created_count"] == 2
     assert body["skipped_count"] == 3
     assert body["error_count"] == 3
     assert db.query(Subject).filter(Subject.subject_codename == "GENCHEM1").count() == 1
     assert db.query(Subject).filter(Subject.subject_codename == "UNKNOWNGRP").count() == 1
-    assert db.query(Subject).filter(Subject.subject_codename == "BADHOURS").count() == 1
-    # Check warnings emitted
     assert any("UnknownGroup" in w for w in body.get("warnings", []))
-    assert any("eighty" in w for w in body.get("warnings", []))
 
 
 def test_subject_import_rejects_bad_headers_and_file_type(client, levels):

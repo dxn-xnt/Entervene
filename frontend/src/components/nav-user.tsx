@@ -18,7 +18,6 @@ import {
   CircleUserRoundIcon,
   BellIcon,
   LogOutIcon,
-  Loader2Icon,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";

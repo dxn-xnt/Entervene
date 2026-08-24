@@ -263,6 +263,7 @@ def offering_to_item(
         "pathway": legacy_pathway,
         "pathway_ids": pathway_ids,
         "pathways": pathways_data,
+        "minutes": getattr(offering, "minutes", None),
         "status": offering.status or DEFAULT_OFFERING_STATUS,
         "created_at": offering.created_at,
         "updated_at": offering.updated_at,

@@ -20,7 +20,6 @@ class SubjectBase(BaseModel):
     subject_name: str = Field(..., min_length=1, max_length=150)
     subject_codename: str | None = Field(None, max_length=50)
     subject_group_id: int
-    hours: int | None = Field(None, ge=0)
     is_core: bool = False
     is_math_or_science: bool = False
     default_grading_template: str | None = Field(None, max_length=100)
@@ -36,7 +35,6 @@ class SubjectUpdate(BaseModel):
     subject_name: str | None = Field(None, min_length=1, max_length=150)
     subject_codename: str | None = Field(None, max_length=50)
     subject_group_id: int | None = None
-    hours: int | None = Field(None, ge=0)
     is_core: bool | None = None
     is_math_or_science: bool | None = None
     default_grading_template: str | None = Field(None, max_length=100)
@@ -50,7 +48,6 @@ class SubjectListItem(BaseModel):
     subject_name: str
     subject_codename: str | None
     subject_group: SubjectGroupInline | None
-    hours: int | None
     is_core: bool = False
     is_math_or_science: bool = False
     default_grading_template: str | None

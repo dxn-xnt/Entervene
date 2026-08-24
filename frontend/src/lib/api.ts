@@ -168,7 +168,6 @@ export type SubjectListItem = {
   subject_name: string;
   subject_codename: string | null;
   subject_group: SubjectGroupInline | null;
-  hours: number | null;
   default_grading_template: string | null;
   description: string | null;
   status: SubjectStatus;
@@ -205,7 +204,6 @@ export type SubjectCreatePayload = {
   subject_name: string;
   subject_codename?: string | null;
   subject_group_id: number;
-  hours?: number | null;
   default_grading_template?: string | null;
   description?: string | null;
   academic_level_id: number;
@@ -241,6 +239,7 @@ export type SubjectOfferingListItem = {
   academic_level: SubjectAcademicLevel;
   academic_period: SubjectOfferingAcademicPeriod;
   pathway: SubjectOfferingPathway;
+  minutes?: number | null;
   status: SubjectStatus;
   created_at: string | null;
   updated_at: string | null;
@@ -302,6 +301,7 @@ export type SubjectOfferingCreatePayload = {
   academic_level_id: number;
   academic_period_id: number;
   pathway: SubjectOfferingPathway;
+  minutes?: number | null;
   status?: SubjectStatus;
 };
 export type SubjectOfferingUpdatePayload = Partial<SubjectOfferingCreatePayload>;
@@ -1463,6 +1463,7 @@ export type SubjectOfferingStudioItem = {
   academic_level_id: number;
   academic_period_id: number;
   pathway: string;
+  minutes?: number | null;
 };
 
 export type SubjectLoadStudioData = {
@@ -1471,7 +1472,7 @@ export type SubjectLoadStudioData = {
   academic_periods: Array<{ academic_period_id: number; period_name: string; is_active: boolean }>;
   academic_levels: Array<{ academic_level_id: number; level_name: string; grade_level: number }>;
   classes: Array<{ class_id: number; section_name: string; academic_level_id: number; academic_year_id: number; pathway?: string; paired_class_id?: number | null; period_template_group?: string | null }>;
-  subjects: Array<{ subject_id: number; subject_name: string; subject_codename: string; academic_level_id: number; hours: number; subject_group: string; is_math_or_science?: boolean }>;
+  subjects: Array<{ subject_id: number; subject_name: string; subject_codename: string; academic_level_id: number; subject_group: string; is_math_or_science?: boolean }>;
   subject_offerings?: SubjectOfferingStudioItem[];
   teachers: Array<{ staff_id: string; name: string; department: string; specialization: string }>;
   existing_loads: SubjectLoadItem[];

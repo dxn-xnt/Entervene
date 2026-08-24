@@ -147,7 +147,7 @@ export default function AdminSubjectView() {
                         Created since {formatDate(subjectDetail.created_at)}
                       </Text>
                       <Text as="p" className="text-sm font-normal">
-                        {subjectDetail.hours != null ? `${subjectDetail.hours} hours` : "Hours not set"}
+                        Passing threshold: {subjectDetail.subject_group?.passing_threshold ?? "—"}%
                       </Text>
                     </div>
                   </div>
