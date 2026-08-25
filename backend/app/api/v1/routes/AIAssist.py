@@ -11,9 +11,11 @@ from app.models.academic.Subject import Subject
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.schemas.AIQuiz import AIQuizGenerateRequest, AIQuizGenerateResponse
+from app.schemas.AITOS import AITOSGenerateRequest, AITOSGenerateResponse, TOSQuestionIn
 from app.schemas.Quiz import QuizQuestionIn
 from app.services.academic.LessonPlanAIService import AISuggestField, generate_lesson_plan_suggestion
 from app.services.ai.AIQuizGeneratorService import generate_quiz_questions
+from app.services.ai.AITOSGeneratorService import generate_tos_row_questions
 
 router = APIRouter()
 
@@ -204,3 +206,45 @@ async def generate_quiz(
 
     questions = [QuizQuestionIn(**q) for q in generated_raw]
     return AIQuizGenerateResponse(questions=questions, warnings=warnings)
+
+
+@router.post("/generate-tos-questions", response_model=AITOSGenerateResponse)
+async def generate_tos_questions(
+    body: AITOSGenerateRequest,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+) -> AITOSGenerateResponse:
+    """
+    Generate structured TOS exam questions using AI, partitioned per competency row.
+    Type counts are hard constraints; bloom targets provide soft guidance.
+    """
+    subject = db.query(Subject).filter(Subject.subject_id == body.subject_id).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    all_questions: list[TOSQuestionIn] = []
+    warnings: list[str] = []
+    running_display_order = 1
+
+    for row in body.rows:
+        try:
+            row_raw_questions = await generate_tos_row_questions(
+                competency_label=row.label,
+                code=row.code,
+                subject=subject.subject_name,
+                type_counts=row.type_counts,
+                bloom_targets=row.bloom_targets,
+            )
+            for q_data in row_raw_questions:
+                q_data["competency_id"] = row.competency_id
+                q_data["competency_label"] = row.label
+                q_data["display_order"] = running_display_order
+                running_display_order += 1
+                all_questions.append(TOSQuestionIn(**q_data))
+        except Exception as exc:
+            warnings.append(f"Could not generate questions for '{row.label}': {exc}")
+
+    if not all_questions and warnings:
+        raise HTTPException(status_code=502, detail="Failed to generate any questions for the requested competencies.")
+
+    return AITOSGenerateResponse(questions=all_questions, warnings=warnings)

@@ -9,4 +9,5 @@ from . import suggestion
 from . import settings
 from . import notifications
 from . import attendance
+from . import tos
 
