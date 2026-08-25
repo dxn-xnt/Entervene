@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Archive, Award, Info, Paperclip, Plus, Trash2, Users, X } from "lucide-react";
+import { Archive, Award, Info, Paperclip, Plus, TableProperties, Trash2, Users, X } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { API_URL, apiFetch } from "@/lib/api";
@@ -21,6 +21,7 @@ import CompetencyModal from "./subject-details/CompetencyModal";
 import LessonClassworkList from "./subject-details/LessonClassworkList";
 import StudentRecordsPanel from "./subject-details/StudentRecordsPanel";
 import TeacherLessonDetailScreen from "./subject-details/TeacherLessonDetailScreen";
+import TOSGeneratorScreen from "./subject-details/TOSGeneratorScreen";
 import {
   LOCKED_CLASSWORK_MESSAGE,
   allowedMaterialExtensions,
@@ -51,6 +52,7 @@ export default function SubjectDetails() {
   const navigate = useNavigate();
   const [competencies, setCompetencies] = useState<CompetencyItem[]>([]);
   const [isCompetencyModalOpen, setIsCompetencyModalOpen] = useState(false);
+  const [isTOSOpen, setIsTOSOpen] = useState(false);
   const [editingCompetency, setEditingCompetency] = useState<CompetencyItem | null>(null);
   const [selectedCompetencyIdForNewLesson, setSelectedCompetencyIdForNewLesson] = useState<number | undefined>(undefined);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -876,6 +878,15 @@ export default function SubjectDetails() {
                 }
               />
             </main>
+          ) : isTOSOpen && subjectId ? (
+            <main className="pt-2">
+              <TOSGeneratorScreen
+                subjectId={Number(subjectId)}
+                subjectName={subjectName || "Subject"}
+                competencies={competencies}
+                onBack={() => setIsTOSOpen(false)}
+              />
+            </main>
           ) : (
             <>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -901,6 +912,16 @@ export default function SubjectDetails() {
                 </Breadcrumb>
 
                 <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsTOSOpen(true)}
+                    className="w-full sm:w-auto gap-2 whitespace-nowrap font-bold border-2 border-black bg-[#E3F2FD] hover:bg-[#BBDEFB] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                  >
+                    <TableProperties size={16} />
+                    TOS Generator
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"

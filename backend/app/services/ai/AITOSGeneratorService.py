@@ -18,8 +18,11 @@ from app.services.ai.AIQuizGeneratorService import _generate_with_gemini, _gener
 
 logger = logging.getLogger(__name__)
 
-_TOS_SYSTEM_PROMPT = """You are an expert assessment specialist and exam writer for secondary and tertiary educational institutions.
-Generate high-quality summative exam questions directly aligned with the provided competency and instructions.
+_TOS_SYSTEM_PROMPT = """You are an expert assessment specialist and exam creator for educational institutions following DepEd and international curriculum guidelines.
+Your job is to generate rigorous, high-quality summative assessment questions that directly test the specified learning competencies.
+
+CRITICAL QUANTITY REQUIREMENT:
+You MUST generate the EXACT quantity of questions specified in the prompt. Every single question must be an individual item in the "questions" array.
 
 OUTPUT FORMAT REQUIREMENTS:
 1. Respond ONLY with a valid JSON object containing a "questions" array.
@@ -37,16 +40,16 @@ OUTPUT FORMAT REQUIREMENTS:
 }
 
 RULES FOR QUESTION TYPES:
-- MULTIPLE_CHOICE: Exactly 4 options, exactly 1 marked is_correct: true.
-- TRUE_FALSE: Exactly 2 options: [{"option_text": "True", "is_correct": bool, "option_order": 1}, {"option_text": "False", "is_correct": bool, "option_order": 2}], exactly 1 marked is_correct: true.
+- MULTIPLE_CHOICE: Provide EXACTLY 4 distinct multiple-choice options (A, B, C, D). Exactly 1 option must have is_correct: true. DO NOT use True/False options for Multiple Choice!
+- TRUE_FALSE: Exactly 2 options: [{"option_text": "True", "is_correct": bool, "option_order": 1}, {"option_text": "False", "is_correct": bool, "option_order": 2}], with exactly 1 marked is_correct: true.
 - IDENTIFICATION: options MUST contain 1 option with {"option_text": "Exact Answer/Term", "is_correct": true, "option_order": 1}.
-- MATCHING: question_text contains the Column A premise item. options contains the matching Column B options (e.g. 4-5 options), with exactly 1 marked is_correct: true corresponding to the premise.
-- ESSAY: options MUST be [], explanation contains the key scoring rubrics and expected response elements.
+- MATCHING: question_text contains the Column A premise item. options contains the matching Column B options (4-5 options), with exactly 1 marked is_correct: true.
+- ESSAY: options MUST be [], explanation contains the key scoring rubrics and expected answer points.
 
-TAGGING RULES:
-- cognitive_level must be one of: REMEMBER, UNDERSTAND, APPLY, ANALYZE, EVALUATE, CREATE.
-- difficulty_band must be one of: EASY, AVERAGE, DIFFICULT.
-  (REMEMBER/UNDERSTAND -> EASY; APPLY/ANALYZE -> AVERAGE; EVALUATE/CREATE -> DIFFICULT).
+TAXONOMY & DIFFICULTY ALIGNMENT:
+- EASY questions correspond to cognitive levels REMEMBER or UNDERSTAND.
+- AVERAGE questions correspond to cognitive levels APPLY or ANALYZE.
+- DIFFICULT questions correspond to cognitive levels EVALUATE or CREATE.
 """
 
 
@@ -57,27 +60,31 @@ def _build_tos_row_prompt(
     type_counts: dict[str, int],
     bloom_targets: dict[str, int],
 ) -> str:
+    total_requested = sum(type_counts.values()) if type_counts else 5
+
     type_lines = []
     for t, n in type_counts.items():
         if n > 0:
-            type_lines.append(f"  • Exactly {n} × {t} question(s)")
+            type_lines.append(f"  • {n} × {t} question(s)")
 
     bloom_lines = []
     for level, n in bloom_targets.items():
         if n > 0:
-            bloom_lines.append(f"  • Approximately {n} target item(s) at {level} level")
+            bloom_lines.append(f"  • {n} target item(s) at {level} level")
 
-    types_str = "\n".join(type_lines) if type_lines else "  • 5 × MULTIPLE_CHOICE"
-    bloom_str = "\n".join(bloom_lines) if bloom_lines else "  • Standard cognitive balance"
+    types_str = "\n".join(type_lines) if type_lines else f"  • {total_requested} × MULTIPLE_CHOICE"
+    bloom_str = "\n".join(bloom_lines) if bloom_lines else "  • Balanced cognitive distribution"
 
     return (
         f"Subject: {subject or 'General'}\n"
         f"Learning Competency: {competency_label} (Code: {code or 'N/A'})\n\n"
-        f"MANDATORY QUESTION TYPE REQUIREMENTS (Generate EXACT counts per type):\n"
+        f"CRITICAL REQUIREMENT: Generate EXACTLY {total_requested} question(s) in total for this competency.\n"
+        f"Do NOT stop early. The 'questions' array MUST contain {total_requested} full question objects.\n\n"
+        f"QUESTION TYPE COMPOSITION:\n"
         f"{types_str}\n\n"
-        f"BLOOM'S TAXONOMY GUIDANCE (Soft guidance - tag each generated question with appropriate cognitive_level):\n"
+        f"BLOOM'S TAXONOMY & DIFFICULTY TARGETS (Tag each question with appropriate cognitive_level & difficulty_band):\n"
         f"{bloom_str}\n\n"
-        f"Ensure every question is rigorous, clear, and accurately tagged with cognitive_level and difficulty_band. Return valid JSON."
+        f"Ensure every question is fully written out, academically sound, and strictly formatted as JSON."
     )
 
 
@@ -174,15 +181,15 @@ async def generate_tos_row_questions(
 
     if groq_key:
         try:
-            raw = await _generate_with_groq(groq_key, prompt)
+            raw = await _generate_with_groq(groq_key, prompt, system_prompt=_TOS_SYSTEM_PROMPT)
         except Exception as exc:
             logger.warning(f"Groq TOS generation failed: {exc}. Trying Gemini fallback...")
             if gemini_key:
-                raw = await _generate_with_gemini(gemini_key, prompt)
+                raw = await _generate_with_gemini(gemini_key, prompt, system_prompt=_TOS_SYSTEM_PROMPT)
             else:
                 raise exc
     elif gemini_key:
-        raw = await _generate_with_gemini(gemini_key, prompt)
+        raw = await _generate_with_gemini(gemini_key, prompt, system_prompt=_TOS_SYSTEM_PROMPT)
     else:
         raise HTTPException(
             status_code=503,
