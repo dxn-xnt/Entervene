@@ -7,7 +7,6 @@ import { Text } from "@/components/retroui/Text";
 import {
   ArrowUpRight,
   Loader2,
-  BookOpen,
   Search,
   X,
   CheckCircle2,
@@ -45,7 +44,6 @@ const StoryBoard = () => {
   const [subjects, setSubjects] = useState<EnrolledSubject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [myClass, setMyClass] = useState<StudentMyClassSummary | null>(null);
-  const [classError, setClassError] = useState("");
   const [isClassmatesOpen, setIsClassmatesOpen] = useState(false);
   const [classmates, setClassmates] =
     useState<StudentClassmatesResponse | null>(null);
@@ -64,13 +62,7 @@ const StoryBoard = () => {
 
     getMyClass()
       .then((data) => setMyClass(data))
-      .catch((error) =>
-        setClassError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load your section.",
-        ),
-      );
+      .catch(() => {});
 
     getStudentTodos()
       .then((data) => {
@@ -142,53 +134,33 @@ const StoryBoard = () => {
                   Study Board
                 </h1>
               </div>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => navigate(routes.student.profile)}
-                className="gap-2 whitespace-nowrap font-bold"
-              >
-                <Calendar />
-                View My Schedule
-              </Button>
+              <div className="flex items-center gap-2">
+                {myClass && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={openClassmates}
+                    className="whitespace-nowrap font-bold"
+                  >
+                    Classmates ({myClass.classmate_count})
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => navigate(routes.student.profile)}
+                  className="gap-2 whitespace-nowrap font-bold"
+                >
+                  <Calendar />
+                  View My Schedule
+                </Button>
+              </div>
             </header>
 
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
             <div className="flex flex-1 flex-col gap-3">
-              {/* {myClass ? (
-                <section className="flex flex-col gap-4 border-2 border-black bg-[#f7e9aa] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex min-w-0 items-center gap-4">
-                    <div className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-black bg-[#79c889] text-lg font-bold">
-                      {(myClass.section_name || "?").charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <h2 className="truncate text-xl font-semibold">
-                        {myClass.grade_level} · {myClass.section_name}
-                      </h2>
-                      <p className="truncate text-sm">
-                        Adviser: {myClass.adviser_name || "Not assigned"} ·{" "}
-                        {myClass.classmate_count}{" "}
-                        {myClass.classmate_count === 1
-                          ? "classmate"
-                          : "classmates"}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={openClassmates}
-                    className="h-10 border-2 border-black bg-white px-5 text-sm font-semibold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5 active:translate-y-0"
-                  >
-                    View classmates
-                  </button>
-                </section>
-              ) : classError ? (
-                <p className="text-sm text-gray-500">
-                  No section assigned yet.
-                </p>
-              ) : null} */}
-
               <div className="flex flex-col lg:flex-row lg:items-start gap-4 flex-1">
                 {/* Left side: Subject cards */}
                 <div className="grid grid-cols-2 gap-4 flex-1 content-start">

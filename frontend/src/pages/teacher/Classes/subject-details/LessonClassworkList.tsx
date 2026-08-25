@@ -26,7 +26,7 @@ type LessonClassworkListProps = {
   lessonSort: "order" | "newest" | "oldest" | "title";
   setLessonSort: (value: "order" | "newest" | "oldest" | "title") => void;
   filteredLessons: Lesson[];
-  totalLessons: number;
+  totalLessons?: number;
   expandedLessonId: number | null;
   linkedClassworks: Record<number, LinkedClasswork[]>;
   loadingClassworkId: number | null;
@@ -50,7 +50,6 @@ export default function LessonClassworkList({
   lessonSort,
   setLessonSort,
   filteredLessons,
-  totalLessons,
   expandedLessonId,
   linkedClassworks,
   loadingClassworkId,

@@ -4,7 +4,7 @@ import { SubjectCard } from "../../components/subject-card";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
 import { apiFetch } from "@/lib/api";
-import { BookOpen, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "../../components/retroui/Card"; 
 

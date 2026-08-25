@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, X } from "lucide-react";
+import { BookOpen } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
