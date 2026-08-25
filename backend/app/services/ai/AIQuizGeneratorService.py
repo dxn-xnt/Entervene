@@ -188,7 +188,11 @@ def _extract_and_validate_json(
     return valid_questions
 
 
-async def _generate_with_groq(groq_key: str, prompt: str) -> str:
+async def _generate_with_groq(
+    groq_key: str,
+    prompt: str,
+    system_prompt: str = _SYSTEM_PROMPT,
+) -> str:
     client = AsyncOpenAI(api_key=groq_key, base_url=GROQ_BASE_URL)
 
     # Discover active models dynamically
@@ -216,11 +220,11 @@ async def _generate_with_groq(groq_key: str, prompt: str) -> str:
             response: Any = await client.chat.completions.create(
                 model=model_name,
                 messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.3,
-                max_tokens=3500,
+                max_tokens=4000,
                 response_format={"type": "json_object"},
                 stream=False,
             )
@@ -245,10 +249,14 @@ async def _generate_with_groq(groq_key: str, prompt: str) -> str:
     raise HTTPException(status_code=502, detail="Groq AI service failed across all candidate models.")
 
 
-async def _generate_with_gemini(gemini_key: str, prompt: str) -> str:
+async def _generate_with_gemini(
+    gemini_key: str,
+    prompt: str,
+    system_prompt: str = _SYSTEM_PROMPT,
+) -> str:
     payload = {
-        "contents": [{"role": "user", "parts": [{"text": f"{_SYSTEM_PROMPT}\n\nTask:\n{prompt}"}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 3500, "responseMimeType": "application/json"},
+        "contents": [{"role": "user", "parts": [{"text": f"{system_prompt}\n\nTask:\n{prompt}"}]}],
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 4000, "responseMimeType": "application/json"},
     }
 
     last_err: Exception | None = None
