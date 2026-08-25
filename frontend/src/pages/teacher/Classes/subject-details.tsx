@@ -126,16 +126,18 @@ export default function SubjectDetails() {
     setIsCompetencyModalOpen(true);
   };
 
-  const handleCompetencySaved = (savedComp: CompetencyItem) => {
-    setCompetencies((prev) => {
-      const idx = prev.findIndex((c) => c.competency_id === savedComp.competency_id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = savedComp;
-        return next;
-      }
-      return [...prev, savedComp];
-    });
+  const handleCompetencySaved = (savedComp?: CompetencyItem) => {
+    if (savedComp) {
+      setCompetencies((prev) => {
+        const idx = prev.findIndex((c) => c.competency_id === savedComp.competency_id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = savedComp;
+          return next;
+        }
+        return [...prev, savedComp];
+      });
+    }
     refreshSubjectData();
   };
 
