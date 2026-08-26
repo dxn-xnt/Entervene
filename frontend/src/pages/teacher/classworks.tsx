@@ -16,7 +16,7 @@ import { useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { apiFetch } from "@/lib/api";
-import ClassworkCard from "./classworks/ClassworkCard";
+import ClassworkCard from "./classworks/classwork-card";
 import { Badge } from "@/components/retroui/Badge";
 import { isQuizType } from "@/lib/classwork-utils";
 import type {
