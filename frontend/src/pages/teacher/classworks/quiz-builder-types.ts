@@ -111,6 +111,8 @@ export type TeacherQuizAnswer = {
   }>;
   is_correct?: boolean | null;
   points_awarded?: number | null;
+  correct_answer_text?: string | null;
+  student_answer_text?: string | null;
 };
 
 export type TeacherQuizSubmissionDetail = {

@@ -100,11 +100,10 @@ export default function QuizAnalysisView({
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}
-              className={`px-6 py-3 text-sm font-bold capitalize transition-colors ${
-                activeTab === tab
+              className={`px-6 py-3 text-sm font-bold capitalize transition-colors ${activeTab === tab
                   ? "bg-[#F6E9B2] border-r-2 border-black last:border-r-0"
                   : "bg-white hover:bg-gray-50 border-r-2 border-black last:border-r-0"
-              }`}
+                }`}
             >
               {tab}
             </button>
@@ -222,11 +221,11 @@ export default function QuizAnalysisView({
                               <span className="w-4 font-bold">{String.fromCharCode(65 + idx)}.</span>
                               <div className="flex-1 text-sm">{opt.option_text}</div>
                               <div className="w-24 text-right text-xs font-bold text-gray-500 flex items-center justify-end gap-1">
-                                {opt.is_correct ? <span className="text-[#3A6D38]">correct <Check size={12} className="inline"/></span> : <span>incorrect <X size={12} className="inline"/></span>}
+                                {opt.is_correct ? <span className="text-[#3A6D38]">correct <Check size={12} className="inline" /></span> : <span>incorrect <X size={12} className="inline" /></span>}
                               </div>
                               <div className="w-80 h-7 border border-black rounded bg-white relative overflow-hidden flex items-center">
-                                <div 
-                                  className={`absolute top-0 left-0 h-full ${opt.is_correct ? 'bg-[#3A6D38]' : 'bg-gray-100'}`} 
+                                <div
+                                  className={`absolute top-0 left-0 h-full ${opt.is_correct ? 'bg-[#3A6D38]' : 'bg-gray-100'}`}
                                   style={{ width: `${percent}%` }}
                                 />
                                 <span className={`relative z-10 text-xs px-2 font-bold ${opt.is_correct && percent > 15 ? 'text-white' : 'text-black'}`}>
@@ -252,9 +251,9 @@ export default function QuizAnalysisView({
             <div>
               <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex gap-4 text-xs font-bold">
-                  <div className="flex items-center gap-1"><div className="w-4 h-4 bg-[#8BCB88] border border-black rounded-sm"/> Correct</div>
-                  <div className="flex items-center gap-1"><div className="w-4 h-4 bg-[#FF6B6B] border border-black rounded-sm"/> Incorrect</div>
-                  <div className="flex items-center gap-1"><div className="w-4 h-4 bg-white border border-black rounded-sm"/> Unattempted</div>
+                  <div className="flex items-center gap-1"><div className="w-4 h-4 bg-[#8BCB88] border border-black rounded-sm" /> Correct</div>
+                  <div className="flex items-center gap-1"><div className="w-4 h-4 bg-[#FF6B6B] border border-black rounded-sm" /> Incorrect</div>
+                  <div className="flex items-center gap-1"><div className="w-4 h-4 bg-white border border-black rounded-sm" /> Unattempted</div>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <span className="font-medium text-gray-600">Sort By:</span>
@@ -313,16 +312,15 @@ export default function QuizAnalysisView({
                                 {quizAnalysis.questions.map((q) => {
                                   const ans = student.answers?.find(a => a.quiz_question_id === q.quiz_question_id);
                                   return (
-                                    <div 
-                                      key={q.quiz_question_id} 
-                                      className={`w-[14px] h-[18px] border border-black rounded-sm ${
-                                        ans?.is_correct === true ? 'bg-[#8BCB88]' : ans?.is_correct === false ? 'bg-[#FF6B6B]' : 'bg-gray-100'
-                                      }`}
+                                    <div
+                                      key={q.quiz_question_id}
+                                      className={`w-[14px] h-[18px] border border-black rounded-sm ${ans?.is_correct === true ? 'bg-[#8BCB88]' : ans?.is_correct === false ? 'bg-[#FF6B6B]' : 'bg-gray-100'
+                                        }`}
                                     />
                                   );
                                 })}
                               </div>
-                              <span className="text-xs font-bold text-[#3A6D38] ml-2">{corrects} corrects <Check size={12} className="inline"/></span>
+                              <span className="text-xs font-bold text-[#3A6D38] ml-2">{corrects} corrects <Check size={12} className="inline" /></span>
                             </div>
                           </td>
                           <td className="py-4 px-4 text-center font-bold text-lg">
@@ -339,11 +337,10 @@ export default function QuizAnalysisView({
                               <button
                                 type="button"
                                 onClick={() => setSelectedGradingSubmissionId(student.submission_id!)}
-                                className={`inline-flex items-center gap-1 rounded border border-black px-3 py-1.5 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-colors ${
-                                  student.needs_grading
+                                className={`inline-flex items-center gap-1 rounded border border-black px-3 py-1.5 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-colors ${student.needs_grading
                                     ? "bg-[#FFD08A] hover:bg-[#FFC06A] text-black"
                                     : "bg-white hover:bg-gray-50 text-black"
-                                }`}
+                                  }`}
                               >
                                 <Pencil size={12} />
                                 {student.needs_grading ? "Grade" : "Score"}
