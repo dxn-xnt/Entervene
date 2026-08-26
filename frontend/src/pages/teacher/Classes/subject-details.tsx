@@ -18,7 +18,7 @@ import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Badge } from "@/components/retroui/Badge";
 import ClassworkFormModal from "./subject-details/ClassworkFormModal";
 import CompetencyModal from "./subject-details/CompetencyModal";
-import LessonClassworkList from "./subject-details/LessonClassworkList";
+import LessonClassworkList from "./subject-details/lesson-classwork-list";
 import StudentRecordsPanel from "./subject-details/StudentRecordsPanel";
 import TeacherLessonDetailScreen from "./subject-details/TeacherLessonDetailScreen";
 import TOSGeneratorScreen from "./subject-details/TOSGeneratorScreen";
@@ -204,13 +204,13 @@ export default function SubjectDetails() {
             apiFetch("/api/v1/classwork-assignments/teacher/classes"),
             classId && subjectId
               ? apiFetch(
-                  `/api/v1/lessons/my-class/${classId}/subject/${subjectId}`,
-                )
+                `/api/v1/lessons/my-class/${classId}/subject/${subjectId}`,
+              )
               : Promise.resolve(null),
             classId && subjectId
               ? apiFetch(
-                  `/api/v1/classwork-assignments/teacher/class/${classId}/subject/${subjectId}/assignments`,
-                )
+                `/api/v1/classwork-assignments/teacher/class/${classId}/subject/${subjectId}/assignments`,
+              )
               : Promise.resolve(null),
             subjectId
               ? apiFetch(`/api/v1/competencies/subject/${subjectId}`)
@@ -329,10 +329,10 @@ export default function SubjectDetails() {
     const query = lessonSearch.trim().toLowerCase();
     const visibleLessons = query
       ? lessons.filter((lesson) =>
-          [lesson.title, lesson.description]
-            .filter(Boolean)
-            .some((value) => value?.toLowerCase().includes(query)),
-        )
+        [lesson.title, lesson.description]
+          .filter(Boolean)
+          .some((value) => value?.toLowerCase().includes(query)),
+      )
       : lessons;
 
     return [...visibleLessons].sort((a, b) => {
@@ -802,7 +802,7 @@ export default function SubjectDetails() {
           const uploadError = await uploadResponse.json().catch(() => ({}));
           throw new Error(
             uploadError.detail ||
-              `Classwork was created, but ${material.name} could not be uploaded.`,
+            `Classwork was created, but ${material.name} could not be uploaded.`,
           );
         }
       }
@@ -891,33 +891,26 @@ export default function SubjectDetails() {
             <>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <Breadcrumb>
-                  <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
+                  <Breadcrumb.List>
                     <Breadcrumb.Item>
-                      <Breadcrumb.Link asChild>
-                        <button
-                          type="button"
-                          onClick={() => navigate("/teacher/classes/subjects")}
-                        >
-                          Subjects
-                        </button>
+                      <Breadcrumb.Link href="/teacher/classes/subjects">
+                        Subjects
                       </Breadcrumb.Link>
                     </Breadcrumb.Item>
 
                     <Breadcrumb.Separator />
-
                     <Breadcrumb.Item>
                       <Breadcrumb.Page>{subjectName}</Breadcrumb.Page>
                     </Breadcrumb.Item>
                   </Breadcrumb.List>
                 </Breadcrumb>
 
-                <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto">
+                <div className="flex items-center gap-2 flex-col lg:flex-row lg:flex-nowrap">
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
                     onClick={() => setIsTOSOpen(true)}
-                    className="w-full sm:w-auto gap-2 whitespace-nowrap font-bold border-2 border-black bg-[#E3F2FD] hover:bg-[#BBDEFB] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    className="whitespace-nowrap gap-2"
                   >
                     <TableProperties size={16} />
                     TOS Generator
@@ -925,9 +918,8 @@ export default function SubjectDetails() {
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
                     onClick={() => openCompetencyForm(null)}
-                    className="w-full sm:w-auto gap-2 whitespace-nowrap font-bold border-2 border-black bg-[#F6E9B2] hover:bg-[#fae498] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    className="whitespace-nowrap gap-2"
                   >
                     <Award size={16} />
                     Add Competency
@@ -935,12 +927,11 @@ export default function SubjectDetails() {
                   <Button
                     type="button"
                     variant="default"
-                    size="sm"
                     onClick={() => {
                       setSelectedCompetencyIdForNewLesson(undefined);
                       setIsCreatingLesson(true);
                     }}
-                    className="w-full sm:w-auto gap-2 whitespace-nowrap font-semibold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    className="whitespace-nowrap gap-2"
                   >
                     <Plus size={16} />
                     Add Lesson
@@ -948,14 +939,18 @@ export default function SubjectDetails() {
                 </div>
               </div>
 
-              <div className="-mx-4 md:-mx-6 border-b-2 border-black" />
-
-              <main className="flex flex-col gap-5 pt-5">
+              <main className="flex flex-col gap-4">
                 {error && (
                   <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
                     {error}
                   </div>
                 )}
+
+                <Tabs
+                  tabs={tabs}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                />
 
                 <Card className="block bg-primary">
                   <Card.Content className="flex items-start justify-between gap-4">
@@ -972,49 +967,6 @@ export default function SubjectDetails() {
                     <Info size={16} />
                   </Card.Content>
                 </Card>
-
-                <section>
-                  <h2 className="mb-3 text-xl font-bold">Subject Overview</h2>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <Card className="block">
-                      <Card.Content className="space-y-1">
-                        <Card.Description>Lesson Mastery</Card.Description>
-                        <Card.Title>{overviewMastery}%</Card.Title>
-                        <p className="text-xs text-black">
-                          Average graded classwork performance
-                        </p>
-                      </Card.Content>
-                    </Card>
-
-                    <Card className="block">
-                      <Card.Content className="space-y-1">
-                        <Card.Description>Classwork Assigned</Card.Description>
-                        <Card.Title>{classworkCount ?? 0}</Card.Title>
-                        <p className="text-xs text-black">
-                          Active classworks in this subject
-                        </p>
-                      </Card.Content>
-                    </Card>
-
-                    <Card className="block">
-                      <Card.Content className="space-y-1">
-                        <Card.Description>
-                          Completion Percentage
-                        </Card.Description>
-                        <Card.Title>{overviewCompletion}%</Card.Title>
-                        <p className="text-xs text-black">
-                          Average submitted classwork completion
-                        </p>
-                      </Card.Content>
-                    </Card>
-                  </div>
-                </section>
-
-                <Tabs
-                  tabs={tabs}
-                  activeTab={activeTab}
-                  onTabChange={setActiveTab}
-                />
 
                 {activeTab === "students" && classId && subjectId ? (
                   <StudentRecordsPanel
@@ -1047,6 +999,9 @@ export default function SubjectDetails() {
                     openCompetencyForm={openCompetencyForm}
                     onAddLessonToCompetency={handleAddLessonToCompetency}
                     onArchiveCompetency={handleArchiveCompetency}
+                    overviewMastery={overviewMastery}
+                    classworkCount={classworkCount}
+                    overviewCompletion={overviewCompletion}
                   />
                 )}
               </main>
@@ -1121,9 +1076,9 @@ export default function SubjectDetails() {
                                 setLessonDraft((current) =>
                                   current
                                     ? {
-                                        ...current,
-                                        order_index: event.target.value,
-                                      }
+                                      ...current,
+                                      order_index: event.target.value,
+                                    }
                                     : current,
                                 )
                               }
@@ -1147,9 +1102,9 @@ export default function SubjectDetails() {
                               setLessonDraft((current) =>
                                 current
                                   ? {
-                                      ...current,
-                                      description: event.target.value,
-                                    }
+                                    ...current,
+                                    description: event.target.value,
+                                  }
                                   : current,
                               )
                             }
@@ -1232,7 +1187,7 @@ export default function SubjectDetails() {
                                   >
                                     <Trash2 size={14} />
                                     {removingLessonAttachmentId ===
-                                    attachment.lesson_attachment_id
+                                      attachment.lesson_attachment_id
                                       ? "Removing..."
                                       : "Remove"}
                                   </button>
@@ -1269,9 +1224,9 @@ export default function SubjectDetails() {
                               setLessonDraft((current) =>
                                 current
                                   ? {
-                                      ...current,
-                                      is_published: event.target.checked,
-                                    }
+                                    ...current,
+                                    is_published: event.target.checked,
+                                  }
                                   : current,
                               )
                             }
@@ -1582,8 +1537,8 @@ export default function SubjectDetails() {
                               <p className="font-bold">
                                 {selectedClasswork.due_date
                                   ? new Date(
-                                      selectedClasswork.due_date,
-                                    ).toLocaleString()
+                                    selectedClasswork.due_date,
+                                  ).toLocaleString()
                                   : "No due date"}
                               </p>
                             </div>
@@ -1611,31 +1566,31 @@ export default function SubjectDetails() {
 
                       {(selectedClasswork.description ||
                         selectedClasswork.instructions) && (
-                        <Card className="block">
-                          <Card.Content className="space-y-3">
-                            {selectedClasswork.description && (
-                              <div>
-                                <Card.Title className="mb-0 font-bold">
-                                  Description
-                                </Card.Title>
-                                <p className="mt-1 text-sm">
-                                  {selectedClasswork.description}
-                                </p>
-                              </div>
-                            )}
-                            {selectedClasswork.instructions && (
-                              <div>
-                                <Card.Title className="mb-0 font-bold">
-                                  Instructions
-                                </Card.Title>
-                                <p className="mt-1 whitespace-pre-wrap text-sm">
-                                  {selectedClasswork.instructions}
-                                </p>
-                              </div>
-                            )}
-                          </Card.Content>
-                        </Card>
-                      )}
+                          <Card className="block">
+                            <Card.Content className="space-y-3">
+                              {selectedClasswork.description && (
+                                <div>
+                                  <Card.Title className="mb-0 font-bold">
+                                    Description
+                                  </Card.Title>
+                                  <p className="mt-1 text-sm">
+                                    {selectedClasswork.description}
+                                  </p>
+                                </div>
+                              )}
+                              {selectedClasswork.instructions && (
+                                <div>
+                                  <Card.Title className="mb-0 font-bold">
+                                    Instructions
+                                  </Card.Title>
+                                  <p className="mt-1 whitespace-pre-wrap text-sm">
+                                    {selectedClasswork.instructions}
+                                  </p>
+                                </div>
+                              )}
+                            </Card.Content>
+                          </Card>
+                        )}
 
                       <Card className="block">
                         <Card.Content className="space-y-3">
@@ -1736,10 +1691,10 @@ export default function SubjectDetails() {
                               ))}
                             {(selectedTracking?.submitted ?? []).length ===
                               0 && (
-                              <p className="text-sm text-gray-600">
-                                No submissions yet.
-                              </p>
-                            )}
+                                <p className="text-sm text-gray-600">
+                                  No submissions yet.
+                                </p>
+                              )}
                           </div>
                         </Card.Content>
                       </Card>
