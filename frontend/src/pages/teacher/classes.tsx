@@ -290,7 +290,7 @@ const TeacherClasses = () => {
                               isAdvisory={advisoryByClass.has(load.class_id)}
                               onClick={() =>
                                 navigate(
-                                  `/teacher/classes/${load.class_id}/subjects/${load.subject_id}`,
+                                  `/teacher/classes/${load.class_id}`,
                                 )
                               }
                             />
