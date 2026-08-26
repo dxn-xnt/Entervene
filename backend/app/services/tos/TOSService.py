@@ -125,27 +125,51 @@ def create_tos_exam(subject_id: int, body: TOSExamUpsert, staff_id: Optional[str
     return _exam_to_detail(exam)
 
 
+def _exam_to_summary(e: TOSExam) -> TOSExamSummary:
+    total_items = 0
+    if e.test_parts_json:
+        try:
+            parts = json.loads(e.test_parts_json)
+            total_items = sum(p.get("count", 0) for p in parts if isinstance(p, dict))
+        except Exception:
+            pass
+
+    return TOSExamSummary(
+        tos_exam_id=e.tos_exam_id,
+        subject_id=e.subject_id,
+        subject_name=e.subject.subject_name if e.subject else None,
+        title=e.title,
+        quarter=e.quarter,
+        status=e.status,
+        total_items=total_items,
+        question_count=len(e.questions) if e.questions else 0,
+        created_at=e.created_at,
+        updated_at=e.updated_at,
+    )
+
+
+def list_all_tos_exams(staff_id: Optional[str], db: Session) -> List[TOSExamSummary]:
+    query = (
+        db.query(TOSExam)
+        .options(selectinload(TOSExam.questions), selectinload(TOSExam.subject))
+    )
+    if staff_id:
+        query = query.filter(
+            (TOSExam.created_by_staff_id == staff_id) | (TOSExam.created_by_staff_id == None)
+        )
+    exams = query.order_by(TOSExam.updated_at.desc(), TOSExam.created_at.desc()).all()
+    return [_exam_to_summary(e) for e in exams]
+
+
 def list_tos_exams_for_subject(subject_id: int, db: Session) -> List[TOSExamSummary]:
     exams = (
         db.query(TOSExam)
-        .options(selectinload(TOSExam.questions))
+        .options(selectinload(TOSExam.questions), selectinload(TOSExam.subject))
         .filter(TOSExam.subject_id == subject_id)
         .order_by(TOSExam.updated_at.desc(), TOSExam.created_at.desc())
         .all()
     )
-    return [
-        TOSExamSummary(
-            tos_exam_id=e.tos_exam_id,
-            subject_id=e.subject_id,
-            title=e.title,
-            quarter=e.quarter,
-            status=e.status,
-            question_count=len(e.questions) if e.questions else 0,
-            created_at=e.created_at,
-            updated_at=e.updated_at,
-        )
-        for e in exams
-    ]
+    return [_exam_to_summary(e) for e in exams]
 
 
 def get_tos_exam_detail(tos_exam_id: int, db: Session) -> TOSExamDetailResponse:
