@@ -51,6 +51,7 @@ import GradesPredictions from "./pages/teacher/grade-predictions";
 import SectionPredictions from "./pages/teacher/section-predictions";
 import LessonPlannerPage from "./pages/teacher/LessonPlanner/LessonPlannerPage";
 import LessonPlannerListPage from "./pages/teacher/LessonPlanner/LessonPlannerListPage";
+import TeacherTOSPage from "./pages/teacher/TOS/TeacherTOSPage";
 
 // // Student pages
 import StudentBoard from "./pages/student/storyboard";
@@ -134,6 +135,7 @@ const App = () => {
                 <Route path={routes.teacher.lessonPlanner} element={<LessonPlannerListPage />} />
                 <Route path={routes.teacher.lessonPlannerCreate} element={<LessonPlannerPage />} />
                 <Route path={routes.teacher.lessonPlannerEdit} element={<LessonPlannerPage />} />
+                <Route path={routes.teacher.tos} element={<TeacherTOSPage />} />
               </Route>
 
               {/* Student */}

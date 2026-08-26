@@ -31,6 +31,7 @@ export type TOSCompetencyInput = {
   label: string;
   code?: string;
   days: number;
+  is_adhoc?: boolean;
 };
 
 export type TOSDifficultyRatio = {
