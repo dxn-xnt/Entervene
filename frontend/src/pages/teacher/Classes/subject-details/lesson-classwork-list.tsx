@@ -18,6 +18,7 @@ import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Select } from "@/components/retroui/Select";
 import { Badge } from "@/components/retroui/Badge";
+import { OverviewCard } from "@/components/overview-cards";
 import type { CompetencyItem, Lesson, LinkedClasswork } from "./types";
 
 type LessonClassworkListProps = {
@@ -42,6 +43,10 @@ type LessonClassworkListProps = {
   openCompetencyForm?: (competency?: CompetencyItem | null) => void;
   onAddLessonToCompetency?: (competencyId: number) => void;
   onArchiveCompetency?: (competencyId: number) => void;
+  // Overview metrics
+  overviewMastery?: number;
+  classworkCount?: number | null;
+  overviewCompletion?: number;
 };
 
 export default function LessonClassworkList({
@@ -64,6 +69,9 @@ export default function LessonClassworkList({
   openCompetencyForm,
   onAddLessonToCompetency,
   onArchiveCompetency,
+  overviewMastery = 0,
+  classworkCount = 0,
+  overviewCompletion = 0,
 }: LessonClassworkListProps) {
   const quarterlyAssessments = (subjectAssignments ?? []).filter(
     (cw) => cw.classwork_category === "QUARTERLY_ASSESSMENT",
@@ -391,6 +399,28 @@ export default function LessonClassworkList({
         </>
       )}
 
+      {/* ── Subject Overview ── */}
+      <section>
+        <h2 className="mb-3 text-xl font-bold">Subject Overview</h2>
+        <div className="grid gap-4 md:grid-cols-3">
+          <OverviewCard
+            title="Lesson Mastery"
+            count={`${overviewMastery}%`}
+            statDescription="Average graded classwork performance"
+          />
+          <OverviewCard
+            title="Classwork Assigned"
+            count={String(classworkCount ?? 0)}
+            statDescription="Active classworks in this subject"
+          />
+          <OverviewCard
+            title="Completion Percentage"
+            count={`${overviewCompletion}%`}
+            statDescription="Average submitted classwork completion"
+          />
+        </div>
+      </section>
+
       {/* ── Search, Sort, and Add Competency Toolbar ── */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-1 items-center gap-3">
@@ -423,18 +453,6 @@ export default function LessonClassworkList({
           </Select>
         </div>
 
-        {openCompetencyForm && (
-          <Button
-            type="button"
-            variant="default"
-            size="sm"
-            onClick={() => openCompetencyForm(null)}
-            className="gap-2 border-black bg-[#F6E9B2] hover:bg-[#fae498] text-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] whitespace-nowrap"
-          >
-            <Award size={16} />
-            Add Competency
-          </Button>
-        )}
       </div>
 
       {/* ── Hierarchy View: Competency Containers ── */}
