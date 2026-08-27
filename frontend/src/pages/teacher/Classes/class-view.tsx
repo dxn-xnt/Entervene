@@ -437,32 +437,32 @@ function OverviewTab({
     const isLoadingCw = loadingClassworkId === lesson.lesson_id;
 
     return (
-      <div key={lesson.lesson_id} className="flex flex-col gap-2">
-        <Card className="bg-[#F6E9B2] border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all">
-          <Card.Content className="flex items-center justify-between gap-3 p-4">
+      <div key={lesson.lesson_id} className="flex flex-col gap-2 min-w-0">
+        <Card className="bg-[#F6E9B2] border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all min-w-0">
+          <Card.Content className="flex items-center justify-between gap-3 p-4 min-w-0">
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2 mb-1">
-                <Card.Title className="truncate text-lg md:text-xl font-bold text-black">
+              <div className="flex flex-wrap items-center gap-2 mb-1 min-w-0">
+                <Card.Title className="text-lg md:text-xl font-bold text-black break-words line-clamp-2">
                   {lesson.title}
                 </Card.Title>
                 <Badge
                   variant="outline"
                   size="sm"
-                  className="border border-black bg-white font-bold"
+                  className="border border-black bg-white font-bold shrink-0"
                 >
                   {lesson.is_published ? "Published" : "Draft"}
                 </Badge>
                 {lesson.attachments && lesson.attachments.length > 0 && (
                   <Badge
                     size="sm"
-                    className="border border-black bg-[#7ABA78] text-white font-bold"
+                    className="border border-black bg-[#7ABA78] text-white font-bold shrink-0"
                   >
                     {lesson.attachments.length} material
                     {lesson.attachments.length === 1 ? "" : "s"}
                   </Badge>
                 )}
               </div>
-              <p className="truncate text-xs font-medium text-black/70">
+              <p className="text-xs font-medium text-black/70 break-words line-clamp-2">
                 {lesson.description ||
                   (lesson.created_at
                     ? `Created ${new Date(lesson.created_at).toLocaleDateString()}`
@@ -489,7 +489,7 @@ function OverviewTab({
 
         {/* Expanded linked classworks */}
         {isExpanded && (
-          <div className="ml-4 pl-3 border-l-2 border-black space-y-2 py-1">
+          <div className="ml-4 pl-3 border-l-2 border-black space-y-2 py-1 min-w-0">
             {isLoadingCw ? (
               <div className="flex items-center gap-2 py-3 text-xs text-gray-500 font-medium">
                 <Loader2 className="size-4 animate-spin" /> Loading
@@ -503,7 +503,7 @@ function OverviewTab({
               classworks.map((cw) => (
                 <div
                   key={cw.classwork_assignment_id}
-                  className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3 rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-50 transition-colors"
+                  className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3 rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-50 transition-colors min-w-0"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <span className="shrink-0">
@@ -542,11 +542,11 @@ function OverviewTab({
   };
 
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-4 xl:grid-cols-[1fr_320px] xl:grid-rows-[auto_1fr] items-stretch">
-        <div className="flex flex-col gap-2">
+    <div className="grid gap-4 min-w-0">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:grid-rows-[auto_1fr] items-stretch min-w-0">
+        <div className="flex flex-col gap-2 min-w-0">
           <h3 className="text-xl font-semibold">Overview</h3>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 min-w-0">
             <OverviewCard
               title="Total Students"
               count={String(detail.student_count ?? 0)}
@@ -560,23 +560,23 @@ function OverviewTab({
           </div>
         </div>
 
-        <aside className="flex flex-col gap-2 xl:row-span-2">
+        <aside className="flex flex-col gap-2 min-w-0 xl:row-span-2">
           <LessonGoalProgress
             sortedGoalLessons={lessons as any}
             classworksByLesson={linkedClassworks as any}
-            className="w-full flex-1"
+            className="w-full flex-1 min-w-0"
           />
         </aside>
 
-        <section className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3">
+        <section className="flex flex-col gap-4 min-w-0">
+          <div className="flex flex-col gap-3 min-w-0">
             {/* Header toolbar with quick actions */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap min-w-0">
               <Text as="h3" className="text-xl font-semibold">
                 Lessons & Competencies
               </Text>
 
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap shrink-0">
                 {selectedSubjectId && (
                   <>
                     <Button
@@ -623,7 +623,7 @@ function OverviewTab({
             </div>
 
             {/* Search & Sort Controls */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
               <label className="relative flex-1 sm:max-w-xs">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                 <Input
@@ -663,7 +663,7 @@ function OverviewTab({
               {lessonsError}
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0">
               {/* Render Competency Accordions */}
               {competencies.map((comp) => {
                 const compLessons = lessonsByCompetency.get(comp.competency_id) || [];
@@ -680,28 +680,28 @@ function OverviewTab({
                 return (
                   <div
                     key={comp.competency_id}
-                    className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
+                    className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden min-w-0"
                   >
                     {/* Competency Header Bar */}
-                    <div className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 gap-3 flex-wrap sm:flex-nowrap">
+                    <div className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 gap-3 flex-wrap sm:flex-nowrap min-w-0">
                       <button
                         type="button"
                         onClick={() => toggleCompetencyCollapse(comp.competency_id)}
                         className="flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer group"
                       >
-                        <div className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors">
+                        <div className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors shrink-0">
                           {isCollapsed ? <ChevronRight size={16} className="text-black" /> : <ChevronDown size={16} className="text-black" />}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <div className="mb-1 flex flex-wrap items-center gap-2 min-w-0">
                             <Award size={20} className="text-black shrink-0" />
-                            <h4 className="truncate text-xl md:text-2xl font-bold text-gray-950">
+                            <h4 className="text-lg md:text-xl font-bold text-gray-950 break-words line-clamp-2">
                               {comp.competency_code || comp.statement}
                             </h4>
                             <Badge
                               variant="secondary"
                               size="sm"
-                              className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                              className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
                             >
                               {compLessons.length} lesson{compLessons.length === 1 ? "" : "s"}
                             </Badge>
@@ -709,14 +709,14 @@ function OverviewTab({
                               <Badge
                                 variant="secondary"
                                 size="sm"
-                                className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                                className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
                               >
                                 {comp.target_hours} hrs
                               </Badge>
                             )}
                           </div>
-                          {comp.competency_code && (
-                            <p className="truncate text-xs font-medium text-gray-700">
+                          {comp.competency_code && comp.statement && (
+                            <p className="text-xs font-medium text-gray-700 break-words line-clamp-2">
                               {comp.statement}
                             </p>
                           )}

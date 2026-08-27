@@ -152,28 +152,28 @@ export default function LessonClassworkList({
                 }
                 className="group min-w-0 flex-1 text-left cursor-pointer"
               >
-                <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <Card.Title className="truncate text-xl md:text-2xl font-bold text-gray-950 group-hover:underline">
+                <div className="mb-1 flex flex-wrap items-center gap-2 min-w-0">
+                  <Card.Title className="text-lg md:text-xl font-bold text-gray-950 group-hover:underline break-words line-clamp-2">
                     {lesson.title}
                   </Card.Title>
                   <Badge
                     variant="secondary"
                     size="sm"
-                    className="border border-black bg-white font-semibold"
+                    className="border border-black bg-white font-semibold shrink-0"
                   >
                     {lesson.is_published ? "Published" : "Draft"}
                   </Badge>
                   {lesson.attachments.length > 0 && (
                     <Badge
                       size="sm"
-                      className="border border-black bg-[#7ABA78] font-bold text-black"
+                      className="border border-black bg-[#7ABA78] font-bold text-black shrink-0"
                     >
                       {lesson.attachments.length} material
                       {lesson.attachments.length === 1 ? "" : "s"}
                     </Badge>
                   )}
                 </div>
-                <p className="truncate text-xs font-medium text-gray-700">
+                <p className="text-xs font-medium text-gray-700 break-words line-clamp-2">
                   {lesson.description ||
                     (lesson.created_at
                       ? `Created ${new Date(lesson.created_at).toLocaleDateString()}`
@@ -489,15 +489,15 @@ export default function LessonClassworkList({
                       {isCollapsed ? <ChevronRight size={16} className="text-black" /> : <ChevronDown size={16} className="text-black" />}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <div className="mb-1 flex flex-wrap items-center gap-2 min-w-0">
                         <Award size={20} className="text-black shrink-0" />
-                        <h4 className="truncate text-xl md:text-2xl font-bold text-gray-950">
+                        <h4 className="text-lg md:text-xl font-bold text-gray-950 break-words line-clamp-2">
                           {comp.competency_code || comp.statement}
                         </h4>
                         <Badge
                           variant="secondary"
                           size="sm"
-                          className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                          className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
                         >
                           {compLessons.length} lesson{compLessons.length === 1 ? "" : "s"}
                         </Badge>
@@ -505,14 +505,14 @@ export default function LessonClassworkList({
                           <Badge
                             variant="secondary"
                             size="sm"
-                            className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                            className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
                           >
                             {comp.target_hours} hrs
                           </Badge>
                         )}
                       </div>
-                      {comp.competency_code && (
-                        <p className="truncate text-xs font-medium text-gray-700">
+                      {comp.competency_code && comp.statement && (
+                        <p className="text-xs font-medium text-gray-700 break-words line-clamp-2">
                           {comp.statement}
                         </p>
                       )}
