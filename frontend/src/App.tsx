@@ -64,7 +64,7 @@ import StudentInterventions from "./pages/student/student-interventions";
 import StudentGrades from "./pages/student/Grades/grades";
 import StudentTodo from "./pages/student/todo";
 import StudentTodoView from "./pages/student/todo-view";
-import StudentNotifications from "./pages/student/notifications";si
+import StudentNotifications from "./pages/student/notifications";
 import AdminStudentView from "./pages/admin/student-view";
 
 // Quiz pages
