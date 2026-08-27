@@ -1,5 +1,4 @@
-import { ChartAreaInteractive } from "@/components/chart-area-interactive";
-import { Progress } from "@/components/retroui/Progress";
+
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -23,23 +22,7 @@ const TEACHER_AVATARS = [
   "/avatars/teacher-avatars/20.svg",
 ];
 
-const gradeLevelRates = [
-  { label: "Grade 7", value: 90 },
-  { label: "Grade 8", value: 87 },
-  { label: "Grade 9", value: 95 },
-  { label: "Grade 10", value: 92 },
-  { label: "STEM 11", value: 95 },
-  { label: "STEM 12", value: 95 },
-];
 
-const subjectMasteryRates = [
-  { label: "7 - Science", value: 95 },
-  { label: "9 - Compute", value: 87 },
-  { label: "9 - English", value: 93 },
-  { label: "8 - Filipino", value: 95 },
-  { label: "7 - English", value: 87 },
-  { label: "8 - Filipino", value: 91 },
-];
 
 export default function TeacherProfile() {
   const { user, updateAvatar } = useAuth();
