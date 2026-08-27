@@ -163,12 +163,12 @@ export default function TeacherClassDetail() {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
-            <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between -mb-[5px]">
+      <div className="flex min-w-0 max-w-full flex-1 flex-col overflow-x-hidden">
+        <div className="@container/main flex min-w-0 max-w-full flex-1 flex-col gap-2">
+          <div className="flex min-w-0 max-w-full flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
+            <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between -mb-[5px] min-w-0">
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <Breadcrumb>
                   <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
                     <Breadcrumb.Item>
@@ -189,9 +189,9 @@ export default function TeacherClassDetail() {
                 </Breadcrumb>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {tab === "lessons" && (
-                  <Button >
+                  <Button>
                     <Pencil className="mr-2 size-4" /> Set Lesson Goal
                   </Button>
                 )}
@@ -437,14 +437,14 @@ function OverviewTab({
     const isLoadingCw = loadingClassworkId === lesson.lesson_id;
 
     return (
-      <div key={lesson.lesson_id} className="flex flex-col gap-2 min-w-0">
-        <Card className="bg-[#F6E9B2] border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all min-w-0">
-          <Card.Content className="flex items-center justify-between gap-3 p-4 min-w-0">
+      <div key={lesson.lesson_id} className="flex flex-col gap-2 min-w-0 w-full">
+        <div className="w-full min-w-0 rounded border-2 border-black bg-[#F6E9B2] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all">
+          <div className="flex items-center justify-between gap-3 min-w-0">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2 mb-1 min-w-0">
-                <Card.Title className="text-lg md:text-xl font-bold text-black break-words line-clamp-2">
+                <h4 className="text-base sm:text-lg md:text-xl font-bold text-black break-words line-clamp-2">
                   {lesson.title}
-                </Card.Title>
+                </h4>
                 <Badge
                   variant="outline"
                   size="sm"
@@ -484,8 +484,8 @@ function OverviewTab({
                 <ChevronRight size={18} />
               )}
             </button>
-          </Card.Content>
-        </Card>
+          </div>
+        </div>
 
         {/* Expanded linked classworks */}
         {isExpanded && (
@@ -683,10 +683,15 @@ function OverviewTab({
                     className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden min-w-0"
                   >
                     {/* Competency Header Bar */}
-                    <div className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 gap-3 flex-wrap sm:flex-nowrap min-w-0">
-                      <button
-                        type="button"
+                    <div className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 gap-3 min-w-0 w-full">
+                      <div
+                        role="button"
+                        tabIndex={0}
                         onClick={() => toggleCompetencyCollapse(comp.competency_id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ")
+                            toggleCompetencyCollapse(comp.competency_id);
+                        }}
                         className="flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer group"
                       >
                         <div className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors shrink-0">
@@ -695,7 +700,7 @@ function OverviewTab({
                         <div className="min-w-0 flex-1">
                           <div className="mb-1 flex flex-wrap items-center gap-2 min-w-0">
                             <Award size={20} className="text-black shrink-0" />
-                            <h4 className="text-lg md:text-xl font-bold text-gray-950 break-words line-clamp-2">
+                            <h4 className="text-base sm:text-lg md:text-xl font-bold text-gray-950 break-words line-clamp-2">
                               {comp.competency_code || comp.statement}
                             </h4>
                             <Badge
@@ -721,14 +726,17 @@ function OverviewTab({
                             </p>
                           )}
                         </div>
-                      </button>
+                      </div>
 
                       <div className="flex items-center gap-2 shrink-0">
                         <Button
                           type="button"
                           variant="default"
                           size="sm"
-                          onClick={() => openAddLessonForCompetency(comp.competency_id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openAddLessonForCompetency(comp.competency_id);
+                          }}
                           className="gap-1 border-2 border-black bg-white hover:bg-yellow-50 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                         >
                           <Plus size={14} />
@@ -741,21 +749,7 @@ function OverviewTab({
                     {!isCollapsed && (
                       <div className="flex flex-col gap-3 p-4 bg-white">
                         {compLessons.length > 0 ? (
-                          <>
-                            {compLessons.map(renderLessonCard)}
-                            <div className="flex justify-end pt-1">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => openAddLessonForCompetency(comp.competency_id)}
-                                className="gap-1 border-2 border-black bg-white hover:bg-yellow-50 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                              >
-                                <Plus size={14} />
-                                Add Lesson to this Competency
-                              </Button>
-                            </div>
-                          </>
+                          compLessons.map(renderLessonCard)
                         ) : (
                           <div className="flex items-center justify-between rounded-lg border-2 border-dashed border-black bg-[#FFFDF0] p-4">
                             <div className="flex items-center gap-2 text-xs font-bold text-black">
@@ -782,16 +776,21 @@ function OverviewTab({
 
               {/* Standalone / Unassigned Lessons Section */}
               {unassignedLessons.length > 0 && (
-                <div className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
+                <div className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden min-w-0 w-full">
                   {competencies.length > 0 ? (
                     <>
-                      <button
-                        type="button"
+                      <div
+                        role="button"
+                        tabIndex={0}
                         onClick={() => setIsUnassignedExpanded((prev) => !prev)}
-                        className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 text-left cursor-pointer group"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ")
+                            setIsUnassignedExpanded((prev) => !prev);
+                        }}
+                        className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 text-left cursor-pointer group min-w-0 w-full"
                       >
-                        <div className="flex items-center gap-2">
-                          <div className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors shrink-0">
                             {isUnassignedExpanded ? <ChevronDown size={16} className="text-black" /> : <ChevronRight size={16} className="text-black" />}
                           </div>
                           <BookOpen size={18} className="text-black shrink-0" />
@@ -801,21 +800,21 @@ function OverviewTab({
                           <Badge
                             variant="secondary"
                             size="sm"
-                            className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                            className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
                           >
                             {unassignedLessons.length} to assign
                           </Badge>
                         </div>
-                      </button>
+                      </div>
 
                       {isUnassignedExpanded && (
-                        <div className="flex flex-col gap-3 p-4 bg-white">
+                        <div className="flex flex-col gap-3 p-4 bg-white min-w-0 w-full">
                           {unassignedLessons.map(renderLessonCard)}
                         </div>
                       )}
                     </>
                   ) : (
-                    <div className="flex flex-col gap-3 p-4 bg-white">
+                    <div className="flex flex-col gap-3 p-4 bg-white min-w-0 w-full">
                       {unassignedLessons.map(renderLessonCard)}
                     </div>
                   )}
