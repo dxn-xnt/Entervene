@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
@@ -53,6 +52,7 @@ export const TeacherTOSPage: React.FC = () => {
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   // Active Wizard Mode State
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [activeSubject, setActiveSubject] = useState<{
     subject_id: number;
     subject_name: string;
@@ -133,6 +133,7 @@ export const TeacherTOSPage: React.FC = () => {
       });
       setActiveCompetencies(comps);
       setActiveExamId(exam.tos_exam_id);
+      setIsWizardOpen(true);
     } catch (err) {
       toast.error("Unable to load competencies for this exam.");
     } finally {
@@ -140,35 +141,16 @@ export const TeacherTOSPage: React.FC = () => {
     }
   };
 
-  const handleStartNewTOSForSubject = async (subjectIdNum: number) => {
-    const targetSub = subjects.find((s) => s.subject_id === subjectIdNum);
-    if (!targetSub) {
-      toast.error("Subject not found.");
-      return;
-    }
+  const handleStartNewTOS = () => {
+    const targetSub =
+      selectedSubjectFilter !== "ALL"
+        ? subjects.find((s) => s.subject_id === Number(selectedSubjectFilter))
+        : null;
 
-    setIsOpeningExam(true);
-    try {
-      const compRes = await apiFetch(
-        `/api/v1/competencies/subject/${subjectIdNum}`,
-      ).catch(() => null);
-      let comps: CompetencyItem[] = [];
-      if (compRes && compRes.ok) {
-        const compData = await compRes.json();
-        comps = Array.isArray(compData) ? compData : [];
-      }
-
-      setActiveSubject({
-        subject_id: targetSub.subject_id,
-        subject_name: targetSub.subject_name,
-      });
-      setActiveCompetencies(comps);
-      setActiveExamId(null);
-    } catch (err) {
-      toast.error("Unable to load subject competencies.");
-    } finally {
-      setIsOpeningExam(false);
-    }
+    setActiveSubject(targetSub || null);
+    setActiveCompetencies([]);
+    setActiveExamId(null);
+    setIsWizardOpen(true);
   };
 
   const handleDeleteExam = async (e: React.MouseEvent, examId: number) => {
@@ -218,23 +200,29 @@ export const TeacherTOSPage: React.FC = () => {
   }, [exams, selectedSubjectFilter, selectedQuarterFilter, searchQuery]);
 
   // If in wizard mode, render TOSGeneratorScreen full-width
-  if (activeSubject) {
+  if (isWizardOpen) {
     return (
       <AppLayout>
-        <div className="min-h-screen bg-[#FDFBF7] p-4 sm:p-6 lg:p-8">
-          <TOSGeneratorScreen
-            subjectId={activeSubject.subject_id}
-            subjectName={activeSubject.subject_name}
-            competencies={activeCompetencies}
-            initialExamId={activeExamId}
-            initialStep={activeExamId ? "blueprint" : "test-parts"}
-            subjectsList={subjects}
-            onBack={() => {
-              setActiveSubject(null);
-              setActiveExamId(null);
-              fetchData();
-            }}
-          />
+        <div className="flex flex-1 flex-col">
+          <div className="@container/main flex flex-1 flex-col">
+            <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
+              <TOSGeneratorScreen
+                subjectId={activeSubject?.subject_id ?? 0}
+                subjectName={activeSubject?.subject_name ?? ""}
+                competencies={activeCompetencies}
+                initialExamId={activeExamId}
+                initialStep={activeExamId ? "blueprint" : "test-parts"}
+                parentLabel="TOS Generator"
+                subjectsList={subjects}
+                onBack={() => {
+                  setIsWizardOpen(false);
+                  setActiveSubject(null);
+                  setActiveExamId(null);
+                  fetchData();
+                }}
+              />
+            </div>
+          </div>
         </div>
       </AppLayout>
     );
@@ -242,55 +230,31 @@ export const TeacherTOSPage: React.FC = () => {
 
   return (
     <AppLayout>
-      <div className="min-h-screen bg-[#FDFBF7] p-4 sm:p-6 lg:p-8">
-        <div className="mx-auto max-w-7xl space-y-6">
-          {/* Header & Breadcrumb */}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b-2 border-black pb-4">
-            <div className="flex items-center gap-3">
-              <SidebarTrigger />
-              <div>
-                <Breadcrumb>
-                  <Breadcrumb.List>
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Page className="font-bold text-gray-500">
-                        Teacher
-                      </Breadcrumb.Page>
-                    </Breadcrumb.Item>
-                    <Breadcrumb.Separator />
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Page className="font-black text-black">
-                        Table of Specifications (TOS)
-                      </Breadcrumb.Page>
-                    </Breadcrumb.Item>
-                  </Breadcrumb.List>
-                </Breadcrumb>
-                <h1 className="mt-1 text-2xl font-black tracking-tight text-black sm:text-3xl">
-                  My TOS Exams
+      <div className="flex flex-1 flex-col">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
+            {/* Header matching other sidebar pages */}
+            <header className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="md:hidden" />
+                <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
+                  TOS Generator
                 </h1>
               </div>
-            </div>
 
-            <Button
-              onClick={() => {
-                const targetSub =
-                  selectedSubjectFilter !== "ALL"
-                    ? subjects.find((s) => s.subject_id === Number(selectedSubjectFilter))
-                    : subjects[0];
-                if (targetSub) {
-                  handleStartNewTOSForSubject(targetSub.subject_id);
-                } else if (subjects.length > 0) {
-                  handleStartNewTOSForSubject(subjects[0].subject_id);
-                } else {
-                  setActiveSubject({ subject_id: 1, subject_name: "General Subject" });
-                  setActiveCompetencies([]);
-                  setActiveExamId(null);
-                }
-              }}
-              className="border-2 border-black bg-[#FFD54F] font-black text-xs text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
-            >
-              <Plus className="mr-1.5 h-4 w-4" /> New TOS
-            </Button>
-          </div>
+              <Button
+                variant="default"
+                size="md"
+                onClick={handleStartNewTOS}
+                className="gap-1.5"
+              >
+                <Plus className="size-4" />
+                <span className="hidden sm:inline">New TOS</span>
+                <span className="sm:hidden">+</span>
+              </Button>
+            </header>
+
+            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
 
           {/* Filter Toolbar */}
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between rounded-lg border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
@@ -372,16 +336,7 @@ export const TeacherTOSPage: React.FC = () => {
                 <Button
                   variant="default"
                   size="md"
-                  onClick={() => {
-                    const targetSub = subjects[0];
-                    if (targetSub) {
-                      handleStartNewTOSForSubject(targetSub.subject_id);
-                    } else {
-                      setActiveSubject({ subject_id: 1, subject_name: "General Subject" });
-                      setActiveCompetencies([]);
-                      setActiveExamId(null);
-                    }
-                  }}
+                  onClick={handleStartNewTOS}
                   className="gap-2"
                 >
                   <Plus size={16} />
@@ -489,6 +444,7 @@ export const TeacherTOSPage: React.FC = () => {
             </div>
           )}
         </div>
+      </div>
       </div>
     </AppLayout>
   );

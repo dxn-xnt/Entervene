@@ -47,11 +47,12 @@ import {
 } from "@/lib/tos-export";
 
 export interface TOSGeneratorScreenProps {
-  subjectId: number;
-  subjectName: string;
+  subjectId?: number;
+  subjectName?: string;
   competencies?: CompetencyItem[];
   initialExamId?: number | null;
   initialStep?: WizardStep;
+  parentLabel?: string;
   subjectsList?: Array<{ subject_id: number; subject_name: string; section_name?: string }>;
   onBack: () => void;
 }
@@ -66,11 +67,12 @@ type WizardStep =
   | "export";
 
 export function TOSGeneratorScreen({
-  subjectId,
-  subjectName,
+  subjectId = 0,
+  subjectName = "",
   competencies = [],
   initialExamId,
   initialStep,
+  parentLabel,
   subjectsList,
   onBack,
 }: TOSGeneratorScreenProps) {
@@ -168,7 +170,7 @@ export function TOSGeneratorScreen({
   useEffect(() => {
     if (subjectId && subjectId !== currentSubjectId) {
       setCurrentSubjectId(subjectId);
-      setCurrentSubjectName(subjectName);
+      setCurrentSubjectName(subjectName || "");
     }
   }, [subjectId, subjectName]);
 
@@ -184,7 +186,7 @@ export function TOSGeneratorScreen({
         is_adhoc: false,
       }));
       setCompInputs(initial);
-    } else {
+    } else if (currentSubjectId) {
       apiFetch(`/api/v1/competencies/subject/${currentSubjectId}`)
         .then((res) => (res.ok ? res.json() : []))
         .then((compData: CompetencyItem[]) => {
@@ -200,22 +202,21 @@ export function TOSGeneratorScreen({
               }))
             );
           } else {
-            setCompInputs([
-              { label: "Unit 1: Core Concepts and Foundations", code: "LC-01", days: 3, is_adhoc: true },
-              { label: "Unit 2: Practical Applications and Problem Solving", code: "LC-02", days: 4, is_adhoc: true },
-            ]);
+            setLoadedCompetencies([]);
+            setCompInputs([]);
           }
         })
         .catch(() => {
-          setCompInputs([
-            { label: "Unit 1: Core Concepts and Foundations", code: "LC-01", days: 3, is_adhoc: true },
-            { label: "Unit 2: Practical Applications and Problem Solving", code: "LC-02", days: 4, is_adhoc: true },
-          ]);
+          setLoadedCompetencies([]);
+          setCompInputs([]);
         });
+    } else {
+      setLoadedCompetencies([]);
+      setCompInputs([]);
     }
     if (initialExamId) {
       handleLoadExam(initialExamId);
-    } else {
+    } else if (currentSubjectId) {
       loadSavedExams();
     }
   }, [competencies, currentSubjectId, initialExamId]);
@@ -245,6 +246,7 @@ export function TOSGeneratorScreen({
   };
 
   const loadSavedExams = async () => {
+    if (!currentSubjectId) return;
     setIsLoadingSaved(true);
     try {
       const res = await apiFetch(`/api/v1/tos/subject/${currentSubjectId}`);
@@ -260,6 +262,13 @@ export function TOSGeneratorScreen({
   };
 
   const handleSubjectChange = async (newSubjectIdNum: number) => {
+    if (!newSubjectIdNum) {
+      setCurrentSubjectId(0);
+      setCurrentSubjectName("");
+      setLoadedCompetencies([]);
+      setCompInputs([]);
+      return;
+    }
     const targetSub = availableSubjects.find((s) => s.subject_id === newSubjectIdNum);
     setCurrentSubjectId(newSubjectIdNum);
     if (targetSub) {
@@ -298,7 +307,12 @@ export function TOSGeneratorScreen({
     setQuarter("Term 1");
     setTestParts([{ type: "MULTIPLE_CHOICE", count: 15 }]);
     setLanguage("English");
-    if (loadedCompetencies && loadedCompetencies.length > 0) {
+    if (!subjectId) {
+      setCurrentSubjectId(0);
+      setCurrentSubjectName("");
+      setLoadedCompetencies([]);
+      setCompInputs([]);
+    } else if (loadedCompetencies && loadedCompetencies.length > 0) {
       setCompInputs(
         loadedCompetencies.map((c) => ({
           competency_id: c.competency_id,
@@ -308,10 +322,7 @@ export function TOSGeneratorScreen({
         }))
       );
     } else {
-      setCompInputs([
-        { label: "Unit 1: Core Concepts and Foundations", code: "LC-01", days: 3 },
-        { label: "Unit 2: Practical Applications and Problem Solving", code: "LC-02", days: 4 },
-      ]);
+      setCompInputs([]);
     }
     setDifficultyRatio({ easy: 60, average: 30, difficult: 10 });
     setRows([]);
@@ -679,30 +690,15 @@ export function TOSGeneratorScreen({
           <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
             <Breadcrumb.Item>
               <Breadcrumb.Link onClick={onBack} className="cursor-pointer hover:text-black">
-                {currentSubjectName}
+                {parentLabel || (currentSubjectName || "TOS Generator")}
               </Breadcrumb.Link>
             </Breadcrumb.Item>
             <Breadcrumb.Separator />
             <Breadcrumb.Item>
-              {step === "saved-list" ? (
-                <Breadcrumb.Page>My TOS Exams</Breadcrumb.Page>
-              ) : (
-                <Breadcrumb.Link
-                  onClick={() => setStep("saved-list")}
-                  className="cursor-pointer hover:text-black"
-                >
-                  My TOS Exams
-                </Breadcrumb.Link>
-              )}
+              <Breadcrumb.Page>
+                {step === "saved-list" ? "My TOS Exams" : (title || "New Assessment Blueprint")}
+              </Breadcrumb.Page>
             </Breadcrumb.Item>
-            {step !== "saved-list" && (
-              <>
-                <Breadcrumb.Separator />
-                <Breadcrumb.Item>
-                  <Breadcrumb.Page>{title || "TOS Generator"}</Breadcrumb.Page>
-                </Breadcrumb.Item>
-              </>
-            )}
           </Breadcrumb.List>
         </Breadcrumb>
 
@@ -715,7 +711,7 @@ export function TOSGeneratorScreen({
                 onClick={onBack}
                 className="border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100"
               >
-                <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to {currentSubjectName}
+                <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to {parentLabel || (currentSubjectName || "TOS Generator")}
               </Button>
               <Button
                 size="sm"
@@ -730,10 +726,10 @@ export function TOSGeneratorScreen({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setStep("saved-list")}
+                onClick={onBack}
                 className="border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100"
               >
-                <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to TOS Exams
+                <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to {parentLabel || "TOS Exams"}
               </Button>
               <Button
                 size="sm"
@@ -765,7 +761,9 @@ export function TOSGeneratorScreen({
                 {step === "saved-list" ? "My TOS Exams" : "Table of Specifications (TOS) Generator"}
               </h2>
               <p className="text-xs font-semibold text-gray-700">
-                {currentSubjectName} • {step === "saved-list" ? "Assessment Blueprint & Question Archive" : `${quarter} Assessment Blueprint & AI Exam Creator (${language})`}
+                {currentSubjectName
+                  ? `${currentSubjectName} • ${step === "saved-list" ? "Assessment Blueprint & Question Archive" : `${quarter} Assessment Blueprint & AI Exam Creator (${language})`}`
+                  : `Select subject curriculum & configure ${quarter} blueprint (${language})`}
               </p>
             </div>
           </div>
@@ -1009,19 +1007,16 @@ export function TOSGeneratorScreen({
                 <div>
                   <label className="text-xs font-bold text-gray-700 block">Subject Curriculum</label>
                   <select
-                    value={currentSubjectId}
+                    value={currentSubjectId || ""}
                     onChange={(e) => handleSubjectChange(Number(e.target.value))}
                     className="mt-1 w-full rounded-md border-2 border-black bg-white px-3 py-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none cursor-pointer"
                   >
-                    {availableSubjects.length > 0 ? (
-                      availableSubjects.map((s) => (
-                        <option key={s.subject_id} value={s.subject_id}>
-                          {s.subject_name} {s.section_name ? `(${s.section_name})` : ""}
-                        </option>
-                      ))
-                    ) : (
-                      <option value={currentSubjectId}>{currentSubjectName}</option>
-                    )}
+                    <option value="">-- Select Subject Curriculum --</option>
+                    {availableSubjects.map((s) => (
+                      <option key={s.subject_id} value={s.subject_id}>
+                        {s.subject_name} {s.section_name ? `(${s.section_name})` : ""}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1135,15 +1130,15 @@ export function TOSGeneratorScreen({
               <div className="flex justify-between gap-2 pt-2">
                 <Button
                   variant="outline"
-                  onClick={() => setStep("saved-list")}
+                  onClick={onBack}
                   className="border-2 border-black font-bold"
                 >
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Cancel & Back
                 </Button>
                 <Button
-                  disabled={totalItems <= 0}
+                  disabled={totalItems <= 0 || !currentSubjectId}
                   onClick={() => setStep("competencies")}
-                  className="border-2 border-black bg-[#FFD54F] font-bold text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                  className="border-2 border-black bg-[#FFD54F] font-bold text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28] disabled:opacity-50"
                 >
                   Next: Competencies & Days <ArrowRight className="ml-1.5 h-4 w-4" />
                 </Button>
