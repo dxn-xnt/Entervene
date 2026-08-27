@@ -4,6 +4,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
+import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
 import {
   TableProperties,
@@ -44,14 +45,22 @@ export const TeacherTOSPage: React.FC = () => {
   const [exams, setExams] = useState<SavedTOSSummary[]>([]);
   const [subjects, setSubjects] = useState<SubjectOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>("ALL");
-  const [selectedQuarterFilter, setSelectedQuarterFilter] = useState<"ALL" | "Term 1" | "Term 2" | "Term 3">("ALL");
+  const [selectedSubjectFilter, setSelectedSubjectFilter] =
+    useState<string>("ALL");
+  const [selectedQuarterFilter, setSelectedQuarterFilter] = useState<
+    "ALL" | "Term 1" | "Term 2" | "Term 3"
+  >("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   // Active Wizard Mode State
-  const [activeSubject, setActiveSubject] = useState<{ subject_id: number; subject_name: string } | null>(null);
-  const [activeCompetencies, setActiveCompetencies] = useState<CompetencyItem[]>([]);
+  const [activeSubject, setActiveSubject] = useState<{
+    subject_id: number;
+    subject_name: string;
+  } | null>(null);
+  const [activeCompetencies, setActiveCompetencies] = useState<
+    CompetencyItem[]
+  >([]);
   const [activeExamId, setActiveExamId] = useState<number | null>(null);
   const [isOpeningExam, setIsOpeningExam] = useState(false);
 
@@ -64,7 +73,9 @@ export const TeacherTOSPage: React.FC = () => {
     try {
       const [examsRes, classesRes] = await Promise.all([
         apiFetch("/api/v1/tos/").catch(() => null),
-        apiFetch("/api/v1/classwork-assignments/teacher/classes").catch(() => null),
+        apiFetch("/api/v1/classwork-assignments/teacher/classes").catch(
+          () => null,
+        ),
       ]);
 
       if (examsRes && examsRes.ok) {
@@ -108,17 +119,22 @@ export const TeacherTOSPage: React.FC = () => {
   const handleOpenExam = async (exam: SavedTOSSummary) => {
     setIsOpeningExam(true);
     try {
-      const compRes = await apiFetch(`/api/v1/competencies/subject/${exam.subject_id}`).catch(() => null);
+      const compRes = await apiFetch(
+        `/api/v1/competencies/subject/${exam.subject_id}`,
+      ).catch(() => null);
       let comps: CompetencyItem[] = [];
       if (compRes && compRes.ok) {
         const compData = await compRes.json();
         comps = Array.isArray(compData) ? compData : [];
       }
 
-      const matchedSubject = subjects.find((s) => s.subject_id === exam.subject_id);
+      const matchedSubject = subjects.find(
+        (s) => s.subject_id === exam.subject_id,
+      );
       setActiveSubject({
         subject_id: exam.subject_id,
-        subject_name: exam.subject_name || matchedSubject?.subject_name || "Subject",
+        subject_name:
+          exam.subject_name || matchedSubject?.subject_name || "Subject",
       });
       setActiveCompetencies(comps);
       setActiveExamId(exam.tos_exam_id);
@@ -138,7 +154,9 @@ export const TeacherTOSPage: React.FC = () => {
 
     setIsOpeningExam(true);
     try {
-      const compRes = await apiFetch(`/api/v1/competencies/subject/${subjectIdNum}`).catch(() => null);
+      const compRes = await apiFetch(
+        `/api/v1/competencies/subject/${subjectIdNum}`,
+      ).catch(() => null);
       let comps: CompetencyItem[] = [];
       if (compRes && compRes.ok) {
         const compData = await compRes.json();
@@ -161,7 +179,12 @@ export const TeacherTOSPage: React.FC = () => {
 
   const handleDeleteExam = async (e: React.MouseEvent, examId: number) => {
     e.stopPropagation();
-    if (!window.confirm("Are you sure you want to delete this Table of Specifications?")) return;
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this Table of Specifications?",
+      )
+    )
+      return;
 
     setDeletingId(examId);
     try {
@@ -178,10 +201,16 @@ export const TeacherTOSPage: React.FC = () => {
 
   const filteredExams = useMemo(() => {
     return (exams || []).filter((ex) => {
-      if (selectedSubjectFilter !== "ALL" && ex.subject_id !== Number(selectedSubjectFilter)) {
+      if (
+        selectedSubjectFilter !== "ALL" &&
+        ex.subject_id !== Number(selectedSubjectFilter)
+      ) {
         return false;
       }
-      if (selectedQuarterFilter !== "ALL" && ex.quarter !== selectedQuarterFilter) {
+      if (
+        selectedQuarterFilter !== "ALL" &&
+        ex.quarter !== selectedQuarterFilter
+      ) {
         return false;
       }
       if (searchQuery.trim()) {
@@ -227,11 +256,15 @@ export const TeacherTOSPage: React.FC = () => {
                 <Breadcrumb>
                   <Breadcrumb.List>
                     <Breadcrumb.Item>
-                      <Breadcrumb.Page className="font-bold text-gray-500">Teacher</Breadcrumb.Page>
+                      <Breadcrumb.Page className="font-bold text-gray-500">
+                        Teacher
+                      </Breadcrumb.Page>
                     </Breadcrumb.Item>
                     <Breadcrumb.Separator />
                     <Breadcrumb.Item>
-                      <Breadcrumb.Page className="font-black text-black">Table of Specifications (TOS)</Breadcrumb.Page>
+                      <Breadcrumb.Page className="font-black text-black">
+                        Table of Specifications (TOS)
+                      </Breadcrumb.Page>
                     </Breadcrumb.Item>
                   </Breadcrumb.List>
                 </Breadcrumb>
@@ -278,20 +311,22 @@ export const TeacherTOSPage: React.FC = () => {
 
               {/* Academic Term Filter Chips */}
               <div className="flex items-center gap-1 overflow-x-auto">
-                {(["ALL", "Term 1", "Term 2", "Term 3"] as const).map((qTab) => (
-                  <button
-                    key={qTab}
-                    type="button"
-                    onClick={() => setSelectedQuarterFilter(qTab)}
-                    className={`px-3 py-1 text-xs font-black rounded border-2 transition-all ${
-                      selectedQuarterFilter === qTab
-                        ? "border-black bg-[#FFD54F] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                        : "border-transparent bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    }`}
-                  >
-                    {qTab === "ALL" ? "All Terms" : `${qTab}`}
-                  </button>
-                ))}
+                {(["ALL", "Term 1", "Term 2", "Term 3"] as const).map(
+                  (qTab) => (
+                    <button
+                      key={qTab}
+                      type="button"
+                      onClick={() => setSelectedQuarterFilter(qTab)}
+                      className={`px-3 py-1 text-xs font-black rounded border-2 transition-all ${
+                        selectedQuarterFilter === qTab
+                          ? "border-black bg-[#FFD54F] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                          : "border-transparent bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      {qTab === "ALL" ? "All Terms" : `${qTab}`}
+                    </button>
+                  ),
+                )}
               </div>
             </div>
 
@@ -311,30 +346,41 @@ export const TeacherTOSPage: React.FC = () => {
           {isLoading || isOpeningExam ? (
             <div className="py-20 text-center">
               <RefreshCw className="mx-auto h-8 w-8 animate-spin text-black" />
-              <p className="mt-3 text-xs font-black text-gray-700">Loading Table of Specifications...</p>
+              <p className="mt-3 text-xs font-black text-gray-700">
+                Loading Table of Specifications...
+              </p>
             </div>
           ) : filteredExams.length === 0 ? (
-            <div className="rounded-lg border-2 border-dashed border-black/30 bg-white p-12 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl border-2 border-black bg-[#FFD54F] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                <TableProperties className="h-7 w-7 text-black" />
-              </div>
-              <h3 className="mt-4 text-base font-black text-black">No TOS Exams Found</h3>
-              <p className="mt-1 text-xs font-medium text-gray-600 max-w-sm mx-auto">
-                {exams.length === 0
-                  ? "Create your first Table of Specifications blueprint and exam questionnaire."
-                  : "No exam matches the selected filters."}
-              </p>
-              <Button
-                size="sm"
-                onClick={() => {
-                  if (subjects.length > 0) setIsPickerOpen(true);
-                  else toast.error("No assigned subjects found.");
-                }}
-                className="mt-5 border-2 border-black bg-[#FFD54F] font-black text-xs text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
-              >
-                <Plus className="mr-1 h-3.5 w-3.5" /> Create New TOS
-              </Button>
-            </div>
+            <Card className="block w-full border-black text-center">
+              <Card.Content className="flex flex-col items-center py-10">
+                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-lg border-2 border-black">
+                  <TableProperties className="size-7" />
+                </div>
+
+                <Card.Title className="mb-2 text-xl">
+                  No TOS Exams Found
+                </Card.Title>
+
+                <p className="mb-6 max-w-md text-sm text-gray-600">
+                  {exams.length === 0
+                    ? "Create your first Table of Specifications blueprint and exam questionnaire."
+                    : "No exam matches the selected filters."}
+                </p>
+
+                <Button
+                  variant="default"
+                  size="md"
+                  onClick={() => {
+                    if (subjects.length > 0) setIsPickerOpen(true);
+                    else toast.error("No assigned subjects found.");
+                  }}
+                  className="gap-2"
+                >
+                  <Plus size={16} />
+                  <span>Create New TOS</span>
+                </Button>
+              </Card.Content>
+              </Card>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredExams.map((ex) => {
@@ -352,10 +398,14 @@ export const TeacherTOSPage: React.FC = () => {
                           variant="outline"
                           className="border-black bg-[#E3F2FD] text-blue-950 font-black text-[10px]"
                         >
-                          <BookOpen className="mr-1 h-3 w-3" /> {ex.subject_name || "Subject"}
+                          <BookOpen className="mr-1 h-3 w-3" />{" "}
+                          {ex.subject_name || "Subject"}
                         </Badge>
                         <div className="flex items-center gap-1.5">
-                          <Badge variant="outline" className="border-black bg-amber-100 font-black text-[10px]">
+                          <Badge
+                            variant="outline"
+                            className="border-black bg-amber-100 font-black text-[10px]"
+                          >
                             {ex.quarter}
                           </Badge>
                           <Badge
@@ -379,12 +429,20 @@ export const TeacherTOSPage: React.FC = () => {
                       {/* Metrics */}
                       <div className="mt-3.5 grid grid-cols-2 gap-2 rounded border border-black/20 bg-gray-50/80 p-2.5 text-center">
                         <div>
-                          <p className="text-[10px] font-bold text-gray-500 uppercase">Target Items</p>
-                          <p className="text-sm font-black text-black">{ex.total_items || "—"}</p>
+                          <p className="text-[10px] font-bold text-gray-500 uppercase">
+                            Target Items
+                          </p>
+                          <p className="text-sm font-black text-black">
+                            {ex.total_items || "—"}
+                          </p>
                         </div>
                         <div>
-                          <p className="text-[10px] font-bold text-gray-500 uppercase">AI Questions</p>
-                          <p className="text-sm font-black text-blue-700">{ex.question_count}</p>
+                          <p className="text-[10px] font-bold text-gray-500 uppercase">
+                            AI Questions
+                          </p>
+                          <p className="text-sm font-black text-blue-700">
+                            {ex.question_count}
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -392,7 +450,9 @@ export const TeacherTOSPage: React.FC = () => {
                     {/* Bottom Toolbar */}
                     <div className="mt-4 flex items-center justify-between border-t border-black/10 pt-3">
                       <span className="text-[11px] font-semibold text-gray-400">
-                        {ex.updated_at ? new Date(ex.updated_at).toLocaleDateString() : "Recently"}
+                        {ex.updated_at
+                          ? new Date(ex.updated_at).toLocaleDateString()
+                          : "Recently"}
                       </span>
 
                       <div className="flex items-center gap-1.5">
@@ -427,7 +487,9 @@ export const TeacherTOSPage: React.FC = () => {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
             <div className="w-full max-w-md rounded-lg border-2 border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] animate-in fade-in zoom-in-95 duration-150">
               <div className="flex items-center justify-between border-b-2 border-black pb-3">
-                <h3 className="text-base font-black text-black">Select Subject for New TOS</h3>
+                <h3 className="text-base font-black text-black">
+                  Select Subject for New TOS
+                </h3>
                 <button
                   type="button"
                   onClick={() => setIsPickerOpen(false)}
@@ -439,11 +501,14 @@ export const TeacherTOSPage: React.FC = () => {
 
               <div className="py-4 space-y-3">
                 <p className="text-xs text-gray-600">
-                  Choose which subject curriculum you want to build a Table of Specifications blueprint for.
+                  Choose which subject curriculum you want to build a Table of
+                  Specifications blueprint for.
                 </p>
 
                 <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1.5">Assigned Subject</label>
+                  <label className="text-xs font-bold text-gray-700 block mb-1.5">
+                    Assigned Subject
+                  </label>
                   <select
                     value={pickerSubjectId}
                     onChange={(e) => setPickerSubjectId(e.target.value)}
@@ -452,7 +517,8 @@ export const TeacherTOSPage: React.FC = () => {
                     <option value="">-- Select a subject --</option>
                     {subjects.map((s) => (
                       <option key={s.subject_id} value={s.subject_id}>
-                        {s.subject_name} {s.section_name ? `(${s.section_name})` : ""}
+                        {s.subject_name}{" "}
+                        {s.section_name ? `(${s.section_name})` : ""}
                       </option>
                     ))}
                   </select>
