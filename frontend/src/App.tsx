@@ -64,8 +64,7 @@ import StudentInterventions from "./pages/student/student-interventions";
 import StudentGrades from "./pages/student/Grades/grades";
 import StudentTodo from "./pages/student/todo";
 import StudentTodoView from "./pages/student/todo-view";
-import StudentNotifications from "./pages/student/notifications";
-import StudentAttendance from "./pages/student/attendance";
+import StudentNotifications from "./pages/student/notifications";si
 import AdminStudentView from "./pages/admin/student-view";
 
 // Quiz pages
@@ -154,7 +153,6 @@ const App = () => {
                 <Route path={routes.student.todo} element={<StudentTodo />} />
                 <Route path={routes.student.todoView} element={<StudentTodoView />} />
                 <Route path={routes.student.notifications} element={<StudentNotifications />} />
-                <Route path={routes.student.attendance} element={<StudentAttendance />} />
               </Route>
 
               {/* Quiz pages (outside student layout — fullscreen) */}
