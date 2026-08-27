@@ -47,10 +47,13 @@ import {
 } from "@/lib/tos-export";
 
 export interface TOSGeneratorScreenProps {
-  subjectId: number;
-  subjectName: string;
-  competencies: CompetencyItem[];
+  subjectId?: number;
+  subjectName?: string;
+  competencies?: CompetencyItem[];
   initialExamId?: number | null;
+  initialStep?: WizardStep;
+  parentLabel?: string;
+  subjectsList?: Array<{ subject_id: number; subject_name: string; section_name?: string }>;
   onBack: () => void;
 }
 
@@ -64,14 +67,27 @@ type WizardStep =
   | "export";
 
 export function TOSGeneratorScreen({
-  subjectId,
-  subjectName,
-  competencies,
+  subjectId = 0,
+  subjectName = "",
+  competencies = [],
   initialExamId,
+  initialStep,
+  parentLabel,
+  subjectsList,
   onBack,
 }: TOSGeneratorScreenProps) {
-  // Default entry point is "saved-list" (My TOS Exams landing page)
-  const [step, setStep] = useState<WizardStep>("saved-list");
+  // Default entry point: initialStep or "test-parts" when creating new, "blueprint" when loading existing
+  const [step, setStep] = useState<WizardStep>(
+    initialStep || (initialExamId ? "blueprint" : "test-parts")
+  );
+  const [currentSubjectId, setCurrentSubjectId] = useState<number>(subjectId);
+  const [currentSubjectName, setCurrentSubjectName] = useState<string>(subjectName);
+  const [availableSubjects, setAvailableSubjects] = useState<
+    Array<{ subject_id: number; subject_name: string; section_name?: string }>
+  >(subjectsList || []);
+  const [language, setLanguage] = useState<"English" | "Filipino">("English");
+  const [loadedCompetencies, setLoadedCompetencies] = useState<CompetencyItem[]>(competencies);
+
   const [examId, setExamId] = useState<number | null>(null);
   const [savedExams, setSavedExams] = useState<Array<any>>([]);
   const [isLoadingSaved, setIsLoadingSaved] = useState(false);
@@ -120,9 +136,48 @@ export function TOSGeneratorScreen({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState("");
 
+  // Fetch available subjects list if not passed from parent
+  useEffect(() => {
+    if (availableSubjects.length === 0) {
+      apiFetch("/api/v1/classwork-assignments/teacher/classes")
+        .then((res) => (res.ok ? res.json() : []))
+        .then((classesData) => {
+          if (Array.isArray(classesData)) {
+            const extracted: Array<{ subject_id: number; subject_name: string; section_name?: string }> = [];
+            const seen = new Set<number>();
+            classesData.forEach((item: any) => {
+              const sId = item.subject_id;
+              const sName = item.subject_name;
+              if (sId && sName && !seen.has(sId)) {
+                seen.add(sId);
+                extracted.push({
+                  subject_id: sId,
+                  subject_name: sName,
+                  section_name: item.section_name,
+                });
+              }
+            });
+            if (extracted.length > 0) {
+              setAvailableSubjects(extracted);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [availableSubjects.length]);
+
+  // Keep subject in sync if prop changes
+  useEffect(() => {
+    if (subjectId && subjectId !== currentSubjectId) {
+      setCurrentSubjectId(subjectId);
+      setCurrentSubjectName(subjectName || "");
+    }
+  }, [subjectId, subjectName]);
+
   // Initialize competencies and load exams list
   useEffect(() => {
     if (competencies && competencies.length > 0) {
+      setLoadedCompetencies(competencies);
       const initial = competencies.map((c) => ({
         competency_id: c.competency_id,
         label: c.statement,
@@ -131,29 +186,51 @@ export function TOSGeneratorScreen({
         is_adhoc: false,
       }));
       setCompInputs(initial);
+    } else if (currentSubjectId) {
+      apiFetch(`/api/v1/competencies/subject/${currentSubjectId}`)
+        .then((res) => (res.ok ? res.json() : []))
+        .then((compData: CompetencyItem[]) => {
+          if (Array.isArray(compData) && compData.length > 0) {
+            setLoadedCompetencies(compData);
+            setCompInputs(
+              compData.map((c) => ({
+                competency_id: c.competency_id,
+                label: c.statement,
+                code: c.competency_code || undefined,
+                days: c.target_hours ? Math.max(1, Math.round(c.target_hours / 4)) : 2,
+                is_adhoc: false,
+              }))
+            );
+          } else {
+            setLoadedCompetencies([]);
+            setCompInputs([]);
+          }
+        })
+        .catch(() => {
+          setLoadedCompetencies([]);
+          setCompInputs([]);
+        });
     } else {
-      setCompInputs([
-        { label: "Unit 1: Core Concepts and Foundations", code: "LC-01", days: 3, is_adhoc: true },
-        { label: "Unit 2: Practical Applications and Problem Solving", code: "LC-02", days: 4, is_adhoc: true },
-      ]);
+      setLoadedCompetencies([]);
+      setCompInputs([]);
     }
     if (initialExamId) {
       handleLoadExam(initialExamId);
-    } else {
+    } else if (currentSubjectId) {
       loadSavedExams();
     }
-  }, [competencies, subjectId, initialExamId]);
+  }, [competencies, currentSubjectId, initialExamId]);
 
   const availableCompetencies = useMemo(() => {
-    return (competencies || []).filter(
+    return (loadedCompetencies || []).filter(
       (c) => !compInputs.some((input) => input.competency_id === c.competency_id)
     );
-  }, [competencies, compInputs]);
+  }, [loadedCompetencies, compInputs]);
 
   const handleSelectCompetency = (compIdStr: string) => {
     if (!compIdStr) return;
     const compId = Number(compIdStr);
-    const targetComp = (competencies || []).find((c) => c.competency_id === compId);
+    const targetComp = (loadedCompetencies || []).find((c) => c.competency_id === compId);
     if (!targetComp) return;
 
     setCompInputs((prev) => [
@@ -169,9 +246,10 @@ export function TOSGeneratorScreen({
   };
 
   const loadSavedExams = async () => {
+    if (!currentSubjectId) return;
     setIsLoadingSaved(true);
     try {
-      const res = await apiFetch(`/api/v1/tos/subject/${subjectId}`);
+      const res = await apiFetch(`/api/v1/tos/subject/${currentSubjectId}`);
       if (res.ok) {
         const data = await res.json();
         setSavedExams(Array.isArray(data) ? data : []);
@@ -183,14 +261,60 @@ export function TOSGeneratorScreen({
     }
   };
 
+  const handleSubjectChange = async (newSubjectIdNum: number) => {
+    if (!newSubjectIdNum) {
+      setCurrentSubjectId(0);
+      setCurrentSubjectName("");
+      setLoadedCompetencies([]);
+      setCompInputs([]);
+      return;
+    }
+    const targetSub = availableSubjects.find((s) => s.subject_id === newSubjectIdNum);
+    setCurrentSubjectId(newSubjectIdNum);
+    if (targetSub) {
+      setCurrentSubjectName(targetSub.subject_name);
+    }
+    try {
+      const compRes = await apiFetch(`/api/v1/competencies/subject/${newSubjectIdNum}`);
+      if (compRes.ok) {
+        const compData = (await compRes.json()) as CompetencyItem[];
+        setLoadedCompetencies(compData);
+        if (compData.length > 0) {
+          setCompInputs(
+            compData.map((c) => ({
+              competency_id: c.competency_id,
+              label: c.statement,
+              code: c.competency_code || undefined,
+              days: c.target_hours ? Math.max(1, Math.round(c.target_hours / 4)) : 2,
+              is_adhoc: false,
+            }))
+          );
+        } else {
+          setCompInputs([
+            { label: "Unit 1: Core Concepts and Foundations", code: "LC-01", days: 3, is_adhoc: true },
+            { label: "Unit 2: Practical Applications and Problem Solving", code: "LC-02", days: 4, is_adhoc: true },
+          ]);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load competencies for selected subject", err);
+    }
+  };
+
   const startNewExam = () => {
     setExamId(null);
     setTitle(`Summative Assessment ${savedExams.length + 1}`);
-    setQuarter("Q1");
+    setQuarter("Term 1");
     setTestParts([{ type: "MULTIPLE_CHOICE", count: 15 }]);
-    if (competencies && competencies.length > 0) {
+    setLanguage("English");
+    if (!subjectId) {
+      setCurrentSubjectId(0);
+      setCurrentSubjectName("");
+      setLoadedCompetencies([]);
+      setCompInputs([]);
+    } else if (loadedCompetencies && loadedCompetencies.length > 0) {
       setCompInputs(
-        competencies.map((c) => ({
+        loadedCompetencies.map((c) => ({
           competency_id: c.competency_id,
           label: c.statement,
           code: c.competency_code || undefined,
@@ -198,10 +322,7 @@ export function TOSGeneratorScreen({
         }))
       );
     } else {
-      setCompInputs([
-        { label: "Unit 1: Core Concepts and Foundations", code: "LC-01", days: 3 },
-        { label: "Unit 2: Practical Applications and Problem Solving", code: "LC-02", days: 4 },
-      ]);
+      setCompInputs([]);
     }
     setDifficultyRatio({ easy: 60, average: 30, difficult: 10 });
     setRows([]);
@@ -230,8 +351,8 @@ export function TOSGeneratorScreen({
 
   const handleRecalculate = () => {
     const computed = computeTOS({
-      subject_id: subjectId,
-      subject_name: subjectName,
+      subject_id: currentSubjectId,
+      subject_name: currentSubjectName,
       title,
       quarter,
       test_parts: testParts,
@@ -257,7 +378,15 @@ export function TOSGeneratorScreen({
       if (exam) {
         setExamId(exam.tos_exam_id);
         setTitle(exam.title || "TOS Exam");
-        setQuarter(exam.quarter || "Q1");
+        setQuarter(exam.quarter || "Term 1");
+        if (exam.subject_id) {
+          setCurrentSubjectId(exam.subject_id);
+          const matched = availableSubjects.find((s) => s.subject_id === exam.subject_id);
+          if (matched) setCurrentSubjectName(matched.subject_name);
+        }
+        if (exam.difficulty_ratio?.language) {
+          setLanguage(exam.difficulty_ratio.language as "English" | "Filipino");
+        }
         setTestParts(exam.test_parts || [{ type: "MULTIPLE_CHOICE", count: 15 }]);
         setCompInputs(exam.competencies || []);
         if (exam.difficulty_ratio) {
@@ -271,8 +400,8 @@ export function TOSGeneratorScreen({
         setQuestions(loadedQuestions);
 
         const computed = computeTOS({
-          subject_id: subjectId,
-          subject_name: subjectName,
+          subject_id: exam.subject_id || currentSubjectId,
+          subject_name: exam.subject_name || currentSubjectName,
           title: exam.title,
           quarter: exam.quarter,
           test_parts: exam.test_parts || [{ type: "MULTIPLE_CHOICE", count: 15 }],
@@ -325,7 +454,10 @@ export function TOSGeneratorScreen({
         status: questions.length > 0 ? "FINALIZED" : "DRAFT",
         test_parts: testParts,
         competencies: compInputs,
-        difficulty_ratio: ratioDecimal,
+        difficulty_ratio: {
+          ...ratioDecimal,
+          language: language,
+        },
         questions: questions.map((q, idx) => ({
           competency_id: (q as any).competency_id || null,
           competency_label: q.competency_label || "General",
@@ -352,7 +484,7 @@ export function TOSGeneratorScreen({
           body: JSON.stringify(payload),
         });
       } else {
-        res = await apiFetch(`/api/v1/tos/subject/${subjectId}`, {
+        res = await apiFetch(`/api/v1/tos/subject/${currentSubjectId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -400,14 +532,15 @@ export function TOSGeneratorScreen({
         },
       }));
 
-      setGenerationProgress(`Calling AI engine for ${totalItems} question(s) across ${rows.length} competency row(s)...`);
+      setGenerationProgress(`Calling AI engine (${language}) for ${totalItems} question(s) across ${rows.length} competency row(s)...`);
 
       const res = await apiFetch("/api/v1/ai/generate-tos-questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          subject_id: subjectId,
-          subject_name: subjectName,
+          subject_id: currentSubjectId,
+          subject_name: currentSubjectName,
+          language: language,
           rows: rowRequests,
         }),
       });
@@ -442,8 +575,9 @@ export function TOSGeneratorScreen({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          subject_id: subjectId,
-          subject_name: subjectName,
+          subject_id: currentSubjectId,
+          subject_name: currentSubjectName,
+          language: language,
           rows: [
             {
               competency_id: (targetQ as any).competency_id || null,
@@ -476,8 +610,8 @@ export function TOSGeneratorScreen({
   const fullDraft: TOSDraft | null = useMemo(() => {
     if (!grandTotal || rows.length === 0) return null;
     return {
-      subject_id: subjectId,
-      subject_name: subjectName,
+      subject_id: currentSubjectId,
+      subject_name: currentSubjectName,
       title,
       quarter,
       test_parts: testParts,
@@ -487,7 +621,7 @@ export function TOSGeneratorScreen({
       rows,
       grand_total: grandTotal,
     };
-  }, [subjectId, subjectName, title, quarter, testParts, totalItems, compInputs, ratioDecimal, rows, grandTotal]);
+  }, [currentSubjectId, currentSubjectName, title, quarter, testParts, totalItems, compInputs, ratioDecimal, rows, grandTotal]);
 
   const draftValidation = useMemo(() => {
     if (!fullDraft) return { valid: false, errors: [] };
@@ -556,30 +690,15 @@ export function TOSGeneratorScreen({
           <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
             <Breadcrumb.Item>
               <Breadcrumb.Link onClick={onBack} className="cursor-pointer hover:text-black">
-                {subjectName}
+                {parentLabel || (currentSubjectName || "TOS Generator")}
               </Breadcrumb.Link>
             </Breadcrumb.Item>
             <Breadcrumb.Separator />
             <Breadcrumb.Item>
-              {step === "saved-list" ? (
-                <Breadcrumb.Page>My TOS Exams</Breadcrumb.Page>
-              ) : (
-                <Breadcrumb.Link
-                  onClick={() => setStep("saved-list")}
-                  className="cursor-pointer hover:text-black"
-                >
-                  My TOS Exams
-                </Breadcrumb.Link>
-              )}
+              <Breadcrumb.Page>
+                {step === "saved-list" ? "My TOS Exams" : (title || "New Assessment Blueprint")}
+              </Breadcrumb.Page>
             </Breadcrumb.Item>
-            {step !== "saved-list" && (
-              <>
-                <Breadcrumb.Separator />
-                <Breadcrumb.Item>
-                  <Breadcrumb.Page>{title || "TOS Generator"}</Breadcrumb.Page>
-                </Breadcrumb.Item>
-              </>
-            )}
           </Breadcrumb.List>
         </Breadcrumb>
 
@@ -592,7 +711,7 @@ export function TOSGeneratorScreen({
                 onClick={onBack}
                 className="border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100"
               >
-                <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to {subjectName}
+                <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to {parentLabel || (currentSubjectName || "TOS Generator")}
               </Button>
               <Button
                 size="sm"
@@ -607,10 +726,10 @@ export function TOSGeneratorScreen({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setStep("saved-list")}
+                onClick={onBack}
                 className="border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100"
               >
-                <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to TOS Exams
+                <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to {parentLabel || "TOS Exams"}
               </Button>
               <Button
                 size="sm"
@@ -642,7 +761,9 @@ export function TOSGeneratorScreen({
                 {step === "saved-list" ? "My TOS Exams" : "Table of Specifications (TOS) Generator"}
               </h2>
               <p className="text-xs font-semibold text-gray-700">
-                {subjectName} • {step === "saved-list" ? "Assessment Blueprint & Question Archive" : `${quarter} Assessment Blueprint & AI Exam Creator`}
+                {currentSubjectName
+                  ? `${currentSubjectName} • ${step === "saved-list" ? "Assessment Blueprint & Question Archive" : `${quarter} Assessment Blueprint & AI Exam Creator (${language})`}`
+                  : `Select subject curriculum & configure ${quarter} blueprint (${language})`}
               </p>
             </div>
           </div>
@@ -799,33 +920,30 @@ export function TOSGeneratorScreen({
                         key={ex.tos_exam_id}
                         className="flex flex-col justify-between rounded-lg border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
                       >
-                        <div className="space-y-3">
-                          {/* Card Header: Quarter & Status */}
-                          <div className="flex items-center justify-between">
+                        <div>
+                          {/* Top Badges */}
+                          <div className="flex items-center justify-between gap-2 border-b border-black/10 pb-2.5">
                             <Badge
                               variant="outline"
-                              className="border-2 border-black bg-[#E3F2FD] text-xs font-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                              className="border-black bg-[#E3F2FD] text-blue-950 font-black text-[10px]"
                             >
-                              {ex.quarter || "Q1"}
+                              {ex.quarter || "Term 1"}
                             </Badge>
                             <Badge
                               variant="outline"
-                              className={`border-2 border-black text-[10px] font-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${isFinal
-                                  ? "bg-emerald-100 text-emerald-950 border-emerald-600"
-                                  : "bg-amber-100 text-amber-950 border-amber-600"
-                                }`}
+                              className={`border-black font-black text-[10px] ${isFinal ? "bg-[#C8E6C9] text-green-950" : "bg-[#FFF9C4] text-yellow-950"}`}
                             >
                               {isFinal ? "COMPLETED" : "DRAFT"}
                             </Badge>
                           </div>
 
                           {/* Title */}
-                          <div>
-                            <h4 className="text-sm font-black text-black leading-snug line-clamp-2">
-                              {ex.title || "Untitled TOS Exam"}
-                            </h4>
-                            <p className="text-[11px] font-semibold text-gray-500 mt-0.5">{subjectName}</p>
-                          </div>
+                          <h4 className="mt-3 text-sm font-black text-black line-clamp-2">
+                            {ex.title}
+                          </h4>
+                          <p className="text-[11px] font-semibold text-gray-500 mt-0.5">
+                            {ex.subject_name || currentSubjectName}
+                          </p>
 
                           {/* Metric Badges */}
                           <div className="flex flex-wrap items-center gap-1.5 text-[11px] pt-1">
@@ -881,26 +999,55 @@ export function TOSGeneratorScreen({
               <div>
                 <h3 className="text-base font-bold">Step 1 — Configure Assessment Parts</h3>
                 <p className="text-xs text-gray-600">
-                  Define the item-type composition. The sum of all parts determines your total target items.
+                  Define the subject curriculum, exam language, and item-type composition. The sum of all parts determines your total target items.
                 </p>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
-                  <label className="text-xs font-bold text-gray-700">Exam Title</label>
+                  <label className="text-xs font-bold text-gray-700 block">Subject Curriculum</label>
+                  <select
+                    value={currentSubjectId || ""}
+                    onChange={(e) => handleSubjectChange(Number(e.target.value))}
+                    className="mt-1 w-full rounded-md border-2 border-black bg-white px-3 py-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none cursor-pointer"
+                  >
+                    <option value="">-- Select Subject Curriculum --</option>
+                    {availableSubjects.map((s) => (
+                      <option key={s.subject_id} value={s.subject_id}>
+                        {s.subject_name} {s.section_name ? `(${s.section_name})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block">Exam Language</label>
+                  <select
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value as "English" | "Filipino")}
+                    className="mt-1 w-full rounded-md border-2 border-black bg-white px-3 py-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none cursor-pointer"
+                  >
+                    <option value="English">English</option>
+                    <option value="Filipino">Filipino</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block">Exam Title</label>
                   <Input
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="e.g. 1st Periodic Exam in Mathematics 8"
+                    placeholder="e.g. Summative Assessment 1"
                     className="mt-1 border-2 border-black font-semibold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                   />
                 </div>
+
                 <div>
-                  <label className="text-xs font-bold text-gray-700">Academic Term (Trimester)</label>
+                  <label className="text-xs font-bold text-gray-700 block">Academic Term (Trimester)</label>
                   <select
                     value={quarter}
                     onChange={(e) => setQuarter(e.target.value)}
-                    className="mt-1 w-full rounded-md border-2 border-black bg-white px-3 py-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none"
+                    className="mt-1 w-full rounded-md border-2 border-black bg-white px-3 py-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none cursor-pointer"
                   >
                     <option value="Term 1">1st Term (Term 1)</option>
                     <option value="Term 2">2nd Term (Term 2)</option>
@@ -983,15 +1130,15 @@ export function TOSGeneratorScreen({
               <div className="flex justify-between gap-2 pt-2">
                 <Button
                   variant="outline"
-                  onClick={() => setStep("saved-list")}
+                  onClick={onBack}
                   className="border-2 border-black font-bold"
                 >
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Cancel & Back
                 </Button>
                 <Button
-                  disabled={totalItems <= 0}
+                  disabled={totalItems <= 0 || !currentSubjectId}
                   onClick={() => setStep("competencies")}
-                  className="border-2 border-black bg-[#FFD54F] font-bold text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                  className="border-2 border-black bg-[#FFD54F] font-bold text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28] disabled:opacity-50"
                 >
                   Next: Competencies & Days <ArrowRight className="ml-1.5 h-4 w-4" />
                 </Button>
@@ -2012,7 +2159,7 @@ export function TOSGeneratorScreen({
                         setIsExporting("exam-pdf");
                         await exportTosExamPdf(questions, {
                           title,
-                          subjectName,
+                          subjectName: currentSubjectName,
                           quarter,
                           includeAnswerKey,
                         });
@@ -2028,7 +2175,7 @@ export function TOSGeneratorScreen({
                         setIsExporting("exam-docx");
                         await exportTosExamDocx(questions, {
                           title,
-                          subjectName,
+                          subjectName: currentSubjectName,
                           quarter,
                           includeAnswerKey,
                         });

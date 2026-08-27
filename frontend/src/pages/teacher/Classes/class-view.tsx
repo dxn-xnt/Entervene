@@ -570,35 +570,11 @@ function OverviewTab({
 
         <section className="flex flex-col gap-4">
           <div className="flex flex-col gap-3">
-            {/* Header toolbar with subject selector and quick actions */}
+            {/* Header toolbar with quick actions */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-3 flex-wrap">
-                <Text as="h3" className="text-xl font-semibold">
-                  Lessons & Competencies
-                </Text>
-                {detail.subject_loads && detail.subject_loads.length > 0 && (
-                  <div className="w-56">
-                    <Select
-                      value={selectedSubjectId ? String(selectedSubjectId) : ""}
-                      onValueChange={(v) => setSelectedSubjectId(Number(v))}
-                    >
-                      <Select.Trigger className="h-9 text-xs bg-white border-2 border-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                        <Select.Value placeholder="Select Subject" />
-                      </Select.Trigger>
-                      <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                        {detail.subject_loads.map((load) => (
-                          <Select.Item
-                            key={load.subject_id}
-                            value={String(load.subject_id)}
-                          >
-                            {load.subject_name}
-                          </Select.Item>
-                        ))}
-                      </Select.Content>
-                    </Select>
-                  </div>
-                )}
-              </div>
+              <Text as="h3" className="text-xl font-semibold">
+                Lessons & Competencies
+              </Text>
 
               <div className="flex items-center gap-2 flex-wrap">
                 {selectedSubjectId && (
