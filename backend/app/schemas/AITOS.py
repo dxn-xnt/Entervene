@@ -85,6 +85,7 @@ class TOSRowRequest(BaseModel):
 class AITOSGenerateRequest(BaseModel):
     subject_id: int
     subject_name: str
+    language: str = "English"
     rows: List[TOSRowRequest] = Field(default_factory=list)
 
 

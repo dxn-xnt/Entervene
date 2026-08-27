@@ -14,7 +14,6 @@ import {
   BookOpen,
   ArrowRight,
   RefreshCw,
-  X,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
@@ -63,10 +62,6 @@ export const TeacherTOSPage: React.FC = () => {
   >([]);
   const [activeExamId, setActiveExamId] = useState<number | null>(null);
   const [isOpeningExam, setIsOpeningExam] = useState(false);
-
-  // Subject Picker Modal for "+ New TOS"
-  const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const [pickerSubjectId, setPickerSubjectId] = useState<string>("");
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -169,7 +164,6 @@ export const TeacherTOSPage: React.FC = () => {
       });
       setActiveCompetencies(comps);
       setActiveExamId(null);
-      setIsPickerOpen(false);
     } catch (err) {
       toast.error("Unable to load subject competencies.");
     } finally {
@@ -233,6 +227,8 @@ export const TeacherTOSPage: React.FC = () => {
             subjectName={activeSubject.subject_name}
             competencies={activeCompetencies}
             initialExamId={activeExamId}
+            initialStep={activeExamId ? "blueprint" : "test-parts"}
+            subjectsList={subjects}
             onBack={() => {
               setActiveSubject(null);
               setActiveExamId(null);
@@ -276,12 +272,18 @@ export const TeacherTOSPage: React.FC = () => {
 
             <Button
               onClick={() => {
-                if (selectedSubjectFilter !== "ALL") {
-                  handleStartNewTOSForSubject(Number(selectedSubjectFilter));
-                } else if (subjects.length === 1) {
+                const targetSub =
+                  selectedSubjectFilter !== "ALL"
+                    ? subjects.find((s) => s.subject_id === Number(selectedSubjectFilter))
+                    : subjects[0];
+                if (targetSub) {
+                  handleStartNewTOSForSubject(targetSub.subject_id);
+                } else if (subjects.length > 0) {
                   handleStartNewTOSForSubject(subjects[0].subject_id);
                 } else {
-                  setIsPickerOpen(true);
+                  setActiveSubject({ subject_id: 1, subject_name: "General Subject" });
+                  setActiveCompetencies([]);
+                  setActiveExamId(null);
                 }
               }}
               className="border-2 border-black bg-[#FFD54F] font-black text-xs text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
@@ -371,8 +373,14 @@ export const TeacherTOSPage: React.FC = () => {
                   variant="default"
                   size="md"
                   onClick={() => {
-                    if (subjects.length > 0) setIsPickerOpen(true);
-                    else toast.error("No assigned subjects found.");
+                    const targetSub = subjects[0];
+                    if (targetSub) {
+                      handleStartNewTOSForSubject(targetSub.subject_id);
+                    } else {
+                      setActiveSubject({ subject_id: 1, subject_name: "General Subject" });
+                      setActiveCompetencies([]);
+                      setActiveExamId(null);
+                    }
                   }}
                   className="gap-2"
                 >
@@ -481,73 +489,6 @@ export const TeacherTOSPage: React.FC = () => {
             </div>
           )}
         </div>
-
-        {/* Subject Picker Modal for New TOS */}
-        {isPickerOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <div className="w-full max-w-md rounded-lg border-2 border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-center justify-between border-b-2 border-black pb-3">
-                <h3 className="text-base font-black text-black">
-                  Select Subject for New TOS
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setIsPickerOpen(false)}
-                  className="rounded border border-black/20 p-1 hover:bg-gray-100"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="py-4 space-y-3">
-                <p className="text-xs text-gray-600">
-                  Choose which subject curriculum you want to build a Table of
-                  Specifications blueprint for.
-                </p>
-
-                <div>
-                  <label className="text-xs font-bold text-gray-700 block mb-1.5">
-                    Assigned Subject
-                  </label>
-                  <select
-                    value={pickerSubjectId}
-                    onChange={(e) => setPickerSubjectId(e.target.value)}
-                    className="w-full h-10 rounded border-2 border-black bg-white px-3 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] outline-none cursor-pointer"
-                  >
-                    <option value="">-- Select a subject --</option>
-                    {subjects.map((s) => (
-                      <option key={s.subject_id} value={s.subject_id}>
-                        {s.subject_name}{" "}
-                        {s.section_name ? `(${s.section_name})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 border-t border-black/10 pt-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsPickerOpen(false)}
-                  className="border-2 border-black font-bold text-xs"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  disabled={!pickerSubjectId}
-                  onClick={() => {
-                    if (pickerSubjectId) {
-                      handleStartNewTOSForSubject(Number(pickerSubjectId));
-                    }
-                  }}
-                  className="border-2 border-black bg-[#FFD54F] font-black text-xs text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
-                >
-                  Start TOS Wizard <ArrowRight className="ml-1 h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </AppLayout>
   );
