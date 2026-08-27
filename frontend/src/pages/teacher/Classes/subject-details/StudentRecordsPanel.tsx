@@ -262,6 +262,27 @@ export default function StudentRecordsPanel({
         </div>
       )}
 
+      {roster?.scope?.is_view_only && (
+        <div className="rounded-lg border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/30 p-4 text-amber-900 dark:text-amber-200 flex items-center gap-3">
+          <span className="text-xl">🔒</span>
+          <div>
+            <p className="font-bold text-sm">You are currently on leave for this class and subject.</p>
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Student records are view-only. Covered by substitute: <span className="font-semibold">{roster.scope.substitute_name || "Assigned Substitute"}</span>.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {roster?.scope?.is_substitution && (
+        <div className="rounded-lg border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 p-3 text-emerald-900 dark:text-emerald-200 flex items-center gap-2 text-xs font-medium">
+          <span className="text-base">📋</span>
+          <span>
+            You are covering this class as a substitute teacher for <span className="font-bold">{roster.scope.original_teacher_name || "the original teacher"}</span>. You have full grading and record access.
+          </span>
+        </div>
+      )}
+
       {error && (
         <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -270,6 +291,7 @@ export default function StudentRecordsPanel({
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="block">
+
           <Card.Content className="space-y-1">
             <Card.Description>Students</Card.Description>
             <Card.Title>{roster?.students.length ?? 0}</Card.Title>

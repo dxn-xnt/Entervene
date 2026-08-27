@@ -23,6 +23,9 @@ class StudentAssessmentScore(Base):
     raw_score = Column(Numeric(8, 2), nullable=True)
     score_status = Column(String(30), nullable=False, default="RECORDED")
     encoded_at = Column(DateTime(timezone=True), server_default=func.now())
+    entered_by_staff_id = Column(String(20), ForeignKey("academic_staff.staff_id", ondelete="SET NULL"), nullable=True)
 
     assessment = relationship("AssessmentItem", backref="student_scores")
     student = relationship("Student", backref="assessment_scores")
+    entered_by = relationship("AcademicStaff", backref="entered_student_assessment_scores")
+

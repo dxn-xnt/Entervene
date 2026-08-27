@@ -26,6 +26,8 @@ import AdminNotifications from "./pages/admin/notifications";
 import AdminSettings from "./pages/admin/system-settings";
 import AcademicPeriods from "./pages/admin/academic-periods";
 import AdminProfile from "./pages/admin/profile-view";
+import AdminSubstitutions from "./pages/admin/substitutions";
+
 // import AppLayout from "./layouts/app-layout";
 
 // Teacher pages
@@ -106,7 +108,9 @@ const App = () => {
                 <Route path={routes.admin.predictions} element={<PredictionsDashboard />} />
                 <Route path={routes.admin.gradePredictions} element={<GradesPredictions />} />
                 <Route path={routes.admin.sectionPredictions} element={<SectionPredictions />} />
+                <Route path={routes.admin.substitutions} element={<AdminSubstitutions />} />
               </Route>
+
 
               {/* Teacher */}
               <Route element={<ProtectedRoute allowedRoles={["teacher"]} />}>

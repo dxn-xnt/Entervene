@@ -39,6 +39,7 @@ class StudentPeriodGrade(Base):
     is_finalized: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finalized_by_staff_id: Mapped[str | None] = mapped_column(String(20), ForeignKey("academic_staff.staff_id", ondelete="SET NULL"), nullable=True)
+    entered_by_staff_id: Mapped[str | None] = mapped_column(String(20), ForeignKey("academic_staff.staff_id", ondelete="SET NULL"), nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -47,5 +48,7 @@ class StudentPeriodGrade(Base):
     class_ = relationship("Class", backref="period_grades")
     subject = relationship("Subject", backref="period_grades")
     academic_period = relationship("AcademicPeriod", backref="student_period_grades")
-    finalized_by = relationship("AcademicStaff", backref="finalized_period_grades")
+    finalized_by = relationship("AcademicStaff", foreign_keys=[finalized_by_staff_id], backref="finalized_period_grades")
+    entered_by = relationship("AcademicStaff", foreign_keys=[entered_by_staff_id], backref="entered_period_grades")
+
 

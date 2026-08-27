@@ -14,15 +14,9 @@ import {
   BookOpen,
   Save,
   FileText,
-  X,
   Check,
-  HelpCircle,
-  Layers,
-  ChevronDown,
-  List,
 } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
-import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
 import { Switch } from "@/components/retroui/Switch";

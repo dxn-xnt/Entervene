@@ -16,6 +16,11 @@ class StudentRecordScope(BaseModel):
     subject_name: str
     period_name: str
     year_label: str
+    is_view_only: bool = False
+    is_substitution: bool = False
+    substitute_name: str | None = None
+    original_teacher_name: str | None = None
+
 
 
 class StudentRecordRosterRow(BaseModel):

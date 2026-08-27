@@ -32,7 +32,12 @@ export type User = {
   section?: string | null;
   grade_level?: number | null;
   average?: number | null;
+  staff_id?: string;
+  employment_status?: string;
+  is_on_leave?: boolean;
+  active_substitutions_count?: number;
 };
+
 
 export type UserDetail = User & {
   staff_id?: string;
@@ -1576,7 +1581,12 @@ export interface DynamicScheduleRow {
   days?: string[];
   label?: string;
   slot_type?: "HOMEROOM" | "RECESS" | "LUNCH" | "CLASS";
+  is_substitution?: boolean;
+  original_teacher_name?: string | null;
+  is_covered?: boolean;
+  substitute_name?: string | null;
 }
+
 
 export interface DynamicScheduleResponse {
   is_published: boolean;
@@ -1737,6 +1747,222 @@ export async function updatePathwayScopes(payload: PathwayScopeBatchPayload): Pr
   }
   return (await response.json()) as PathwayScopeListResponse;
 }
+
+// ─── Teacher Substitutions ───────────────────────────────────────────────────
+
+export interface SubstitutionConflictItem {
+  rule: string;
+  severity: "error" | "warning";
+  message: string;
+  class_id?: number | null;
+  subject_id?: number | null;
+  staff_id?: string | null;
+  day?: string | null;
+  affected_key?: string | null;
+}
+
+export interface TeacherSubstitution {
+  substitution_id: number;
+  batch_id?: string | null;
+  subject_load_id: number;
+  original_staff_id: string;
+  original_staff_name: string;
+  substitute_staff_id: string;
+  substitute_staff_name: string;
+  subject_id: number;
+  subject_name: string;
+  subject_codename?: string | null;
+  class_id: number;
+  section_name: string;
+  academic_period_id: number;
+  period_name: string;
+  start_date: string;
+  end_date: string | null;
+  status: "active" | "completed" | "cancelled";
+  is_currently_active: boolean;
+  reason?: string | null;
+  conflicts?: SubstitutionConflictItem[];
+  created_by_admin_id?: string | null;
+  ended_by_admin_id?: string | null;
+  ended_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface TeacherLoadSummaryItem {
+  subject_load_id: number;
+  subject_id: number;
+  subject_name: string;
+  subject_codename?: string | null;
+  class_id: number;
+  section_name: string;
+  academic_period_id: number;
+  period_name: string;
+  is_active_period?: boolean;
+  start_time?: string | null;
+  end_time?: string | null;
+  days_of_week?: string[];
+  has_active_substitution: boolean;
+  active_substitute_name?: string | null;
+}
+
+export interface CreateSubstitutionPayload {
+  subject_load_id: number;
+  substitute_staff_id: string;
+  start_date: string;
+  end_date?: string | null;
+  reason?: string | null;
+}
+
+export interface CreateBulkSubstitutionPayload {
+  subject_load_ids: number[];
+  substitute_staff_id: string;
+  start_date: string;
+  end_date?: string | null;
+  reason?: string | null;
+}
+
+export interface TeacherSubstitutionBulkResponse {
+  batch_id: string;
+  created_count: number;
+  substitutions: TeacherSubstitution[];
+}
+
+export async function getSubstitutions(params: {
+  status?: string;
+  staff_id?: string;
+  batch_id?: string;
+  academic_period_id?: number;
+} = {}): Promise<TeacherSubstitution[]> {
+  const query = new URLSearchParams();
+  if (params.status) query.set("status", params.status);
+  if (params.staff_id) query.set("staff_id", params.staff_id);
+  if (params.batch_id) query.set("batch_id", params.batch_id);
+  if (params.academic_period_id) query.set("academic_period_id", String(params.academic_period_id));
+  const res = await apiFetch(`/api/v1/substitutions${query.toString() ? `?${query.toString()}` : ""}`);
+  if (!res.ok) {
+    throw new ApiRequestError("Failed to fetch substitutions", res.status, null);
+  }
+  return (await res.json()) as TeacherSubstitution[];
+}
+
+export async function getTeacherSubjectLoads(
+  staffId: string,
+  academicPeriodId?: number
+): Promise<TeacherLoadSummaryItem[]> {
+  const query = new URLSearchParams();
+  if (academicPeriodId) query.set("academic_period_id", String(academicPeriodId));
+  const res = await apiFetch(
+    `/api/v1/substitutions/teacher-loads/${encodeURIComponent(staffId)}${query.toString() ? `?${query.toString()}` : ""}`
+  );
+  if (!res.ok) {
+    throw new ApiRequestError("Failed to fetch teacher subject loads", res.status, null);
+  }
+  return (await res.json()) as TeacherLoadSummaryItem[];
+}
+
+export async function createSubstitution(payload: CreateSubstitutionPayload): Promise<TeacherSubstitution> {
+  const res = await apiFetch("/api/v1/substitutions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const data: any = await res.json().catch(() => null);
+    throw new ApiRequestError(data?.detail || "Failed to create substitution", res.status, data);
+  }
+  return (await res.json()) as TeacherSubstitution;
+}
+
+export async function createBulkSubstitutions(payload: CreateBulkSubstitutionPayload): Promise<TeacherSubstitutionBulkResponse> {
+  const res = await apiFetch("/api/v1/substitutions/bulk", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const data: any = await res.json().catch(() => null);
+    throw new ApiRequestError(data?.detail || "Failed to create bulk substitutions", res.status, data);
+  }
+  return (await res.json()) as TeacherSubstitutionBulkResponse;
+}
+
+export async function adjustSubstitutionEndDate(
+  substitutionId: number,
+  endDate: string | null
+): Promise<TeacherSubstitution> {
+  const res = await apiFetch(`/api/v1/substitutions/${substitutionId}/end-date`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ end_date: endDate }),
+  });
+  if (!res.ok) {
+    const data: any = await res.json().catch(() => null);
+    throw new ApiRequestError(data?.detail || "Failed to adjust substitution end date", res.status, data);
+  }
+  return (await res.json()) as TeacherSubstitution;
+}
+
+export async function endSubstitutionEarly(substitutionId: number): Promise<TeacherSubstitution> {
+  const res = await apiFetch(`/api/v1/substitutions/${substitutionId}/end`, {
+    method: "PATCH",
+  });
+  if (!res.ok) {
+    const data: any = await res.json().catch(() => null);
+    throw new ApiRequestError(data?.detail || "Failed to end substitution", res.status, data);
+  }
+  return (await res.json()) as TeacherSubstitution;
+}
+
+export async function cancelSubstitution(substitutionId: number): Promise<TeacherSubstitution> {
+  const res = await apiFetch(`/api/v1/substitutions/${substitutionId}/cancel`, {
+    method: "PATCH",
+  });
+  if (!res.ok) {
+    const data: any = await res.json().catch(() => null);
+    throw new ApiRequestError(data?.detail || "Failed to cancel substitution", res.status, data);
+  }
+  return (await res.json()) as TeacherSubstitution;
+}
+
+export async function adjustBatchSubstitutionsEndDate(
+  batchId: string,
+  endDate: string | null
+): Promise<TeacherSubstitution[]> {
+  const res = await apiFetch(`/api/v1/substitutions/batch/${encodeURIComponent(batchId)}/end-date`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ end_date: endDate }),
+  });
+  if (!res.ok) {
+    const data: any = await res.json().catch(() => null);
+    throw new ApiRequestError(data?.detail || "Failed to adjust batch end date", res.status, data);
+  }
+  return (await res.json()) as TeacherSubstitution[];
+}
+
+export async function endBatchSubstitutionsEarly(batchId: string): Promise<TeacherSubstitution[]> {
+  const res = await apiFetch(`/api/v1/substitutions/batch/${encodeURIComponent(batchId)}/end`, {
+    method: "PATCH",
+  });
+  if (!res.ok) {
+    const data: any = await res.json().catch(() => null);
+    throw new ApiRequestError(data?.detail || "Failed to end batch substitutions", res.status, data);
+  }
+  return (await res.json()) as TeacherSubstitution[];
+}
+
+export async function cancelBatchSubstitutions(batchId: string): Promise<TeacherSubstitution[]> {
+  const res = await apiFetch(`/api/v1/substitutions/batch/${encodeURIComponent(batchId)}/cancel`, {
+    method: "PATCH",
+  });
+  if (!res.ok) {
+    const data: any = await res.json().catch(() => null);
+    throw new ApiRequestError(data?.detail || "Failed to cancel batch substitutions", res.status, data);
+  }
+  return (await res.json()) as TeacherSubstitution[];
+}
+
 
 
 

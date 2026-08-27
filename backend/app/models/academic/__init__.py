@@ -22,4 +22,5 @@ from .StudentPeriodGrade import StudentPeriodGrade
 from .LessonPlanModel import LessonPlanModel
 from .PeriodTemplateSlot import PeriodTemplateSlot
 from .Competency import Competency
+from .TeacherSubstitution import TeacherSubstitution
 
