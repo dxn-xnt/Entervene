@@ -137,6 +137,7 @@ export type ClassStudentListItem = {
   full_name: string;
   gender: string;
   avatar_initial: string;
+  account_status: string | null;
 };
 
 export type ClassStudentGenderCounts = {

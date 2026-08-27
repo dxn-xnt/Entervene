@@ -713,11 +713,20 @@ function StudentsTab({
                         }
                       >
                         <CustomAvatar text={student.avatar_initial || student.full_name} size="md" />
-                        <span className="min-w-0">
+                        <span className="min-w-0 flex-1">
                           <Text as="p" className="truncate text-base font-bold">
                             {student.full_name}
                           </Text>
                         </span>
+                        {(student.account_status || "").toLowerCase() === "pending" && (
+                          <Badge
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0 border-amber-400 bg-amber-50 text-amber-700"
+                          >
+                            Pending
+                          </Badge>
+                        )}
                       </div>
                     ))}
                   </div>
