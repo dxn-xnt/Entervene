@@ -1,5 +1,6 @@
 import { Table } from "@/components/retroui/Table";
 import { Loader } from "@/components/retroui/Loader";
+import { Badge } from "@/components/retroui/Badge";
 import type { DynamicScheduleRow } from "@/lib/api";
 
 interface DynamicScheduleTableProps {
@@ -58,9 +59,30 @@ export function DynamicScheduleTable({
               </Table.Cell>
             </Table.Row>
           ) : (
-            <Table.Row key={`class_${row.subject_load_id || idx}`} className="hover:bg-accent/40">
+            <Table.Row
+              key={`class_${row.subject_load_id || idx}`}
+              className={`hover:bg-accent/40 ${row.is_covered ? "opacity-70 bg-amber-50/20" : ""}`}
+            >
               <Table.Cell className="font-semibold text-sm">
-                <div>{row.subject}</div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span>{row.subject}</span>
+                  {row.is_substitution && (
+                    <Badge
+                      variant="outline"
+                      className="bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px] font-bold"
+                    >
+                      Covering: {row.original_teacher_name || "Original Teacher"}
+                    </Badge>
+                  )}
+                  {row.is_covered && (
+                    <Badge
+                      variant="outline"
+                      className="bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 text-[10px] font-bold"
+                    >
+                      On Leave • Covered by {row.substitute_name || "Substitute"}
+                    </Badge>
+                  )}
+                </div>
                 {showTeacher && row.teacher && (
                   <span className="text-xs text-muted-foreground font-normal block mt-0.5">
                     {row.teacher} {row.section_name ? `• ${row.section_name}` : ""}
@@ -72,6 +94,7 @@ export function DynamicScheduleTable({
                   {row.time}
                 </span>
               </Table.Cell>
+
               <Table.Cell>
                 <div className="flex flex-row justify-end gap-1">
                   {(row.days && row.days.length > 0 ? row.days : ["M", "T", "W", "Th", "F"]).map((day) => (

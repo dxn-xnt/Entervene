@@ -9,7 +9,12 @@ export type StudentRecordScope = {
   subject_name: string;
   period_name: string;
   year_label: string;
+  is_view_only?: boolean;
+  is_substitution?: boolean;
+  substitute_name?: string | null;
+  original_teacher_name?: string | null;
 };
+
 
 export type StudentRecordRosterRow = {
   student_id: string;

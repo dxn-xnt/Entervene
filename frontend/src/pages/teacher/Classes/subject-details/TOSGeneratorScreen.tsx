@@ -733,11 +733,10 @@ export function TOSGeneratorScreen({
                       key={qTab}
                       type="button"
                       onClick={() => setExamFilterQuarter(qTab)}
-                      className={`px-3 py-1 text-xs font-black rounded border-2 transition-all ${
-                        examFilterQuarter === qTab
+                      className={`px-3 py-1 text-xs font-black rounded border-2 transition-all ${examFilterQuarter === qTab
                           ? "border-black bg-[#FFD54F] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                           : "border-transparent bg-gray-100 text-gray-700 hover:bg-gray-200"
-                      }`}
+                        }`}
                     >
                       {qTab === "ALL" ? "All Terms" : `${qTab} Exams`}
                     </button>
@@ -811,11 +810,10 @@ export function TOSGeneratorScreen({
                             </Badge>
                             <Badge
                               variant="outline"
-                              className={`border-2 border-black text-[10px] font-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${
-                                isFinal
+                              className={`border-2 border-black text-[10px] font-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${isFinal
                                   ? "bg-emerald-100 text-emerald-950 border-emerald-600"
                                   : "bg-amber-100 text-amber-950 border-amber-600"
-                              }`}
+                                }`}
                             >
                               {isFinal ? "COMPLETED" : "DRAFT"}
                             </Badge>
@@ -1084,9 +1082,8 @@ export function TOSGeneratorScreen({
                             </span>
                             <Badge
                               variant="outline"
-                              className={`border-black text-[10px] font-black ${
-                                isCurriculum ? "bg-[#E3F2FD] text-blue-950" : "bg-amber-100 text-amber-950"
-                              }`}
+                              className={`border-black text-[10px] font-black ${isCurriculum ? "bg-[#E3F2FD] text-blue-950" : "bg-amber-100 text-amber-950"
+                                }`}
                             >
                               {isCurriculum ? "CURRICULUM" : "AD-HOC TOPIC"}
                             </Badge>

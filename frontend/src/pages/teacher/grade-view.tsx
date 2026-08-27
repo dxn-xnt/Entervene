@@ -425,22 +425,26 @@ const TeacherGradeView = () => {
                     <button
                       type="button"
                       key={item.id}
-                      className="flex flex-row items-center gap-1 whitespace-nowrap truncate hover:text-primary transition-colors cursor-pointer"
-                      title={`Click to Enter Scores for ${item.title}`}
-                      onClick={() => setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
+                      className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${
+                        isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                      }`}
+                      title={isViewOnly ? item.title : `Click to Enter Scores for ${item.title}`}
+                      onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                     >
                       <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
                       <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                     </button>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  title="Add score to Written Works"
-                  onClick={() => setAddingCategoryName("Written Works")}
-                >
-                  <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
-                </button>
+                {!isViewOnly && (
+                  <button
+                    type="button"
+                    title="Add score to Written Works"
+                    onClick={() => setAddingCategoryName("Written Works")}
+                  >
+                    <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                  </button>
+                )}
               </div>
             </Table.Cell>
             <Table.Cell className="py-2 px-2">
@@ -463,22 +467,26 @@ const TeacherGradeView = () => {
                     <button
                       type="button"
                       key={item.id}
-                      className="flex flex-row items-center gap-1 whitespace-nowrap truncate hover:text-primary transition-colors cursor-pointer"
-                      title={`Click to Enter Scores for ${item.title}`}
-                      onClick={() => setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
+                      className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${
+                        isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                      }`}
+                      title={isViewOnly ? item.title : `Click to Enter Scores for ${item.title}`}
+                      onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                     >
                       <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
                       <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                     </button>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  title="Add score to Performance Tasks"
-                  onClick={() => setAddingCategoryName("Performance Tasks")}
-                >
-                  <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
-                </button>
+                {!isViewOnly && (
+                  <button
+                    type="button"
+                    title="Add score to Performance Tasks"
+                    onClick={() => setAddingCategoryName("Performance Tasks")}
+                  >
+                    <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                  </button>
+                )}
               </div>
             </Table.Cell>
             <Table.Cell className="py-2 px-2">
@@ -501,26 +509,31 @@ const TeacherGradeView = () => {
                     <button
                       type="button"
                       key={item.id}
-                      className="flex flex-row items-center gap-1 whitespace-nowrap truncate hover:text-primary transition-colors cursor-pointer"
-                      title={`Click to Enter Scores for ${item.title}`}
-                      onClick={() => setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
+                      className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${
+                        isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                      }`}
+                      title={isViewOnly ? item.title : `Click to Enter Scores for ${item.title}`}
+                      onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                     >
                       <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
                       <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                     </button>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  title="Add score to Quarterly Assessment"
-                  onClick={() => setAddingCategoryName("Quarterly Assessment")}
-                >
-                  <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
-                </button>
+                {!isViewOnly && (
+                  <button
+                    type="button"
+                    title="Add score to Quarterly Assessment"
+                    onClick={() => setAddingCategoryName("Quarterly Assessment")}
+                  >
+                    <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                  </button>
+                )}
               </div>
             </Table.Cell>
             <Table.Cell className="text-center font-semibold">100</Table.Cell>
           </Table.Row>
+
 
           {loading ? (
             <Table.Row>
@@ -544,6 +557,9 @@ const TeacherGradeView = () => {
       </Table>
     );
   };
+
+  const isViewOnly = Boolean(gradebook?.scope?.is_view_only);
+  const isSubstitution = Boolean(gradebook?.scope?.is_substitution);
 
   return (
     <AppLayout>
@@ -571,7 +587,12 @@ const TeacherGradeView = () => {
               </Breadcrumb>
 
               <div className="flex flex-row gap-2 ml-auto">
-                <Button variant={"outline"} className="whitespace-nowrap" onClick={() => setOpenAttendance(true)}>
+                <Button
+                  variant={"outline"}
+                  className="whitespace-nowrap"
+                  onClick={() => setOpenAttendance(true)}
+                  disabled={isViewOnly}
+                >
                   <ClipboardCheck className="size-4 mr-2" /> Check Attendance
                 </Button>
                 <Button variant={"outline"} className="whitespace-nowrap" onClick={handleExportCSV}>
@@ -579,6 +600,28 @@ const TeacherGradeView = () => {
                 </Button>
               </div>
             </header>
+
+            {isViewOnly && (
+              <div className="rounded-xl border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/30 p-4 text-amber-900 dark:text-amber-200 flex items-center gap-3 shadow-sm">
+                <span className="text-2xl">🔒</span>
+                <div>
+                  <h4 className="font-bold text-sm">Read-Only Mode (On Leave)</h4>
+                  <p className="text-xs text-amber-800 dark:text-amber-300">
+                    You are currently on leave for this class and subject. Records are view-only.
+                    {gradebook?.scope?.substitute_name && ` Currently covered by substitute teacher: ${gradebook.scope.substitute_name}.`}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {isSubstitution && (
+              <div className="rounded-xl border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 p-3 text-emerald-900 dark:text-emerald-200 flex items-center gap-2 text-xs font-semibold shadow-sm">
+                <span className="text-base">📋</span>
+                <span>
+                  You are covering this class as a substitute teacher for {gradebook?.scope?.original_teacher_name || "the original teacher"}. Full grading and attendance permissions are enabled.
+                </span>
+              </div>
+            )}
 
             <div className="-mx-4 md:-mx-6 border-b border-gray-500" />
 
@@ -593,6 +636,7 @@ const TeacherGradeView = () => {
                     placeholder="Search student's name"
                   />
                 </div>
+
                 <div className="flex flex-row gap-4">
                   <Select value={sortBy} onValueChange={(v) => setSortBy(v)}>
                     <Select.Trigger className="w-full">

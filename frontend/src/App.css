@@ -100,11 +100,12 @@ body {
 }
 
 /* Lock scroll when any modal/dialog is active */
-html:has([data-open]),
-body:has([data-open]),
-html:has([data-state="open"]),
-body:has([data-state="open"]),
-body[data-scroll-locked] {
+html[data-base-ui-scroll-locked],
+body[data-scroll-locked],
+html:has([role="dialog"]),
+body:has([role="dialog"]),
+html:has([role="alertdialog"]),
+body:has([role="alertdialog"]) {
   padding-right: 0 !important;
   margin-right: 0 !important;
   overflow: hidden !important;
@@ -119,8 +120,8 @@ body[data-scroll-locked] {
 /* Chromium — overlay scrollbar so it doesn't take layout space */
 @supports (overflow-y: overlay) {
 
-  html:not(:has([data-open])),
-  body:not(:has([data-open])) {
+  html,
+  body {
     overflow-y: overlay;
   }
 

@@ -14,6 +14,7 @@ import {
   Plus,
   School,
   Search,
+  UserCheck,
   UserCog,
   UsersRound,
 } from "lucide-react";
@@ -21,9 +22,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
+import { Dialog } from "@/components/retroui/Dialog";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/retroui/Accordion";
 import { cn } from "@/lib/utils";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import AssignSubstituteModal from "./forms/assign-substitute-modal";
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -189,7 +193,9 @@ export default function AdminUsers() {
   const initialTab = (searchParams.get("tab") ?? "teacher") as TabId;
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [modalOpen, setModalOpen] = useState(false);
+  const [selectedTeacherForSub, setSelectedTeacherForSub] = useState<User | null>(null);
   const [search, setSearch] = useState("");
+
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -542,7 +548,7 @@ export default function AdminUsers() {
                           </AccordionTrigger>
 
                           <AccordionContent className="p-0 border-t-2 border-border">
-                            <Table className="border-none shadow-none" wrapperClassName="overflow-hidden">
+                            <Table className="border-none shadow-none" wrapperClassName="overflow-x-auto">
                               <Table.Header className="font-sans">
                                 <Table.Row>
                                   <Table.Head>Name</Table.Head>
@@ -587,7 +593,8 @@ export default function AdminUsers() {
                             {activeTab === "teacher" ? (
                               <>
                                 <Table.Head className="text-center w-48">Subjects</Table.Head>
-                                <Table.Head className="text-right w-28">Classes</Table.Head>
+                                <Table.Head className="text-right w-20">Classes</Table.Head>
+                                <Table.Head className="text-right w-28">Actions</Table.Head>
                               </>
                             ) : (
                               <Table.Head className="text-right w-36">Joined</Table.Head>
@@ -601,6 +608,7 @@ export default function AdminUsers() {
                               user={user}
                               activeTab={activeTab}
                               onOpenUser={openUser}
+                              onAssignSubstitute={(u) => setSelectedTeacherForSub(u)}
                             />
                           ))}
                         </Table.Body>
@@ -622,9 +630,27 @@ export default function AdminUsers() {
           void fetchUsers();
         }}
       />
+
+      <Dialog
+        open={Boolean(selectedTeacherForSub)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedTeacherForSub(null);
+        }}
+      >
+        {selectedTeacherForSub && (
+          <AssignSubstituteModal
+            initialStaffId={selectedTeacherForSub.staff_id}
+            initialStaffName={selectedTeacherForSub.name}
+            onClose={() => setSelectedTeacherForSub(null)}
+            onSuccess={() => void fetchUsers()}
+          />
+        )}
+      </Dialog>
     </AppLayout>
   );
 }
+
+
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
@@ -713,10 +739,12 @@ function UserRow({
   user,
   activeTab,
   onOpenUser,
+  onAssignSubstitute,
 }: {
   user: User;
   activeTab: TabId;
   onOpenUser: (user: User) => void;
+  onAssignSubstitute?: (user: User) => void;
 }) {
   const { shown, extra } = visibleSubjects(user.subjects);
 
@@ -730,7 +758,18 @@ function UserRow({
           <NameCell name={user.name} subtitle={user.email} role={user.role} />
         </Table.Cell>
         <Table.Cell className="text-center w-36">
-          <StatusBadge status={user.account_status} />
+          <div className="flex flex-col items-center gap-1">
+            <StatusBadge status={user.account_status} />
+            {user.is_on_leave && (
+              <Badge
+                size="sm"
+                variant="outline"
+                className="border-amber-500/50 text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 text-[10px] font-semibold"
+              >
+                On Leave
+              </Badge>
+            )}
+          </div>
         </Table.Cell>
         <Table.Cell className="text-center w-48">
           <div className="flex flex-wrap justify-center gap-1.5">
@@ -759,15 +798,30 @@ function UserRow({
             )}
           </div>
         </Table.Cell>
-        <Table.Cell className="text-right w-28">
+        <Table.Cell className="text-right w-20">
           <div className="flex items-center justify-end gap-1 text-xs font-semibold">
             <School className="size-3.5" />
             {user.class_count ?? 0}
           </div>
         </Table.Cell>
+        <Table.Cell className="text-right w-28" onClick={(e) => e.stopPropagation()}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-xs border-primary/40 text-primary hover:bg-primary/5 font-medium"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAssignSubstitute?.(user);
+            }}
+          >
+            <UserCheck className="h-3 w-3 mr-1" />
+            Substitute
+          </Button>
+        </Table.Cell>
       </Table.Row>
     );
   }
+
 
   return (
     <Table.Row

@@ -45,6 +45,11 @@ from app.services.prediction.PredictionOutcomeService import evaluate_outcomes_f
 from app.services.classes.ClassQueryService import _student_full_name
 
 
+from app.models.academic.TeacherSubstitution import TeacherSubstitution
+from app.models.people.AcademicStaff import AcademicStaff
+from app.services.academic.SubstitutionService import SubstitutionService, _staff_full_name
+
+
 COMPLETED_STATUSES = {"submitted", "graded", "late"}
 GRADED_STATUS = "graded"
 READING_TYPE = "READING"
@@ -64,6 +69,12 @@ class TeacherRecordScope:
     subject: Subject
     period: AcademicPeriod
     year: AcademicYear
+    is_view_only: bool = False
+    is_substitution: bool = False
+    substitute_name: str | None = None
+    original_teacher_name: str | None = None
+    acting_staff_id: str | None = None
+
 
 
 @dataclass(frozen=True)
@@ -85,18 +96,39 @@ def teacher_period_options(
     class_id: int | None = None,
     subject_id: int | None = None,
 ) -> StudentRecordPeriodOptionsResponse:
+    today_date = date.today()
+    active_subs = (
+        db.query(TeacherSubstitution.subject_load_id, TeacherSubstitution.end_date)
+        .filter(
+            TeacherSubstitution.substitute_staff_id == staff_id,
+            TeacherSubstitution.status == "active",
+            TeacherSubstitution.start_date <= today_date,
+        )
+        .all()
+    )
+    covered_load_ids = [
+        sub_id for sub_id, end_d in active_subs
+        if end_d is None or today_date <= end_d
+    ]
+
+    from sqlalchemy import or_
+    load_filter = SubjectLoad.staff_id == staff_id
+    if covered_load_ids:
+        load_filter = or_(SubjectLoad.staff_id == staff_id, SubjectLoad.subject_load_id.in_(covered_load_ids))
+
     query = (
         db.query(AcademicPeriod, AcademicYear)
         .join(SubjectLoad, SubjectLoad.academic_period_id == AcademicPeriod.academic_period_id)
         .join(AcademicYear, AcademicYear.academic_year_id == AcademicPeriod.academic_year_id)
-        .filter(SubjectLoad.staff_id == staff_id, SubjectLoad.status.in_(["active", "published"]))
+        .filter(load_filter, SubjectLoad.status.in_(["active", "published"]))
     )
     if class_id is not None:
         query = query.filter(SubjectLoad.class_id == class_id)
     if subject_id is not None:
         query = query.filter(SubjectLoad.subject_id == subject_id)
 
-    rows = query.order_by(AcademicPeriod.is_active.desc(), AcademicPeriod.end_date.desc()).all()
+    rows = query.distinct().order_by(AcademicPeriod.is_active.desc(), AcademicPeriod.end_date.desc()).all()
+
     options = [
         StudentRecordPeriodOption(
             academic_year_id=year.academic_year_id,
@@ -405,6 +437,16 @@ def finalize_student_period_grade(
     if period_grade is None:
         raise HTTPException(status_code=404, detail="Student period grade not found")
 
+    if finalized_by_staff_id:
+        try:
+            scope = _teacher_scope(db, finalized_by_staff_id, period_grade.class_id, period_grade.subject_id, period_grade.academic_period_id)
+            if scope.is_view_only:
+                raise HTTPException(status_code=403, detail="You are currently on leave for this class/subject. Records are read-only.")
+        except HTTPException as e:
+            if e.status_code == 403 and "leave" in str(e.detail).lower():
+                raise e
+            pass
+
     if final_period_grade is not None:
         period_grade.final_period_grade = _to_decimal(final_period_grade, "final_period_grade")
     if period_grade.final_period_grade is None:
@@ -422,6 +464,7 @@ def finalize_student_period_grade(
     period_grade.is_finalized = True
     period_grade.finalized_at = datetime.now(timezone.utc)
     period_grade.finalized_by_staff_id = finalized_by_staff_id
+    period_grade.entered_by_staff_id = finalized_by_staff_id
     db.flush()
 
     outcome_summary = evaluate_outcomes_for_finalized_period_grade(
@@ -459,6 +502,7 @@ def _teacher_scope(
     if period_id is None:
         raise HTTPException(status_code=404, detail="No active or recent academic period found")
 
+    # 1. Check if staff_id is directly assigned to the subject_load
     row = (
         db.query(SubjectLoad, Class, Subject, AcademicPeriod, AcademicYear)
         .join(Class, Class.class_id == SubjectLoad.class_id)
@@ -475,16 +519,68 @@ def _teacher_scope(
         )
         .first()
     )
-    if not row:
-        raise HTTPException(status_code=403, detail="Student records are outside your teaching scope")
-    subject_load, class_, subject, period, year = row
-    return TeacherRecordScope(
-        subject_load=subject_load,
-        class_=class_,
-        subject=subject,
-        period=period,
-        year=year,
+    if row:
+        subject_load, class_, subject, period, year = row
+        active_sub = SubstitutionService.get_active_substitution(db, subject_load.subject_load_id)
+        is_view_only = False
+        sub_name = None
+        if active_sub is not None and active_sub.original_staff_id == staff_id:
+            is_view_only = True
+            sub_staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == active_sub.substitute_staff_id).first()
+            sub_name = _staff_full_name(sub_staff)
+
+        return TeacherRecordScope(
+            subject_load=subject_load,
+            class_=class_,
+            subject=subject,
+            period=period,
+            year=year,
+            is_view_only=is_view_only,
+            is_substitution=False,
+            substitute_name=sub_name,
+            original_teacher_name=None,
+            acting_staff_id=staff_id,
+        )
+
+    # 2. Check if staff_id is the active substitute covering this subject_load today
+    sub_row = (
+        db.query(SubjectLoad, Class, Subject, AcademicPeriod, AcademicYear, TeacherSubstitution, AcademicStaff)
+        .join(Class, Class.class_id == SubjectLoad.class_id)
+        .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
+        .join(AcademicPeriod, AcademicPeriod.academic_period_id == SubjectLoad.academic_period_id)
+        .join(AcademicYear, AcademicYear.academic_year_id == AcademicPeriod.academic_year_id)
+        .join(TeacherSubstitution, TeacherSubstitution.subject_load_id == SubjectLoad.subject_load_id)
+        .join(AcademicStaff, AcademicStaff.staff_id == TeacherSubstitution.original_staff_id)
+        .filter(
+            TeacherSubstitution.substitute_staff_id == staff_id,
+            TeacherSubstitution.status == "active",
+            TeacherSubstitution.start_date <= date.today(),
+            SubjectLoad.class_id == class_id,
+            SubjectLoad.subject_id == subject_id,
+            SubjectLoad.academic_period_id == period_id,
+            SubjectLoad.status.in_(["active", "published"]),
+            Class.class_status != "archived",
+        )
+        .first()
     )
+    if sub_row:
+        subject_load, class_, subject, period, year, sub_record, orig_staff = sub_row
+        if sub_record.end_date is None or date.today() <= sub_record.end_date:
+            return TeacherRecordScope(
+                subject_load=subject_load,
+                class_=class_,
+                subject=subject,
+                period=period,
+                year=year,
+                is_view_only=False,
+                is_substitution=True,
+                substitute_name=None,
+                original_teacher_name=_staff_full_name(orig_staff),
+                acting_staff_id=staff_id,
+            )
+
+    raise HTTPException(status_code=403, detail="Student records are outside your teaching scope")
+
 
 
 def _default_period_id(db: Session, staff_id: str) -> int | None:
@@ -738,7 +834,12 @@ def _scope_out(scope: TeacherRecordScope) -> StudentRecordScope:
         subject_name=scope.subject.subject_name,
         period_name=scope.period.period_name,
         year_label=scope.year.year_label,
+        is_view_only=scope.is_view_only,
+        is_substitution=scope.is_substitution,
+        substitute_name=scope.substitute_name,
+        original_teacher_name=scope.original_teacher_name,
     )
+
 
 
 def _ratio(part: int, whole: int) -> float | None:

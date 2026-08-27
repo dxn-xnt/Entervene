@@ -28,8 +28,10 @@ from sqlalchemy import text
 from app.services.academic.ConflictDetectorService import ConflictDetectorService
 from app.services.academic.AutoSchedulerService import AutoSchedulerService
 from app.services.classes.ClassQueryService import class_pathway_code
+from app.services.academic.SubstitutionService import SubstitutionService
 
 router = APIRouter()
+
 
 
 def ensure_default_period_templates(db: Session):
@@ -787,11 +789,16 @@ def get_my_schedule(
             .all()
         )
 
-        if not teacher_loads:
+        covered_by_sub_map = SubstitutionService.get_original_teacher_covered_load_ids(db, staff_id, period_id)
+        covered_as_sub_loads = SubstitutionService.get_substitute_covered_loads(db, staff_id, period_id)
+
+        if not teacher_loads and not covered_as_sub_loads:
             return {"is_published": False, "schedule": []}
 
-        class_ids = list(set(sl.class_id for sl in teacher_loads))
-        primary_class = db.query(Class).filter(Class.class_id == class_ids[0]).first() if class_ids else None
+        all_class_ids = list(set(
+            [sl.class_id for sl in teacher_loads] + [sl.class_id for sl, _ in covered_as_sub_loads]
+        ))
+        primary_class = db.query(Class).filter(Class.class_id == all_class_ids[0]).first() if all_class_ids else None
         grp = getattr(primary_class, "period_template_group", None) or "JHS_45MIN" if primary_class else "JHS_45MIN"
 
         ensure_default_period_templates(db)
@@ -803,7 +810,41 @@ def get_my_schedule(
         )
 
         slots = []
+        # 1. Teacher's own assigned loads
         for sl in teacher_loads:
+            sub = db.query(Subject).filter(Subject.subject_id == sl.subject_id).first()
+            cls_obj = db.query(Class).filter(Class.class_id == sl.class_id).first()
+            staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == staff_id).first()
+
+            start_fmt = format_time_str(sl.start_time)
+            end_fmt = format_time_str(sl.end_time)
+            time_range = f"{start_fmt} - {end_fmt}" if (start_fmt and end_fmt) else ""
+            raw_days = getattr(sl, "days_of_week", []) or []
+            formatted_days = [DAY_MAP.get(d.upper(), d) for d in raw_days]
+
+            is_covered = sl.subject_load_id in covered_by_sub_map
+            sub_name = covered_by_sub_map.get(sl.subject_load_id)
+
+            slots.append({
+                "type": "class",
+                "subject_load_id": sl.subject_load_id,
+                "subject": sub.subject_name if sub else f"Subject #{sl.subject_id}",
+                "subject_codename": sub.subject_codename if sub else "",
+                "teacher": f"{staff.first_name} {staff.last_name}" if staff else "",
+                "section_name": cls_obj.section_name if cls_obj else "",
+                "start_time": sl.start_time or "00:00",
+                "end_time": sl.end_time or "00:00",
+                "time": time_range,
+                "days": formatted_days if formatted_days else ["M", "T", "W", "Th", "F"],
+                "slot_type": "CLASS",
+                "is_covered": is_covered,
+                "substitute_name": sub_name,
+                "is_substitution": False,
+                "original_teacher_name": None,
+            })
+
+        # 2. Loads covered by this teacher as a substitute
+        for sl, orig_name in covered_as_sub_loads:
             sub = db.query(Subject).filter(Subject.subject_id == sl.subject_id).first()
             cls_obj = db.query(Class).filter(Class.class_id == sl.class_id).first()
             staff = db.query(AcademicStaff).filter(AcademicStaff.staff_id == staff_id).first()
@@ -826,6 +867,10 @@ def get_my_schedule(
                 "time": time_range,
                 "days": formatted_days if formatted_days else ["M", "T", "W", "Th", "F"],
                 "slot_type": "CLASS",
+                "is_covered": False,
+                "substitute_name": None,
+                "is_substitution": True,
+                "original_teacher_name": orig_name,
             })
 
         for b in break_slots:
@@ -845,3 +890,4 @@ def get_my_schedule(
         return {"is_published": True, "schedule": slots}
 
     return {"is_published": False, "schedule": []}
+

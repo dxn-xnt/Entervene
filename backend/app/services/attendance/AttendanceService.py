@@ -78,7 +78,20 @@ def batch_mark_attendance(
     recorded_by_staff_id: str | None = None,
 ) -> list[AttendanceRecordResponse]:
     """Upsert daily attendance records for a batch of students in a class."""
+    if recorded_by_staff_id and payload.subject_id:
+        from app.models.academic.SubjectLoad import SubjectLoad
+        from app.services.academic.SubstitutionService import SubstitutionService
+        loads = db.query(SubjectLoad).filter(
+            SubjectLoad.class_id == payload.class_id,
+            SubjectLoad.subject_id == payload.subject_id,
+            SubjectLoad.status.in_(["active", "published"]),
+        ).all()
+        for sl in loads:
+            if sl.staff_id == recorded_by_staff_id:
+                SubstitutionService.assert_can_write(db, recorded_by_staff_id, sl.subject_load_id, payload.date)
+
     results: list[AttendanceRecordResponse] = []
+
 
     for item in payload.records:
         existing_q = (
