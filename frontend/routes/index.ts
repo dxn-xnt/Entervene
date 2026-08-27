@@ -53,6 +53,7 @@ export const routes = {
     lessonPlanner: "/teacher/lesson-planner",
     lessonPlannerCreate: "/teacher/lesson-planner/new",
     lessonPlannerEdit: "/teacher/lesson-planner/:planId",
+    tos: "/teacher/tos",
   },
 
   student: {

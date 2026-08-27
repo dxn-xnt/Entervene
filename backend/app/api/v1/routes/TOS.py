@@ -17,12 +17,22 @@ from app.services.tos.TOSService import (
     create_tos_exam,
     delete_tos_exam,
     get_tos_exam_detail,
+    list_all_tos_exams,
     list_tos_exams_for_subject,
     update_single_tos_question,
     update_tos_exam,
 )
 
 router = APIRouter()
+
+
+@router.get("/", response_model=List[TOSExamSummary])
+def get_all_exams(
+    staff_id: Optional[str] = Depends(get_optional_staff_id),
+    current_user: dict = Depends(require_role("teacher", "admin")),
+    db: Session = Depends(get_db),
+):
+    return list_all_tos_exams(staff_id=staff_id, db=db)
 
 
 @router.post("/subject/{subject_id}", response_model=TOSExamDetailResponse, status_code=status.HTTP_201_CREATED)

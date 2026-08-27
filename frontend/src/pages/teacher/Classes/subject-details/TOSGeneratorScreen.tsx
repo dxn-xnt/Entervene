@@ -11,10 +11,11 @@ import {
   AlertCircle,
   ArrowRight,
   ArrowLeft,
-  BookOpen,
   Save,
   FileText,
   Check,
+  Search,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
@@ -45,10 +46,11 @@ import {
   type TOSExportQuestion,
 } from "@/lib/tos-export";
 
-interface TOSGeneratorScreenProps {
+export interface TOSGeneratorScreenProps {
   subjectId: number;
   subjectName: string;
   competencies: CompetencyItem[];
+  initialExamId?: number | null;
   onBack: () => void;
 }
 
@@ -61,20 +63,25 @@ type WizardStep =
   | "ai-review"
   | "export";
 
-export default function TOSGeneratorScreen({
+export function TOSGeneratorScreen({
   subjectId,
   subjectName,
   competencies,
+  initialExamId,
   onBack,
 }: TOSGeneratorScreenProps) {
-  const [step, setStep] = useState<WizardStep>("test-parts");
+  // Default entry point is "saved-list" (My TOS Exams landing page)
+  const [step, setStep] = useState<WizardStep>("saved-list");
   const [examId, setExamId] = useState<number | null>(null);
   const [savedExams, setSavedExams] = useState<Array<any>>([]);
   const [isLoadingSaved, setIsLoadingSaved] = useState(false);
+  const [examFilterQuarter, setExamFilterQuarter] = useState<string>("ALL");
+  const [examSearchQuery, setExamSearchQuery] = useState<string>("");
+  const [deletingExamId, setDeletingExamId] = useState<number | null>(null);
 
   // Step 1: Exam Info & Test Parts
   const [title, setTitle] = useState("Summative Assessment 1");
-  const [quarter, setQuarter] = useState("Q1");
+  const [quarter, setQuarter] = useState("Term 1");
   const [testParts, setTestParts] = useState<TestPart[]>([
     { type: "MULTIPLE_CHOICE", count: 15 },
   ]);
@@ -113,7 +120,7 @@ export default function TOSGeneratorScreen({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState("");
 
-  // Initialize competencies
+  // Initialize competencies and load exams list
   useEffect(() => {
     if (competencies && competencies.length > 0) {
       const initial = competencies.map((c) => ({
@@ -121,16 +128,45 @@ export default function TOSGeneratorScreen({
         label: c.statement,
         code: c.competency_code || undefined,
         days: c.target_hours ? Math.max(1, Math.round(c.target_hours / 4)) : 2,
+        is_adhoc: false,
       }));
       setCompInputs(initial);
     } else {
       setCompInputs([
-        { label: "Unit 1: Core Concepts and Foundations", code: "LC-01", days: 3 },
-        { label: "Unit 2: Practical Applications and Problem Solving", code: "LC-02", days: 4 },
+        { label: "Unit 1: Core Concepts and Foundations", code: "LC-01", days: 3, is_adhoc: true },
+        { label: "Unit 2: Practical Applications and Problem Solving", code: "LC-02", days: 4, is_adhoc: true },
       ]);
     }
-    loadSavedExams();
-  }, [competencies, subjectId]);
+    if (initialExamId) {
+      handleLoadExam(initialExamId);
+    } else {
+      loadSavedExams();
+    }
+  }, [competencies, subjectId, initialExamId]);
+
+  const availableCompetencies = useMemo(() => {
+    return (competencies || []).filter(
+      (c) => !compInputs.some((input) => input.competency_id === c.competency_id)
+    );
+  }, [competencies, compInputs]);
+
+  const handleSelectCompetency = (compIdStr: string) => {
+    if (!compIdStr) return;
+    const compId = Number(compIdStr);
+    const targetComp = (competencies || []).find((c) => c.competency_id === compId);
+    if (!targetComp) return;
+
+    setCompInputs((prev) => [
+      ...prev,
+      {
+        competency_id: targetComp.competency_id,
+        code: targetComp.competency_code || undefined,
+        label: targetComp.statement,
+        days: targetComp.target_hours ? Math.max(1, Math.round(targetComp.target_hours / 4)) : 2,
+        is_adhoc: false,
+      },
+    ]);
+  };
 
   const loadSavedExams = async () => {
     setIsLoadingSaved(true);
@@ -145,6 +181,33 @@ export default function TOSGeneratorScreen({
     } finally {
       setIsLoadingSaved(false);
     }
+  };
+
+  const startNewExam = () => {
+    setExamId(null);
+    setTitle(`Summative Assessment ${savedExams.length + 1}`);
+    setQuarter("Q1");
+    setTestParts([{ type: "MULTIPLE_CHOICE", count: 15 }]);
+    if (competencies && competencies.length > 0) {
+      setCompInputs(
+        competencies.map((c) => ({
+          competency_id: c.competency_id,
+          label: c.statement,
+          code: c.competency_code || undefined,
+          days: c.target_hours ? Math.max(1, Math.round(c.target_hours / 4)) : 2,
+        }))
+      );
+    } else {
+      setCompInputs([
+        { label: "Unit 1: Core Concepts and Foundations", code: "LC-01", days: 3 },
+        { label: "Unit 2: Practical Applications and Problem Solving", code: "LC-02", days: 4 },
+      ]);
+    }
+    setDifficultyRatio({ easy: 60, average: 30, difficult: 10 });
+    setRows([]);
+    setGrandTotal(null);
+    setQuestions([]);
+    setStep("test-parts");
   };
 
   const totalItems = useMemo(() => {
@@ -195,7 +258,7 @@ export default function TOSGeneratorScreen({
         setExamId(exam.tos_exam_id);
         setTitle(exam.title || "TOS Exam");
         setQuarter(exam.quarter || "Q1");
-        setTestParts(exam.test_parts || []);
+        setTestParts(exam.test_parts || [{ type: "MULTIPLE_CHOICE", count: 15 }]);
         setCompInputs(exam.competencies || []);
         if (exam.difficulty_ratio) {
           setDifficultyRatio({
@@ -204,14 +267,15 @@ export default function TOSGeneratorScreen({
             difficult: exam.difficulty_ratio.difficult ? Math.round(exam.difficulty_ratio.difficult * 100) : 10,
           });
         }
-        setQuestions(exam.questions || []);
+        const loadedQuestions = exam.questions || [];
+        setQuestions(loadedQuestions);
 
         const computed = computeTOS({
           subject_id: subjectId,
           subject_name: subjectName,
           title: exam.title,
           quarter: exam.quarter,
-          test_parts: exam.test_parts || [],
+          test_parts: exam.test_parts || [{ type: "MULTIPLE_CHOICE", count: 15 }],
           total_items: (exam.test_parts || []).reduce((s: number, p: any) => s + (p.count || 0), 0),
           competencies: exam.competencies || [],
           difficulty_ratio: exam.difficulty_ratio || { easy: 0.6, average: 0.3, difficult: 0.1 },
@@ -219,14 +283,35 @@ export default function TOSGeneratorScreen({
         setRows(computed.rows);
         setGrandTotal(computed.grand_total);
 
-        if (exam.questions && exam.questions.length > 0) {
+        // Resume at the appropriate wizard step
+        if (loadedQuestions.length > 0) {
           setStep("ai-review");
-        } else {
+        } else if (computed.rows.length > 0) {
           setStep("blueprint");
+        } else {
+          setStep("test-parts");
         }
       }
     } catch (e) {
       console.error("Failed to load exam details", e);
+    }
+  };
+
+  const handleDeleteExam = async (savedId: number) => {
+    if (!confirm("Are you sure you want to delete this Table of Specifications draft?")) return;
+    setDeletingExamId(savedId);
+    try {
+      const res = await apiFetch(`/api/v1/tos/${savedId}`, { method: "DELETE" });
+      if (res.ok) {
+        setSavedExams((prev) => prev.filter((e) => e.tos_exam_id !== savedId));
+        if (examId === savedId) {
+          setExamId(null);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to delete exam", e);
+    } finally {
+      setDeletingExamId(null);
     }
   };
 
@@ -452,6 +537,17 @@ export default function TOSGeneratorScreen({
     return Array.from(map.values());
   }, [questions]);
 
+  const filteredSavedExams = useMemo(() => {
+    return savedExams.filter((ex) => {
+      const matchesQuarter = examFilterQuarter === "ALL" || ex.quarter === examFilterQuarter;
+      const matchesSearch =
+        !examSearchQuery ||
+        ex.title?.toLowerCase().includes(examSearchQuery.toLowerCase()) ||
+        ex.quarter?.toLowerCase().includes(examSearchQuery.toLowerCase());
+      return matchesQuarter && matchesSearch;
+    });
+  }, [savedExams, examFilterQuarter, examSearchQuery]);
+
   return (
     <div className="flex flex-col gap-5">
       {/* ── Breadcrumb & Action Header ── */}
@@ -465,45 +561,75 @@ export default function TOSGeneratorScreen({
             </Breadcrumb.Item>
             <Breadcrumb.Separator />
             <Breadcrumb.Item>
-              <Breadcrumb.Page>TOS Generator</Breadcrumb.Page>
+              {step === "saved-list" ? (
+                <Breadcrumb.Page>My TOS Exams</Breadcrumb.Page>
+              ) : (
+                <Breadcrumb.Link
+                  onClick={() => setStep("saved-list")}
+                  className="cursor-pointer hover:text-black"
+                >
+                  My TOS Exams
+                </Breadcrumb.Link>
+              )}
             </Breadcrumb.Item>
+            {step !== "saved-list" && (
+              <>
+                <Breadcrumb.Separator />
+                <Breadcrumb.Item>
+                  <Breadcrumb.Page>{title || "TOS Generator"}</Breadcrumb.Page>
+                </Breadcrumb.Item>
+              </>
+            )}
           </Breadcrumb.List>
         </Breadcrumb>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onBack}
-            className="border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100"
-          >
-            <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to {subjectName}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-2 border-black bg-white text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-            onClick={() => setStep(step === "saved-list" ? "test-parts" : "saved-list")}
-          >
-            <BookOpen className="mr-1.5 h-3.5 w-3.5" />
-            {step === "saved-list" ? "Back to Builder" : `My TOS Exams (${savedExams?.length ?? 0})`}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={isSaving}
-            onClick={handleSaveDraft}
-            className="border-2 border-black bg-[#C8E6C9] text-xs font-bold hover:bg-[#A5D6A7] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-          >
-            <Save className="mr-1 h-3.5 w-3.5" />
-            {isSaving ? "Saving..." : "Save Draft"}
-          </Button>
+          {step === "saved-list" ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onBack}
+                className="border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100"
+              >
+                <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to {subjectName}
+              </Button>
+              <Button
+                size="sm"
+                onClick={startNewExam}
+                className="border-2 border-black bg-[#FFD54F] font-bold text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+              >
+                <Plus className="mr-1.5 h-4 w-4" /> New TOS
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setStep("saved-list")}
+                className="border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100"
+              >
+                <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to TOS Exams
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isSaving}
+                onClick={handleSaveDraft}
+                className="border-2 border-black bg-[#C8E6C9] text-xs font-bold hover:bg-[#A5D6A7] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+              >
+                <Save className="mr-1 h-3.5 w-3.5" />
+                {isSaving ? "Saving..." : "Save Draft"}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
       <div className="-mx-4 md:-mx-6 border-b-2 border-black" />
 
-      {/* ── Main Container ── */}
+      {/* ── Main Container (Full-Width, No Sidebar Inside Wizard) ── */}
       <div className="rounded-lg border-2 border-black bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
         {/* Top Banner */}
         <div className="flex flex-col gap-2 border-b-2 border-black bg-[#E3F2FD] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -512,9 +638,11 @@ export default function TOSGeneratorScreen({
               <TableProperties className="h-5 w-5 text-black" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-black">Table of Specifications (TOS) Generator</h2>
+              <h2 className="text-lg font-bold text-black">
+                {step === "saved-list" ? "My TOS Exams" : "Table of Specifications (TOS) Generator"}
+              </h2>
               <p className="text-xs font-semibold text-gray-700">
-                {subjectName} • {quarter} Assessment Blueprint & AI Exam Creator
+                {subjectName} • {step === "saved-list" ? "Assessment Blueprint & Question Archive" : `${quarter} Assessment Blueprint & AI Exam Creator`}
               </p>
             </div>
           </div>
@@ -525,7 +653,7 @@ export default function TOSGeneratorScreen({
           )}
         </div>
 
-        {/* Stepper Navigation */}
+        {/* Stepper Navigation (Only shown when inside wizard steps) */}
         {step !== "saved-list" && (
           <div className="flex items-center justify-between border-b-2 border-black bg-[#FFF9C4] px-6 py-2.5 text-xs font-bold">
             <div className="flex items-center gap-2 overflow-x-auto">
@@ -591,70 +719,163 @@ export default function TOSGeneratorScreen({
 
         {/* Screen Content Body */}
         <div className="p-6">
-          {/* STEP: SAVED EXAMS LIST */}
+          {/* ══════════════════════════════════════════════════════════════════
+              LANDING PAGE: MY TOS EXAMS ARCHIVE
+             ══════════════════════════════════════════════════════════════════ */}
           {step === "saved-list" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-bold">Saved Table of Specifications & Exams</h3>
-                <Button
-                  size="sm"
-                  className="border-2 border-black bg-[#FFD54F] font-bold text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                  onClick={() => {
-                    setExamId(null);
-                    setStep("test-parts");
-                  }}
-                >
-                  <Plus className="mr-1.5 h-4 w-4" /> Create New TOS Blueprint
-                </Button>
+            <div className="space-y-6">
+              {/* Filter & Action Toolbar */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b-2 border-black pb-4">
+                {/* Academic Term Tabs */}
+                <div className="flex items-center gap-1.5 overflow-x-auto">
+                  {(["ALL", "Term 1", "Term 2", "Term 3"] as const).map((qTab) => (
+                    <button
+                      key={qTab}
+                      type="button"
+                      onClick={() => setExamFilterQuarter(qTab)}
+                      className={`px-3 py-1 text-xs font-black rounded border-2 transition-all ${examFilterQuarter === qTab
+                          ? "border-black bg-[#FFD54F] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                          : "border-transparent bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        }`}
+                    >
+                      {qTab === "ALL" ? "All Terms" : `${qTab} Exams`}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Search Bar & New Button */}
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                    <Input
+                      placeholder="Search exam title..."
+                      value={examSearchQuery}
+                      onChange={(e) => setExamSearchQuery(e.target.value)}
+                      className="h-8 w-48 pl-8 text-xs font-semibold border-2 border-black"
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    className="border-2 border-black bg-[#FFD54F] font-black text-xs text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                    onClick={startNewExam}
+                  >
+                    <Plus className="mr-1 h-3.5 w-3.5" /> New TOS
+                  </Button>
+                </div>
               </div>
 
+              {/* Exam Cards Grid */}
               {isLoadingSaved ? (
-                <p className="py-12 text-center text-sm font-semibold text-gray-500">Loading saved exams...</p>
-              ) : savedExams.length === 0 ? (
-                <div className="rounded-lg border-2 border-dashed border-gray-300 p-12 text-center">
-                  <TableProperties className="mx-auto h-10 w-10 text-gray-400" />
-                  <p className="mt-2 text-sm font-bold text-gray-600">No saved TOS exams found for this subject yet.</p>
-                  <p className="text-xs text-gray-400">Create your first Table of Specifications using the wizard.</p>
+                <div className="py-16 text-center">
+                  <RefreshCw className="mx-auto h-8 w-8 animate-spin text-gray-400" />
+                  <p className="mt-3 text-xs font-bold text-gray-600">Loading your Table of Specifications...</p>
+                </div>
+              ) : filteredSavedExams.length === 0 ? (
+                <div className="rounded-lg border-2 border-dashed border-black/30 bg-[#FAFAFA] p-12 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl border-2 border-black bg-[#FFD54F] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <TableProperties className="h-7 w-7 text-black" />
+                  </div>
+                  <h3 className="mt-4 text-base font-black text-black">No TOS Exams Found</h3>
+                  <p className="mt-1 text-xs font-medium text-gray-600 max-w-sm mx-auto">
+                    {savedExams.length === 0
+                      ? "Create your first Table of Specifications blueprint and exam questionnaire."
+                      : "No exam matches the selected quarter or search query."}
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={startNewExam}
+                    className="mt-5 border-2 border-black bg-[#FFD54F] font-black text-xs text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                  >
+                    <Plus className="mr-1.5 h-4 w-4" /> Create New TOS
+                  </Button>
                 </div>
               ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {savedExams.map((ex) => (
-                    <div
-                      key={ex.tos_exam_id}
-                      className="flex flex-col justify-between rounded-lg border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
-                    >
-                      <div>
-                        <div className="flex items-start justify-between">
-                          <h4 className="font-bold text-black">{ex.title}</h4>
-                          <Badge variant="outline" className="border-black bg-[#E3F2FD] text-[10px] font-bold">
-                            {ex.quarter}
-                          </Badge>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {filteredSavedExams.map((ex) => {
+                    const isFinal = ex.status === "FINALIZED" || ex.question_count > 0;
+
+                    return (
+                      <div
+                        key={ex.tos_exam_id}
+                        className="flex flex-col justify-between rounded-lg border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
+                      >
+                        <div className="space-y-3">
+                          {/* Card Header: Quarter & Status */}
+                          <div className="flex items-center justify-between">
+                            <Badge
+                              variant="outline"
+                              className="border-2 border-black bg-[#E3F2FD] text-xs font-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                            >
+                              {ex.quarter || "Q1"}
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={`border-2 border-black text-[10px] font-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${isFinal
+                                  ? "bg-emerald-100 text-emerald-950 border-emerald-600"
+                                  : "bg-amber-100 text-amber-950 border-amber-600"
+                                }`}
+                            >
+                              {isFinal ? "COMPLETED" : "DRAFT"}
+                            </Badge>
+                          </div>
+
+                          {/* Title */}
+                          <div>
+                            <h4 className="text-sm font-black text-black leading-snug line-clamp-2">
+                              {ex.title || "Untitled TOS Exam"}
+                            </h4>
+                            <p className="text-[11px] font-semibold text-gray-500 mt-0.5">{subjectName}</p>
+                          </div>
+
+                          {/* Metric Badges */}
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] pt-1">
+                            <span className="rounded border border-black/30 bg-gray-50 px-2 py-0.5 font-bold text-gray-700">
+                              {ex.total_items || 0} Target Items
+                            </span>
+                            <span className="rounded border border-black/30 bg-purple-50 px-2 py-0.5 font-bold text-purple-900">
+                              {ex.question_count || 0} Questions
+                            </span>
+                          </div>
                         </div>
-                        <p className="mt-1 text-xs text-gray-600">
-                          {ex.question_count > 0 ? `${ex.question_count} AI questions generated` : "Draft Blueprint"}
-                        </p>
-                        <p className="text-[11px] text-gray-400">
-                          Last updated: {new Date(ex.updated_at || ex.created_at).toLocaleDateString()}
-                        </p>
+
+                        {/* Card Footer */}
+                        <div className="mt-5 flex items-center justify-between border-t border-black/20 pt-3 text-[11px]">
+                          <span className="flex items-center gap-1 text-gray-400 font-medium">
+                            <Clock className="h-3 w-3" />
+                            {new Date(ex.updated_at || ex.created_at).toLocaleDateString()}
+                          </span>
+
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDeleteExam(ex.tos_exam_id)}
+                              disabled={deletingExamId === ex.tos_exam_id}
+                              className="h-7 border-2 border-black bg-red-50 px-2 text-xs font-bold text-red-700 hover:bg-red-100 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                              title="Delete Draft"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => handleLoadExam(ex.tos_exam_id)}
+                              className="h-7 border-2 border-black bg-[#FFD54F] px-3 text-xs font-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                            >
+                              Open Exam <ArrowRight className="ml-1 h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
                       </div>
-                      <div className="mt-4 flex items-center justify-end gap-2 border-t pt-3">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-2 border-black bg-[#FFD54F] text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                          onClick={() => handleLoadExam(ex.tos_exam_id)}
-                        >
-                          Open & Edit
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
           )}
 
-          {/* STEP 1: TEST PARTS */}
+          {/* ══════════════════════════════════════════════════════════════════
+              WIZARD STEP 1: TEST PARTS & COMPOSITION
+             ══════════════════════════════════════════════════════════════════ */}
           {step === "test-parts" && (
             <div className="space-y-6">
               <div>
@@ -675,16 +896,15 @@ export default function TOSGeneratorScreen({
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-gray-700">Grading Term / Quarter</label>
+                  <label className="text-xs font-bold text-gray-700">Academic Term (Trimester)</label>
                   <select
                     value={quarter}
                     onChange={(e) => setQuarter(e.target.value)}
                     className="mt-1 w-full rounded-md border-2 border-black bg-white px-3 py-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none"
                   >
-                    <option value="Q1">1st Quarter (Q1)</option>
-                    <option value="Q2">2nd Quarter (Q2)</option>
-                    <option value="Q3">3rd Quarter (Q3)</option>
-                    <option value="Q4">4th Quarter (Q4)</option>
+                    <option value="Term 1">1st Term (Term 1)</option>
+                    <option value="Term 2">2nd Term (Term 2)</option>
+                    <option value="Term 3">3rd Term (Term 3)</option>
                   </select>
                 </div>
               </div>
@@ -760,7 +980,14 @@ export default function TOSGeneratorScreen({
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-between gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setStep("saved-list")}
+                  className="border-2 border-black font-bold"
+                >
+                  <ArrowLeft className="mr-1.5 h-4 w-4" /> Cancel & Back
+                </Button>
                 <Button
                   disabled={totalItems <= 0}
                   onClick={() => setStep("competencies")}
@@ -772,114 +999,183 @@ export default function TOSGeneratorScreen({
             </div>
           )}
 
-          {/* STEP 2: COMPETENCIES & DAYS */}
+          {/* ══════════════════════════════════════════════════════════════════
+              WIZARD STEP 2: COMPETENCIES & DAYS
+             ══════════════════════════════════════════════════════════════════ */}
           {step === "competencies" && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 className="text-base font-bold">Step 2 — Learning Competencies & Days Taught</h3>
                   <p className="text-xs text-gray-600">
-                    Enter the number of days taught per competency. Items will be allocated via largest remainder formula.
+                    Select curriculum competencies from your database or add ad-hoc topics. Enter the number of days taught per competency.
                   </p>
                 </div>
-                <Badge variant="outline" className="border-black bg-[#E3F2FD] font-bold text-xs py-1 px-2.5">
+                <Badge variant="outline" className="border-black bg-[#E3F2FD] font-bold text-xs py-1 px-2.5 self-start sm:self-auto">
                   Total Days: {totalDays}
                 </Badge>
               </div>
 
-              <div className="space-y-3">
-                {compInputs.map((comp, idx) => (
-                  <div
-                    key={idx}
-                    className="flex flex-col gap-3 rounded-lg border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:flex-row sm:items-center sm:justify-between"
+              {/* Competency Picker Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border-2 border-black bg-[#FFF9C4] p-3.5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                <div className="flex-1">
+                  <select
+                    onChange={(e) => {
+                      handleSelectCompetency(e.target.value);
+                      e.target.value = "";
+                    }}
+                    className="w-full h-9 rounded border-2 border-black bg-white px-3 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] outline-none cursor-pointer focus:bg-yellow-50"
                   >
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="border-black bg-yellow-100 text-[10px] font-bold">
-                          {comp.code || `Comp #${idx + 1}`}
-                        </Badge>
-                        <span className="text-xs font-bold text-gray-500">
-                          {totalDays > 0 ? `${((comp.days / totalDays) * 100).toFixed(1)}% Weight` : "0%"}
-                        </span>
-                      </div>
-                      <Input
-                        value={comp.label}
-                        onChange={(e) => {
-                          const updated = [...compInputs];
-                          updated[idx].label = e.target.value;
-                          setCompInputs(updated);
-                        }}
-                        placeholder="Competency statement or topic description..."
-                        className="border-2 border-black/60 text-xs font-semibold"
-                      />
-                    </div>
+                    <option value="">
+                      {availableCompetencies.length > 0
+                        ? `+ Select Competency from Curriculum (${availableCompetencies.length} available)...`
+                        : "All curriculum competencies added to assessment"}
+                    </option>
+                    {availableCompetencies.map((c) => (
+                      <option key={c.competency_id} value={c.competency_id}>
+                        {c.competency_code ? `[${c.competency_code}] ` : ""}
+                        {c.statement.length > 90 ? `${c.statement.substring(0, 90)}...` : c.statement}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <label className="text-[11px] font-bold text-gray-600">Days Taught</label>
-                        <Input
-                          type="number"
-                          min="1"
-                          value={comp.days}
-                          onChange={(e) => {
-                            const updated = [...compInputs];
-                            updated[idx].days = Math.max(1, parseInt(e.target.value) || 1);
-                            setCompInputs(updated);
-                          }}
-                          className="h-9 w-24 border-2 border-black text-center font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                        />
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setCompInputs(compInputs.filter((_, i) => i !== idx));
-                        }}
-                        className="mt-4 border-2 border-black bg-red-100 text-red-700 hover:bg-red-200"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex items-center justify-between pt-2">
                 <Button
+                  type="button"
                   size="sm"
                   variant="outline"
                   onClick={() => {
                     setCompInputs([
                       ...compInputs,
-                      { label: `New Topic / Competency #${compInputs.length + 1}`, days: 2 },
+                      { label: `Ad-hoc Topic #${compInputs.length + 1}`, days: 2, is_adhoc: true },
                     ]);
                   }}
-                  className="border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                  className="border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100 h-9 text-xs shrink-0"
                 >
-                  <Plus className="mr-1.5 h-4 w-4" /> Add Ad-hoc Topic
+                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Ad-hoc Topic
                 </Button>
+              </div>
 
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setStep("test-parts")}
-                    className="border-2 border-black font-bold"
-                  >
-                    <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
-                  </Button>
-                  <Button
-                    disabled={compInputs.length === 0 || totalDays <= 0}
-                    onClick={() => setStep("difficulty")}
-                    className="border-2 border-black bg-[#FFD54F] font-bold text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
-                  >
-                    Next: Difficulty Ratio <ArrowRight className="ml-1.5 h-4 w-4" />
-                  </Button>
-                </div>
+              {/* Competency Items List */}
+              <div className="space-y-3">
+                {compInputs.length === 0 ? (
+                  <div className="rounded-lg border-2 border-dashed border-gray-300 p-8 text-center bg-gray-50">
+                    <p className="text-xs font-bold text-gray-600">No competencies selected yet.</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">
+                      Use the dropdown above to add competencies from your curriculum bank or add an ad-hoc topic.
+                    </p>
+                  </div>
+                ) : (
+                  compInputs.map((comp, idx) => {
+                    const isCurriculum = !!comp.competency_id;
+
+                    return (
+                      <div
+                        key={idx}
+                        className="flex flex-col gap-2.5 rounded-lg border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                      >
+                        {/* 1. Top row: Competency name/code (Bold, larger font) + Weight % badge aligned top-right (small/muted) */}
+                        <div className="flex items-center justify-between gap-2 border-b border-black/10 pb-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm sm:text-base font-black text-black">
+                              {comp.code || `Competency #${idx + 1}`}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className={`border-black text-[10px] font-black ${isCurriculum ? "bg-[#E3F2FD] text-blue-950" : "bg-amber-100 text-amber-950"
+                                }`}
+                            >
+                              {isCurriculum ? "CURRICULUM" : "AD-HOC TOPIC"}
+                            </Badge>
+                          </div>
+
+                          <span className="rounded border border-black/30 bg-gray-100 px-2 py-0.5 text-[11px] font-bold text-gray-600 shrink-0">
+                            {totalDays > 0 ? `${((comp.days / totalDays) * 100).toFixed(1)}% Weight` : "0% Weight"}
+                          </span>
+                        </div>
+
+                        {/* 2. Middle: Full competency statement wrapped across multiple lines — no truncation, regular weight */}
+                        <div className="py-1">
+                          {isCurriculum ? (
+                            <p className="text-xs sm:text-sm font-medium text-gray-800 leading-relaxed whitespace-normal break-words select-text">
+                              {comp.label}
+                            </p>
+                          ) : (
+                            <div>
+                              <label className="text-[11px] font-bold text-gray-600 block mb-1">Topic Description</label>
+                              <textarea
+                                rows={2}
+                                value={comp.label}
+                                onChange={(e) => {
+                                  const updated = [...compInputs];
+                                  updated[idx].label = e.target.value;
+                                  setCompInputs(updated);
+                                }}
+                                placeholder="Enter ad-hoc topic description..."
+                                className="w-full rounded border-2 border-black/60 bg-white p-2 text-xs sm:text-sm font-medium text-gray-900 leading-relaxed outline-none focus:border-black"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 3. Bottom row: Days Taught input + delete icon */}
+                        <div className="flex items-center justify-between border-t border-black/10 pt-2.5">
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs font-bold text-gray-700">Days Taught:</label>
+                            <Input
+                              type="number"
+                              min="1"
+                              value={comp.days}
+                              onChange={(e) => {
+                                const updated = [...compInputs];
+                                updated[idx].days = Math.max(1, parseInt(e.target.value) || 1);
+                                setCompInputs(updated);
+                              }}
+                              className="h-8 w-20 border-2 border-black text-center font-black text-xs shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] bg-white"
+                            />
+                            <span className="text-[11px] text-gray-500 font-semibold">day(s)</span>
+                          </div>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setCompInputs(compInputs.filter((_, i) => i !== idx));
+                            }}
+                            className="h-8 border-2 border-black bg-red-50 px-2.5 text-xs font-bold text-red-700 hover:bg-red-100 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                            title="Remove Competency"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="flex justify-between gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setStep("test-parts")}
+                  className="border-2 border-black font-bold"
+                >
+                  <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
+                </Button>
+                <Button
+                  disabled={compInputs.length === 0 || totalDays <= 0}
+                  onClick={() => setStep("difficulty")}
+                  className="border-2 border-black bg-[#FFD54F] font-bold text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                >
+                  Next: Difficulty Ratio <ArrowRight className="ml-1.5 h-4 w-4" />
+                </Button>
               </div>
             </div>
           )}
 
-          {/* STEP 3: DIFFICULTY RATIO */}
+          {/* ══════════════════════════════════════════════════════════════════
+              WIZARD STEP 3: DIFFICULTY RATIO
+             ══════════════════════════════════════════════════════════════════ */}
           {step === "difficulty" && (
             <div className="space-y-6">
               <div>
@@ -989,7 +1285,9 @@ export default function TOSGeneratorScreen({
             </div>
           )}
 
-          {/* STEP 4: BLUEPRINT GRID TABLE (Spacious DepEd Standard 2-Tier Header) */}
+          {/* ══════════════════════════════════════════════════════════════════
+              WIZARD STEP 4: BLUEPRINT GRID TABLE
+             ══════════════════════════════════════════════════════════════════ */}
           {step === "blueprint" && (
             <div className="space-y-6">
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
@@ -1128,7 +1426,7 @@ export default function TOSGeneratorScreen({
                             {r.items}
                           </td>
 
-                          {/* Editable Bloom Input Cells with Distinct Retro Box */}
+                          {/* Editable Bloom Input Cells */}
                           <td className="border-r border-black p-2 text-center bg-emerald-50/30">
                             <input
                               type="number"
@@ -1268,7 +1566,9 @@ export default function TOSGeneratorScreen({
             </div>
           )}
 
-          {/* STEP 5: AI QUESTION REVIEW & EDIT (Reusing Standard RetroUI Question Cards) */}
+          {/* ══════════════════════════════════════════════════════════════════
+              WIZARD STEP 5: AI QUESTION REVIEW & EDIT
+             ══════════════════════════════════════════════════════════════════ */}
           {step === "ai-review" && (
             <div className="space-y-6">
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
@@ -1476,7 +1776,6 @@ export default function TOSGeneratorScreen({
                                       </div>
                                     </div>
 
-                                    {/* Options editing for MC/TF/Matching */}
                                     {editQuestionForm.options && editQuestionForm.options.length > 0 && (
                                       <div className="space-y-1.5 pt-2">
                                         <label className="text-[11px] font-bold text-gray-700">Options & Correct Answer</label>
@@ -1523,7 +1822,6 @@ export default function TOSGeneratorScreen({
                                 ) : (
                                   /* Display Mode */
                                   <div className="space-y-3">
-                                    {/* Header Row */}
                                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/20 pb-2">
                                       <div className="flex flex-wrap items-center gap-2">
                                         <span className="font-black text-sm text-black">#{globalIdx + 1}.</span>
@@ -1639,7 +1937,9 @@ export default function TOSGeneratorScreen({
             </div>
           )}
 
-          {/* STEP 6: FINAL EXAM EXPORT */}
+          {/* ══════════════════════════════════════════════════════════════════
+              WIZARD STEP 6: FINAL EXAM EXPORT
+             ══════════════════════════════════════════════════════════════════ */}
           {step === "export" && (
             <div className="space-y-6">
               <div>
@@ -1753,11 +2053,11 @@ export default function TOSGeneratorScreen({
                 <Button
                   onClick={() => {
                     handleSaveDraft();
-                    onBack();
+                    setStep("saved-list");
                   }}
                   className="border-2 border-black bg-[#C8E6C9] font-bold text-green-900 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
                 >
-                  <CheckCircle2 className="mr-1.5 h-4 w-4" /> Save & Done
+                  <CheckCircle2 className="mr-1.5 h-4 w-4" /> Save & Return to TOS Archive
                 </Button>
               </div>
             </div>
@@ -1767,3 +2067,5 @@ export default function TOSGeneratorScreen({
     </div>
   );
 }
+
+export default TOSGeneratorScreen;

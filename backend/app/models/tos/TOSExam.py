@@ -31,7 +31,7 @@ class TOSExam(Base):
         nullable=True,
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    quarter: Mapped[str] = mapped_column(String(10), nullable=False, default="Q1")
+    quarter: Mapped[str] = mapped_column(String(20), nullable=False, default="Term 1")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="DRAFT")
     test_parts_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     competencies_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")

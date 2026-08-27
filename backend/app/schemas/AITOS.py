@@ -33,7 +33,7 @@ class TOSQuestionOut(TOSQuestionIn):
 
 class TOSExamUpsert(BaseModel):
     title: str
-    quarter: str = "Q1"
+    quarter: str = "Term 1"
     status: str = "DRAFT"
     test_parts: List[dict[str, Any]] = Field(default_factory=list)
     competencies: List[dict[str, Any]] = Field(default_factory=list)
@@ -44,9 +44,11 @@ class TOSExamUpsert(BaseModel):
 class TOSExamSummary(BaseModel):
     tos_exam_id: int
     subject_id: int
+    subject_name: Optional[str] = None
     title: str
     quarter: str
     status: str
+    total_items: int = 0
     question_count: int = 0
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
