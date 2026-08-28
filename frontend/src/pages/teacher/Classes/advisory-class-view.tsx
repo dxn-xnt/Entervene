@@ -9,7 +9,7 @@ import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
 import { Table } from "@/components/retroui/Table";
 import { OverviewCard } from "@/components/overview-cards";
-import { ManualSuggestionPanel } from "@/components/teacher/suggestions/ManualSuggestionPanel";
+import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
 import { getTeacherAdvisoryClassDetail } from "@/lib/api";
 import type {
   TeacherAdvisoryClassDetailResponse,

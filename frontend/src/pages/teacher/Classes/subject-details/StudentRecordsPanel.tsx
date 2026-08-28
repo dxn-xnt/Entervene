@@ -16,7 +16,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Select } from "@/components/retroui/Select";
 
 import type { TeacherAdvisorySubjectLoadItem } from "@/types/adminClasses";
-import { ManualSuggestionPanel } from "@/components/teacher/suggestions/ManualSuggestionPanel";
+import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
 
 type StudentRecordsPanelProps = {
   classId: string;
@@ -84,8 +84,8 @@ export default function StudentRecordsPanel({
         setSelectedPeriodId(
           String(
             data.default_academic_period_id ||
-              data.periods[0]?.academic_period_id ||
-              "",
+            data.periods[0]?.academic_period_id ||
+            "",
           ),
         );
       } catch (err) {
@@ -212,11 +212,11 @@ export default function StudentRecordsPanel({
             Loading student record...
           </p>
         ) : (
-          <StudentRecordDetail 
-          detail={detail} 
-          classId={Number(classId)} 
-          subjectLoads={subjectLoads}
-        />
+          <StudentRecordDetail
+            detail={detail}
+            classId={Number(classId)}
+            subjectLoads={subjectLoads}
+          />
         )}
       </section>
     );
@@ -301,7 +301,7 @@ export default function StudentRecordsPanel({
       </div>
 
 
-{/* wapa ywa  */}
+      {/* wapa ywa  */}
       {/* Search bar - always visible with proper spacing */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <label className="relative w-full md:w-96 shadow-md transition-shadow hover:shadow-none">
@@ -423,7 +423,7 @@ function StudentRecordDetail({
           <UserRound size={24} className="shrink-0" />
         </Card.Content>
       </Card>
-      
+
       <ManualSuggestionPanel
         classId={classId}
         student={{
