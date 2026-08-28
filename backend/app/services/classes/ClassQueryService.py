@@ -112,7 +112,7 @@ def _gender_count_key(group: str) -> str:
     return "unspecified"
 
 
-def _student_list_item(student: Student) -> dict:
+def _student_list_item(student: Student, account: UserAccount | None = None) -> dict:
     full_name = _student_full_name(student)
     return {
         "student_id": student.student_id,
@@ -122,6 +122,7 @@ def _student_list_item(student: Student) -> dict:
         "full_name": full_name,
         "gender": _student_gender_group(student.gender),
         "avatar_initial": (readable_text(student.first_name)[:1] or "?").upper(),
+        "account_status": account.account_status if account else None,
     }
 
 
@@ -470,13 +471,14 @@ def get_class_students_data(
     # Restrict the roster to the class's academic year so historical enrollment
     # records do not leak into the current admin view.
     rows = (
-        db.query(Student)
+        db.query(Student, UserAccount)
         .join(StudentClass, Student.student_id == StudentClass.student_id)
+        .outerjoin(UserAccount, Student.user_id == UserAccount.user_id)
         .filter(StudentClass.class_id == class_.class_id)
         .filter(StudentClass.academic_year_id == class_.academic_year_id)
         .all()
     )
-    items = [_student_list_item(student) for student in rows]
+    items = [_student_list_item(student, account) for student, account in rows]
     search_term = normalized_text(search)
     if search_term:
         items = [item for item in items if search_term in normalized_text(item["full_name"])]

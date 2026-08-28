@@ -17,7 +17,9 @@ export const SidebarConfigs: Record<string, NavItem[]> = {
       { title: "Subjects",        url: routes.admin.subjects,          icon: <Book />            },
       { title: "Classes",         url: routes.admin.classes,           icon: <School />          },
       { title: "Subject Load",    url: routes.admin.subjectLoadStudio, icon: <Calendar />        },
+      { title: "Substitutions",   url: routes.admin.substitutions,     icon: <UserCheck />       },
       { title: "Users",           url: routes.admin.users,             icon: <Users />           },
+
       { title: "AI Predictions",  url: routes.admin.predictions,       icon: <Sparkles />        },
       { title: "Interventions",   url: routes.admin.interventions,     icon: <Shield />          },
       { title: "Notifications",   url: routes.admin.notifications,     icon: <Bell />            },
@@ -39,7 +41,6 @@ export const SidebarConfigs: Record<string, NavItem[]> = {
     student: [
       { title: "Study Board",   url: routes.student.board,          icon: <LayoutDashboard /> },
       { title: "Subjects",      url: routes.student.subjects,       icon: <BookOpen />        },
-      { title: "Attendance",    url: routes.student.attendance,     icon: <UserCheck />       },
       { title: "Interventions", url: routes.student.interventions,  icon: <Shield />          },
       { title: "Grades",        url: routes.student.grades,         icon: <BarChart2 />       },
       { title: "To Do",         url: routes.student.todo,           icon: <CheckSquare />     },

@@ -111,6 +111,7 @@ class ClassStudentListItemResponse(BaseModel):
     full_name: str
     gender: str
     avatar_initial: str
+    account_status: str | None = None
 
 
 class ClassStudentGenderCountsResponse(BaseModel):

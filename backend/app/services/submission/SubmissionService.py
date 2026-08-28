@@ -69,9 +69,39 @@ def teacher_owns_assignment(assignment_id: int, staff_id: str, db: Session) -> C
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first()
-    if not classwork or classwork.created_by_staff_id != staff_id:
+    if not classwork:
         raise HTTPException(status_code=403, detail="You do not own this assignment")
+
+    if classwork.created_by_staff_id != staff_id:
+        from app.models.academic.SubjectLoad import SubjectLoad
+        from app.services.academic.SubstitutionService import SubstitutionService
+        loads = db.query(SubjectLoad).filter(
+            SubjectLoad.class_id == assignment.class_id,
+            SubjectLoad.subject_id == classwork.subject_id,
+            SubjectLoad.status.in_(["active", "published"]),
+        ).all()
+        is_sub = False
+        for sl in loads:
+            active_sub = SubstitutionService.get_active_substitution(db, sl.subject_load_id)
+            if active_sub and active_sub.substitute_staff_id == staff_id:
+                is_sub = True
+                break
+        if not is_sub:
+            raise HTTPException(status_code=403, detail="You do not own this assignment")
+    else:
+        from app.models.academic.SubjectLoad import SubjectLoad
+        from app.services.academic.SubstitutionService import SubstitutionService
+        loads = db.query(SubjectLoad).filter(
+            SubjectLoad.class_id == assignment.class_id,
+            SubjectLoad.subject_id == classwork.subject_id,
+            SubjectLoad.status.in_(["active", "published"]),
+        ).all()
+        for sl in loads:
+            if sl.staff_id == staff_id:
+                SubstitutionService.assert_can_write(db, staff_id, sl.subject_load_id)
+
     return assignment
+
 
 
 def authorize_submission_access(submission: StudentSubmission, current_user: dict, db: Session) -> None:

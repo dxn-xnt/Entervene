@@ -16,7 +16,11 @@ export default function ConfirmAlertDialog({
   onConfirm,
 }: ConfirmAlertDialogProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+    >
       <div className="w-full max-w-md rounded-lg border border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
         <Alert status="warning">
           <Alert.Title>{title}</Alert.Title>

@@ -6,6 +6,7 @@ import { Text } from "@/components/retroui/Text";
 import { Table } from "@/components/retroui/Table";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
+import { Card } from "@/components/retroui/Card";
 import { Search, ChevronLeft, ChevronRight, Edit3 } from "lucide-react";
 
 interface ViewGradeScoreModalProps {
@@ -64,8 +65,8 @@ export default function ViewGradeScoreModal({
     if (group.length === 0) return null;
     return (
       <>
-        <Table.Row className="bg-muted/50 border-y-2 border-y-gray-400">
-          <Table.Cell colSpan={2 + paginatedItems.length} className="font-bold text-gray-700 py-1 uppercase">
+        <Table.Row className="border-y-2 border-black bg-yellow-50 hover:bg-yellow-100/70">
+          <Table.Cell colSpan={2 + paginatedItems.length} className="py-1 font-black uppercase text-black">
             {label}
           </Table.Cell>
         </Table.Row>
@@ -75,8 +76,8 @@ export default function ViewGradeScoreModal({
           const totalScore = student.scores.reduce<number>((sum, score) => sum + (score ?? 0), 0);
 
           return (
-            <Table.Row key={student.name} className="hover:bg-muted/20">
-              <Table.Cell className="font-medium whitespace-nowrap">
+            <Table.Row key={student.name} className="border-b border-black/10 hover:bg-yellow-50/50">
+              <Table.Cell className="whitespace-nowrap text-sm font-extrabold text-black">
                 {idx + 1}. {student.name}
               </Table.Cell>
               {paginatedItems.map((_, i) => {
@@ -87,7 +88,7 @@ export default function ViewGradeScoreModal({
                   </Table.Cell>
                 );
               })}
-              <Table.Cell className="text-center font-bold text-primary tabular-nums">
+              <Table.Cell className="text-center font-black text-black tabular-nums">
                 {totalScore}
               </Table.Cell>
             </Table.Row>
@@ -124,36 +125,36 @@ export default function ViewGradeScoreModal({
           </div>
         </div>
 
-        <div className="border border-border rounded-lg overflow-x-auto shadow-sm">
-          <Table>
-            <Table.Header className="font-sans bg-muted/30">
+        <Card className="w-full rounded-none border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <Table className="w-full border-collapse text-sm">
+            <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black uppercase">
               <Table.Row>
-                <Table.Head className="min-w-[180px] font-bold">Learner's Name</Table.Head>
+                <Table.Head className="min-w-[180px] font-black text-black">Learner's Name</Table.Head>
                 {paginatedItems.map((item) => (
-                  <Table.Head key={item.id} className="text-center min-w-[150px] py-3 px-3">
+                  <Table.Head key={item.id} className="min-w-[150px] px-3 py-3 text-center font-black text-black">
                     <div className="flex flex-col items-center justify-center gap-1">
                       <div className="flex items-center justify-center gap-1">
-                        <span className="font-bold text-sm text-foreground text-center break-words max-w-[160px] leading-tight" title={item.title}>
+                        <span className="max-w-[160px] break-words text-center text-sm font-black leading-tight text-black" title={item.title}>
                           {item.title}
                         </span>
                         {onEnterScores && (
                           <button
                             type="button"
                             title="Enter / Edit Scores"
-                            className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-black transition-colors"
+                            className="border border-transparent p-1 text-black transition-colors hover:border-black hover:bg-yellow-200"
                             onClick={() => onEnterScores(item)}
                           >
                             <Edit3 className="size-3.5" />
                           </button>
                         )}
                       </div>
-                      <span className="text-[11px] font-semibold text-muted-foreground bg-background px-2 py-0.5 rounded-full border border-border whitespace-nowrap">
+                      <span className="whitespace-nowrap border border-black bg-yellow-50 px-2 py-0.5 text-[11px] font-bold text-black">
                         {item.maxScore} pts
                       </span>
                     </div>
                   </Table.Head>
                 ))}
-                <Table.Head className="text-center min-w-[100px] font-bold">
+                <Table.Head className="min-w-[100px] text-center font-black text-black">
                   Total Score
                 </Table.Head>
               </Table.Row>
@@ -163,7 +164,7 @@ export default function ViewGradeScoreModal({
                 <Table.Row>
                   <Table.Cell
                     colSpan={2 + paginatedItems.length}
-                    className="text-center py-8 text-muted-foreground text-sm"
+                    className="py-8 text-center text-sm font-bold italic text-gray-500"
                   >
                     No learners found matching "{searchQuery}".
                   </Table.Cell>
@@ -176,7 +177,7 @@ export default function ViewGradeScoreModal({
               )}
             </Table.Body>
           </Table>
-        </div>
+        </Card>
 
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border border-border rounded-lg text-xs font-semibold text-muted-foreground">

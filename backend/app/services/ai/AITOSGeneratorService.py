@@ -59,6 +59,7 @@ def _build_tos_row_prompt(
     subject: str,
     type_counts: dict[str, int],
     bloom_targets: dict[str, int],
+    language: str = "English",
 ) -> str:
     total_requested = sum(type_counts.values()) if type_counts else 5
 
@@ -75,16 +76,19 @@ def _build_tos_row_prompt(
     types_str = "\n".join(type_lines) if type_lines else f"  • {total_requested} × MULTIPLE_CHOICE"
     bloom_str = "\n".join(bloom_lines) if bloom_lines else "  • Balanced cognitive distribution"
 
+    lang_instruction = "strictly in Filipino (Tagalog)" if (language and language.lower() == "filipino") else "strictly in English"
+
     return (
         f"Subject: {subject or 'General'}\n"
-        f"Learning Competency: {competency_label} (Code: {code or 'N/A'})\n\n"
+        f"Learning Competency: {competency_label} (Code: {code or 'N/A'})\n"
+        f"Language of Examination: {language} (You MUST generate all question text, options, correct answers, and explanations {lang_instruction})\n\n"
         f"CRITICAL REQUIREMENT: Generate EXACTLY {total_requested} question(s) in total for this competency.\n"
         f"Do NOT stop early. The 'questions' array MUST contain {total_requested} full question objects.\n\n"
         f"QUESTION TYPE COMPOSITION:\n"
         f"{types_str}\n\n"
         f"BLOOM'S TAXONOMY & DIFFICULTY TARGETS (Tag each question with appropriate cognitive_level & difficulty_band):\n"
         f"{bloom_str}\n\n"
-        f"Ensure every question is fully written out, academically sound, and strictly formatted as JSON."
+        f"Ensure every question is fully written out {lang_instruction}, academically sound, and strictly formatted as JSON."
     )
 
 
@@ -166,6 +170,7 @@ async def generate_tos_row_questions(
     subject: str,
     type_counts: dict[str, int],
     bloom_targets: dict[str, int],
+    language: str = "English",
 ) -> list[dict[str, Any]]:
     groq_key = settings.groq_api_key
     gemini_key = settings.gemini_api_key
@@ -176,6 +181,7 @@ async def generate_tos_row_questions(
         subject=subject,
         type_counts=type_counts,
         bloom_targets=bloom_targets,
+        language=language,
     )
     raw = None
 

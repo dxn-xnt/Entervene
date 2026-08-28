@@ -25,7 +25,9 @@ export const routes = {
     gradePredictions: "/admin/predictions/:grade",
     sectionPredictions: "/admin/predictions/:grade/:classId",
     profile: "/admin/profile",
+    substitutions: "/admin/substitutions",
   },
+
 
   teacher: {
     dashboard: "/teacher/dashboard",

@@ -161,6 +161,8 @@ def list_users(
     student_ids = {user.student_id for user in users if user.role_name == "Student" and user.student_id}
     teacher_summaries = _teacher_summaries(db, teacher_ids)
     latest_sections = _student_summaries(db, student_ids)
+    from app.services.academic.SubstitutionService import SubstitutionService
+    leave_summaries = SubstitutionService.get_staff_leave_summary(db, teacher_ids)
 
     response = []
     for user in users:
@@ -177,14 +179,20 @@ def list_users(
         }
         if client_role == "teacher" and user.staff_id:
             summary = teacher_summaries.get(user.staff_id, {"subjects": set(), "class_ids": set()})
+            item["staff_id"] = user.staff_id
+            item["employment_status"] = user.employment_status or ""
             item["subjects"] = sorted(summary["subjects"])
             item["class_count"] = len(summary["class_ids"])
+            leave_info = leave_summaries.get(user.staff_id, {"is_on_leave": False, "active_substitutions_count": 0})
+            item["is_on_leave"] = leave_info["is_on_leave"]
+            item["active_substitutions_count"] = leave_info["active_substitutions_count"]
         if client_role == "student" and user.student_id:
             sec_info = latest_sections.get(user.student_id)
             item["section"] = sec_info["section_name"] if sec_info else None
             item["grade_level"] = sec_info["grade_level"] if (sec_info and sec_info.get("grade_level")) else user.grade_level
         response.append(item)
     return response
+
 
 
 def get_user_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any]:

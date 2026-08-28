@@ -26,6 +26,8 @@ import AdminNotifications from "./pages/admin/notifications";
 import AdminSettings from "./pages/admin/system-settings";
 import AcademicPeriods from "./pages/admin/academic-periods";
 import AdminProfile from "./pages/admin/profile-view";
+import AdminSubstitutions from "./pages/admin/substitutions";
+
 // import AppLayout from "./layouts/app-layout";
 
 // Teacher pages
@@ -63,7 +65,6 @@ import StudentGrades from "./pages/student/Grades/grades";
 import StudentTodo from "./pages/student/todo";
 import StudentTodoView from "./pages/student/todo-view";
 import StudentNotifications from "./pages/student/notifications";
-import StudentAttendance from "./pages/student/attendance";
 import AdminStudentView from "./pages/admin/student-view";
 
 // Quiz pages
@@ -107,7 +108,9 @@ const App = () => {
                 <Route path={routes.admin.predictions} element={<PredictionsDashboard />} />
                 <Route path={routes.admin.gradePredictions} element={<GradesPredictions />} />
                 <Route path={routes.admin.sectionPredictions} element={<SectionPredictions />} />
+                <Route path={routes.admin.substitutions} element={<AdminSubstitutions />} />
               </Route>
+
 
               {/* Teacher */}
               <Route element={<ProtectedRoute allowedRoles={["teacher"]} />}>
@@ -150,7 +153,6 @@ const App = () => {
                 <Route path={routes.student.todo} element={<StudentTodo />} />
                 <Route path={routes.student.todoView} element={<StudentTodoView />} />
                 <Route path={routes.student.notifications} element={<StudentNotifications />} />
-                <Route path={routes.student.attendance} element={<StudentAttendance />} />
               </Route>
 
               {/* Quiz pages (outside student layout — fullscreen) */}

@@ -177,11 +177,11 @@ function OverviewTab({
   detail: TeacherAdvisoryClassDetailResponse;
 }) {
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-4 xl:grid-cols-[1fr_300px] xl:grid-rows-[auto_1fr] items-stretch">
-        <div className="flex flex-col gap-2">
+    <div className="grid gap-4 min-w-0">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px] xl:grid-rows-[auto_1fr] items-stretch min-w-0">
+        <div className="flex flex-col gap-2 min-w-0">
           <h3 className="text-lg font-bold">Overview</h3>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 min-w-0">
             <OverviewCard
               title="Total Students"
               count={String(detail.student_count ?? 0)}
@@ -194,7 +194,7 @@ function OverviewTab({
             />
           </div>
         </div>
-        <aside className="flex flex-col gap-2 xl:row-span-2">
+        <aside className="flex flex-col gap-2 min-w-0 xl:row-span-2">
           <h3 className="text-lg font-bold">Recent Activity</h3>
           <Card className="block w-full flex-1">
             <Card.Content className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-black/60">
@@ -202,9 +202,9 @@ function OverviewTab({
             </Card.Content>
           </Card>
         </aside>
-        <section>
+        <section className="min-w-0">
           <h3 className="text-lg font-bold">Subjects</h3>
-          <div className="grid gap-2">
+          <div className="grid gap-2 min-w-0">
             {detail.subject_loads.length ? (
               detail.subject_loads.map((load) => (
                 <Link

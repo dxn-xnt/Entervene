@@ -33,7 +33,10 @@ class AssessmentItem(Base):
     item_number = Column(Integer, nullable=False)
     max_score = Column(Numeric(8, 2), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    entered_by_staff_id = Column(String(20), ForeignKey("academic_staff.staff_id", ondelete="SET NULL"), nullable=True)
 
     class_ = relationship("Class", backref="assessment_items")
     subject = relationship("Subject", backref="assessment_items")
     academic_period = relationship("AcademicPeriod", backref="assessment_items")
+    entered_by = relationship("AcademicStaff", backref="created_assessment_items")
+

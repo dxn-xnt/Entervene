@@ -9,6 +9,7 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
+import { Card } from "@/components/retroui/Card";
 import ViewGradeScoreModal from "./forms/view-grade-scores";
 import AddClassworkScoreModal from "./forms/add-classwork-score";
 import EnterManualScoresModal from "./forms/enter-manual-scores";
@@ -206,12 +207,12 @@ const TeacherGradeView = () => {
       if (group.length === 0) return null;
       return (
         <>
-          <Table.Row className="bg-muted/50 border-y-2 border-y-gray-400">
-            <Table.Cell colSpan={periods.length + 3} className="font-bold text-gray-700 py-1 uppercase">{label}</Table.Cell>
+          <Table.Row className="border-y-2 border-black bg-yellow-50 hover:bg-yellow-100/70">
+            <Table.Cell colSpan={periods.length + 3} className="py-1 font-black uppercase text-black">{label}</Table.Cell>
           </Table.Row>
           {group.map((item, idx) => (
-            <Table.Row key={item.student_id}>
-              <Table.Cell className="font-medium truncate max-w-[200px]" title={item.name}>
+            <Table.Row key={item.student_id} className="border-b border-black/10 hover:bg-yellow-50/50">
+              <Table.Cell className="max-w-[200px] truncate text-sm font-extrabold text-black" title={item.name}>
                 {idx + 1}. {item.name}
               </Table.Cell>
               {periods.map((p) => {
@@ -235,29 +236,29 @@ const TeacherGradeView = () => {
     };
 
     return (
-      <Table className="w-full text-sm border-collapse">
-        <Table.Header className="font-sans">
+      <Table className="w-full border-collapse text-sm">
+        <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black uppercase">
           <Table.Row>
-            <Table.Head className="font-bold min-w-[200px]">Learner's Name</Table.Head>
+            <Table.Head className="min-w-[200px] font-black text-black">Learner's Name</Table.Head>
             {periods.map((p) => (
-              <Table.Head key={p.academic_period_id} className="text-center font-bold">
+              <Table.Head key={p.academic_period_id} className="text-center font-black text-black">
                 {p.period_name}
               </Table.Head>
             ))}
-            <Table.Head className="text-center font-bold">Final Grade</Table.Head>
-            <Table.Head className="text-center font-bold">Remarks</Table.Head>
+            <Table.Head className="text-center font-black text-black">Final Grade</Table.Head>
+            <Table.Head className="text-center font-black text-black">Remarks</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
           {loading ? (
             <Table.Row>
-              <Table.Cell colSpan={periods.length + 3} className="text-center py-8 text-gray-500">
+              <Table.Cell colSpan={periods.length + 3} className="py-8 text-center font-bold italic text-gray-500">
                 Loading summary...
               </Table.Cell>
             </Table.Row>
           ) : filteredSummary.length === 0 ? (
             <Table.Row>
-              <Table.Cell colSpan={periods.length + 3} className="text-center py-8 text-gray-500">
+              <Table.Cell colSpan={periods.length + 3} className="py-8 text-center font-bold italic text-gray-500">
                 No student records found.
               </Table.Cell>
             </Table.Row>
@@ -279,12 +280,12 @@ const TeacherGradeView = () => {
       if (group.length === 0) return null;
       return (
         <>
-          <Table.Row className="bg-muted/50 border-y-2 border-y-gray-400">
-            <Table.Cell colSpan={5} className="font-bold text-gray-700 py-1 uppercase">{label}</Table.Cell>
+          <Table.Row className="border-y-2 border-black bg-yellow-50 hover:bg-yellow-100/70">
+            <Table.Cell colSpan={5} className="py-1 font-black uppercase text-black">{label}</Table.Cell>
           </Table.Row>
           {group.map((item, idx) => (
-            <Table.Row key={item.student_id}>
-              <Table.Cell className="font-medium truncate max-w-[200px]" title={item.name}>
+            <Table.Row key={item.student_id} className="border-b border-black/10 hover:bg-yellow-50/50">
+              <Table.Cell className="max-w-[200px] truncate text-sm font-extrabold text-black" title={item.name}>
                 {idx + 1}. {item.name}
               </Table.Cell>
 
@@ -344,12 +345,12 @@ const TeacherGradeView = () => {
     };
 
     return (
-      <Table className="w-full text-sm border-collapse">
-        <Table.Header className="font-sans">
+      <Table className="w-full border-collapse text-sm">
+        <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black uppercase">
           <Table.Row>
-            <Table.Head className="w-[22%] font-bold">Learner's Name</Table.Head>
+            <Table.Head className="w-[22%] font-black text-black">Learner's Name</Table.Head>
             <Table.Head
-              className="w-[27%] text-center cursor-pointer hover:bg-muted/50 transition-colors"
+              className="w-[27%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
               title="Click to view full Written Works breakdown"
               onClick={() =>
                 setSelectedCategory({
@@ -366,7 +367,7 @@ const TeacherGradeView = () => {
               Written Works
             </Table.Head>
             <Table.Head
-              className="w-[27%] text-center cursor-pointer hover:bg-muted/50 transition-colors"
+              className="w-[27%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
               title="Click to view full Performance Tasks breakdown"
               onClick={() =>
                 setSelectedCategory({
@@ -383,7 +384,7 @@ const TeacherGradeView = () => {
               Performance Task
             </Table.Head>
             <Table.Head
-              className="w-[15%] text-center cursor-pointer hover:bg-muted/50 transition-colors"
+              className="w-[15%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
               title="Click to view full Quarterly Assessment breakdown"
               onClick={() =>
                 setSelectedCategory({
@@ -399,12 +400,12 @@ const TeacherGradeView = () => {
             >
               Quarterly Assessment
             </Table.Head>
-            <Table.Head className="w-[9%] text-center font-bold">Grade</Table.Head>
+            <Table.Head className="w-[9%] text-center font-black text-black">Grade</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          <Table.Row className="bg-muted/20">
-            <Table.Cell className="font-semibold text-muted-foreground">Classwork Name</Table.Cell>
+          <Table.Row className="border-b-2 border-black bg-yellow-50 hover:bg-yellow-100/70">
+            <Table.Cell className="font-black text-black">Classwork Name</Table.Cell>
             <Table.Cell className="py-2 px-2">
               <div className="flex flex-row items-center justify-between gap-1 w-full">
                 <button
@@ -425,22 +426,26 @@ const TeacherGradeView = () => {
                     <button
                       type="button"
                       key={item.id}
-                      className="flex flex-row items-center gap-1 whitespace-nowrap truncate hover:text-primary transition-colors cursor-pointer"
-                      title={`Click to Enter Scores for ${item.title}`}
-                      onClick={() => setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
+                      className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${
+                        isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                      }`}
+                      title={isViewOnly ? item.title : `Click to Enter Scores for ${item.title}`}
+                      onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                     >
                       <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
                       <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                     </button>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  title="Add score to Written Works"
-                  onClick={() => setAddingCategoryName("Written Works")}
-                >
-                  <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
-                </button>
+                {!isViewOnly && (
+                  <button
+                    type="button"
+                    title="Add score to Written Works"
+                    onClick={() => setAddingCategoryName("Written Works")}
+                  >
+                    <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                  </button>
+                )}
               </div>
             </Table.Cell>
             <Table.Cell className="py-2 px-2">
@@ -463,22 +468,26 @@ const TeacherGradeView = () => {
                     <button
                       type="button"
                       key={item.id}
-                      className="flex flex-row items-center gap-1 whitespace-nowrap truncate hover:text-primary transition-colors cursor-pointer"
-                      title={`Click to Enter Scores for ${item.title}`}
-                      onClick={() => setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
+                      className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${
+                        isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                      }`}
+                      title={isViewOnly ? item.title : `Click to Enter Scores for ${item.title}`}
+                      onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                     >
                       <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
                       <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                     </button>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  title="Add score to Performance Tasks"
-                  onClick={() => setAddingCategoryName("Performance Tasks")}
-                >
-                  <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
-                </button>
+                {!isViewOnly && (
+                  <button
+                    type="button"
+                    title="Add score to Performance Tasks"
+                    onClick={() => setAddingCategoryName("Performance Tasks")}
+                  >
+                    <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                  </button>
+                )}
               </div>
             </Table.Cell>
             <Table.Cell className="py-2 px-2">
@@ -501,36 +510,41 @@ const TeacherGradeView = () => {
                     <button
                       type="button"
                       key={item.id}
-                      className="flex flex-row items-center gap-1 whitespace-nowrap truncate hover:text-primary transition-colors cursor-pointer"
-                      title={`Click to Enter Scores for ${item.title}`}
-                      onClick={() => setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
+                      className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${
+                        isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                      }`}
+                      title={isViewOnly ? item.title : `Click to Enter Scores for ${item.title}`}
+                      onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                     >
                       <span className="truncate max-w-[90px] font-semibold">{item.title}</span>
                       <span className="text-muted-foreground font-normal">({item.maxScore})</span>
                     </button>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  title="Add score to Quarterly Assessment"
-                  onClick={() => setAddingCategoryName("Quarterly Assessment")}
-                >
-                  <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
-                </button>
+                {!isViewOnly && (
+                  <button
+                    type="button"
+                    title="Add score to Quarterly Assessment"
+                    onClick={() => setAddingCategoryName("Quarterly Assessment")}
+                  >
+                    <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
+                  </button>
+                )}
               </div>
             </Table.Cell>
             <Table.Cell className="text-center font-semibold">100</Table.Cell>
           </Table.Row>
 
+
           {loading ? (
             <Table.Row>
-              <Table.Cell colSpan={5} className="text-center py-8 text-gray-500">
+              <Table.Cell colSpan={5} className="py-8 text-center font-bold italic text-gray-500">
                 Loading gradebook...
               </Table.Cell>
             </Table.Row>
           ) : filtered.length === 0 ? (
             <Table.Row>
-              <Table.Cell colSpan={5} className="text-center py-8 text-gray-500">
+              <Table.Cell colSpan={5} className="py-8 text-center font-bold italic text-gray-500">
                 No student records found.
               </Table.Cell>
             </Table.Row>
@@ -544,6 +558,9 @@ const TeacherGradeView = () => {
       </Table>
     );
   };
+
+  const isViewOnly = Boolean(gradebook?.scope?.is_view_only);
+  const isSubstitution = Boolean(gradebook?.scope?.is_substitution);
 
   return (
     <AppLayout>
@@ -571,7 +588,12 @@ const TeacherGradeView = () => {
               </Breadcrumb>
 
               <div className="flex flex-row gap-2 ml-auto">
-                <Button variant={"outline"} className="whitespace-nowrap" onClick={() => setOpenAttendance(true)}>
+                <Button
+                  variant={"outline"}
+                  className="whitespace-nowrap"
+                  onClick={() => setOpenAttendance(true)}
+                  disabled={isViewOnly}
+                >
                   <ClipboardCheck className="size-4 mr-2" /> Check Attendance
                 </Button>
                 <Button variant={"outline"} className="whitespace-nowrap" onClick={handleExportCSV}>
@@ -579,6 +601,28 @@ const TeacherGradeView = () => {
                 </Button>
               </div>
             </header>
+
+            {isViewOnly && (
+              <div className="rounded-xl border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/30 p-4 text-amber-900 dark:text-amber-200 flex items-center gap-3 shadow-sm">
+                <span className="text-2xl">🔒</span>
+                <div>
+                  <h4 className="font-bold text-sm">Read-Only Mode (On Leave)</h4>
+                  <p className="text-xs text-amber-800 dark:text-amber-300">
+                    You are currently on leave for this class and subject. Records are view-only.
+                    {gradebook?.scope?.substitute_name && ` Currently covered by substitute teacher: ${gradebook.scope.substitute_name}.`}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {isSubstitution && (
+              <div className="rounded-xl border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 p-3 text-emerald-900 dark:text-emerald-200 flex items-center gap-2 text-xs font-semibold shadow-sm">
+                <span className="text-base">📋</span>
+                <span>
+                  You are covering this class as a substitute teacher for {gradebook?.scope?.original_teacher_name || "the original teacher"}. Full grading and attendance permissions are enabled.
+                </span>
+              </div>
+            )}
 
             <div className="-mx-4 md:-mx-6 border-b border-gray-500" />
 
@@ -593,6 +637,7 @@ const TeacherGradeView = () => {
                     placeholder="Search student's name"
                   />
                 </div>
+
                 <div className="flex flex-row gap-4">
                   <Select value={sortBy} onValueChange={(v) => setSortBy(v)}>
                     <Select.Trigger className="w-full">
@@ -606,9 +651,9 @@ const TeacherGradeView = () => {
                   </Select>
                 </div>
               </section>
-              <div className="w-full overflow-hidden border border-border rounded-lg shadow-sm">
+              <Card className="w-full rounded-none border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                 {activeTab === "summary" ? renderSummaryTable() : renderTermTable()}
-              </div>
+              </Card>
               <div className="h-24 w-full"></div>
             </div>
           </div>

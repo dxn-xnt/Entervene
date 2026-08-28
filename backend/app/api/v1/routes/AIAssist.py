@@ -234,6 +234,7 @@ async def generate_tos_questions(
                 subject=subject.subject_name,
                 type_counts=row.type_counts,
                 bloom_targets=row.bloom_targets,
+                language=body.language,
             )
             for q_data in row_raw_questions:
                 q_data["competency_id"] = row.competency_id
