@@ -264,281 +264,286 @@ export default function Classworks() {
       ) : (
         // Main list view
         <>
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl md:text-4xl font-bold">Classwork</h1>
-              </div>
+          <div className="flex flex-1 flex-col">
+            <div className="@container/main flex flex-1 flex-col">
+              <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
+                <header className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <SidebarTrigger className="md:hidden" />
+                    <h1 className="text-2xl md:text-4xl font-bold">Classwork</h1>
+                  </div>
 
-              <Button
-                type="button"
-                onClick={openCreateWizard}
-                className="gap-2"
-              >
-                <Plus size={17} />
-                <span className="hidden sm:inline">New Classwork</span>
-                <span className="sm:hidden">New</span>
-              </Button>
-            </header>
+                  <Button
+                    type="button"
+                    onClick={openCreateWizard}
+                    className="gap-2"
+                  >
+                    <Plus size={17} />
+                    <span className="hidden sm:inline">New Classwork</span>
+                    <span className="sm:hidden">New</span>
+                  </Button>
+                </header>
 
-            <Tabs
-              tabs={tabs}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-            />
-          </div>
-
-          <main className="flex flex-col gap-4 px-5 py-4 pt-0!">
-            {error && (
-              <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
-
-            <div className="grid gap-3 py-2 md:grid-cols-[1fr_auto_auto]">
-              <label className="relative shadow-md transition-shadow hover:shadow-none">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search classwork..."
-                  className="h-10 w-full border-black pl-9 pr-3 shadow-none"
+                <Tabs
+                  tabs={tabs}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
                 />
-              </label>
+              </div>
 
-              <Button
-                variant="outline"
-                size="md"
-                onClick={() => setShowFilters((current) => !current)}
-                className="gap-1.5"
-              >
-                <Filter size={15} />
-                Add Filter
-              </Button>
-
-              <Button
-                variant="outline"
-                size="md"
-                onClick={cycleSort}
-                className="gap-1.5"
-                title={`Current sort: ${sortMode}`}
-              >
-                {sortMode === "title" ? (
-                  <ArrowDownAZ size={15} />
-                ) : (
-                  <ArrowUpDown size={15} />
+              <main className="flex flex-col gap-4 px-5 py-4 pt-0!">
+                {error && (
+                  <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
+                  </div>
                 )}
-                Sort By
-              </Button>
 
-              {subjectFilter !== "all" && (
-                <Badge
-                  variant="secondary"
-                  size="sm"
-                  className="flex w-fit items-center gap-2"
-                  onClick={() => setSubjectFilter("all")}
-                >
-                  {
-                    subjects.find(
-                      (subject) => subject.id === Number(subjectFilter),
-                    )?.name
-                  }
-                  <X size={13} />
-                </Badge>
-              )}
+                <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
+                  <label className="relative shadow-md transition-shadow hover:shadow-none">
+                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+                    <Input
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Search classwork..."
+                      className="h-10 w-full border-black pl-9 pr-3 shadow-none"
+                    />
+                  </label>
 
-              {classFilter !== "all" && (
-                <Badge
-                  variant="secondary"
-                  size="sm"
-                  className="flex w-fit items-center gap-2"
-                  onClick={() => setClassFilter("all")}
-                >
-                  {
-                    classSections.find(
-                      (section) => section.id === Number(classFilter),
-                    )?.name
-                  }
-                  <X size={13} />
-                </Badge>
-              )}
-
-              {statusFilter !== "all" && (
-                <Badge
-                  variant="secondary"
-                  size="sm"
-                  className="flex w-fit items-center gap-2 capitalize"
-                  onClick={() => setStatusFilter("all")}
-                >
-                  {statusFilter}
-                  <X size={13} />
-                </Badge>
-              )}
-            </div>
-
-            {showFilters && (
-              <section className="grid gap-3 rounded-lg border border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:grid-cols-3">
-                <label className="text-xs font-bold">
-                  Subject
-                  <select
-                    value={subjectFilter}
-                    onChange={(event) => setSubjectFilter(event.target.value)}
-                    className="mt-1 w-full rounded border border-gray-700 bg-white px-3 py-2 text-sm font-medium"
+                  <Button
+                    variant="outline"
+                    size="md"
+                    onClick={() => setShowFilters((current) => !current)}
+                    className="gap-1.5"
                   >
-                    <option value="all">All subjects</option>
-                    {subjects.map((subject) => (
-                      <option key={subject.id} value={subject.id}>
-                        {subject.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="text-xs font-bold">
-                  Section / Class
-                  <select
-                    value={classFilter}
-                    onChange={(event) => setClassFilter(event.target.value)}
-                    className="mt-1 w-full rounded border border-gray-700 bg-white px-3 py-2 text-sm font-medium"
-                  >
-                    <option value="all">All sections</option>
-                    {classSections.map((section) => (
-                      <option key={section.id} value={section.id}>
-                        {section.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="text-xs font-bold">
-                  Publication status
-                  <select
-                    value={statusFilter}
-                    onChange={(event) => setStatusFilter(event.target.value)}
-                    className="mt-1 w-full rounded border border-gray-700 bg-white px-3 py-2 text-sm font-medium"
-                  >
-                    <option value="all">All statuses</option>
-                    <option value="published">Published</option>
-                    <option value="draft">Draft</option>
-                  </select>
-                </label>
-              </section>
-            )}
+                    <Filter size={15} />
+                    Add Filter
+                  </Button>
 
-            {isLoading ? (
-              <p className="py-12 text-center text-sm font-semibold text-gray-500">
-                Loading classworks...
-              </p>
-            ) : filteredItems.length > 0 ? (
-              <section className="space-y-3">
-                {filteredItems.map((item) => (
-                  <ClassworkCard
-                    key={item.classwork_id}
-                    item={item}
-                    onOpen={openClassworkDetail}
-                  />
-                ))}
-              </section>
-            ) : (
-              <Card className="flex flex-col justify-center items-center">
-                <ClipboardList
-                  className="mx-auto mb-2 "
-                  size={24}
-                />
-                <p className="font-bold">No classworks found</p>
-                <p className="mt-1 text-sm text-gray-500">
-                  Try another tab, search term, or filter.
-                </p>
-              </Card>
-            )}
-          </main>
+                  <Button
+                    variant="outline"
+                    size="md"
+                    onClick={cycleSort}
+                    className="gap-1.5"
+                    title={`Current sort: ${sortMode}`}
+                  >
+                    {sortMode === "title" ? (
+                      <ArrowDownAZ size={15} />
+                    ) : (
+                      <ArrowUpDown size={15} />
+                    )}
+                    Sort By
+                  </Button>
 
-          <Dialog
-            open={showCreateWizard}
-            onOpenChange={(open) => {
-              if (!open) closeCreateWizard();
-            }}
-          >
-            {showCreateWizard &&
-              (selectedType === null ? (
-                <Dialog.Content size="lg">
-                  <Dialog.Header position="fixed" asChild>
-                    <div className="flex items-center justify-between w-full">
-                      <Text as="h5" className="font-sans text-xl font-bold">
-                        Choose Classwork Type
-                      </Text>
-                      <button
-                        type="button"
-                        onClick={closeCreateWizard}
-                        className="cursor-pointer text-white hover:text-gray-200"
-                      >
-                        <X size={18} />
-                      </button>
-                    </div>
-                  </Dialog.Header>
-                  <section className="p-5">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {createOptions.map((option) => {
-                        const Icon = option.icon;
-                        return (
-                          <button
-                            key={option.type}
-                            type="button"
-                            onClick={() => setSelectedType(option.type)}
-                            className="rounded-lg border-2 border-black bg-[#7ABA78] p-5 text-left shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 cursor-pointer text-black"
-                          >
-                            <div className="flex items-center gap-2">
-                              <Icon size={20} className="text-black" />
-                              <h3 className="text-lg font-bold text-black">
-                                {option.title}
-                              </h3>
-                            </div>
-                            <p className="mt-2 text-xs font-semibold text-black/80">
-                              {option.description}
-                            </p>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </section>
-                  <Dialog.Footer position="fixed">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={closeCreateWizard}
+                  {subjectFilter !== "all" && (
+                    <Badge
+                      variant="secondary"
+                      size="sm"
+                      className="flex w-fit items-center gap-2"
+                      onClick={() => setSubjectFilter("all")}
                     >
-                      Cancel
-                    </Button>
-                  </Dialog.Footer>
-                </Dialog.Content>
-              ) : isQuizType(selectedType) ? (
-                <CreateClassworkQuizModal
-                  selectedType={selectedType}
-                  subjects={subjects}
-                  loads={loads}
-                  initialSubjectId={subjectFilter !== "all" ? subjectFilter : undefined}
-                  onClose={closeCreateWizard}
-                  onSuccess={async () => {
-                    await loadClassworks();
-                    closeCreateWizard();
-                  }}
-                  onBack={() => setSelectedType(null)}
-                />
-              ) : (
-                <CreateClassworkModal
-                  selectedType={selectedType}
-                  subjects={subjects}
-                  loads={loads}
-                  initialSubjectId={subjectFilter !== "all" ? subjectFilter : undefined}
-                  onClose={closeCreateWizard}
-                  onSuccess={async () => {
-                    await loadClassworks();
-                    closeCreateWizard();
-                  }}
-                  onBack={() => setSelectedType(null)}
-                />
-              ))}
-          </Dialog>
+                      {
+                        subjects.find(
+                          (subject) => subject.id === Number(subjectFilter),
+                        )?.name
+                      }
+                      <X size={13} />
+                    </Badge>
+                  )}
+
+                  {classFilter !== "all" && (
+                    <Badge
+                      variant="secondary"
+                      size="sm"
+                      className="flex w-fit items-center gap-2"
+                      onClick={() => setClassFilter("all")}
+                    >
+                      {
+                        classSections.find(
+                          (section) => section.id === Number(classFilter),
+                        )?.name
+                      }
+                      <X size={13} />
+                    </Badge>
+                  )}
+
+                  {statusFilter !== "all" && (
+                    <Badge
+                      variant="secondary"
+                      size="sm"
+                      className="flex w-fit items-center gap-2 capitalize"
+                      onClick={() => setStatusFilter("all")}
+                    >
+                      {statusFilter}
+                      <X size={13} />
+                    </Badge>
+                  )}
+                </div>
+
+                {showFilters && (
+                  <section className="grid gap-3 rounded-lg border border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:grid-cols-3">
+                    <label className="text-xs font-bold">
+                      Subject
+                      <select
+                        value={subjectFilter}
+                        onChange={(event) => setSubjectFilter(event.target.value)}
+                        className="mt-1 w-full rounded border border-gray-700 bg-white px-3 py-2 text-sm font-medium"
+                      >
+                        <option value="all">All subjects</option>
+                        {subjects.map((subject) => (
+                          <option key={subject.id} value={subject.id}>
+                            {subject.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-xs font-bold">
+                      Section / Class
+                      <select
+                        value={classFilter}
+                        onChange={(event) => setClassFilter(event.target.value)}
+                        className="mt-1 w-full rounded border border-gray-700 bg-white px-3 py-2 text-sm font-medium"
+                      >
+                        <option value="all">All sections</option>
+                        {classSections.map((section) => (
+                          <option key={section.id} value={section.id}>
+                            {section.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-xs font-bold">
+                      Publication status
+                      <select
+                        value={statusFilter}
+                        onChange={(event) => setStatusFilter(event.target.value)}
+                        className="mt-1 w-full rounded border border-gray-700 bg-white px-3 py-2 text-sm font-medium"
+                      >
+                        <option value="all">All statuses</option>
+                        <option value="published">Published</option>
+                        <option value="draft">Draft</option>
+                      </select>
+                    </label>
+                  </section>
+                )}
+
+                {isLoading ? (
+                  <p className="py-12 text-center text-sm font-semibold text-gray-500">
+                    Loading classworks...
+                  </p>
+                ) : filteredItems.length > 0 ? (
+                  <section className="space-y-3">
+                    {filteredItems.map((item) => (
+                      <ClassworkCard
+                        key={item.classwork_id}
+                        item={item}
+                        onOpen={openClassworkDetail}
+                      />
+                    ))}
+                  </section>
+                ) : (
+                  <Card className="flex flex-col justify-center items-center">
+                    <ClipboardList
+                      className="mx-auto mb-2 "
+                      size={24}
+                    />
+                    <p className="font-bold">No classworks found</p>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Try another tab, search term, or filter.
+                    </p>
+                  </Card>
+                )}
+              </main>
+
+              <Dialog
+                open={showCreateWizard}
+                onOpenChange={(open) => {
+                  if (!open) closeCreateWizard();
+                }}
+              >
+                {showCreateWizard &&
+                  (selectedType === null ? (
+                    <Dialog.Content size="lg">
+                      <Dialog.Header position="fixed" asChild>
+                        <div className="flex items-center justify-between w-full">
+                          <Text as="h5" className="font-sans text-xl font-bold">
+                            Choose Classwork Type
+                          </Text>
+                          <button
+                            type="button"
+                            onClick={closeCreateWizard}
+                            className="cursor-pointer text-white hover:text-gray-200"
+                          >
+                            <X size={18} />
+                          </button>
+                        </div>
+                      </Dialog.Header>
+                      <section className="p-5">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          {createOptions.map((option) => {
+                            const Icon = option.icon;
+                            return (
+                              <button
+                                key={option.type}
+                                type="button"
+                                onClick={() => setSelectedType(option.type)}
+                                className="rounded-lg border-2 border-black bg-[#7ABA78] p-5 text-left shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 cursor-pointer text-black"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Icon size={20} className="text-black" />
+                                  <h3 className="text-lg font-bold text-black">
+                                    {option.title}
+                                  </h3>
+                                </div>
+                                <p className="mt-2 text-xs font-semibold text-black/80">
+                                  {option.description}
+                                </p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </section>
+                      <Dialog.Footer position="fixed">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={closeCreateWizard}
+                        >
+                          Cancel
+                        </Button>
+                      </Dialog.Footer>
+                    </Dialog.Content>
+                  ) : isQuizType(selectedType) ? (
+                    <CreateClassworkQuizModal
+                      selectedType={selectedType}
+                      subjects={subjects}
+                      loads={loads}
+                      initialSubjectId={subjectFilter !== "all" ? subjectFilter : undefined}
+                      onClose={closeCreateWizard}
+                      onSuccess={async () => {
+                        await loadClassworks();
+                        closeCreateWizard();
+                      }}
+                      onBack={() => setSelectedType(null)}
+                    />
+                  ) : (
+                    <CreateClassworkModal
+                      selectedType={selectedType}
+                      subjects={subjects}
+                      loads={loads}
+                      initialSubjectId={subjectFilter !== "all" ? subjectFilter : undefined}
+                      onClose={closeCreateWizard}
+                      onSuccess={async () => {
+                        await loadClassworks();
+                        closeCreateWizard();
+                      }}
+                      onBack={() => setSelectedType(null)}
+                    />
+                  ))}
+              </Dialog>
+            </div>
+          </div>
         </>
+
       )}
     </AppLayout>
   );

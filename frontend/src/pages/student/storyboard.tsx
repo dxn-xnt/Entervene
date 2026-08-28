@@ -57,19 +57,19 @@ const StoryBoard = () => {
     apiFetch("/api/v1/students/me/subjects")
       .then((r) => r.json())
       .then((data) => setSubjects(data))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setIsLoading(false));
 
     getMyClass()
       .then((data) => setMyClass(data))
-      .catch(() => {});
+      .catch(() => { });
 
     getStudentTodos()
       .then((data) => {
         const urgent = [...data.pastdue, ...data.pending].slice(0, 3);
         setTodos(urgent);
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setIsTodosLoading(false));
   }, []);
 
@@ -87,7 +87,7 @@ const StoryBoard = () => {
           );
           if (match) targetClassId = match.class_id;
         }
-      } catch {}
+      } catch { }
     }
 
     if (targetClassId && item.subject_id) {
