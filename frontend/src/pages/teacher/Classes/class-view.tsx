@@ -1,17 +1,22 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Archive,
   Award,
   BookOpen,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   ClipboardList,
   ExternalLink,
   FileText,
+  Lightbulb,
   Loader2,
   Pencil,
   Plus,
   Search,
   Users,
+  X,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
@@ -23,17 +28,27 @@ import { Badge } from "@/components/retroui/Badge";
 import { Text } from "@/components/retroui/Text";
 import { Select } from "@/components/retroui/Select";
 import { OverviewCard } from "@/components/overview-cards";
-import { ManualSuggestionPanel } from "@/components/teacher/suggestions/ManualSuggestionPanel";
+import { Table } from "@/components/retroui/Table";
+import { Alert } from "@/components/retroui/Alert";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
 import CompetencyModal from "./subject-details/CompetencyModal";
 import CreateLessonModal from "@/pages/teacher/create-lesson";
+import { SuggestionPanel } from "@/components/teacher/suggestions/suggestion-panel-modal";
 import { apiFetch, getTeacherAdvisoryClassDetail } from "@/lib/api";
+import {
+  approveSuggestion,
+  archiveSuggestion,
+  dismissSuggestion,
+  getTeacherSuggestions,
+} from "@/lib/suggestion-api";
 import type {
   TeacherAdvisoryClassDetailResponse,
   TeacherAdvisoryStudentItem,
 } from "@/types/adminClasses";
+import type { SuggestionResponse } from "@/types/suggestion";
 import type { CompetencyItem } from "./subject-details/types";
 import { Button } from "@/components/retroui/Button";
+import { Avatar } from "@/components/retroui/Avatar";
 
 interface LessonAttachment {
   lesson_attachment_id: number;
@@ -170,7 +185,7 @@ export default function TeacherClassDetail() {
 
               <div className="flex items-center gap-3 min-w-0">
                 <Breadcrumb>
-                  <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
+                  <Breadcrumb.List>
                     <Breadcrumb.Item>
                       <Breadcrumb.Link
                         onClick={() => navigate("/teacher/classes")}
@@ -181,7 +196,7 @@ export default function TeacherClassDetail() {
                     </Breadcrumb.Item>
                     <Breadcrumb.Separator />
                     <Breadcrumb.Item>
-                      <Breadcrumb.Page className="text-2xl">
+                      <Breadcrumb.Page>
                         {detail.section_name}
                       </Breadcrumb.Page>
                     </Breadcrumb.Item>
@@ -940,16 +955,17 @@ function StudentsTab({
       </div>
 
       <section>
-        <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <h3 className="text-xl font-bold">Students</h3>
           <Input
+            className="w-[400px]!"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search students..."
+            placeholder="Search students"
           />
         </div>
         <Card className="block w-full border-black">
-          <Card.Content className="max-h-[560px] overflow-y-auto p-4">
+          <Card.Content >
             {!detail.students.length ? (
               <StateInline message="No students are currently enrolled in this class." />
             ) : !filteredStudents.length ? (
@@ -962,30 +978,34 @@ function StudentsTab({
                     open
                     className="group overflow-hidden border-2 border-black bg-white"
                   >
-                    <summary className="flex cursor-pointer list-none items-center justify-between bg-primary border-b-2 px-4 py-3 text-sm font-black">
-                      <span>{gender.toUpperCase()}</span>
-                      <span className="flex items-center gap-2">
+                    <summary className="flex cursor-pointer list-none items-center justify-between bg-primary px-4 py-3 text-base font-black">
+                      <span>{gender}</span>
+                      <span className="flex items-center gap-3">
                         <Badge
                           variant="outline"
                           size="sm"
-                          className="rounded-none"
                         >
                           {students.length} student
                           {students.length !== 1 ? "s" : ""}
                         </Badge>
-                        <ChevronDown className="size-4" />
+                        <ChevronRight className="size-4 transition-transform duration-200 group-open:rotate-90" />
                       </span>
                     </summary>
-                    <div>
-                      {students.map((student) => (
-                        <StudentRow
-                          key={student.student_id}
-                          student={student}
-                          classId={detail.class_id}
-                          subjectLoads={detail.subject_loads}
-                        />
-                      ))}
-                    </div>
+                    <Table
+                      wrapperClassName="overflow-visible h-auto"
+                      className="w-full border-0 shadow-none"
+                    >
+                      <Table.Body>
+                        {students.map((student) => (
+                          <StudentRow
+                            key={student.student_id}
+                            student={student}
+                            classId={detail.class_id}
+                            subjectLoads={detail.subject_loads}
+                          />
+                        ))}
+                      </Table.Body>
+                    </Table>
                   </details>
                 ))}
               </div>
@@ -1022,27 +1042,290 @@ function StudentRow({
   classId: number;
   subjectLoads: TeacherAdvisoryClassDetailResponse["subject_loads"];
 }) {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<SuggestionResponse[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+
+  const loadHistory = useCallback(async () => {
+    setIsHistoryLoading(true);
+    setHistoryError("");
+    try {
+      const data = await getTeacherSuggestions({
+        classId,
+        studentId: student.student_id,
+      });
+      setHistory(data.suggestions);
+    } catch (err) {
+      setHistoryError(
+        err instanceof Error ? err.message : "Unable to load suggestions.",
+      );
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  }, [classId, student.student_id]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
+
+  async function updateSuggestion(
+    id: number,
+    action: "approve" | "dismiss" | "archive",
+  ) {
+    setHistoryError("");
+    try {
+      if (action === "approve") await approveSuggestion(id);
+      else if (action === "dismiss") await dismissSuggestion(id);
+      else await archiveSuggestion(id);
+      await loadHistory();
+    } catch (err) {
+      setHistoryError(
+        err instanceof Error ? err.message : "Unable to update suggestion.",
+      );
+    }
+  }
+
+  const activeCount = history.filter((item) => item.status === "ACTIVE").length;
+  const draftCount = history.filter((item) => item.status === "DRAFT").length;
+
   return (
-    <div className="border-b-2 border-black bg-white px-3 py-2 text-sm last:border-b-0">
-      <div className="flex min-h-12 items-center gap-3">
-        <Avatar text={student.avatar_initial || student.full_name} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-semibold">
-            {student.full_name}
-          </span>
-          {student.student_lrn && (
-            <span className="block text-[10px] font-semibold text-black/55">
-              LRN {student.student_lrn}
+    <>
+      <Table.Row className="border-b-2 border-black bg-white transition-colors">
+        {/* Column 1: Student Details */}
+        <Table.Cell className="py-2.5 px-4">
+          <div className="flex items-center gap-3">
+            <Avatar variant="student" className="size-10 shrink-0">
+              <Avatar.Image
+                src="/avatars/student-avatars/1.svg"
+                alt={student.full_name}
+              />
+              <Avatar.Fallback>
+                {(student.avatar_initial || student.full_name || "?")
+                  .charAt(0)
+                  .toUpperCase()}
+              </Avatar.Fallback>
+            </Avatar>
+            <div className="min-w-0">
+              <span className="block text-base font-semibold truncate">
+                {student.full_name}
+              </span>
+              {student.student_lrn && (
+                <span className="text-xs font-semibold text-muted-foreground">
+                  {student.student_lrn}
+                </span>
+              )}
+            </div>
+          </div>
+        </Table.Cell>
+
+        {/* Column 2: Suggestion Status */}
+        <Table.Cell className="py-2.5 px-4">
+          {isHistoryLoading ? (
+            <span className="text-xs text-black/50">Loading...</span>
+          ) : activeCount > 0 || draftCount > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {activeCount > 0 && (
+                <Badge
+                  variant="solid"
+                  size="sm"
+                  className="border border-black bg-[#79bd80] font-bold text-black text-[11px]"
+                >
+                  {activeCount} Active
+                </Badge>
+              )}
+              {draftCount > 0 && (
+                <Badge
+                  variant="outline"
+                  size="sm"
+                  className="border border-black bg-amber-100 font-bold text-amber-900 text-[11px]"
+                >
+                  {draftCount} Draft{draftCount !== 1 ? "s" : ""}
+                </Badge>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs font-semibold text-black/40">
+              No active suggestions
             </span>
           )}
-        </span>
-      </div>
-      <ManualSuggestionPanel
+        </Table.Cell>
+
+        {/* Column 3: Action */}
+        <Table.Cell className="py-2.5 px-4 text-right">
+          <div className="flex items-center justify-end gap-2">
+            {history.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowHistory((prev) => !prev)}
+                className="gap-2"
+              >
+                {showHistory ? (
+                  <>
+                    <ChevronUp size={13} />
+                    Hide History
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown size={13} />
+                    History ({history.length})
+                  </>
+                )}
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              onClick={() => setIsDialogOpen(true)}
+              className="gap-2"
+            >
+              <Lightbulb size={13} />
+              Suggest Material
+            </Button>
+          </div>
+        </Table.Cell>
+      </Table.Row>
+
+      {showHistory && (
+        <Table.Row className="border-b-2 border-black bg-[#fffdf5]/60 hover:bg-[#fffdf5]/80">
+          <Table.Cell colSpan={3} className="p-3">
+            <Card className="block w-full border-black bg-white p-3 shadow-none transition-none hover:shadow-none">
+              <h4 className="mb-2 text-sm font-black">
+                Suggestion History for {student.full_name}
+              </h4>
+              {historyError && (
+                <Alert status="error" className="mb-2 text-xs">
+                  {historyError}
+                </Alert>
+              )}
+              {isHistoryLoading ? (
+                <p className="text-xs font-semibold text-black/60">
+                  Loading suggestions...
+                </p>
+              ) : history.length ? (
+                <div className="grid max-h-80 gap-2 overflow-y-auto pr-1">
+                  {history.map((item) => (
+                    <Card
+                      key={item.student_suggestion_id}
+                      className="block w-full border-black bg-[#fffdf5] p-2.5 text-xs shadow-none transition-none hover:shadow-none"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-black">{item.title}</p>
+                          <p className="font-semibold text-black/60">
+                            {item.resource.title}
+                          </p>
+                        </div>
+                        <span className="border border-black bg-white px-2 py-0.5 font-black text-[10px]">
+                          {item.status}
+                        </span>
+                      </div>
+                      {item.description && (
+                        <p className="mt-1 text-black/70">{item.description}</p>
+                      )}
+                      {item.source_metrics ? (
+                        <div className="mt-2 border border-black bg-white px-2 py-1 text-[11px] font-semibold text-black/70">
+                          <p>
+                            Reason:{" "}
+                            {String(
+                              item.source_metrics.source_title ?? "Low result",
+                            )}
+                          </p>
+                          <p>
+                            Score:{" "}
+                            {String(item.source_metrics.score_percent ?? "?")}%
+                            {item.source_metrics.threshold_percent
+                              ? ` below ${String(item.source_metrics.threshold_percent)}% threshold`
+                              : ""}
+                          </p>
+                        </div>
+                      ) : null}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {item.status === "DRAFT" && (
+                          <Button
+                            type="button"
+                            variant="default"
+                            size="sm"
+                            onClick={() =>
+                              updateSuggestion(
+                                item.student_suggestion_id,
+                                "approve",
+                              )
+                            }
+                            className="gap-1 border-black bg-[#79bd80] px-2 py-1 font-bold shadow-none hover:bg-[#79bd80]"
+                          >
+                            <CheckCircle2 size={12} />
+                            Approve
+                          </Button>
+                        )}
+                        {item.status === "ACTIVE" && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              updateSuggestion(
+                                item.student_suggestion_id,
+                                "dismiss",
+                              )
+                            }
+                            className="gap-1 border-black px-2 py-1 font-bold shadow-none"
+                          >
+                            <X size={12} />
+                            Dismiss
+                          </Button>
+                        )}
+                        {(item.status === "COMPLETED" ||
+                          item.status === "DISMISSED") && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                updateSuggestion(
+                                  item.student_suggestion_id,
+                                  "archive",
+                                )
+                              }
+                              className="gap-1 border-black px-2 py-1 font-bold shadow-none"
+                            >
+                              <Archive size={12} />
+                              Archive
+                            </Button>
+                          )}
+                        {item.status === "COMPLETED" && (
+                          <span className="inline-flex items-center gap-1 font-bold text-green-700">
+                            <CheckCircle2 size={12} />
+                            Completed by student
+                          </span>
+                        )}
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs font-semibold text-black/60">
+                  No suggestions yet.
+                </p>
+              )}
+            </Card>
+          </Table.Cell>
+        </Table.Row>
+      )}
+
+      <SuggestionPanel
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
         classId={classId}
         student={student}
         subjectLoads={subjectLoads}
+        onSuccess={loadHistory}
       />
-    </div>
+    </>
   );
 }
 
@@ -1085,13 +1368,6 @@ function EmptyInline({ message }: { message: string }) {
   );
 }
 
-function Avatar({ text }: { text: string }) {
-  return (
-    <span className="grid size-7 shrink-0 place-items-center rounded-full border border-amber-700 bg-amber-200 text-[13px] font-semibold text-amber-900">
-      {(text || "?").charAt(0)}
-    </span>
-  );
-}
 
 function normalizedStudentGender(gender: string) {
   if (gender === "Female" || gender === "Male" || gender === "Other")

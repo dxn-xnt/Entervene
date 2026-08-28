@@ -112,7 +112,7 @@ const SelectItem = ({
 }: SelectPrimitive.SelectItemProps) => (
   <SelectPrimitive.Item
     className={cn(
-      "relative flex w-full max-w-full cursor-default select-none items-center py-2 pl-3 pr-8 outline-none data-[highlighted]:bg-primary data-[highlighted]:text-primary-foreground focus:bg-primary focus:text-primary-foreground data-disabled:pointer-events-none data-disabled:opacity-50 text-xs font-medium",
+      "relative flex w-full max-w-full cursor-default select-none items-center py-2 px-3 outline-none data-[highlighted]:bg-primary data-[highlighted]:text-primary-foreground focus:bg-primary focus:text-primary-foreground data-disabled:pointer-events-none data-disabled:opacity-50 text-xs font-medium",
       className,
     )}
     {...props}
