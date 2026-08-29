@@ -130,7 +130,8 @@ class ClassworkCategoryHeader(BaseModel):
 class GradebookCategoryHeaderGroup(BaseModel):
     writtenWork: list[ClassworkCategoryHeader]
     performanceTask: list[ClassworkCategoryHeader]
-    quarterlyAssessment: list[ClassworkCategoryHeader]
+    quarterlyAssessment: list[ClassworkCategoryHeader] = []
+    exams: list[ClassworkCategoryHeader] = []
 
 
 class StudentGradebookRow(BaseModel):
@@ -139,11 +140,17 @@ class StudentGradebookRow(BaseModel):
     gender: Optional[str] = None
     writtenWork: list[Optional[float]]
     performanceTask: list[Optional[float]]
-    quarterlyAssessment: list[Optional[float]]
+    quarterlyAssessment: list[Optional[float]] = []
+    exams: list[Optional[float]] = []
     # Per-category Percentage Scores (PS = sum_scores / max_possible * 100)
     ps_written: Optional[float] = None
     ps_performance: Optional[float] = None
     ps_quarterly: Optional[float] = None
+    ps_exams: Optional[float] = None
+    # Exam sub-split Percentage Scores
+    ps_summative_1: Optional[float] = None
+    ps_summative_2: Optional[float] = None
+    ps_term_exam: Optional[float] = None
     # DepEd computed grades
     initial_grade: Optional[float] = None
     transmuted_grade: Optional[float] = None

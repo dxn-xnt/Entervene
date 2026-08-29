@@ -7,7 +7,8 @@ from pydantic import BaseModel, Field
 
 class ActivityCreateRequest(BaseModel):
     title: str
-    classwork_category: str  # WRITTEN_WORK, PERFORMANCE_TASK, QUARTERLY_ASSESSMENT
+    classwork_category: str  # WRITTEN_WORK, PERFORMANCE_TASK, QUARTERLY_ASSESSMENT, EXAMS
+    exam_subtype: Optional[str] = None  # SUMMATIVE_1, SUMMATIVE_2, TERM_EXAM
     total_points: float = Field(default=100.0, gt=0)
     class_id: int
     subject_id: int

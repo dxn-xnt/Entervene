@@ -114,7 +114,8 @@ const TeacherGradeView = () => {
     }
   }, [section, subject, activeTab, refresh]);
 
-  const cg = gradebook?.classwork?.[0] ?? { writtenWork: [], performanceTask: [], quarterlyAssessment: [] };
+  const cg = gradebook?.classwork?.[0] ?? { writtenWork: [], performanceTask: [], quarterlyAssessment: [], exams: [] };
+  const examItems = cg.exams && cg.exams.length > 0 ? cg.exams : (cg.quarterlyAssessment ?? []);
   const raw = gradebook?.studentGrades ?? [];
   const filtered = raw
     .filter((sg) => sg.name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -156,27 +157,33 @@ const TeacherGradeView = () => {
         "Learner's Name",
         ...cg.writtenWork.map((w) => `WW: ${w.title} (${w.maxScore})`),
         ...cg.performanceTask.map((p) => `PT: ${p.title} (${p.maxScore})`),
-        ...cg.quarterlyAssessment.map((q) => `QA: ${q.title} (${q.maxScore})`),
+        ...examItems.map((q) => `Exam: ${q.title} (${q.maxScore})`),
         "Transmuted Grade",
       ];
       const { males, females } = groupStudentsByGender(raw);
       const rows = [
-        ...males.map((sg) => [
-          "Male",
-          `"${sg.name}"`,
-          ...sg.writtenWork.map((s) => (s !== null && s !== undefined ? s : "")),
-          ...sg.performanceTask.map((s) => (s !== null && s !== undefined ? s : "")),
-          ...sg.quarterlyAssessment.map((s) => (s !== null && s !== undefined ? s : "")),
-          fmt(sg.transmuted_grade ?? sg.initial_grade),
-        ]),
-        ...females.map((sg) => [
-          "Female",
-          `"${sg.name}"`,
-          ...sg.writtenWork.map((s) => (s !== null && s !== undefined ? s : "")),
-          ...sg.performanceTask.map((s) => (s !== null && s !== undefined ? s : "")),
-          ...sg.quarterlyAssessment.map((s) => (s !== null && s !== undefined ? s : "")),
-          fmt(sg.transmuted_grade ?? sg.initial_grade),
-        ]),
+        ...males.map((sg) => {
+          const sgExams = sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []);
+          return [
+            "Male",
+            `"${sg.name}"`,
+            ...sg.writtenWork.map((s) => (s !== null && s !== undefined ? s : "")),
+            ...sg.performanceTask.map((s) => (s !== null && s !== undefined ? s : "")),
+            ...sgExams.map((s) => (s !== null && s !== undefined ? s : "")),
+            fmt(sg.transmuted_grade ?? sg.initial_grade),
+          ];
+        }),
+        ...females.map((sg) => {
+          const sgExams = sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []);
+          return [
+            "Female",
+            `"${sg.name}"`,
+            ...sg.writtenWork.map((s) => (s !== null && s !== undefined ? s : "")),
+            ...sg.performanceTask.map((s) => (s !== null && s !== undefined ? s : "")),
+            ...sgExams.map((s) => (s !== null && s !== undefined ? s : "")),
+            fmt(sg.transmuted_grade ?? sg.initial_grade),
+          ];
+        }),
       ];
       csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
       const activePeriodName = periods.find((p) => `term-${p.academic_period_id}` === activeTab)?.period_name || "Term";
@@ -319,7 +326,7 @@ const TeacherGradeView = () => {
                 <div className="flex flex-row items-center justify-between gap-1 w-full">
                   <div className="size-4 shrink-0" />
                   <div className="flex flex-row justify-around w-full text-xs">
-                    {getLatestTwo(item.quarterlyAssessment).map(({ item: score }, i) => (
+                    {getLatestTwo(item.exams && item.exams.length > 0 ? item.exams : (item.quarterlyAssessment ?? [])).map(({ item: score }, i) => (
                       <span className="w-full text-center tabular-nums" key={i}>
                         {score !== null && score !== undefined ? score : "—"}
                       </span>
@@ -383,20 +390,20 @@ const TeacherGradeView = () => {
             </Table.Head>
             <Table.Head
               className="w-[15%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
-              title="Click to view full Quarterly Assessment breakdown"
+              title="Click to view full Exams breakdown"
               onClick={() =>
                 setSelectedCategory({
-                  name: "Quarterly Assessment",
-                  items: cg.quarterlyAssessment,
+                  name: "Exams",
+                  items: examItems,
                   studentGrades: filtered.map((sg) => ({
                     name: sg.name,
-                    scores: sg.quarterlyAssessment,
+                    scores: sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []),
                     gender: sg.gender,
                   })),
                 })
               }
             >
-              Quarterly Assessment
+              Exams
             </Table.Head>
             <Table.Head className="w-[9%] text-center font-black text-black">Grade</Table.Head>
           </Table.Row>
@@ -492,19 +499,23 @@ const TeacherGradeView = () => {
               <div className="flex flex-row items-center justify-between gap-1 w-full">
                 <button
                   type="button"
-                  title="View all Quarterly Assessment scores"
+                  title="View all Exams scores"
                   onClick={() =>
                     setSelectedCategory({
-                      name: "Quarterly Assessment",
-                      items: cg.quarterlyAssessment,
-                      studentGrades: filtered.map((sg) => ({ name: sg.name, scores: sg.quarterlyAssessment, gender: sg.gender })),
+                      name: "Exams",
+                      items: examItems,
+                      studentGrades: filtered.map((sg) => ({
+                        name: sg.name,
+                        scores: sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []),
+                        gender: sg.gender,
+                      })),
                     })
                   }
                 >
                   <Ellipsis className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
                 </button>
                 <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
-                  {getLatestTwo(cg.quarterlyAssessment).map(({ item }) => (
+                  {getLatestTwo(examItems).map(({ item }) => (
                     <button
                       type="button"
                       key={item.id}
@@ -522,8 +533,8 @@ const TeacherGradeView = () => {
                 {!isViewOnly && (
                   <button
                     type="button"
-                    title="Add score to Quarterly Assessment"
-                    onClick={() => setAddingCategoryName("Quarterly Assessment")}
+                    title="Add score to Exams"
+                    onClick={() => setAddingCategoryName("Exams")}
                   >
                     <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
                   </button>

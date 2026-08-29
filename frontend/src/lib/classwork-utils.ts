@@ -85,5 +85,6 @@ export const classworkToEditDraft = (item: TeacherClasswork): EditDraft => ({
   instructions: item.instructions ?? "",
   classwork_type: item.classwork_type,
   classwork_category: item.classwork_category ?? "",
+  exam_subtype: item.exam_subtype ?? "",
   total_points: item.total_points !== null && item.total_points !== undefined ? String(item.total_points) : "",
 });

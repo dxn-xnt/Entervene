@@ -595,6 +595,9 @@ export default function CreateClassworkQuizModal({
             if (draft.classwork_category) {
                 formData.append("classwork_category", draft.classwork_category);
             }
+            if (draft.exam_subtype) {
+                formData.append("exam_subtype", draft.exam_subtype);
+            }
             formData.append("total_points", String(Number(draft.total_points)));
             formData.append("is_published", String(draft.is_published));
             formData.append("subject_id", String(draft.subject_id));
@@ -922,12 +925,47 @@ export default function CreateClassworkQuizModal({
                                                 Performance Task
                                             </Select.Item>
                                             <Select.Item value="QUARTERLY_ASSESSMENT">
-                                                Quarterly Assessment
+                                                Exams
                                             </Select.Item>
                                         </Select.Group>
                                     </Select.Content>
                                 </Select>
                             </div>
+
+                            {(draft.classwork_category === "QUARTERLY_ASSESSMENT" || draft.classwork_category === "EXAMS") && (
+                                <div className="flex flex-col gap-1 w-full">
+                                    <label className="text-xs font-bold text-gray-700">
+                                        Exam Sub-type
+                                    </label>
+                                    <Select
+                                        value={draft.exam_subtype || "SUMMATIVE_1"}
+                                        onValueChange={(val) =>
+                                            setDraft((current) => ({
+                                                ...current,
+                                                exam_subtype: val,
+                                            }))
+                                        }
+                                        disabled={isCreating}
+                                    >
+                                        <Select.Trigger className="w-full bg-white border-2 border-black rounded shadow-md text-sm">
+                                            <Select.Value placeholder="Select Sub-type" />
+                                        </Select.Trigger>
+                                        <Select.Content className="border-2 border-black rounded bg-white">
+                                            <Select.Group>
+                                                <Select.Item value="SUMMATIVE_1">
+                                                    Summative 1 (30%)
+                                                </Select.Item>
+                                                <Select.Item value="SUMMATIVE_2">
+                                                    Summative 2 (30%)
+                                                </Select.Item>
+                                                <Select.Item value="TERM_EXAM">
+                                                    Term Exam (40%)
+                                                </Select.Item>
+                                            </Select.Group>
+                                        </Select.Content>
+                                    </Select>
+                                </div>
+                            )}
 
                             <div className="flex flex-col gap-1 w-full">
                                 <label className="text-xs font-bold text-gray-700">

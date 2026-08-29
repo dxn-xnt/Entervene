@@ -50,6 +50,7 @@ def create_activity(db: Session, staff_id: str, payload: ActivityCreateRequest):
         description=payload.description,
         classwork_type="ACTIVITY",
         classwork_category=payload.classwork_category,
+        exam_subtype=payload.exam_subtype,
         activity_mode=payload.activity_mode,
         total_points=Decimal(str(payload.total_points)),
         is_published=True,

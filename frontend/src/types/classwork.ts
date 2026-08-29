@@ -112,6 +112,7 @@ export type CreateDraft = {
   description: string;
   instructions: string;
   classwork_category: string;
+  exam_subtype?: string;
   total_points: string;
   due_date: string;
   lock_date: string;
@@ -127,6 +128,7 @@ export type EditDraft = {
   instructions: string;
   classwork_type: string;
   classwork_category: string;
+  exam_subtype?: string;
   total_points: string;
   due_date: string;
   lock_date: string;
