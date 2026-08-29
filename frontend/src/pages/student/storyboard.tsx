@@ -139,20 +139,20 @@ const StoryBoard = () => {
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
+                    size="md"
                     onClick={openClassmates}
-                    className="whitespace-nowrap font-bold"
+                    className="whitespace-nowrap"
                   >
                     Classmates ({myClass.classmate_count})
                   </Button>
                 )}
                 <Button
                   type="button"
-                  size="sm"
+                  size="md"
                   onClick={() => navigate(routes.student.profile)}
-                  className="gap-2 whitespace-nowrap font-bold"
+                  className="gap-2 whitespace-nowrap"
                 >
-                  <Calendar />
+                  <Calendar className="size-4" />
                   View My Schedule
                 </Button>
               </div>

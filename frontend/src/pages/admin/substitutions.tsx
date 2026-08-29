@@ -1,13 +1,14 @@
 import * as React from "react";
 import AppLayout from "@/layouts/app-layout";
-import { Text } from "@/components/retroui/Text";
 import { Button } from "@/components/retroui/Button";
 import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "@/components/retroui/Badge";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Input } from "@/components/retroui/Input";
 import { Dialog } from "@/components/retroui/Dialog";
+import { Card } from "@/components/retroui/Card";
+import { OverviewCard } from "@/components/overview-cards";
+import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import {
   getSubstitutions,
   endSubstitutionEarly,
@@ -20,7 +21,6 @@ import AdjustSubstitutionModal, { type AdjustModalTarget } from "./forms/adjust-
 import {
   AlertCircle,
   Calendar,
-  CheckCircle2,
   Edit,
   Layers,
   Loader2,
@@ -28,18 +28,29 @@ import {
   Search,
   StopCircle,
   UserCheck,
-  Users,
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+type SubstitutionTab = "all" | "active" | "completed" | "cancelled";
+
+const substitutionTabs: Array<TabItem<SubstitutionTab>> = [
+  { id: "all", label: "All" },
+  { id: "active", label: "Active" },
+  { id: "completed", label: "Completed" },
+  { id: "cancelled", label: "Cancelled" },
+];
 
 export default function AdminSubstitutions() {
   const [substitutions, setSubstitutions] = React.useState<TeacherSubstitution[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = React.useState<"all" | "active" | "completed" | "cancelled">("all");
+  const [activeTab, setActiveTab] = React.useState<SubstitutionTab>("all");
   const [searchQuery, setSearchQuery] = React.useState("");
 
   const [isAssignModalOpen, setIsAssignModalOpen] = React.useState(false);
@@ -53,8 +64,8 @@ export default function AdminSubstitutions() {
     try {
       const data = await getSubstitutions();
       setSubstitutions(data);
-    } catch (err: any) {
-      setError(err?.message || "Failed to load teacher substitutions.");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "Failed to load teacher substitutions."));
     } finally {
       setIsLoading(false);
     }
@@ -85,8 +96,8 @@ export default function AdminSubstitutions() {
       await endSubstitutionEarly(sub.substitution_id);
       toast.success("Substitution ended successfully. Coverage ended today.");
       await fetchSubstitutions();
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to end substitution.");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to end substitution."));
     } finally {
       setActionLoadingId(null);
     }
@@ -102,8 +113,8 @@ export default function AdminSubstitutions() {
       await endBatchSubstitutionsEarly(batchId);
       toast.success(`Successfully concluded all active loads for ${teacherName}'s leave program.`);
       await fetchSubstitutions();
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to end program substitutions.");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to end program substitutions."));
     } finally {
       setActionLoadingId(null);
     }
@@ -119,8 +130,8 @@ export default function AdminSubstitutions() {
       await cancelSubstitution(sub.substitution_id);
       toast.success("Substitution cancelled.");
       await fetchSubstitutions();
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to cancel substitution.");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to cancel substitution."));
     } finally {
       setActionLoadingId(null);
     }
@@ -156,102 +167,54 @@ export default function AdminSubstitutions() {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col gap-6 p-6">
-        {/* Header with Breadcrumb & Action */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-1 flex-col">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
+        {/* Header */}
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <SidebarTrigger className="-ml-1" />
-            <div className="space-y-1">
-              <Breadcrumb>
-                <Breadcrumb.List className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Link href="/admin/dashboard" className="text-xs font-normal">
-                      Admin
-                    </Breadcrumb.Link>
-                  </Breadcrumb.Item>
-                  <Breadcrumb.Separator />
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Page className="text-xs font-semibold text-foreground">
-                      Teacher Substitutions
-                    </Breadcrumb.Page>
-                  </Breadcrumb.Item>
-                </Breadcrumb.List>
-              </Breadcrumb>
-              <Text as="h3" className="font-sans text-2xl font-bold tracking-tight">
+            <SidebarTrigger className="md:hidden" />
+              <h1 className="text-2xl font-bold tracking-tight md:text-4xl">
                 Teacher Substitution Management
-              </Text>
-            </div>
+              </h1>
           </div>
 
           <Button
+            variant="default"
+            size="md"
             onClick={() => setIsAssignModalOpen(true)}
-            className="flex items-center gap-2 self-start sm:self-auto"
+            className="gap-2 self-start whitespace-nowrap sm:self-auto"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="size-4" />
             <span>Assign Substitute</span>
           </Button>
-        </div>
+        </header>
+
+        <div className="-mx-4 -mt-[1px] border-b-2 border-border md:-mx-6" />
 
         {/* Summary Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 rounded-xl border bg-card text-card-foreground shadow-sm flex items-center gap-4">
-            <div className="p-3 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <UserCheck className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase">Active Substitutions</p>
-              <h4 className="text-2xl font-bold">{activeCount}</h4>
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl border bg-card text-card-foreground shadow-sm flex items-center gap-4">
-            <div className="p-3 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
-              <CheckCircle2 className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase">Completed Handbacks</p>
-              <h4 className="text-2xl font-bold">{completedCount}</h4>
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl border bg-card text-card-foreground shadow-sm flex items-center gap-4">
-            <div className="p-3 rounded-lg bg-slate-500/10 text-slate-600 dark:text-slate-400">
-              <Users className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase">Total Tracked</p>
-              <h4 className="text-2xl font-bold">{substitutions.length}</h4>
-            </div>
-          </div>
+        <div className="grid grid-cols-1 gap-4 py-4 sm:grid-cols-3 md:py-6">
+          <OverviewCard title="Active Substitutions" count={String(activeCount)} />
+          <OverviewCard title="Completed Handbacks" count={String(completedCount)} />
+          <OverviewCard title="Total Tracked" count={String(substitutions.length)} />
         </div>
 
-        {/* Filter Controls & Search */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-1 border rounded-lg p-1 bg-muted/30">
-            {(
-              [
-                { id: "all", label: `All (${substitutions.length})` },
-                { id: "active", label: `Active (${activeCount})` },
-                { id: "completed", label: `Completed (${completedCount})` },
-                { id: "cancelled", label: `Cancelled (${cancelledCount})` },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                  activeTab === tab.id
-                    ? "bg-background text-foreground shadow-sm font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+        {/* Status Tabs & Search */}
+        <Tabs
+          tabs={substitutionTabs}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          counts={{
+            all: substitutions.length,
+            active: activeCount,
+            completed: completedCount,
+            cancelled: cancelledCount,
+          }}
+        />
 
+        <div className="flex justify-start py-1">
           <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search teacher, class, subject..."
               value={searchQuery}
@@ -262,7 +225,7 @@ export default function AdminSubstitutions() {
         </div>
 
         {/* Table Content */}
-        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+        <Card className="mt-1 w-full rounded-none border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           {isLoading ? (
             <div className="p-12 flex flex-col items-center justify-center gap-3 text-muted-foreground">
               <Loader2 className="h-6 w-6 animate-spin" />
@@ -288,16 +251,16 @@ export default function AdminSubstitutions() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table>
-                <Table.Header>
+              <Table className="w-full border-collapse text-sm">
+                <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black uppercase">
                   <Table.Row>
-                    <Table.Head>Teacher on Leave</Table.Head>
-                    <Table.Head>Class & Subject</Table.Head>
-                    <Table.Head>Substitute Teacher</Table.Head>
-                    <Table.Head>Coverage Window</Table.Head>
-                    <Table.Head>Status</Table.Head>
-                    <Table.Head>Reason</Table.Head>
-                    <Table.Head className="text-right">Actions</Table.Head>
+                    <Table.Head className="font-black text-black">Teacher on Leave</Table.Head>
+                    <Table.Head className="font-black text-black">Class & Subject</Table.Head>
+                    <Table.Head className="font-black text-black">Substitute Teacher</Table.Head>
+                    <Table.Head className="font-black text-black">Coverage Window</Table.Head>
+                    <Table.Head className="font-black text-black">Status</Table.Head>
+                    <Table.Head className="font-black text-black">Reason</Table.Head>
+                    <Table.Head className="text-right font-black text-black">Actions</Table.Head>
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
@@ -308,9 +271,9 @@ export default function AdminSubstitutions() {
                     const batchTotal = sub.batch_id ? (batchCounts[sub.batch_id] || 0) : 0;
 
                     return (
-                      <Table.Row key={sub.substitution_id}>
+                      <Table.Row key={sub.substitution_id} className="border-b border-black/10 hover:bg-yellow-50/50">
                         <Table.Cell>
-                          <div className="font-semibold text-sm">{sub.original_staff_name}</div>
+                          <div className="text-sm font-extrabold text-black">{sub.original_staff_name}</div>
                           <div className="text-xs text-muted-foreground font-mono">
                             {sub.original_staff_id}
                           </div>
@@ -337,7 +300,7 @@ export default function AdminSubstitutions() {
                         </Table.Cell>
 
                         <Table.Cell>
-                          <div className="font-semibold text-sm text-primary flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 text-sm font-bold text-black">
                             <UserCheck className="h-3.5 w-3.5" />
                             <span>{sub.substitute_staff_name}</span>
                           </div>
@@ -471,6 +434,8 @@ export default function AdminSubstitutions() {
               </Table>
             </div>
           )}
+        </Card>
+          </div>
         </div>
       </div>
 

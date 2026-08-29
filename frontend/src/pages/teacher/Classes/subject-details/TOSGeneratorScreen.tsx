@@ -707,38 +707,39 @@ export function TOSGeneratorScreen({
             <>
               <Button
                 variant="outline"
-                size="sm"
+                size="md"
                 onClick={onBack}
-                className="border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100"
+                className="gap-2"
               >
-                <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to {parentLabel || (currentSubjectName || "TOS Generator")}
+                <ArrowLeft className="size-4" /> Back to {parentLabel || (currentSubjectName || "TOS Generator")}
               </Button>
               <Button
-                size="sm"
+                variant="default"
+                size="md"
                 onClick={startNewExam}
-                className="border-2 border-black bg-[#FFD54F] font-bold text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                className="gap-2"
               >
-                <Plus className="mr-1.5 h-4 w-4" /> New TOS
+                <Plus className="size-4" /> New TOS
               </Button>
             </>
           ) : (
             <>
               <Button
                 variant="outline"
-                size="sm"
+                size="md"
                 onClick={onBack}
-                className="border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100"
+                className="gap-2"
               >
-                <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to {parentLabel || "TOS Exams"}
+                <ArrowLeft className="size-4" /> Back to {parentLabel || "TOS Exams"}
               </Button>
               <Button
-                size="sm"
+                size="md"
                 variant="outline"
                 disabled={isSaving}
                 onClick={handleSaveDraft}
-                className="border-2 border-black bg-[#C8E6C9] text-xs font-bold hover:bg-[#A5D6A7] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                className="gap-2"
               >
-                <Save className="mr-1 h-3.5 w-3.5" />
+                <Save className="size-4" />
                 {isSaving ? "Saving..." : "Save Draft"}
               </Button>
             </>

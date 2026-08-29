@@ -278,7 +278,7 @@ export default function Classworks() {
                     onClick={openCreateWizard}
                     className="gap-2"
                   >
-                    <Plus size={17} />
+                    <Plus className="size-4" />
                     <span className="hidden sm:inline">New Classwork</span>
                     <span className="sm:hidden">New</span>
                   </Button>

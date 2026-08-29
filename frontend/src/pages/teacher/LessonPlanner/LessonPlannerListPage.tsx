@@ -125,7 +125,7 @@ export const LessonPlannerListPage: React.FC = () => {
                 variant="default"
                 size="md"
                 onClick={() => navigate(routes.teacher.lessonPlannerCreate)}
-                className="gap-1.5"
+                className="gap-2"
               >
                 <Plus className="size-4" />
                 <span className="hidden sm:inline">Create Lesson Plan</span>

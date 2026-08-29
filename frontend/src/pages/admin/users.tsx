@@ -807,8 +807,8 @@ function UserRow({
         <Table.Cell className="text-right w-28" onClick={(e) => e.stopPropagation()}>
           <Button
             size="sm"
-            variant="outline"
-            className="h-7 px-2 text-xs border-primary/40 text-primary hover:bg-primary/5 font-medium"
+            variant="default"
+            className="h-7 px-2 text-xs font-medium"
             onClick={(e) => {
               e.stopPropagation();
               onAssignSubstitute?.(user);

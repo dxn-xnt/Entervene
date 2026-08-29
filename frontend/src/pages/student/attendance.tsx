@@ -232,11 +232,11 @@ export default function StudentAttendancePage() {
                 <Button
                   type="button"
                   variant="default"
-                  size="sm"
+                  size="md"
                   onClick={() => setShowLeaveModal(true)}
-                  className="gap-2 whitespace-nowrap font-bold cursor-pointer"
+                  className="gap-2 whitespace-nowrap"
                 >
-                  <Plus className="size-3.5" /> Submit Leave Request
+                  <Plus className="size-4" /> Submit Leave Request
                 </Button>
               </div>
             </header>
