@@ -7,6 +7,7 @@ import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card as RetroCard } from "@/components/retroui/Card";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { Input } from "@/components/retroui/Input";
 import { Loader } from "@/components/retroui/Loader";
 import { Tabs } from "@/components/retroui/Tabs";
@@ -189,12 +190,10 @@ export default function AdminClassDetail() {
     return (
       <AppLayout>
         <div className="flex flex-1 flex-col p-4 md:p-6">
-          <RetroCard className="flex items-center gap-3 bg-accent px-4 py-3">
+          <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
             <Loader size="sm" />
-            <Text as="p" className="text-sm font-semibold">
-              Loading class details...
-            </Text>
-          </RetroCard>
+            Loading class details...
+          </div>
         </div>
       </AppLayout>
     );
@@ -558,9 +557,7 @@ function OverviewTab({
                 </RetroCard>
               ))
             ) : (
-              <RetroCard className="p-4 text-center text-sm font-semibold text-muted-foreground">
-                No published subjects for this section yet.
-              </RetroCard>
+              <EmptyStateCard title="No published subjects for this section yet." />
             )}
           </div>
         </section>
@@ -666,8 +663,9 @@ function StudentsTab({
 
         <RetroCard className="max-h-[520px] overflow-y-auto p-4">
           {isLoading ? (
-            <div className="flex items-center justify-center gap-2 p-6 text-sm font-semibold">
-              <Loader size="sm" /> Loading students...
+            <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+              <Loader size="sm" />
+              Loading students...
             </div>
           ) : error ? (
             <div className="grid gap-3 p-6 text-center text-sm font-semibold">

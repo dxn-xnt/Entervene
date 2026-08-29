@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, Fragment } from "react";
+import { useEffect, useState, useMemo } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
@@ -25,13 +25,13 @@ import {
   Search,
   Save,
   Check,
-  Loader2,
   Users,
   BarChart3,
   Table as TableIcon,
   X,
   ArrowUpRight,
 } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 
 type StudentInfo = {
@@ -121,7 +121,6 @@ export default function TeacherAttendancePage() {
   const [selectedStudentLogs, setSelectedStudentLogs] =
     useState<StudentSummaryStats | null>(null);
 
-  const [loadingClasses, setLoadingClasses] = useState(true);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -146,7 +145,6 @@ export default function TeacherAttendancePage() {
   useEffect(() => {
     async function fetchClasses() {
       try {
-        setLoadingClasses(true);
         const [advisoryRes, loadsRes] = await Promise.all([
           getTeacherAdvisoryClasses(),
           apiFetch("/api/v1/classwork-assignments/teacher/classes"),
@@ -196,8 +194,6 @@ export default function TeacherAttendancePage() {
         }
       } catch (err) {
         console.error("Failed to load attendance classes:", err);
-      } finally {
-        setLoadingClasses(false);
       }
     }
     fetchClasses();
@@ -614,10 +610,7 @@ export default function TeacherAttendancePage() {
 
                   {/* Attendance Roster Table */}
                   {loadingLogs ? (
-                    <div className="flex flex-col items-center justify-center p-12 text-gray-500 border-2 border-black bg-white">
-                      <Loader2 className="w-8 h-8 animate-spin mb-2 text-black" />
-                      <p className="font-semibold">Loading student roster...</p>
-                    </div>
+                    <LoadingPanel label="Loading student roster..." />
                   ) : filteredStudents.length === 0 ? (
                     <Empty className="">
                       <EmptyHeader>
@@ -921,12 +914,7 @@ export default function TeacherAttendancePage() {
                     </div>
 
                     {loadingLogs ? (
-                      <div className="flex flex-col items-center justify-center p-12 text-gray-500 border-2 border-black bg-white">
-                        <Loader2 className="w-8 h-8 animate-spin mb-2 text-black" />
-                        <p className="font-semibold">
-                          Calculating attendance summaries...
-                        </p>
-                      </div>
+                      <LoadingPanel label="Calculating attendance summaries..." />
                     ) : summaryMatrix.length === 0 ? (
                       <Empty>
                         <EmptyHeader>

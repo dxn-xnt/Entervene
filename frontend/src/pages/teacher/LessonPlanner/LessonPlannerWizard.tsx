@@ -18,6 +18,7 @@ import {
   AlertCircle,
   FileDown,
 } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
 
 import { InfoTab } from "./tabs/InfoTab";
 import { IntentionsTab } from "./tabs/IntentionsTab";
@@ -135,10 +136,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
 
   if (isFetching) {
     return (
-      <div className="flex items-center justify-center py-24 gap-3 text-muted-foreground w-full">
-        <Loader2 className="size-5 animate-spin" />
-        <span className="text-sm">Loading lesson plan…</span>
-      </div>
+      <LoadingPanel label="Loading lesson plan..." className="w-full" />
     );
   }
 

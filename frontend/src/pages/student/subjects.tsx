@@ -4,9 +4,9 @@ import { SubjectCard } from "../../components/subject-card";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
 import { apiFetch } from "@/lib/api";
-import { Loader2 } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Card } from "../../components/retroui/Card"; 
+import { EmptyStateCard } from "@/components/empty-state-card";
 
 interface EnrolledSubject {
   subject_load_id: number;
@@ -71,9 +71,7 @@ const Subjects = () => {
 
             <main className="py-3">
               {isLoading ? (
-              <div className="flex items-center justify-center w-full py-20">
-                <Loader2 className="animate-spin text-gray-400" size={40} />
-              </div>
+              <LoadingPanel label="Loading subjects..." />
             ) : error ? (
               <div className="flex flex-col items-center justify-center w-full py-20 gap-4">
                 <p className="text-red-500">{error}</p>
@@ -85,12 +83,7 @@ const Subjects = () => {
                 </button>
               </div>
             ) : subjects.length === 0 ? (
-              <Card className="flex flex-col items-center p-12">
-                            
-                            <p className="text-sm">
-                              No enrolled subjects found.
-                            </p>
-                          </Card>
+              <EmptyStateCard title="No enrolled subjects found." />
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 {subjects.map((subject) => (

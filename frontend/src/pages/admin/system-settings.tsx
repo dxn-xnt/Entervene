@@ -13,7 +13,8 @@ import { Switch } from "@/components/retroui/Switch";
 import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
-import { ArrowUpRight, Lock, Pencil, Loader2, Plus, Calendar, Save } from "lucide-react";
+import { ArrowUpRight, Lock, Pencil, Plus, Calendar, Save } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
 import AddAcademicPeriodModal from "./forms/add-academic-period";
 import AddGradingTemplateModal from "./forms/add-grading-template";
 import AddPathwayModal from "./forms/add-pathway";
@@ -517,10 +518,7 @@ export default function AdminSystemSettings() {
                 </h1>
               </div>
               {isLoadingSettings && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Loading settings...
-                </div>
+                <LoadingPanel label="Loading settings..." />
               )}
             </header>
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />

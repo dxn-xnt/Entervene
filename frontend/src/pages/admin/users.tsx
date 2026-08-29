@@ -438,7 +438,7 @@ export default function AdminUsers() {
               )}
 
               {loading && (
-                <div className="flex items-center justify-center gap-3 rounded-xl border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+                <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
                   <Loader size="sm" />
                   Loading users
                 </div>

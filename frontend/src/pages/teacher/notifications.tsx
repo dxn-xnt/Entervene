@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { Tabs } from "@/components/retroui/Tabs";
 import { Button } from "@/components/retroui/Button";
-import { Card } from "@/components/retroui/Card";
 import { NotificationCard } from "@/components/notification-card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { Loader2 } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import {
   getNotifications,
   markAllNotificationsAsRead,
@@ -102,15 +103,12 @@ const Notifications = () => {
             />
 
             {loading ? (
-              <div className="flex flex-col items-center justify-center p-12 text-muted-foreground">
-                <Loader2 className="h-8 w-8 animate-spin mb-2" />
-                <p>Loading notifications...</p>
-              </div>
+              <LoadingPanel label="Loading notifications..." />
             ) : filteredNotifications.length === 0 ? (
-              <Card className="flex flex-col items-center justify-center py-12">
-                <p className="text-lg font-medium">No notifications</p>
-                <p className="text-sm">You are all caught up!</p>
-              </Card>
+              <EmptyStateCard
+                title="No notifications"
+                description="You are all caught up!"
+              />
             ) : (
               <div className="flex flex-col gap-3 w-full">
                 {filteredNotifications.map((card) => (

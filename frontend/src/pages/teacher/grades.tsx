@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import GradeItemLine from "@/components/item-line/grade";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Card } from "@/components/retroui/Card";
 import AppLayout from "@/layouts/app-layout";
 import { useNavigate } from "react-router-dom";
 import { getTeacherClasses, type TeacherClassItem } from "@/lib/api";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { EmptyStateCard } from "@/components/empty-state-card";
+import { LoadingPanel } from "@/components/loading-panel";
 
 const Grades = () => {
   const navigate = useNavigate();
@@ -42,9 +43,9 @@ const Grades = () => {
             </header>
             <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
             {loading ? (
-              <div className="py-12 text-center text-sm text-gray-500">Loading grades...</div>
+              <LoadingPanel label="Loading grades..." />
             ) : classes.length === 0 ? (
-              <Card className="py-12 text-center text-lg font-medium">No classes assigned.</Card>
+              <EmptyStateCard title="No classes assigned." />
             ) : (
               <div className="flex flex-col gap-3">
                 {classes.map((item) => (

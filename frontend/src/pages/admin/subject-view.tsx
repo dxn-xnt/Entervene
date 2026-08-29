@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Badge } from "@/components/retroui/Badge";
 import { Card as RetroCard } from "@/components/retroui/Card";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { Text } from "@/components/retroui/Text";
@@ -171,9 +172,9 @@ export default function AdminSubjectView() {
                   </Text>
                   <div className="flex flex-col gap-3">
                     {classesList.length === 0 ? (
-                      <RetroCard className="px-4 py-3">
-                        <p>No active classes currently assigned to this subject level ({decodedGrade}).</p>
-                      </RetroCard>
+                      <EmptyStateCard
+                        title={<>No active classes currently assigned to this subject level ({decodedGrade}).</>}
+                      />
                     ) : (
                       classesList.map((cls) => (
                         <ClassItemLine

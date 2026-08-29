@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowUpDown, Loader2, Search, Sparkles } from "lucide-react";
+import { ArrowUpDown, Search, Sparkles } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
 import { Alert } from "@/components/retroui/Alert";
@@ -239,15 +241,15 @@ export default function SubjectSuggestionsTab({
         </div>
       </div>
       {isLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="animate-spin text-gray-400" size={36} />
-        </div>
+        <LoadingPanel label="Loading study suggestions..." />
       ) : visibleSuggestions.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 bg-white px-5 py-10 text-center text-gray-500">
-          {selectedLessonId
-            ? "No suggested study materials for this lesson yet."
-            : "No suggested study materials for this subject yet."}
-        </div>
+        <EmptyStateCard
+          title={
+            selectedLessonId
+              ? "No suggested study materials for this lesson yet."
+              : "No suggested study materials for this subject yet."
+          }
+        />
       ) : (
         <section className="flex flex-col gap-4">
           {visibleSuggestions.map((suggestion) => (

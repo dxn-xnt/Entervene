@@ -10,6 +10,7 @@ import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { Button } from "@/components/retroui/Button";
 import { Search, Sparkles, CheckCircle2, XCircle, Archive, Shield, Loader2 } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
 import { useAuth } from "@/context/AuthContext";
 import {
   fetchTeacherInterventions,
@@ -241,10 +242,7 @@ export default function AdminInterventions() {
                     {/* Table Container */}
                     <Card className="p-0 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-none">
                       {loading ? (
-                        <div className="p-8 flex items-center justify-center gap-2 text-black font-extrabold text-sm">
-                          <Loader2 className="animate-spin size-5" />
-                          Loading interventions...
-                        </div>
+                        <LoadingPanel label="Loading interventions..." />
                       ) : error ? (
                         <div className="p-6 text-rose-600 font-bold text-sm">
                           {error}

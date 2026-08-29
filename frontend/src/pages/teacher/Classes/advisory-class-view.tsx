@@ -5,6 +5,7 @@ import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
 import { Table } from "@/components/retroui/Table";
@@ -196,11 +197,10 @@ function OverviewTab({
         </div>
         <aside className="flex flex-col gap-2 min-w-0 xl:row-span-2">
           <h3 className="text-lg font-bold">Recent Activity</h3>
-          <Card className="block w-full flex-1">
-            <Card.Content className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-black/60">
-              No recent activity available yet.
-            </Card.Content>
-          </Card>
+          <EmptyStateCard
+            title="No recent activity available yet."
+            className="h-full flex-1"
+          />
         </aside>
         <section className="min-w-0">
           <h3 className="text-lg font-bold">Subjects</h3>

@@ -6,7 +6,8 @@ import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "@/components/retroui/Badge";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
-import { ArrowUpRight, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowUpRight, AlertCircle } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
 import { Dialog } from "@/components/retroui/Dialog";
 import ViewPreviousPeriodsModal from "./forms/view-previous-periods";
 import { API_URL } from "@/lib/api";
@@ -148,10 +149,7 @@ export default function AdminAcademicPeriods() {
 
               <Card.Content className="flex flex-col gap-4">
                 {isLoading ? (
-                  <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span className="text-sm">Loading academic periods from database...</span>
-                  </div>
+                  <LoadingPanel label="Loading academic periods from database..." />
                 ) : (
                   <Table>
                     <Table.Header className="font-sans">

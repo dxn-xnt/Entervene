@@ -1,11 +1,7 @@
-import { Card as RetroCard } from "@/components/retroui/Card";
-import { Loader } from "@/components/retroui/Loader";
+import { LoadingPanel } from "@/components/loading-panel";
 
 export function LoadingCard({ label }: { label: string }) {
   return (
-    <RetroCard className="flex w-full items-center gap-3 p-4 text-sm">
-      <Loader size="sm" />
-      <span>{label}</span>
-    </RetroCard>
+    <LoadingPanel label={label} className="w-full" />
   );
 }

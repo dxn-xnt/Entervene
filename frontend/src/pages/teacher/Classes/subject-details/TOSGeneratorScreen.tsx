@@ -893,12 +893,12 @@ export function TOSGeneratorScreen({
                   <p className="mt-3 text-xs font-bold text-gray-600">Loading your Table of Specifications...</p>
                 </div>
               ) : filteredSavedExams.length === 0 ? (
-                <div className="rounded-lg border-2 border-dashed border-black/30 bg-[#FAFAFA] p-12 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <div className="rounded-lg border-2 border-dashed border-black/30 bg-[#FAFAFA] px-6 py-12 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl border-2 border-black bg-[#FFD54F] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                     <TableProperties className="h-7 w-7 text-black" />
                   </div>
-                  <h3 className="mt-4 text-base font-black text-black">No TOS Exams Found</h3>
-                  <p className="mt-1 text-xs font-medium text-gray-600 max-w-sm mx-auto">
+                  <h3 className="mt-4 text-base font-bold text-black">No TOS Exams Found</h3>
+                  <p className="mx-auto mt-1 max-w-sm text-sm font-normal text-gray-500">
                     {savedExams.length === 0
                       ? "Create your first Table of Specifications blueprint and exam questionnaire."
                       : "No exam matches the selected quarter or search query."}
@@ -1207,7 +1207,7 @@ export function TOSGeneratorScreen({
               {/* Competency Items List */}
               <div className="space-y-3">
                 {compInputs.length === 0 ? (
-                  <div className="rounded-lg border-2 border-dashed border-gray-300 p-8 text-center bg-gray-50">
+                  <div className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-12 text-center">
                     <p className="text-xs font-bold text-gray-600">No competencies selected yet.</p>
                     <p className="text-[11px] text-gray-400 mt-0.5">
                       Use the dropdown above to add competencies from your curriculum bank or add an ad-hoc topic.
@@ -1759,7 +1759,7 @@ export function TOSGeneratorScreen({
               )}
 
               {questions.length === 0 ? (
-                <div className="rounded-lg border-2 border-dashed border-gray-300 p-12 text-center">
+                <div className="rounded-lg border-2 border-dashed border-gray-300 px-6 py-12 text-center">
                   <Sparkles className="mx-auto h-8 w-8 text-yellow-500" />
                   <p className="mt-2 text-sm font-bold text-gray-700">No questions generated yet.</p>
                   <Button

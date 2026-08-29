@@ -23,13 +23,14 @@ import {
   Calendar,
   Edit,
   Layers,
-  Loader2,
   Plus,
   Search,
   StopCircle,
   UserCheck,
   XCircle,
 } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { toast } from "sonner";
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -227,10 +228,7 @@ export default function AdminSubstitutions() {
         {/* Table Content */}
         <Card className="mt-1 w-full rounded-none border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           {isLoading ? (
-            <div className="p-12 flex flex-col items-center justify-center gap-3 text-muted-foreground">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              <p className="text-sm">Loading substitution records...</p>
-            </div>
+            <LoadingPanel label="Loading substitution records..." />
           ) : error ? (
             <div className="p-8 text-center text-sm text-destructive flex flex-col items-center gap-2">
               <AlertCircle className="h-5 w-5" />
@@ -240,15 +238,16 @@ export default function AdminSubstitutions() {
               </Button>
             </div>
           ) : filteredSubstitutions.length === 0 ? (
-            <div className="p-12 text-center text-muted-foreground flex flex-col items-center gap-2">
-              <UserCheck className="h-8 w-8 text-muted-foreground/50" />
-              <p className="font-medium text-base text-foreground">No substitutions found</p>
-              <p className="text-xs">
-                {searchQuery
+            <EmptyStateCard
+              icon={<UserCheck size={24} />}
+              title="No substitutions found"
+              description={
+                searchQuery
                   ? "Try adjusting your search terms or filters."
-                  : "Assign a substitute when a teacher goes on maternity leave or extended leave."}
-              </p>
-            </div>
+                  : "Assign a substitute when a teacher goes on maternity leave or extended leave."
+              }
+              className="border-0 shadow-none"
+            />
           ) : (
             <div className="overflow-x-auto">
               <Table className="w-full border-collapse text-sm">

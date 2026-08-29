@@ -6,7 +6,6 @@ import { Button } from "@/components/retroui/Button";
 import { Text } from "@/components/retroui/Text";
 import {
   ArrowUpRight,
-  Loader2,
   Search,
   X,
   CheckCircle2,
@@ -15,6 +14,8 @@ import {
   Check,
   Zap,
 } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
@@ -165,16 +166,9 @@ const StoryBoard = () => {
                 {/* Left side: Subject cards */}
                 <div className="grid grid-cols-2 gap-4 flex-1 content-start">
                   {isLoading ? (
-                    <div className="col-span-2 flex justify-center py-16">
-                      <Loader2
-                        className="animate-spin text-gray-400"
-                        size={36}
-                      />
-                    </div>
+                    <LoadingPanel label="Loading subjects..." className="col-span-2" />
                   ) : subjects.length === 0 ? (
-                    <Card className="flex flex-col items-center p-12">
-                      <p className="text-sm">No enrolled subjects found.</p>
-                    </Card>
+                    <EmptyStateCard title="No enrolled subjects found." className="col-span-2" />
                   ) : (
                     subjects.map((subject) => (
                       <SubjectCard
@@ -258,19 +252,14 @@ const StoryBoard = () => {
                       </div>
 
                       {isTodosLoading ? (
-                        <div className="flex justify-center py-8">
-                          <Loader2
-                            className="animate-spin text-gray-400"
-                            size={28}
-                          />
-                        </div>
+                        <LoadingPanel label="Loading to-do items..." />
                       ) : todos.length === 0 ? (
-                        <div className="flex flex-col items-center py-6 text-gray-500 gap-1.5">
-                          <CheckCircle2 size={32} className="text-green-500" />
-                          <p className="text-sm font-semibold">
+                        <div className="flex flex-col items-center gap-2 px-6 py-12 text-center text-gray-500">
+                          <CheckCircle2 size={24} className="text-green-500" />
+                          <p className="text-base font-bold">
                             All caught up!
                           </p>
-                          <p className="text-xs text-gray-400">
+                          <p className="text-sm font-normal text-gray-500">
                             No pending tasks
                           </p>
                         </div>
@@ -388,15 +377,11 @@ function ClassmatesModal({
 
         <div className="min-h-0 overflow-y-auto p-4">
           {isLoading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="animate-spin text-gray-400" size={32} />
-            </div>
+            <LoadingPanel label="Loading classmates..." />
           ) : error ? (
             <p className="py-10 text-center text-sm text-red-600">{error}</p>
           ) : filtered.length === 0 ? (
-            <p className="py-10 text-center text-sm text-gray-500">
-              No classmates found.
-            </p>
+            <EmptyStateCard title="No classmates found." />
           ) : (
             <div className="grid gap-3">
               {groups.map(([label, students]) => (

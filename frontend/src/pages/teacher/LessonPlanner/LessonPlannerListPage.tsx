@@ -15,6 +15,7 @@ import {
   Search,
   Calendar,
 } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
 import { apiFetch } from "@/lib/api";
 import { routes } from "@/../routes";
 import { toast } from "sonner";
@@ -161,27 +162,22 @@ export const LessonPlannerListPage: React.FC = () => {
 
             {/* Loading state */}
             {isLoading && (
-              <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
-                <Loader2 className="size-7 animate-spin text-[#7ABA78]" />
-                <p className="text-sm font-medium">
-                  Loading your lesson plans…
-                </p>
-              </div>
+              <LoadingPanel label="Loading your lesson plans..." />
             )}
 
             {/* Empty state */}
             {!isLoading && filteredPlans.length === 0 && (
               <Card className="block w-full text-center border-black">
-                <Card.Content className="flex flex-col items-center py-10">
+                <Card.Content className="flex flex-col items-center px-6 py-12">
                   <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-lg border-2 border-black">
                     <BookOpen className="size-7" />
                   </div>
 
-                  <Card.Title className="mb-2 text-xl">
+                  <Card.Title className="mb-2 text-base font-bold">
                     No Lesson Plans Found
                   </Card.Title>
 
-                  <p className="mb-6 max-w-md text-sm text-gray-600">
+                  <p className="mb-6 max-w-md text-sm font-normal text-gray-500">
                     {searchQuery
                       ? "No lesson plans match your search filter."
                       : "Start structuring your lessons using the DepEd ILAW format with built-in AI assistance."}

@@ -974,7 +974,10 @@ export default function AdminSubjects() {
                   <h2 className="text-xl font-semibold">Archived Catalog Subjects</h2>
                   <p className="mb-4 text-sm">Subjects no longer used in the catalog.</p>
                   {isLoadingCatalog ? (
-                    <div className="flex items-center gap-2 text-sm"><Loader size="sm" /> Loading archived subjects...</div>
+                    <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+                      <Loader size="sm" />
+                      Loading archived subjects...
+                    </div>
                   ) : archivedSubjects.length === 0 ? (
                     <p className="text-sm">No archived catalog subjects.</p>
                   ) : (
@@ -1001,7 +1004,10 @@ export default function AdminSubjects() {
                   <h2 className="text-xl font-semibold">Archived Subject Offerings</h2>
                   <p className="mb-4 text-sm">Offerings removed from the active school year/pathway setup.</p>
                   {isLoadingOfferings ? (
-                    <div className="flex items-center gap-2 text-sm"><Loader size="sm" /> Loading archived offerings...</div>
+                    <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+                      <Loader size="sm" />
+                      Loading archived offerings...
+                    </div>
                   ) : archivedOfferings.length === 0 ? (
                     <p className="text-sm">No archived subject offerings.</p>
                   ) : (
@@ -1030,7 +1036,10 @@ export default function AdminSubjects() {
                   <h2 className="text-xl font-semibold">Archived Grading Templates</h2>
                   <p className="mb-4 text-sm">Reusable grading setups hidden from active use.</p>
                   {isLoadingGradingTemplates ? (
-                    <div className="flex items-center gap-2 text-sm"><Loader size="sm" /> Loading archived templates...</div>
+                    <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+                      <Loader size="sm" />
+                      Loading archived templates...
+                    </div>
                   ) : archivedGradingTemplates.length === 0 ? (
                     <p className="text-sm">No archived grading templates.</p>
                   ) : (

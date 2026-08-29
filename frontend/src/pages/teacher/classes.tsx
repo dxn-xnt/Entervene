@@ -11,6 +11,7 @@ import { apiFetch, getTeacherAdvisoryClasses } from "@/lib/api";
 import type { TeacherAdvisoryClassListItem } from "@/types/adminClasses";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { Progress } from "@/components/retroui/Progress";
+import { EmptyStateCard } from "@/components/empty-state-card";
 
 type TeacherClassLoad = {
   subject_load_id: number;
@@ -241,9 +242,7 @@ const TeacherClasses = () => {
                 {/* Left: Subject Loads */}
                 <div className="lg:col-span-8 flex flex-col gap-4">
                   {groupedSubjectLoads.length === 0 ? (
-                    <Card className="flex justify-center items-center border-black py-8 text-sm font-semibold">
-                      No subject teaching sections assigned.
-                    </Card>
+                    <EmptyStateCard title="No subject teaching sections assigned." />
                   ) : (
                     groupedSubjectLoads.map((group) => (
                       <Card
@@ -314,9 +313,10 @@ const TeacherClasses = () => {
                   </div>
                   <div className="flex flex-col gap-3">
                     {advisoryClasses.length === 0 ? (
-                      <p className="text-sm font-semibold text-gray-700 py-4 text-center">
-                        No advisory classes assigned.
-                      </p>
+                      <EmptyStateCard
+                        title="No advisory classes assigned."
+                        className="border-0 bg-transparent shadow-none"
+                      />
                     ) : (
                       advisoryClasses.map((item) => (
                         <AdvisoryCatalogCard

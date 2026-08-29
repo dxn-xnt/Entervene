@@ -19,6 +19,7 @@ import AttachmentDisplay from "@/components/attachment-display";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { Alert } from "@/components/retroui/Alert";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Badge } from "@/components/retroui/Badge";
@@ -1236,11 +1237,13 @@ export default function SubjectClassworkTab({
       </div>
 
       {visibleClassworks.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 bg-white px-5 py-10 text-center text-gray-500">
-          {classworks.length === 0
-            ? "No classworks assigned yet."
-            : "No classworks match your search."}
-        </div>
+        <EmptyStateCard
+          title={
+            classworks.length === 0
+              ? "No classworks assigned yet."
+              : "No classworks match your search."
+          }
+        />
       ) : (
         visibleClassworks.map((cw) => {
           const submission = submissions[cw.classwork_assignment_id];
