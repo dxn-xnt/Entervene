@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft, SkipBack, SkipForward, Flag, Loader2, AlertCircle } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { routes } from "@/../routes";
@@ -199,8 +200,8 @@ const StudentQuizTake = () => {
   // --------------------------------------------------
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-black/50" />
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <LoadingPanel label="Loading quiz..." className="w-full max-w-3xl" />
       </div>
     );
   }

@@ -16,6 +16,8 @@ import {
   ArrowRight,
   PartyPopper,
 } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
 import {
@@ -144,10 +146,7 @@ export default function StudentInterventions() {
 
               {/* Main Content Area */}
               {loading ? (
-                <div className="p-12 flex flex-col items-center justify-center gap-3 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                  <Loader2 className="animate-spin size-8 text-black" />
-                  <span className="font-extrabold text-sm text-black">Loading your study recommendations...</span>
-                </div>
+                <LoadingPanel label="Loading your study recommendations..." />
               ) : error ? (
                 <div className="p-6 border-2 border-black bg-rose-50 text-rose-700 font-bold text-sm shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                   {error}
@@ -254,16 +253,11 @@ export default function StudentInterventions() {
                 </div>
               ) : (
                 /* Clean RetroUI Empty State */
-                <div className="p-12 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col items-center justify-center text-center gap-4">
-                  <div className="size-16 rounded-full bg-yellow-300 border-2 border-black flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                    <PartyPopper className="size-8 text-black" />
-                  </div>
-                  <div className="flex flex-col gap-1 max-w-md">
-                    <h3 className="text-xl font-black text-black">No Active Interventions</h3>
-                    <p className="text-xs font-bold text-gray-600 leading-relaxed">
-                      You currently have no pending study interventions or remedial tasks assigned for this view. Keep up the great work in your classes!
-                    </p>
-                  </div>
+                <EmptyStateCard
+                  icon={<PartyPopper size={24} />}
+                  title="No Active Interventions"
+                  description="You currently have no pending study interventions or remedial tasks assigned for this view. Keep up the great work in your classes!"
+                >
                   <Button
                     size="sm"
                     onClick={() => navigate(routes.student.subjects)}
@@ -272,7 +266,7 @@ export default function StudentInterventions() {
                     <BookOpen className="size-4 mr-1.5" />
                     Browse Subjects & Lessons
                   </Button>
-                </div>
+                </EmptyStateCard>
               )}
             </div>
           </div>

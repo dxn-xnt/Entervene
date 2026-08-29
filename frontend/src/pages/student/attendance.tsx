@@ -30,6 +30,8 @@ import {
   Calendar,
   BookOpen,
 } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
+import { EmptyStateCard } from "@/components/empty-state-card";
 
 type SubjectOption = {
   subject_id: number;
@@ -232,11 +234,11 @@ export default function StudentAttendancePage() {
                 <Button
                   type="button"
                   variant="default"
-                  size="sm"
+                  size="md"
                   onClick={() => setShowLeaveModal(true)}
-                  className="gap-2 whitespace-nowrap font-bold cursor-pointer"
+                  className="gap-2 whitespace-nowrap"
                 >
-                  <Plus className="size-3.5" /> Submit Leave Request
+                  <Plus className="size-4" /> Submit Leave Request
                 </Button>
               </div>
             </header>
@@ -271,11 +273,7 @@ export default function StudentAttendancePage() {
 
             {/* Attendance Rate Banner Card */}
             {loading ? (
-              <Card className="block w-full border-black transition-none">
-                <Card.Content className="flex items-center justify-center p-12 text-muted-foreground">
-                  <Loader2 className="h-8 w-8 animate-spin text-black" />
-                </Card.Content>
-              </Card>
+              <LoadingPanel label="Loading attendance records..." />
             ) : error ? (
               <div className="flex flex-col items-center justify-center py-12 text-red-500 gap-2">
                 <p className="text-sm font-semibold">{error}</p>
@@ -405,14 +403,15 @@ export default function StudentAttendancePage() {
                   {activeTab === "logs" && (
                     <div className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
                       {logs.length === 0 ? (
-                        <div className="p-12 text-center text-muted-foreground">
-                          <p className="font-bold text-base">No attendance records found</p>
-                          <p className="text-xs mt-1">
-                            {selectedSubjectId === "all"
+                        <EmptyStateCard
+                          title="No attendance records found"
+                          description={
+                            selectedSubjectId === "all"
                               ? "Daily attendance marked by your teachers will appear here."
-                              : "No attendance recorded for this specific subject."}
-                          </p>
-                        </div>
+                              : "No attendance recorded for this specific subject."
+                          }
+                          className="border-0 shadow-none"
+                        />
                       ) : (
                         <Table wrapperClassName="overflow-x-auto" className="min-w-full border-collapse">
                           <Table.Header>
@@ -459,9 +458,9 @@ export default function StudentAttendancePage() {
                   {activeTab === "leaves" && (
                     <div className="border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
                       {leaveRequests.length === 0 ? (
-                        <div className="p-12 text-center text-muted-foreground">
-                          <p className="font-bold text-base">No leave requests submitted</p>
-                          <p className="text-xs mt-1">Submit a leave request if you plan to be absent.</p>
+                        <div className="px-6 py-12 text-center text-muted-foreground">
+                          <p className="text-base font-bold">No leave requests submitted</p>
+                          <p className="mt-1 text-sm font-normal text-gray-500">Submit a leave request if you plan to be absent.</p>
                         </div>
                       ) : (
                         <Table wrapperClassName="overflow-x-auto" className="min-w-full border-collapse">

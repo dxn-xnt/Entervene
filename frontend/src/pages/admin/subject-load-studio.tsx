@@ -1419,7 +1419,7 @@ export default function AdminSubjectLoadStudio() {
                 </section>
 
                 {filteredClasses.length === 0 ? (
-                  <RetroCard className="p-8 text-center border-2 border-black bg-accent">
+                  <RetroCard className="border-2 border-black bg-accent px-6 py-12 text-center">
                     <Text as="h3" className="font-bold text-lg">
                       No Class Sections Found
                     </Text>

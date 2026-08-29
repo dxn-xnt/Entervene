@@ -438,7 +438,7 @@ export default function AdminUsers() {
               )}
 
               {loading && (
-                <div className="flex items-center justify-center gap-3 rounded-xl border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+                <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
                   <Loader size="sm" />
                   Loading users
                 </div>
@@ -807,8 +807,8 @@ function UserRow({
         <Table.Cell className="text-right w-28" onClick={(e) => e.stopPropagation()}>
           <Button
             size="sm"
-            variant="outline"
-            className="h-7 px-2 text-xs border-primary/40 text-primary hover:bg-primary/5 font-medium"
+            variant="default"
+            className="h-7 px-2 text-xs font-medium"
             onClick={(e) => {
               e.stopPropagation();
               onAssignSubstitute?.(user);

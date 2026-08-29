@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ChevronLeft, FileEdit, CheckCircle2, XCircle, Clock, AlertCircle, Loader2, Award, RotateCcw } from "lucide-react";
+import { ChevronLeft, FileEdit, CheckCircle2, XCircle, Clock, AlertCircle, Award, RotateCcw } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
@@ -51,8 +52,8 @@ const StudentQuizResult = () => {
   if (loading) {
     return (
       <AppLayout>
-        <div className="flex flex-1 items-center justify-center min-h-[60vh]">
-          <Loader2 className="w-8 h-8 animate-spin text-black/50" />
+        <div className="flex flex-1 items-center justify-center min-h-[60vh] px-4">
+          <LoadingPanel label="Loading quiz results..." className="w-full" />
         </div>
       </AppLayout>
     );

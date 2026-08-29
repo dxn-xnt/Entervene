@@ -22,6 +22,7 @@ import { StudentLessonDetailScreen } from "@/components/student-lesson-detail-sc
 import { API_URL, apiFetch } from "@/lib/api";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { Card } from "@/components/retroui/Card";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { Badge } from "@/components/retroui/Badge";
 import { Dialog } from "@/components/retroui/Dialog";
 import { SortButton } from "@/components/sort-button";
@@ -1665,10 +1666,10 @@ export default function SubjectLessonTab({
 
           {/* ── Empty state ── */}
           {lessons.length === 0 ? (
-            <div className="flex flex-col items-center py-16 text-gray-500 gap-2">
-              <BookOpen size={40} className="opacity-30" />
-              <p>No lessons available for this subject.</p>
-            </div>
+            <EmptyStateCard
+              icon={<BookOpen size={24} />}
+              title="No lessons available for this subject."
+            />
           ) : (
             <div className="flex gap-4 items-start">
               {/* ════════════════ LEFT: Lessons list ════════════════ */}

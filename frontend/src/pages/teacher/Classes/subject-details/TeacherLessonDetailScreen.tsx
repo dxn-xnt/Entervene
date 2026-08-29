@@ -212,10 +212,10 @@ export default function TeacherLessonDetailScreen({
             <Card.Content className="flex items-center gap-3">
               <ClipboardList size={22} className="shrink-0 text-gray-400" />
               <div>
-                <Card.Title className="text-lg font-bold">
+                <Card.Title className="text-base font-bold">
                   No classworks yet
                 </Card.Title>
-                <p className="text-xs font-medium text-gray-600">
+                <p className="text-sm font-normal text-gray-500">
                   Click "+ Add Classwork" to assign readings, activities, or
                   quizzes to this lesson.
                 </p>

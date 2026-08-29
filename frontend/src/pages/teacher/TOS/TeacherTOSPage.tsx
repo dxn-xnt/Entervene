@@ -246,7 +246,7 @@ export const TeacherTOSPage: React.FC = () => {
                 variant="default"
                 size="md"
                 onClick={handleStartNewTOS}
-                className="gap-1.5"
+                className="gap-2"
               >
                 <Plus className="size-4" />
                 <span className="hidden sm:inline">New TOS</span>
@@ -318,16 +318,16 @@ export const TeacherTOSPage: React.FC = () => {
             </div>
           ) : filteredExams.length === 0 ? (
             <Card className="block w-full border-black text-center">
-              <Card.Content className="flex flex-col items-center py-10">
+              <Card.Content className="flex flex-col items-center px-6 py-12">
                 <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-lg border-2 border-black">
                   <TableProperties className="size-7" />
                 </div>
 
-                <Card.Title className="mb-2 text-xl">
+                <Card.Title className="mb-2 text-base font-bold">
                   No TOS Exams Found
                 </Card.Title>
 
-                <p className="mb-6 max-w-md text-sm text-gray-600">
+                <p className="mb-6 max-w-md text-sm font-normal text-gray-500">
                   {exams.length === 0
                     ? "Create your first Table of Specifications blueprint and exam questionnaire."
                     : "No exam matches the selected filters."}

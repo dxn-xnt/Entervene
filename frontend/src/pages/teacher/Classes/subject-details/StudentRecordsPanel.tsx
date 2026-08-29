@@ -345,7 +345,7 @@ export default function StudentRecordsPanel({
               Loading student records...
             </p>
           ) : !filteredStudents.length ? (
-            <div className="py-8 text-center">
+            <div className="px-6 py-12 text-center">
               <div className="inline-flex h-20 w-20 items-center justify-center rounded-full border-2 border-black bg-[#F6E9B2] mb-4">
                 {search.trim() ? (
                   <Search size={36} className="text-gray-600" />
@@ -353,12 +353,12 @@ export default function StudentRecordsPanel({
                   <UserRound size={36} className="text-gray-600" />
                 )}
               </div>
-              <p className="text-xl font-bold text-gray-800">
+              <p className="text-base font-bold text-black">
                 {search.trim()
                   ? "No students match your search"
                   : "No students enrolled"}
               </p>
-              <p className="text-sm text-gray-500 mt-2 max-w-sm mx-auto">
+              <p className="mx-auto mt-1 max-w-sm text-sm font-normal text-gray-500">
                 {search.trim()
                   ? "Try adjusting your search terms or clear the search to see all students"
                   : "Students will appear here once they are enrolled in this class"}

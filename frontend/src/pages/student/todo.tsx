@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs } from "../../components/retroui/Tabs";
-import { Card } from "../../components/retroui/Card";
 import ToDoItem from "../../components/to-do-item";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -11,7 +10,9 @@ import {
   type StudentTodosResponse,
   type TodoItem as ApiTodoItem,
 } from "@/lib/api";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
+import { EmptyStateCard } from "@/components/empty-state-card";
 
 const todoTabs = [
   { id: "pending", label: "Pending" },
@@ -105,10 +106,7 @@ export default function ToDo() {
               />
 
               {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
-                  <Loader2 className="animate-spin" size={36} />
-                  <p className="text-sm">Loading your to-do items...</p>
-                </div>
+                <LoadingPanel label="Loading your to-do items..." />
               ) : error ? (
                 <div className="flex flex-col items-center justify-center py-12 text-red-500 gap-2">
                   <p className="text-sm font-semibold">{error}</p>
@@ -147,12 +145,10 @@ export default function ToDo() {
                         </h3>
                         {regularUpcomingItems.length === 0 &&
                         interventionItems.length === 0 ? (
-                          <Card className="flex flex-col items-center p-12">
-                            <p className="font-semibold text-lg">All caught up!</p>
-                            <p className="text-sm">
-                              You have no pending assignments or tasks.
-                            </p>
-                          </Card>
+                          <EmptyStateCard
+                            title="All caught up!"
+                            description="You have no pending assignments or tasks."
+                          />
                         ) : regularUpcomingItems.length === 0 ? (
                           <p className="text-sm text-gray-500">No upcoming tasks.</p>
                         ) : (
@@ -174,13 +170,11 @@ export default function ToDo() {
                     <section className="flex flex-col gap-4">
                       <h3 className="text-xl md:text-3xl font-semibold">Past Due</h3>
                       {pastDueItems.length === 0 ? (
-                        <div className="flex flex-col items-center py-12 gap-2 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg bg-white/50">
-                          <CheckCircle2 size={40} className="text-green-500" />
-                          <p className="font-semibold text-lg">No past due items!</p>
-                          <p className="text-sm">
-                            Great job keeping up with your deadlines.
-                          </p>
-                        </div>
+                        <EmptyStateCard
+                          icon={<CheckCircle2 size={24} className="text-green-500" />}
+                          title="No past due items!"
+                          description="Great job keeping up with your deadlines."
+                        />
                       ) : (
                         pastDueItems.map((item) => (
                           <ToDoItem
@@ -199,12 +193,10 @@ export default function ToDo() {
                     <section className="flex flex-col gap-4">
                       <h3 className="text-xl md:text-3xl font-semibold">Completed</h3>
                       {completedItems.length === 0 ? (
-                        <div className="flex flex-col items-center py-12 gap-2 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg bg-white/50">
-                          <p className="font-semibold text-lg">No completed tasks yet.</p>
-                          <p className="text-sm">
-                            Your submitted assignments and quizzes will appear here.
-                          </p>
-                        </div>
+                        <EmptyStateCard
+                          title="No completed tasks yet."
+                          description="Your submitted assignments and quizzes will appear here."
+                        />
                       ) : (
                         completedItems.map((item) => (
                           <ToDoItem

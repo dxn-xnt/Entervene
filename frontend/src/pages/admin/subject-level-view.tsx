@@ -5,6 +5,7 @@ import { Card as RetroCard } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
 import { Loader } from "@/components/retroui/Loader";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { Select } from "@/components/retroui/Select";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
@@ -236,13 +237,12 @@ export default function AdminSubjectLevel() {
 
               <div className="flex flex-col gap-3">
                 {isLoading ? (
-                  <RetroCard className="flex items-center gap-3 px-4 py-3">
-                    <Loader size="sm" /> Loading subjects...
-                  </RetroCard>
+                  <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+                    <Loader size="sm" />
+                    Loading subjects...
+                  </div>
                 ) : visibleSubjects.length === 0 ? (
-                  <RetroCard className="px-4 py-3">
-                    No subjects found for {decodedGrade}.
-                  </RetroCard>
+                  <EmptyStateCard title={<>No subjects found for {decodedGrade}.</>} />
                 ) : (
                   visibleSubjects.map((subject) => (
                     <SubjectItemLine

@@ -11,13 +11,13 @@ import {
   ExternalLink,
   FileText,
   Lightbulb,
-  Loader2,
   Pencil,
   Plus,
   Search,
   Users,
   X,
 } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
 import { useNavigate, useParams } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tabs } from "@/components/retroui/Tabs";
@@ -506,10 +506,7 @@ function OverviewTab({
         {isExpanded && (
           <div className="ml-4 pl-3 border-l-2 border-black space-y-2 py-1 min-w-0">
             {isLoadingCw ? (
-              <div className="flex items-center gap-2 py-3 text-xs text-gray-500 font-medium">
-                <Loader2 className="size-4 animate-spin" /> Loading
-                classworks...
-              </div>
+              <LoadingPanel label="Loading classworks..." />
             ) : classworks.length === 0 ? (
               <div className="rounded border border-black/20 bg-white p-3 text-xs text-gray-500 font-medium">
                 No classworks linked to this lesson.
@@ -670,9 +667,7 @@ function OverviewTab({
 
           {/* Lessons List with Competencies Hierarchy */}
           {isLoadingLessons ? (
-            <div className="flex items-center justify-center py-12 text-sm text-gray-500 font-medium">
-              <Loader2 className="animate-spin mr-2 size-5" /> Loading lessons...
-            </div>
+            <LoadingPanel label="Loading lessons..." />
           ) : lessonsError ? (
             <div className="rounded border-2 border-red-300 bg-red-50 p-4 text-sm text-red-700 font-medium">
               {lessonsError}
@@ -838,13 +833,13 @@ function OverviewTab({
 
               {/* Empty state when no competencies and no lessons */}
               {competencies.length === 0 && unassignedLessons.length === 0 && (
-                <Card className="block w-full border-2 border-black bg-white p-8 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <Card className="block w-full border-2 border-black bg-white px-6 py-12 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                   <div className="flex flex-col items-center justify-center gap-3 text-gray-500">
                     <Award size={40} className="text-gray-400" />
-                    <Card.Title className="text-2xl font-bold text-black">
+                    <Card.Title className="text-base font-bold text-black">
                       No Competencies or Lessons Yet
                     </Card.Title>
-                    <p className="font-semibold text-xs text-gray-600 max-w-md">
+                    <p className="max-w-md text-sm font-normal text-gray-500">
                       Get started by creating a Learning Competency for this subject or adding a lesson directly.
                     </p>
                     {selectedSubjectId && (

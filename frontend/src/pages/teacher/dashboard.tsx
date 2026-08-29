@@ -125,8 +125,9 @@ const Dashboard = () => {
               </div>
               <Button
                 onClick={() => navigate(routes.teacher.profile)}
+                className="gap-2"
               >
-                <Calendar className="size-3.5 mr-1.5" />
+                <Calendar className="size-4" />
                 View My Schedule
               </Button>
             </header>

@@ -296,7 +296,7 @@ export default function LessonClassworkList({
                       <Card.Title className="text-base font-bold">
                         No classworks yet
                       </Card.Title>
-                      <p className="text-xs font-medium text-gray-600">
+                      <p className="text-sm font-normal text-gray-500">
                         Readings, activities, assignments, and quizzes linked to this lesson will appear here.
                       </p>
                     </div>
@@ -640,10 +640,10 @@ export default function LessonClassworkList({
           <Card className="block border-2 border-black p-8 text-center bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             <Card.Content className="flex flex-col items-center gap-3">
               <Award size={36} className="text-gray-400" />
-              <Card.Title className="text-2xl font-bold">
+              <Card.Title className="text-base font-bold">
                 No Competencies or Lessons Yet
               </Card.Title>
-              <p className="text-xs text-gray-600 max-w-md">
+              <p className="max-w-md text-sm font-normal text-gray-500">
                 Get started by creating a Learning Competency to group your lessons and prepare for Table of Specifications (TOS), or add a direct lesson.
               </p>
               <div className="flex gap-3 mt-2">

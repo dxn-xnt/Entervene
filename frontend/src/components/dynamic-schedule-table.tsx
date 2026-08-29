@@ -1,5 +1,6 @@
 import { Table } from "@/components/retroui/Table";
-import { Loader } from "@/components/retroui/Loader";
+import { LoadingPanel } from "@/components/loading-panel";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import { Badge } from "@/components/retroui/Badge";
 import type { DynamicScheduleRow } from "@/lib/api";
 
@@ -20,18 +21,13 @@ export function DynamicScheduleTable({
 }: DynamicScheduleTableProps) {
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-8 bg-white border-2 border-black rounded-lg shadow-md">
-        <Loader size="sm" />
-        <span className="ml-2 text-sm font-bold">Loading schedule...</span>
-      </div>
+      <LoadingPanel label="Loading schedule..." />
     );
   }
 
   if (!isPublished || !schedule || schedule.length === 0) {
     return (
-      <div className="p-6 text-center bg-amber-50/60 border-2 border-dashed border-amber-300 rounded-lg">
-        <p className="text-sm font-semibold text-amber-900">{emptyMessage}</p>
-      </div>
+      <EmptyStateCard title={emptyMessage} />
     );
   }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ChevronLeft, FileEdit, Clock, HelpCircle, Award, AlertCircle, Loader2, RotateCcw } from "lucide-react";
+import { ChevronLeft, FileEdit, Clock, HelpCircle, Award, AlertCircle, RotateCcw } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
@@ -82,9 +83,7 @@ const StudentQuizView = () => {
 
             <main className="flex flex-1 flex-col gap-4 py-3">
               {loading ? (
-                <div className="flex flex-1 items-center justify-center py-24">
-                  <Loader2 className="w-8 h-8 animate-spin text-black/50" />
-                </div>
+                <LoadingPanel label="Loading quiz..." />
               ) : error || !quiz ? (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20">
                   <AlertCircle className="w-10 h-10 text-red-500" />

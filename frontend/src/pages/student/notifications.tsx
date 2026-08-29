@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { Tabs } from "../../components/retroui/Tabs";
 import { Button } from "@/components/retroui/Button";
-import { Card } from "@/components/retroui/Card";
 import { NotificationCard } from "../../components/notification-card";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Loader2 } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import {
   getNotifications,
   markAllNotificationsAsRead,
@@ -116,14 +117,9 @@ const Notifications = () => {
               />
 
               {loading ? (
-                <div className="flex flex-col items-center justify-center p-12 text-muted-foreground">
-                  <Loader2 className="h-8 w-8 animate-spin mb-2" />
-                  <p>Loading notifications...</p>
-                </div>
+                <LoadingPanel label="Loading notifications..." />
               ) : notifications.length === 0 ? (
-                <Card className="flex justify-center items-center py-12">
-                  <p className="text-sm">No announcements yet.</p>
-                </Card>
+                <EmptyStateCard title="No announcements yet." />
               ) : (
                 <div className="flex flex-col gap-5 w-full">
                   {(activeTab === "all" || activeTab === "classworks") &&

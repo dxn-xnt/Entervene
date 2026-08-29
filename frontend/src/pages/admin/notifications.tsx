@@ -5,6 +5,8 @@ import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { NotificationCard } from "@/components/notification-card";
 import { Button } from "@/components/retroui/Button";
 import { Loader2 } from "lucide-react";
+import { LoadingPanel } from "@/components/loading-panel";
+import { EmptyStateCard } from "@/components/empty-state-card";
 import {
   getNotifications,
   markAllNotificationsAsRead,
@@ -100,15 +102,12 @@ export default function AdminNotifications() {
                 onTabChange={setActiveTab}
               />
               {loading ? (
-                <div className="flex flex-col items-center justify-center p-12 text-muted-foreground">
-                  <Loader2 className="h-8 w-8 animate-spin mb-2" />
-                  <p>Loading notifications...</p>
-                </div>
+                <LoadingPanel label="Loading notifications..." />
               ) : filteredNotifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-12 text-muted-foreground border rounded-lg">
-                  <p className="text-lg font-medium">No notifications</p>
-                  <p className="text-sm">You are all caught up!</p>
-                </div>
+                <EmptyStateCard
+                  title="No notifications"
+                  description="You are all caught up!"
+                />
               ) : (
                 <div className="flex flex-col gap-3 w-full">
                   {filteredNotifications.map((notification) => (
