@@ -116,6 +116,7 @@ def build_classwork_response(cw: Classwork) -> ClassworkResponse:
         instructions=cw.instructions,
         classwork_type=cw.classwork_type,
         classwork_category=cw.classwork_category,
+        exam_subtype=getattr(cw, "exam_subtype", None),
         activity_mode=getattr(cw, "activity_mode", "ONLINE"),
         is_graded=getattr(cw, "is_graded", True),
         total_points=float(cw.total_points) if cw.total_points is not None else None,

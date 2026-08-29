@@ -7,12 +7,15 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
+from app.models.academic.GradingTemplate import GradingTemplate
+from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
@@ -251,6 +254,13 @@ def teacher_student_gradebook(
             return float(sub.grade)
         return None
 
+    # Resolve grading template weights for this subject
+    weights = resolve_subject_grading_weights(
+        db=db,
+        subject_id=scope.subject.subject_id,
+        academic_level_id=getattr(scope.class_, "academic_level_id", None),
+    )
+
     for student in students:
         student_subs = submissions_by_student.get(student.student_id, {})
 
@@ -267,12 +277,18 @@ def teacher_student_gradebook(
             for asgn in quarterly_assignments
         ]
 
-        # DepEd K-12 grade computation
-        ps_ww, ps_pt, ps_qa, ig, tg = _deped_grade(
+        # DepEd K-12 grade computation using resolved template weights
+        grade_res = _deped_grade(
             written_scores, written_assignments,
             performance_scores, performance_assignments,
             quarterly_scores, quarterly_assignments,
+            weights=weights,
         )
+        ps_ww = grade_res.ps_ww
+        ps_pt = grade_res.ps_pt
+        ps_qa = grade_res.ps_qa
+        ig = grade_res.initial_grade
+        tg = grade_res.transmuted_grade
 
         # Prefer finalized official grade if available
         metrics = _metrics_for_student(db, scope, student, assignments, student_subs)
@@ -291,9 +307,14 @@ def teacher_student_gradebook(
                 writtenWork=written_scores,
                 performanceTask=performance_scores,
                 quarterlyAssessment=quarterly_scores,
+                exams=quarterly_scores,
                 ps_written=ps_ww,
                 ps_performance=ps_pt,
                 ps_quarterly=ps_qa,
+                ps_exams=ps_qa,
+                ps_summative_1=grade_res.ps_sum1,
+                ps_summative_2=grade_res.ps_sum2,
+                ps_term_exam=grade_res.ps_term,
                 initial_grade=ig,
                 transmuted_grade=tg,
                 total=display_total,
@@ -307,6 +328,7 @@ def teacher_student_gradebook(
                 writtenWork=written_headers,
                 performanceTask=performance_headers,
                 quarterlyAssessment=quarterly_headers,
+                exams=quarterly_headers,
             )
         ],
         studentGrades=student_rows,
@@ -318,7 +340,15 @@ def _categorize_assignment(assignment: ClassworkAssignment) -> str:
     cw_type = (assignment.classwork.classwork_type or "").upper()
 
     # 1. Quarterly / exam signals (strongest priority)
-    if "QUARTERLY" in cat or "QUARTER" in cat or "PERIODIC" in cat or "EXAM" in cat or cw_type == "EXAM":
+    if (
+        "EXAM" in cat
+        or "QUARTERLY" in cat
+        or "QUARTER" in cat
+        or "PERIODIC" in cat
+        or "SUMMATIVE" in cat
+        or cw_type == "EXAM"
+        or (getattr(assignment.classwork, "exam_subtype", None) is not None)
+    ):
         return "quarterlyAssessment"
 
     # 2. Explicit written-work category name
@@ -335,6 +365,122 @@ def _categorize_assignment(assignment: ClassworkAssignment) -> str:
 
     # 5. Default: written work
     return "writtenWork"
+
+
+@dataclass
+class ExamSubsplitWeights:
+    sum1_weight: float = 0.30
+    sum2_weight: float = 0.30
+    term_weight: float = 0.40
+
+
+DEFAULT_EXAM_SUBSPLIT = ExamSubsplitWeights(
+    sum1_weight=0.30,
+    sum2_weight=0.30,
+    term_weight=0.40,
+)
+
+
+def _categorize_exam_subtype(assignment: ClassworkAssignment) -> str:
+    cw = assignment.classwork
+    subtype = (getattr(cw, "exam_subtype", None) or "").upper().strip()
+    if subtype in ("SUMMATIVE_1", "SUMMATIVE_2", "TERM_EXAM"):
+        return subtype
+
+    title = (cw.title or "").upper()
+    cat = (cw.classwork_category or "").upper()
+
+    # 1. Explicit Summative 1
+    if any(k in title or k in cat for k in ("SUMMATIVE 1", "SUMMATIVE_1", "SUMMATIVE ASSESSMENT 1", "SUMMATIVE TEST 1", "SUMMATIVE-1")):
+        return "SUMMATIVE_1"
+
+    # 2. Explicit Summative 2
+    if any(k in title or k in cat for k in ("SUMMATIVE 2", "SUMMATIVE_2", "SUMMATIVE ASSESSMENT 2", "SUMMATIVE TEST 2", "SUMMATIVE-2")):
+        return "SUMMATIVE_2"
+
+    # 3. Explicit Term Exam / Periodical Exam
+    if any(k in title or k in cat for k in ("TERM EXAM", "PERIODICAL EXAM", "QUARTERLY EXAM", "QUARTER EXAM", "TERM_EXAM", "PERIODICAL_EXAM", "FINAL EXAM")):
+        return "TERM_EXAM"
+
+    return "UNSPECIFIED_EXAM"
+
+
+def _compute_exam_ps(
+    exam_scores: list[float | None],
+    exam_assignments: list[ClassworkAssignment],
+    subsplit: ExamSubsplitWeights = DEFAULT_EXAM_SUBSPLIT,
+) -> tuple[float | None, float | None, float | None, float | None]:
+    """
+    Compute Major Exam percentage scores with 30/30/40 sub-split:
+    Returns (ps_sum1, ps_sum2, ps_term, ps_composite_exams).
+    If no exam assignments exist, returns (None, None, None, None) safely without zero division.
+    """
+    if not exam_assignments:
+        return None, None, None, None
+
+    sum1_pairs: list[tuple[float | None, ClassworkAssignment]] = []
+    sum2_pairs: list[tuple[float | None, ClassworkAssignment]] = []
+    term_pairs: list[tuple[float | None, ClassworkAssignment]] = []
+    unspecified_pairs: list[tuple[float | None, ClassworkAssignment]] = []
+
+    for score, asgn in zip(exam_scores, exam_assignments):
+        st = _categorize_exam_subtype(asgn)
+        if st == "SUMMATIVE_1":
+            sum1_pairs.append((score, asgn))
+        elif st == "SUMMATIVE_2":
+            sum2_pairs.append((score, asgn))
+        elif st == "TERM_EXAM":
+            term_pairs.append((score, asgn))
+        else:
+            unspecified_pairs.append((score, asgn))
+
+    # Chronological / sequence fallback for unclassified items
+    if unspecified_pairs:
+        for score, asgn in unspecified_pairs:
+            title = (asgn.classwork.title or "").upper()
+            if "SUMMATIVE" in title:
+                if not sum1_pairs:
+                    sum1_pairs.append((score, asgn))
+                elif not sum2_pairs:
+                    sum2_pairs.append((score, asgn))
+                else:
+                    sum2_pairs.append((score, asgn))
+            elif any(k in title for k in ("EXAM", "PERIODIC", "QUARTER", "TERM")):
+                term_pairs.append((score, asgn))
+            else:
+                # Chronological order: 1st created -> Summative 1 (30%), 2nd -> Summative 2 (30%), 3rd+ -> Term Exam (40%)
+                if not sum1_pairs:
+                    sum1_pairs.append((score, asgn))
+                elif not sum2_pairs:
+                    sum2_pairs.append((score, asgn))
+                else:
+                    term_pairs.append((score, asgn))
+
+    ps_sum1 = _category_ps([s for s, _ in sum1_pairs], [a for _, a in sum1_pairs]) if sum1_pairs else None
+    ps_sum2 = _category_ps([s for s, _ in sum2_pairs], [a for _, a in sum2_pairs]) if sum2_pairs else None
+    ps_term = _category_ps([s for s, _ in term_pairs], [a for _, a in term_pairs]) if term_pairs else None
+
+    # Dynamic normalization based on assigned exam components
+    active_weight = 0.0
+    weighted_sum = 0.0
+
+    if sum1_pairs:
+        active_weight += subsplit.sum1_weight
+        weighted_sum += subsplit.sum1_weight * (ps_sum1 or 0.0)
+
+    if sum2_pairs:
+        active_weight += subsplit.sum2_weight
+        weighted_sum += subsplit.sum2_weight * (ps_sum2 or 0.0)
+
+    if term_pairs:
+        active_weight += subsplit.term_weight
+        weighted_sum += subsplit.term_weight * (ps_term or 0.0)
+
+    if active_weight <= 0:
+        return None, None, None, None
+
+    composite_ps = round(weighted_sum / active_weight, 2)
+    return ps_sum1, ps_sum2, ps_term, composite_ps
 
 
 
@@ -357,10 +503,119 @@ def _category_ps(
     return round((total_earned / total_max) * 100, 2)
 
 
-# DepEd K-12 category weights (DO 8, s. 2015 – Grades 7-10)
-_WW_WEIGHT = 0.30
-_PT_WEIGHT = 0.50
-_QA_WEIGHT = 0.20
+# ── Dynamic Grading Weights Resolution ─────────────────────────────────────
+@dataclass
+class GradingWeights:
+    ww_weight: float
+    pt_weight: float
+    qa_weight: float
+    template_id: int | None = None
+    template_name: str | None = None
+
+
+# Fallback weights when no grading template is assigned (30% WW / 50% PT / 20% QA/Exams)
+DEFAULT_FALLBACK_WW_WEIGHT = 0.30
+DEFAULT_FALLBACK_PT_WEIGHT = 0.50
+DEFAULT_FALLBACK_QA_WEIGHT = 0.20
+
+FALLBACK_GRADING_WEIGHTS = GradingWeights(
+    ww_weight=DEFAULT_FALLBACK_WW_WEIGHT,
+    pt_weight=DEFAULT_FALLBACK_PT_WEIGHT,
+    qa_weight=DEFAULT_FALLBACK_QA_WEIGHT,
+)
+
+
+def _match_component_category(name: str) -> str | None:
+    """Classify a grading template component name into WW, PT, or QA."""
+    n = (name or "").upper().replace("-", " ").replace("_", " ")
+    if any(k in n for k in ("QUARTER", "EXAM", "PERIODIC", "QA", "ASSESSMENT", "TERM")):
+        return "QA"
+    if any(k in n for k in ("PERFORMANCE", "PROJECT", "ACTIVITY", "PT", "PRODUCT", "TASK")):
+        return "PT"
+    if any(k in n for k in ("WRITTEN", "SEATWORK", "QUIZ", "WW", "WORK")):
+        return "WW"
+    return None
+
+
+def resolve_subject_grading_weights(
+    db: Session,
+    subject_id: int,
+    academic_level_id: int | None = None,
+) -> GradingWeights:
+    """
+    Resolve grading component weights from the assigned GradingTemplate.
+    1. Looks up Subject.default_grading_template (by template ID or template_name).
+    2. Falls back to GradingTemplate linked directly to subject_id.
+    3. Falls back to GradingTemplate linked to academic_level_id (where subject_id is None).
+    4. Matches component names for WW, PT, and QA/Exams.
+    5. Normalizes weights so their sum equals 1.0 (100%).
+    6. If no valid template or components found, returns FALLBACK_GRADING_WEIGHTS.
+    """
+    subject = db.query(Subject).filter(Subject.subject_id == subject_id).first()
+    if not subject:
+        return FALLBACK_GRADING_WEIGHTS
+
+    template: GradingTemplate | None = None
+
+    # 1. Check Subject.default_grading_template
+    raw_tpl_ref = (subject.default_grading_template or "").strip()
+    if raw_tpl_ref:
+        if raw_tpl_ref.isdigit():
+            template = db.query(GradingTemplate).filter(
+                GradingTemplate.grading_template_id == int(raw_tpl_ref),
+                GradingTemplate.status == "active",
+            ).first()
+        if not template:
+            template = db.query(GradingTemplate).filter(
+                func.lower(GradingTemplate.template_name) == raw_tpl_ref.casefold(),
+                GradingTemplate.status == "active",
+            ).first()
+
+    # 2. Check GradingTemplate linked directly to subject_id
+    if not template:
+        template = db.query(GradingTemplate).filter(
+            GradingTemplate.subject_id == subject_id,
+            GradingTemplate.status == "active",
+        ).first()
+
+    # 3. Check GradingTemplate linked to academic_level_id
+    if not template and academic_level_id is not None:
+        template = db.query(GradingTemplate).filter(
+            GradingTemplate.academic_level_id == academic_level_id,
+            GradingTemplate.subject_id.is_(None),
+            GradingTemplate.status == "active",
+        ).first()
+
+    if not template or not template.components:
+        return FALLBACK_GRADING_WEIGHTS
+
+    # 4. Extract component weights
+    ww_raw = 0.0
+    pt_raw = 0.0
+    qa_raw = 0.0
+
+    for comp in template.components:
+        category = _match_component_category(comp.component_name)
+        comp_weight = float(comp.weight or 0.0)
+        if category == "WW":
+            ww_raw += comp_weight
+        elif category == "PT":
+            pt_raw += comp_weight
+        elif category == "QA":
+            qa_raw += comp_weight
+
+    total_weight = ww_raw + pt_raw + qa_raw
+    if total_weight <= 0:
+        return FALLBACK_GRADING_WEIGHTS
+
+    # Normalize weights so they sum to 1.0
+    return GradingWeights(
+        ww_weight=round(ww_raw / total_weight, 4),
+        pt_weight=round(pt_raw / total_weight, 4),
+        qa_weight=round(qa_raw / total_weight, 4),
+        template_id=template.grading_template_id,
+        template_name=template.template_name,
+    )
 
 
 def _deped_transmuted(initial_grade: float) -> float:
@@ -397,6 +652,24 @@ def _deped_transmuted(initial_grade: float) -> float:
     return 10.0  # fallback for ig == 0
 
 
+@dataclass
+class DepEdGradeResult:
+    ps_ww: float | None
+    ps_pt: float | None
+    ps_qa: float | None
+    initial_grade: float | None
+    transmuted_grade: float | None
+    ps_sum1: float | None = None
+    ps_sum2: float | None = None
+    ps_term: float | None = None
+
+    def __iter__(self):
+        return iter((self.ps_ww, self.ps_pt, self.ps_qa, self.initial_grade, self.transmuted_grade))
+
+    def __getitem__(self, item):
+        return (self.ps_ww, self.ps_pt, self.ps_qa, self.initial_grade, self.transmuted_grade)[item]
+
+
 def _deped_grade(
     written_scores: list[float | None],
     written_assignments: list[ClassworkAssignment],
@@ -404,26 +677,41 @@ def _deped_grade(
     performance_assignments: list[ClassworkAssignment],
     quarterly_scores: list[float | None],
     quarterly_assignments: list[ClassworkAssignment],
-) -> tuple[float | None, float | None, float | None, float | None, float | None]:
+    weights: GradingWeights | None = None,
+    exam_subsplit: ExamSubsplitWeights = DEFAULT_EXAM_SUBSPLIT,
+) -> DepEdGradeResult:
     """
     Compute DepEd K-12 grades (DO 8, s. 2015).
-    Returns (ps_written, ps_performance, ps_quarterly, initial_grade, transmuted_grade).
+    Returns DepEdGradeResult(ps_ww, ps_pt, ps_qa/ps_exams, initial_grade, transmuted_grade, ps_sum1, ps_sum2, ps_term).
+    Can be unpacked as 5-tuple (ps_ww, ps_pt, ps_qa, ig, tg) for backward compatibility.
     Any category with no assignments contributes 0 weighted score.
     """
+    if weights is None:
+        weights = FALLBACK_GRADING_WEIGHTS
+
     ps_ww = _category_ps(written_scores, written_assignments)
     ps_pt = _category_ps(performance_scores, performance_assignments)
-    ps_qa = _category_ps(quarterly_scores, quarterly_assignments)
+    ps_sum1, ps_sum2, ps_term, ps_qa = _compute_exam_ps(quarterly_scores, quarterly_assignments, exam_subsplit)
 
     has_any = ps_ww is not None or ps_pt is not None or ps_qa is not None
     if not has_any:
-        return None, None, None, None, None
+        return DepEdGradeResult(None, None, None, None, None, None, None, None)
 
-    ww_contrib = (ps_ww or 0.0) * _WW_WEIGHT
-    pt_contrib = (ps_pt or 0.0) * _PT_WEIGHT
-    qa_contrib = (ps_qa or 0.0) * _QA_WEIGHT
+    ww_contrib = (ps_ww or 0.0) * weights.ww_weight
+    pt_contrib = (ps_pt or 0.0) * weights.pt_weight
+    qa_contrib = (ps_qa or 0.0) * weights.qa_weight
     ig = round(ww_contrib + pt_contrib + qa_contrib, 2)
     tg = _deped_transmuted(ig)
-    return ps_ww, ps_pt, ps_qa, ig, tg
+    return DepEdGradeResult(
+        ps_ww=ps_ww,
+        ps_pt=ps_pt,
+        ps_qa=ps_qa,
+        initial_grade=ig,
+        transmuted_grade=tg,
+        ps_sum1=ps_sum1,
+        ps_sum2=ps_sum2,
+        ps_term=ps_term,
+    )
 
 
 

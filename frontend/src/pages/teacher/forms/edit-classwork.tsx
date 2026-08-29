@@ -206,6 +206,7 @@ export default function EditClassworkModal({
             instructions: editDraft.instructions.trim() || null,
             classwork_type: editDraft.classwork_type,
             classwork_category: editDraft.classwork_category || null,
+            exam_subtype: editDraft.exam_subtype || null,
             total_points: totalPoints,
             is_published: editDraft.is_published,
             show_scores: editDraft.show_scores,
@@ -371,10 +372,37 @@ export default function EditClassworkModal({
                     <Select.Item value="NONE">None</Select.Item>
                     <Select.Item value="WRITTEN_WORK">Written Works</Select.Item>
                     <Select.Item value="PERFORMANCE_TASK">Performance Task</Select.Item>
-                    <Select.Item value="QUARTERLY_ASSESSMENT">Quarterly Assessment</Select.Item>
+                    <Select.Item value="QUARTERLY_ASSESSMENT">Exams</Select.Item>
                   </Select.Content>
                 </Select>
               </label>
+
+              {(editDraft.classwork_category === "QUARTERLY_ASSESSMENT" || editDraft.classwork_category === "EXAMS") && (
+                <label className="block text-xs font-bold">
+                  Exam Sub-type
+                  <Select
+                    value={editDraft.exam_subtype || "SUMMATIVE_1"}
+                    onValueChange={(v) =>
+                      setEditDraft((current) => ({
+                        ...current,
+                        exam_subtype: v,
+                      }))
+                    }
+                  >
+                    <Select.Trigger
+                      disabled={isSavingEdit}
+                      className="mt-1 w-full h-10 border-2 border-black bg-white text-sm shadow-none"
+                    >
+                      <Select.Value placeholder="Select Sub-type" />
+                    </Select.Trigger>
+                    <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                      <Select.Item value="SUMMATIVE_1">Summative 1 (30%)</Select.Item>
+                      <Select.Item value="SUMMATIVE_2">Summative 2 (30%)</Select.Item>
+                      <Select.Item value="TERM_EXAM">Term Exam (40%)</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </label>
+              )}
               {!isReadingType(editDraft.classwork_type) && (
                 <label className="block text-xs font-bold">
                   Total points

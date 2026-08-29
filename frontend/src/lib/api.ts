@@ -590,7 +590,8 @@ export type GradebookCategoryHeader = {
 export type GradebookCategoryHeaderGroup = {
   writtenWork: GradebookCategoryHeader[];
   performanceTask: GradebookCategoryHeader[];
-  quarterlyAssessment: GradebookCategoryHeader[];
+  quarterlyAssessment?: GradebookCategoryHeader[];
+  exams?: GradebookCategoryHeader[];
 };
 
 export type StudentGradebookRow = {
@@ -599,10 +600,15 @@ export type StudentGradebookRow = {
   gender?: string | null;
   writtenWork: (number | null)[];
   performanceTask: (number | null)[];
-  quarterlyAssessment: (number | null)[];
+  quarterlyAssessment?: (number | null)[];
+  exams?: (number | null)[];
   ps_written?: number | null;
   ps_performance?: number | null;
   ps_quarterly?: number | null;
+  ps_exams?: number | null;
+  ps_summative_1?: number | null;
+  ps_summative_2?: number | null;
+  ps_term_exam?: number | null;
   initial_grade?: number | null;
   transmuted_grade?: number | null;
   total: string;
@@ -690,6 +696,7 @@ export async function getTeacherTermSummary(
 export type ActivityCreatePayload = {
   title: string;
   classwork_category: string;
+  exam_subtype?: string;
   total_points: number;
   class_id: number;
   subject_id: number;

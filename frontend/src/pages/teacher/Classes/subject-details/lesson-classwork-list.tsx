@@ -319,7 +319,7 @@ export default function LessonClassworkList({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <GraduationCap size={20} />
-                <h3 className="text-lg font-bold">Quarterly Assessments</h3>
+                <h3 className="text-lg font-bold">Exams</h3>
                 <Badge
                   variant="secondary"
                   size="sm"
@@ -337,13 +337,13 @@ export default function LessonClassworkList({
                   className="gap-2 border-black bg-[#F6E9B2] font-semibold shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#f0dd9a]"
                 >
                   <Plus size={15} />
-                  Add Assessment
+                  Add Exam
                 </Button>
               )}
             </div>
 
             <p className="text-xs font-medium text-gray-600">
-              Subject-level assessments spanning all lessons in this grading period.
+              Subject-level exams spanning all lessons in this grading period.
             </p>
 
             <div className="flex flex-col gap-2">

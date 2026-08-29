@@ -31,13 +31,13 @@ READINESS_ACTION = "Collect more graded evidence before generating a model-assis
 def map_classwork_category(classwork_type: str, classwork_category: str | None) -> str:
     if classwork_category:
         cat = classwork_category.upper()
-        if cat in {"PERIODICAL_EXAM", "PERIODICAL_ASSESSMENT", "QUARTERLY_ASSESSMENT"}:
+        if cat in {"EXAMS", "EXAM", "PERIODICAL_EXAM", "PERIODICAL_ASSESSMENT", "QUARTERLY_ASSESSMENT", "SUMMATIVE_1", "SUMMATIVE_2", "TERM_EXAM"}:
             return "QUARTERLY_ASSESSMENT"
         if cat in {"WRITTEN_WORK", "PERFORMANCE_TASK"}:
             return cat
 
     t = (classwork_type or "").upper()
-    if t in {"EXAM", "PERIODICAL_EXAM", "QUARTERLY_EXAM"}:
+    if t in {"EXAM", "PERIODICAL_EXAM", "QUARTERLY_EXAM", "SUMMATIVE"}:
         return "QUARTERLY_ASSESSMENT"
     elif t in {"ACTIVITY", "PROJECT"}:
         return "PERFORMANCE_TASK"
@@ -176,7 +176,7 @@ def _component_features(
 
     for assessment, score in assessment_rows:
         component = assessment.component_type
-        if component in {"PERIODICAL_EXAM", "PERIODICAL_ASSESSMENT"}:
+        if component in {"PERIODICAL_EXAM", "PERIODICAL_ASSESSMENT", "EXAMS", "EXAM", "SUMMATIVE_1", "SUMMATIVE_2", "TERM_EXAM"}:
             component = "QUARTERLY_ASSESSMENT"
         if component not in COMPONENT_FEATURES:
             continue

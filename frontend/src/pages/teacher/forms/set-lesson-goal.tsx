@@ -29,6 +29,7 @@ export default function AddClassworkScoreModal({
   onClose,
 }: AddClassworkScoreModalProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>(categoryName);
+  const [examSubtype, setExamSubtype] = useState<string>("SUMMATIVE_1");
   const [activityMode, setActivityMode] = useState<string>("MANUAL"); // MANUAL or ONLINE
   const [title, setTitle] = useState<string>("");
   const [maxScore, setMaxScore] = useState<string>("100");
@@ -60,7 +61,7 @@ export default function AddClassworkScoreModal({
   const mapCategoryToEnum = (cat: string): string => {
     if (cat.toLowerCase().includes("written")) return "WRITTEN_WORK";
     if (cat.toLowerCase().includes("performance")) return "PERFORMANCE_TASK";
-    if (cat.toLowerCase().includes("quarter")) return "QUARTERLY_ASSESSMENT";
+    if (cat.toLowerCase().includes("exam") || cat.toLowerCase().includes("quarter")) return "QUARTERLY_ASSESSMENT";
     return "WRITTEN_WORK";
   };
 
@@ -87,7 +88,7 @@ export default function AddClassworkScoreModal({
     }
 
     if (isQuarterly && selectedLessonIds.length === 0) {
-      setErrorMessage("Quarterly Assessment requires at least one lesson to be linked.");
+      setErrorMessage("Exams require at least one lesson to be linked.");
       return;
     }
 
@@ -96,6 +97,7 @@ export default function AddClassworkScoreModal({
       await createActivity({
         title: title.trim(),
         classwork_category: mapCategoryToEnum(selectedCategory),
+        exam_subtype: isQuarterly ? examSubtype : undefined,
         total_points: points,
         class_id: classId,
         subject_id: subjectId,
@@ -172,11 +174,29 @@ export default function AddClassworkScoreModal({
                 <Select.Group>
                   <Select.Item value="Written Works">Written Works</Select.Item>
                   <Select.Item value="Performance Tasks">Performance Tasks</Select.Item>
-                  <Select.Item value="Quarterly Assessment">Quarterly Assessment</Select.Item>
+                  <Select.Item value="Exams">Exams</Select.Item>
                 </Select.Group>
               </Select.Content>
             </Select>
           </div>
+
+          {isQuarterly && (
+            <div className="flex flex-col gap-1.5 w-full">
+              <label className="text-sm font-semibold">Exam Sub-type</label>
+              <Select value={examSubtype} onValueChange={(val) => setExamSubtype(val)}>
+                <Select.Trigger className="w-full">
+                  <Select.Value placeholder="Select Exam Sub-type" />
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Group>
+                    <Select.Item value="SUMMATIVE_1">Summative 1 (30%)</Select.Item>
+                    <Select.Item value="SUMMATIVE_2">Summative 2 (30%)</Select.Item>
+                    <Select.Item value="TERM_EXAM">Term Exam (40%)</Select.Item>
+                  </Select.Group>
+                </Select.Content>
+              </Select>
+            </div>
+          )}
 
           {/* Multi-Select Covered Lessons */}
           <div className="flex flex-col gap-1.5 w-full">
@@ -229,7 +249,7 @@ export default function AddClassworkScoreModal({
             )}
             {isQuarterly && (
               <p className="text-xs text-muted-foreground">
-                Select one or more lessons that this Quarterly Assessment covers.
+                Select one or more lessons that this Exam covers.
               </p>
             )}
           </div>

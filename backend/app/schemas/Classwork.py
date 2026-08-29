@@ -9,7 +9,8 @@ class ClassworkCreate(BaseModel):
     description: Optional[str] = None
     instructions: Optional[str] = None
     classwork_type: str  # READING, QUIZ, ASSIGNMENT, ACTIVITY
-    classwork_category: Optional[str] = None  # WRITTEN_WORK, PERFORMANCE_TASK, QUARTERLY_ASSESSMENT
+    classwork_category: Optional[str] = None  # WRITTEN_WORK, PERFORMANCE_TASK, QUARTERLY_ASSESSMENT, EXAMS
+    exam_subtype: Optional[str] = None  # SUMMATIVE_1, SUMMATIVE_2, TERM_EXAM
     activity_mode: Optional[str] = "ONLINE"  # ONLINE, MANUAL
     is_graded: Optional[bool] = True
     total_points: Optional[float] = 100
@@ -25,6 +26,7 @@ class ClassworkUpdate(BaseModel):
     instructions: Optional[str] = None
     classwork_type: Optional[str] = None
     classwork_category: Optional[str] = None
+    exam_subtype: Optional[str] = None
     activity_mode: Optional[str] = None
     is_graded: Optional[bool] = None
     total_points: Optional[float] = None
@@ -87,6 +89,7 @@ class ClassworkResponse(BaseModel):
     instructions: Optional[str]
     classwork_type: str
     classwork_category: Optional[str]
+    exam_subtype: Optional[str] = None
     activity_mode: Optional[str] = "ONLINE"
     is_graded: bool = True
     total_points: Optional[float]
@@ -126,6 +129,7 @@ class ClassworkAssignmentResponse(BaseModel):
     instructions: Optional[str]
     classwork_type: str
     classwork_category: Optional[str]
+    exam_subtype: Optional[str] = None
     activity_mode: Optional[str] = "ONLINE"
     is_graded: bool = True
     total_points: Optional[float]
