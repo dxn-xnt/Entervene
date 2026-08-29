@@ -1,5 +1,6 @@
 import {
   Archive,
+  ArrowLeft,
   Eye,
   FileText,
   Pencil,
@@ -25,7 +26,6 @@ import type {
 } from "@/types/classwork";
 import { Button } from "@/components/retroui/Button";
 import { Table } from "@/components/retroui/Table";
-import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import QuizAnalysisView from "./classworks/quiz-analysis-view";
 import EditClassworkModal from "./forms/edit-classwork";
@@ -284,67 +284,22 @@ export default function ClassworkView({
       <div className="@container/main flex flex-1 flex-col">
         <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
           <div className="flex flex-row gap-3 justify-between items-center">
-            <Breadcrumb>
-              <Breadcrumb.List>
-                <Breadcrumb.Item>
-                  <Breadcrumb.Link
-                    onClick={() => {
-                      closeStudentSubmission();
-                      onClose();
-                    }}
-                    className="cursor-pointer"
-                  >
-                    Classworks
-                  </Breadcrumb.Link>
-                </Breadcrumb.Item>
-
-                {selectedStudent ? (
-                  <>
-                    <Breadcrumb.Separator />
-                    <Breadcrumb.Item className="min-w-0">
-                      <Breadcrumb.Link
-                        onClick={closeStudentSubmission}
-                        className="cursor-pointer truncate max-w-[100px] sm:max-w-xs inline-block"
-                        title={selected.title}
-                      >
-                        {selected.title}
-                      </Breadcrumb.Link>
-                    </Breadcrumb.Item>
-                    <Breadcrumb.Separator />
-                    <Breadcrumb.Item className="min-w-0">
-                      <Breadcrumb.Page
-                        className="truncate max-w-[100px] sm:max-w-xs inline-block"
-                        title={selectedStudent.student_name}
-                      >
-                        {selectedStudent.student_name}
-                      </Breadcrumb.Page>
-                    </Breadcrumb.Item>
-                  </>
-                ) : (
-                  <>
-                    {selected.subject_name && (
-                      <>
-                        <Breadcrumb.Separator />
-                        <Breadcrumb.Item>
-                          <span className="text-muted-foreground font-semibold">
-                            {selected.subject_name}
-                          </span>
-                        </Breadcrumb.Item>
-                      </>
-                    )}
-                    <Breadcrumb.Separator />
-                    <Breadcrumb.Item className="min-w-0">
-                      <Breadcrumb.Page
-                        className="truncate max-w-md inline-block"
-                        title={selected.title}
-                      >
-                        {selected.title}
-                      </Breadcrumb.Page>
-                    </Breadcrumb.Item>
-                  </>
-                )}
-              </Breadcrumb.List>
-            </Breadcrumb>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (selectedStudent) {
+                  closeStudentSubmission();
+                } else {
+                  onClose();
+                }
+              }}
+              className="gap-2 border-2 border-black bg-white hover:bg-yellow-50 text-black font-bold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+            >
+              <ArrowLeft size={16} />
+              <span>Back</span>
+            </Button>
 
             {!selectedStudent && (
               <div className="flex items-center gap-2 flex-col lg:flex-row lg:flex-nowrap">

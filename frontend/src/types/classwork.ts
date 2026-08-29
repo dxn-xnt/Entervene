@@ -33,6 +33,7 @@ export type TeacherClasswork = {
   instructions?: string | null;
   classwork_type: ClassworkType;
   classwork_category?: string | null;
+  exam_subtype?: string | null;
   total_points?: number | null;
   is_published: boolean;
   show_scores: boolean;

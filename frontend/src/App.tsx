@@ -38,7 +38,6 @@ import ClassesPage from "./pages/teacher/classes";
 import TeacherClassDetail from "./pages/teacher/Classes/class-view";
 import AdvisoryClassDetail from "./pages/teacher/Classes/advisory-class-view";
 import ClassSections from "./pages/teacher/Classes/class-section";
-import SubjectDetails from "./pages/teacher/Classes/subject-details";
 import Subjects from "./pages/teacher/Classes/subjects";
 import TeacherClassworks from "./pages/teacher/classworks";
 // import TeacherLessons from "./pages/teacher/lessons";
@@ -122,7 +121,7 @@ const App = () => {
                 <Route path={routes.teacher.classDetail} element={<TeacherClassDetail />} />
                 <Route path={routes.teacher.advisoryClassDetail} element={<AdvisoryClassDetail />} />
                 <Route path={routes.teacher.classSubjects} element={<Subjects />} />
-                <Route path={routes.teacher.subjectDetail} element={<SubjectDetails />} />
+                <Route path={routes.teacher.subjectDetail} element={<TeacherClassDetail />} />
                 <Route path={routes.teacher.classworks} element={<TeacherClassworks />} />
                 <Route path={routes.teacher.createLesson} element={<CreateLesson />} />
                 {/* <Route path={routes.teacher.lessons} element={<TeacherLessons />} /> */}
