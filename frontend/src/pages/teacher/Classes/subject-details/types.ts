@@ -89,6 +89,8 @@ export type ClassworkDetail = {
   instructions?: string | null;
   classwork_type?: string | null;
   classwork_category?: string | null;
+  exam_subtype?: string | null;
+  activity_mode?: string | null;
   total_points?: number | null;
   due_date?: string | null;
   is_published: boolean;
