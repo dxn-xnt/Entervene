@@ -4,7 +4,7 @@ import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { useParams } from "react-router-dom";
-import { Ellipsis, Plus, Search, Download, ClipboardCheck } from "lucide-react";
+import { Ellipsis, Plus, Search, Download } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
@@ -13,7 +13,6 @@ import { Card } from "@/components/retroui/Card";
 import ViewGradeScoreModal from "./forms/view-grade-scores";
 import AddClassworkScoreModal from "./forms/add-classwork-score";
 import EnterManualScoresModal from "./forms/enter-manual-scores";
-import AttendanceModal from "./forms/attendance-modal";
 import { 
   getTeacherGradebook, 
   getTeacherAvailablePeriods,
@@ -64,7 +63,6 @@ const TeacherGradeView = () => {
   const [sortBy, setSortBy] = useState("name");
   const [refresh, setRefresh] = useState(0);
 
-  const [openAttendance, setOpenAttendance] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<{
     name: string;
     items: GradebookCategoryHeader[];
@@ -588,14 +586,6 @@ const TeacherGradeView = () => {
               </Breadcrumb>
 
               <div className="flex flex-row gap-2 ml-auto">
-                <Button
-                  variant={"outline"}
-                  className="whitespace-nowrap"
-                  onClick={() => setOpenAttendance(true)}
-                  disabled={isViewOnly}
-                >
-                  <ClipboardCheck className="size-4 mr-2" /> Check Attendance
-                </Button>
                 <Button variant={"outline"} className="whitespace-nowrap" onClick={handleExportCSV}>
                   <Download className="size-4 mr-2" /> Export Grades
                 </Button>
@@ -682,12 +672,6 @@ const TeacherGradeView = () => {
         </div>
       </div>
 
-      <Dialog open={openAttendance} onOpenChange={setOpenAttendance}>
-        <AttendanceModal
-          sectionName={displaySectionName}
-          students={filtered.map((s) => ({ student_id: s.student_id, name: s.name }))}
-        />
-      </Dialog>
 
       <Dialog
         open={selectedCategory !== null}
