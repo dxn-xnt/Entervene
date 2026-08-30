@@ -88,10 +88,10 @@ interface SubjectClassworkTabProps {
 }
 
 export default function SubjectClassworkTab({
-  classId,
+  classId: _classId,
   subjectId,
-  subjectName,
-  sectionName,
+  subjectName: _subjectName,
+  sectionName: _sectionName,
 }: SubjectClassworkTabProps) {
   const numericSubjectId = Number(subjectId);
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
@@ -22,11 +22,18 @@ from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
+from app.models.academic.GradeSubmissionLog import GradeSubmissionLog
+from app.models.academic.TeacherSubstitution import TeacherSubstitution
+from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.schemas.StudentRecord import (
+    BulkSendGradesRequest,
+    BulkSendGradesToAdviserResponse,
     ClassworkCategoryHeader,
     GradebookCategoryHeaderGroup,
+    SendGradeToAdviserItemResponse,
+    SendStudentGradeRequest,
     StudentClassworkResult,
     StudentGradebookResponse,
     StudentGradebookRow,
@@ -40,22 +47,57 @@ from app.schemas.StudentRecord import (
     StudentRecordScope,
     StudentRecordSummary,
     TermGradeSummaryResponse,
+    TermGradeSummaryRow,
     TermGradeSummaryScope,
     TermPeriodInfo,
-    TermGradeSummaryRow,
 )
 from app.services.prediction.PredictionOutcomeService import evaluate_outcomes_for_finalized_period_grade
 from app.services.classes.ClassQueryService import _student_full_name
-
-
-from app.models.academic.TeacherSubstitution import TeacherSubstitution
-from app.models.people.AcademicStaff import AcademicStaff
 from app.services.academic.SubstitutionService import SubstitutionService, _staff_full_name
 
 
 COMPLETED_STATUSES = {"submitted", "graded", "late"}
 GRADED_STATUS = "graded"
 READING_TYPE = "READING"
+
+# Days before academic period end_date when grade submission to adviser opens.
+# Configurable: Flagged as candidate for per-school or system-level administrative settings.
+GRADE_SUBMISSION_WINDOW_DAYS = 7
+
+
+def _validate_grade_submission_timing(db: Session, academic_period_id: int) -> None:
+    """Validate that sending grades to adviser is within the allowed time window.
+
+    Allowed starting GRADE_SUBMISSION_WINDOW_DAYS before AcademicPeriod.end_date,
+    and closes GRADE_SUBMISSION_WINDOW_DAYS after AcademicPeriod.end_date.
+    """
+    period = db.get(AcademicPeriod, academic_period_id)
+    if not period or not period.end_date:
+        return
+
+    end_d = period.end_date
+    if isinstance(end_d, str):
+        end_d = date.fromisoformat(end_d)
+    elif isinstance(end_d, datetime):
+        end_d = end_d.date()
+
+    today = date.today()
+    allowed_start_date = end_d - timedelta(days=GRADE_SUBMISSION_WINDOW_DAYS)
+    allowed_end_date = end_d + timedelta(days=GRADE_SUBMISSION_WINDOW_DAYS)
+
+    if today < allowed_start_date:
+        formatted_date = allowed_start_date.isoformat()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Grades can be sent to the adviser starting {formatted_date}.",
+        )
+
+    if today > allowed_end_date:
+        formatted_date = allowed_end_date.isoformat()
+        raise HTTPException(
+            status_code=400,
+            detail=f"The submission window for this term closed on {formatted_date}. Contact an administrator if this grade needs correction.",
+        )
 
 
 def _to_decimal(value: Any, field_name: str) -> Decimal:
@@ -76,6 +118,7 @@ class TeacherRecordScope:
     is_substitution: bool = False
     substitute_name: str | None = None
     original_teacher_name: str | None = None
+    original_teacher_staff_id: str | None = None
     acting_staff_id: str | None = None
 
 
@@ -233,7 +276,7 @@ def teacher_student_gradebook(
             continue
         cat_key = _categorize_assignment(assignment)
         header = ClassworkCategoryHeader(
-            id=assignment.classwork_assignment_id,
+            id=assignment.classwork.classwork_id,
             title=assignment.classwork.title,
             maxScore=float(assignment.classwork.total_points or 100),
         )
@@ -260,6 +303,18 @@ def teacher_student_gradebook(
         subject_id=scope.subject.subject_id,
         academic_level_id=getattr(scope.class_, "academic_level_id", None),
     )
+
+    # Pre-fetch existing finalized period grades for all students in this scope
+    existing_pgs = (
+        db.query(StudentPeriodGrade)
+        .filter(
+            StudentPeriodGrade.class_id == scope.class_.class_id,
+            StudentPeriodGrade.subject_id == scope.subject.subject_id,
+            StudentPeriodGrade.academic_period_id == scope.period.academic_period_id,
+        )
+        .all()
+    )
+    pg_map = {pg.student_id: pg for pg in existing_pgs}
 
     for student in students:
         student_subs = submissions_by_student.get(student.student_id, {})
@@ -299,6 +354,15 @@ def teacher_student_gradebook(
         else:
             display_total = "0"
 
+        pg = pg_map.get(student.student_id)
+        finalized_by_name = None
+        if pg and pg.finalized_by:
+            finalized_by_name = _staff_full_name(pg.finalized_by)
+        elif pg and pg.finalized_by_staff_id:
+            staff_rec = db.get(AcademicStaff, pg.finalized_by_staff_id)
+            if staff_rec:
+                finalized_by_name = _staff_full_name(staff_rec)
+
         student_rows.append(
             StudentGradebookRow(
                 student_id=str(student.student_id),
@@ -318,6 +382,11 @@ def teacher_student_gradebook(
                 initial_grade=ig,
                 transmuted_grade=tg,
                 total=display_total,
+                period_grade_id=pg.period_grade_id if pg else None,
+                is_finalized=bool(pg.is_finalized) if pg else False,
+                finalized_at=pg.finalized_at if pg else None,
+                finalized_by_staff_id=pg.finalized_by_staff_id if pg else None,
+                finalized_by_name=finalized_by_name,
             )
         )
 
@@ -595,8 +664,9 @@ def resolve_subject_grading_weights(
     qa_raw = 0.0
 
     for comp in template.components:
-        category = _match_component_category(comp.component_name)
-        comp_weight = float(comp.weight or 0.0)
+        comp_name = getattr(comp, "component_name", "")
+        category = _match_component_category(comp_name)
+        comp_weight = float(getattr(comp, "weight", 0.0) or 0.0)
         if category == "WW":
             ww_raw += comp_weight
         elif category == "PT":
@@ -731,7 +801,7 @@ def finalize_student_period_grade(
             if scope.is_view_only:
                 raise HTTPException(status_code=403, detail="You are currently on leave for this class/subject. Records are read-only.")
         except HTTPException as e:
-            if e.status_code == 403 and "leave" in str(e.detail).lower():
+            if e.status_code == 403 and "leave" in (e.detail or "").lower():
                 raise e
             pass
 
@@ -776,6 +846,512 @@ def finalize_student_period_grade(
         prediction_outcomes_evaluated_count=outcome_summary["evaluated_count"],
         prediction_outcomes_skipped_count=outcome_summary["skipped_count"],
         prediction_outcomes_message=outcome_summary.get("reason"),
+    )
+
+
+def _compute_student_period_components(
+    student: Student,
+    written_assignments: list[ClassworkAssignment],
+    performance_assignments: list[ClassworkAssignment],
+    quarterly_assignments: list[ClassworkAssignment],
+    submissions_by_student: dict[UUID, dict[int, StudentSubmission]],
+    weights: GradingWeights,
+) -> dict[str, Any]:
+    student_subs = submissions_by_student.get(student.student_id, {})
+
+    def _extract_score(subs: dict, asgn_id: int) -> float | None:
+        sub = subs.get(asgn_id)
+        if sub is not None and sub.grade is not None:
+            return float(sub.grade)
+        return None
+
+    written_scores = [
+        _extract_score(student_subs, asgn.classwork_assignment_id)
+        for asgn in written_assignments
+    ]
+    performance_scores = [
+        _extract_score(student_subs, asgn.classwork_assignment_id)
+        for asgn in performance_assignments
+    ]
+    quarterly_scores = [
+        _extract_score(student_subs, asgn.classwork_assignment_id)
+        for asgn in quarterly_assignments
+    ]
+
+    grade_res = _deped_grade(
+        written_scores, written_assignments,
+        performance_scores, performance_assignments,
+        quarterly_scores, quarterly_assignments,
+        weights=weights,
+    )
+    return {
+        "written_scores": written_scores,
+        "performance_scores": performance_scores,
+        "quarterly_scores": quarterly_scores,
+        "ps_ww": grade_res.ps_ww,
+        "ps_pt": grade_res.ps_pt,
+        "ps_qa": grade_res.ps_qa,
+        "ps_sum1": grade_res.ps_sum1,
+        "ps_sum2": grade_res.ps_sum2,
+        "ps_term": grade_res.ps_term,
+        "initial_grade": grade_res.initial_grade,
+        "transmuted_grade": grade_res.transmuted_grade,
+    }
+
+
+def send_student_grade_to_adviser(
+    db: Session,
+    staff_id: str,
+    class_id: int,
+    subject_id: int,
+    student_id: UUID,
+    payload: SendStudentGradeRequest,
+) -> SendGradeToAdviserItemResponse:
+    scope = _teacher_scope(db, staff_id, class_id, subject_id, payload.academic_period_id)
+    if scope.is_view_only:
+        raise HTTPException(
+            status_code=403,
+            detail="You are currently on leave for this class/subject. Records are read-only.",
+        )
+
+    _validate_grade_submission_timing(db, payload.academic_period_id)
+
+    student = db.get(Student, student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    enrollment = (
+        db.query(StudentClass)
+        .filter(
+            StudentClass.student_id == student_id,
+            StudentClass.class_id == class_id,
+            StudentClass.enrollment_status == "enrolled",
+        )
+        .first()
+    )
+    if not enrollment:
+        raise HTTPException(status_code=400, detail="Student is not actively enrolled in this class")
+
+    assignments = _classwork_assignments(db, scope)
+    written_assignments: list[ClassworkAssignment] = []
+    performance_assignments: list[ClassworkAssignment] = []
+    quarterly_assignments: list[ClassworkAssignment] = []
+    for assignment in assignments:
+        cw = assignment.classwork
+        if not getattr(cw, "is_graded", True) or (getattr(cw, "classwork_type", "") or "").upper() == READING_TYPE:
+            continue
+        cat_key = _categorize_assignment(assignment)
+        if cat_key == "writtenWork":
+            written_assignments.append(assignment)
+        elif cat_key == "performanceTask":
+            performance_assignments.append(assignment)
+        else:
+            quarterly_assignments.append(assignment)
+
+    submissions_by_student = _submissions_by_student(db, assignments)
+    weights = resolve_subject_grading_weights(
+        db=db,
+        subject_id=scope.subject.subject_id,
+        academic_level_id=getattr(scope.class_, "academic_level_id", None),
+    )
+
+    comp_res = _compute_student_period_components(
+        student,
+        written_assignments, performance_assignments, quarterly_assignments,
+        submissions_by_student, weights,
+    )
+
+    ig = comp_res["initial_grade"]
+    tg = comp_res["transmuted_grade"]
+
+    # Identify missing/incomplete components for non-blocking warnings
+    incomplete_components: list[str] = []
+    if weights.ww_weight > 0 and (not written_assignments or all(s is None for s in comp_res["written_scores"])):
+        incomplete_components.append("written_work")
+    if weights.pt_weight > 0 and (not performance_assignments or all(s is None for s in comp_res["performance_scores"])):
+        incomplete_components.append("performance_task")
+    if weights.qa_weight > 0 and (not quarterly_assignments or all(s is None for s in comp_res["quarterly_scores"])):
+        incomplete_components.append("quarterly_assessment")
+
+    computed_tg = tg if tg is not None else (ig if ig is not None else 0.0)
+
+    # 2. Recompute-vs-display conflict check
+    if payload.expected_transmuted_grade is not None:
+        expected_tg = round(payload.expected_transmuted_grade, 2)
+        actual_tg = round(computed_tg, 2)
+        if abs(actual_tg - expected_tg) > 0.01 and not payload.force_resend:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Grade conflict: Recomputed transmuted grade ({actual_tg}) differs from last displayed ({expected_tg}). Please refresh before sending.",
+            )
+
+    if payload.expected_final_period_grade is not None and payload.final_period_grade is None:
+        expected_fpg = round(payload.expected_final_period_grade, 2)
+        actual_fpg = round(computed_tg, 2)
+        if abs(actual_fpg - expected_fpg) > 0.01 and not payload.force_resend:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Grade conflict: Recomputed final grade ({actual_fpg}) differs from last displayed ({expected_fpg}). Please refresh before sending.",
+            )
+
+    final_grade_val = payload.final_period_grade if payload.final_period_grade is not None else computed_tg
+
+    # Check latest submission log for unchanged detection
+    latest_log = (
+        db.query(GradeSubmissionLog)
+        .filter(
+            GradeSubmissionLog.student_id == student_id,
+            GradeSubmissionLog.class_id == class_id,
+            GradeSubmissionLog.subject_id == subject_id,
+            GradeSubmissionLog.academic_period_id == payload.academic_period_id,
+        )
+        .order_by(GradeSubmissionLog.submitted_at.desc())
+        .first()
+    )
+
+    status = "newly_sent"
+    if latest_log is not None:
+        if latest_log.final_period_grade is not None and abs(float(latest_log.final_period_grade) - float(final_grade_val)) < 0.01 and not payload.force_resend:
+            status = "unchanged"
+        else:
+            status = "updated"
+
+    # 3. Idempotent Upsert into StudentPeriodGrade
+    period_grade = (
+        db.query(StudentPeriodGrade)
+        .filter(
+            StudentPeriodGrade.student_id == student_id,
+            StudentPeriodGrade.class_id == class_id,
+            StudentPeriodGrade.subject_id == subject_id,
+            StudentPeriodGrade.academic_period_id == payload.academic_period_id,
+        )
+        .first()
+    )
+
+    now = datetime.now(timezone.utc)
+    acting_staff = db.get(AcademicStaff, staff_id)
+    acting_staff_name = _staff_full_name(acting_staff) if acting_staff else staff_id
+
+    if period_grade is None:
+        period_grade = StudentPeriodGrade(
+            student_id=student_id,
+            class_id=class_id,
+            subject_id=subject_id,
+            academic_period_id=payload.academic_period_id,
+            entered_by_staff_id=scope.original_teacher_staff_id or staff_id,
+        )
+        db.add(period_grade)
+    else:
+        if not period_grade.entered_by_staff_id:
+            period_grade.entered_by_staff_id = scope.original_teacher_staff_id or staff_id
+
+    period_grade.written_work_percent = _to_decimal(comp_res["ps_ww"], "written_work_percent") if comp_res["ps_ww"] is not None else None
+    period_grade.performance_task_percent = _to_decimal(comp_res["ps_pt"], "performance_task_percent") if comp_res["ps_pt"] is not None else None
+    period_grade.quarterly_assessment_percent = _to_decimal(comp_res["ps_qa"], "quarterly_assessment_percent") if comp_res["ps_qa"] is not None else None
+    period_grade.initial_grade = _to_decimal(ig, "initial_grade") if ig is not None else None
+    period_grade.transmuted_grade = _to_decimal(tg, "transmuted_grade") if tg is not None else None
+    period_grade.final_period_grade = _to_decimal(final_grade_val, "final_period_grade")
+    period_grade.is_finalized = True
+    period_grade.finalized_at = now
+    period_grade.finalized_by_staff_id = staff_id
+    if payload.remarks:
+        period_grade.remarks = payload.remarks
+
+    db.flush()
+
+    # 4. Append-only GradeSubmissionLog entry
+    sub_log = GradeSubmissionLog(
+        student_period_grade_id=period_grade.period_grade_id,
+        student_id=student_id,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=payload.academic_period_id,
+        written_work_percent=period_grade.written_work_percent,
+        performance_task_percent=period_grade.performance_task_percent,
+        quarterly_assessment_percent=period_grade.quarterly_assessment_percent,
+        initial_grade=period_grade.initial_grade,
+        transmuted_grade=period_grade.transmuted_grade,
+        final_period_grade=period_grade.final_period_grade,
+        submitted_by_staff_id=staff_id,
+        submitted_at=now,
+        submission_type="single",
+        remarks=payload.remarks,
+    )
+    db.add(sub_log)
+    db.flush()
+
+    # 5. Trigger ML outcome evaluation
+    evaluate_outcomes_for_finalized_period_grade(db, period_grade.period_grade_id, commit=False)
+    db.commit()
+    db.refresh(period_grade)
+    db.refresh(sub_log)
+
+    return SendGradeToAdviserItemResponse(
+        student_id=str(student_id),
+        name=_student_name(student),
+        period_grade_id=period_grade.period_grade_id,
+        log_id=sub_log.id,
+        written_work_percent=float(period_grade.written_work_percent) if period_grade.written_work_percent is not None else None,
+        performance_task_percent=float(period_grade.performance_task_percent) if period_grade.performance_task_percent is not None else None,
+        quarterly_assessment_percent=float(period_grade.quarterly_assessment_percent) if period_grade.quarterly_assessment_percent is not None else None,
+        initial_grade=float(period_grade.initial_grade) if period_grade.initial_grade is not None else None,
+        transmuted_grade=float(period_grade.transmuted_grade) if period_grade.transmuted_grade is not None else None,
+        final_period_grade=float(period_grade.final_period_grade) if period_grade.final_period_grade is not None else None,
+        is_finalized=period_grade.is_finalized,
+        finalized_at=period_grade.finalized_at,
+        finalized_by_staff_id=period_grade.finalized_by_staff_id,
+        finalized_by_name=acting_staff_name,
+        status=status,
+        message="Grade sent to adviser with missing component warnings" if incomplete_components else ("Grade already up to date" if status == "unchanged" else "Grade transmitted to adviser"),
+        incomplete_components=incomplete_components,
+    )
+
+
+def bulk_send_grades_to_adviser(
+    db: Session,
+    staff_id: str,
+    class_id: int,
+    subject_id: int,
+    academic_period_id: int,
+    payload: BulkSendGradesRequest,
+) -> BulkSendGradesToAdviserResponse:
+    scope = _teacher_scope(db, staff_id, class_id, subject_id, academic_period_id)
+    if scope.is_view_only:
+        raise HTTPException(
+            status_code=403,
+            detail="You are currently on leave for this class/subject. Records are read-only.",
+        )
+
+    _validate_grade_submission_timing(db, academic_period_id)
+
+    students = (
+        db.query(Student)
+        .join(StudentClass, StudentClass.student_id == Student.student_id)
+        .filter(
+            StudentClass.class_id == class_id,
+            StudentClass.enrollment_status == "enrolled",
+        )
+        .order_by(Student.last_name.asc(), Student.first_name.asc())
+        .all()
+    )
+
+    assignments = _classwork_assignments(db, scope)
+    written_assignments: list[ClassworkAssignment] = []
+    performance_assignments: list[ClassworkAssignment] = []
+    quarterly_assignments: list[ClassworkAssignment] = []
+    for assignment in assignments:
+        cw = assignment.classwork
+        if not getattr(cw, "is_graded", True) or (getattr(cw, "classwork_type", "") or "").upper() == READING_TYPE:
+            continue
+        cat_key = _categorize_assignment(assignment)
+        if cat_key == "writtenWork":
+            written_assignments.append(assignment)
+        elif cat_key == "performanceTask":
+            performance_assignments.append(assignment)
+        else:
+            quarterly_assignments.append(assignment)
+
+    submissions_by_student = _submissions_by_student(db, assignments)
+    weights = resolve_subject_grading_weights(
+        db=db,
+        subject_id=scope.subject.subject_id,
+        academic_level_id=getattr(scope.class_, "academic_level_id", None),
+    )
+
+    existing_pgs = (
+        db.query(StudentPeriodGrade)
+        .filter(
+            StudentPeriodGrade.class_id == class_id,
+            StudentPeriodGrade.subject_id == subject_id,
+            StudentPeriodGrade.academic_period_id == academic_period_id,
+        )
+        .all()
+    )
+    pg_map = {pg.student_id: pg for pg in existing_pgs}
+
+    latest_logs_query = (
+        db.query(GradeSubmissionLog)
+        .filter(
+            GradeSubmissionLog.class_id == class_id,
+            GradeSubmissionLog.subject_id == subject_id,
+            GradeSubmissionLog.academic_period_id == academic_period_id,
+        )
+        .order_by(GradeSubmissionLog.submitted_at.desc())
+        .all()
+    )
+    latest_log_map: dict[UUID, GradeSubmissionLog] = {}
+    for log in latest_logs_query:
+        if log.student_id not in latest_log_map:
+            latest_log_map[log.student_id] = log
+
+    now = datetime.now(timezone.utc)
+    acting_staff = db.get(AcademicStaff, staff_id)
+    acting_staff_name = _staff_full_name(acting_staff) if acting_staff else staff_id
+
+    entries: list[SendGradeToAdviserItemResponse] = []
+    newly_sent_count = 0
+    unchanged_skipped_count = 0
+    incomplete_warning_count = 0
+    modified_pg_ids: list[int] = []
+
+    for student in students:
+        sname = _student_name(student)
+        sid_str = str(student.student_id)
+
+        comp_res = _compute_student_period_components(
+            student,
+            written_assignments, performance_assignments, quarterly_assignments,
+            submissions_by_student, weights,
+        )
+
+        ig = comp_res["initial_grade"]
+        tg = comp_res["transmuted_grade"]
+
+        incomplete_components: list[str] = []
+        if weights.ww_weight > 0 and (not written_assignments or all(s is None for s in comp_res["written_scores"])):
+            incomplete_components.append("written_work")
+        if weights.pt_weight > 0 and (not performance_assignments or all(s is None for s in comp_res["performance_scores"])):
+            incomplete_components.append("performance_task")
+        if weights.qa_weight > 0 and (not quarterly_assignments or all(s is None for s in comp_res["quarterly_scores"])):
+            incomplete_components.append("quarterly_assessment")
+
+        if incomplete_components:
+            incomplete_warning_count += 1
+
+        computed_tg = tg if tg is not None else (ig if ig is not None else 0.0)
+
+        # Check stale-data conflict against expected_student_grades
+        if payload.expected_student_grades and sid_str in payload.expected_student_grades:
+            expected_tg = round(payload.expected_student_grades[sid_str], 2)
+            actual_tg = round(computed_tg, 2)
+            if abs(actual_tg - expected_tg) > 0.01 and not payload.force_resend_all:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Grade conflict for student {sname}: recomputed grade is {actual_tg}, but expected {expected_tg}. Please refresh before sending.",
+                )
+
+        final_grade_val = computed_tg
+        latest_log = latest_log_map.get(student.student_id)
+
+        # Check if unchanged
+        if latest_log is not None and not payload.force_resend_all:
+            if latest_log.final_period_grade is not None and abs(float(latest_log.final_period_grade) - float(final_grade_val)) < 0.01:
+                unchanged_skipped_count += 1
+                pg = pg_map.get(student.student_id)
+                entries.append(
+                    SendGradeToAdviserItemResponse(
+                        student_id=sid_str,
+                        name=sname,
+                        period_grade_id=pg.period_grade_id if pg else None,
+                        log_id=latest_log.id,
+                        written_work_percent=float(latest_log.written_work_percent) if latest_log.written_work_percent is not None else None,
+                        performance_task_percent=float(latest_log.performance_task_percent) if latest_log.performance_task_percent is not None else None,
+                        quarterly_assessment_percent=float(latest_log.quarterly_assessment_percent) if latest_log.quarterly_assessment_percent is not None else None,
+                        initial_grade=float(latest_log.initial_grade) if latest_log.initial_grade is not None else None,
+                        transmuted_grade=float(latest_log.transmuted_grade) if latest_log.transmuted_grade is not None else None,
+                        final_period_grade=float(latest_log.final_period_grade) if latest_log.final_period_grade is not None else None,
+                        is_finalized=True,
+                        finalized_at=latest_log.submitted_at,
+                        finalized_by_staff_id=latest_log.submitted_by_staff_id,
+                        finalized_by_name=acting_staff_name,
+                        status="unchanged",
+                        incomplete_components=incomplete_components,
+                    )
+                )
+                continue
+
+        # Transmit/update student
+        pg = pg_map.get(student.student_id)
+        is_update = pg is not None
+        if pg is None:
+            pg = StudentPeriodGrade(
+                student_id=student.student_id,
+                class_id=class_id,
+                subject_id=subject_id,
+                academic_period_id=academic_period_id,
+                entered_by_staff_id=scope.original_teacher_staff_id or staff_id,
+            )
+            db.add(pg)
+            pg_map[student.student_id] = pg
+        else:
+            if not pg.entered_by_staff_id:
+                pg.entered_by_staff_id = scope.original_teacher_staff_id or staff_id
+
+        pg.written_work_percent = _to_decimal(comp_res["ps_ww"], "written_work_percent") if comp_res["ps_ww"] is not None else None
+        pg.performance_task_percent = _to_decimal(comp_res["ps_pt"], "performance_task_percent") if comp_res["ps_pt"] is not None else None
+        pg.quarterly_assessment_percent = _to_decimal(comp_res["ps_qa"], "quarterly_assessment_percent") if comp_res["ps_qa"] is not None else None
+        pg.initial_grade = _to_decimal(ig, "initial_grade") if ig is not None else None
+        pg.transmuted_grade = _to_decimal(tg, "transmuted_grade") if tg is not None else None
+        pg.final_period_grade = _to_decimal(final_grade_val, "final_period_grade")
+        pg.is_finalized = True
+        pg.finalized_at = now
+        pg.finalized_by_staff_id = staff_id
+        if payload.remarks:
+            pg.remarks = payload.remarks
+
+        db.flush()
+        modified_pg_ids.append(pg.period_grade_id)
+
+        sub_log = GradeSubmissionLog(
+            student_period_grade_id=pg.period_grade_id,
+            student_id=student.student_id,
+            class_id=class_id,
+            subject_id=subject_id,
+            academic_period_id=academic_period_id,
+            written_work_percent=pg.written_work_percent,
+            performance_task_percent=pg.performance_task_percent,
+            quarterly_assessment_percent=pg.quarterly_assessment_percent,
+            initial_grade=pg.initial_grade,
+            transmuted_grade=pg.transmuted_grade,
+            final_period_grade=pg.final_period_grade,
+            submitted_by_staff_id=staff_id,
+            submitted_at=now,
+            submission_type="bulk",
+            remarks=payload.remarks,
+        )
+        db.add(sub_log)
+        db.flush()
+
+        newly_sent_count += 1
+        entries.append(
+            SendGradeToAdviserItemResponse(
+                student_id=sid_str,
+                name=sname,
+                period_grade_id=pg.period_grade_id,
+                log_id=sub_log.id,
+                written_work_percent=float(pg.written_work_percent) if pg.written_work_percent is not None else None,
+                performance_task_percent=float(pg.performance_task_percent) if pg.performance_task_percent is not None else None,
+                quarterly_assessment_percent=float(pg.quarterly_assessment_percent) if pg.quarterly_assessment_percent is not None else None,
+                initial_grade=float(pg.initial_grade) if pg.initial_grade is not None else None,
+                transmuted_grade=float(pg.transmuted_grade) if pg.transmuted_grade is not None else None,
+                final_period_grade=float(pg.final_period_grade) if pg.final_period_grade is not None else None,
+                is_finalized=True,
+                finalized_at=now,
+                finalized_by_staff_id=staff_id,
+                finalized_by_name=acting_staff_name,
+                status="updated" if is_update else "newly_sent",
+                incomplete_components=incomplete_components,
+            )
+        )
+
+    for pid in modified_pg_ids:
+        evaluate_outcomes_for_finalized_period_grade(db, pid, commit=False)
+
+    db.commit()
+
+    return BulkSendGradesToAdviserResponse(
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=academic_period_id,
+        total_students=len(students),
+        newly_sent_count=newly_sent_count,
+        unchanged_skipped_count=unchanged_skipped_count,
+        incomplete_skipped_count=0,
+        incomplete_warning_count=incomplete_warning_count,
+        finalized_at=now,
+        finalized_by_staff_id=staff_id,
+        finalized_by_name=acting_staff_name,
+        entries=entries,
     )
 
 
@@ -827,6 +1403,7 @@ def _teacher_scope(
             is_substitution=False,
             substitute_name=sub_name,
             original_teacher_name=None,
+            original_teacher_staff_id=staff_id,
             acting_staff_id=staff_id,
         )
 
@@ -864,6 +1441,7 @@ def _teacher_scope(
                 is_substitution=True,
                 substitute_name=None,
                 original_teacher_name=_staff_full_name(orig_staff),
+                original_teacher_staff_id=orig_staff.staff_id,
                 acting_staff_id=staff_id,
             )
 
@@ -954,7 +1532,18 @@ def _submissions_by_student(
     )
     grouped: dict[UUID, dict[int, StudentSubmission]] = {}
     for submission in submissions:
-        grouped.setdefault(submission.student_id, {})[submission.classwork_assignment_id] = submission
+        sid = submission.student_id
+        asgn_id = submission.classwork_assignment_id
+        existing = grouped.setdefault(sid, {}).get(asgn_id)
+        if existing is None:
+            grouped[sid][asgn_id] = submission
+        elif submission.grade is not None and existing.grade is None:
+            grouped[sid][asgn_id] = submission
+        elif submission.grade is not None and existing.grade is not None:
+            sub_ts = submission.graded_at or submission.submitted_at or submission.created_at
+            ex_ts = existing.graded_at or existing.submitted_at or existing.created_at
+            if sub_ts and ex_ts and sub_ts > ex_ts:
+                grouped[sid][asgn_id] = submission
     return grouped
 
 

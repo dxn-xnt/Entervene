@@ -90,23 +90,48 @@ def create_activity(db: Session, staff_id: str, payload: ActivityCreateRequest):
     }
 
 
-def get_activity_scores(db: Session, staff_id: str, activity_id: int, class_id: int) -> ActivityScoresResponse:
+def _resolve_activity_and_assignment(
+    db: Session,
+    staff_id: str,
+    activity_id: int,
+    class_id: int,
+) -> tuple[Classwork, ClassworkAssignment]:
+    # 1. Try treating activity_id as Classwork.classwork_id
     classwork = db.query(Classwork).filter(Classwork.classwork_id == activity_id).first()
-    if not classwork:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    _verify_teacher_scope(db, staff_id, class_id, classwork.subject_id)
-
-    assignment = (
-        db.query(ClassworkAssignment)
-        .filter(
-            ClassworkAssignment.classwork_id == activity_id,
-            ClassworkAssignment.class_id == class_id,
+    assignment = None
+    if classwork:
+        _verify_teacher_scope(db, staff_id, class_id, classwork.subject_id)
+        assignment = (
+            db.query(ClassworkAssignment)
+            .filter(
+                ClassworkAssignment.classwork_id == classwork.classwork_id,
+                ClassworkAssignment.class_id == class_id,
+            )
+            .first()
         )
-        .first()
-    )
+
+    # 2. Try treating activity_id as ClassworkAssignment.classwork_assignment_id
     if not assignment:
-        raise HTTPException(status_code=404, detail="Activity is not assigned to this class")
+        assignment = (
+            db.query(ClassworkAssignment)
+            .filter(
+                ClassworkAssignment.classwork_assignment_id == activity_id,
+                ClassworkAssignment.class_id == class_id,
+            )
+            .first()
+        )
+        if assignment:
+            classwork = assignment.classwork
+            _verify_teacher_scope(db, staff_id, class_id, classwork.subject_id)
+
+    if not classwork or not assignment:
+        raise HTTPException(status_code=404, detail="Activity not found or not assigned to this class")
+
+    return classwork, assignment
+
+
+def get_activity_scores(db: Session, staff_id: str, activity_id: int, class_id: int) -> ActivityScoresResponse:
+    classwork, assignment = _resolve_activity_and_assignment(db, staff_id, activity_id, class_id)
 
     # Fetch roster of enrolled students in this class
     students = (
@@ -126,15 +151,15 @@ def get_activity_scores(db: Session, staff_id: str, activity_id: int, class_id: 
         .filter(StudentSubmission.classwork_assignment_id == assignment.classwork_assignment_id)
         .all()
     )
-    sub_map = {sub.student_id: sub for sub in submissions}
+    sub_map = {str(sub.student_id): sub for sub in submissions}
 
     student_items: list[StudentActivityScoreItem] = []
     for s in students:
-        sub = sub_map.get(s.student_id)
+        sub = sub_map.get(str(s.student_id))
         score = float(sub.grade) if (sub and sub.grade is not None) else None
         student_items.append(
             StudentActivityScoreItem(
-                student_id=s.student_id,
+                student_id=str(s.student_id),
                 name=f"{s.first_name} {s.last_name}".strip(),
                 score=score,
             )
@@ -156,23 +181,7 @@ def bulk_update_activity_scores(
     activity_id: int,
     payload: BulkScoreUpdateRequest,
 ) -> ActivityScoresResponse:
-    classwork = db.query(Classwork).filter(Classwork.classwork_id == activity_id).first()
-    if not classwork:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    _verify_teacher_scope(db, staff_id, payload.class_id, classwork.subject_id)
-
-    assignment = (
-        db.query(ClassworkAssignment)
-        .filter(
-            ClassworkAssignment.classwork_id == activity_id,
-            ClassworkAssignment.class_id == payload.class_id,
-        )
-        .first()
-    )
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Activity is not assigned to this class")
-
+    classwork, assignment = _resolve_activity_and_assignment(db, staff_id, activity_id, payload.class_id)
     max_score = float(classwork.total_points or 100)
 
     # Validate each score input before modifying database
@@ -195,18 +204,24 @@ def bulk_update_activity_scores(
         .filter(StudentSubmission.classwork_assignment_id == assignment.classwork_assignment_id)
         .all()
     )
-    sub_map = {sub.student_id: sub for sub in existing_subs}
+    sub_map = {str(sub.student_id): sub for sub in existing_subs}
 
     now = datetime.now(timezone.utc)
 
     for item in payload.scores:
-        sub = sub_map.get(item.student_id)
+        sid_str = str(item.student_id)
+        sub = sub_map.get(sid_str)
         if sub is None:
+            try:
+                parsed_sid = UUID(sid_str)
+            except (ValueError, TypeError):
+                parsed_sid = sid_str
             sub = StudentSubmission(
-                student_id=item.student_id,
+                student_id=parsed_sid,
                 classwork_assignment_id=assignment.classwork_assignment_id,
             )
             db.add(sub)
+            sub_map[sid_str] = sub
 
         if item.score is not None:
             sub.grade = Decimal(str(item.score))
@@ -219,7 +234,7 @@ def bulk_update_activity_scores(
 
     db.commit()
 
-    return get_activity_scores(db, staff_id, activity_id, payload.class_id)
+    return get_activity_scores(db, staff_id, classwork.classwork_id, payload.class_id)
 
 
 def delete_activity(db: Session, staff_id: str, activity_id: int):

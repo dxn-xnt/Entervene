@@ -155,12 +155,68 @@ class StudentGradebookRow(BaseModel):
     initial_grade: Optional[float] = None
     transmuted_grade: Optional[float] = None
     total: Optional[str] = None
+    # Transmission to Adviser Audit State
+    period_grade_id: Optional[int] = None
+    is_finalized: bool = False
+    finalized_at: Optional[datetime] = None
+    finalized_by_staff_id: Optional[str] = None
+    finalized_by_name: Optional[str] = None
 
 
 class StudentGradebookResponse(BaseModel):
     scope: StudentRecordScope
     classwork: list[GradebookCategoryHeaderGroup]
     studentGrades: list[StudentGradebookRow]
+
+
+class SendStudentGradeRequest(BaseModel):
+    academic_period_id: int
+    expected_transmuted_grade: Optional[float] = None
+    expected_final_period_grade: Optional[float] = None
+    final_period_grade: Optional[float] = None
+    force_resend: bool = False
+    remarks: Optional[str] = None
+
+
+class SendGradeToAdviserItemResponse(BaseModel):
+    student_id: str
+    name: str
+    period_grade_id: Optional[int] = None
+    log_id: Optional[int] = None
+    written_work_percent: Optional[float] = None
+    performance_task_percent: Optional[float] = None
+    quarterly_assessment_percent: Optional[float] = None
+    initial_grade: Optional[float] = None
+    transmuted_grade: Optional[float] = None
+    final_period_grade: Optional[float] = None
+    is_finalized: bool
+    finalized_at: Optional[datetime] = None
+    finalized_by_staff_id: Optional[str] = None
+    finalized_by_name: Optional[str] = None
+    status: str  # "newly_sent" | "updated" | "unchanged" | "conflict" | "skipped_incomplete"
+    message: Optional[str] = None
+    incomplete_components: list[str] = []
+
+
+class BulkSendGradesRequest(BaseModel):
+    force_resend_all: bool = False
+    expected_student_grades: Optional[dict[str, float]] = None  # {student_id: expected_transmuted_grade}
+    remarks: Optional[str] = None
+
+
+class BulkSendGradesToAdviserResponse(BaseModel):
+    class_id: int
+    subject_id: int
+    academic_period_id: int
+    total_students: int
+    newly_sent_count: int
+    unchanged_skipped_count: int
+    incomplete_skipped_count: int = 0
+    incomplete_warning_count: int = 0
+    finalized_at: datetime
+    finalized_by_staff_id: str
+    finalized_by_name: str
+    entries: list[SendGradeToAdviserItemResponse]
 
 
 class TermGradeSummaryRow(BaseModel):
