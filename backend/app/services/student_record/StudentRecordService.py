@@ -233,7 +233,7 @@ def teacher_student_gradebook(
             continue
         cat_key = _categorize_assignment(assignment)
         header = ClassworkCategoryHeader(
-            id=assignment.classwork_assignment_id,
+            id=assignment.classwork.classwork_id,
             title=assignment.classwork.title,
             maxScore=float(assignment.classwork.total_points or 100),
         )
@@ -595,8 +595,9 @@ def resolve_subject_grading_weights(
     qa_raw = 0.0
 
     for comp in template.components:
-        category = _match_component_category(comp.component_name)
-        comp_weight = float(comp.weight or 0.0)
+        comp_name = getattr(comp, "component_name", "")
+        category = _match_component_category(comp_name)
+        comp_weight = float(getattr(comp, "weight", 0.0) or 0.0)
         if category == "WW":
             ww_raw += comp_weight
         elif category == "PT":
@@ -731,7 +732,7 @@ def finalize_student_period_grade(
             if scope.is_view_only:
                 raise HTTPException(status_code=403, detail="You are currently on leave for this class/subject. Records are read-only.")
         except HTTPException as e:
-            if e.status_code == 403 and "leave" in str(e.detail).lower():
+            if e.status_code == 403 and "leave" in (e.detail or "").lower():
                 raise e
             pass
 
@@ -954,7 +955,18 @@ def _submissions_by_student(
     )
     grouped: dict[UUID, dict[int, StudentSubmission]] = {}
     for submission in submissions:
-        grouped.setdefault(submission.student_id, {})[submission.classwork_assignment_id] = submission
+        sid = submission.student_id
+        asgn_id = submission.classwork_assignment_id
+        existing = grouped.setdefault(sid, {}).get(asgn_id)
+        if existing is None:
+            grouped[sid][asgn_id] = submission
+        elif submission.grade is not None and existing.grade is None:
+            grouped[sid][asgn_id] = submission
+        elif submission.grade is not None and existing.grade is not None:
+            sub_ts = submission.graded_at or submission.submitted_at or submission.created_at
+            ex_ts = existing.graded_at or existing.submitted_at or existing.created_at
+            if sub_ts and ex_ts and sub_ts > ex_ts:
+                grouped[sid][asgn_id] = submission
     return grouped
 
 
