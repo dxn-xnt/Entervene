@@ -4,7 +4,7 @@ import {
   Pencil,
   X,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AttachmentDisplay from "@/components/attachment-display";
 import { API_URL, apiFetch } from "@/lib/api";
@@ -14,7 +14,6 @@ import QuizGradingModal from "@/components/quiz-grading-modal";
 import {
   isQuizType,
   isReadingType,
-  scoreBand,
   submissionStatusLabel,
 } from "@/lib/classwork-utils";
 import type {
@@ -26,25 +25,37 @@ import type {
 import { Button } from "@/components/retroui/Button";
 import { Table } from "@/components/retroui/Table";
 import { Card } from "@/components/retroui/Card";
+import { Select } from "@/components/retroui/Select";
+import { Alert } from "@/components/retroui/Alert";
+import { Avatar } from "@/components/retroui/Avatar";
 import QuizAnalysisView from "./classworks/quiz-analysis-view";
 import StudentSubmissionView from "./classworks/student-submission-view";
 import EditClassworkModal from "./forms/edit-classwork";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import AppLayout from "@/layouts/app-layout";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import RubricsScoreBoard from "@/components/rubrics-score-board";
 
 export type ClassworkViewProps = {
-  classwork: TeacherClasswork;
-  onClose: () => void;
+  classwork?: TeacherClasswork;
+  onClose?: () => void;
   onUpdated?: (updated: TeacherClasswork) => void;
   onArchived?: (classworkId: number) => void;
 };
 
 export default function ClassworkView({
   classwork,
+  onClose,
   onUpdated,
   onArchived,
-}: ClassworkViewProps) {
+}: ClassworkViewProps = {}) {
   const navigate = useNavigate();
-  const [selected, setSelected] = useState<TeacherClasswork>(classwork);
+  const params = useParams<{ classworkId: string }>();
+  const isStandalone = !classwork;
+
+  const [selected, setSelected] = useState<TeacherClasswork | null>(classwork ?? null);
+  const [isClassworkLoading, setIsClassworkLoading] = useState(!classwork);
+  const [classworkFetchError, setClassworkFetchError] = useState("");
   const [tracking, setTracking] = useState<AssignmentTracking | null>(null);
   const [isTrackingLoading, setIsTrackingLoading] = useState(false);
   const [quizAnalysis, setQuizAnalysis] = useState<QuizAnalysis | null>(null);
@@ -71,12 +82,55 @@ export default function ClassworkView({
   const [isPostingGrade, setIsPostingGrade] = useState(false);
   const [gradeSuccess, setGradeSuccess] = useState("");
 
-  // Sync internal selected state when prop changes
+  // Sync internal selected state when prop changes or fetch if standalone
   useEffect(() => {
-    setSelected(classwork);
-  }, [classwork]);
+    if (classwork) {
+      setSelected(classwork);
+      setIsClassworkLoading(false);
+      return;
+    }
+
+    const classworkId = params.classworkId;
+    if (!classworkId) {
+      setClassworkFetchError("No classwork ID specified.");
+      setIsClassworkLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsClassworkLoading(true);
+    setClassworkFetchError("");
+
+    apiFetch(`/api/v1/classwork-assignments/classwork/${classworkId}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.detail || "Unable to load classwork.");
+        }
+        return res.json() as Promise<TeacherClasswork>;
+      })
+      .then((data) => {
+        if (isMounted) {
+          setSelected(data);
+          setIsClassworkLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          setClassworkFetchError(
+            err instanceof Error ? err.message : "Unable to load classwork.",
+          );
+          setIsClassworkLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [classwork, params.classworkId]);
 
   const loadTrackingAndAnalysis = useCallback(async () => {
+    if (!selected) return;
     const assignmentId = selected.assignments?.[0]?.classwork_assignment_id;
     if (!assignmentId) return;
 
@@ -116,7 +170,7 @@ export default function ClassworkView({
       setIsTrackingLoading(false);
       setIsQuizAnalysisLoading(false);
     }
-  }, [selected.assignments, selected.classwork_id, selected.classwork_type]);
+  }, [selected]);
 
   useEffect(() => {
     loadTrackingAndAnalysis();
@@ -138,7 +192,11 @@ export default function ClassworkView({
       }
 
       setShowArchiveConfirm(false);
-      onArchived?.(selected.classwork_id);
+      if (onArchived) {
+        onArchived(selected.classwork_id);
+      } else {
+        navigate("/teacher/classworks");
+      }
     } catch (err) {
       setDetailError(
         err instanceof Error ? err.message : "Unable to archive classwork.",
@@ -280,17 +338,85 @@ export default function ClassworkView({
     });
   }, [submissionSort, tracking]);
 
-  return (
+  if (isClassworkLoading) {
+    const loadingContent = (
+      <main className="flex flex-1 items-center justify-center p-8">
+        <p className="text-muted-foreground font-semibold animate-pulse">
+          Loading classwork details...
+        </p>
+      </main>
+    );
+    return isStandalone ? <AppLayout>{loadingContent}</AppLayout> : loadingContent;
+  }
+
+  if (!selected || classworkFetchError) {
+    const errorContent = (
+      <main className="flex flex-1 flex-col items-center justify-center gap-4 p-8">
+        <p className="text-red-600 font-semibold">
+          {classworkFetchError || "Classwork not found."}
+        </p>
+        <Button
+          onClick={() => (onClose ? onClose() : navigate("/teacher/classworks"))}
+        >
+          Back to Classworks
+        </Button>
+      </main>
+    );
+    return isStandalone ? <AppLayout>{errorContent}</AppLayout> : errorContent;
+  }
+
+  if (selectedStudent) {
+    const studentSubmissionContent = (
+      <StudentSubmissionView
+        selectedStudent={selectedStudent}
+        selected={selected}
+        selectedSubmissionDetail={selectedSubmissionDetail}
+        isSubmissionLoading={isSubmissionLoading}
+        submissionDetailError={submissionDetailError}
+        gradeDraft={gradeDraft}
+        feedbackDraft={feedbackDraft}
+        gradeError={gradeError}
+        gradeSuccess={gradeSuccess}
+        isPostingGrade={isPostingGrade}
+        onClose={closeStudentSubmission}
+        onGradeChange={(value) => {
+          setGradeDraft(value);
+          setGradeError("");
+          setGradeSuccess("");
+        }}
+        onFeedbackChange={(value) => {
+          setFeedbackDraft(value);
+          setGradeError("");
+          setGradeSuccess("");
+        }}
+        onPostGrade={postGrade}
+        onOpenQuizGrading={(submissionId) =>
+          setSelectedGradingSubmissionId(submissionId)
+        }
+      />
+    );
+
+    return isStandalone ? (
+      <AppLayout>{studentSubmissionContent}</AppLayout>
+    ) : (
+      studentSubmissionContent
+    );
+  }
+
+  const mainContent = (
     <main className="flex flex-1 flex-col overflow-x-hidden">
       <div className="@container/main flex flex-1 flex-col">
         <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
           <div className="flex flex-row gap-3 justify-between items-center">
             <div className="flex items-center gap-3 min-w-0">
+              <SidebarTrigger className="md:hidden" />
               <Breadcrumb>
                 <Breadcrumb.List className="flex-nowrap">
                   <Breadcrumb.Item className="shrink-0">
                     <Breadcrumb.Link
-                      onClick={() => navigate("/teacher/classworks")}
+                      onClick={() =>
+                        onClose ? onClose() : navigate("/teacher/classworks")
+                      }
                       className="cursor-pointer"
                     >
                       Classworks
@@ -299,7 +425,7 @@ export default function ClassworkView({
                   <Breadcrumb.Separator className="shrink-0" />
                   <Breadcrumb.Item className="min-w-0">
                     <Breadcrumb.Page
-                      className="block max-w-[200px] truncate sm:max-w-[350px] md:max-w-[500px] lg:max-w-[550px]"
+                      className="block max-w-[200px] truncate sm:max-w-[350px] lg:max-w-[400px]"
                       title={selected?.title ?? "Classwork Title"}
                     >
                       {selected?.title ?? "Classwork Title"}
@@ -309,304 +435,221 @@ export default function ClassworkView({
               </Breadcrumb>
             </div>
 
-            {!selectedStudent && (
-              <div className="flex items-center gap-2 flex-col lg:flex-row lg:flex-nowrap">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowEditModal(true)}
-                  disabled={isArchiving}
-                  className="whitespace-nowrap gap-2"
-                >
-                  <Pencil size={16} />
-                  Edit Classwork
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowArchiveConfirm(true)}
-                  disabled={isArchiving}
-                  className="whitespace-nowrap gap-2 bg-primary"
-                >
-                  <Archive size={16} />
-                  Archive Classwork
-                </Button>
-              </div>
-            )}
+            <div className="flex items-center gap-2 flex-col lg:flex-row lg:flex-nowrap">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowEditModal(true)}
+                disabled={isArchiving}
+                className="whitespace-nowrap gap-2"
+              >
+                <Pencil size={16} />
+                Edit Classwork
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowArchiveConfirm(true)}
+                disabled={isArchiving}
+                className="whitespace-nowrap gap-2 bg-primary"
+              >
+                <Archive size={16} />
+                Archive Classwork
+              </Button>
+            </div>
           </div>
 
           <div className="-mx-4 md:-mx-6 border-b-2 border-border" />
 
-          <section className="mx-auto w-full space-y-4">
-            <div className="flex items-center gap-3">
-              <FileText className="size-7" />
-              <h1 className="text-xl font-bold md:text-2xl">
-                {selected.title}
-              </h1>
+          <Card className="mx-auto w-full space-y-4">
+            <Card className="block w-full bg-primary shadow-none">
+              <Card.Content>
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <Card.Title className="flex flex-row gap-2 mb-0 text-2xl font-extrabold">
+                      <FileText className="size-7" />
+
+                      {selected.title}
+                    </Card.Title>
+                  </div>
+                </div>
+              </Card.Content>
+            </Card>
+
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+              <Card className="block shadow-none md:col-span-4">
+                <Card.Content>
+                  <Card.Title className="mb-3 text-xl">
+                    Instructions
+                  </Card.Title>
+                  <p className="text-sm">
+                    {selected.instructions ||
+                      selected.description ||
+                      "No instructions provided."}
+                  </p>
+                </Card.Content>
+              </Card>
+
+              <Card className="block shadow-none md:col-span-2">
+                <Card.Content className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <Card.Title className="mb-0 text-xl">
+                      Attached Files
+                    </Card.Title>
+
+                    <Badge variant="secondary" size="sm">
+                      File {selected.attachments.length}
+                    </Badge>
+                  </div>
+
+                  {selected.attachments.length > 0 ? (
+                    <AttachmentDisplay
+                      attachments={selected.attachments}
+                      type="classwork"
+                      downloadUrl={(attachmentId) =>
+                        `${API_URL}/api/v1/classwork-assignments/classwork/${selected.classwork_id}/attachments/${attachmentId}/download`
+                      }
+                    />
+                  ) : (
+                    <div className="py-8 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        No files attached.
+                      </p>
+                    </div>
+                  )}
+                </Card.Content>
+              </Card>
             </div>
 
-            {selectedStudent ? (
-              <StudentSubmissionView
-                selectedStudent={selectedStudent}
+
+            {isReadingType(selected.classwork_type) ? (
+              <div className="rounded-lg border border-black bg-[#F6E9B2] p-4 text-sm font-semibold shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+                This is a reading material, so scores, attempts, and
+                student submissions are not required.
+              </div>
+            ) : isQuizType(selected.classwork_type) ? (
+              <QuizAnalysisView
+                quizAnalysis={quizAnalysis}
+                isQuizAnalysisLoading={isQuizAnalysisLoading}
+                quizAnalysisError={quizAnalysisError}
                 selected={selected}
-                selectedSubmissionDetail={selectedSubmissionDetail}
-                isSubmissionLoading={isSubmissionLoading}
-                submissionDetailError={submissionDetailError}
-                gradeDraft={gradeDraft}
-                feedbackDraft={feedbackDraft}
-                gradeError={gradeError}
-                gradeSuccess={gradeSuccess}
-                isPostingGrade={isPostingGrade}
-                onClose={closeStudentSubmission}
-                onGradeChange={(value) => {
-                  setGradeDraft(value);
-                  setGradeError("");
-                  setGradeSuccess("");
-                }}
-                onFeedbackChange={(value) => {
-                  setFeedbackDraft(value);
-                  setGradeError("");
-                  setGradeSuccess("");
-                }}
-                onPostGrade={postGrade}
-                onOpenQuizGrading={(submissionId) =>
-                  setSelectedGradingSubmissionId(submissionId)
-                }
+                setSelectedGradingSubmissionId={setSelectedGradingSubmissionId}
               />
             ) : (
               <>
-                <Card className="block">
-                  <Card.Content>
-                    <Card.Title className="mb-3 text-xl">
-                      Instructions
-                    </Card.Title>
-                    <p className="text-sm">
-                      {selected.instructions ||
-                        selected.description ||
-                        "No instructions provided."}
-                    </p>
-                  </Card.Content>
-                </Card>
-
-                <Card className="block">
-                  <Card.Content className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <Card.Title className="mb-0 text-xl">
-                        Attached Files
-                      </Card.Title>
-
-                      <Badge variant="secondary" size="sm">
-                        File {selected.attachments.length}
-                      </Badge>
-                    </div>
-
-                    {selected.attachments.length > 0 ? (
-                      <AttachmentDisplay
-                        attachments={selected.attachments}
-                        type="classwork"
-                        downloadUrl={(attachmentId) =>
-                          `${API_URL}/api/v1/classwork-assignments/classwork/${selected.classwork_id}/attachments/${attachmentId}/download`
+                <RubricsScoreBoard totalPoints={selected.total_points} />
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <h2 className="text-xl font-bold">Submissions</h2>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-semibold">
+                        Sort by
+                      </label>
+                      <Select
+                        value={submissionSort}
+                        onValueChange={(value) =>
+                          setSubmissionSort(value as "name" | "score")
                         }
-                      />
-                    ) : (
-                      <div className="py-8 text-center">
-                        <p className="text-sm text-muted-foreground">
-                          No files attached.
-                        </p>
-                      </div>
-                    )}
-                  </Card.Content>
-                </Card>
-
-                {isReadingType(selected.classwork_type) ? (
-                  <div className="rounded-lg border border-black bg-[#F6E9B2] p-4 text-sm font-semibold shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-                    This is a reading material, so scores, attempts, and
-                    student submissions are not required.
-                  </div>
-                ) : isQuizType(selected.classwork_type) ? (
-                  <QuizAnalysisView
-                    quizAnalysis={quizAnalysis}
-                    isQuizAnalysisLoading={isQuizAnalysisLoading}
-                    quizAnalysisError={quizAnalysisError}
-                    selected={selected}
-                    setSelectedGradingSubmissionId={setSelectedGradingSubmissionId}
-                  />
-                ) : (
-                  <>
-                    <Card className="block">
-                      <Card.Content className="space-y-6">
-                        <div className="flex items-center justify-between">
-                          <Card.Title className="mb-0 text-xl">
-                            Activity Score
-                          </Card.Title>
-
-                          <Badge variant="secondary" size="sm">
-                            Total: {selected.total_points ?? 0} pts
-                          </Badge>
-                        </div>
-
-                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                          {[
-                            [
-                              "Excellent",
-                              scoreBand(selected.total_points, 1),
-                              "Displays all required components clearly and accurately.",
-                            ],
-                            [
-                              "Good",
-                              scoreBand(selected.total_points, 0.8),
-                              "Most components are present with minor errors.",
-                            ],
-                            [
-                              "Fair",
-                              scoreBand(selected.total_points, 0.6),
-                              "Some required parts are missing or unclear.",
-                            ],
-                            [
-                              "Needs Improvement",
-                              scoreBand(selected.total_points, 0.4),
-                              "Many required elements are missing.",
-                            ],
-                            [
-                              "Poor",
-                              scoreBand(selected.total_points, 0.2),
-                              "Work is incomplete or not submitted.",
-                            ],
-                          ].map(([label, points, description]) => (
-                            <div
-                              key={label}
-                              className="rounded-lg border border-black p-3"
-                            >
-                              <div className="mb-3 flex items-center justify-between gap-2">
-                                <p className="font-bold">{label}</p>
-                                <p className="text-sm font-bold">{points}</p>
-                              </div>
-                              <p className="text-xs">{description}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </Card.Content>
-                    </Card>
-
-                    <div className="space-y-4">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <h2 className="text-xl font-bold">Submissions</h2>
-                        <div className="flex items-center gap-2">
-                          <label className="text-xs font-bold text-gray-600">
-                            Sort by
-                          </label>
-                          <select
-                            value={submissionSort}
-                            onChange={(event) =>
-                              setSubmissionSort(
-                                event.target.value as "name" | "score",
-                              )
-                            }
-                            className="rounded border border-black bg-white px-2 py-1 text-xs font-bold"
-                          >
-                            <option value="name">Name</option>
-                            <option value="score">Score</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <Table className="border-black">
-                        <Table.Header className="border-black">
-                          <Table.Row className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-black font-bold">
-                            <Table.Head>Student</Table.Head>
-                            <Table.Head>Status</Table.Head>
-                            <Table.Head className="min-w-20 text-right">
-                              Grade
-                            </Table.Head>
-                          </Table.Row>
-                        </Table.Header>
-                        <Table.Body>
-                          {isTrackingLoading ? (
-                            <Table.Row className="hover:bg-transparent">
-                              <Table.Cell
-                                colSpan={3}
-                                className="py-6 text-center text-sm font-semibold text-gray-500"
-                              >
-                                Loading submissions...
-                              </Table.Cell>
-                            </Table.Row>
-                          ) : detailError ? (
-                            <Table.Row className="hover:bg-transparent">
-                              <Table.Cell
-                                colSpan={3}
-                                className="py-6 text-center text-sm font-semibold text-red-600"
-                              >
-                                {detailError}
-                              </Table.Cell>
-                            </Table.Row>
-                          ) : trackingRows.length > 0 ? (
-                            trackingRows.map((student) => {
-                              const isGraded =
-                                student.grade !== null &&
-                                student.grade !== undefined;
-                              const scoreLabel = isGraded
-                                ? `${student.grade} / ${selected.total_points ?? 0}`
-                                : "Not graded";
-
-                              return (
-                                <Table.Row
-                                  key={student.student_id}
-                                  className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-black"
-                                >
-                                  <Table.Cell>
-                                    <div className="flex items-center gap-3">
-                                      <div className="grid h-8 w-8 place-items-center rounded-full border-2 border-black bg-[#FFD08A] text-xs font-bold">
-                                        {student.student_name.slice(0, 1)}
-                                      </div>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          openStudentSubmission(student)
-                                        }
-                                        className="font-bold hover:underline"
-                                      >
-                                        {student.student_name}
-                                      </button>
-                                    </div>
-                                  </Table.Cell>
-                                  <Table.Cell>
-                                    <Badge
-                                      variant="outline"
-                                      size="sm"
-                                      className="w-fit rounded-none font-medium"
-                                    >
-                                      {submissionStatusLabel(
-                                        isGraded
-                                          ? "graded"
-                                          : student.status,
-                                      )}
-                                    </Badge>
-                                  </Table.Cell>
-                                  <Table.Cell className="min-w-20 text-right text-sm font-semibold text-gray-700">
-                                    {scoreLabel}
-                                  </Table.Cell>
-                                </Table.Row>
-                              );
-                            })
-                          ) : (
-                            <Table.Row className="hover:bg-transparent">
-                              <Table.Cell
-                                colSpan={3}
-                                className="py-6 text-center text-sm font-semibold text-gray-500"
-                              >
-                                No submissions found for this classwork yet.
-                              </Table.Cell>
-                            </Table.Row>
-                          )}
-                        </Table.Body>
-                      </Table>
+                      >
+                        <Select.Trigger className="h-8 text-sm shadow-none">
+                          <Select.Value placeholder="Sort by" />
+                        </Select.Trigger>
+                        <Select.Content>
+                          <Select.Item value="name">Name</Select.Item>
+                          <Select.Item value="score">Score</Select.Item>
+                        </Select.Content>
+                      </Select>
                     </div>
-                  </>
-                )}
+                  </div>
+
+                  <Table className="border-black">
+                    <Table.Header className="border-black">
+                      <Table.Row>
+                        <Table.Head>Student</Table.Head>
+                        <Table.Head className="text-center">Status</Table.Head>
+                        <Table.Head className="min-w-20 text-right">
+                          Grade
+                        </Table.Head>
+                      </Table.Row>
+                    </Table.Header>
+                    <Table.Body>
+                      {detailError ? (
+                        <Table.Row className="hover:bg-transparent">
+                          <Table.Cell colSpan={3} className="p-4">
+                            <Alert status="error">
+                              <Alert.Description>{detailError}</Alert.Description>
+                            </Alert>
+                          </Table.Cell>
+                        </Table.Row>
+                      ) : trackingRows.length > 0 ? (
+                        trackingRows.map((student) => {
+                          const isGraded =
+                            student.grade !== null &&
+                            student.grade !== undefined;
+                          const scoreLabel = isGraded
+                            ? `${student.grade} / ${selected.total_points ?? 0}`
+                            : "Not graded";
+
+                          return (
+                            <Table.Row
+                              className="cursor-pointer"
+                              key={student.student_id}
+                              onClick={() =>
+                                openStudentSubmission(student)
+                              }
+                            >
+                              <Table.Cell>
+                                <div className="flex items-center gap-3">
+                                  <Avatar variant="student" className="size-8 shrink-0">
+                                    <Avatar.Image
+                                      src="/avatars/student-avatars/1.svg"
+                                      alt={student.student_name}
+                                    />
+                                    <Avatar.Fallback>
+                                      {student.student_name.slice(0, 1).toUpperCase()}
+                                    </Avatar.Fallback>
+                                  </Avatar>
+                                  <span className="text-base font-semibold">
+                                    {student.student_name}
+                                  </span>
+                                </div>
+                              </Table.Cell>
+                              <Table.Cell className="text-center">
+                                <Badge
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-fit rounded-none font-medium"
+                                >
+                                  {submissionStatusLabel(
+                                    isGraded
+                                      ? "graded"
+                                      : student.status,
+                                  )}
+                                </Badge>
+                              </Table.Cell>
+                              <Table.Cell className="min-w-20 text-right text-sm font-semibold text-gray-700">
+                                {scoreLabel}
+                              </Table.Cell>
+                            </Table.Row>
+                          );
+                        })
+                      ) : (
+                        <Table.Row className="hover:bg-transparent">
+                          <Table.Cell
+                            colSpan={3}
+                            className="py-6 text-center text-sm font-semibold text-gray-500"
+                          >
+                            No submissions found for this classwork yet.
+                          </Table.Cell>
+                        </Table.Row>
+                      )}
+                    </Table.Body>
+                  </Table>
+                </div>
               </>
             )}
 
-            {showArchiveConfirm && !selectedStudent && (
+            {showArchiveConfirm && (
               <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4">
                 <Card className="block w-full max-w-md border-black p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-none hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                   <div className="flex items-center justify-between border-b-2 border-black bg-red-100 px-5 py-3">
@@ -662,7 +705,7 @@ export default function ClassworkView({
                 </Card>
               </div>
             )}
-          </section>
+          </Card>
         </div>
       </div>
 
@@ -689,4 +732,6 @@ export default function ClassworkView({
       )}
     </main>
   );
+
+  return isStandalone ? <AppLayout>{mainContent}</AppLayout> : mainContent;
 }

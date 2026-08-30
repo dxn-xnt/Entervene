@@ -11,8 +11,8 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { apiFetch } from "@/lib/api";
@@ -35,7 +35,6 @@ import { Label } from "@/components/retroui/Label";
 import { Select } from "@/components/retroui/Select";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
-import ClassworkView from "./classwork-view";
 
 const tabs: Array<TabItem<TabId>> = [
   { id: "all", label: "All", icon: ClipboardList },
@@ -85,8 +84,7 @@ const tabType: Partial<Record<TabId, string>> = {
 };
 
 export default function Classworks() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const suppressAutoOpenRef = useRef(false);
+  const navigate = useNavigate();
   const [items, setItems] = useState<TeacherClasswork[]>([]);
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("all");
@@ -98,7 +96,6 @@ export default function Classworks() {
   const [showFilters, setShowFilters] = useState(false);
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [selectedType, setSelectedType] = useState<ClassworkKind | null>(null);
-  const [selected, setSelected] = useState<TeacherClasswork | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -202,33 +199,8 @@ export default function Classworks() {
     setSelectedType(null);
   };
 
-  const openClassworkDetail = useCallback(
-    (item: TeacherClasswork) => {
-      suppressAutoOpenRef.current = false;
-      setSelected(item);
-      setSearchParams({ classworkId: String(item.classwork_id) });
-    },
-    [setSearchParams],
-  );
-
-  useEffect(() => {
-    const classworkId = Number(searchParams.get("classworkId"));
-    if (!classworkId) {
-      suppressAutoOpenRef.current = false;
-      return;
-    }
-    if (suppressAutoOpenRef.current || selected?.classwork_id === classworkId)
-      return;
-    const target = items.find((item) => item.classwork_id === classworkId);
-    if (target) {
-      openClassworkDetail(target);
-    }
-  }, [items, openClassworkDetail, searchParams, selected?.classwork_id]);
-
-  const closeClassworkDetail = () => {
-    suppressAutoOpenRef.current = true;
-    setSelected(null);
-    setSearchParams({}, { replace: true });
+  const openClassworkDetail = (item: TeacherClasswork) => {
+    navigate(`/teacher/classworks/${item.classwork_id}`);
   };
 
   const cycleSort = () => {
@@ -243,31 +215,9 @@ export default function Classworks() {
 
   return (
     <AppLayout>
-      {selected ? (
-        <ClassworkView
-          classwork={selected}
-          onClose={closeClassworkDetail}
-          onUpdated={(updated) => {
-            setItems((current) =>
-              current.map((item) =>
-                item.classwork_id === updated.classwork_id ? updated : item,
-              ),
-            );
-            setSelected(updated);
-          }}
-          onArchived={(classworkId) => {
-            setItems((current) =>
-              current.filter((item) => item.classwork_id !== classworkId),
-            );
-            closeClassworkDetail();
-          }}
-        />
-      ) : (
-        // Main list view
-        <>
-          <div className="flex flex-1 flex-col">
-            <div className="@container/main flex flex-1 flex-col">
-              <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
+      <div className="flex flex-1 flex-col">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
                 <header className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <SidebarTrigger className="md:hidden" />
@@ -488,9 +438,6 @@ export default function Classworks() {
               </Dialog>
             </div>
           </div>
-        </>
-
-      )}
     </AppLayout>
   );
 }
