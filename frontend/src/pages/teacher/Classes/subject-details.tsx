@@ -19,6 +19,7 @@ import { Badge } from "@/components/retroui/Badge";
 import ClassworkFormModal from "./subject-details/ClassworkFormModal";
 import CompetencyModal from "./subject-details/CompetencyModal";
 import LessonClassworkList from "./subject-details/lesson-classwork-list";
+import SubjectClassworkTab from "./subject-details/SubjectClassworkTab";
 import StudentRecordsPanel from "./subject-details/StudentRecordsPanel";
 import TeacherLessonDetailScreen from "./subject-details/TeacherLessonDetailScreen";
 import TOSGeneratorScreen from "./subject-details/TOSGeneratorScreen";
@@ -911,38 +912,31 @@ export default function SubjectDetails() {
                   </Breadcrumb.List>
                 </Breadcrumb>
 
-                <div className="flex items-center gap-2 flex-col lg:flex-row lg:flex-nowrap">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsTOSOpen(true)}
-                    className="whitespace-nowrap gap-2"
-                  >
-                    <TableProperties size={16} />
-                    TOS Generator
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => openCompetencyForm(null)}
-                    className="whitespace-nowrap gap-2"
-                  >
-                    <Award size={16} />
-                    Add Competency
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="default"
-                    onClick={() => {
-                      setSelectedCompetencyIdForNewLesson(undefined);
-                      setIsCreatingLesson(true);
-                    }}
-                    className="whitespace-nowrap gap-2"
-                  >
-                    <Plus size={16} />
-                    Add Lesson
-                  </Button>
-                </div>
+                {activeTab === "lessons" && (
+                  <div className="flex items-center gap-2 flex-col lg:flex-row lg:flex-nowrap">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => openCompetencyForm(null)}
+                      className="whitespace-nowrap gap-2"
+                    >
+                      <Award size={16} />
+                      Add Competency
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="default"
+                      onClick={() => {
+                        setSelectedCompetencyIdForNewLesson(undefined);
+                        setIsCreatingLesson(true);
+                      }}
+                      className="whitespace-nowrap gap-2"
+                    >
+                      <Plus size={16} />
+                      Add Lesson
+                    </Button>
+                  </div>
+                )}
               </div>
 
               <main className="flex flex-col gap-4">
@@ -974,10 +968,13 @@ export default function SubjectDetails() {
                   </Card.Content>
                 </Card>
 
-                {activeTab === "classwork" && classId && subjectId ? (
-                  <p className="py-8 text-center text-gray-500">
-                    Loading classworks...
-                  </p>
+                {activeTab === "classwork" && subjectId ? (
+                  <SubjectClassworkTab
+                    classId={classId}
+                    subjectId={subjectId}
+                    subjectName={subjectName}
+                    sectionName={sectionName}
+                  />
                 ) : isLoading ? (
                   <p className="py-8 text-center text-gray-500">
                     Loading lessons...
