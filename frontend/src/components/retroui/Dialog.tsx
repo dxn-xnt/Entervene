@@ -10,7 +10,7 @@ const Dialog = BaseDialog.Root;
 const DialogTrigger = BaseDialog.Trigger;
 
 const overlayVariants = cva(
-  ` fixed bg-black/80 font-head
+  ` fixed bg-black/80 font-head backdrop-blur-sm
     data-[open]:fade-in-0
     data-[open]:animate-in
     data-[closed]:animate-out
@@ -19,7 +19,7 @@ const overlayVariants = cva(
   {
     variants: {
       variant: {
-        default: "inset-0 z-[998] bg-black/85",
+        default: "inset-0 z-[998] bg-black/80 backdrop-blur-sm",
         none: "fixed bg-transparent",
       },
     },
@@ -164,6 +164,8 @@ const dialogHeaderVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground",
+        ghost: "bg-transparent text-foreground border-b border-border",
+        neutral: "bg-card text-card-foreground border-b border-border",
       },
       position: {
         fixed: "sticky top-0",
@@ -181,8 +183,8 @@ const DialogHeaderDefaultLayout = ({ children }: { children: ReactNode }) => {
   return (
     <>
       {children}
-      <BaseDialog.Close title="Close pop-up" className="cursor-pointer">
-        <X />
+      <BaseDialog.Close title="Close pop-up" className="cursor-pointer text-black hover:bg-black/10 transition-colors p-1 rounded-sm">
+        <X className="size-4" />
       </BaseDialog.Close>
     </>
   );
