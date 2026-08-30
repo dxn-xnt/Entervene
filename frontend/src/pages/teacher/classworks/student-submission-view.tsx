@@ -235,7 +235,7 @@ export default function StudentSubmissionView({
 
             {/* Score & Feedback Rubrics */}
             <RubricsScoreBoard
-              title="Score & Feedback"
+              title="Score Rubrics"
               totalPoints={selected.total_points}
               selectedScore={gradeDraft !== "" ? Number(gradeDraft) : null}
               onSelectScore={(points) => {
@@ -267,7 +267,7 @@ export default function StudentSubmissionView({
               {/* Feedback Comment Box */}
               <div className="space-y-1.5 pt-2">
                 <label className="block text-xl font-bold">
-                  Teacher Feedback &amp; Comments
+                  Feedback &amp; Comments
                 </label>
                 <textarea
                   value={feedbackDraft}
