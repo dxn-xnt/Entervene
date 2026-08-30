@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react
 import {
   Archive,
   ArrowDownAZ,
+  ArrowLeft,
   ArrowUpDown,
   Award,
   BookOpen,
@@ -57,6 +58,13 @@ import type {
 import ClassworkFormModal from "./subject-details/ClassworkFormModal";
 import TeacherLessonDetailScreen from "./subject-details/TeacherLessonDetailScreen";
 import TeacherCompetencyDetailScreen from "./subject-details/TeacherCompetencyDetailScreen";
+import { StudentRecordDetail } from "./subject-details/StudentRecordsPanel";
+import {
+  getTeacherRecordPeriods,
+  getTeacherStudentRecordDetail,
+  type StudentRecordDetailResponse,
+  type StudentRecordPeriodOption,
+} from "@/lib/student-record-api";
 import {
   emptyClassworkDraft,
   allowedMaterialExtensions,
@@ -329,7 +337,12 @@ export default function TeacherClassDetail() {
                 initialSubjectId={initialSubjectId}
               />
             )}
-            {tab === "students" && <StudentsTab detail={detail} />}
+            {tab === "students" && (
+              <StudentsTab
+                detail={detail}
+                subjectId={currentSubject?.subject_id || initialSubjectId}
+              />
+            )}
             {tab === "classwork" && (
               <ClassworkTab
                 detail={detail}
@@ -838,12 +851,7 @@ function OverviewTab({
           <div className="flex items-start justify-between gap-3 min-w-0">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2 mb-1.5 min-w-0">
-                <h4
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setActiveLessonDetail(lesson)}
-                  className="text-base sm:text-lg font-bold text-black hover:underline cursor-pointer break-words line-clamp-2"
-                >
+                <h4 className="text-base sm:text-lg font-bold text-black break-words line-clamp-2">
                   {lesson.title}
                 </h4>
                 <Badge
@@ -877,27 +885,6 @@ function OverviewTab({
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => openClassworkForm(lesson)}
-                className="gap-1 border-2 border-black bg-white hover:bg-yellow-50 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                title="Add Classwork to this lesson"
-              >
-                <Plus size={14} />
-                Classwork
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => openLessonManager(lesson)}
-                className="p-1.5 border-2 border-black bg-white hover:bg-yellow-50 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                title="Manage Lesson Details & Materials"
-              >
-                <Pencil size={14} />
-              </Button>
               <button
                 type="button"
                 onClick={() => toggleLesson(lesson.lesson_id)}
@@ -922,16 +909,6 @@ function OverviewTab({
             ) : classworks.length === 0 ? (
               <div className="flex items-center justify-between rounded border-2 border-dashed border-black/40 bg-white p-3 text-xs text-gray-500 font-medium">
                 <span>No classworks assigned to this lesson yet.</span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openClassworkForm(lesson)}
-                  className="text-[11px] font-bold border-2 border-black bg-[#F6E9B2] hover:bg-[#fae498] text-black h-7"
-                >
-                  <Plus size={12} className="mr-1" />
-                  Add First Classwork
-                </Button>
               </div>
             ) : (
               classworks.map((cw) => (
@@ -965,19 +942,6 @@ function OverviewTab({
                         {cw.classwork_category.replace(/_/g, " ")}
                       </span>
                     )}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openClassworkDetail(cw);
-                      }}
-                      className="h-7 px-2 border-2 border-black bg-white hover:bg-gray-100 text-[11px] font-bold"
-                    >
-                      <Eye size={12} className="mr-1" />
-                      View Details
-                    </Button>
                   </div>
                 </div>
               ))
@@ -1063,27 +1027,12 @@ function OverviewTab({
           <section className="flex flex-col gap-4 min-w-0">
             <div className="flex flex-col gap-4 min-w-0">
               <div className="flex flex-col gap-3 min-w-0">
-                {/* Header toolbar with quick actions */}
+                {/* Header toolbar */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap min-w-0">
                   <div className="flex items-center gap-2">
                     <Text as="h3" className="text-xl font-semibold">
                       Lessons & Competencies
                     </Text>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap shrink-0">
-                    {selectedSubjectId && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openCompetencyForm(null)}
-                        className="gap-1.5 border-2 border-black bg-[#F6E9B2] hover:bg-[#fae498] text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                      >
-                        <Award size={14} />
-                        Add Competency
-                      </Button>
-                    )}
                   </div>
                 </div>
 
@@ -1099,24 +1048,49 @@ function OverviewTab({
                     />
                   </label>
 
-                  <Select
-                    value={lessonSort}
-                    onValueChange={(v) =>
-                      setLessonSort(
-                        v as "order" | "newest" | "oldest" | "title",
-                      )
-                    }
-                  >
-                    <Select.Trigger className="h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold">
-                      <Select.Value placeholder="Sort by" />
-                    </Select.Trigger>
-                    <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                      <Select.Item value="order">Lesson order</Select.Item>
-                      <Select.Item value="newest">Newest first</Select.Item>
-                      <Select.Item value="oldest">Oldest first</Select.Item>
-                      <Select.Item value="title">Title A-Z</Select.Item>
-                    </Select.Content>
-                  </Select>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Select
+                      value={lessonSort}
+                      onValueChange={(v) =>
+                        setLessonSort(
+                          v as "order" | "newest" | "oldest" | "title",
+                        )
+                      }
+                    >
+                      <Select.Trigger className="h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold">
+                        <Select.Value placeholder="Sort by" />
+                      </Select.Trigger>
+                      <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                        <Select.Item value="order">Lesson order</Select.Item>
+                        <Select.Item value="newest">Newest first</Select.Item>
+                        <Select.Item value="oldest">Oldest first</Select.Item>
+                        <Select.Item value="title">Title A-Z</Select.Item>
+                      </Select.Content>
+                    </Select>
+
+                    {(selectedSubjectId || currentSubjectLoad?.subject_id || detail.subject_loads[0]?.subject_id) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          const targetId =
+                            selectedSubjectId ||
+                            currentSubjectLoad?.subject_id ||
+                            detail.subject_loads[0]?.subject_id;
+                          if (targetId) {
+                            navigate(
+                              `/teacher/classes/${detail.class_id}/subjects/${targetId}`,
+                            );
+                          }
+                        }}
+                        className="h-10 gap-1.5 border-2 border-black bg-[#F6E9B2] hover:bg-[#fae498] text-black text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] whitespace-nowrap"
+                        title="Go to Subject View"
+                      >
+                        <BookOpen size={16} />
+                        Subject View
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1151,23 +1125,22 @@ function OverviewTab({
                         className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden min-w-0"
                       >
                         {/* Competency Header Bar */}
-                        <div className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 gap-3 min-w-0 w-full">
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => setActiveCompetency(comp)}
-                            className="flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer group"
-                            title="Click to view full competency details and lessons"
-                          >
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => toggleCompetencyCollapse(comp.competency_id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              toggleCompetencyCollapse(comp.competency_id);
+                            }
+                          }}
+                          className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 gap-3 min-w-0 w-full cursor-pointer group select-none"
+                          title={isCollapsed ? "Expand competency" : "Collapse competency"}
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
                             <div
-                              role="button"
-                              tabIndex={0}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleCompetencyCollapse(comp.competency_id);
-                              }}
                               className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-100 transition-colors shrink-0"
-                              title={isCollapsed ? "Expand inline" : "Collapse inline"}
                             >
                               {isCollapsed ? (
                                 <ChevronRight
@@ -1187,7 +1160,7 @@ function OverviewTab({
                                   size={20}
                                   className="text-black shrink-0"
                                 />
-                                <h4 className="text-base sm:text-lg md:text-xl font-bold text-gray-950 break-words line-clamp-2 group-hover:underline">
+                                <h4 className="text-base sm:text-lg md:text-xl font-bold text-gray-950 break-words line-clamp-2">
                                   {comp.competency_code || comp.statement}
                                 </h4>
                                 <Badge
@@ -1215,33 +1188,6 @@ function OverviewTab({
                               )}
                             </div>
                           </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setActiveCompetency(comp)}
-                              className="gap-1 border-2 border-black bg-white hover:bg-yellow-50 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                              title="Open full Competency details"
-                            >
-                              <ExternalLink size={14} />
-                              Details
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="default"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openAddLessonForCompetency(comp.competency_id);
-                              }}
-                              className="gap-1 border-2 border-black bg-white hover:bg-yellow-50 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                            >
-                              <Plus size={14} />
-                              Add Lesson
-                            </Button>
-                          </div>
                         </div>
 
                         {/* Competency Body when expanded */}
@@ -1257,20 +1203,6 @@ function OverviewTab({
                                     No lessons assigned to this competency yet.
                                   </span>
                                 </div>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    openAddLessonForCompetency(
-                                      comp.competency_id,
-                                    )
-                                  }
-                                  className="border-2 border-black bg-white hover:bg-yellow-50 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                                >
-                                  <Plus size={14} />
-                                  Create First Lesson
-                                </Button>
                               </div>
                             )}
                           </div>
@@ -1351,32 +1283,31 @@ function OverviewTab({
                             No Competencies or Lessons Yet
                           </Card.Title>
                           <p className="max-w-md text-sm font-normal text-gray-500">
-                            Get started by creating a Learning Competency for
-                            this subject or adding a lesson directly.
+                            No learning competencies or lessons have been added
+                            for this subject yet. Manage them in the Subject
+                            View.
                           </p>
-                          {selectedSubjectId && (
+                          {(selectedSubjectId || currentSubjectLoad?.subject_id || detail.subject_loads[0]?.subject_id) && (
                             <div className="flex gap-2 mt-2">
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                onClick={() => openCompetencyForm(null)}
-                                className="border-2 border-black bg-[#F6E9B2] text-black font-bold"
+                                onClick={() => {
+                                  const targetId =
+                                    selectedSubjectId ||
+                                    currentSubjectLoad?.subject_id ||
+                                    detail.subject_loads[0]?.subject_id;
+                                  if (targetId) {
+                                    navigate(
+                                      `/teacher/classes/${detail.class_id}/subjects/${targetId}`,
+                                    );
+                                  }
+                                }}
+                                className="border-2 border-black bg-[#F6E9B2] hover:bg-[#fae498] text-black font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                               >
-                                <Award size={14} className="mr-1" />
-                                Add Competency
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="default"
-                                size="sm"
-                                onClick={() =>
-                                  openAddLessonForCompetency(undefined)
-                                }
-                                className="border-2 border-black font-bold"
-                              >
-                                <Plus size={14} className="mr-1" />
-                                Add Lesson
+                                <BookOpen size={14} className="mr-1.5" />
+                                Go to Subject View
                               </Button>
                             </div>
                           )}
@@ -1901,10 +1832,91 @@ function OverviewTab({
 
 function StudentsTab({
   detail,
+  subjectId,
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
+  subjectId?: number | null;
 }) {
+  const activeSubjectId =
+    subjectId || detail.subject_loads[0]?.subject_id || null;
+
   const [search, setSearch] = useState("");
+  const [selectedStudent, setSelectedStudent] =
+    useState<TeacherAdvisoryStudentItem | null>(null);
+  const [studentDetail, setStudentDetail] =
+    useState<StudentRecordDetailResponse | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
+  const [periods, setPeriods] = useState<StudentRecordPeriodOption[]>([]);
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>("");
+
+  useEffect(() => {
+    if (!detail.class_id || !activeSubjectId) return;
+    let isMounted = true;
+    const loadPeriods = async () => {
+      try {
+        const data = await getTeacherRecordPeriods(
+          detail.class_id,
+          activeSubjectId,
+        );
+        if (!isMounted) return;
+        setPeriods(data.periods);
+        setSelectedPeriodId(
+          String(
+            data.default_academic_period_id ||
+              data.periods[0]?.academic_period_id ||
+              "",
+          ),
+        );
+      } catch {
+        // ignore
+      }
+    };
+    void loadPeriods();
+    return () => {
+      isMounted = false;
+    };
+  }, [detail.class_id, activeSubjectId]);
+
+  const loadStudentAnalytics = useCallback(
+    async (student: TeacherAdvisoryStudentItem, periodId?: string) => {
+      if (!detail.class_id || !activeSubjectId) return;
+      setIsDetailLoading(true);
+      setDetailError("");
+      setStudentDetail(null);
+      try {
+        const data = await getTeacherStudentRecordDetail(
+          detail.class_id,
+          activeSubjectId,
+          student.student_id,
+          periodId || selectedPeriodId || undefined,
+        );
+        setStudentDetail(data);
+      } catch (err) {
+        setDetailError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load student analytics.",
+        );
+      } finally {
+        setIsDetailLoading(false);
+      }
+    },
+    [detail.class_id, activeSubjectId, selectedPeriodId],
+  );
+
+  const handleSelectStudent = (student: TeacherAdvisoryStudentItem) => {
+    setSelectedStudent(student);
+    void loadStudentAnalytics(student, selectedPeriodId);
+  };
+
+  const handlePeriodChange = (newPeriodId: string) => {
+    setSelectedPeriodId(newPeriodId);
+    if (selectedStudent) {
+      void loadStudentAnalytics(selectedStudent, newPeriodId);
+    }
+  };
+
   const filteredStudents = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return detail.students
@@ -1915,6 +1927,67 @@ function StudentsTab({
       .sort((a, b) => a.full_name.localeCompare(b.full_name));
   }, [detail.students, search]);
   const groupedStudents = groupStudents(filteredStudents);
+
+  if (selectedStudent) {
+    return (
+      <div className="flex flex-col gap-4 min-w-0">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSelectedStudent(null);
+              setStudentDetail(null);
+            }}
+            className="gap-2 border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#F6E9B2]"
+          >
+            <ArrowLeft size={16} />
+            Back to students
+          </Button>
+
+          {periods.length > 1 && (
+            <Select
+              value={selectedPeriodId}
+              onValueChange={handlePeriodChange}
+            >
+              <Select.Trigger className="h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold min-w-[200px]">
+                <Select.Value placeholder="Select period" />
+              </Select.Trigger>
+              <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                {periods.map((p) => (
+                  <Select.Item
+                    key={p.academic_period_id}
+                    value={String(p.academic_period_id)}
+                  >
+                    {p.period_name} ({p.year_label})
+                  </Select.Item>
+                ))}
+              </Select.Content>
+            </Select>
+          )}
+        </div>
+
+        {detailError && (
+          <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 font-medium">
+            {detailError}
+          </div>
+        )}
+
+        {isDetailLoading || !studentDetail ? (
+          <p className="py-12 text-center text-sm font-semibold text-gray-500">
+            Loading student analytics...
+          </p>
+        ) : (
+          <StudentRecordDetail
+            detail={studentDetail}
+            classId={detail.class_id}
+            subjectLoads={detail.subject_loads as any}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-4">
@@ -1984,6 +2057,7 @@ function StudentsTab({
                             student={student}
                             classId={detail.class_id}
                             subjectLoads={detail.subject_loads}
+                            onSelectStudent={handleSelectStudent}
                           />
                         ))}
                       </Table.Body>
@@ -2400,10 +2474,12 @@ function StudentRow({
   student,
   classId,
   subjectLoads,
+  onSelectStudent,
 }: {
   student: TeacherAdvisoryStudentItem;
   classId: number;
   subjectLoads: TeacherAdvisoryClassDetailResponse["subject_loads"];
+  onSelectStudent?: (student: TeacherAdvisoryStudentItem) => void;
 }) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -2455,7 +2531,10 @@ function StudentRow({
 
   return (
     <>
-      <Table.Row className="border-b-2 border-black bg-white transition-colors">
+      <Table.Row
+        className={`border-b-2 border-black bg-white transition-colors ${onSelectStudent ? "cursor-pointer hover:bg-[#F6E9B2]/40 group" : ""}`}
+        onClick={() => onSelectStudent?.(student)}
+      >
         {/* Column 1: Student Details */}
         <Table.Cell className="py-2.5 px-4">
           <div className="flex items-center gap-3">
@@ -2471,7 +2550,7 @@ function StudentRow({
               </Avatar.Fallback>
             </Avatar>
             <div className="min-w-0">
-              <span className="block text-base font-semibold truncate">
+              <span className="block text-base font-semibold truncate group-hover:underline">
                 {student.full_name}
               </span>
               {student.student_lrn && (
@@ -2516,13 +2595,19 @@ function StudentRow({
         </Table.Cell>
 
         {/* Column 3: Action */}
-        <Table.Cell className="py-2.5 px-4 text-right">
+        <Table.Cell
+          className="py-2.5 px-4 text-right"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="flex items-center justify-end gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setIsDialogOpen(true)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsDialogOpen(true);
+              }}
               className="border-2 border-black bg-[#F6E9B2] hover:bg-[#fae498] text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
             >
               <Lightbulb size={14} className="mr-1" />
@@ -2532,7 +2617,10 @@ function StudentRow({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setShowHistory((prev) => !prev)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowHistory((prev) => !prev);
+              }}
               className="border-2 border-black bg-white hover:bg-gray-100 text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
             >
               History

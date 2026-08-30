@@ -417,7 +417,7 @@ export default function StudentRecordsPanel({
   );
 }
 
-function StudentRecordDetail({
+export function StudentRecordDetail({
   detail,
   classId,
   subjectLoads,
