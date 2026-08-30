@@ -36,6 +36,7 @@ import TeacherProfile from "./pages/teacher/profile-view";
 // import TeacherClasses from "./pages/teacher/Classworks";
 import ClassesPage from "./pages/teacher/classes";
 import TeacherClassDetail from "./pages/teacher/Classes/class-view";
+import SubjectDetails from "./pages/teacher/Classes/subject-details";
 import AdvisoryClassDetail from "./pages/teacher/Classes/advisory-class-view";
 import ClassSections from "./pages/teacher/Classes/class-section";
 import Subjects from "./pages/teacher/Classes/subjects";
@@ -110,7 +111,6 @@ const App = () => {
                 <Route path={routes.admin.substitutions} element={<AdminSubstitutions />} />
               </Route>
 
-
               {/* Teacher */}
               <Route element={<ProtectedRoute allowedRoles={["teacher"]} />}>
                 <Route index element={<Navigate to={routes.teacher.dashboard} replace />} />
@@ -121,7 +121,7 @@ const App = () => {
                 <Route path={routes.teacher.classDetail} element={<TeacherClassDetail />} />
                 <Route path={routes.teacher.advisoryClassDetail} element={<AdvisoryClassDetail />} />
                 <Route path={routes.teacher.classSubjects} element={<Subjects />} />
-                <Route path={routes.teacher.subjectDetail} element={<TeacherClassDetail />} />
+                <Route path={routes.teacher.subjectDetail} element={<SubjectDetails />} />
                 <Route path={routes.teacher.classworks} element={<TeacherClassworks />} />
                 <Route path={routes.teacher.createLesson} element={<CreateLesson />} />
                 {/* <Route path={routes.teacher.lessons} element={<TeacherLessons />} /> */}
@@ -158,7 +158,6 @@ const App = () => {
               <Route path={routes.student.quizView} element={<StudentQuizView />} />
               <Route path={routes.student.quizTake} element={<StudentQuizTake />} />
               <Route path={routes.student.quizResult} element={<StudentQuizResult />} />
-
 
               <Route
                 path="*"

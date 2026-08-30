@@ -39,9 +39,9 @@ import type {
   TeacherClassLoad,
 } from "./subject-details/types";
 
-const tabs: Array<TabItem<"lessons" | "students">> = [
-  { id: "lessons", label: "Lessons & Classwork" },
-  { id: "students", label: "Students" },
+const tabs: Array<TabItem<"lessons" | "classwork">> = [
+  { id: "lessons", label: "Lessons" },
+  { id: "classwork", label: "Classwork" },
 ];
 
 export default function SubjectDetails() {
@@ -56,7 +56,7 @@ export default function SubjectDetails() {
   const [editingCompetency, setEditingCompetency] = useState<CompetencyItem | null>(null);
   const [selectedCompetencyIdForNewLesson, setSelectedCompetencyIdForNewLesson] = useState<number | undefined>(undefined);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<"lessons" | "students">("lessons");
+  const [activeTab, setActiveTab] = useState<"lessons" | "classwork">("lessons");
   const [isCreatingLesson, setIsCreatingLesson] = useState(false);
   const [activeLessonDetail, setActiveLessonDetail] = useState<Lesson | null>(
     null,
@@ -249,26 +249,32 @@ export default function SubjectDetails() {
         }
 
         if (classId && subjectId) {
-          const periods = await getTeacherRecordPeriods(classId, subjectId);
-          const periodId =
-            periods.default_academic_period_id ||
-            periods.periods[0]?.academic_period_id;
-          if (periodId) {
-            const roster = await getTeacherStudentRoster(
-              classId,
-              subjectId,
-              periodId,
-            );
-            setOverviewMastery(
-              averageRosterMetric(
-                roster.students,
-                "running_classwork_percentage",
-              ),
-            );
-            setOverviewCompletion(
-              averageRosterMetric(roster.students, "completion_rate"),
-            );
-          } else {
+          try {
+            const periods = await getTeacherRecordPeriods(classId, subjectId);
+            const periodId =
+              periods.default_academic_period_id ||
+              periods.periods[0]?.academic_period_id;
+            if (periodId) {
+              const roster = await getTeacherStudentRoster(
+                classId,
+                subjectId,
+                periodId,
+              );
+              setOverviewMastery(
+                averageRosterMetric(
+                  roster.students,
+                  "running_classwork_percentage",
+                ),
+              );
+              setOverviewCompletion(
+                averageRosterMetric(roster.students, "completion_rate"),
+              );
+            } else {
+              setOverviewMastery(0);
+              setOverviewCompletion(0);
+            }
+          } catch (rosterErr) {
+            console.warn("Failed to load roster overview metrics:", rosterErr);
             setOverviewMastery(0);
             setOverviewCompletion(0);
           }
@@ -893,8 +899,8 @@ export default function SubjectDetails() {
                 <Breadcrumb>
                   <Breadcrumb.List>
                     <Breadcrumb.Item>
-                      <Breadcrumb.Link href="/teacher/classes/subjects">
-                        Subjects
+                      <Breadcrumb.Link href="/teacher/classes">
+                        Classes
                       </Breadcrumb.Link>
                     </Breadcrumb.Item>
 
@@ -968,12 +974,10 @@ export default function SubjectDetails() {
                   </Card.Content>
                 </Card>
 
-                {activeTab === "students" && classId && subjectId ? (
-                  <StudentRecordsPanel
-                    classId={classId}
-                    subjectId={subjectId}
-                    subjectLoads={loads as any}
-                  />
+                {activeTab === "classwork" && classId && subjectId ? (
+                  <p className="py-8 text-center text-gray-500">
+                    Loading classworks...
+                  </p>
                 ) : isLoading ? (
                   <p className="py-8 text-center text-gray-500">
                     Loading lessons...
