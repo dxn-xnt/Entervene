@@ -3,6 +3,7 @@ import { Download, FileText, File, X } from "lucide-react";
 import PDFViewer from "./pdf-viewer";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/retroui/Button";
+import { Card } from "./retroui/Card";
 
 interface Attachment {
   classwork_attachment_id?: number;
@@ -229,9 +230,6 @@ export default function AttachmentDisplay({
               {previewError}
             </div>
           )}
-          <h3 className="font-semibold text-sm text-gray-700">
-            Attachments ({attachments.length})
-          </h3>
           <div className="grid gap-2">
             {attachments.map((attachment, idx) => {
               const isPdfFile = isPdf(attachment.file_name);
@@ -239,15 +237,15 @@ export default function AttachmentDisplay({
               const url = getAttachmentUrl(attachment);
 
               return (
-                <div
+                <Card
                   key={idx}
-                  className="flex min-w-0 flex-col gap-3 rounded-lg border border-gray-200 p-3 transition-colors hover:bg-gray-50 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex min-w-0 flex-col shadow-none transition-colors hover:bg-accent sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     {isPdfFile ? (
                       <FileText
-                        className="text-red-500 flex-shrink-0"
-                        size={20}
+                        className="flex-shrink-0"
+                        size={24}
                       />
                     ) : (
                       <File className="text-blue-500 flex-shrink-0" size={20} />
@@ -271,6 +269,7 @@ export default function AttachmentDisplay({
                         type="button"
                         variant="outline"
                         size="sm"
+                        className="shadow-none"
                         onClick={() =>
                           isPdfFile
                             ? handleOpenPdf(attachment)
@@ -278,9 +277,7 @@ export default function AttachmentDisplay({
                         }
                         disabled={imageLoadingName === attachment.file_name}
                       >
-                        {imageLoadingName === attachment.file_name
-                          ? "Loading..."
-                          : "View"}
+                        View
                       </Button>
                     )}
                     {url && (
@@ -289,16 +286,14 @@ export default function AttachmentDisplay({
                         size="sm"
                         onClick={() => handleDownload(attachment)}
                         disabled={downloadLoadingName === attachment.file_name}
-                        className="gap-1.5"
+                        className="gap-1.5 shadow-none"
                       >
                         <Download size={14} />
-                        {downloadLoadingName === attachment.file_name
-                          ? "Downloading..."
-                          : "Download"}
+                        Download
                       </Button>
                     )}
                   </div>
-                </div>
+                </Card>
               );
             })}
           </div>

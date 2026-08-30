@@ -71,6 +71,8 @@ import AdminStudentView from "./pages/admin/student-view";
 import StudentQuizTake from "./pages/quiz/quiz-interface";
 import StudentQuizView from "./pages/quiz/quiz-view";
 import StudentQuizResult from "./pages/quiz/quiz-result";
+import ClassworkView from "./pages/teacher/classwork-view";
+
 
 // // Layouts
 // import TeacherLayout from "./pages/teacher/TeacherLayout";
@@ -123,6 +125,7 @@ const App = () => {
                 <Route path={routes.teacher.classSubjects} element={<Subjects />} />
                 <Route path={routes.teacher.subjectDetail} element={<SubjectDetails />} />
                 <Route path={routes.teacher.classworks} element={<TeacherClassworks />} />
+                <Route path={routes.teacher.classworkDetail} element={<ClassworkView />} />
                 <Route path={routes.teacher.createLesson} element={<CreateLesson />} />
                 {/* <Route path={routes.teacher.lessons} element={<TeacherLessons />} /> */}
                 <Route path={routes.teacher.profile} element={<TeacherProfile />} />
