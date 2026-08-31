@@ -612,6 +612,11 @@ export type StudentGradebookRow = {
   initial_grade?: number | null;
   transmuted_grade?: number | null;
   total: string;
+  period_grade_id?: number | null;
+  is_finalized?: boolean;
+  finalized_at?: string | null;
+  finalized_by_staff_id?: string | null;
+  finalized_by_name?: string | null;
 };
 
 export type StudentGradebookResponse = {
@@ -641,8 +646,10 @@ export type TermGradeSummaryScope = {
 export type TermPeriodInfo = {
   academic_period_id: number;
   period_name: string;
-  period_sequence: number;
+  period_sequence?: number;
   is_active?: boolean;
+  start_date?: string;
+  end_date?: string;
 };
 
 export type StudentRecordPeriodOptionsResponse = {
@@ -656,6 +663,104 @@ export type TermGradeSummaryResponse = {
   students: TermGradeSummaryRow[];
   passing_threshold: number;
 };
+
+export type SendStudentGradePayload = {
+  academic_period_id: number;
+  expected_transmuted_grade?: number | null;
+  expected_final_period_grade?: number | null;
+  final_period_grade?: number | null;
+  force_resend?: boolean;
+  remarks?: string | null;
+};
+
+export type SendGradeToAdviserItemResponse = {
+  student_id: string;
+  name: string;
+  period_grade_id?: number | null;
+  log_id?: number | null;
+  written_work_percent?: number | null;
+  performance_task_percent?: number | null;
+  quarterly_assessment_percent?: number | null;
+  initial_grade?: number | null;
+  transmuted_grade?: number | null;
+  final_period_grade?: number | null;
+  is_finalized: boolean;
+  finalized_at?: string | null;
+  finalized_by_staff_id?: string | null;
+  finalized_by_name?: string | null;
+  status: "newly_sent" | "updated" | "unchanged" | "conflict" | "skipped_incomplete";
+  message?: string | null;
+  incomplete_components?: string[];
+};
+
+export type BulkSendGradesPayload = {
+  force_resend_all?: boolean;
+  expected_student_grades?: Record<string, number>;
+  remarks?: string | null;
+};
+
+export type BulkSendGradesToAdviserResponse = {
+  class_id: number;
+  subject_id: number;
+  academic_period_id: number;
+  total_students: number;
+  newly_sent_count: number;
+  unchanged_skipped_count: number;
+  incomplete_skipped_count?: number;
+  incomplete_warning_count?: number;
+  finalized_at: string;
+  finalized_by_staff_id: string;
+  finalized_by_name: string;
+  entries: SendGradeToAdviserItemResponse[];
+};
+
+export async function sendStudentGradeToAdviser(
+  classId: number | string,
+  subjectId: number | string,
+  studentId: string,
+  payload: SendStudentGradePayload
+): Promise<SendGradeToAdviserItemResponse> {
+  const url = `/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/students/${encodeURIComponent(studentId)}/send-to-adviser`;
+  const response = await apiFetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const error: any = new Error(errorData.detail?.message || errorData.detail || "Failed to send grade to adviser.");
+    error.status = response.status;
+    error.data = errorData;
+    throw error;
+  }
+
+  return (await response.json()) as SendGradeToAdviserItemResponse;
+}
+
+export async function bulkSendGradesToAdviser(
+  classId: number | string,
+  subjectId: number | string,
+  academicPeriodId: number | string,
+  payload?: BulkSendGradesPayload
+): Promise<BulkSendGradesToAdviserResponse> {
+  const url = `/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/periods/${encodeURIComponent(String(academicPeriodId))}/send-to-adviser`;
+  const response = await apiFetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const error: any = new Error(errorData.detail?.message || errorData.detail || "Failed to send grades to adviser.");
+    error.status = response.status;
+    error.data = errorData;
+    throw error;
+  }
+
+  return (await response.json()) as BulkSendGradesToAdviserResponse;
+}
 
 export async function getTeacherGradebook(classId: number | string, subjectId: number | string, academicPeriodId?: number): Promise<StudentGradebookResponse> {
   const url = academicPeriodId

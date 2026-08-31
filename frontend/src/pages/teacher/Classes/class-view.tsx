@@ -11,8 +11,6 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardList,
-  ExternalLink,
-  Eye,
   FileText,
   Filter,
   Lightbulb,

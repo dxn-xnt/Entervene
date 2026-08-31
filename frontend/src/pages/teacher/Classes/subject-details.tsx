@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Archive, Award, Info, Paperclip, Plus, TableProperties, Trash2, Users, X } from "lucide-react";
+import { Archive, Award, Info, Paperclip, Plus, Trash2, Users, X } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { API_URL, apiFetch } from "@/lib/api";
@@ -20,7 +20,6 @@ import ClassworkFormModal from "./subject-details/ClassworkFormModal";
 import CompetencyModal from "./subject-details/CompetencyModal";
 import LessonClassworkList from "./subject-details/lesson-classwork-list";
 import SubjectClassworkTab from "./subject-details/SubjectClassworkTab";
-import StudentRecordsPanel from "./subject-details/StudentRecordsPanel";
 import TeacherLessonDetailScreen from "./subject-details/TeacherLessonDetailScreen";
 import TOSGeneratorScreen from "./subject-details/TOSGeneratorScreen";
 import {

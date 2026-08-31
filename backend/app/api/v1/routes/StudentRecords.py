@@ -6,6 +6,10 @@ from sqlalchemy.orm import Session
 from app.core.Dependencies import get_staff_id, require_role
 from app.db.Session import get_db
 from app.schemas.StudentRecord import (
+    BulkSendGradesRequest,
+    BulkSendGradesToAdviserResponse,
+    SendGradeToAdviserItemResponse,
+    SendStudentGradeRequest,
     StudentGradebookResponse,
     StudentPeriodGradeFinalizeRequest,
     StudentPeriodGradeFinalizeResponse,
@@ -15,7 +19,9 @@ from app.schemas.StudentRecord import (
     TermGradeSummaryResponse,
 )
 from app.services.student_record.StudentRecordService import (
+    bulk_send_grades_to_adviser,
     finalize_student_period_grade,
+    send_student_grade_to_adviser,
     teacher_period_options,
     teacher_student_gradebook,
     teacher_student_record_detail,
@@ -133,4 +139,51 @@ def get_teacher_term_grade_summary(
         class_id=class_id,
         subject_id=subject_id,
     )
+
+
+@router.post(
+    "/teacher/classes/{class_id}/subjects/{subject_id}/students/{student_id}/send-to-adviser",
+    response_model=SendGradeToAdviserItemResponse,
+)
+def send_student_grade(
+    class_id: int,
+    subject_id: int,
+    student_id: UUID,
+    payload: SendStudentGradeRequest,
+    _teacher: dict = Depends(require_role("teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return send_student_grade_to_adviser(
+        db=db,
+        staff_id=staff_id,
+        class_id=class_id,
+        subject_id=subject_id,
+        student_id=student_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/teacher/classes/{class_id}/subjects/{subject_id}/periods/{academic_period_id}/send-to-adviser",
+    response_model=BulkSendGradesToAdviserResponse,
+)
+def bulk_send_grades(
+    class_id: int,
+    subject_id: int,
+    academic_period_id: int,
+    payload: BulkSendGradesRequest,
+    _teacher: dict = Depends(require_role("teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return bulk_send_grades_to_adviser(
+        db=db,
+        staff_id=staff_id,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=academic_period_id,
+        payload=payload,
+    )
+
 
