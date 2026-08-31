@@ -246,7 +246,7 @@ export function SuggestionPanel({
         size="lg"
         className="w-[95vw] max-w-2xl p-0 overflow-hidden"
       >
-        <Dialog.Header className="px-6 py-4">
+        <Dialog.Header>
           <div className="flex items-center gap-2.5">
             <Lightbulb className="size-6 text-black" />
             <div>

@@ -1047,7 +1047,7 @@ const TeacherGradeView = () => {
         }}
       >
         <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded-lg overflow-hidden">
-          <Dialog.Header className="bg-primary border-b-2 border-black text-black px-5 py-3.5 min-h-0 flex items-center justify-between">
+          <Dialog.Header className="bg-primary border-b-2 border-black text-black min-h-0 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="size-8 rounded-md bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                 {timingGate.isLocked ? (
@@ -1174,7 +1174,7 @@ const TeacherGradeView = () => {
         }}
       >
         <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded-lg overflow-hidden">
-          <Dialog.Header className="bg-primary border-b-2 border-black text-black px-5 py-3.5 min-h-0 flex items-center justify-between">
+          <Dialog.Header className="bg-primary border-b-2 border-black text-black min-h-0 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="size-8 rounded-md bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                 <AlertTriangle className="size-4 text-black" />
@@ -1242,7 +1242,7 @@ const TeacherGradeView = () => {
         }}
       >
         <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded-lg overflow-hidden">
-          <Dialog.Header className="bg-primary border-b-2 border-black text-black px-5 py-3.5 min-h-0 flex items-center justify-between">
+          <Dialog.Header className="bg-primary border-b-2 border-black text-black min-h-0 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="size-8 rounded-md bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                 <CheckCircle2 className="size-4 text-black" />

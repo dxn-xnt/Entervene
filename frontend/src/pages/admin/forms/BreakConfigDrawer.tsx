@@ -259,7 +259,7 @@ export default function BreakConfigDrawer({
   return (
     <Dialog open={open} onOpenChange={(val) => { if (!val && !isSaving) onClose(); }}>
       <Dialog.Content size="3xl" className="border-2 border-black p-0 max-h-[92vh] overflow-y-auto">
-        <Dialog.Header className="border-b-2 border-black bg-primary px-5 py-4 flex items-center justify-between">
+        <Dialog.Header className="border-b-2 border-black bg-primary flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Clock className="size-5 text-black" />
             <div>
@@ -466,7 +466,7 @@ export default function BreakConfigDrawer({
       {/* Themed RetroUI Confirmation Modal */}
       <Dialog open={showConfirmModal} onOpenChange={(val) => { if (!val && !isSaving) setShowConfirmModal(false); }}>
         <Dialog.Content size="md" className="border-2 border-black p-0 overflow-hidden shadow-[4px_4px_0_#000] bg-white">
-          <Dialog.Header className="border-b-2 border-black bg-primary px-5 py-3.5 flex items-center justify-between">
+          <Dialog.Header className="border-b-2 border-black bg-primary flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Clock className="size-5 text-black" />
               <h3 className="text-base font-bold">Confirm Period Template Update</h3>
@@ -509,7 +509,7 @@ export default function BreakConfigDrawer({
       {/* Themed RetroUI New Template Group Modal */}
       <Dialog open={showNewGroupModal} onOpenChange={(val) => { if (!val) setShowNewGroupModal(false); }}>
         <Dialog.Content size="md" className="border-2 border-black p-0 overflow-hidden shadow-[4px_4px_0_#000] bg-white">
-          <Dialog.Header className="border-b-2 border-black bg-primary px-5 py-3.5 flex items-center justify-between">
+          <Dialog.Header className="border-b-2 border-black bg-primary flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FolderPlus className="size-5 text-black" />
               <h3 className="text-base font-bold">New Section Template Group</h3>

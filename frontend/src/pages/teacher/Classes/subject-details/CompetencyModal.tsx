@@ -138,7 +138,7 @@ export default function CompetencyModal({
         size="md"
         className="w-[95vw] max-w-xl border-2 border-black bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-0 overflow-hidden"
       >
-        <Dialog.Header className="bg-[#F6E9B2] border-b-2 border-black px-6 py-4">
+        <Dialog.Header className="bg-[#F6E9B2] border-b-2 border-black">
           <div className="flex items-center gap-2.5">
             <Award className="size-6 text-black" />
             <h2 className="text-xl font-black text-black">

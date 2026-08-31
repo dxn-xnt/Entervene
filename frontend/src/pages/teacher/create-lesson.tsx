@@ -273,7 +273,7 @@ export default function CreateLessonModal({
         size="md"
         className="w-[95vw] max-w-2xl max-h-[88vh] flex flex-col border-2 border-black bg-[#FBFBEE] p-0 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
       >
-        <Dialog.Header className="shrink-0 bg-[#F6E9B2] border-b-2 border-black px-6 py-4">
+        <Dialog.Header className="shrink-0 bg-[#F6E9B2] border-b-2 border-black">
           <div className="flex items-center gap-2.5">
             <BookOpen className="size-6 text-black" />
             <div>
