@@ -60,7 +60,7 @@ export default function ClassworkFormModal({
     >
       <Dialog.Content className="block w-full max-w-2xl border-black bg-white p-0 transition-none max-h-[90vh] overflow-y-auto">
         <Dialog.Header
-          className={`sticky top-0 z-10 flex items-center justify-between border-b-2 border-black px-5 py-4`}
+          className="sticky top-0 z-10 border-black"
         >
           <div>
             <h2 className="text-lg font-bold">{classworkModalTitle}</h2>

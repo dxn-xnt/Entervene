@@ -1332,7 +1332,7 @@ function OverviewTab({
             className="no-scrollbar h-fit max-h-[90vh] !overflow-y-auto overflow-x-hidden border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
             overlay={{ className: "bg-black/50" }}
           >
-            <Dialog.Header asChild className="bg-primary px-5 py-4 border-b-2 border-black">
+            <Dialog.Header asChild className="border-black">
               <>
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-black/70">
@@ -1582,7 +1582,7 @@ function OverviewTab({
           }}
         >
           <Dialog.Content className="block w-full max-w-4xl border-2 border-black bg-white p-0 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] max-h-[92vh] overflow-y-auto">
-            <Dialog.Header className="sticky top-0 z-10 flex items-center justify-between border-b-2 border-black bg-primary px-5 py-4">
+            <Dialog.Header className="sticky top-0 z-10 border-black">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide">
                   Teacher lesson management

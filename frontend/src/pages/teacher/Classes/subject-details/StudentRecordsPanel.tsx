@@ -309,7 +309,7 @@ export default function StudentRecordsPanel({
           </Card.Content>
         </Card>
 
-        <Card className="bloc">
+        <Card className="block">
           <Card.Content className="space-y-1">
             <Card.Description>Completion</Card.Description>
             <Card.Title>

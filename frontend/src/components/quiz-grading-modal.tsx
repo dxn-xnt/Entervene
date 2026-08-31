@@ -354,7 +354,7 @@ export default function QuizGradingModal({
       <Dialog.Content size="3xl" className="max-h-[92vh] flex flex-col border-2 border-black">
         {/* Header */}
         <Dialog.Header position="fixed" asChild>
-          <div className="flex items-center justify-between w-full py-4 px-2">
+          <div className="flex w-full items-center justify-between">
             <div>
               <h2 className="text-xl font-bold text-black">
                 Grade Quiz Answers: {detail?.student_name || "Student"}
