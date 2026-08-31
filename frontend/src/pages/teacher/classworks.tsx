@@ -1,11 +1,8 @@
 import {
-  ArrowDownAZ,
-  ArrowUpDown,
   BookOpen,
   CheckSquare,
   ClipboardList,
   FileText,
-  Filter,
   Plus,
   Search,
   X,
@@ -31,7 +28,6 @@ import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Input } from "@/components/retroui/Input";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
-import { Label } from "@/components/retroui/Label";
 import { Select } from "@/components/retroui/Select";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
@@ -92,8 +88,7 @@ export default function Classworks() {
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [classFilter, setClassFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [sortMode, setSortMode] = useState<SortMode>("newest");
-  const [showFilters, setShowFilters] = useState(false);
+  const [sortMode, _setSortMode] = useState<SortMode>("newest");
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [selectedType, setSelectedType] = useState<ClassworkKind | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -203,46 +198,39 @@ export default function Classworks() {
     navigate(`/teacher/classworks/${item.classwork_id}`);
   };
 
-  const cycleSort = () => {
-    setSortMode((current) =>
-      current === "newest"
-        ? "oldest"
-        : current === "oldest"
-          ? "title"
-          : "newest",
-    );
-  };
-
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-                <header className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <SidebarTrigger className="md:hidden" />
-                    <h1 className="text-2xl md:text-4xl font-bold">Classwork</h1>
-                  </div>
-
-                  <Button
-                    type="button"
-                    onClick={openCreateWizard}
-                    className="gap-2"
-                  >
-                    <Plus className="size-4" />
-                    <span className="hidden sm:inline">New Classwork</span>
-                    <span className="sm:hidden">New</span>
-                  </Button>
-                </header>
-
-                <Tabs
-                  tabs={tabs}
-                  activeTab={activeTab}
-                  onTabChange={setActiveTab}
-                />
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="md:hidden" />
+                <h1 className="text-2xl md:text-4xl font-bold">Classwork</h1>
               </div>
 
-              <main className="flex flex-col gap-4 px-5 py-4 pt-0!">
+              <Button
+                type="button"
+                onClick={openCreateWizard}
+                className="gap-2"
+              >
+                <Plus className="size-4" />
+                <span className="hidden sm:inline">New Classwork</span>
+                <span className="sm:hidden">New</span>
+              </Button>
+            </header>
+            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+              <Tabs
+                tabs={tabs}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+              />
+            </div>
+
+            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
+
+
+              <main className="flex flex-col gap-4">
                 {error && (
                   <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
                     {error}
@@ -438,6 +426,8 @@ export default function Classworks() {
               </Dialog>
             </div>
           </div>
+        </div>
+      </div>
     </AppLayout>
   );
 }

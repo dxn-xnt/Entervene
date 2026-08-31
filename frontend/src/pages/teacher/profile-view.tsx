@@ -61,8 +61,8 @@ export default function TeacherProfile() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-1 flex-col">
+            <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <div className="flex flex-col items-start">
@@ -77,9 +77,8 @@ export default function TeacherProfile() {
                 </Button>
               </div>
             </header>
-            <div className="-mx-4 md:-mx-6 border-b border-black/40" />
 
-            <div className="flex flex-col gap-4 py-2 md:gap-6">
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4 md:gap-6">
               <ProfileHeader user={user} onAvatarClick={openModal} />
 
               <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4">

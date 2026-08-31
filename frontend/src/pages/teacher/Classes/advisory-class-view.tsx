@@ -8,6 +8,7 @@ import { Card } from "@/components/retroui/Card";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Table } from "@/components/retroui/Table";
 import { OverviewCard } from "@/components/overview-cards";
 import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
@@ -93,9 +94,10 @@ export default function AdvisoryClassDetail() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
-            <header className="flex items-center gap-3 -mb-[5px]">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
+              <SidebarTrigger className="md:hidden" />
               <Breadcrumb>
                 <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
                   <Breadcrumb.Item>
@@ -115,28 +117,31 @@ export default function AdvisoryClassDetail() {
                 </Breadcrumb.List>
               </Breadcrumb>
             </header>
+            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+              <Tabs<DetailTab>
+                tabs={[
+                  {
+                    id: "classes",
+                    label: "Classes",
+                    icon: BookOpen,
+                  },
+                  {
+                    id: "students",
+                    label: "Students",
+                    icon: Users,
+                  },
+                  {
+                    id: "subjects",
+                    label: "Subject Load",
+                    icon: BookOpen,
+                  },
+                ]}
+                activeTab={tab}
+                onTabChange={setTab}
+              />
+            </div>
 
-            <Tabs<DetailTab>
-              tabs={[
-                {
-                  id: "classes",
-                  label: "Classes",
-                  icon: BookOpen,
-                },
-                {
-                  id: "students",
-                  label: "Students",
-                  icon: Users,
-                },
-                {
-                  id: "subjects",
-                  label: "Subject Load",
-                  icon: BookOpen,
-                },
-              ]}
-              activeTab={tab}
-              onTabChange={setTab}
-            />
+            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
 
             <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
               <Card.Content>
@@ -167,6 +172,7 @@ export default function AdvisoryClassDetail() {
             {tab === "subjects" && <SubjectLoadTab detail={detail} />}
           </div>
         </div>
+      </div>
       </div>
     </AppLayout>
   );

@@ -1,4 +1,4 @@
-import { ArrowLeft, Eye } from "lucide-react";
+import { Eye } from "lucide-react";
 import AttachmentDisplay from "@/components/attachment-display";
 import { API_URL } from "@/lib/api";
 import { Button } from "@/components/retroui/Button";
@@ -61,9 +61,9 @@ export default function StudentSubmissionView({
   return (
     <main className="flex flex-1 flex-col overflow-x-hidden">
       <div className="@container/main flex flex-1 flex-col">
-        <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
+        <div className="flex flex-1 flex-col">
           {/* Top Bar with Breadcrumbs and Back Button */}
-          <div className="flex flex-row gap-3 justify-between items-center">
+          <header className="flex flex-row gap-3 justify-between items-center bg-background py-4 px-4 md:px-6">
             <div className="flex items-center gap-3 min-w-0">
               <SidebarTrigger className="md:hidden" />
               <Breadcrumb>
@@ -110,22 +110,11 @@ export default function StudentSubmissionView({
                   : "Post Grade"}
               </Button>
             </div>
+          </header>
 
-            {/* <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              className="whitespace-nowrap gap-2"
-            >
-              <ArrowLeft size={16} />
-              Back
-            </Button> */}
-          </div>
-
-          <div className="-mx-4 md:-mx-6 border-b-2 border-border" />
-
-          {/* Main Content Area */}
-          <Card className="mx-auto w-full space-y-4">
+          <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
+            {/* Main Content Area */}
+            <Card className="mx-auto w-full space-y-4">
             {/* Student Submission Banner Card */}
             <Card className="block w-full bg-primary shadow-none">
               <Card.Content>
@@ -293,6 +282,7 @@ export default function StudentSubmissionView({
             </div>
           </Card>
         </div>
+      </div>
       </div>
     </main>
   );

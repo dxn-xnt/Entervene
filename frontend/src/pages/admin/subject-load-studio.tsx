@@ -1214,9 +1214,9 @@ export default function AdminSubjectLoadStudio() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center justify-between">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center justify-between bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <h1 className="text-4xl font-bold tracking-tight">
@@ -1313,10 +1313,9 @@ export default function AdminSubjectLoadStudio() {
               </div>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b border-black/40" />
-
-            {/* Notice Alert Overlay */}
-            {notice && (
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+              {/* Notice Alert Overlay */}
+              {notice && (
               <Alert
                 status={notice.type}
                 position="top-right"
@@ -2191,6 +2190,7 @@ export default function AdminSubjectLoadStudio() {
               </aside>
             </div>
 
+            </div>
           </div>
         </div>
       </div>

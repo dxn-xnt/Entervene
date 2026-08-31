@@ -80,8 +80,8 @@ const StudentQuizResult = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center gap-3">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
               <SidebarTrigger className="md:hidden" />
               <Breadcrumb>
                 <Breadcrumb.List>
@@ -103,9 +103,7 @@ const StudentQuizResult = () => {
               </Breadcrumb>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b border-gray-300" />
-
-            <main className="flex flex-1 flex-col gap-6 py-3 max-w-4xl w-full mx-auto">
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-1 flex-col gap-6 max-w-4xl w-full mx-auto">
               {/* Header Actions */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -303,7 +301,7 @@ const StudentQuizResult = () => {
                   </div>
                 </div>
               )}
-            </main>
+            </div>
           </div>
         </div>
       </div>

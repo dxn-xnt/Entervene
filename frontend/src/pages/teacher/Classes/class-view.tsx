@@ -30,6 +30,7 @@ import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Text } from "@/components/retroui/Text";
 import { Select } from "@/components/retroui/Select";
 import { OverviewCard } from "@/components/overview-cards";
@@ -238,10 +239,11 @@ export default function TeacherClassDetail() {
   return (
     <AppLayout>
       <div className="flex min-w-0 max-w-full flex-1 flex-col overflow-x-hidden">
-        <div className="@container/main flex min-w-0 max-w-full flex-1 flex-col gap-2">
-          <div className="flex min-w-0 max-w-full flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
-            <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between -mb-[5px] min-w-0">
+        <div className="@container/main flex min-w-0 max-w-full flex-1 flex-col">
+          <div className="flex min-w-0 max-w-full flex-1 flex-col">
+            <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-background py-4 px-4 md:px-6 min-w-0">
               <div className="flex items-center gap-3 min-w-0">
+                <SidebarTrigger className="md:hidden" />
                 <Breadcrumb>
                   <Breadcrumb.List>
                     <Breadcrumb.Item>
@@ -283,28 +285,31 @@ export default function TeacherClassDetail() {
                 )}
               </div>
             </header>
+            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+              <Tabs<DetailTab>
+                tabs={[
+                  {
+                    id: "lessons",
+                    label: "Lessons",
+                    icon: BookOpen,
+                  },
+                  {
+                    id: "students",
+                    label: "Students",
+                    icon: Users,
+                  },
+                  {
+                    id: "classwork",
+                    label: "Classwork",
+                    icon: ClipboardList,
+                  },
+                ]}
+                activeTab={tab}
+                onTabChange={setTab}
+              />
+            </div>
 
-            <Tabs<DetailTab>
-              tabs={[
-                {
-                  id: "lessons",
-                  label: "Lessons",
-                  icon: BookOpen,
-                },
-                {
-                  id: "students",
-                  label: "Students",
-                  icon: Users,
-                },
-                {
-                  id: "classwork",
-                  label: "Classwork",
-                  icon: ClipboardList,
-                },
-              ]}
-              activeTab={tab}
-              onTabChange={setTab}
-            />
+            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
 
             <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
               <Card.Content>
@@ -349,6 +354,7 @@ export default function TeacherClassDetail() {
             )}
           </div>
         </div>
+      </div>
       </div>
     </AppLayout>
   );

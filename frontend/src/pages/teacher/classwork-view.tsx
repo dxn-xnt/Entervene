@@ -57,7 +57,7 @@ export default function ClassworkView({
   const [isClassworkLoading, setIsClassworkLoading] = useState(!classwork);
   const [classworkFetchError, setClassworkFetchError] = useState("");
   const [tracking, setTracking] = useState<AssignmentTracking | null>(null);
-  const [isTrackingLoading, setIsTrackingLoading] = useState(false);
+  const [_isTrackingLoading, setIsTrackingLoading] = useState(false);
   const [quizAnalysis, setQuizAnalysis] = useState<QuizAnalysis | null>(null);
   const [isQuizAnalysisLoading, setIsQuizAnalysisLoading] = useState(false);
   const [quizAnalysisError, setQuizAnalysisError] = useState("");
@@ -406,8 +406,8 @@ export default function ClassworkView({
   const mainContent = (
     <main className="flex flex-1 flex-col overflow-x-hidden">
       <div className="@container/main flex flex-1 flex-col">
-        <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
-          <div className="flex flex-row gap-3 justify-between items-center">
+        <div className="flex flex-1 flex-col">
+          <header className="flex flex-row gap-3 justify-between items-center bg-background py-4 px-4 md:px-6">
             <div className="flex items-center gap-3 min-w-0">
               <SidebarTrigger className="md:hidden" />
               <Breadcrumb>
@@ -457,11 +457,10 @@ export default function ClassworkView({
                 Archive Classwork
               </Button>
             </div>
-          </div>
+          </header>
 
-          <div className="-mx-4 md:-mx-6 border-b-2 border-border" />
-
-          <Card className="mx-auto w-full space-y-4">
+          <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
+            <Card className="mx-auto w-full space-y-4">
             <Card className="block w-full bg-primary shadow-none">
               <Card.Content>
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -707,6 +706,7 @@ export default function ClassworkView({
             )}
           </Card>
         </div>
+      </div>
       </div>
 
       {/* Edit Classwork Modal */}

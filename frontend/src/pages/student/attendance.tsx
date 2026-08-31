@@ -213,9 +213,9 @@ export default function StudentAttendancePage() {
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-4 px-4 py-4 md:px-6 md:py-5">
+          <div className="flex flex-1 flex-col">
             {/* Header */}
-            <header className="flex flex-wrap items-center justify-between gap-3">
+            <header className="flex flex-wrap items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <div>
@@ -243,10 +243,9 @@ export default function StudentAttendancePage() {
               </div>
             </header>
 
-            <div className="-mx-4 -mt-[1px] border-b-2 border-border md:-mx-6" />
-
-            {/* Subject Selector Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-neutral-50 border-2 border-black p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-1 flex-col gap-4">
+              {/* Subject Selector Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-neutral-50 border-2 border-black p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
               <div className="flex items-center gap-2">
                 <BookOpen className="w-4 h-4 text-black/70" />
                 <span className="text-xs font-bold uppercase tracking-wider">Attendance Scope:</span>
@@ -616,6 +615,7 @@ export default function StudentAttendancePage() {
                 </Dialog.Content>
               </Dialog>
             )}
+            </div>
           </div>
         </div>
       </div>

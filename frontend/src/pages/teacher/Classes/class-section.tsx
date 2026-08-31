@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Info, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { apiFetch } from "@/lib/api";
 
 type TeacherClassLoad = {
@@ -103,16 +104,20 @@ export default function ClassSections() {
 
   return (
     <AppLayout>
-      <header className="border-b border-gray-300 bg-white px-5 py-5">
-        <h1 className="text-3xl font-bold text-gray-950">Classes</h1>
-      </header>
+      <div className="flex flex-1 flex-col">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
+              <SidebarTrigger className="md:hidden" />
+              <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Classes</h1>
+            </header>
 
-      <main className="flex flex-col gap-5 px-5 py-5">
-        {error && (
-          <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-5">
+              {error && (
+                <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
 
         <section className="rounded-lg border border-black bg-[#F6E9B2] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-start justify-between gap-4">
@@ -151,7 +156,10 @@ export default function ClassSections() {
             </button>
           ))}
         </section>
-      </main>
+      </div>
+    </div>
+  </div>
+</div>
     </AppLayout>
   );
 }

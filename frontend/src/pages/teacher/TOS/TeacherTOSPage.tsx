@@ -232,9 +232,9 @@ export const TeacherTOSPage: React.FC = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
+          <div className="flex flex-1 flex-col">
             {/* Header matching other sidebar pages */}
-            <header className="flex items-center justify-between gap-3">
+            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
@@ -254,10 +254,9 @@ export const TeacherTOSPage: React.FC = () => {
               </Button>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
-
-          {/* Filter Toolbar */}
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between rounded-lg border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+              {/* Filter Toolbar */}
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between rounded-lg border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
             <div className="flex flex-wrap items-center gap-2">
               {/* Subject Filter Dropdown */}
               <div className="w-full sm:w-auto">
@@ -444,6 +443,7 @@ export const TeacherTOSPage: React.FC = () => {
             </div>
           )}
         </div>
+      </div>
       </div>
       </div>
     </AppLayout>

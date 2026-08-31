@@ -290,8 +290,8 @@ export default function AdminUsers() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6 pb-6">
-            <header className="flex items-center justify-between">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center justify-between bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <h1 className="text-2xl md:text-4xl font-bold tracking-tight">User Management</h1>
@@ -304,12 +304,15 @@ export default function AdminUsers() {
                 New User
               </Button>
             </header>
+            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+              <Tabs
+                tabs={tabs}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+              />
+            </div>
 
-            <Tabs
-              tabs={tabs}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-            />
+            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
 
             <div className="flex flex-col gap-3">
               <div className="grid gap-3 md:grid-cols-[1fr_160px_160px] py-2">
@@ -620,6 +623,7 @@ export default function AdminUsers() {
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       <AddUserModal
