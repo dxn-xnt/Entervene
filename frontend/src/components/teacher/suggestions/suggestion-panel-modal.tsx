@@ -412,7 +412,7 @@ export function SuggestionPanel({
                 size="sm"
                 onClick={handleClose}
                 disabled={isSubmitting}
-                className="border-2 border-black bg-white hover:bg-gray-100 font-bold px-4 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+        className="border-2 border-black bg-white hover:bg-gray-100 font-bold px-4 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
               >
                 Cancel
               </Button>
@@ -421,7 +421,7 @@ export function SuggestionPanel({
                 variant="default"
                 size="sm"
                 disabled={isSubmitting || !resources.length}
-                className="border-2 border-black bg-[#79bd80] hover:bg-[#79bd80] text-black font-bold px-5 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
+        className="border-2 border-black bg-[#79bd80] hover:bg-[#79bd80] text-black font-bold px-5 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
               >
                 <Send size={14} className="mr-1 inline" />
                 {isSubmitting ? "Sending..." : "Send Suggestion"}
