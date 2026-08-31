@@ -144,7 +144,7 @@ const StudentQuizView = () => {
                   <div className="flex flex-1 flex-col gap-6 py-4">
                     {/* Instructions Card */}
                     {quiz.instructions && (
-                      <Card className="bg-white border-2 border-black p-4">
+                      <Card className="bg-white">
                         <h3 className="font-bold text-sm text-black/70 uppercase tracking-wide mb-1">Instructions</h3>
                         <p className="text-sm text-black/80 whitespace-pre-wrap">{quiz.instructions}</p>
                       </Card>
@@ -152,7 +152,7 @@ const StudentQuizView = () => {
 
                     {/* Stats Overview Grid */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <Card className="bg-[#F6E9B2] border-2 border-black flex flex-col items-center justify-center p-6 text-center">
+                      <Card className="bg-[#F6E9B2] flex flex-col items-center justify-center p-6 text-center">
                         <HelpCircle className="w-6 h-6 mb-2 text-black/70" />
                         <span className="text-3xl font-extrabold">{quiz.questions.length}</span>
                         <span className="text-xs font-semibold text-black/70 uppercase tracking-wider mt-1">
@@ -160,7 +160,7 @@ const StudentQuizView = () => {
                         </span>
                       </Card>
 
-                      <Card className="bg-[#F6E9B2] border-2 border-black flex flex-col items-center justify-center p-6 text-center">
+                      <Card className="bg-[#F6E9B2] flex flex-col items-center justify-center p-6 text-center">
                         <Clock className="w-6 h-6 mb-2 text-black/70" />
                         <span className="text-3xl font-extrabold">
                           {quiz.duration_minutes ? `${quiz.duration_minutes}m` : "∞"}
@@ -170,7 +170,7 @@ const StudentQuizView = () => {
                         </span>
                       </Card>
 
-                      <Card className="bg-[#F6E9B2] border-2 border-black flex flex-col items-center justify-center p-6 text-center">
+                      <Card className="bg-[#F6E9B2] flex flex-col items-center justify-center p-6 text-center">
                         <Award className="w-6 h-6 mb-2 text-black/70" />
                         <span className="text-3xl font-extrabold">
                           {quiz.total_points != null ? quiz.total_points : quiz.questions.reduce((sum, q) => sum + (q.points || 1), 0)}
@@ -180,7 +180,7 @@ const StudentQuizView = () => {
                         </span>
                       </Card>
 
-                      <Card className="bg-[#F6E9B2] border-2 border-black flex flex-col items-center justify-center p-6 text-center">
+                      <Card className="bg-[#F6E9B2] flex flex-col items-center justify-center p-6 text-center">
                         <RotateCcw className="w-6 h-6 mb-2 text-black/70" />
                         <span className="text-3xl font-extrabold">
                           {quiz.attempt_count} / {quiz.max_attempts}
@@ -193,7 +193,7 @@ const StudentQuizView = () => {
 
                     {/* Previous Result Summary Banner if graded */}
                     {isCompleted && quiz.grade != null && (
-                      <Card className="bg-white border-2 border-black p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+                      <Card className="bg-white p-6 flex flex-col md:flex-row items-center justify-between gap-4">
                         <div>
                           <h3 className="font-bold text-lg">Your Latest Score</h3>
                           <p className="text-sm text-black/60">
