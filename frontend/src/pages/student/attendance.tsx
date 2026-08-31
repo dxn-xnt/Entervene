@@ -516,7 +516,7 @@ export default function StudentAttendancePage() {
                 >
                   <Dialog.Header
                     asChild
-                    className="border-b-2 border-black px-5 py-4 bg-primary"
+                    className="border-black"
                   >
                     <>
                       <h3 className="text-lg font-bold">

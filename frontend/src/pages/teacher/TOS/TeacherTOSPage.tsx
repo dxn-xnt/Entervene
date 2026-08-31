@@ -5,6 +5,7 @@ import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
+import { Select } from "@/components/retroui/Select";
 import {
   TableProperties,
   Plus,
@@ -22,6 +23,13 @@ import type { CompetencyItem } from "../Classes/subject-details/types";
 interface SubjectOption {
   subject_id: number;
   subject_name: string;
+  subject_codename?: string;
+  section_name?: string;
+}
+
+interface AssignedSubjectResponse {
+  subject_id?: number;
+  subject_name?: string;
   subject_codename?: string;
   section_name?: string;
 }
@@ -84,7 +92,7 @@ export const TeacherTOSPage: React.FC = () => {
         const seen = new Set<number>();
 
         if (Array.isArray(classesData)) {
-          classesData.forEach((item: any) => {
+          classesData.forEach((item: AssignedSubjectResponse) => {
             const sId = item.subject_id;
             const sName = item.subject_name;
             if (sId && sName && !seen.has(sId)) {
@@ -134,7 +142,7 @@ export const TeacherTOSPage: React.FC = () => {
       setActiveCompetencies(comps);
       setActiveExamId(exam.tos_exam_id);
       setIsWizardOpen(true);
-    } catch (err) {
+    } catch {
       toast.error("Unable to load competencies for this exam.");
     } finally {
       setIsOpeningExam(false);
@@ -168,7 +176,7 @@ export const TeacherTOSPage: React.FC = () => {
       if (!res.ok) throw new Error("Delete failed");
       setExams((prev) => prev.filter((ex) => ex.tos_exam_id !== examId));
       toast.success("TOS exam deleted.");
-    } catch (err) {
+    } catch {
       toast.error("Failed to delete TOS exam.");
     } finally {
       setDeletingId(null);
@@ -260,18 +268,25 @@ export const TeacherTOSPage: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
               {/* Subject Filter Dropdown */}
               <div className="w-full sm:w-auto">
-                <select
+                <Select
                   value={selectedSubjectFilter}
-                  onChange={(e) => setSelectedSubjectFilter(e.target.value)}
-                  className="h-9 w-full sm:w-52 rounded border-2 border-black bg-[#FFF9C4] px-3 text-xs font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] outline-none"
+                  onValueChange={setSelectedSubjectFilter}
                 >
-                  <option value="ALL">All Assigned Subjects</option>
-                  {subjects.map((s) => (
-                    <option key={s.subject_id} value={s.subject_id}>
-                      {s.subject_name}
-                    </option>
-                  ))}
-                </select>
+                  <Select.Trigger className="h-9 w-full text-xs font-black sm:w-52">
+                    <Select.Value placeholder="All Assigned Subjects" />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Item value="ALL">All Assigned Subjects</Select.Item>
+                    {subjects.map((subject) => (
+                      <Select.Item
+                        key={subject.subject_id}
+                        value={String(subject.subject_id)}
+                      >
+                        {subject.subject_name}
+                      </Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select>
               </div>
 
               {/* Academic Term Filter Chips */}
@@ -305,7 +320,7 @@ export const TeacherTOSPage: React.FC = () => {
                 className="h-9 w-full pl-8 text-xs font-bold border-2 border-black"
               />
             </div>
-          </div>
+          </Card>
 
           {/* Exams Grid */}
           {isLoading || isOpeningExam ? (

@@ -1814,7 +1814,7 @@ export default function SubjectLessonTab({
               {/* Modal header */}
               <Dialog.Header
                 position="fixed"
-                className="bg-[#F6E9B2] px-5 py-4 text-black"
+                className="bg-[#F6E9B2] text-black"
               >
                 <div>
                   <p className="text-xs">Student classwork detail</p>

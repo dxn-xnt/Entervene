@@ -396,7 +396,7 @@ function EditUserModal({
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
       <Dialog.Content size="xl" className="border-2 border-black shadow-[6px_7px_0_#000] p-0 overflow-hidden">
-        <Dialog.Header className="px-5 py-4 border-b border-black/30 bg-background text-foreground flex items-center justify-between">
+        <Dialog.Header className="border-b border-black/30 bg-background text-foreground">
           <div>
             <h2 className="text-lg font-bold">Edit User</h2>
             <p className="text-xs text-muted-foreground">Update profile information only. Role changes are handled separately.</p>

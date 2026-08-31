@@ -63,7 +63,7 @@ export default function LessonModal({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Content size="2xl" className="max-h-[90vh] p-0">
         {/* Header */}
-        <Dialog.Header position="fixed" className="bg-[#F6E9B2] px-5 py-4">
+        <Dialog.Header position="fixed" className="bg-[#F6E9B2]">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs">Lesson Management</p>

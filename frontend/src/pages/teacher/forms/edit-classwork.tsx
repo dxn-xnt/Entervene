@@ -280,7 +280,7 @@ export default function EditClassworkModal({
       {isOpen && (
         <Dialog.Content size="2xl" className="max-h-[90vh] flex flex-col bg-white border-2 border-black">
           <Dialog.Header position="fixed" asChild>
-            <div className="flex items-center justify-between w-full px-4 py-3 bg-primary text-black font-bold">
+            <div className="flex w-full items-center justify-between bg-primary font-bold text-black">
               <div className="flex items-center gap-2 text-lg">
                 <Pencil size={18} />
                 <span>Edit Classwork</span>

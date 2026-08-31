@@ -159,7 +159,7 @@ const DialogFooter = ({
 };
 
 const dialogHeaderVariants = cva(
-  "flex items-center justify-between border-b-2 px-4 min-h-12",
+  "flex items-center justify-between border-b-2 px-5 py-4 min-h-12",
   {
     variants: {
       variant: {

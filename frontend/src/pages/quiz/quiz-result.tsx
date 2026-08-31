@@ -139,7 +139,7 @@ const StudentQuizResult = () => {
               </div>
 
               {/* Score Hero Card */}
-              <Card className="bg-[#F6E9B2] border-2 border-black p-8 flex flex-col items-center justify-center text-center shadow-md">
+              <Card className="bg-[#F6E9B2] p-8 flex flex-col items-center justify-center text-center">
                 <span className="text-sm font-bold uppercase tracking-wider text-black/70 mb-1">
                   {isPendingGrading ? "Quiz Submitted" : "Score Result"}
                 </span>

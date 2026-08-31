@@ -1019,7 +1019,7 @@ export default function SubjectDetails() {
               }}
             >
               <Dialog.Content className="block w-full max-w-4xl border-black bg-white p-0 transition-none max-h-[92vh] overflow-y-auto">
-                <Dialog.Header className="sticky top-0 z-10 flex items-center justify-between border-b-2 border-black bg-primary px-5 py-4">
+                <Dialog.Header className="sticky top-0 z-10 border-black">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wide">
                       Teacher lesson management
@@ -1447,7 +1447,7 @@ export default function SubjectDetails() {
                 className="no-scrollbar h-fit max-h-[90vh] !overflow-y-auto overflow-x-hidden"
                 overlay={{ className: "bg-black/50" }}
               >
-                <Dialog.Header asChild className="bg-primary px-5 py-4">
+                <Dialog.Header asChild>
                   <>
                     <div>
                       <p className="text-xs font-bold uppercase">

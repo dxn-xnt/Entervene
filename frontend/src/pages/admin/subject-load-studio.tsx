@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
-import { Card, Card as RetroCard } from "@/components/retroui/Card";
+import { Card } from "@/components/retroui/Card";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
 import { Progress } from "@/components/retroui/Progress";
@@ -1418,14 +1418,14 @@ export default function AdminSubjectLoadStudio() {
                 </section>
 
                 {filteredClasses.length === 0 ? (
-                  <RetroCard className="border-2 border-black bg-accent px-6 py-12 text-center">
+                  <Card className="bg-accent px-6 py-12 text-center">
                     <Text as="h3" className="font-bold text-lg">
                       No Class Sections Found
                     </Text>
                     <Text as="p" className="text-sm text-muted-foreground mt-1">
                       Select a different Grade Level or create classes in the admin dashboard.
                     </Text>
-                  </RetroCard>
+                  </Card>
                 ) : (
                   groupedClassesByGrade.map((group) => (
                     <Card
@@ -1502,9 +1502,9 @@ export default function AdminSubjectLoadStudio() {
                           };
 
                           return (
-                            <RetroCard
+                            <Card
                               key={cls.class_id}
-                              className="block border-2 border-black p-4 overflow-visible shadow-none hover:-translate-y-1"
+                              className="block overflow-visible shadow-none hover:-translate-y-1"
                             >
                               <div className="flex items-center justify-between pb-4 flex-wrap gap-2">
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -1987,7 +1987,7 @@ export default function AdminSubjectLoadStudio() {
                                   </Table.Body>
                                 </Table>
                               )}
-                            </RetroCard>
+                            </Card>
                           );
                         })}
                       </div>
@@ -2031,7 +2031,7 @@ export default function AdminSubjectLoadStudio() {
                 </Card>
 
                 {/* Grouped Issues Card (Root-Cause Aggregated) */}
-                <RetroCard className="p-4 bg-background">
+                <Card className="bg-background">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       {/* <AlertTriangle className="size-5 text-amber-600" /> */}
@@ -2098,10 +2098,10 @@ export default function AdminSubjectLoadStudio() {
                       })}
                     </div>
                   )}
-                </RetroCard>
+                </Card>
 
                 {/* Teacher Workload Capacity Card */}
-                <RetroCard className="border-2 border-black shadow-[4px_4px_0_#000] p-4 bg-background">
+                <Card className="bg-background shadow-[4px_4px_0_#000]">
                   <div className="flex flex-col gap-1 pb-3 mb-3">
                     <div className="flex items-center gap-2">
                       {/* <Clock className="size-5 text-blue-600" /> */}
@@ -2186,7 +2186,7 @@ export default function AdminSubjectLoadStudio() {
                       })
                     )}
                   </div>
-                </RetroCard>
+                </Card>
               </aside>
             </div>
 

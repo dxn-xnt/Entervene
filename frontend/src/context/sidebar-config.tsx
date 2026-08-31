@@ -9,6 +9,7 @@ export type NavItem = {
   title: string
   url: string
   icon?: React.ReactNode
+  activePaths?: string[]
 }
 
 export const SidebarConfigs: Record<string, NavItem[]> = {
@@ -27,7 +28,12 @@ export const SidebarConfigs: Record<string, NavItem[]> = {
   ],
   teacher: [
     { title: "Dashboard", url: routes.teacher.dashboard, icon: <LayoutDashboard /> },
-    { title: "Classes", url: routes.teacher.classes, icon: <School /> },
+    {
+      title: "Classes",
+      url: routes.teacher.classes,
+      icon: <School />,
+      activePaths: ["/teacher/advisory-class"],
+    },
     { title: "Attendance", url: routes.teacher.attendance, icon: <UserCheck /> },
     { title: "Classworks", url: routes.teacher.classworks, icon: <ClipboardList /> },
     // { title: "Lessons",        url: routes.teacher.lessons,       icon: <Book />            },
