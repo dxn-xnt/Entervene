@@ -244,9 +244,9 @@ export function SuggestionPanel({
     >
       <Dialog.Content
         size="lg"
-        className="w-[95vw] max-w-2xl border-2 border-black bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-0 overflow-hidden"
+        className="w-[95vw] max-w-2xl p-0 overflow-hidden"
       >
-        <Dialog.Header className="bg-[#F6E9B2] border-b-2 border-black px-6 py-4">
+        <Dialog.Header className="px-6 py-4">
           <div className="flex items-center gap-2.5">
             <Lightbulb className="size-6 text-black" />
             <div>
@@ -381,7 +381,7 @@ export function SuggestionPanel({
                 rows={3}
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                className="mt-1 w-full rounded-md border-2 border-black bg-[#fffdf5] p-2 text-xs font-medium outline-none focus:border-black resize-none"
+                className="mt-1 w-full border-2 border-black bg-[#fffdf5] p-2 text-xs font-medium outline-none focus:border-black resize-none"
                 placeholder="Why this material will help the student..."
               />
             </label>

@@ -14,9 +14,13 @@ export function NavMain({
     title: string;
     url: string;
     icon?: React.ReactNode;
+    activePaths?: string[];
   }[];
 }) {
   const { pathname } = useLocation();
+
+  const matchesPath = (path: string) =>
+    pathname === path || pathname.startsWith(path + "/");
 
   return (
     <SidebarGroup>
@@ -29,8 +33,8 @@ export function NavMain({
                 isActive={
                   item.url === "/"
                     ? pathname === item.url
-                    : pathname === item.url ||
-                      pathname.startsWith(item.url + "/")
+                    : matchesPath(item.url) ||
+                      item.activePaths?.some(matchesPath) === true
                 }
                 asChild
               >
