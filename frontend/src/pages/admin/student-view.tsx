@@ -10,11 +10,10 @@ export default function AdminStudentView() {
     return (
         <AppLayout>
             <div className="flex flex-1 flex-col">
-                <div className="@container/main flex flex-1 flex-col gap-2">
-                    <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-
+                <div className="@container/main flex flex-1 flex-col">
+                    <div className="flex flex-1 flex-col">
                         {/* Breadcrumb Header */}
-                        <header className="flex items-center gap-3">
+                        <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
                             <SidebarTrigger className="md:hidden" />
                             <Breadcrumb>
                                 <Breadcrumb.List className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black flex items-center gap-2">
@@ -33,10 +32,9 @@ export default function AdminStudentView() {
                             </Breadcrumb>
                         </header>
 
-                        <div className="-mx-4 md:-mx-6 border-b" />
-
-                        {/* Student Banner Card */}
-                        <Card className="w-full flex flex-col p-6 border-2 border-black rounded-lg shadow-md bg-white">
+                        <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+                            {/* Student Banner Card */}
+                            <Card className="w-full flex flex-col p-6 border-2 border-black rounded-lg shadow-md bg-white">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
 
                                 {/* Profile info */}
@@ -296,6 +294,7 @@ export default function AdminStudentView() {
                                 </div>
                             </div>
 
+                        </div>
                         </div>
 
                     </div>

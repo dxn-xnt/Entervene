@@ -106,9 +106,9 @@ export default function AdminAcademicPeriods() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center gap-3">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
               <SidebarTrigger className="md:hidden" />
               <div className="flex items-center gap-3">
                 <Breadcrumb>
@@ -126,10 +126,10 @@ export default function AdminAcademicPeriods() {
                 </Breadcrumb>
               </div>
             </header>
-            <div className="-mx-4 md:-mx-6 border-b border-black/40" />
 
-            {/* Single Consolidated Card for Unified JHS & SHS */}
-            <Card className="@container/card">
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
+              {/* Single Consolidated Card for Unified JHS & SHS */}
+              <Card className="@container/card">
               <Card.Header className="flex flex-row justify-between items-start">
                 <Card.Title className="flex flex-col w-full gap-1">
                   Academic Periods
@@ -204,6 +204,7 @@ export default function AdminAcademicPeriods() {
               </Card.Content>
             </Card>
 
+            </div>
           </div>
         </div>
       </div>

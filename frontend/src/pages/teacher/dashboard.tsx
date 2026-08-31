@@ -112,15 +112,14 @@ const Dashboard = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
-            <header className="flex items-center justify-between gap-3">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <div>
                   <h1 className="text-2xl md:text-4xl font-bold">
                     Dashboard
                   </h1>
-
                 </div>
               </div>
               <Button
@@ -132,9 +131,8 @@ const Dashboard = () => {
               </Button>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
               {overviewCards.map((card) => (
                 <OverviewCard
                   key={card.title}
@@ -275,6 +273,7 @@ const Dashboard = () => {
                   </div>
                 ))}
               </Card>
+            </div>
             </div>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Button } from "@/components/retroui/Button";
 import { Card as RetroCard } from "@/components/retroui/Card";
@@ -15,7 +16,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import AddSubjectModal from "./forms/add-subject";
 import { OverviewCard } from "@/components/overview-cards";
 import SubjectItemLine from "@/components/item-line/subject";
-import ConfirmDialog from "@/components/confirm-dialog";
 import {
   archiveSubject,
   getSubjectOfferingFormOptions,
@@ -30,27 +30,12 @@ export default function AdminSubjectLevel() {
   const { grade } = useParams<{ grade: string }>();
   const decodedGrade = decodeURIComponent(grade || "Grade 7");
   const [subjects, setSubjects] = useState<SubjectListItem[]>([]);
-  const [offeringOptions, setOfferingOptions] =
-    useState<SubjectOfferingFormOptions | null>(null);
+  const [offeringOptions, setOfferingOptions] = useState<SubjectOfferingFormOptions | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<SubjectStatus | "all">("active");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pendingArchive, setPendingArchive] = useState<SubjectListItem | null>(
-    null,
-  );
-  const [isSubjectModalOpen, setIsSubjectModalOpen] = useState(false);
-  const [editingSubject, setEditingSubject] = useState<SubjectListItem | null>(null);
-
-  const openCreateSubject = () => {
-    setEditingSubject(null);
-    setIsSubjectModalOpen(true);
-  };
-
-  const openEditSubject = (subject: SubjectListItem) => {
-    setEditingSubject(subject);
-    setIsSubjectModalOpen(true);
-  };
+  const [pendingArchive, setPendingArchive] = useState<SubjectListItem | null>(null);
 
   const loadSubjects = useCallback(async () => {
     setIsLoading(true);
@@ -76,10 +61,7 @@ export default function AdminSubjectLevel() {
   const gradeSubjects = useMemo(() => {
     const normalizedGrade = decodedGrade.trim().toLowerCase();
     return subjects
-      .filter(
-        (subject) =>
-          subject.academic_level.level_name.toLowerCase() === normalizedGrade,
-      )
+      .filter((subject) => subject.academic_level.level_name.toLowerCase() === normalizedGrade)
       .sort((a, b) => a.subject_name.localeCompare(b.subject_name));
   }, [decodedGrade, subjects]);
 
@@ -87,30 +69,20 @@ export default function AdminSubjectLevel() {
     const query = search.trim().toLowerCase();
     return gradeSubjects.filter((subject) => {
       const matchesStatus = status === "all" || subject.status === status;
-      const matchesSearch =
-        !query ||
-        [
-          subject.subject_name,
-          subject.subject_codename,
-          subject.subject_group?.name,
-          subject.default_grading_template,
-        ].some((value) => value?.toLowerCase().includes(query));
+      const matchesSearch = !query || [
+        subject.subject_name,
+        subject.subject_codename,
+        subject.subject_group?.name,
+        subject.default_grading_template,
+      ].some((value) => value?.toLowerCase().includes(query));
       return matchesStatus && matchesSearch;
     });
   }, [gradeSubjects, search, status]);
 
-  const activeYearLabel = offeringOptions?.academic_years.find(
-    (year) => year.is_active,
-  )?.year_label;
-  const activeSubjects = gradeSubjects.filter(
-    (subject) => subject.status === "active",
-  );
-  const archivedSubjects = gradeSubjects.filter(
-    (subject) => subject.status === "archived",
-  );
-  const totalGroups = new Set(
-    gradeSubjects.map((s) => s.subject_group?.name).filter(Boolean),
-  ).size;
+  const activeYearLabel = offeringOptions?.academic_years.find((year) => year.is_active)?.year_label;
+  const activeSubjects = gradeSubjects.filter((subject) => subject.status === "active");
+  const archivedSubjects = gradeSubjects.filter((subject) => subject.status === "archived");
+  const totalGroups = new Set(gradeSubjects.map((s) => s.subject_group?.name).filter(Boolean)).size;
 
   const handleArchive = async () => {
     if (!pendingArchive) return;
@@ -118,9 +90,7 @@ export default function AdminSubjectLevel() {
       await archiveSubject(pendingArchive.subject_id);
       await loadSubjects();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Unable to archive subject.",
-      );
+      setError(err instanceof Error ? err.message : "Unable to archive subject.");
     } finally {
       setPendingArchive(null);
     }
@@ -149,10 +119,15 @@ export default function AdminSubjectLevel() {
                 </Breadcrumb>
               </div>
 
-              <Button onClick={openCreateSubject}>
-                <Plus className="mr-2 size-4" />
-                New Subject
-              </Button>
+              <Dialog>
+                <Dialog.Trigger>
+                  <Button>
+                    <Plus className="mr-2 size-4" />
+                    New Subject
+                  </Button>
+                </Dialog.Trigger>
+                <AddSubjectModal onCreated={loadSubjects} />
+              </Dialog>
             </header>
 
             <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
@@ -162,11 +137,7 @@ export default function AdminSubjectLevel() {
                   <Text as="h2" className="font-sansm font-bold">
                     {decodedGrade}
                   </Text>
-                  {activeYearLabel ? (
-                    <p className="pb-1 text-lg font-semibold">
-                      ({activeYearLabel})
-                    </p>
-                  ) : null}
+                  {activeYearLabel ? <p className="pb-1 text-lg font-semibold">({activeYearLabel})</p> : null}
                 </div>
               </div>
             </RetroCard>
@@ -183,18 +154,9 @@ export default function AdminSubjectLevel() {
                 Overview
               </Text>
               <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
-                <OverviewCard
-                  title="Total Subjects"
-                  count={String(gradeSubjects.length)}
-                />
-                <OverviewCard
-                  title="Active Subjects"
-                  count={String(activeSubjects.length)}
-                />
-                <OverviewCard
-                  title="Archived Subjects"
-                  count={String(archivedSubjects.length)}
-                />
+                <OverviewCard title="Total Subjects" count={String(gradeSubjects.length)} />
+                <OverviewCard title="Active Subjects" count={String(activeSubjects.length)} />
+                <OverviewCard title="Archived Subjects" count={String(archivedSubjects.length)} />
                 <OverviewCard title="Subject Groups" count={String(totalGroups)} />
               </div>
             </section>
@@ -214,12 +176,7 @@ export default function AdminSubjectLevel() {
                       placeholder="Search name, code, group"
                     />
                   </label>
-                  <Select
-                    value={status}
-                    onValueChange={(value) =>
-                      setStatus(value as SubjectStatus | "all")
-                    }
-                  >
+                  <Select value={status} onValueChange={(value) => setStatus(value as SubjectStatus | "all")}>
                     <Select.Trigger className="h-10 w-full sm:w-40">
                       <Select.Value />
                     </Select.Trigger>
@@ -251,15 +208,8 @@ export default function AdminSubjectLevel() {
                       isArchived={subject.status === "archived"}
                       subjectCode={subject.subject_codename || "No code"}
                       subjectGroup={subject.subject_group?.name || "Ungrouped"}
-                      gradingTemplate={
-                        subject.default_grading_template || "No template"
-                      }
-                      onView={() =>
-                        navigate(
-                          `/admin/subjects/${encodeURIComponent(decodedGrade)}/${subject.subject_id}`,
-                        )
-                      }
-                      onEdit={() => openEditSubject(subject)}
+                      gradingTemplate={subject.default_grading_template || "No template"}
+                      onView={() => navigate(`/admin/subjects/${encodeURIComponent(decodedGrade)}/${subject.subject_id}`)}
                       onArchive={() => setPendingArchive(subject)}
                     />
                   ))
@@ -271,35 +221,15 @@ export default function AdminSubjectLevel() {
         </div>
       </div>
 
-      <Dialog open={isSubjectModalOpen} onOpenChange={setIsSubjectModalOpen}>
-        <AddSubjectModal
-          open={isSubjectModalOpen}
-          subjectToEdit={editingSubject}
-          lockedGradeLevel={decodedGrade}
-          onCreated={async () => {
-            await loadSubjects();
-          }}
+      {pendingArchive ? (
+        <ConfirmAlertDialog
+          title="Archive subject?"
+          description={`${pendingArchive.subject_name} will be moved out of active use.`}
+          confirmLabel="Archive"
+          onCancel={() => setPendingArchive(null)}
+          onConfirm={() => void handleArchive()}
         />
-      </Dialog>
-
-      <ConfirmDialog
-        open={Boolean(pendingArchive)}
-        onOpenChange={(open) => {
-          if (!open) setPendingArchive(null);
-        }}
-        title="Archive Subject?"
-        description={
-          <p>
-            <strong>{pendingArchive?.subject_name}</strong> will be moved out of active use.
-          </p>
-        }
-        options={{
-          confirmLabel: "Archive",
-          confirmVariant: "default",
-          onConfirm: handleArchive,
-          onCancel: () => setPendingArchive(null),
-        }}
-      />
+      ) : null}
     </AppLayout>
   );
 }

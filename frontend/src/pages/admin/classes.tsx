@@ -177,18 +177,14 @@ export default function AdminClasses() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center justify-between">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center justify-between bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <div>
                   <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
                     Classes
                   </h1>
-                  {/* <p className="text-sm text-black/70">
-                    Manage class sections, advisers, students, subject load, and
-                    schedules.
-                  </p> */}
                 </div>
               </div>
               <div className="flex flex-row gap-2">
@@ -211,9 +207,8 @@ export default function AdminClasses() {
               </div>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
-
-            {notice && (
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+              {notice && (
               <p className="border-2 border-black bg-[#bbf7d0] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">
                 {notice}
               </p>
@@ -362,6 +357,7 @@ export default function AdminClasses() {
                 ))
               )}
             </section>
+            </div>
           </div>
         </div>
       </div>

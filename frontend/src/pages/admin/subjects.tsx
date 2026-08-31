@@ -525,9 +525,9 @@ export default function AdminSubjects() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col">
+            <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Subjects</h1>
@@ -618,19 +618,16 @@ export default function AdminSubjects() {
                 ) : null}
               </div>
             </header>
-            {/* <SubjectContextBanner
-              academicYears={offeringOptions?.academic_years}
-              academicPeriods={offeringOptions?.academic_periods}
-              academicYearId={selectedAcademicYear?.academic_year_id}
-              isLoading={isLoadingOptions}
-            /> */}
-            <Tabs
-              tabs={MODULE_TABS}
-              activeTab={activeSection}
-              onTabChange={setActiveSection}
-              className="border-b-2 border-black -mt-1"
-            />
-            {isViewingInactiveAcademicYear ? (
+            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+              <Tabs
+                tabs={MODULE_TABS}
+                activeTab={activeSection}
+                onTabChange={setActiveSection}
+              />
+            </div>
+
+            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
+              {isViewingInactiveAcademicYear ? (
               <div className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
                 <p className="font-bold">{readOnlyReason}</p>
                 <p className="text-black/70">
@@ -1065,6 +1062,7 @@ export default function AdminSubjects() {
                 </RetroCard>
               </section>
             ) : null}
+            </div>
           </div>
         </div>
       </div>

@@ -170,9 +170,9 @@ export default function SectionPredictions() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
+          <div className="flex flex-1 flex-col">
             {/* ── Header ── */}
-            <header className="flex items-center gap-3">
+            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
               <SidebarTrigger className="md:hidden" />
               <Breadcrumb>
                 <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
@@ -205,10 +205,9 @@ export default function SectionPredictions() {
               </Breadcrumb>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
-
-            {/* ── Main Content: Table on Left + Risk Cards on Right ── */}
-            <div className="flex flex-col lg:flex-row gap-5 items-start">
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
+              {/* ── Main Content: Table on Left + Risk Cards on Right ── */}
+              <div className="flex flex-col lg:flex-row gap-5 items-start">
               {/* Left Column: Filters + Table */}
               <div className="flex-1 flex flex-col gap-4 min-w-0 w-full">
                 <PredictionFilters
@@ -285,6 +284,7 @@ export default function SectionPredictions() {
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       {/* ── Detail Sheet ── */}

@@ -429,9 +429,9 @@ export default function TeacherAttendancePage() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
+          <div className="flex flex-1 flex-col">
             {/* Header */}
-            <header className="flex items-center justify-between gap-4">
+            <header className="flex items-center justify-between gap-4 bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <div>
@@ -439,23 +439,26 @@ export default function TeacherAttendancePage() {
                 </div>
               </div>
             </header>
+            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+              <Tabs
+                tabs={[
+                  {
+                    id: "marking",
+                    label: "Mark Attendance",
+                    icon: Users,
+                  },
+                  {
+                    id: "summary",
+                    label: "Attendance Summary & Logs",
+                    icon: BarChart3,
+                  },
+                ]}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+              />
+            </div>
 
-            <Tabs
-              tabs={[
-                {
-                  id: "marking",
-                  label: "Mark Attendance",
-                  icon: Users,
-                },
-                {
-                  id: "summary",
-                  label: "Attendance Summary & Logs",
-                  icon: BarChart3,
-                },
-              ]}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-            />
+            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-1 flex-col gap-3">
 
             {/* Stats Overview */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 mb-1">
@@ -1124,6 +1127,7 @@ export default function TeacherAttendancePage() {
                 </Card>
               </>
             )}
+            </div>
           </div>
         </div>
       </div>

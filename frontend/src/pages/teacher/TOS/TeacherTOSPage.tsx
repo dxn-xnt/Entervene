@@ -240,9 +240,9 @@ export const TeacherTOSPage: React.FC = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
+          <div className="flex flex-1 flex-col">
             {/* Header matching other sidebar pages */}
-            <header className="flex items-center justify-between gap-3">
+            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
@@ -262,204 +262,202 @@ export const TeacherTOSPage: React.FC = () => {
               </Button>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
-
-          {/* Filter Toolbar */}
-          <Card className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Subject Filter Dropdown */}
-              <div className="w-full sm:w-auto">
-                <Select
-                  value={selectedSubjectFilter}
-                  onValueChange={setSelectedSubjectFilter}
-                >
-                  <Select.Trigger className="h-9 w-full text-xs font-black sm:w-52">
-                    <Select.Value placeholder="All Assigned Subjects" />
-                  </Select.Trigger>
-                  <Select.Content>
-                    <Select.Item value="ALL">All Assigned Subjects</Select.Item>
-                    {subjects.map((subject) => (
-                      <Select.Item
-                        key={subject.subject_id}
-                        value={String(subject.subject_id)}
-                      >
-                        {subject.subject_name}
-                      </Select.Item>
-                    ))}
-                  </Select.Content>
-                </Select>
-              </div>
-
-              {/* Academic Term Filter Chips */}
-              <div className="flex items-center gap-1 overflow-x-auto">
-                {(["ALL", "Term 1", "Term 2", "Term 3"] as const).map(
-                  (qTab) => (
-                    <button
-                      key={qTab}
-                      type="button"
-                      onClick={() => setSelectedQuarterFilter(qTab)}
-                      className={`px-3 py-1 text-xs font-black rounded border-2 transition-all ${
-                        selectedQuarterFilter === qTab
-                          ? "border-black bg-[#FFD54F] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                          : "border-transparent bg-gray-100 text-gray-700 hover:bg-gray-200"
-                      }`}
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+              {/* Filter Toolbar */}
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between rounded-lg border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Subject Filter Dropdown */}
+                  <div className="w-full sm:w-auto">
+                    <Select
+                      value={selectedSubjectFilter}
+                      onValueChange={setSelectedSubjectFilter}
                     >
-                      {qTab === "ALL" ? "All Terms" : `${qTab}`}
-                    </button>
-                  ),
-                )}
-              </div>
-            </div>
+                      <Select.Trigger className="h-9 w-full text-xs font-black sm:w-52">
+                        <Select.Value placeholder="All Assigned Subjects" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Item value="ALL">All Assigned Subjects</Select.Item>
+                        {subjects.map((subject) => (
+                          <Select.Item
+                            key={subject.subject_id}
+                            value={String(subject.subject_id)}
+                          >
+                            {subject.subject_name}
+                          </Select.Item>
+                        ))}
+                      </Select.Content>
+                    </Select>
+                  </div>
 
-            {/* Search Input */}
-            <div className="relative w-full md:w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search exam or subject..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-9 w-full pl-8 text-xs font-bold border-2 border-black"
-              />
-            </div>
-          </Card>
-
-          {/* Exams Grid */}
-          {isLoading || isOpeningExam ? (
-            <div className="py-20 text-center">
-              <RefreshCw className="mx-auto h-8 w-8 animate-spin text-black" />
-              <p className="mt-3 text-xs font-black text-gray-700">
-                Loading Table of Specifications...
-              </p>
-            </div>
-          ) : filteredExams.length === 0 ? (
-            <Card className="block w-full border-black text-center">
-              <Card.Content className="flex flex-col items-center px-6 py-12">
-                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-lg border-2 border-black">
-                  <TableProperties className="size-7" />
+                  {/* Academic Term Filter Chips */}
+                  <div className="flex items-center gap-1 overflow-x-auto">
+                    {(["ALL", "Term 1", "Term 2", "Term 3"] as const).map(
+                      (qTab) => (
+                        <button
+                          key={qTab}
+                          type="button"
+                          onClick={() => setSelectedQuarterFilter(qTab)}
+                          className={`px-3 py-1 text-xs font-black rounded border-2 transition-all ${selectedQuarterFilter === qTab
+                              ? "border-black bg-[#FFD54F] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                              : "border-transparent bg-gray-100 text-gray-700 hover:bg-gray-200"
+                            }`}
+                        >
+                          {qTab === "ALL" ? "All Terms" : `${qTab}`}
+                        </button>
+                      ),
+                    )}
+                  </div>
                 </div>
 
-                <Card.Title className="mb-2 text-base font-bold">
-                  No TOS Exams Found
-                </Card.Title>
+                {/* Search Input */}
+                <div className="relative w-full md:w-64">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search exam or subject..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-9 w-full pl-8 text-xs font-bold border-2 border-black"
+                  />
+                </div>
+              </div>
 
-                <p className="mb-6 max-w-md text-sm font-normal text-gray-500">
-                  {exams.length === 0
-                    ? "Create your first Table of Specifications blueprint and exam questionnaire."
-                    : "No exam matches the selected filters."}
-                </p>
-
-                <Button
-                  variant="default"
-                  size="md"
-                  onClick={handleStartNewTOS}
-                  className="gap-2"
-                >
-                  <Plus size={16} />
-                  <span>Create New TOS</span>
-                </Button>
-              </Card.Content>
-              </Card>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredExams.map((ex) => {
-                const isFinalized = ex.status === "FINALIZED";
-
-                return (
-                  <div
-                    key={ex.tos_exam_id}
-                    className="flex flex-col justify-between rounded-lg border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                  >
-                    <div>
-                      {/* Top Badges */}
-                      <div className="flex items-center justify-between gap-2 border-b border-black/10 pb-2.5">
-                        <Badge
-                          variant="outline"
-                          className="border-black bg-[#E3F2FD] text-blue-950 font-black text-[10px]"
-                        >
-                          <BookOpen className="mr-1 h-3 w-3" />{" "}
-                          {ex.subject_name || "Subject"}
-                        </Badge>
-                        <div className="flex items-center gap-1.5">
-                          <Badge
-                            variant="outline"
-                            className="border-black bg-amber-100 font-black text-[10px]"
-                          >
-                            {ex.quarter}
-                          </Badge>
-                          <Badge
-                            variant="outline"
-                            className={`border-black font-black text-[10px] ${
-                              isFinalized
-                                ? "bg-emerald-100 text-emerald-900"
-                                : "bg-gray-100 text-gray-700"
-                            }`}
-                          >
-                            {isFinalized ? "FINALIZED" : "DRAFT"}
-                          </Badge>
-                        </div>
-                      </div>
-
-                      {/* Title */}
-                      <h4 className="mt-3 text-sm font-black text-black leading-snug line-clamp-2">
-                        {ex.title}
-                      </h4>
-
-                      {/* Metrics */}
-                      <div className="mt-3.5 grid grid-cols-2 gap-2 rounded border border-black/20 bg-gray-50/80 p-2.5 text-center">
-                        <div>
-                          <p className="text-[10px] font-bold text-gray-500 uppercase">
-                            Target Items
-                          </p>
-                          <p className="text-sm font-black text-black">
-                            {ex.total_items || "—"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-bold text-gray-500 uppercase">
-                            AI Questions
-                          </p>
-                          <p className="text-sm font-black text-blue-700">
-                            {ex.question_count}
-                          </p>
-                        </div>
-                      </div>
+              {/* Exams Grid */}
+              {isLoading || isOpeningExam ? (
+                <div className="py-20 text-center">
+                  <RefreshCw className="mx-auto h-8 w-8 animate-spin text-black" />
+                  <p className="mt-3 text-xs font-black text-gray-700">
+                    Loading Table of Specifications...
+                  </p>
+                </div>
+              ) : filteredExams.length === 0 ? (
+                <Card className="block w-full border-black text-center">
+                  <Card.Content className="flex flex-col items-center px-6 py-12">
+                    <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-lg border-2 border-black">
+                      <TableProperties className="size-7" />
                     </div>
 
-                    {/* Bottom Toolbar */}
-                    <div className="mt-4 flex items-center justify-between border-t border-black/10 pt-3">
-                      <span className="text-[11px] font-semibold text-gray-400">
-                        {ex.updated_at
-                          ? new Date(ex.updated_at).toLocaleDateString()
-                          : "Recently"}
-                      </span>
+                    <Card.Title className="mb-2 text-base font-bold">
+                      No TOS Exams Found
+                    </Card.Title>
 
-                      <div className="flex items-center gap-1.5">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={(e) => handleDeleteExam(e, ex.tos_exam_id)}
-                          disabled={deletingId === ex.tos_exam_id}
-                          className="h-7 border-2 border-black bg-red-50 px-2 text-red-700 hover:bg-red-100"
-                          title="Delete Exam"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => handleOpenExam(ex)}
-                          className="h-7 border-2 border-black bg-[#FFD54F] px-3 text-xs font-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
-                        >
-                          Open Exam <ArrowRight className="ml-1 h-3 w-3" />
-                        </Button>
+                    <p className="mb-6 max-w-md text-sm font-normal text-gray-500">
+                      {exams.length === 0
+                        ? "Create your first Table of Specifications blueprint and exam questionnaire."
+                        : "No exam matches the selected filters."}
+                    </p>
+
+                    <Button
+                      variant="default"
+                      size="md"
+                      onClick={handleStartNewTOS}
+                      className="gap-2"
+                    >
+                      <Plus size={16} />
+                      <span>Create New TOS</span>
+                    </Button>
+                  </Card.Content>
+                </Card>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {filteredExams.map((ex) => {
+                    const isFinalized = ex.status === "FINALIZED";
+
+                    return (
+                      <div
+                        key={ex.tos_exam_id}
+                        className="flex flex-col justify-between rounded-lg border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      >
+                        <div>
+                          {/* Top Badges */}
+                          <div className="flex items-center justify-between gap-2 border-b border-black/10 pb-2.5">
+                            <Badge
+                              variant="outline"
+                              className="border-black bg-[#E3F2FD] text-blue-950 font-black text-[10px]"
+                            >
+                              <BookOpen className="mr-1 h-3 w-3" />{" "}
+                              {ex.subject_name || "Subject"}
+                            </Badge>
+                            <div className="flex items-center gap-1.5">
+                              <Badge
+                                variant="outline"
+                                className="border-black bg-amber-100 font-black text-[10px]"
+                              >
+                                {ex.quarter}
+                              </Badge>
+                              <Badge
+                                variant="outline"
+                                className={`border-black font-black text-[10px] ${isFinalized
+                                    ? "bg-emerald-100 text-emerald-900"
+                                    : "bg-gray-100 text-gray-700"
+                                  }`}
+                              >
+                                {isFinalized ? "FINALIZED" : "DRAFT"}
+                              </Badge>
+                            </div>
+                          </div>
+
+                          {/* Title */}
+                          <h4 className="mt-3 text-sm font-black text-black leading-snug line-clamp-2">
+                            {ex.title}
+                          </h4>
+
+                          {/* Metrics */}
+                          <div className="mt-3.5 grid grid-cols-2 gap-2 rounded border border-black/20 bg-gray-50/80 p-2.5 text-center">
+                            <div>
+                              <p className="text-[10px] font-bold text-gray-500 uppercase">
+                                Target Items
+                              </p>
+                              <p className="text-sm font-black text-black">
+                                {ex.total_items || "—"}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold text-gray-500 uppercase">
+                                AI Questions
+                              </p>
+                              <p className="text-sm font-black text-blue-700">
+                                {ex.question_count}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Bottom Toolbar */}
+                        <div className="mt-4 flex items-center justify-between border-t border-black/10 pt-3">
+                          <span className="text-[11px] font-semibold text-gray-400">
+                            {ex.updated_at
+                              ? new Date(ex.updated_at).toLocaleDateString()
+                              : "Recently"}
+                          </span>
+
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => handleDeleteExam(e, ex.tos_exam_id)}
+                              disabled={deletingId === ex.tos_exam_id}
+                              className="h-7 border-2 border-black bg-red-50 px-2 text-red-700 hover:bg-red-100"
+                              title="Delete Exam"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => handleOpenExam(ex)}
+                              className="h-7 border-2 border-black bg-[#FFD54F] px-3 text-xs font-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                            >
+                              Open Exam <ArrowRight className="ml-1 h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
-      </div>
       </div>
     </AppLayout>
   );

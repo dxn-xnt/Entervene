@@ -170,98 +170,98 @@ export default function PredictionsDashboard() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
+          <div className="flex flex-1 flex-col">
             {/* ── Header ── */}
-            <header className="flex items-center gap-3">
+            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
               <SidebarTrigger className="md:hidden" />
               <h1 className="text-2xl md:text-4xl font-bold">AI Predictions</h1>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
+              {/* ── Risk Summary Cards ── */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-3">
+                {RISK_CARDS.map((card) => {
+                  const count = summary[card.key];
+                  const isActive = riskLevel === card.key;
 
-            {/* ── Risk Summary Cards ── */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-              {RISK_CARDS.map((card) => {
-                const count = summary[card.key];
-                const isActive = riskLevel === card.key;
+                  return (
+                    <button
+                      key={card.key}
+                      type="button"
+                      onClick={() => handleRiskClick(isActive ? undefined : card.key)}
+                      className="text-left cursor-pointer transition-transform active:translate-x-[2px] active:translate-y-[2px] w-full"
+                    >
+                      <OverviewCard
+                        title={card.label}
+                        count={String(count)}
+                        className={cn(
+                          "w-full border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all",
 
-                return (
-                  <button
-                    key={card.key}
-                    type="button"
-                    onClick={() => handleRiskClick(isActive ? undefined : card.key)}
-                    className="text-left cursor-pointer transition-transform active:translate-x-[2px] active:translate-y-[2px] w-full"
-                  >
-                    <OverviewCard
-                      title={card.label}
-                      count={String(count)}
-                      className={cn(
-                        "w-full border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all",
+                          isActive
+                            ? `${card.activeClass} shadow-none translate-x-[2px] translate-y-[2px]`
+                            : "hover:translate-x-[-1px] hover:translate-y-[-1px]"
+                        )}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
 
-                        isActive
-                          ? `${card.activeClass} shadow-none translate-x-[2px] translate-y-[2px]`
-                          : "hover:translate-x-[-1px] hover:translate-y-[-1px]"
-                      )}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* ── Chart + Filters row ── */}
-            <div className="flex flex-col lg:flex-row gap-5">
-              {/* Filters + table */}
-              <div className="flex-1 flex flex-col gap-4 min-w-0">
-                <PredictionFilters
-                  filters={filters}
-                  classId={classId}
-                  subjectId={subjectId}
-                  term={term}
-                  riskLevel={riskLevel}
-                  search={search}
-                  onClassChange={(v) => {
-                    setClassId(v);
-                    setOffset(0);
-                  }}
-                  onSubjectChange={(v) => {
-                    setSubjectId(v);
-                    setOffset(0);
-                  }}
-                  onTermChange={(v) => {
-                    setTerm(v);
-                    setOffset(0);
-                  }}
-                  onRiskChange={(v) => {
-                    setRiskLevel(v);
-                    setOffset(0);
-                  }}
-                  onSearchChange={handleSearchChange}
-                  onClearAll={handleClearAll}
-                />
-
-                {loading && !data ? (
-                  <div className="flex items-center justify-center py-20 text-gray-400">
-                    Loading predictions...
-                  </div>
-                ) : (
-                  <PredictionTable
-                    items={data?.items ?? []}
-                    total={data?.total ?? 0}
-                    limit={data?.limit ?? limit}
-                    offset={data?.offset ?? 0}
-                    sortBy={sortBy}
-                    sortOrder={sortOrder}
-                    onSort={handleSort}
-                    onPageChange={setOffset}
-                    onRowClick={handleRowClick}
+              {/* ── Chart + Filters row ── */}
+              <div className="flex flex-col lg:flex-row gap-5">
+                {/* Filters + table */}
+                <div className="flex-1 flex flex-col gap-4 min-w-0">
+                  <PredictionFilters
+                    filters={filters}
+                    classId={classId}
+                    subjectId={subjectId}
+                    term={term}
+                    riskLevel={riskLevel}
+                    search={search}
+                    onClassChange={(v) => {
+                      setClassId(v);
+                      setOffset(0);
+                    }}
+                    onSubjectChange={(v) => {
+                      setSubjectId(v);
+                      setOffset(0);
+                    }}
+                    onTermChange={(v) => {
+                      setTerm(v);
+                      setOffset(0);
+                    }}
+                    onRiskChange={(v) => {
+                      setRiskLevel(v);
+                      setOffset(0);
+                    }}
+                    onSearchChange={handleSearchChange}
+                    onClearAll={handleClearAll}
                   />
-                )}
 
-                {/* ── Grade Groups ── */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 -mt-2">
-                  {MOCK_GRADE_GROUPS.map((group) => (
-                    <PredictionGradeSection key={group.grade} group={group} />
-                  ))}
+                  {loading && !data ? (
+                    <div className="flex items-center justify-center py-20 text-gray-400">
+                      Loading predictions...
+                    </div>
+                  ) : (
+                    <PredictionTable
+                      items={data?.items ?? []}
+                      total={data?.total ?? 0}
+                      limit={data?.limit ?? limit}
+                      offset={data?.offset ?? 0}
+                      sortBy={sortBy}
+                      sortOrder={sortOrder}
+                      onSort={handleSort}
+                      onPageChange={setOffset}
+                      onRowClick={handleRowClick}
+                    />
+                  )}
+
+                  {/* ── Grade Groups ── */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 -mt-2">
+                    {MOCK_GRADE_GROUPS.map((group) => (
+                      <PredictionGradeSection key={group.grade} group={group} />
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

@@ -16,6 +16,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Badge } from "@/components/retroui/Badge";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import ClassworkFormModal from "./subject-details/ClassworkFormModal";
 import CompetencyModal from "./subject-details/CompetencyModal";
 import LessonClassworkList from "./subject-details/lesson-classwork-list";
@@ -102,6 +103,7 @@ export default function SubjectDetails() {
   >("order");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  void isLoading;
 
   const refreshSubjectData = async () => {
     if (!classId || !subjectId) return;
@@ -860,153 +862,154 @@ export default function SubjectDetails() {
 
   return (
     <AppLayout>
-      <div className="@container/main flex flex-1 flex-col">
-        <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
-          {activeLessonDetail ? (
-            <main className="pt-2">
-              {error && (
-                <div className="mb-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {error}
-                </div>
-              )}
-              <TeacherLessonDetailScreen
-                lesson={activeLessonDetail}
-                subjectName={subjectName}
-                closeLessonDetail={closeLessonDetail}
-                openLessonManager={openLessonManager}
-                openClassworkForm={openClassworkForm}
-                openClassworkDetail={openClassworkDetail}
-                linkedClassworks={
-                  linkedClassworks[activeLessonDetail.lesson_id] || []
-                }
-                isLoadingClasswork={
-                  loadingClassworkId === activeLessonDetail.lesson_id
-                }
-              />
-            </main>
-          ) : isTOSOpen && subjectId ? (
-            <main className="pt-2">
-              <TOSGeneratorScreen
-                subjectId={Number(subjectId)}
-                subjectName={subjectName || "Subject"}
-                competencies={competencies}
-                onBack={() => setIsTOSOpen(false)}
-              />
-            </main>
-          ) : (
-            <>
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <Breadcrumb>
-                  <Breadcrumb.List>
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Link href="/teacher/classes">
-                        Classes
-                      </Breadcrumb.Link>
-                    </Breadcrumb.Item>
-
-                    <Breadcrumb.Separator />
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Page>{subjectName}</Breadcrumb.Page>
-                    </Breadcrumb.Item>
-                  </Breadcrumb.List>
-                </Breadcrumb>
-
-                {activeTab === "lessons" && (
-                  <div className="flex items-center gap-2 flex-col lg:flex-row lg:flex-nowrap">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => openCompetencyForm(null)}
-                      className="whitespace-nowrap gap-2"
-                    >
-                      <Award size={16} />
-                      Add Competency
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="default"
-                      onClick={() => {
-                        setSelectedCompetencyIdForNewLesson(undefined);
-                        setIsCreatingLesson(true);
-                      }}
-                      className="whitespace-nowrap gap-2"
-                    >
-                      <Plus size={16} />
-                      Add Lesson
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              <main className="flex flex-col gap-4">
+      <div className="flex flex-1 flex-col">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col">
+            {activeLessonDetail ? (
+              <main className="py-4 px-4 md:px-6">
                 {error && (
-                  <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <div className="mb-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
                     {error}
                   </div>
                 )}
-
-                <Tabs
-                  tabs={tabs}
-                  activeTab={activeTab}
-                  onTabChange={setActiveTab}
+                <TeacherLessonDetailScreen
+                  lesson={activeLessonDetail}
+                  subjectName={subjectName}
+                  closeLessonDetail={closeLessonDetail}
+                  openLessonManager={openLessonManager}
+                  openClassworkForm={openClassworkForm}
+                  openClassworkDetail={openClassworkDetail}
+                  linkedClassworks={
+                    linkedClassworks[activeLessonDetail.lesson_id] || []
+                  }
+                  isLoadingClasswork={
+                    loadingClassworkId === activeLessonDetail.lesson_id
+                  }
                 />
-
-                <Card className="block bg-primary">
-                  <Card.Content className="flex items-start justify-between gap-4">
-                    <div>
-                      <Card.Title className="text-3xl font-bold">
-                        {subjectName}
-                      </Card.Title>
-                      <p className="text-xs text-black">
-                        {sectionName
-                          ? `Section assigned: ${sectionName}`
-                          : "Section assigned for this subject"}
-                      </p>
-                    </div>
-                    <Info size={16} />
-                  </Card.Content>
-                </Card>
-
-                {activeTab === "classwork" && subjectId ? (
-                  <SubjectClassworkTab
-                    classId={classId}
-                    subjectId={subjectId}
-                    subjectName={subjectName}
-                    sectionName={sectionName}
-                  />
-                ) : isLoading ? (
-                  <p className="py-8 text-center text-gray-500">
-                    Loading lessons...
-                  </p>
-                ) : (
-                  <LessonClassworkList
-                    lessonSearch={lessonSearch}
-                    setLessonSearch={setLessonSearch}
-                    lessonSort={lessonSort}
-                    setLessonSort={setLessonSort}
-                    filteredLessons={filteredLessons}
-                    totalLessons={lessons.length}
-                    expandedLessonId={expandedLessonId}
-                    linkedClassworks={linkedClassworks}
-                    loadingClassworkId={loadingClassworkId}
-                    toggleLesson={toggleLesson}
-                    openLessonManager={openLessonManager}
-                    openClassworkForm={openClassworkForm}
-                    openClassworkDetail={openClassworkDetail}
-                    subjectAssignments={subjectAssignments}
-                    openLessonDetail={openLessonDetail}
-                    competencies={competencies}
-                    openCompetencyForm={openCompetencyForm}
-                    onAddLessonToCompetency={handleAddLessonToCompetency}
-                    onArchiveCompetency={handleArchiveCompetency}
-                    overviewMastery={overviewMastery}
-                    classworkCount={classworkCount}
-                    overviewCompletion={overviewCompletion}
-                  />
-                )}
               </main>
-            </>
-          )}
+            ) : isTOSOpen && subjectId ? (
+              <main className="py-4 px-4 md:px-6">
+                <TOSGeneratorScreen
+                  subjectId={Number(subjectId)}
+                  subjectName={subjectName || "Subject"}
+                  competencies={competencies}
+                  onBack={() => setIsTOSOpen(false)}
+                />
+              </main>
+            ) : (
+              <>
+                <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between bg-background py-4 px-4 md:px-6">
+                  <div className="flex items-center gap-3">
+                    <SidebarTrigger className="md:hidden" />
+                    <Breadcrumb>
+                      <Breadcrumb.List>
+                        <Breadcrumb.Item>
+                          <Breadcrumb.Link href="/teacher/classes">
+                            Classes
+                          </Breadcrumb.Link>
+                        </Breadcrumb.Item>
+
+                        <Breadcrumb.Separator />
+                        <Breadcrumb.Item>
+                          <Breadcrumb.Page>{subjectName}</Breadcrumb.Page>
+                        </Breadcrumb.Item>
+                      </Breadcrumb.List>
+                    </Breadcrumb>
+                  </div>
+
+                  {activeTab === "lessons" && (
+                    <div className="flex items-center gap-2 flex-col lg:flex-row lg:flex-nowrap">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => openCompetencyForm(null)}
+                        className="whitespace-nowrap gap-2"
+                      >
+                        <Award size={16} />
+                        Add Competency
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="default"
+                        onClick={() => {
+                          setSelectedCompetencyIdForNewLesson(undefined);
+                          setIsCreatingLesson(true);
+                        }}
+                        className="whitespace-nowrap gap-2"
+                      >
+                        <Plus size={16} />
+                        Add Lesson
+                      </Button>
+                    </div>
+                  )}
+                </header>
+                <div className="px-4 md:px-6 bg-background -mt-[1px]">
+                  <Tabs
+                    tabs={tabs}
+                    activeTab={activeTab}
+                    onTabChange={setActiveTab}
+                  />
+                </div>
+
+                <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
+                  {error && (
+                    <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {error}
+                    </div>
+                  )}
+
+                  <Card className="block bg-primary">
+                    <Card.Content className="flex items-start justify-between gap-4">
+                      <div>
+                        <Card.Title className="text-3xl font-bold">
+                          {subjectName}
+                        </Card.Title>
+                        <p className="text-xs text-black">
+                          {sectionName
+                            ? `Section assigned: ${sectionName}`
+                            : "Section assigned for this subject"}
+                        </p>
+                      </div>
+                      <Info size={16} />
+                    </Card.Content>
+                  </Card>
+
+                  {activeTab === "classwork" && subjectId ? (
+                    <SubjectClassworkTab
+                      classId={classId}
+                      subjectId={subjectId}
+                      subjectName={subjectName}
+                      sectionName={sectionName}
+                    />
+                  ) : (
+                    <LessonClassworkList
+                      lessonSearch={lessonSearch}
+                      setLessonSearch={setLessonSearch}
+                      lessonSort={lessonSort}
+                      setLessonSort={setLessonSort}
+                      filteredLessons={filteredLessons}
+                      totalLessons={lessons.length}
+                      expandedLessonId={expandedLessonId}
+                      linkedClassworks={linkedClassworks}
+                      loadingClassworkId={loadingClassworkId}
+                      toggleLesson={toggleLesson}
+                      openLessonManager={openLessonManager}
+                      openClassworkForm={openClassworkForm}
+                      openClassworkDetail={openClassworkDetail}
+                      subjectAssignments={subjectAssignments}
+                      openLessonDetail={openLessonDetail}
+                      competencies={competencies}
+                      openCompetencyForm={openCompetencyForm}
+                      onAddLessonToCompetency={handleAddLessonToCompetency}
+                      onArchiveCompetency={handleArchiveCompetency}
+                      overviewMastery={overviewMastery}
+                      classworkCount={classworkCount}
+                      overviewCompletion={overviewCompletion}
+                    />
+                  )}
+                </div>
+              </>
+            )}
 
           {selectedLesson && lessonDraft && (
             <Dialog
@@ -1765,7 +1768,8 @@ export default function SubjectDetails() {
           )}
         </div>
       </div>
-    </AppLayout>
+    </div>
+  </AppLayout>
   );
 }
 
