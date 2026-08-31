@@ -52,16 +52,16 @@ const Login = () => {
 
   return (
     <div className="retro-squares-bg flex flex-col items-center justify-center h-screen">
-      <Card className="w-md py-10 px-8">
-        <Card.Header className="flex flex-col justify-center mb-8">
+      <Card className="w-md p-0">
+        <Card.Header className="flex flex-col justify-center mb-8 pb-6 pt-8 px-8 bg-primary border-b-2 border-border">
           <Card.Title className="font-sans font-bold mb-1">
             Entervene
           </Card.Title>
-          <Card.Description className="font-normal text-muted-foreground text-sm">
+          <Card.Description className="font-normal text-sm">
             Enter your details to access your account
           </Card.Description>
         </Card.Header>
-        <Card.Content>
+        <Card.Content className="pb-10 px-8">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -74,6 +74,7 @@ const Login = () => {
               <Input
                 type="email"
                 id="email"
+                className="shadow-none"
                 placeholder="Email"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -86,7 +87,7 @@ const Login = () => {
                 <Button
                   type="button"
                   variant="link"
-                  className="font-regular p-0 text-sm font-normal font-underline"
+                  className="font-regular p-0 text-sm font-normal font-underline shadow-none"
                   onClick={() => navigate("/forgot-password")}
                 >
                   Forget password?
@@ -99,7 +100,7 @@ const Login = () => {
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-none border-black h-10 pr-10 text-sm"
+                  className="w-full rounded-none border-black h-10 pr-10 text-sm shadow-none"
                 />
                 <button
                   type="button"
@@ -129,12 +130,12 @@ const Login = () => {
             <Button
               type="submit"
               variant="default"
-              className="mt-4"
+              className="mt-4 shadow-none"
               disabled={loading}
             >
               Sign In
             </Button>
-            <div className="flex flex-row items-center gap-1 mt-1">
+            {/* <div className="flex flex-row items-center gap-1 mt-1">
               <Text as="p" className="text-center">
                 Don't have an account?
               </Text>
@@ -146,7 +147,7 @@ const Login = () => {
               >
                 Sign Up
               </Button>
-            </div>
+            </div> */}
           </form>
         </Card.Content>
       </Card>

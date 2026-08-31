@@ -127,8 +127,8 @@ const StoryBoard = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center justify-between gap-3">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
@@ -159,9 +159,7 @@ const StoryBoard = () => {
               </div>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
-
-            <div className="flex flex-1 flex-col gap-3">
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-1 flex-col gap-3">
               <div className="flex flex-col lg:flex-row lg:items-start gap-4 flex-1">
                 {/* Left side: Subject cards */}
                 <div className="grid grid-cols-2 gap-4 flex-1 content-start">

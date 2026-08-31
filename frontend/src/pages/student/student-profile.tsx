@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
 import { useAuth } from "@/context/AuthContext";
 import { Avatar } from "@/components/retroui/Avatar";
@@ -113,14 +114,15 @@ const StudentProfile = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center gap-3 pb-4 -mx-4 md:-mx-6 px-4 md:px-6 border-b border-gray-500">
-              <p className="text-2xl md:text-4xl font-bold tracking-tight">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
+              <SidebarTrigger className="md:hidden" />
+              <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
                 Profile
-              </p>
+              </h1>
             </header>
 
-            <main className="flex flex-col gap-3 py-3">
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
               <Card className="flex flex-row items-center gap-4 p-4 md:p-6">
               <Avatar
                 variant="student"
@@ -201,7 +203,7 @@ const StudentProfile = () => {
                 </Card>
               </div>
               </div>
-            </main>
+            </div>
           </div>
         </div>
       </div>

@@ -35,8 +35,8 @@ export default function AdminDashboard() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-1 flex-col">
+            <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <div className="flex flex-col items-start">
@@ -45,16 +45,9 @@ export default function AdminDashboard() {
                   </h1>
                 </div>
               </div>
-
-              {/* <div className="flex flex-col sm:items-end">
-                <h1 className="text-4xl font-bold tracking-tight">00:00</h1>
-                <p>January 8, 2026</p>
-              </div> */}
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
-
-            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4 md:gap-6">
               <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
                 {overviewCards.map((card) => (
                   <OverviewCard

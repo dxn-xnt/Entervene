@@ -59,47 +59,45 @@ const Subjects = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center gap-3">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
               <SidebarTrigger className="md:hidden" />
               <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
                 Subjects
               </h1>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
-
-            <main className="py-3">
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
               {isLoading ? (
-              <LoadingPanel label="Loading subjects..." />
-            ) : error ? (
-              <div className="flex flex-col items-center justify-center w-full py-20 gap-4">
-                <p className="text-red-500">{error}</p>
-                <button
-                  onClick={fetchSubjects}
-                  className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition-colors"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : subjects.length === 0 ? (
-              <EmptyStateCard title="No enrolled subjects found." />
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {subjects.map((subject) => (
-                  <SubjectCard
-                    key={subject.subject_load_id}
-                    title={subject.subject_name}
-                    onClick={() => handleSubjectClick(subject)}
-                    teacher={subject.teacher_name}
-                    badges={[
-                      { label: subject.section_name || "Section", count: 0 },
-                    ]}
-                  />
-                ))}
-              </div>
+                <LoadingPanel label="Loading subjects..." />
+              ) : error ? (
+                <div className="flex flex-col items-center justify-center w-full py-20 gap-4">
+                  <p className="text-red-500">{error}</p>
+                  <button
+                    onClick={fetchSubjects}
+                    className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition-colors"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : subjects.length === 0 ? (
+                <EmptyStateCard title="No enrolled subjects found." />
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {subjects.map((subject) => (
+                    <SubjectCard
+                      key={subject.subject_load_id}
+                      title={subject.subject_name}
+                      onClick={() => handleSubjectClick(subject)}
+                      teacher={subject.teacher_name}
+                      badges={[
+                        { label: subject.section_name || "Section", count: 0 },
+                      ]}
+                    />
+                  ))}
+                </div>
               )}
-            </main>
+            </div>
           </div>
         </div>
       </div>

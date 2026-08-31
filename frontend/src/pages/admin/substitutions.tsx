@@ -170,48 +170,47 @@ export default function AdminSubstitutions() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
-        {/* Header */}
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <SidebarTrigger className="md:hidden" />
-              <h1 className="text-2xl font-bold tracking-tight md:text-4xl">
-                Teacher Substitution Management
-              </h1>
-          </div>
+          <div className="flex flex-1 flex-col">
+            {/* Header */}
+            <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-background py-4 px-4 md:px-6">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="md:hidden" />
+                <h1 className="text-2xl font-bold tracking-tight md:text-4xl">
+                  Teacher Substitution Management
+                </h1>
+              </div>
 
-          <Button
-            variant="default"
-            size="md"
-            onClick={() => setIsAssignModalOpen(true)}
-            className="gap-2 self-start whitespace-nowrap sm:self-auto"
-          >
-            <Plus className="size-4" />
-            <span>Assign Substitute</span>
-          </Button>
-        </header>
+              <Button
+                variant="default"
+                size="md"
+                onClick={() => setIsAssignModalOpen(true)}
+                className="gap-2 self-start whitespace-nowrap sm:self-auto"
+              >
+                <Plus className="size-4" />
+                <span>Assign Substitute</span>
+              </Button>
+            </header>
+            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+              <Tabs
+                tabs={substitutionTabs}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                counts={{
+                  all: substitutions.length,
+                  active: activeCount,
+                  completed: completedCount,
+                  cancelled: cancelledCount,
+                }}
+              />
+            </div>
 
-        <div className="-mx-4 -mt-[1px] border-b-2 border-border md:-mx-6" />
-
-        {/* Summary Metric Cards */}
-        <div className="grid grid-cols-1 gap-4 py-4 sm:grid-cols-3 md:py-6">
-          <OverviewCard title="Active Substitutions" count={String(activeCount)} />
-          <OverviewCard title="Completed Handbacks" count={String(completedCount)} />
-          <OverviewCard title="Total Tracked" count={String(substitutions.length)} />
-        </div>
-
-        {/* Status Tabs & Search */}
-        <Tabs
-          tabs={substitutionTabs}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          counts={{
-            all: substitutions.length,
-            active: activeCount,
-            completed: completedCount,
-            cancelled: cancelledCount,
-          }}
-        />
+            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+              {/* Summary Metric Cards */}
+              <div className="grid grid-cols-1 gap-4 py-2 sm:grid-cols-3 md:py-4">
+                <OverviewCard title="Active Substitutions" count={String(activeCount)} />
+                <OverviewCard title="Completed Handbacks" count={String(completedCount)} />
+                <OverviewCard title="Total Tracked" count={String(substitutions.length)} />
+              </div>
 
         <div className="flex justify-start py-1">
           <div className="relative w-full sm:w-72">
@@ -434,6 +433,7 @@ export default function AdminSubstitutions() {
             </div>
           )}
         </Card>
+            </div>
           </div>
         </div>
       </div>

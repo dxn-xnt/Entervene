@@ -4,6 +4,7 @@ import Tabs from "../../../components/tabs";
 import SubjectLessonTab from "./tabs/subject-lesson-tab";
 import SubjectClassworkTab from "./tabs/subject-classwork-tab";
 import AppLayout from "@/layouts/app-layout";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 type SubjectDetailProps = {
   subject: string;
@@ -20,23 +21,33 @@ const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
 
   return (
     <AppLayout>
-      <header className="flex items-center gap-3 py-4 md:py-5 px-4 md:px-6">
-        <button
-          onClick={onBack}
-          className="text-4xl font-semibold cursor-pointer"
-        >
-          Subjects
-        </button>
-        <ChevronRight size={40} />
-        <h1 className="text-3xl">{subject}</h1>
-      </header>
-      <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-      <main className="py-4 md:py-5 px-4 md:px-6">
-        <div>
-          {activeTab === "lessons" && <SubjectLessonTab subject={subject} />}
-          {activeTab === "classwork" && <SubjectClassworkTab />}
+      <div className="flex flex-1 flex-col">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
+              <SidebarTrigger className="md:hidden" />
+              <button
+                onClick={onBack}
+                className="text-4xl font-semibold cursor-pointer"
+              >
+                Subjects
+              </button>
+              <ChevronRight size={40} />
+              <h1 className="text-3xl font-bold">{subject}</h1>
+            </header>
+            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+              <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+            </div>
+
+            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
+              <div>
+                {activeTab === "lessons" && <SubjectLessonTab subject={subject} />}
+                {activeTab === "classwork" && <SubjectClassworkTab />}
+              </div>
+            </div>
+          </div>
         </div>
-      </main>
+      </div>
     </AppLayout>
   );
 };

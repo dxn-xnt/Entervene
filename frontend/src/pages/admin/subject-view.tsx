@@ -81,9 +81,9 @@ export default function AdminSubjectView() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 p-4">
-            <header className="flex items-center justify-between">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center justify-between bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <Breadcrumb>
@@ -108,9 +108,8 @@ export default function AdminSubjectView() {
               </div>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border mt-[3px]" />
-
-            {isLoading ? (
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+              {isLoading ? (
               <RetroCard className="py-3 px-4 bg-accent">Loading subject...</RetroCard>
             ) : error ? (
               <RetroCard className="py-3 px-4 bg-accent">
@@ -189,6 +188,7 @@ export default function AdminSubjectView() {
                 </div>
               </>
             ) : null}
+            </div>
           </div>
         </div>
       </div>

@@ -273,10 +273,10 @@ export default function AdminClassDetail() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col">
             {/* Header with Breadcrumb & Context Actions */}
-            <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <Breadcrumb>
@@ -314,20 +314,22 @@ export default function AdminClassDetail() {
                 )}
               </div>
             </header>
+            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+              <Tabs<DetailTab>
+                tabs={[
+                  { id: "classes", label: "Overview", icon: BookOpen },
+                  { id: "students", label: "Students", icon: Users },
+                  { id: "subjects", label: "Subject Load", icon: BookOpen },
+                ]}
+                activeTab={tab}
+                onTabChange={(id) => setTab(id)}
+              />
+            </div>
 
-            {/* Retro UI Tabs */}
-            <Tabs<DetailTab>
-              tabs={[
-                { id: "classes", label: "Overview", icon: BookOpen },
-                { id: "students", label: "Students", icon: Users },
-                { id: "subjects", label: "Subject Load", icon: BookOpen },
-              ]}
-              activeTab={tab}
-              onTabChange={(id) => setTab(id)}
-            />
+            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
 
-            {/* Tab content */}
-            <div className="flex flex-col gap-3 pt-2">
+              {/* Tab content */}
+              <div className="flex flex-col gap-3 pt-2">
               {isArchived && (
                 <RetroCard className="bg-[#fff7d6] p-3">
                   <Text as="p" className="text-sm font-bold">
@@ -371,6 +373,7 @@ export default function AdminClassDetail() {
                 />
               )}
               {tab === "subjects" && <SubjectLoadTab selectedClass={selectedClass} />}
+            </div>
             </div>
           </div>
         </div>

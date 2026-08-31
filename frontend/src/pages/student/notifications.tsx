@@ -87,8 +87,8 @@ const Notifications = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center justify-between gap-3">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
@@ -108,13 +108,15 @@ const Notifications = () => {
                 <span className="sm:hidden">Read All</span>
               </Button>
             </header>
-
-            <main className="flex flex-col gap-3">
+            <div className="px-4 md:px-6 bg-background -mt-[1px]">
               <Tabs
                 tabs={tabs}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
               />
+            </div>
+
+            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
 
               {loading ? (
                 <LoadingPanel label="Loading notifications..." />
@@ -197,7 +199,7 @@ const Notifications = () => {
                     )}
                 </div>
               )}
-            </main>
+            </div>
           </div>
         </div>
       </div>

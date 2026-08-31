@@ -147,13 +147,13 @@ export default function AdminInterventions() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center justify-between gap-3">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <h1 className="text-4xl font-black  flex items-center gap-2 text-black">
-                  Interventions Dashboard
+                  Interventions
                 </h1>
                 {isAdmin && (
                   <Badge size="sm" className="">
@@ -163,9 +163,7 @@ export default function AdminInterventions() {
               </div>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-black -mt-[1px]" />
-
-            <div className="flex flex-col gap-4 py-2 md:gap-6 md:py-3">
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4 md:gap-6">
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
                 {/* Left column — Main Dashboard Content */}
                 <div className="lg:col-span-3 flex flex-col gap-6">
@@ -240,7 +238,7 @@ export default function AdminInterventions() {
                     </div>
 
                     {/* Table Container */}
-                    <Card className="p-0 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-none">
+                    <Card className="p-0 border-0">
                       {loading ? (
                         <LoadingPanel label="Loading interventions..." />
                       ) : error ? (
@@ -250,13 +248,13 @@ export default function AdminInterventions() {
                       ) : (
                         <div className="overflow-x-auto">
                           <Table>
-                            <Table.Header className="bg-yellow-300 border-b-2 border-black font-black uppercase text-xs">
+                            <Table.Header>
                               <Table.Row>
-                                <Table.Head className="text-black font-black">Learner Name</Table.Head>
-                                <Table.Head className="text-black font-black">Subject / Class</Table.Head>
-                                <Table.Head className="text-black font-black">Intervention Title</Table.Head>
-                                <Table.Head className="text-black font-black">Priority</Table.Head>
-                                <Table.Head className="text-black font-black">Status</Table.Head>
+                                <Table.Head>Learner Name</Table.Head>
+                                <Table.Head>Subject / Class</Table.Head>
+                                <Table.Head>Intervention Title</Table.Head>
+                                <Table.Head>Priority</Table.Head>
+                                <Table.Head>Status</Table.Head>
                                 {isTeacher && (
                                   <Table.Head className="text-black font-black text-right">Actions</Table.Head>
                                 )}

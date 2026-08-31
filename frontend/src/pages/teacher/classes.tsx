@@ -212,126 +212,126 @@ const TeacherClasses = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
-            <header className="flex items-center gap-3">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
               <SidebarTrigger className="md:hidden" />
               <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Classes</h1>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
+            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
+              {error && (
+                <Alert
+                  status="error"
+                  position="top-right"
 
-            {error && (
-              <Alert
-                status="error"
-                position="top-right"
+                  duration={5000}
+                  onClose={() => setError("")}
+                >
+                  <Alert.Title>Error</Alert.Title>
+                  <Alert.Description>{error}</Alert.Description>
+                </Alert>
+              )}
 
-                duration={5000}
-                onClose={() => setError("")}
-              >
-                <Alert.Title>Error</Alert.Title>
-                <Alert.Description>{error}</Alert.Description>
-              </Alert>
-            )}
-
-            {isLoading ? (
-              <p className="py-8 text-center text-gray-500">
-                Loading classes...
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-                {/* Left: Subject Loads */}
-                <div className="lg:col-span-8 flex flex-col gap-4">
-                  {groupedSubjectLoads.length === 0 ? (
-                    <EmptyStateCard title="No subject teaching sections assigned." />
-                  ) : (
-                    groupedSubjectLoads.map((group) => (
-                      <Card
-                        key={group.subjectId}
-                        className="flex flex-col"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <h2 className="text-xl font-bold">
-                              {group.subjectName}
-                            </h2>
-                            {group.subjectCodename && (
-                              <Badge variant="default" size="sm">
-                                {group.subjectCodename}
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex flex-row gap-3">
-                            <Badge variant="secondary">
-                              {group.loads.length} section{group.loads.length !== 1 ? "s" : ""}
-                            </Badge>
-                            <Button
-                              variant="secondary"
-                              className="shadow-none"
-                              size="icon"
-                              title={`View ${group.subjectName}`}
-                              onClick={() => {
-                                if (group.loads[0]) {
-                                  navigate(
-                                    `/teacher/classes/${group.loads[0].class_id}/subjects/${group.subjectId}`,
-                                  );
-                                }
-                              }}
-                            >
-                              <ArrowUpRight className="size-4" />
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="pt-3 flex gap-3 overflow-auto pb-2">
-                          {group.loads.map((load) => (
-                            <SubjectClassCatalogCard
-                              key={load.subject_load_id}
-                              load={load}
-                              isAdvisory={advisoryByClass.has(load.class_id)}
-                              onClick={() =>
-                                navigate(
-                                  `/teacher/classes/${load.class_id}/${load.subject_id}`,
-                                )
-                              }
-                            />
-                          ))}
-                        </div>
-                      </Card>
-                    ))
-                  )}
-                </div>
-
-                {/* Right: Advisory Class */}
-                <Card className="lg:col-span-4 gap-3 flex flex-col bg-primary">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold">Advisory Class</h2>
-                    <div className="flex flex-row gap-3">
-                      <Badge variant="outline">
-                        {advisoryClasses.length} section
-                        {advisoryClasses.length !== 1 ? "s" : ""}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {advisoryClasses.length === 0 ? (
-                      <EmptyStateCard
-                        title="No advisory classes assigned."
-                        className="border-0 bg-transparent shadow-none"
-                      />
+              {isLoading ? (
+                <p className="py-8 text-center text-gray-500">
+                  Loading classes...
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+                  {/* Left: Subject Loads */}
+                  <div className="lg:col-span-8 flex flex-col gap-4">
+                    {groupedSubjectLoads.length === 0 ? (
+                      <EmptyStateCard title="No subject teaching sections assigned." />
                     ) : (
-                      advisoryClasses.map((item) => (
-                        <AdvisoryCatalogCard
-                          key={item.class_id}
-                          item={item}
-                          onClick={() =>
-                            navigate(`/teacher/advisory-class/${item.class_id}`)
-                          }
-                        />
+                      groupedSubjectLoads.map((group) => (
+                        <Card
+                          key={group.subjectId}
+                          className="flex flex-col"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <h2 className="text-xl font-bold">
+                                {group.subjectName}
+                              </h2>
+                              {group.subjectCodename && (
+                                <Badge variant="default" size="sm">
+                                  {group.subjectCodename}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex flex-row gap-3">
+                              <Badge variant="secondary">
+                                {group.loads.length} section{group.loads.length !== 1 ? "s" : ""}
+                              </Badge>
+                              <Button
+                                variant="secondary"
+                                className="shadow-none"
+                                size="icon"
+                                title={`View ${group.subjectName}`}
+                                onClick={() => {
+                                  if (group.loads[0]) {
+                                    navigate(
+                                      `/teacher/classes/${group.loads[0].class_id}/subjects/${group.subjectId}`,
+                                    );
+                                  }
+                                }}
+                              >
+                                <ArrowUpRight className="size-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="pt-3 flex gap-3 overflow-auto pb-2">
+                            {group.loads.map((load) => (
+                              <SubjectClassCatalogCard
+                                key={load.subject_load_id}
+                                load={load}
+                                isAdvisory={advisoryByClass.has(load.class_id)}
+                                onClick={() =>
+                                  navigate(
+                                    `/teacher/classes/${load.class_id}/${load.subject_id}`,
+                                  )
+                                }
+                              />
+                            ))}
+                          </div>
+                        </Card>
                       ))
                     )}
                   </div>
-                </Card>
-              </div>
-            )}
+
+                  {/* Right: Advisory Class */}
+                  <Card className="lg:col-span-4 gap-3 flex flex-col bg-primary">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-xl font-bold">Advisory Class</h2>
+                      <div className="flex flex-row gap-3">
+                        <Badge variant="outline">
+                          {advisoryClasses.length} section
+                          {advisoryClasses.length !== 1 ? "s" : ""}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {advisoryClasses.length === 0 ? (
+                        <EmptyStateCard
+                          title="No advisory classes assigned."
+                          className="border-0 bg-transparent shadow-none"
+                        />
+                      ) : (
+                        advisoryClasses.map((item) => (
+                          <AdvisoryCatalogCard
+                            key={item.class_id}
+                            item={item}
+                            onClick={() =>
+                              navigate(`/teacher/advisory-class/${item.class_id}`)
+                            }
+                          />
+                        ))
+                      )}
+                    </div>
+                  </Card>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

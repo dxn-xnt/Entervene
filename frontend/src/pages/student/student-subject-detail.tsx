@@ -80,11 +80,11 @@ const StudentSubjectDetail = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
+          <div className="flex flex-1 flex-col">
             {/* ── Page header: breadcrumb ── */}
             {!isLessonDetailScreen ? (
               <>
-                <header className="flex items-center gap-3">
+                <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
                   <SidebarTrigger className="md:hidden" />
                   <Breadcrumb>
                     <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
@@ -117,34 +117,47 @@ const StudentSubjectDetail = () => {
                     </Breadcrumb.List>
                   </Breadcrumb>
                 </header>
+                <div className="px-4 md:px-6 bg-background -mt-[1px]">
+                  <Tabs
+                    tabs={tabs}
+                    activeTab={activeTab}
+                    onTabChange={handleTabChange}
+                  />
+                </div>
 
-                {/* ── Tab bar ── */}
+                <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
 
-                <Tabs
-                  tabs={tabs}
-                  activeTab={activeTab}
-                  onTabChange={handleTabChange}
-                />
+                  {/* ── Tab content ── */}
+                  <div className="py-2">
+                    {activeTab === "lessons" && (
+                      <SubjectLessonTab
+                        classId={numericClassId}
+                        subjectId={numericSubjectId}
+                        subjectName={subjectInfo?.subject_name}
+                        teacherName={subjectInfo?.teacher_name}
+                      />
+                    )}
+                    {activeTab === "classwork" && (
+                      <SubjectClassworkTab
+                        classId={numericClassId}
+                        subjectId={numericSubjectId}
+                      />
+                    )}
+                  </div>
+                </div>
               </>
-            ) : null}
-
-            {/* ── Tab content ── */}
-            <main className="py-3">
-              {activeTab === "lessons" && (
-                <SubjectLessonTab
-                  classId={numericClassId}
-                  subjectId={numericSubjectId}
-                  subjectName={subjectInfo?.subject_name}
-                  teacherName={subjectInfo?.teacher_name}
-                />
-              )}
-              {activeTab === "classwork" && (
-                <SubjectClassworkTab
-                  classId={numericClassId}
-                  subjectId={numericSubjectId}
-                />
-              )}
-            </main>
+            ) : (
+              <div className="py-4 px-4 md:px-6">
+                {activeTab === "lessons" && (
+                  <SubjectLessonTab
+                    classId={numericClassId}
+                    subjectId={numericSubjectId}
+                    subjectName={subjectInfo?.subject_name}
+                    teacherName={subjectInfo?.teacher_name}
+                  />
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
