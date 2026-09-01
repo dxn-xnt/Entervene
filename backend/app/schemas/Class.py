@@ -1,5 +1,6 @@
 from uuid import UUID
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -294,3 +295,20 @@ class BatchCreateClassesResponse(BaseModel):
     academic_year_id: int
     summary: BatchCreateSummary
     classes: list[CreatedClassItem]
+
+
+class SectionDraftPayload(BaseModel):
+    local_id: str
+    section_name: str
+
+
+class DistributeStudentsRequest(BaseModel):
+    academic_level_id: int
+    mode: Literal["alphabetical", "gwa"] = "alphabetical"
+    sections: list[SectionDraftPayload]
+    unassigned_student_ids: list[UUID]
+    assignments_by_section: dict[str, list[UUID]]
+
+
+class DistributeStudentsResponse(BaseModel):
+    assignments_by_section: dict[str, list[str]]

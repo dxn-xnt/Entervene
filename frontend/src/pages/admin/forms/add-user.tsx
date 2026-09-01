@@ -43,6 +43,7 @@ export interface ManualFormData {
   studentLrn: string;
   suffix: string;
   gradeLevel: string;
+  priorGwa: string;
 }
 
 const EMPTY_FORM: ManualFormData = {
@@ -60,6 +61,7 @@ const EMPTY_FORM: ManualFormData = {
   studentLrn: "",
   suffix: "",
   gradeLevel: "",
+  priorGwa: "",
 };
 
 const IMPORT_TEMPLATES: Record<
@@ -80,6 +82,7 @@ const IMPORT_TEMPLATES: Record<
       "grade_level",
       "suffix",
       "dob",
+      "general_average",
     ],
     sample: [
       "Maria",
@@ -93,6 +96,7 @@ const IMPORT_TEMPLATES: Record<
       "7",
       "",
       "2008-04-15",
+      "88.50",
     ],
   },
   Teacher: {
@@ -412,6 +416,8 @@ export default function AddUserModal({
         employment_status: form.employmentStatus,
         student_lrn: form.studentLrn.trim(),
         grade_level: form.gradeLevel ? Number(form.gradeLevel) : null,
+        prior_gwa: form.priorGwa.trim() ? Number(form.priorGwa.trim()) : null,
+        general_average: form.priorGwa.trim() ? Number(form.priorGwa.trim()) : null,
       };
 
       if (form.role !== "Admin") {
@@ -788,37 +794,51 @@ export default function AddUserModal({
               )}
 
               {isStudent && (
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Student LRN">
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Student LRN">
+                      <Input
+                        placeholder="12-digit LRN"
+                        maxLength={12}
+                        className="w-full bg-background border-2 border-black font-mono"
+                        value={form.studentLrn}
+                        onChange={(e) =>
+                          handleField(
+                            "studentLrn",
+                            e.target.value.replace(/\D/g, ""),
+                          )
+                        }
+                      />
+                    </Field>
+                    <Field label="Grade Level">
+                      <Select value={form.gradeLevel} onValueChange={(val) => handleField("gradeLevel", val)}>
+                        <Select.Trigger className="w-full">
+                          <Select.Value placeholder="Select grade level" />
+                        </Select.Trigger>
+                        <Select.Content>
+                          <Select.Item value="7">Grade 7</Select.Item>
+                          <Select.Item value="8">Grade 8</Select.Item>
+                          <Select.Item value="9">Grade 9</Select.Item>
+                          <Select.Item value="10">Grade 10</Select.Item>
+                          <Select.Item value="11">Grade 11</Select.Item>
+                          <Select.Item value="12">Grade 12</Select.Item>
+                        </Select.Content>
+                      </Select>
+                    </Field>
+                  </div>
+                  <Field label="General Average (Prior GWA)">
                     <Input
-                      placeholder="12-digit LRN"
-                      maxLength={12}
+                      type="number"
+                      step="0.01"
+                      min="60"
+                      max="100"
+                      placeholder="e.g. 88.50 (optional)"
                       className="w-full bg-background border-2 border-black font-mono"
-                      value={form.studentLrn}
-                      onChange={(e) =>
-                        handleField(
-                          "studentLrn",
-                          e.target.value.replace(/\D/g, ""),
-                        )
-                      }
+                      value={form.priorGwa}
+                      onChange={(e) => handleField("priorGwa", e.target.value)}
                     />
                   </Field>
-                  <Field label="Grade Level">
-                    <Select value={form.gradeLevel} onValueChange={(val) => handleField("gradeLevel", val)}>
-                      <Select.Trigger className="w-full">
-                        <Select.Value placeholder="Select grade level" />
-                      </Select.Trigger>
-                      <Select.Content>
-                        <Select.Item value="7">Grade 7</Select.Item>
-                        <Select.Item value="8">Grade 8</Select.Item>
-                        <Select.Item value="9">Grade 9</Select.Item>
-                        <Select.Item value="10">Grade 10</Select.Item>
-                        <Select.Item value="11">Grade 11</Select.Item>
-                        <Select.Item value="12">Grade 12</Select.Item>
-                      </Select.Content>
-                    </Select>
-                  </Field>
-                </div>
+                </>
               )}
             </div>
 

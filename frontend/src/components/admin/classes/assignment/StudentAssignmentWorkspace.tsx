@@ -6,9 +6,10 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { useEffect, useState } from "react";
-import { getUnassignedClassStudents } from "@/lib/api";
+import { distributeClassStudents, getUnassignedClassStudents } from "@/lib/api";
 import type {
   ClassAssignmentStudent,
+  DistributionMode,
   ManualAssignmentWorkspaceState,
   ManualClassSetup,
 } from "@/types/adminClasses";
@@ -48,6 +49,8 @@ export default function StudentAssignmentWorkspace({
   const [reviewAttempted, setReviewAttempted] = useState(false);
   const [showAssignEvenlyConfirmation, setShowAssignEvenlyConfirmation] =
     useState(false);
+  const [distributing, setDistributing] = useState(false);
+  const [distributeError, setDistributeError] = useState("");
   const [detailsSectionId, setDetailsSectionId] = useState<string | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -197,20 +200,76 @@ export default function StudentAssignmentWorkspace({
     if (canContinueToReview) onReview();
   }
 
-  function assignEvenly() {
+  async function assignEvenly(mode: DistributionMode) {
     if (!state || !state.unassignedStudents.length || !setup.sections.length)
       return;
-    onChange({
-      ...state,
-      unassignedStudents: [],
-      assignmentsBySection: distributeUnassignedStudents(
-        state.unassignedStudents,
-        state.assignmentsBySection,
-        setup.sections,
-      ),
-      selectedStudentIds: new Set(),
-    });
+
     setShowAssignEvenlyConfirmation(false);
+
+    if (mode === "alphabetical") {
+      onChange({
+        ...state,
+        unassignedStudents: [],
+        assignmentsBySection: distributeUnassignedStudents(
+          state.unassignedStudents,
+          state.assignmentsBySection,
+          setup.sections,
+        ),
+        selectedStudentIds: new Set(),
+      });
+      return;
+    }
+
+    setDistributing(true);
+    setDistributeError("");
+    try {
+      const resp = await distributeClassStudents({
+        academic_level_id: setup.academicLevelId,
+        mode: "gwa",
+        sections: setup.sections.map((s) => ({
+          local_id: s.localId,
+          section_name: s.sectionName,
+        })),
+        unassigned_student_ids: state.unassignedStudents.map((s) => s.student_id),
+        assignments_by_section: Object.fromEntries(
+          Object.entries(state.assignmentsBySection).map(([secId, students]) => [
+            secId,
+            students.map((s) => s.student_id),
+          ]),
+        ),
+      });
+
+      const allStudentsMap = new Map<string, ClassAssignmentStudent>();
+      state.unassignedStudents.forEach((s) => allStudentsMap.set(s.student_id, s));
+      Object.values(state.assignmentsBySection)
+        .flat()
+        .forEach((s) => allStudentsMap.set(s.student_id, s));
+
+      const updatedAssignments: Record<string, ClassAssignmentStudent[]> = {};
+      for (const section of setup.sections) {
+        const ids = resp.assignments_by_section[section.localId] || [];
+        updatedAssignments[section.localId] = sortAssignmentStudents(
+          ids
+            .map((id) => allStudentsMap.get(id))
+            .filter((s): s is ClassAssignmentStudent => Boolean(s)),
+        );
+      }
+
+      onChange({
+        ...state,
+        unassignedStudents: [],
+        assignmentsBySection: updatedAssignments,
+        selectedStudentIds: new Set(),
+      });
+    } catch (err) {
+      setDistributeError(
+        err instanceof Error
+          ? err.message
+          : "Failed to distribute students by GWA.",
+      );
+    } finally {
+      setDistributing(false);
+    }
   }
 
   return (
@@ -230,11 +289,29 @@ export default function StudentAssignmentWorkspace({
           </p>
         )}
       </div>
+      {distributeError && (
+        <div className="flex items-center justify-between rounded border-2 border-red-600 bg-red-50 p-2.5 text-xs font-bold text-red-700">
+          <span>{distributeError}</span>
+          <button
+            type="button"
+            className="underline ml-2"
+            onClick={() => setDistributeError("")}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+      {distributing && (
+        <div className="flex items-center gap-2 rounded border-2 border-black bg-[#fff8d7] p-2.5 text-xs font-bold">
+          <span className="inline-block size-3.5 animate-spin rounded-full border-2 border-black border-t-transparent" />
+          <span>Balancing students by academic performance (GWA)...</span>
+        </div>
+      )}
       <AssignmentToolbar
         sections={setup.sections}
         selectedCount={state.selectedStudentIds.size}
         canAssignEvenly={
-          state.unassignedStudents.length > 0 && setup.sections.length > 0
+          state.unassignedStudents.length > 0 && setup.sections.length > 0 && !distributing
         }
         onMove={(target) => moveStudents([...state.selectedStudentIds], target)}
         onClear={() => onChange({ ...state, selectedStudentIds: new Set() })}
