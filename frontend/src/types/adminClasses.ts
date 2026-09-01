@@ -377,3 +377,17 @@ export type ClassImportValidationErrorResponse = {
   code: string;
   errors: ClassImportValidationErrorItem[];
 };
+
+export type DistributionMode = "alphabetical" | "gwa";
+
+export type DistributeStudentsPayload = {
+  academic_level_id: number;
+  mode: DistributionMode;
+  sections: { local_id: string; section_name: string }[];
+  unassigned_student_ids: string[];
+  assignments_by_section: Record<string, string[]>;
+};
+
+export type DistributeStudentsResponse = {
+  assignments_by_section: Record<string, string[]>;
+};

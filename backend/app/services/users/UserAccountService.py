@@ -14,7 +14,7 @@ from app.models.people.Student import Student
 from app.schemas.User import UpdateUserRequest
 from app.services.classes.ClassService import build_student_class_assignment
 from app.services.users.UserQueryService import get_user_detail, role_name_to_client_role
-from app.services.users.UserShared import capitalize_name, resolve_academic_level_id, normalize_employment_status
+from app.services.users.UserShared import capitalize_name, resolve_academic_level_id, normalize_employment_status, validate_prior_gwa
 
 # EXISTING USER WRITE FLOW
 # Admin edits update UserAccount plus the matching Student or AcademicStaff
@@ -97,6 +97,9 @@ def _update_student(
         if not academic_level_id:
             raise HTTPException(status_code=400, detail="Invalid grade level")
         student.academic_level_id = academic_level_id
+
+    if payload.prior_gwa is not None:
+        student.prior_gwa = validate_prior_gwa({"prior_gwa": payload.prior_gwa})
 
     section = (payload.section or "").strip()
     if not section:

@@ -1,4 +1,5 @@
 import csv
+from decimal import Decimal, InvalidOperation
 import io
 from typing import Any, Callable
 
@@ -160,6 +161,15 @@ def _validate_import_rows(
             raw_gender = normalized.get("gender", "").strip()
             if not raw_gender:
                 errors.append(_import_error(index, "gender", raw_gender, "Gender is required"))
+
+            raw_gwa = next((normalized.get(k) for k in ("prior_gwa", "general_average", "gwa") if normalized.get(k) not in (None, "")), "")
+            if raw_gwa:
+                try:
+                    val = Decimal(str(raw_gwa).strip())
+                    if val < Decimal("60.00") or val > Decimal("100.00"):
+                        errors.append(_import_error(index, "general_average", raw_gwa, "General average must be between 60.00 and 100.00"))
+                except (InvalidOperation, ValueError):
+                    errors.append(_import_error(index, "general_average", raw_gwa, "General average must be a valid number between 60.00 and 100.00"))
 
         valid_rows.append(normalized)
 

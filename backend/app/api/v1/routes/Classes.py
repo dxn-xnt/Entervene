@@ -18,6 +18,8 @@ from app.schemas.Class import (
     UpdateClassStudentListRequest,
     UnassignedStudentsResponse,
     ValidateClassImportResponse,
+    DistributeStudentsRequest,
+    DistributeStudentsResponse,
 )
 from app.services.classes.ClassService import archive_class_record, batch_create_classes, update_class_record
 from app.services.classes.ClassImportService import validate_class_import_file
@@ -32,6 +34,7 @@ from app.services.classes.ClassQueryService import (
     list_classes_data,
 )
 from app.services.classes.ClassStudentService import update_class_student_assignments
+from app.services.classes.StudentDistributionService import distribute_students_balanced
 
 # CLASS MANAGEMENT FLOW
 # 1. The admin frontend sends a request to one of the endpoints in this file.
@@ -88,6 +91,23 @@ async def validate_class_import(
         file=file,
         academic_level_id=academic_level_id,
     )
+
+
+@router.post("/distribute-students", response_model=DistributeStudentsResponse)
+def distribute_students(
+    payload: DistributeStudentsRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    assignments = distribute_students_balanced(
+        db=db,
+        academic_level_id=payload.academic_level_id,
+        section_ids=[sec.local_id for sec in payload.sections],
+        unassigned_student_ids=payload.unassigned_student_ids,
+        current_assignments=payload.assignments_by_section,
+        mode=payload.mode,
+    )
+    return DistributeStudentsResponse(assignments_by_section=assignments)
 
 
 # These students can be selected during class creation because they do not yet
