@@ -215,3 +215,46 @@ def test_three_plus_summatives_aggregate_in_sum2():
     assert ps_exams == 83.0
 
 
+def test_unrecorded_scores_return_none_not_default_ten():
+    """When assignments exist but student has no scores entered (all None), grades must be None, not 10.0."""
+    asgn_ww = _make_mock_assignment("Activity 1", 100, category="WRITTEN_WORK")
+    asgn_pt = _make_mock_assignment("Performance 1", 100, category="PERFORMANCE_TASK")
+    asgn_exam = _make_mock_assignment("Term Exam", 100, subtype="TERM_EXAM")
+
+    res = _deped_grade(
+        written_scores=[None],
+        written_assignments=[asgn_ww],
+        performance_scores=[None],
+        performance_assignments=[asgn_pt],
+        quarterly_scores=[None],
+        quarterly_assignments=[asgn_exam],
+    )
+    assert res.ps_ww is None
+    assert res.ps_pt is None
+    assert res.ps_qa is None
+    assert res.initial_grade is None
+    assert res.transmuted_grade is None
+
+
+def test_actual_zero_score_transmutes_to_ten():
+    """When student legitimately earned 0 score (score is 0.0, not None), initial grade is 0.0 and transmutes to 10.0."""
+    asgn_ww = _make_mock_assignment("Activity 1", 100, category="WRITTEN_WORK")
+    asgn_pt = _make_mock_assignment("Performance 1", 100, category="PERFORMANCE_TASK")
+    asgn_exam = _make_mock_assignment("Term Exam", 100, subtype="TERM_EXAM")
+
+    res = _deped_grade(
+        written_scores=[0.0],
+        written_assignments=[asgn_ww],
+        performance_scores=[0.0],
+        performance_assignments=[asgn_pt],
+        quarterly_scores=[0.0],
+        quarterly_assignments=[asgn_exam],
+    )
+    assert res.ps_ww == 0.0
+    assert res.ps_pt == 0.0
+    assert res.ps_qa == 0.0
+    assert res.initial_grade == 0.0
+    assert res.transmuted_grade == 10.0
+
+
+

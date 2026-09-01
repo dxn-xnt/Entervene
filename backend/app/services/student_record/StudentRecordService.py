@@ -354,7 +354,7 @@ def teacher_student_gradebook(
             display_total = str(round(tg, 1))
             grade_for_descriptor = tg
         else:
-            display_total = "0"
+            display_total = None
             grade_for_descriptor = None
 
         perf_descriptor = get_performance_descriptor(grade_for_descriptor)
@@ -535,24 +535,27 @@ def _compute_exam_ps(
     ps_sum2 = _category_ps([s for s, _ in sum2_pairs], [a for _, a in sum2_pairs]) if sum2_pairs else None
     ps_term = _category_ps([s for s, _ in term_pairs], [a for _, a in term_pairs]) if term_pairs else None
 
+    if ps_sum1 is None and ps_sum2 is None and ps_term is None:
+        return ps_sum1, ps_sum2, ps_term, None
+
     # Dynamic normalization based on assigned exam components
     active_weight = 0.0
     weighted_sum = 0.0
 
-    if sum1_pairs:
+    if ps_sum1 is not None and sum1_pairs:
         active_weight += subsplit.sum1_weight
-        weighted_sum += subsplit.sum1_weight * (ps_sum1 or 0.0)
+        weighted_sum += subsplit.sum1_weight * ps_sum1
 
-    if sum2_pairs:
+    if ps_sum2 is not None and sum2_pairs:
         active_weight += subsplit.sum2_weight
-        weighted_sum += subsplit.sum2_weight * (ps_sum2 or 0.0)
+        weighted_sum += subsplit.sum2_weight * ps_sum2
 
-    if term_pairs:
+    if ps_term is not None and term_pairs:
         active_weight += subsplit.term_weight
-        weighted_sum += subsplit.term_weight * (ps_term or 0.0)
+        weighted_sum += subsplit.term_weight * ps_term
 
     if active_weight <= 0:
-        return None, None, None, None
+        return ps_sum1, ps_sum2, ps_term, None
 
     composite_ps = round(weighted_sum / active_weight, 2)
     return ps_sum1, ps_sum2, ps_term, composite_ps
@@ -566,7 +569,7 @@ def _category_ps(
     """
     Percentage Score for a category.
     PS = (Sum of student scores) / (Sum of max scores) × 100
-    Returns None when there are no assignments in the category.
+    Returns None when there are no assignments in the category or when no scores are entered for the student.
     """
     total_max = sum(
         float(asgn.classwork.total_points or 0)
@@ -574,7 +577,10 @@ def _category_ps(
     )
     if total_max <= 0:
         return None
-    total_earned = sum(s for s in scores if s is not None)
+    valid_scores = [s for s in scores if s is not None]
+    if not valid_scores:
+        return None
+    total_earned = sum(valid_scores)
     return round((total_earned / total_max) * 100, 2)
 
 

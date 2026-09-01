@@ -299,6 +299,19 @@ def test_advisory_grades_matrix_finalized_and_pending(advisory_grades_setup):
     assert s2_grade["final_period_grade"] is None
     assert s2_grade["performance_descriptor"] is None
 
+    # stu2 has no scores/grades finalized at all
+    stu2_row = next(s for s in res["students"] if s["student_id"] == str(env["stu2"].student_id))
+    assert stu2_row["finalized_count"] == 0
+    assert stu2_row["total_subjects_count"] == 2
+    assert stu2_row["is_all_finalized"] is False
+    assert stu2_row["gwa"] is None
+    assert stu2_row["gwa_descriptor"] is None
+    for s_id in (env["s1"].subject_id, env["s2"].subject_id):
+        assert stu2_row["grades"][s_id]["status"] == "pending"
+        assert stu2_row["grades"][s_id]["final_period_grade"] is None
+        assert stu2_row["grades"][s_id]["performance_descriptor"] is None
+
+
 
 def test_send_grade_and_advisory_view_sync(advisory_grades_setup):
     """Finalizing a subject grade immediately reflects in advisory view."""

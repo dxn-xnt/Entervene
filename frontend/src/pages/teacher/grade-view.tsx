@@ -367,7 +367,9 @@ const TeacherGradeView = () => {
         ...cg.writtenWork.map((w) => `WW: ${w.title} (${w.maxScore})`),
         ...cg.performanceTask.map((p) => `PT: ${p.title} (${p.maxScore})`),
         ...examItems.map((q) => `Exam: ${q.title} (${q.maxScore})`),
-        "Transmuted Grade",
+        "Initial Grade",
+        "Term Grade",
+        "Descriptor",
       ];
       const { males, females } = groupStudentsByGender(raw);
       const rows = [
@@ -379,7 +381,9 @@ const TeacherGradeView = () => {
             ...sg.writtenWork.map((s) => (s !== null && s !== undefined ? s : "")),
             ...sg.performanceTask.map((s) => (s !== null && s !== undefined ? s : "")),
             ...sgExams.map((s) => (s !== null && s !== undefined ? s : "")),
-            fmt(sg.transmuted_grade ?? sg.initial_grade),
+            fmt(sg.initial_grade),
+            fmt(sg.transmuted_grade),
+            sg.transmuted_grade != null && sg.performance_descriptor ? `"${sg.performance_descriptor}"` : "",
           ];
         }),
         ...females.map((sg) => {
@@ -390,7 +394,9 @@ const TeacherGradeView = () => {
             ...sg.writtenWork.map((s) => (s !== null && s !== undefined ? s : "")),
             ...sg.performanceTask.map((s) => (s !== null && s !== undefined ? s : "")),
             ...sgExams.map((s) => (s !== null && s !== undefined ? s : "")),
-            fmt(sg.transmuted_grade ?? sg.initial_grade),
+            fmt(sg.initial_grade),
+            fmt(sg.transmuted_grade),
+            sg.transmuted_grade != null && sg.performance_descriptor ? `"${sg.performance_descriptor}"` : "",
           ];
         }),
       ];
@@ -432,7 +438,7 @@ const TeacherGradeView = () => {
               {periods.map((p) => {
                 const grade = item.term_grades[p.academic_period_id];
                 return (
-                  <Table.Cell key={p.academic_period_id} className="text-center tabular-nums">
+                  <Table.Cell key={p.academic_period_id} className="text-center tabular-nums font-medium">
                     {grade !== undefined && grade !== null ? grade.toFixed(1) : "—"}
                   </Table.Cell>
                 );
@@ -464,14 +470,14 @@ const TeacherGradeView = () => {
       <Table className="w-full border-collapse text-sm">
         <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black uppercase">
           <Table.Row>
-            <Table.Head className="min-w-[200px] font-black text-black">Learner's Name</Table.Head>
+            <Table.Head className="w-[20%] font-black text-black">Learner's Name</Table.Head>
             {periods.map((p) => (
               <Table.Head key={p.academic_period_id} className="text-center font-black text-black">
                 {p.period_name}
               </Table.Head>
             ))}
-            <Table.Head className="text-center font-black text-black">Final Grade</Table.Head>
-            <Table.Head className="text-center font-black text-black">Remarks</Table.Head>
+            <Table.Head className="w-[12%] text-center font-black text-black">Final Grade</Table.Head>
+            <Table.Head className="w-[12%] text-center font-black text-black">Remarks</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -484,7 +490,7 @@ const TeacherGradeView = () => {
           ) : filteredSummary.length === 0 ? (
             <Table.Row>
               <Table.Cell colSpan={periods.length + 3} className="py-8 text-center font-bold italic text-gray-500">
-                No student records found.
+                No summary records found.
               </Table.Cell>
             </Table.Row>
           ) : (
@@ -506,7 +512,7 @@ const TeacherGradeView = () => {
       return (
         <>
           <Table.Row className="border-y-2 border-black bg-yellow-50 hover:bg-yellow-100/70">
-            <Table.Cell colSpan={6} className="py-1 font-black uppercase text-black">{label}</Table.Cell>
+            <Table.Cell colSpan={8} className="py-1 font-black uppercase text-black">{label}</Table.Cell>
           </Table.Row>
           {group.map((item, idx) => (
             <Table.Row key={item.student_id} className="border-b border-black/10 hover:bg-yellow-50/50">
@@ -557,26 +563,28 @@ const TeacherGradeView = () => {
               </Table.Cell>
 
               <Table.Cell className="font-medium text-center tabular-nums whitespace-nowrap">
+                {item.initial_grade != null ? (
+                  <span className="font-bold">{item.initial_grade.toFixed(1)}</span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </Table.Cell>
+
+              <Table.Cell className="font-medium text-center tabular-nums whitespace-nowrap">
                 {item.transmuted_grade != null ? (
-                  <span>
-                    <span className="font-bold">{item.transmuted_grade.toFixed(1)}</span>
-                    {item.performance_descriptor && (
-                      <span className="text-xs text-muted-foreground ml-1.5 font-semibold">
-                        — {item.performance_descriptor}
-                      </span>
-                    )}
-                  </span>
-                ) : item.initial_grade != null ? (
-                  <span>
-                    <span className="font-bold">{item.initial_grade.toFixed(1)}</span>
-                    {item.performance_descriptor && (
-                      <span className="text-xs text-muted-foreground ml-1.5 font-semibold">
-                        — {item.performance_descriptor}
-                      </span>
-                    )}
+                  <span className="font-bold">{item.transmuted_grade.toFixed(1)}</span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </Table.Cell>
+
+              <Table.Cell className="font-medium text-center tabular-nums whitespace-nowrap">
+                {item.transmuted_grade != null && item.performance_descriptor ? (
+                  <span className="font-semibold text-xs text-foreground">
+                    {item.performance_descriptor}
                   </span>
                 ) : (
-                  "—"
+                  <span className="text-xs text-muted-foreground">—</span>
                 )}
               </Table.Cell>
 
@@ -636,7 +644,7 @@ const TeacherGradeView = () => {
           <Table.Row>
             <Table.Head className="w-[17%] font-black text-black">Learner's Name</Table.Head>
             <Table.Head
-              className="w-[24%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
+              className="w-[20%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
               title="Click to view full Written Works breakdown"
               onClick={() =>
                 setSelectedCategory({
@@ -653,7 +661,7 @@ const TeacherGradeView = () => {
               Written Works
             </Table.Head>
             <Table.Head
-              className="w-[24%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
+              className="w-[20%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
               title="Click to view full Performance Tasks breakdown"
               onClick={() =>
                 setSelectedCategory({
@@ -670,7 +678,7 @@ const TeacherGradeView = () => {
               Performance Task
             </Table.Head>
             <Table.Head
-              className="w-[11%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
+              className="w-[12%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
               title="Click to view full Exams breakdown"
               onClick={() =>
                 setSelectedCategory({
@@ -686,8 +694,10 @@ const TeacherGradeView = () => {
             >
               Exams
             </Table.Head>
-            <Table.Head className="w-[12%] text-center font-black text-black">Grade</Table.Head>
-            <Table.Head className="w-[12%] text-center font-black text-black">Adviser Status</Table.Head>
+            <Table.Head className="w-[8%] text-center font-black text-black">Initial Grade</Table.Head>
+            <Table.Head className="w-[8%] text-center font-black text-black">Term Grade</Table.Head>
+            <Table.Head className="w-[8%] text-center font-black text-black">Descriptor</Table.Head>
+            <Table.Head className="w-[8%] text-center font-black text-black">Adviser Status</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -822,18 +832,20 @@ const TeacherGradeView = () => {
             </Table.Cell>
             <Table.Cell className="text-center font-semibold">100</Table.Cell>
             <Table.Cell className="text-center font-bold text-xs text-muted-foreground py-2 px-2">—</Table.Cell>
+            <Table.Cell className="text-center font-bold text-xs text-muted-foreground py-2 px-2">—</Table.Cell>
+            <Table.Cell className="text-center font-bold text-xs text-muted-foreground py-2 px-2">—</Table.Cell>
           </Table.Row>
 
 
           {loading ? (
             <Table.Row>
-              <Table.Cell colSpan={6} className="py-8 text-center font-bold italic text-gray-500">
+              <Table.Cell colSpan={8} className="py-8 text-center font-bold italic text-gray-500">
                 Loading gradebook...
               </Table.Cell>
             </Table.Row>
           ) : filtered.length === 0 ? (
             <Table.Row>
-              <Table.Cell colSpan={6} className="py-8 text-center font-bold italic text-gray-500">
+              <Table.Cell colSpan={8} className="py-8 text-center font-bold italic text-gray-500">
                 No student records found.
               </Table.Cell>
             </Table.Row>
