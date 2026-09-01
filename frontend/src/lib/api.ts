@@ -612,6 +612,7 @@ export type StudentGradebookRow = {
   initial_grade?: number | null;
   transmuted_grade?: number | null;
   total: string;
+  performance_descriptor?: string | null;
   period_grade_id?: number | null;
   is_finalized?: boolean;
   finalized_at?: string | null;
@@ -632,6 +633,7 @@ export type TermGradeSummaryRow = {
   term_grades: Record<number, number | null>; // {academic_period_id: grade}
   final_grade: number | null;
   remark: "PASSED" | "FAILED" | "INCOMPLETE" | null;
+  performance_descriptor?: string | null;
 };
 
 export type TermGradeSummaryScope = {
@@ -684,6 +686,7 @@ export type SendGradeToAdviserItemResponse = {
   initial_grade?: number | null;
   transmuted_grade?: number | null;
   final_period_grade?: number | null;
+  performance_descriptor?: string | null;
   is_finalized: boolean;
   finalized_at?: string | null;
   finalized_by_staff_id?: string | null;

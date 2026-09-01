@@ -437,8 +437,19 @@ const TeacherGradeView = () => {
                   </Table.Cell>
                 );
               })}
-              <Table.Cell className="text-center font-bold tabular-nums">
-                {item.final_grade !== null ? item.final_grade.toFixed(1) : "—"}
+              <Table.Cell className="text-center font-bold tabular-nums whitespace-nowrap">
+                {item.final_grade !== null ? (
+                  <span>
+                    <span>{item.final_grade.toFixed(1)}</span>
+                    {item.performance_descriptor && (
+                      <span className="text-xs text-muted-foreground ml-1.5 font-semibold">
+                        — {item.performance_descriptor}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  "—"
+                )}
               </Table.Cell>
               <Table.Cell className={`text-center font-bold ${item.remark === 'PASSED' ? 'text-green-600' : item.remark === 'FAILED' ? 'text-red-600' : 'text-yellow-600'}`}>
                 {item.remark || "—"}
@@ -545,12 +556,28 @@ const TeacherGradeView = () => {
                 </div>
               </Table.Cell>
 
-              <Table.Cell className="font-medium text-center tabular-nums">
-                {item.transmuted_grade != null
-                  ? item.transmuted_grade.toFixed(1)
-                  : item.initial_grade != null
-                    ? item.initial_grade.toFixed(1)
-                    : "—"}
+              <Table.Cell className="font-medium text-center tabular-nums whitespace-nowrap">
+                {item.transmuted_grade != null ? (
+                  <span>
+                    <span className="font-bold">{item.transmuted_grade.toFixed(1)}</span>
+                    {item.performance_descriptor && (
+                      <span className="text-xs text-muted-foreground ml-1.5 font-semibold">
+                        — {item.performance_descriptor}
+                      </span>
+                    )}
+                  </span>
+                ) : item.initial_grade != null ? (
+                  <span>
+                    <span className="font-bold">{item.initial_grade.toFixed(1)}</span>
+                    {item.performance_descriptor && (
+                      <span className="text-xs text-muted-foreground ml-1.5 font-semibold">
+                        — {item.performance_descriptor}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  "—"
+                )}
               </Table.Cell>
 
               <Table.Cell className="font-medium text-center py-2 px-2">
@@ -607,9 +634,9 @@ const TeacherGradeView = () => {
       <Table className="w-full border-collapse text-sm">
         <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black uppercase">
           <Table.Row>
-            <Table.Head className="w-[18%] font-black text-black">Learner's Name</Table.Head>
+            <Table.Head className="w-[17%] font-black text-black">Learner's Name</Table.Head>
             <Table.Head
-              className="w-[25%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
+              className="w-[24%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
               title="Click to view full Written Works breakdown"
               onClick={() =>
                 setSelectedCategory({
@@ -626,7 +653,7 @@ const TeacherGradeView = () => {
               Written Works
             </Table.Head>
             <Table.Head
-              className="w-[25%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
+              className="w-[24%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
               title="Click to view full Performance Tasks breakdown"
               onClick={() =>
                 setSelectedCategory({
@@ -643,7 +670,7 @@ const TeacherGradeView = () => {
               Performance Task
             </Table.Head>
             <Table.Head
-              className="w-[12%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
+              className="w-[11%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
               title="Click to view full Exams breakdown"
               onClick={() =>
                 setSelectedCategory({
@@ -659,7 +686,7 @@ const TeacherGradeView = () => {
             >
               Exams
             </Table.Head>
-            <Table.Head className="w-[8%] text-center font-black text-black">Grade</Table.Head>
+            <Table.Head className="w-[12%] text-center font-black text-black">Grade</Table.Head>
             <Table.Head className="w-[12%] text-center font-black text-black">Adviser Status</Table.Head>
           </Table.Row>
         </Table.Header>

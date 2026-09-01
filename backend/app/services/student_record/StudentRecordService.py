@@ -349,10 +349,15 @@ def teacher_student_gradebook(
         metrics = _metrics_for_student(db, scope, student, assignments, student_subs)
         if metrics.official_period_grade is not None:
             display_total = str(round(metrics.official_period_grade, 1))
+            grade_for_descriptor = metrics.official_period_grade
         elif tg is not None:
             display_total = str(round(tg, 1))
+            grade_for_descriptor = tg
         else:
             display_total = "0"
+            grade_for_descriptor = None
+
+        perf_descriptor = get_performance_descriptor(grade_for_descriptor)
 
         pg = pg_map.get(student.student_id)
         finalized_by_name = None
@@ -382,6 +387,7 @@ def teacher_student_gradebook(
                 initial_grade=ig,
                 transmuted_grade=tg,
                 total=display_total,
+                performance_descriptor=perf_descriptor,
                 period_grade_id=pg.period_grade_id if pg else None,
                 is_finalized=bool(pg.is_finalized) if pg else False,
                 finalized_at=pg.finalized_at if pg else None,
@@ -722,6 +728,42 @@ def _deped_transmuted(initial_grade: float) -> float:
     return 10.0  # fallback for ig == 0
 
 
+# DepEd Order No. 015, s. 2026 (Memo 576, s. 2026) Performance Descriptors
+DESCRIPTOR_ADVANCING = "Advancing"
+DESCRIPTOR_BENCHMARKING = "Benchmarking"
+DESCRIPTOR_CONNECTING = "Connecting"
+DESCRIPTOR_DEVELOPING = "Developing"
+DESCRIPTOR_EMERGING = "Emerging"
+
+BAND_ADVANCING_MIN = 90.0
+BAND_BENCHMARKING_MIN = 80.0
+BAND_CONNECTING_MIN = 75.0
+BAND_DEVELOPING_MIN = 65.0
+
+
+def get_performance_descriptor(grade: float | None) -> str | None:
+    """
+    Derive the DepEd Order No. 015, s. 2026 (Memo 576, s. 2026) performance descriptor
+    from a numeric final or transmuted grade:
+      90–100  -> Advancing     (Passed)
+      80–89   -> Benchmarking  (Passed)
+      75–79   -> Connecting    (Passed)
+      65–74   -> Developing    (Failed)
+      0–64    -> Emerging      (Failed)
+    """
+    if grade is None:
+        return None
+    if grade >= BAND_ADVANCING_MIN:
+        return DESCRIPTOR_ADVANCING
+    if grade >= BAND_BENCHMARKING_MIN:
+        return DESCRIPTOR_BENCHMARKING
+    if grade >= BAND_CONNECTING_MIN:
+        return DESCRIPTOR_CONNECTING
+    if grade >= BAND_DEVELOPING_MIN:
+        return DESCRIPTOR_DEVELOPING
+    return DESCRIPTOR_EMERGING
+
+
 @dataclass
 class DepEdGradeResult:
     ps_ww: float | None
@@ -833,13 +875,15 @@ def finalize_student_period_grade(
     db.commit()
     db.refresh(period_grade)
 
+    final_grade_float = float(period_grade.final_period_grade)
     return StudentPeriodGradeFinalizeResponse(
         period_grade_id=period_grade.period_grade_id,
         student_id=period_grade.student_id,
         class_id=period_grade.class_id,
         subject_id=period_grade.subject_id,
         academic_period_id=period_grade.academic_period_id,
-        final_period_grade=float(period_grade.final_period_grade),
+        final_period_grade=final_grade_float,
+        performance_descriptor=get_performance_descriptor(final_grade_float),
         is_finalized=period_grade.is_finalized,
         finalized_at=period_grade.finalized_at,
         finalized_by_staff_id=period_grade.finalized_by_staff_id,
@@ -1086,6 +1130,7 @@ def send_student_grade_to_adviser(
     db.refresh(period_grade)
     db.refresh(sub_log)
 
+    final_grade_val = float(period_grade.final_period_grade) if period_grade.final_period_grade is not None else (float(period_grade.transmuted_grade) if period_grade.transmuted_grade is not None else None)
     return SendGradeToAdviserItemResponse(
         student_id=str(student_id),
         name=_student_name(student),
@@ -1097,6 +1142,7 @@ def send_student_grade_to_adviser(
         initial_grade=float(period_grade.initial_grade) if period_grade.initial_grade is not None else None,
         transmuted_grade=float(period_grade.transmuted_grade) if period_grade.transmuted_grade is not None else None,
         final_period_grade=float(period_grade.final_period_grade) if period_grade.final_period_grade is not None else None,
+        performance_descriptor=get_performance_descriptor(final_grade_val),
         is_finalized=period_grade.is_finalized,
         finalized_at=period_grade.finalized_at,
         finalized_by_staff_id=period_grade.finalized_by_staff_id,
@@ -1238,6 +1284,7 @@ def bulk_send_grades_to_adviser(
             if latest_log.final_period_grade is not None and abs(float(latest_log.final_period_grade) - float(final_grade_val)) < 0.01:
                 unchanged_skipped_count += 1
                 pg = pg_map.get(student.student_id)
+                final_grade_val = float(latest_log.final_period_grade) if latest_log.final_period_grade is not None else (float(latest_log.transmuted_grade) if latest_log.transmuted_grade is not None else None)
                 entries.append(
                     SendGradeToAdviserItemResponse(
                         student_id=sid_str,
@@ -1250,6 +1297,7 @@ def bulk_send_grades_to_adviser(
                         initial_grade=float(latest_log.initial_grade) if latest_log.initial_grade is not None else None,
                         transmuted_grade=float(latest_log.transmuted_grade) if latest_log.transmuted_grade is not None else None,
                         final_period_grade=float(latest_log.final_period_grade) if latest_log.final_period_grade is not None else None,
+                        performance_descriptor=get_performance_descriptor(final_grade_val),
                         is_finalized=True,
                         finalized_at=latest_log.submitted_at,
                         finalized_by_staff_id=latest_log.submitted_by_staff_id,
@@ -1313,6 +1361,7 @@ def bulk_send_grades_to_adviser(
         db.flush()
 
         newly_sent_count += 1
+        final_grade_val_bulk = float(pg.final_period_grade) if pg.final_period_grade is not None else (float(pg.transmuted_grade) if pg.transmuted_grade is not None else None)
         entries.append(
             SendGradeToAdviserItemResponse(
                 student_id=sid_str,
@@ -1325,6 +1374,7 @@ def bulk_send_grades_to_adviser(
                 initial_grade=float(pg.initial_grade) if pg.initial_grade is not None else None,
                 transmuted_grade=float(pg.transmuted_grade) if pg.transmuted_grade is not None else None,
                 final_period_grade=float(pg.final_period_grade) if pg.final_period_grade is not None else None,
+                performance_descriptor=get_performance_descriptor(final_grade_val_bulk),
                 is_finalized=True,
                 finalized_at=now,
                 finalized_by_staff_id=staff_id,
@@ -1803,6 +1853,7 @@ def teacher_term_grade_summary(
                 
         if grades:
             row.final_grade = round(sum(grades) / len(grades), 1)
+            row.performance_descriptor = get_performance_descriptor(row.final_grade)
             
         if missing_any:
             row.remark = "INCOMPLETE"
