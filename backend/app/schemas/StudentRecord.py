@@ -113,6 +113,7 @@ class StudentPeriodGradeFinalizeResponse(BaseModel):
     subject_id: int
     academic_period_id: int
     final_period_grade: float
+    performance_descriptor: Optional[str] = None
     is_finalized: bool
     finalized_at: Optional[datetime] = None
     finalized_by_staff_id: Optional[str] = None
@@ -155,6 +156,7 @@ class StudentGradebookRow(BaseModel):
     initial_grade: Optional[float] = None
     transmuted_grade: Optional[float] = None
     total: Optional[str] = None
+    performance_descriptor: Optional[str] = None
     # Transmission to Adviser Audit State
     period_grade_id: Optional[int] = None
     is_finalized: bool = False
@@ -189,6 +191,7 @@ class SendGradeToAdviserItemResponse(BaseModel):
     initial_grade: Optional[float] = None
     transmuted_grade: Optional[float] = None
     final_period_grade: Optional[float] = None
+    performance_descriptor: Optional[str] = None
     is_finalized: bool
     finalized_at: Optional[datetime] = None
     finalized_by_staff_id: Optional[str] = None
@@ -226,6 +229,7 @@ class TermGradeSummaryRow(BaseModel):
     term_grades: dict[int, Optional[float]]  # {academic_period_id: grade}
     final_grade: Optional[float] = None
     remark: Optional[str] = None  # "PASSED" | "FAILED" | "INCOMPLETE"
+    performance_descriptor: Optional[str] = None
 
 
 class TermGradeSummaryScope(BaseModel):
