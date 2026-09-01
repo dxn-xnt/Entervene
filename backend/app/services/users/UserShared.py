@@ -3,6 +3,7 @@ import re
 import secrets
 import uuid
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from fastapi import HTTPException
@@ -185,6 +186,19 @@ def attach_staff_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
     ))
 
 
+def validate_prior_gwa(data: dict[str, Any]) -> Decimal | None:
+    raw = next((data.get(k) for k in ("prior_gwa", "general_average", "gwa") if data.get(k) not in (None, "")), None)
+    if raw is None or str(raw).strip() == "":
+        return None
+    try:
+        val = Decimal(str(raw).strip())
+    except (InvalidOperation, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="General average must be a valid number between 60.00 and 100.00") from exc
+    if val < Decimal("60.00") or val > Decimal("100.00"):
+        raise HTTPException(status_code=400, detail="General average must be between 60.00 and 100.00")
+    return val.quantize(Decimal("0.01"))
+
+
 def attach_student_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
     gender = data.get("gender", "").strip()
     if not gender:
@@ -204,4 +218,5 @@ def attach_student_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
         address=data.get("address", ""),
         email=data.get("email", ""),
         academic_level_id=resolve_academic_level_id(db, data),
+        prior_gwa=validate_prior_gwa(data),
     ))

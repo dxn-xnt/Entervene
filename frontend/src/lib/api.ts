@@ -6,6 +6,8 @@ import type {
   ClassFormOptions,
   ClassStudentListResponse,
   ClassTransferOptionsResponse,
+  DistributeStudentsPayload,
+  DistributeStudentsResponse,
   GetClassesResponse,
   TeacherAdvisoryClassDetailResponse,
   TeacherAdvisoryClassListItem,
@@ -52,6 +54,8 @@ export type UserDetail = User & {
   graduation_year?: number | null;
   last_grade_level?: number | null;
   last_section?: string | null;
+  prior_gwa?: number | null;
+  has_computed_gwa?: boolean;
 };
 
 export type UpdateUserPayload = {
@@ -65,6 +69,7 @@ export type UpdateUserPayload = {
   employment_status?: string;
   grade_level?: number | null;
   section?: string | null;
+  prior_gwa?: number | null;
 };
 
 export type InviteUserPayload = {
@@ -82,6 +87,8 @@ export type InviteUserPayload = {
   employment_status?: string;
   student_lrn?: string;
   grade_level?: number | null;
+  prior_gwa?: number | null;
+  general_average?: number | null;
 };
 
 export type UserAnalytics = {
@@ -1492,6 +1499,30 @@ export async function createClassesBatch(payload: BatchCreateClassesRequest): Pr
   }
 
   return (await response.json()) as BatchCreateClassesResponse;
+}
+
+export async function distributeClassStudents(payload: DistributeStudentsPayload): Promise<DistributeStudentsResponse> {
+  const response = await apiFetch("/api/v1/classes/distribute-students", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(distributeStudentsErrorMessage(data, response.status), response.status, data);
+  }
+
+  return (await response.json()) as DistributeStudentsResponse;
+}
+
+function distributeStudentsErrorMessage(data: unknown, status: number): string {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to distribute students.";
+  if (!data || typeof data !== "object") return "Unable to distribute students. Please try again.";
+  if ("message" in data && typeof data.message === "string") return data.message;
+  if ("detail" in data && typeof data.detail === "string") return data.detail;
+  return "Unable to distribute students. Please try again.";
 }
 
 export async function validateClassImport(file: File, academicLevelId: number): Promise<ValidateClassImportResponse> {

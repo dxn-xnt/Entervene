@@ -345,6 +345,7 @@ function initialEditForm(user: UserDetail): UpdateUserPayload {
     employment_status: user.employment_status || "",
     grade_level: user.grade_level ?? null,
     section: sectionName(user.section) || "",
+    prior_gwa: user.prior_gwa ?? null,
   };
 }
 
@@ -390,6 +391,7 @@ function EditUserModal({
       address: form.address?.trim() || "",
       employment_status: form.employment_status?.trim() || "",
       section: form.section?.trim() || null,
+      prior_gwa: form.prior_gwa !== undefined && form.prior_gwa !== null && String(form.prior_gwa).trim() !== "" ? Number(form.prior_gwa) : null,
     });
   }
 
@@ -460,33 +462,55 @@ function EditUserModal({
             </EditField>
 
             {isStudent && (
-              <div className="grid gap-3 md:grid-cols-2">
-                <EditField label="Current Year Level">
-                  <Select
-                    value={form.grade_level !== null && form.grade_level !== undefined ? String(form.grade_level) : ""}
-                    onValueChange={(val) => setField("grade_level", val ? Number(val) : null)}
-                  >
-                    <Select.Trigger className="w-full bg-background border-2 border-black">
-                      <Select.Value placeholder="Select..." />
-                    </Select.Trigger>
-                    <Select.Content>
-                      {[7, 8, 9, 10, 11, 12].map((grade) => (
-                        <Select.Item key={grade} value={String(grade)}>
-                          Grade {grade}
-                        </Select.Item>
-                      ))}
-                    </Select.Content>
-                  </Select>
-                </EditField>
-                <EditField label="Current Section">
+              <>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <EditField label="Current Year Level">
+                    <Select
+                      value={form.grade_level !== null && form.grade_level !== undefined ? String(form.grade_level) : ""}
+                      onValueChange={(val) => setField("grade_level", val ? Number(val) : null)}
+                    >
+                      <Select.Trigger className="w-full bg-background border-2 border-black">
+                        <Select.Value placeholder="Select..." />
+                      </Select.Trigger>
+                      <Select.Content>
+                        {[7, 8, 9, 10, 11, 12].map((grade) => (
+                          <Select.Item key={grade} value={String(grade)}>
+                            Grade {grade}
+                          </Select.Item>
+                        ))}
+                      </Select.Content>
+                    </Select>
+                  </EditField>
+                  <EditField label="Current Section">
+                    <Input
+                      value={form.section || ""}
+                      placeholder="Optional"
+                      onChange={(event) => setField("section", event.target.value)}
+                      className="w-full"
+                    />
+                  </EditField>
+                </div>
+                <EditField label="General Average (Prior GWA)">
                   <Input
-                    value={form.section || ""}
-                    placeholder="Optional"
-                    onChange={(event) => setField("section", event.target.value)}
-                    className="w-full"
+                    type="number"
+                    step="0.01"
+                    min="60"
+                    max="100"
+                    value={form.prior_gwa !== null && form.prior_gwa !== undefined ? String(form.prior_gwa) : ""}
+                    placeholder="e.g. 88.50 (Optional)"
+                    onChange={(event) => {
+                      const val = event.target.value;
+                      setField("prior_gwa", val === "" ? null : Number(val));
+                    }}
+                    className={`w-full ${user.has_computed_gwa ? "opacity-60 bg-muted/30" : ""}`}
                   />
+                  {user.has_computed_gwa && (
+                    <p className="mt-1 text-[11px] text-muted-foreground font-semibold">
+                      Fallback only — this student has a computed average from prior year grades. The computed value is used for sectioning.
+                    </p>
+                  )}
                 </EditField>
-              </div>
+              </>
             )}
 
             {isTeacher && (

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, aliased
 
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
@@ -248,6 +249,27 @@ def get_user_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any]:
             .filter(StudentSubmission.grade.isnot(None))
             .scalar()
         )
+        student_obj = db.query(Student.prior_gwa).filter(Student.student_id == user.student_id).first()
+        active_ay = db.query(AcademicYear.academic_year_id).filter(AcademicYear.is_active.is_(True)).first()
+        has_computed = False
+        if active_ay is not None:
+            has_computed = bool(
+                db.query(
+                    db.query(StudentPeriodGrade.period_grade_id)
+                    .join(Class, Class.class_id == StudentPeriodGrade.class_id)
+                    .filter(StudentPeriodGrade.student_id == user.student_id)
+                    .filter(Class.academic_year_id < active_ay[0])
+                    .filter(
+                        or_(
+                            StudentPeriodGrade.final_period_grade.isnot(None),
+                            StudentPeriodGrade.transmuted_grade.isnot(None),
+                            StudentPeriodGrade.initial_grade.isnot(None),
+                        )
+                    )
+                    .exists()
+                ).scalar()
+            )
+
         item["student_id"] = str(user.student_id)
         item["section"] = class_row.section_name if class_row else None
         item["grade_level"] = user.grade_level
@@ -256,6 +278,8 @@ def get_user_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any]:
         item["last_grade_level"] = user.grade_level
         item["last_section"] = class_row.section_name if class_row else None
         item["average"] = round(float(average)) if average is not None else None
+        item["prior_gwa"] = float(student_obj.prior_gwa) if student_obj and student_obj.prior_gwa is not None else None
+        item["has_computed_gwa"] = has_computed
     return item
 
 

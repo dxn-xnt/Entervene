@@ -1,7 +1,8 @@
 from __future__ import annotations
 import uuid
 from datetime import date
-from sqlalchemy import String, Text, Integer, CheckConstraint, ForeignKey, Index, Date
+from decimal import Decimal
+from sqlalchemy import String, Text, Integer, Numeric, CheckConstraint, ForeignKey, Index, Date
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.Base import Base
@@ -23,6 +24,7 @@ class Student(Base):
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     # guardian_id       = Column(UUID(as_uuid=True))   # not in DB yet
     academic_level_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("academic_level.academic_level_id", ondelete="RESTRICT"), nullable=True)
+    prior_gwa: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     # import_log_id     = Column(Integer)              # not in DB yet
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("user_account.user_id", ondelete="SET NULL"), unique=True, nullable=True)
 

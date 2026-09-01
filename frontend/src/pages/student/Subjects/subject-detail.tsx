@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
-import Tabs from "../../../components/tabs";
+import { Tabs } from "@/components/retroui/Tabs";
 import SubjectLessonTab from "./tabs/subject-lesson-tab";
 import SubjectClassworkTab from "./tabs/subject-classwork-tab";
 import AppLayout from "@/layouts/app-layout";
@@ -36,7 +36,7 @@ const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
               <h1 className="text-3xl font-bold">{subject}</h1>
             </header>
             <div className="px-4 md:px-6 bg-background -mt-[1px]">
-              <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+              <Tabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
             </div>
 
             <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
