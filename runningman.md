@@ -23,6 +23,9 @@ hash_mnsts_admin_01
 m.cruz@school.edu.ph
 hash_poly_02
 
+miguel.delossantos@teacher.ph
+12345678
+
 Student Account
 Email:				Password Hash: 
 
