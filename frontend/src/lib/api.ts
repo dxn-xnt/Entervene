@@ -10,6 +10,7 @@ import type {
   DistributeStudentsResponse,
   GetClassesResponse,
   TeacherAdvisoryClassDetailResponse,
+  TeacherAdvisoryClassGradesResponse,
   TeacherAdvisoryClassListItem,
   UpdateClassStudentListRequest,
   UpdateClassRequest,
@@ -1385,6 +1386,21 @@ export async function getTeacherAdvisoryClassDetail(
   }
 
   return (await response.json()) as TeacherAdvisoryClassDetailResponse;
+}
+
+export async function getTeacherAdvisoryClassGrades(
+  classId: string | number,
+  academicPeriodId?: number,
+): Promise<TeacherAdvisoryClassGradesResponse> {
+  const query = academicPeriodId ? `?academic_period_id=${academicPeriodId}` : "";
+  const response = await apiFetch(`/api/v1/classes/teacher/advisory/${encodeURIComponent(String(classId))}/grades${query}`);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(teacherAdvisoryClassErrorMessage(data, response.status, "Unable to load advisory class grades."));
+  }
+
+  return (await response.json()) as TeacherAdvisoryClassGradesResponse;
 }
 
 export async function getClassTransferOptions(classId: string | number): Promise<ClassTransferOptionsResponse> {

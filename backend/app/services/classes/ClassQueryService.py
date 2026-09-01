@@ -10,6 +10,7 @@ from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
@@ -400,6 +401,169 @@ def get_teacher_advisory_class_detail_data(db: Session, class_id: int, staff_id:
         "subject_count": len(subject_loads),
         "students": students,
         "subject_loads": subject_loads,
+    }
+
+
+def get_teacher_advisory_class_grades_data(
+    db: Session,
+    class_id: int,
+    staff_id: str,
+    academic_period_id: int | None = None,
+) -> dict:
+    class_, academic_level, academic_year = _advisory_class_access_row(db, class_id)
+    if class_.adviser_staff_id != staff_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to view advisory grades for this class.",
+        )
+
+    from app.services.student_record.StudentRecordService import get_performance_descriptor
+
+    # Resolve academic periods for this class's academic year
+    periods = (
+        db.query(AcademicPeriod)
+        .filter(AcademicPeriod.academic_year_id == class_.academic_year_id)
+        .order_by(AcademicPeriod.period_sequence.asc(), AcademicPeriod.start_date.asc())
+        .all()
+    )
+    if not periods:
+        raise HTTPException(
+            status_code=400,
+            detail="No academic periods found for this class's academic year.",
+        )
+
+    selected_period = None
+    if academic_period_id is not None:
+        selected_period = next((p for p in periods if p.academic_period_id == academic_period_id), None)
+    if selected_period is None:
+        selected_period = next((p for p in periods if p.is_active), periods[0])
+
+    # Query all enrolled students in this class
+    student_rows = (
+        db.query(Student)
+        .join(StudentClass, Student.student_id == StudentClass.student_id)
+        .filter(
+            StudentClass.class_id == class_.class_id,
+            StudentClass.academic_year_id == class_.academic_year_id,
+            func.lower(func.coalesce(StudentClass.enrollment_status, "enrolled")) == "enrolled",
+        )
+        .order_by(Student.last_name.asc(), Student.first_name.asc())
+        .all()
+    )
+
+    # Query all active subjects in this class
+    subject_load_rows = (
+        db.query(SubjectLoad, Subject, AcademicStaff)
+        .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
+        .join(AcademicStaff, AcademicStaff.staff_id == SubjectLoad.staff_id)
+        .filter(
+            SubjectLoad.class_id == class_.class_id,
+            func.lower(func.coalesce(SubjectLoad.status, "active")).in_(["active", "published"]),
+        )
+        .order_by(func.lower(Subject.subject_name))
+        .all()
+    )
+
+    # Unique subjects list
+    seen_subject_ids = set()
+    subjects_list = []
+    for load, subject, teacher in subject_load_rows:
+        if subject.subject_id not in seen_subject_ids:
+            seen_subject_ids.add(subject.subject_id)
+            subjects_list.append({
+                "subject_id": subject.subject_id,
+                "subject_name": subject.subject_name,
+                "teacher_staff_id": teacher.staff_id,
+                "teacher_name": _staff_full_name(teacher),
+            })
+
+    # Query finalized grades for this class and period
+    period_grades = (
+        db.query(StudentPeriodGrade)
+        .filter(
+            StudentPeriodGrade.class_id == class_.class_id,
+            StudentPeriodGrade.academic_period_id == selected_period.academic_period_id,
+            StudentPeriodGrade.is_finalized == True,
+        )
+        .all()
+    )
+    grade_map = {
+        (pg.student_id, pg.subject_id): pg
+        for pg in period_grades
+    }
+
+    # Construct student grade matrix
+    student_grade_rows = []
+    for student in student_rows:
+        grades_dict = {}
+        finalized_grades = []
+        for subj in subjects_list:
+            s_id = subj["subject_id"]
+            pg = grade_map.get((student.student_id, s_id))
+            if pg and pg.final_period_grade is not None:
+                grade_num = float(pg.final_period_grade)
+                desc = get_performance_descriptor(grade_num)
+                grades_dict[s_id] = {
+                    "subject_id": s_id,
+                    "subject_name": subj["subject_name"],
+                    "final_period_grade": grade_num,
+                    "performance_descriptor": desc,
+                    "is_finalized": True,
+                    "finalized_at": pg.finalized_at,
+                    "status": "finalized",
+                }
+                finalized_grades.append(grade_num)
+            else:
+                grades_dict[s_id] = {
+                    "subject_id": s_id,
+                    "subject_name": subj["subject_name"],
+                    "final_period_grade": None,
+                    "performance_descriptor": None,
+                    "is_finalized": False,
+                    "finalized_at": None,
+                    "status": "pending",
+                }
+
+        total_subj_count = len(subjects_list)
+        finalized_count = len(finalized_grades)
+        is_all_finalized = total_subj_count > 0 and finalized_count == total_subj_count
+        gwa_val = round(sum(finalized_grades) / finalized_count, 2) if finalized_count > 0 else None
+        gwa_desc = get_performance_descriptor(gwa_val) if gwa_val is not None else None
+
+        student_grade_rows.append({
+            "student_id": str(student.student_id),
+            "student_lrn": student.student_lrn,
+            "full_name": _student_full_name(student),
+            "gender": student.gender,
+            "grades": grades_dict,
+            "finalized_count": finalized_count,
+            "total_subjects_count": total_subj_count,
+            "is_all_finalized": is_all_finalized,
+            "gwa": gwa_val,
+            "gwa_descriptor": gwa_desc,
+        })
+
+    period_options = [
+        {
+            "academic_period_id": p.academic_period_id,
+            "period_name": p.period_name,
+            "period_sequence": getattr(p, "period_sequence", 1) or 1,
+            "is_active": bool(p.is_active),
+        }
+        for p in periods
+    ]
+
+    return {
+        "class_id": class_.class_id,
+        "section_name": class_.section_name,
+        "academic_level": academic_level.level_name,
+        "academic_year": academic_year.year_label,
+        "academic_period_id": selected_period.academic_period_id,
+        "period_name": selected_period.period_name,
+        "periods": period_options,
+        "subjects": subjects_list,
+        "students": student_grade_rows,
+        "total_students": len(student_rows),
     }
 
 

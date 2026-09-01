@@ -312,3 +312,53 @@ class DistributeStudentsRequest(BaseModel):
 
 class DistributeStudentsResponse(BaseModel):
     assignments_by_section: dict[str, list[str]]
+
+
+class AdvisorySubjectItem(BaseModel):
+    subject_id: int
+    subject_name: str
+    teacher_staff_id: str | None = None
+    teacher_name: str | None = None
+
+
+class AdvisoryStudentSubjectGradeItem(BaseModel):
+    subject_id: int
+    subject_name: str
+    final_period_grade: float | None = None
+    performance_descriptor: str | None = None
+    is_finalized: bool = False
+    finalized_at: datetime | None = None
+    status: str  # "finalized" | "pending"
+
+
+class AdvisoryStudentGradeRow(BaseModel):
+    student_id: str
+    student_lrn: str | None = None
+    full_name: str
+    gender: str | None = None
+    grades: dict[int, AdvisoryStudentSubjectGradeItem]  # mapped by subject_id
+    finalized_count: int
+    total_subjects_count: int
+    is_all_finalized: bool
+    gwa: float | None = None
+    gwa_descriptor: str | None = None
+
+
+class AdvisoryPeriodOption(BaseModel):
+    academic_period_id: int
+    period_name: str
+    period_sequence: int = 1
+    is_active: bool = False
+
+
+class TeacherAdvisoryClassGradesResponse(BaseModel):
+    class_id: int
+    section_name: str
+    academic_level: str
+    academic_year: str
+    academic_period_id: int
+    period_name: str
+    periods: list[AdvisoryPeriodOption]
+    subjects: list[AdvisorySubjectItem]
+    students: list[AdvisoryStudentGradeRow]
+    total_students: int
