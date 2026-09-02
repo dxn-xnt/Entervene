@@ -1,10 +1,11 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { BookOpen, ChevronDown, Users } from "lucide-react";
+import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
+import { Award, BookOpen, ChevronDown, Users } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
+import { Button } from "@/components/retroui/Button";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
@@ -12,13 +13,14 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Table } from "@/components/retroui/Table";
 import { OverviewCard } from "@/components/overview-cards";
 import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
-import { getTeacherAdvisoryClassDetail } from "@/lib/api";
+import { getTeacherAdvisoryClassDetail, getTeacherAdvisoryClassGrades } from "@/lib/api";
 import type {
   TeacherAdvisoryClassDetailResponse,
+  TeacherAdvisoryClassGradesResponse,
   TeacherAdvisoryStudentItem,
 } from "@/types/adminClasses";
 
-type DetailTab = "classes" | "students" | "subjects";
+type DetailTab = "classes" | "students" | "subjects" | "grades";
 
 export default function AdvisoryClassDetail() {
   const { classId } = useParams<{ classId: string }>();
@@ -135,6 +137,11 @@ export default function AdvisoryClassDetail() {
                     label: "Subject Load",
                     icon: BookOpen,
                   },
+                  {
+                    id: "grades",
+                    label: "Grades",
+                    icon: Award,
+                  },
                 ]}
                 activeTab={tab}
                 onTabChange={setTab}
@@ -170,6 +177,7 @@ export default function AdvisoryClassDetail() {
             {tab === "classes" && <OverviewTab detail={detail} />}
             {tab === "students" && <StudentsTab detail={detail} />}
             {tab === "subjects" && <SubjectLoadTab detail={detail} />}
+            {tab === "grades" && <GradesTab classId={detail.class_id} />}
           </div>
         </div>
       </div>
@@ -390,6 +398,312 @@ function SubjectLoadTab({
         </Table.Body>
       </Table>
     </section>
+  );
+}
+
+function GradesTab({ classId }: { classId: number }) {
+  const [gradesData, setGradesData] =
+    useState<TeacherAdvisoryClassGradesResponse | null>(null);
+  const [selectedPeriodId, setSelectedPeriodId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadGrades() {
+      setIsLoading(true);
+      setError("");
+      try {
+        const data = await getTeacherAdvisoryClassGrades(
+          classId,
+          selectedPeriodId ?? undefined,
+        );
+        if (isMounted) {
+          setGradesData(data);
+          if (selectedPeriodId === null && data.academic_period_id) {
+            setSelectedPeriodId(data.academic_period_id);
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load advisory grades.",
+          );
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    void loadGrades();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [classId, selectedPeriodId]);
+
+  const filteredStudents = useMemo(() => {
+    if (!gradesData) return [];
+    const query = search.trim().toLocaleLowerCase();
+    return gradesData.students
+      .filter(
+        (student) =>
+          !query || student.full_name.toLocaleLowerCase().includes(query),
+      )
+      .sort((a, b) => a.full_name.localeCompare(b.full_name));
+  }, [gradesData, search]);
+
+  const groupedStudents = useMemo(() => {
+    const order = ["Male", "Female", "Other", "Unspecified"];
+    return order
+      .map(
+        (gender) =>
+          [
+            gender,
+            filteredStudents.filter(
+              (student) =>
+                normalizedStudentGender(student.gender || "") === gender,
+            ),
+          ] as const,
+      )
+      .filter(([, group]) => group.length > 0);
+  }, [filteredStudents]);
+
+  if (isLoading && !gradesData) {
+    return <StateInline message="Loading finalized subject grades..." />;
+  }
+
+  if (error && !gradesData) {
+    return <StateInline message={error} />;
+  }
+
+  if (!gradesData) {
+    return <EmptyInline message="No grade records available." />;
+  }
+
+  const fullyFinalizedCount = gradesData.students.filter(
+    (s) => s.is_all_finalized,
+  ).length;
+
+  return (
+    <div className="grid gap-4">
+      {/* Top Controls: Period selector & Search */}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold text-muted-foreground mr-1">
+              Period:
+            </span>
+            {gradesData.periods.map((period) => (
+              <Button
+                key={period.academic_period_id}
+                variant={
+                  selectedPeriodId === period.academic_period_id
+                    ? "default"
+                    : "outline"
+                }
+                size="sm"
+                onClick={() => setSelectedPeriodId(period.academic_period_id)}
+                className="font-bold text-xs"
+              >
+                {period.period_name} {period.is_active ? "(Active)" : ""}
+              </Button>
+            ))}
+          </div>
+
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search students..."
+            className="w-full sm:w-64"
+          />
+        </div>
+
+        {/* Metric Cards */}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <OverviewCard
+            title="Total Students"
+            count={String(gradesData.total_students)}
+            statDescription="Enrolled in this section"
+          />
+          <OverviewCard
+            title="Total Subjects"
+            count={String(gradesData.subjects.length)}
+            statDescription="Assigned subject curriculum"
+          />
+          <OverviewCard
+            title="Fully Finalized"
+            count={`${fullyFinalizedCount} / ${gradesData.total_students}`}
+            statDescription="All subjects finalized"
+          />
+        </div>
+      </div>
+
+      {/* Grades Matrix */}
+      <Card className="block w-full border-black bg-card">
+        <Card.Content className="p-0">
+          {!gradesData.students.length ? (
+            <StateInline message="No students are enrolled in this class." />
+          ) : !filteredStudents.length ? (
+            <StateInline message="No students match your search." />
+          ) : (
+            <Table
+              wrapperClassName="overflow-x-auto"
+              className="border-black min-w-[850px] w-full"
+            >
+              <Table.Header>
+                <Table.Row className="bg-primary/20">
+                  <Table.Head className="min-w-[220px] font-black">
+                    Learner's Name
+                  </Table.Head>
+                  {gradesData.subjects.map((subj) => (
+                    <Table.Head
+                      key={subj.subject_id}
+                      className="text-center min-w-[140px] font-bold"
+                    >
+                      <span className="block">{subj.subject_name}</span>
+                      {subj.teacher_name && (
+                        <span className="block text-[10px] font-normal text-muted-foreground">
+                          {subj.teacher_name}
+                        </span>
+                      )}
+                    </Table.Head>
+                  ))}
+                  <Table.Head className="text-center min-w-[160px] font-black">
+                    General Average (GWA)
+                  </Table.Head>
+                  <Table.Head className="text-center min-w-[120px] font-black">
+                    Status
+                  </Table.Head>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {groupedStudents.map(([gender, students]) => (
+                  <Fragment key={gender}>
+                    <Table.Row className="bg-muted/40 font-black border-y-2 border-black/30">
+                      <Table.Cell
+                        colSpan={gradesData.subjects.length + 3}
+                        className="py-2 text-xs uppercase tracking-wider font-extrabold text-foreground"
+                      >
+                        {gender} ({students.length})
+                      </Table.Cell>
+                    </Table.Row>
+                    {students.map((student) => (
+                      <Table.Row
+                        key={student.student_id}
+                        className="border-b border-border text-xs hover:bg-muted/10"
+                      >
+                        <Table.Cell className="font-semibold">
+                          <div className="flex items-center gap-2">
+                            <Avatar text={student.full_name} />
+                            <div>
+                              <span className="block font-bold text-sm text-foreground">
+                                {student.full_name}
+                              </span>
+                              {student.student_lrn && (
+                                <span className="block text-[10px] font-medium text-muted-foreground">
+                                  LRN {student.student_lrn}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </Table.Cell>
+                        {gradesData.subjects.map((subj) => {
+                          const gradeItem = student.grades[subj.subject_id];
+                          return (
+                            <Table.Cell
+                              key={subj.subject_id}
+                              className="text-center"
+                            >
+                              {gradeItem &&
+                              gradeItem.is_finalized &&
+                              gradeItem.final_period_grade !== null ? (
+                                <div className="flex flex-col items-center justify-center">
+                                  <span className="font-bold text-sm tabular-nums text-foreground">
+                                    {gradeItem.final_period_grade.toFixed(1)}
+                                  </span>
+                                  {gradeItem.performance_descriptor && (
+                                    <span className="text-[10px] font-semibold text-muted-foreground">
+                                      {gradeItem.performance_descriptor}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <Badge
+                                  variant="outline"
+                                  size="sm"
+                                  className="font-semibold text-muted-foreground text-[10px] border-border"
+                                >
+                                  Pending
+                                </Badge>
+                              )}
+                            </Table.Cell>
+                          );
+                        })}
+                        <Table.Cell className="text-center">
+                          {student.is_all_finalized &&
+                          student.gwa !== null ? (
+                            <div className="flex flex-col items-center justify-center">
+                              <span className="font-black text-sm tabular-nums text-foreground">
+                                {student.gwa.toFixed(1)}
+                              </span>
+                              {student.gwa_descriptor && (
+                                <span className="text-[10px] font-semibold text-muted-foreground">
+                                  {student.gwa_descriptor}
+                                </span>
+                              )}
+                            </div>
+                          ) : student.finalized_count > 0 &&
+                            student.gwa !== null ? (
+                            <div className="flex flex-col items-center justify-center text-amber-600 dark:text-amber-400">
+                              <span className="font-bold text-xs tabular-nums">
+                                {student.gwa.toFixed(1)}
+                              </span>
+                              <span className="text-[10px] font-medium text-muted-foreground">
+                                Partial ({student.finalized_count}/
+                                {student.total_subjects_count} subjects)
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground font-medium">
+                              —
+                            </span>
+                          )}
+                        </Table.Cell>
+                        <Table.Cell className="text-center">
+                          {student.is_all_finalized ? (
+                            <Badge
+                              variant="solid"
+                              size="sm"
+                              className="bg-[#79bd80] text-black font-black text-[10px]"
+                            >
+                              Complete
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              size="sm"
+                              className="font-bold text-muted-foreground text-[10px]"
+                            >
+                              {student.finalized_count}/
+                              {student.total_subjects_count} Finalized
+                            </Badge>
+                          )}
+                        </Table.Cell>
+                      </Table.Row>
+                    ))}
+                  </Fragment>
+                ))}
+              </Table.Body>
+            </Table>
+          )}
+        </Card.Content>
+      </Card>
+    </div>
   );
 }
 

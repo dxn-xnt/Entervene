@@ -12,6 +12,7 @@ from app.schemas.Class import (
     ClassFormOptionsResponse,
     ClassStudentListResponse,
     TeacherAdvisoryClassDetailResponse,
+    TeacherAdvisoryClassGradesResponse,
     TeacherAdvisoryClassListItem,
     ClassTransferOptionsResponse,
     ClassUpdateRequest,
@@ -29,6 +30,7 @@ from app.services.classes.ClassQueryService import (
     get_class_students_data,
     get_class_transfer_options_data,
     get_teacher_advisory_class_detail_data,
+    get_teacher_advisory_class_grades_data,
     list_teacher_advisory_classes_data,
     get_unassigned_students_data,
     list_classes_data,
@@ -165,6 +167,21 @@ def get_teacher_advisory_class_detail(
     db: Session = Depends(get_db),
 ):
     return get_teacher_advisory_class_detail_data(db=db, class_id=class_id, staff_id=staff_id)
+
+
+@router.get("/teacher/advisory/{class_id}/grades", response_model=TeacherAdvisoryClassGradesResponse)
+def get_teacher_advisory_class_grades(
+    class_id: int,
+    academic_period_id: int | None = None,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return get_teacher_advisory_class_grades_data(
+        db=db,
+        class_id=class_id,
+        staff_id=staff_id,
+        academic_period_id=academic_period_id,
+    )
 
 
 @router.get("/{class_id}/transfer-options", response_model=ClassTransferOptionsResponse)

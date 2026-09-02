@@ -10,6 +10,7 @@ import type {
   DistributeStudentsResponse,
   GetClassesResponse,
   TeacherAdvisoryClassDetailResponse,
+  TeacherAdvisoryClassGradesResponse,
   TeacherAdvisoryClassListItem,
   UpdateClassStudentListRequest,
   UpdateClassRequest,
@@ -619,6 +620,7 @@ export type StudentGradebookRow = {
   initial_grade?: number | null;
   transmuted_grade?: number | null;
   total: string;
+  performance_descriptor?: string | null;
   period_grade_id?: number | null;
   is_finalized?: boolean;
   finalized_at?: string | null;
@@ -639,6 +641,7 @@ export type TermGradeSummaryRow = {
   term_grades: Record<number, number | null>; // {academic_period_id: grade}
   final_grade: number | null;
   remark: "PASSED" | "FAILED" | "INCOMPLETE" | null;
+  performance_descriptor?: string | null;
 };
 
 export type TermGradeSummaryScope = {
@@ -691,6 +694,7 @@ export type SendGradeToAdviserItemResponse = {
   initial_grade?: number | null;
   transmuted_grade?: number | null;
   final_period_grade?: number | null;
+  performance_descriptor?: string | null;
   is_finalized: boolean;
   finalized_at?: string | null;
   finalized_by_staff_id?: string | null;
@@ -1382,6 +1386,21 @@ export async function getTeacherAdvisoryClassDetail(
   }
 
   return (await response.json()) as TeacherAdvisoryClassDetailResponse;
+}
+
+export async function getTeacherAdvisoryClassGrades(
+  classId: string | number,
+  academicPeriodId?: number,
+): Promise<TeacherAdvisoryClassGradesResponse> {
+  const query = academicPeriodId ? `?academic_period_id=${academicPeriodId}` : "";
+  const response = await apiFetch(`/api/v1/classes/teacher/advisory/${encodeURIComponent(String(classId))}/grades${query}`);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(teacherAdvisoryClassErrorMessage(data, response.status, "Unable to load advisory class grades."));
+  }
+
+  return (await response.json()) as TeacherAdvisoryClassGradesResponse;
 }
 
 export async function getClassTransferOptions(classId: string | number): Promise<ClassTransferOptionsResponse> {
