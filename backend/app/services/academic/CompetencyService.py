@@ -6,6 +6,7 @@ from app.models.academic.Competency import Competency
 from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAssignment import LessonAssignment
 from app.models.academic.Subject import Subject
+from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.people.AcademicStaff import AcademicStaff
 from app.schemas.Competency import (
@@ -78,10 +79,21 @@ def get_competency_detail(competency_id: int, db: Session) -> CompetencyResponse
 def list_subject_competencies(
     subject_id: int,
     db: Session,
+    staff_id: Optional[str] = None,
+    is_admin: bool = False,
     period_id: Optional[int] = None,
     include_archived: bool = False,
 ) -> list[CompetencyResponse]:
+    # Non-admin requests without a resolved staff_id return [] immediately (never leak other teachers' data)
+    if not is_admin and not staff_id:
+        return []
+
     query = db.query(Competency).filter(Competency.subject_id == subject_id)
+    if staff_id is not None:
+        query = query.filter(Competency.created_by_staff_id == staff_id)
+    elif not is_admin:
+        return []
+
     if not include_archived:
         query = query.filter(Competency.is_archived == False)
     if period_id is not None:
@@ -95,11 +107,16 @@ def update_competency_record(
     competency_id: int,
     body: CompetencyUpdate,
     staff_id: Optional[str],
+    is_admin: bool,
     db: Session,
 ) -> CompetencyResponse:
     competency = db.query(Competency).filter(Competency.competency_id == competency_id).first()
     if not competency:
         raise HTTPException(status_code=404, detail="Competency not found")
+
+    if not is_admin:
+        if not staff_id or competency.created_by_staff_id != staff_id:
+            raise HTTPException(status_code=403, detail="You do not have permission to update this competency")
 
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(competency, field, value)
@@ -112,11 +129,16 @@ def update_competency_record(
 def archive_competency_record(
     competency_id: int,
     staff_id: Optional[str],
+    is_admin: bool,
     db: Session,
 ) -> dict:
     competency = db.query(Competency).filter(Competency.competency_id == competency_id).first()
     if not competency:
         raise HTTPException(status_code=404, detail="Competency not found")
+
+    if not is_admin:
+        if not staff_id or competency.created_by_staff_id != staff_id:
+            raise HTTPException(status_code=403, detail="You do not have permission to delete this competency")
 
     competency.is_archived = True
     db.commit()
@@ -126,6 +148,8 @@ def archive_competency_record(
 def get_subject_hierarchy_tree(
     subject_id: int,
     db: Session,
+    staff_id: Optional[str] = None,
+    is_admin: bool = False,
     class_id: Optional[int] = None,
     period_id: Optional[int] = None,
 ) -> SubjectHierarchyTreeResponse:
@@ -134,11 +158,36 @@ def get_subject_hierarchy_tree(
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
 
+    target_staff_id = staff_id
+    if target_staff_id is None and class_id is not None:
+        load = db.query(SubjectLoad).filter(
+            SubjectLoad.class_id == class_id,
+            SubjectLoad.subject_id == subject_id,
+        ).first()
+        if load and load.staff_id:
+            target_staff_id = load.staff_id
+
+    # Non-admin without target_staff_id returns 0 competencies
+    if not is_admin and not target_staff_id:
+        return SubjectHierarchyTreeResponse(
+            subject_id=subject.subject_id,
+            subject_name=subject.subject_name,
+            competencies=[],
+            unassigned_lessons=[],
+            total_competencies=0,
+            total_lessons=0,
+        )
+
     # 1. Fetch competencies
     comp_query = db.query(Competency).filter(
         Competency.subject_id == subject_id,
         Competency.is_archived == False,
     )
+    if target_staff_id is not None:
+        comp_query = comp_query.filter(Competency.created_by_staff_id == target_staff_id)
+    elif not is_admin:
+        comp_query = comp_query.filter(Competency.created_by_staff_id == "__NONE__")
+
     if period_id is not None:
         comp_query = comp_query.filter(Competency.academic_period_id == period_id)
     competencies = comp_query.order_by(Competency.order_index.asc(), Competency.created_at.asc()).all()
@@ -148,6 +197,9 @@ def get_subject_hierarchy_tree(
         Lesson.subject_id == subject_id,
         Lesson.is_archived == False,
     )
+    if target_staff_id is not None:
+        lesson_query = lesson_query.filter(Lesson.created_by_staff_id == target_staff_id)
+
     if class_id is not None:
         lesson_query = lesson_query.join(
             LessonAssignment, LessonAssignment.lesson_id == Lesson.lesson_id
