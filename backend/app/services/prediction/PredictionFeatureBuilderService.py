@@ -236,7 +236,7 @@ def _late_submission_count(
     student_id: UUID,
     class_id: int,
     subject_id: int,
-) -> tuple[int, str | None]:
+) -> tuple[int, int, str | None]:
     rows = (
         db.query(ClassworkAssignment, StudentSubmission)
         .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
@@ -254,13 +254,16 @@ def _late_submission_count(
         .all()
     )
     if not rows:
-        return 0, "No published classwork assignments were available for late-submission evidence."
-    if not any(assignment.due_date for assignment, _ in rows):
-        return 0, "Classwork due dates are not available; late_submission_count defaulted to 0."
+        return 0, 0, "No published classwork assignments were available for late-submission evidence."
+
+    assignments_with_due_date = [row for row in rows if row[0].due_date]
+    total_due_dates = len(assignments_with_due_date)
+    if total_due_dates == 0:
+        return 0, 0, "Classwork due dates are not available; late_submission_count defaulted to 0."
 
     late_count = 0
-    for assignment, submission in rows:
-        if not assignment.due_date or submission is None or submission.submitted_at is None:
+    for assignment, submission in assignments_with_due_date:
+        if submission is None or submission.submitted_at is None:
             continue
         due_date = assignment.due_date
         submitted_at = submission.submitted_at
@@ -270,7 +273,65 @@ def _late_submission_count(
             submitted_at = submitted_at.replace(tzinfo=timezone.utc)
         if submitted_at > due_date or (submission.status or "").lower() == "late":
             late_count += 1
-    return late_count, None
+    return late_count, total_due_dates, None
+
+
+def compute_behavioral_engagement_score(
+    risk_adjusted_attendance_rate: float | None,
+    on_time_submission_rate: float | None,
+    assessment_completion_rate: float | None,
+    db: Session | None = None,
+) -> float | None:
+    """Compute the Consolidated Behavioral Engagement Score (0.0 - 100.0%).
+
+    Uses configurable weights from RiskThreshold (loaded via RiskEngine.load_active_thresholds)
+    or default fallbacks:
+    - attendance_weight: 0.40
+    - ontime_weight: 0.35
+    - participation_weight: 0.25
+
+    Dynamically redistributes weights over non-None signals.
+    Converts on_time_submission_rate (0-1) and assessment_completion_rate (0-1)
+    to a 0-100 scale before computing the weighted score.
+    Returns None if all available signals are None.
+    """
+    weights = {
+        "attendance": 0.40,
+        "ontime": 0.35,
+        "participation": 0.25,
+    }
+
+    if db is not None:
+        try:
+            from app.services.prediction.RiskEngine import load_active_thresholds
+            active_thresholds = load_active_thresholds(db)
+            for thresh in active_thresholds:
+                if thresh.condition_type == "attendance_weight" and thresh.condition_value is not None:
+                    weights["attendance"] = float(thresh.condition_value)
+                elif thresh.condition_type == "ontime_weight" and thresh.condition_value is not None:
+                    weights["ontime"] = float(thresh.condition_value)
+                elif thresh.condition_type == "participation_weight" and thresh.condition_value is not None:
+                    weights["participation"] = float(thresh.condition_value)
+        except Exception:
+            pass
+
+    available_signals: dict[str, float] = {}
+    if risk_adjusted_attendance_rate is not None:
+        available_signals["attendance"] = float(risk_adjusted_attendance_rate)
+    if on_time_submission_rate is not None:
+        available_signals["ontime"] = float(on_time_submission_rate) * 100.0
+    if assessment_completion_rate is not None:
+        available_signals["participation"] = float(assessment_completion_rate) * 100.0
+
+    if not available_signals:
+        return None
+
+    total_weight = sum(weights[k] for k in available_signals)
+    if total_weight <= 0:
+        return None
+
+    weighted_sum = sum((weights[k] / total_weight) * available_signals[k] for k in available_signals)
+    return round(weighted_sum, 2)
 
 
 def _prediction_mode(source_period: AcademicPeriod, target_period_id: int | None) -> str:
@@ -355,10 +416,18 @@ def build_prediction_features_from_records(
     rows = _assessment_rows(db, student_id, class_id, subject_id, source_period_id)
     cw_rows = _classwork_rows(db, student_id, class_id, subject_id)
     component_features, evidence_summary = _component_features(rows, cw_rows)
-    late_count, late_warning = _late_submission_count(db, student_id, class_id, subject_id)
+    late_count, total_due_dates, late_warning = _late_submission_count(db, student_id, class_id, subject_id)
     if late_warning:
         warnings.append(late_warning)
     evidence_summary["late_submission_count"] = late_count
+
+    on_time_submission_rate = round((total_due_dates - late_count) / total_due_dates, 4) if total_due_dates > 0 else None
+
+    from app.services.attendance.AttendanceService import get_risk_adjusted_attendance_rate
+    att_summary = get_risk_adjusted_attendance_rate(db, student_id, class_id=class_id, subject_id=subject_id)
+    risk_adjusted_attendance_rate = att_summary["risk_adjusted_rate"]
+    if att_summary["total_days"] == 0:
+        warnings.append("Attendance records were not found for this student/class/subject; attendance rate was omitted from behavioral engagement.")
 
     expected_count = evidence_summary["expected_assessment_count"]
     recorded_count = evidence_summary["recorded_assessment_count"]
@@ -367,6 +436,24 @@ def build_prediction_features_from_records(
         warnings.append("No assessment items were found; expected assessment count was inferred as 0.")
     data_coverage_ratio = (recorded_count / expected_count) if expected_count else 0
     completion_rate = (submitted_count / expected_count) if expected_count else 0
+
+    behavioral_cold_start = (att_summary["total_days"] == 0 and on_time_submission_rate is None)
+    behavioral_score = compute_behavioral_engagement_score(
+        risk_adjusted_attendance_rate=risk_adjusted_attendance_rate,
+        on_time_submission_rate=on_time_submission_rate,
+        assessment_completion_rate=completion_rate,
+        db=db,
+    )
+
+    evidence_summary["attendance_total_days"] = att_summary["total_days"]
+    evidence_summary["attendance_present_count"] = att_summary["present_count"]
+    evidence_summary["attendance_absent_count"] = att_summary["absent_count"]
+    evidence_summary["attendance_late_count"] = att_summary["late_count"]
+    evidence_summary["attendance_excused_count"] = att_summary["excused_count"]
+    evidence_summary["risk_adjusted_attendance_rate"] = risk_adjusted_attendance_rate
+    evidence_summary["on_time_submission_rate"] = on_time_submission_rate
+    evidence_summary["behavioral_engagement_score"] = behavioral_score
+    evidence_summary["behavioral_score_cold_start"] = behavioral_cold_start
 
     period_grade = _period_grade(db, student_id, class_id, subject_id, source_period_id)
     source_period_grade = None
@@ -422,6 +509,9 @@ def build_prediction_features_from_records(
         "data_coverage_ratio": _round_or_none(data_coverage_ratio),
         "grade_trend_vs_previous_period": trend,
         "has_previous_period": has_previous,
+        "behavioral_engagement_score": behavioral_score,
+        "behavioral_score_cold_start": behavioral_cold_start,
+        "risk_adjusted_attendance_rate": risk_adjusted_attendance_rate,
         # Per-group passing threshold resolved from SubjectGroup FK.
         # Available for future model features; not used in current risk rules.
         "passing_threshold": (

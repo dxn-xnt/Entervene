@@ -26,6 +26,8 @@ RUNTIME_RISK_EVIDENCE_FIELDS = {
     "missing_activity_count",
     "late_submission_count",
     "data_coverage_ratio",
+    "behavioral_engagement_score",
+    "risk_adjusted_attendance_rate",
 }
 SUMMARY_EVIDENCE_FIELDS = {
     "predicted_period_grade",

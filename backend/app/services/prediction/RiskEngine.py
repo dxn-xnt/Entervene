@@ -51,6 +51,8 @@ class RiskEngineInput:
     late_submission_count: int | None = None
     data_coverage_ratio: float | None = None
     has_previous_period: bool | None = None
+    behavioral_engagement_score: float | None = None
+    behavioral_score_cold_start: bool = False
 
 
 @dataclass(frozen=True)
@@ -164,6 +166,15 @@ def evaluate_default_rules(risk_input: RiskEngineInput) -> list[tuple[str, str, 
     if risk_input.has_previous_period is False:
         _add_trigger(triggers, NEEDS_MONITORING, "no_previous_period", "No previous period record is available, so continued monitoring is recommended.")
 
+    behavioral = risk_input.behavioral_engagement_score
+    if behavioral is not None:
+        if behavioral < 60.0:
+            _add_trigger(triggers, HIGH_RISK, "behavioral_engagement_below_60", "Behavioral engagement score is below 60%.")
+        elif behavioral < 75.0:
+            _add_trigger(triggers, MODERATE_RISK, "behavioral_engagement_60_to_74", "Behavioral engagement score is between 60% and 75%.")
+        elif behavioral < 85.0:
+            _add_trigger(triggers, NEEDS_MONITORING, "behavioral_engagement_75_to_84", "Behavioral engagement score is between 75% and 85%.")
+
     severe_decline = trend is not None and trend <= -7
     if (
         predicted is not None
@@ -225,7 +236,13 @@ def evaluate_risk(risk_input: RiskEngineInput, db: Session | None = None) -> Ris
     triggers = evaluate_default_rules(risk_input)
     risk_level = choose_risk_level(triggers)
     risk_score = compute_risk_score(risk_level, risk_input, len(triggers))
-    data_status = INSUFFICIENT_DATA if risk_level == INSUFFICIENT_DATA else SUFFICIENT
+
+    if risk_level == INSUFFICIENT_DATA:
+        data_status = INSUFFICIENT_DATA
+    elif risk_input.behavioral_score_cold_start:
+        data_status = COLD_START
+    else:
+        data_status = SUFFICIENT
 
     return RiskEngineResult(
         risk_level=risk_level,

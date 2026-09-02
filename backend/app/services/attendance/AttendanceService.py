@@ -1,5 +1,5 @@
 from datetime import date, datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -196,6 +196,53 @@ def get_student_attendance_summary(
         excused_count=excused_count,
         attendance_rate=attendance_rate,
     )
+
+
+def get_risk_adjusted_attendance_rate(
+    db: Session,
+    student_id: UUID,
+    class_id: Optional[int] = None,
+    subject_id: Optional[int] = None,
+) -> dict[str, Any]:
+    """Calculate risk-adjusted attendance statistics and weighted rate for early risk detection.
+
+    Formula: (1.0*present + 0.8*excused + 0.5*late + 0.0*absent) / total_days * 100
+    Returns risk_adjusted_rate = None if total_days == 0 (cold start / no records).
+    """
+    query = db.query(AttendanceRecord).filter(AttendanceRecord.student_id == student_id)
+    if class_id:
+        query = query.filter(AttendanceRecord.class_id == class_id)
+    if subject_id:
+        query = query.filter(AttendanceRecord.subject_id == subject_id)
+
+    records = query.all()
+    total_days = len(records)
+    if total_days == 0:
+        return {
+            "total_days": 0,
+            "present_count": 0,
+            "absent_count": 0,
+            "late_count": 0,
+            "excused_count": 0,
+            "risk_adjusted_rate": None,
+        }
+
+    present_count = sum(1 for r in records if r.status == "present")
+    absent_count = sum(1 for r in records if r.status == "absent")
+    late_count = sum(1 for r in records if r.status == "late")
+    excused_count = sum(1 for r in records if r.status == "excused")
+
+    weighted_score = (1.0 * present_count) + (0.8 * excused_count) + (0.5 * late_count) + (0.0 * absent_count)
+    risk_adjusted_rate = round((weighted_score / total_days * 100.0), 2)
+
+    return {
+        "total_days": total_days,
+        "present_count": present_count,
+        "absent_count": absent_count,
+        "late_count": late_count,
+        "excused_count": excused_count,
+        "risk_adjusted_rate": risk_adjusted_rate,
+    }
 
 
 def create_leave_request(
