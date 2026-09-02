@@ -42,21 +42,28 @@ def create_notification(db: Session, payload: NotificationCreate) -> Notificatio
 # Read
 # ---------------------------------------------------------------------------
 
+def _to_uuid(val: uuid.UUID | str) -> uuid.UUID:
+    if isinstance(val, uuid.UUID):
+        return val
+    return uuid.UUID(str(val))
+
+
 def get_notifications_for_user(
     db: Session,
-    user_id: str,
+    user_id: uuid.UUID | str,
     limit: int = 50,
     unread_only: bool = False,
 ) -> NotificationListResponse:
     """Return notifications for a user, newest first."""
-    query = db.query(Notification).filter(Notification.user_id == user_id)
+    uid = _to_uuid(user_id)
+    query = db.query(Notification).filter(Notification.user_id == uid)
 
     if unread_only:
         query = query.filter(Notification.is_read == False)  # noqa: E712
 
     records = query.order_by(Notification.created_at.desc()).limit(limit).all()
     unread_count = db.query(Notification).filter(
-        Notification.user_id == user_id,
+        Notification.user_id == uid,
         Notification.is_read == False,  # noqa: E712
     ).count()
 
@@ -70,11 +77,13 @@ def get_notifications_for_user(
 # Mark as read
 # ---------------------------------------------------------------------------
 
-def mark_notification_read(db: Session, notification_id: str, user_id: str) -> NotificationResponse:
+def mark_notification_read(db: Session, notification_id: str, user_id: uuid.UUID | str) -> NotificationResponse:
     """Mark a single notification as read. Raises 404 if not found or not owned."""
+    nid = _to_uuid(notification_id)
+    uid = _to_uuid(user_id)
     record = db.query(Notification).filter(
-        Notification.notification_id == notification_id,
-        Notification.user_id == user_id,
+        Notification.notification_id == nid,
+        Notification.user_id == uid,
     ).first()
 
     if not record:
@@ -87,11 +96,12 @@ def mark_notification_read(db: Session, notification_id: str, user_id: str) -> N
     return NotificationResponse.model_validate(record)
 
 
-def mark_all_notifications_read(db: Session, user_id: str) -> dict:
+def mark_all_notifications_read(db: Session, user_id: uuid.UUID | str) -> dict:
     """Mark every unread notification for a user as read."""
+    uid = _to_uuid(user_id)
     updated = (
         db.query(Notification)
-        .filter(Notification.user_id == user_id, Notification.is_read == False)  # noqa: E712
+        .filter(Notification.user_id == uid, Notification.is_read == False)  # noqa: E712
         .all()
     )
     now = datetime.now(timezone.utc)
