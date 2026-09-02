@@ -17,6 +17,9 @@ RUNTIME_RISK_FIELDS = {
     "missing_activity_count",
     "late_submission_count",
     "data_coverage_ratio",
+    "behavioral_engagement_score",
+    "behavioral_score_cold_start",
+    "risk_adjusted_attendance_rate",
 }
 IDENTITY_OR_LEAKAGE_TERMS = (
     "student_id",
@@ -220,6 +223,8 @@ def score_student_prediction(
             late_submission_count=_to_int_or_none(input_data.get("late_submission_count")),
             data_coverage_ratio=_to_float_or_none(input_data.get("data_coverage_ratio")),
             has_previous_period=_to_bool(_risk_value(input_data, prepared_row, "has_previous_period")),
+            behavioral_engagement_score=_to_float_or_none(input_data.get("behavioral_engagement_score")),
+            behavioral_score_cold_start=_to_bool(input_data.get("behavioral_score_cold_start")) or False,
         ),
         db=db,
     )
