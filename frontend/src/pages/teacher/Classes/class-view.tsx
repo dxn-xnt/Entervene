@@ -881,19 +881,50 @@ function OverviewTab({
             <div className="flex flex-col items-start gap-1 min-w-0 text-left">
               <div className="flex flex-wrap items-center gap-2 min-w-0">
                 <h4 className="text-base sm:text-lg font-bold text-black break-words line-clamp-2">
+      <div key={lesson.lesson_id} className="flex flex-col gap-2 min-w-0 w-full">
+        {/* Lesson Card */}
+        <Card
+          role="button"
+          tabIndex={0}
+          aria-expanded={isExpanded}
+          onClick={() => toggleLesson(lesson.lesson_id)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              toggleLesson(lesson.lesson_id);
+            }
+          }}
+          title={isExpanded ? "Collapse classworks" : "Expand classworks"}
+          className="block w-full min-w-0 cursor-pointer border-black bg-primary p-4 transition-none hover:shadow-md"
+        >
+          <div className="flex items-start justify-between gap-3 min-w-0">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2 mb-1.5 min-w-0">
+                <Card.Title className="text-base font-bold text-black sm:text-lg break-words line-clamp-2">
                   {lesson.title}
-                </h4>
-                <Badge variant="outline" size="sm">
+                </Card.Title>
+                <Badge
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 border border-black bg-white text-xs font-bold text-black"
+                >
                   {lesson.is_published ? "Published" : "Draft"}
                 </Badge>
                 {lesson.attachments && lesson.attachments.length > 0 && (
-                  <Badge size="sm">
+                  <Badge
+                    size="sm"
+                    className="shrink-0 gap-1 border border-black bg-white text-xs font-bold text-black"
+                  >
                     <Paperclip size={10} />
                     {lesson.attachments.length} material
                     {lesson.attachments.length === 1 ? "" : "s"}
                   </Badge>
                 )}
-                <Badge variant="outline" size="sm">
+                <Badge
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 border border-black bg-white text-xs font-bold text-black"
+                >
                   {classworks.length} classwork{classworks.length === 1 ? "" : "s"}
                 </Badge>
               </div>
@@ -904,18 +935,27 @@ function OverviewTab({
           </Accordion.Header>
 
           <Accordion.Content className="p-3 border-t-2 border-black bg-white space-y-2">
+
+          </div>
+        </Card>
+
+        {/* Expanded linked classworks (White Card with Yellow Badges) */}
+        {isExpanded && (
+          <div className="ml-4 pl-3 border-l-2 border-black space-y-2 py-1 min-w-0">
             {isLoadingCw ? (
               <LoadingPanel label="Loading classworks..." />
             ) : classworks.length === 0 ? (
-              <div className="flex items-center justify-between border-2 border-dashed border-black/40 bg-white p-3 text-xs text-gray-500 font-medium">
+              <Card className="block w-full border-dashed border-black/40 bg-white p-3 text-xs font-medium text-gray-500 transition-none hover:shadow-md">
                 <span>No classworks assigned to this lesson yet.</span>
-              </div>
+              </Card>
             ) : (
               classworks.map((cw) => (
+                <Card
                 <Card
                   key={cw.classwork_assignment_id}
                   onClick={() => openClassworkDetail(cw)}
                   className="flex items-center justify-between gap-3 shadow-none bg-white hover:translate-x-1 hover:bg-accent transition-all cursor-pointer min-w-0 group"
+                  className="group flex min-w-0 w-full cursor-pointer items-center justify-between gap-3 border-black bg-white p-3.5 transition-none hover:shadow-md"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="shrink-0 text-black">
@@ -937,8 +977,12 @@ function OverviewTab({
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {cw.classwork_category && (
-                      <Badge size="sm" variant="secondary" className="capitalize">
-                        {(cw.classwork_type || "Classwork").replace(/_/g, " ").toLowerCase()}
+                      <Badge
+                        variant="secondary"
+                        size="sm"
+                        className="rounded-none border border-black bg-primary text-[11px] font-black uppercase text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                      >
+                        {cw.classwork_category.replace(/_/g, " ")}
                       </Badge>
                     )}
                   </div>
@@ -1088,6 +1132,29 @@ function OverviewTab({
                         <Select.Item value="title">Title A-Z</Select.Item>
                       </Select.Content>
                     </Select>
+
+                    {(selectedSubjectId || currentSubjectLoad?.subject_id || detail.subject_loads[0]?.subject_id) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          const targetId =
+                            selectedSubjectId ||
+                            currentSubjectLoad?.subject_id ||
+                            detail.subject_loads[0]?.subject_id;
+                          if (targetId) {
+                            navigate(
+                              `/teacher/classes/${detail.class_id}/subjects/${targetId}`,
+                            );
+                          }
+                        }}
+                        className="h-10 gap-1.5 border-black bg-primary text-black text-sm font-bold whitespace-nowrap"
+                        title="Go to Subject View"
+                      >
+                        <BookOpen size={16} />
+                        Subject View
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1118,53 +1185,39 @@ function OverviewTab({
                     }
 
                     return (
-                      <div
+                      <Card
                         key={comp.competency_id}
-                        className="flex flex-col border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden min-w-0"
+                        className="flex w-full min-w-0 flex-col overflow-hidden border-black bg-white p-0 transition-none hover:shadow-md"
                       >
                         {/* Competency Header Bar */}
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => toggleCompetencyCollapse(comp.competency_id)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              toggleCompetencyCollapse(comp.competency_id);
-                            }
-                          }}
-                          className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 gap-3 min-w-0 w-full cursor-pointer group select-none"
-                          title={isCollapsed ? "Expand competency" : "Collapse competency"}
-                        >
-                          <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                            <div
-                              className=" border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-100 transition-colors shrink-0"
-                            >
-                              {isCollapsed ? (
-                                <ChevronRight
-                                  size={16}
-                                  className="text-black"
-                                />
-                              ) : (
-                                <ChevronDown
-                                  size={16}
-                                  className="text-black"
-                                />
-                              )}
-                            </div>
+                        <Card.Header className="mb-0 flex-row items-center justify-between gap-3 border-b-2 border-black bg-primary px-4 py-3.5">
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            aria-expanded={!isCollapsed}
+                            onClick={() => toggleCompetencyCollapse(comp.competency_id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                toggleCompetencyCollapse(comp.competency_id);
+                              }
+                            }}
+                            className="min-w-0 flex-1 cursor-pointer text-left select-none"
+                            title={isCollapsed ? "Expand competency" : "Collapse competency"}
+                          >
                             <div className="min-w-0 flex-1">
                               <div className="mb-1 flex flex-wrap items-center gap-2 min-w-0">
                                 <Award
                                   size={20}
                                   className="text-black shrink-0"
                                 />
-                                <h4 className="text-base sm:text-lg md:text-xl font-bold text-gray-950 break-words line-clamp-2">
+                                <Card.Title className="text-base font-bold text-gray-950 sm:text-lg md:text-xl break-words line-clamp-2">
                                   {comp.competency_code || comp.statement}
-                                </h4>
+                                </Card.Title>
                                 <Badge
                                   variant="secondary"
                                   size="sm"
-                                  className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
+                                  className="shrink-0 border border-black bg-white text-xs font-bold text-black"
                                 >
                                   {compLessons.length} lesson
                                   {compLessons.length === 1 ? "" : "s"}
@@ -1173,7 +1226,7 @@ function OverviewTab({
                                   <Badge
                                     variant="secondary"
                                     size="sm"
-                                    className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
+                                    className="shrink-0 border border-black bg-white text-xs font-bold text-black"
                                   >
                                     {comp.target_hours} hrs
                                   </Badge>
@@ -1186,11 +1239,11 @@ function OverviewTab({
                               )}
                             </div>
                           </div>
-                        </div>
+                        </Card.Header>
 
                         {/* Competency Body when expanded */}
                         {!isCollapsed && (
-                          <div className="flex flex-col gap-3 p-4 bg-white">
+                          <Card.Content className="flex flex-col gap-3 bg-white p-4">
                             {compLessons.length > 0 ? (
                               compLessons.map(renderLessonCard)
                             ) : (
@@ -1203,9 +1256,9 @@ function OverviewTab({
                                 </div>
                               </div>
                             )}
-                          </div>
+                          </Card.Content>
                         )}
-                      </div>
+                      </Card>
                     );
                   })}
 
@@ -1377,7 +1430,7 @@ function OverviewTab({
                 {detailError}
               </div>
             ) : selectedClasswork ? (
-              <div className="grid gap-5 p-5 lg:grid-cols-[1.4fr_1fr]">
+              <div className="flex flex-col gap-5 p-5">
                 <div className="space-y-4">
                   <Card className="block border-2 border-black">
                     <Card.Content className="space-y-3">
@@ -1408,7 +1461,7 @@ function OverviewTab({
                             : "Draft"}
                         </Badge>
                         {selectedClasswork.is_locked && (
-                          <Badge className="rounded-none border-2 border-red-600 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                          <Badge className="rounded-none border border-red-600 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
                             Locked
                           </Badge>
                         )}
@@ -1488,7 +1541,11 @@ function OverviewTab({
                         <Card.Title className="mb-0 text-base font-bold">
                           Reference Files
                         </Card.Title>
-                        <Badge variant="outline" size="sm" className="font-bold">
+                        <Badge
+                          variant="outline"
+                          size="sm"
+                          className="border border-black font-bold"
+                        >
                           {selectedClasswork.attachments?.length || 0}
                         </Badge>
                       </div>
@@ -2568,7 +2625,7 @@ function StudentRow({
                 e.stopPropagation();
                 setIsDialogOpen(true);
               }}
-              className="border-2 border-black bg-[#F6E9B2] hover:bg-[#fae498] text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+              className="border-2 border-black bg-success hover:bg-[#fae498] text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
             >
               <Lightbulb size={14} className="mr-1" />
               Intervention

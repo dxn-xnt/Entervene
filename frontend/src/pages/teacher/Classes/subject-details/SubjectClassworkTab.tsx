@@ -362,7 +362,7 @@ export default function SubjectClassworkTab({
                   <button
                     type="button"
                     onClick={closeCreateWizard}
-                    className="cursor-pointer text-white hover:text-gray-200"
+                    className="cursor-pointer text-black hover:text-gray-200"
                   >
                     <X size={18} />
                   </button>

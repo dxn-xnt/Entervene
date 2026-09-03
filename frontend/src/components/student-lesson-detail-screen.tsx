@@ -77,7 +77,7 @@ export function StudentLessonDetailScreen({
         </Breadcrumb>
       </header>
 
-      <Card className="block w-full border-black bg-[#F6E9B2]">
+      <Card className="block w-full border-black bg-primary">
         <Card.Title className="text-2xl font-bold">{lesson.title}</Card.Title>
         <p className="mt-1 text-sm font-semibold text-gray-800">
           {lesson.description || "No lesson description provided."}
