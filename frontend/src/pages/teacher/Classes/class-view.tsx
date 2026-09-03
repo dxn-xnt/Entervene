@@ -944,7 +944,7 @@ function OverviewTab({
                       <Badge
                         variant="secondary"
                         size="sm"
-                        className="rounded-none border-2 border-black bg-primary text-[11px] font-black uppercase text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                        className="rounded-none border border-black bg-primary text-[11px] font-black uppercase text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
                       >
                         {cw.classwork_category.replace(/_/g, " ")}
                       </Badge>
@@ -1372,7 +1372,7 @@ function OverviewTab({
                 {detailError}
               </div>
             ) : selectedClasswork ? (
-              <div className="grid gap-5 p-5 lg:grid-cols-[1.4fr_1fr]">
+              <div className="flex flex-col gap-5 p-5">
                 <div className="space-y-4">
                   <Card className="block border-2 border-black">
                     <Card.Content className="space-y-3">
@@ -1403,7 +1403,7 @@ function OverviewTab({
                             : "Draft"}
                         </Badge>
                         {selectedClasswork.is_locked && (
-                          <Badge className="rounded-none border-2 border-red-600 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                          <Badge className="rounded-none border border-red-600 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
                             Locked
                           </Badge>
                         )}
@@ -1483,7 +1483,11 @@ function OverviewTab({
                         <Card.Title className="mb-0 text-base font-bold">
                           Reference Files
                         </Card.Title>
-                        <Badge variant="outline" size="sm" className="font-bold">
+                        <Badge
+                          variant="outline"
+                          size="sm"
+                          className="border border-black font-bold"
+                        >
                           {selectedClasswork.attachments?.length || 0}
                         </Badge>
                       </div>
@@ -2601,7 +2605,7 @@ function StudentRow({
                 e.stopPropagation();
                 setIsDialogOpen(true);
               }}
-              className="border-2 border-black bg-[#F6E9B2] hover:bg-[#fae498] text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+              className="border-2 border-black bg-success hover:bg-[#fae498] text-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
             >
               <Lightbulb size={14} className="mr-1" />
               Intervention

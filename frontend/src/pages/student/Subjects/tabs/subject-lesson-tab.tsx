@@ -24,6 +24,7 @@ import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { Card } from "@/components/retroui/Card";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { Badge } from "@/components/retroui/Badge";
+import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { SortButton } from "@/components/sort-button";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
@@ -1814,7 +1815,7 @@ export default function SubjectLessonTab({
               {/* Modal header */}
               <Dialog.Header
                 position="fixed"
-                className="bg-[#F6E9B2] text-black"
+                className="bg-primary text-black"
               >
                 <div>
                   <p className="text-xs">Student classwork detail</p>
@@ -1834,23 +1835,23 @@ export default function SubjectLessonTab({
                   {detailError}
                 </Card>
               ) : selectedClasswork ? (
-                <div className="grid max-h-[calc(90vh-88px)] min-w-0 gap-5 overflow-y-auto overflow-x-hidden p-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,1fr)]">
+                <div className="flex max-h-[calc(90vh-88px)] min-w-0 flex-col gap-5 overflow-y-auto overflow-x-hidden p-5">
                   {/* Left: details */}
                   <div className="min-w-0 space-y-4">
                     {/* Status + title card */}
-                    <Card className="block w-full shadow-none">
+                    <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge
                           variant="surface"
                           size="sm"
-                          className="bg-[#7ABA78] text-black"
+                          className="border border-black bg-[#7ABA78] text-black"
                         >
                           {selectedClasswork.classwork_type || "Classwork"}
                         </Badge>
                         <Badge
                           variant="outline"
                           size="sm"
-                          className="border-gray-300 capitalize"
+                          className="border border-gray-300 capitalize"
                         >
                           {statusLabel(
                             selectedQuizAttempt?.status ??
@@ -1863,7 +1864,7 @@ export default function SubjectLessonTab({
                         {selectedClasswork.title}
                       </h3>
                       <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
-                        <div className="rounded-lg bg-gray-50 p-3">
+                        <Card className="block w-full border-black bg-gray-50 p-3 shadow-none hover:shadow-none">
                           <div className="mb-1 flex items-center gap-1 font-semibold text-gray-600">
                             <CalendarDays size={14} />
                             Due
@@ -1875,26 +1876,26 @@ export default function SubjectLessonTab({
                               ).toLocaleString()
                               : "No due date"}
                           </p>
-                        </div>
-                        <div className="rounded-lg bg-gray-50 p-3">
+                        </Card>
+                        <Card className="block w-full border-black bg-gray-50 p-3 shadow-none hover:shadow-none">
                           <p className="font-semibold text-gray-600">Points</p>
                           <p className="font-bold">
                             {selectedClasswork.total_points ?? "Not set"}
                           </p>
-                        </div>
-                        <div className="rounded-lg bg-gray-50 p-3">
+                        </Card>
+                        <Card className="block w-full border-black bg-gray-50 p-3 shadow-none hover:shadow-none">
                           <p className="font-semibold text-gray-600">Teacher</p>
                           <p className="font-bold">
                             {selectedClasswork.teacher_name || "Teacher"}
                           </p>
-                        </div>
+                        </Card>
                       </div>
                     </Card>
 
                     {/* Description + instructions */}
                     {(selectedClasswork.description ||
                       selectedClasswork.instructions) && (
-                        <Card className="block w-full shadow-none">
+                        <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
                           {selectedClasswork.description && (
                             <div>
                               <h4 className="font-bold">Description</h4>
@@ -1918,16 +1919,16 @@ export default function SubjectLessonTab({
                     {isQuizType(selectedClasswork.classwork_type) &&
                       selectedClasswork.linked_lessons &&
                       selectedClasswork.linked_lessons.length > 0 && (
-                        <Card className="block w-full shadow-none border-2 border-black bg-[#F8F6ED]">
+                        <Card className="block w-full border-black bg-primary shadow-none hover:shadow-none">
                           <div className="mb-2 flex items-center gap-2">
                             <GraduationCap size={18} className="text-black" />
                             <h4 className="font-bold text-black">Coverage</h4>
                           </div>
                           <div className="space-y-3">
                             {selectedClasswork.linked_lessons.map((lesson) => (
-                              <div
+                              <Card
                                 key={lesson.lesson_id}
-                                className="rounded-lg border border-black/20 bg-white p-3.5 shadow-sm"
+                                className="block w-full border-black bg-white p-3.5 shadow-none hover:shadow-none"
                               >
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-bold uppercase text-gray-500">Lesson:</span>
@@ -1951,7 +1952,7 @@ export default function SubjectLessonTab({
                                       {lesson.readings.map((reading) => (
                                         <div
                                           key={reading.classwork_id}
-                                          className="flex items-center gap-2 rounded border border-black/15 bg-[#F6E9B2]/40 px-2.5 py-1.5 text-xs"
+                                          className="flex items-center gap-2 border border-black/15 bg-[#F6E9B2]/40 px-2.5 py-1.5 text-xs"
                                         >
                                           <BookOpen size={13} className="text-black shrink-0" />
                                           <span className="font-bold text-black">{reading.title}</span>
@@ -1982,7 +1983,7 @@ export default function SubjectLessonTab({
                                     />
                                   </div>
                                 )}
-                              </div>
+                              </Card>
                             ))}
                           </div>
                         </Card>
@@ -1990,7 +1991,7 @@ export default function SubjectLessonTab({
 
                     {/* Classwork File Attachments (Only shown when files are directly attached) */}
                     {selectedClasswork.attachments && selectedClasswork.attachments.length > 0 && (
-                      <Card className="block w-full shadow-none">
+                      <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
                         <div className="mb-3 flex items-center gap-2">
                           <Paperclip size={18} />
                           <h4 className="font-bold">Attached Files</h4>
@@ -2007,7 +2008,7 @@ export default function SubjectLessonTab({
                   </div>
 
                   {/* Right: submission or quiz attempt */}
-                  <Card className="block w-full shadow-none">
+                  <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
                     <div className="mb-3 flex items-center gap-2">
                       {isQuizType(selectedClasswork.classwork_type) ? (
                         <ClipboardList size={18} />
@@ -2067,7 +2068,7 @@ export default function SubjectLessonTab({
                           </div>
                         ) : selectedQuizAttempt ? (
                           <>
-                            <div className="rounded-lg border border-black bg-white p-3 text-sm">
+                            <Card className="block w-full border-black bg-white p-3 text-sm shadow-none hover:shadow-none">
                               <div className="flex items-center justify-between gap-3">
                                 <span className="font-bold capitalize">
                                   {statusLabel(selectedQuizAttempt.status)}
@@ -2077,7 +2078,7 @@ export default function SubjectLessonTab({
                                   {selectedQuizAttempt.max_attempts}
                                 </span>
                               </div>
-                              <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-gray-600">
+                              <Card className="mt-2 flex w-full flex-wrap gap-2 border-black bg-white p-2 text-xs font-semibold text-gray-600 shadow-none hover:shadow-none">
                                 <span>
                                   {selectedQuizAttempt.questions.length} questions
                                 </span>
@@ -2092,7 +2093,7 @@ export default function SubjectLessonTab({
                                     {selectedQuizAttempt.duration_minutes} minutes
                                   </span>
                                 ) : null}
-                              </div>
+                              </Card>
                               {selectedQuizAttempt.grade !== null &&
                                 selectedQuizAttempt.grade !== undefined ? (
                                 <p className="mt-2 text-sm font-bold">
@@ -2110,7 +2111,7 @@ export default function SubjectLessonTab({
                                   )}
                                 </p>
                               ) : null}
-                            </div>
+                            </Card>
 
                             {selectedQuizAttempt.status !== "pending" ? (
                               <div className="space-y-2">
@@ -2142,40 +2143,40 @@ export default function SubjectLessonTab({
                                         : "Summary Scheduled"}
                                   </button>
                                 ) : null}
-                                <button
+                                <Button
                                   type="button"
                                   onClick={startQuizAttempt}
                                   disabled={
                                     !selectedQuizAttempt.can_submit ||
                                     isQuizSubmitting
                                   }
-                                  className="w-full rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="w-full rounded-none border-black bg-success text-sm font-bold text-black shadow-none hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   {selectedQuizAttempt.status === "not_started"
                                     ? "Start Quiz"
                                     : "Retake Quiz"}
-                                </button>
+                                </Button>
                               </div>
                             ) : (
                               <>
-                                <div className="rounded-lg border border-black bg-white p-3 text-sm font-semibold">
+                                <Card className="block w-full border-black bg-white p-3 text-sm font-semibold shadow-none hover:shadow-none">
                                   <p>Your quiz attempt is in progress.</p>
                                   <p className="mt-1 text-gray-600">
                                     Time left:{" "}
                                     {formatExamTimer(quizRemainingSeconds)}
                                   </p>
-                                </div>
-                                <button
+                                </Card>
+                                <Button
                                   type="button"
                                   onClick={() => setIsQuizFullscreen(true)}
                                   disabled={
                                     !selectedQuizAttempt.can_submit ||
                                     isQuizSubmitting
                                   }
-                                  className="w-full rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="w-full rounded-none border-black bg-success text-sm font-bold text-black shadow-none hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   Continue Exam
-                                </button>
+                                </Button>
                               </>
                             )}
                           </>
