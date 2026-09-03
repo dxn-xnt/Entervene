@@ -24,6 +24,7 @@ import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { Card } from "@/components/retroui/Card";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { Badge } from "@/components/retroui/Badge";
+import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { SortButton } from "@/components/sort-button";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
@@ -873,20 +874,22 @@ export default function SubjectLessonTab({
       selectedQuizAttempt.total_points ?? selectedClasswork.total_points ?? 0;
 
     return (
-      <div className="fixed inset-0 z-[99999] flex flex-col bg-[#F8F6ED]">
-        <header className="border-b border-black px-4 py-3">
+      <div className="fixed inset-0 z-[99999] flex flex-col bg-white">
+        <header className="border-b-2 border-black bg-white px-4 py-3">
           <div className="grid grid-cols-[auto_1fr_auto] items-start gap-3">
-            <button
+            <Button
               type="button"
               onClick={() => {
                 setIsQuizFullscreen(false);
                 setQuizReviewMode(false);
               }}
-              className="rounded p-1 hover:bg-black/5"
+              variant="outline"
+              size="icon"
+              className="rounded-none border-black bg-white shadow-md hover:bg-white hover:shadow-none"
               aria-label="Exit fullscreen quiz"
             >
               <ChevronLeft size={22} />
-            </button>
+            </Button>
             <div className="text-center">
               <p className="text-xl font-black leading-none">
                 {isSummaryMode
@@ -900,28 +903,31 @@ export default function SubjectLessonTab({
               </p>
             </div>
             {isSummaryMode ? (
-              <button
+              <Button
                 type="button"
                 onClick={() => setIsQuizFullscreen(false)}
-                className="rounded-lg border border-black bg-white px-4 py-1.5 text-sm font-bold shadow-md hover:bg-[#FFFBEE]"
+                variant="outline"
+                size="sm"
+                className="rounded-none border-black bg-white text-sm font-bold shadow-md hover:shadow-none"
               >
                 Close Summary
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
                 onClick={() => setQuizReviewMode(true)}
-                className="rounded-lg border border-black bg-white px-4 py-1.5 text-sm font-bold shadow-md hover:bg-[#FFFBEE]"
+                size="sm"
+                className="rounded-none border-black bg-primary text-sm font-bold text-black"
               >
                 Finish Quiz
-              </button>
+              </Button>
             )}
           </div>
         </header>
 
         <main className="flex-1 overflow-y-auto px-4 py-4">
           <div className="mx-auto max-w-6xl space-y-4">
-            <section className="rounded-lg border border-black bg-white p-4 text-center shadow-md">
+            <Card className="block w-full border-black bg-white p-4 text-center shadow-md hover:shadow-none">
               <h1 className="text-2xl font-bold">
                 {selectedQuizAttempt.title}
               </h1>
@@ -940,15 +946,15 @@ export default function SubjectLessonTab({
               ) : !quizReviewMode ? (
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
                   {questions.map((question, index) => (
-                    <button
+                    <Button
                       key={question.quiz_question_id}
                       type="button"
                       onClick={() => {
                         setQuizCurrentIndex(index);
                         setQuizReviewMode(false);
                       }}
-                      className={`relative h-8 min-w-8 rounded border border-black px-2 text-xs font-bold ${index === quizCurrentIndex
-                          ? "bg-white shadow-md"
+                      className={`relative h-8 min-w-8 rounded-none border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${index === quizCurrentIndex
+                          ? "bg-white"
                           : hasQuizAnswer(question)
                             ? "bg-[#F6E9B2]"
                             : "bg-white"
@@ -958,14 +964,14 @@ export default function SubjectLessonTab({
                         <span className="absolute -top-2 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-red-500" />
                       ) : null}
                       {index + 1}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               ) : null}
-            </section>
+            </Card>
 
             {quizError ? (
-              <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+              <p className="border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
                 {quizError}
               </p>
             ) : null}
@@ -986,19 +992,19 @@ export default function SubjectLessonTab({
                       option.is_correct !== undefined,
                   );
                   return (
-                    <article
+                    <Card
                       key={question.quiz_question_id}
-                      className="rounded-lg border border-black bg-white p-4 shadow-md"
+                      className="block w-full border-black bg-white p-4 shadow-md hover:shadow-none"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <h2 className="min-w-0 flex-1 break-words text-base font-bold">
                           {index + 1}. {question.question_text}
                         </h2>
-                        <span className="shrink-0 rounded-full border border-gray-300 px-3 py-1 text-xs font-bold">
+                        <Badge variant="outline" size="sm" className="shrink-0 rounded-none border border-gray-300 text-xs font-bold">
                           {selectedClasswork.show_scores
                             ? `${question.points_awarded ?? 0}/${question.points} pts`
                             : `${question.points} pts`}
-                        </span>
+                        </Badge>
                       </div>
                       {question.question_type === "MULTIPLE_CHOICE" ? (
                         <div className="mt-3 grid gap-2">
@@ -1011,7 +1017,7 @@ export default function SubjectLessonTab({
                             return (
                               <div
                                 key={option.option_id}
-                                className={`rounded-lg border px-3 py-2 text-sm ${isCorrect
+                                className={`border px-3 py-2 text-sm ${isCorrect
                                     ? "border-green-500 bg-green-50"
                                     : isKnownWrongSelection
                                       ? "border-red-400 bg-red-50"
@@ -1045,7 +1051,7 @@ export default function SubjectLessonTab({
                         </div>
                       ) : (
                         <div className="mt-3 space-y-2 text-sm">
-                          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                          <div className="border border-gray-200 bg-gray-50 px-3 py-2">
                             <p className="text-xs font-bold uppercase text-gray-500">
                               Your answer
                             </p>
@@ -1055,7 +1061,7 @@ export default function SubjectLessonTab({
                             </p>
                           </div>
                           {correctOption ? (
-                            <p className="rounded-lg border border-green-500 bg-green-50 px-3 py-2 font-semibold">
+                            <p className="border border-green-500 bg-green-50 px-3 py-2 font-semibold">
                               Expected answer: {correctOption.option_text}
                             </p>
                           ) : null}
@@ -1075,7 +1081,7 @@ export default function SubjectLessonTab({
                           ) : null}
                         </div>
                       )}
-                    </article>
+                    </Card>
                   );
                 })}
               </section>
@@ -1087,57 +1093,60 @@ export default function SubjectLessonTab({
                     {answeredCount}/{questions.length} answered
                   </p>
                 </div>
-                <div className="overflow-hidden rounded-lg border border-black bg-white">
+                <Card className="block w-full overflow-hidden border-black bg-white p-0 shadow-md hover:shadow-none">
                   {questions.map((question, index) => (
-                    <button
+                    <Button
                       key={question.quiz_question_id}
                       type="button"
                       onClick={() => {
                         setQuizCurrentIndex(index);
                         setQuizReviewMode(false);
                       }}
-                      className="flex w-full items-center justify-between border-b border-gray-300 px-4 py-2 text-left last:border-b-0 hover:bg-[#FFFBEE]"
+                      variant="ghost"
+                      className="flex w-full rounded-none items-center justify-between border-b border-gray-300 px-4 py-2 text-left shadow-none last:border-b-0 hover:bg-primary hover:shadow-none"
                     >
                       <span className="font-semibold">
                         Question {index + 1}
                       </span>
-                      <span className="rounded-full border border-gray-300 px-3 py-1 text-[11px] font-semibold">
+                      <Badge variant="outline" size="sm" className="rounded-none border border-gray-300 text-[11px] font-semibold">
                         {hasQuizAnswer(question)
                           ? "Answer Recorded"
                           : "No Answer"}
-                      </span>
-                    </button>
+                      </Badge>
+                    </Button>
                   ))}
-                </div>
-                <button
+                </Card>
+                <Button
                   type="button"
                   onClick={() => submitQuizAttempt(false)}
                   disabled={!selectedQuizAttempt.can_submit || isQuizSubmitting}
-                  className="mt-4 float-right rounded-lg border border-black bg-[#7ABA78] px-5 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                  className="mt-4 float-right rounded-none border-black bg-success text-sm font-bold text-black shadow-none hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isQuizSubmitting ? "Submitting..." : "Submit"}
-                </button>
+                </Button>
               </section>
             ) : currentQuestion ? (
               <section className="mx-auto max-w-3xl space-y-4">
                 <div className="flex items-center justify-between">
-                  <button
+                  <Button
                     type="button"
                     onClick={() =>
                       setQuizCurrentIndex((index) => Math.max(0, index - 1))
                     }
                     disabled={quizCurrentIndex === 0}
-                    className="rounded-full border border-black bg-white p-2 disabled:opacity-40"
+                    variant="outline"
+                    size="icon"
+                    className="rounded-none border-black bg-white shadow-md hover:shadow-none disabled:opacity-40"
                     aria-label="Previous question"
                   >
                     <ChevronLeft size={18} />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     onClick={() =>
                       toggleQuizFlag(currentQuestion.quiz_question_id)
                     }
-                    className={`rounded-lg border border-black px-4 py-2 text-xs font-bold shadow-md ${flaggedQuizQuestionIds.has(
+                    className={`rounded-none border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${flaggedQuizQuestionIds.has(
                       currentQuestion.quiz_question_id,
                     )
                         ? "bg-[#F6E9B2]"
@@ -1145,8 +1154,8 @@ export default function SubjectLessonTab({
                       }`}
                   >
                     Flag Question
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     onClick={() =>
                       setQuizCurrentIndex((index) =>
@@ -1154,23 +1163,25 @@ export default function SubjectLessonTab({
                       )
                     }
                     disabled={quizCurrentIndex === questions.length - 1}
-                    className="rounded-full border border-black bg-white p-2 disabled:opacity-40"
+                    variant="outline"
+                    size="icon"
+                    className="rounded-none border-black bg-white shadow-md hover:shadow-none disabled:opacity-40"
                     aria-label="Next question"
                   >
                     <ChevronRight size={18} />
-                  </button>
+                  </Button>
                 </div>
 
-                <div className="rounded-lg border border-black bg-[#F6E9B2] px-6 py-12 text-center shadow-md">
+                <Card className="block w-full border-black bg-white px-6 py-12 text-center shadow-md hover:shadow-none">
                   <p className="text-lg font-bold">
                     {currentQuestion.question_text}
                   </p>
-                </div>
+                </Card>
 
                 {currentQuestion.question_type === "MULTIPLE_CHOICE" ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     {currentQuestion.options.map((option) => (
-                      <button
+                      <Button
                         key={option.option_id}
                         type="button"
                         onClick={() =>
@@ -1183,14 +1194,14 @@ export default function SubjectLessonTab({
                           }))
                         }
                         disabled={isQuizSubmitting}
-                        className={`min-h-24 rounded-lg border border-black px-4 py-3 text-lg font-bold shadow-md ${quizAnswers[currentQuestion.quiz_question_id]
+                        className={`min-h-24 rounded-none border-black px-4 py-3 text-lg font-bold shadow-md hover:shadow-none ${quizAnswers[currentQuestion.quiz_question_id]
                             ?.selected_option_id === option.option_id
-                            ? "bg-[#F6E9B2]"
-                            : "bg-white"
+                            ? "bg-success hover:bg-success"
+                            : "bg-white hover:bg-white"
                           }`}
                       >
                         {option.option_text}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 ) : (
@@ -1209,7 +1220,7 @@ export default function SubjectLessonTab({
                       }))
                     }
                     disabled={isQuizSubmitting}
-                    className="min-h-32 w-full rounded-lg border border-black bg-white px-4 py-4 text-center text-lg font-bold shadow-md"
+                    className="min-h-32 w-full rounded-none border border-black bg-white px-4 py-4 text-center text-lg font-bold shadow-md transition-shadow hover:shadow-none"
                     placeholder="Type answer"
                   />
                 )}
@@ -1305,7 +1316,7 @@ export default function SubjectLessonTab({
     return (
       <div key={lesson.lesson_id} id={`student-lesson-${lesson.lesson_id}`}>
         {/* ── Lesson card ── */}
-        <Card className="w-full bg-[#F6E9B2] flex items-center justify-between shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-black">
+        <Card className="flex w-full items-center justify-between border-black bg-white shadow-md hover:shadow-none">
           <button
             type="button"
             onClick={() => openLessonDetail(lesson)}
@@ -1316,10 +1327,10 @@ export default function SubjectLessonTab({
                 {lesson.title}
               </Card.Title>
               {lesson.attachments.length > 0 && (
-                <span className="rounded-full border border-black bg-[#7ABA78] px-2 py-0.5 text-[10px] font-bold">
+                <Badge variant="secondary" size="sm" className="rounded-none border border-black bg-success px-2 py-0.5 text-[10px] font-bold text-black">
                   {lesson.attachments.length} material
                   {lesson.attachments.length === 1 ? "" : "s"}
-                </span>
+                </Badge>
               )}
             </div>
             <p className="text-xs text-gray-700 mt-0.5">
@@ -1358,9 +1369,9 @@ export default function SubjectLessonTab({
                 Loading classworks...
               </div>
             ) : classworks.length === 0 ? (
-              <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-400">
+              <Card className="block w-full border-gray-200 bg-white px-4 py-3 text-sm text-gray-400 shadow-md hover:shadow-none">
                 No classworks linked to this lesson.
-              </div>
+              </Card>
             ) : (
               classworks.map((cw) => {
                 const badge = getStatusBadge(cw.submission_status, cw.due_date);
@@ -1369,9 +1380,9 @@ export default function SubjectLessonTab({
                   <Card
                     key={cw.classwork_assignment_id}
                     onClick={() => !isLoading && openClassworkDetail(cw)}
-                    className="block w-full cursor-pointer border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    className="block w-full cursor-pointer"
                   >
-                    <Card.Content className="flex items-center justify-between gap-4 py-2.5 px-3">
+                    <Card.Content className="flex items-center justify-between gap-4">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <ClassworkIcon type={cw.classwork_type} size={18} />
@@ -1559,16 +1570,16 @@ export default function SubjectLessonTab({
         />
       ) : (
         <>
-          <Card className="flex justify-between bg-[#F6E9B2]">
+          <Card className="flex justify-between border-black bg-primary shadow-md hover:shadow-none">
             <div>
               <Card.Title className="text-2xl font-bold">
                 {displaySubjectName}
               </Card.Title>
               <p className="text-sm">{displayTeacherName}</p>
             </div>
-            <button className="hover:text-gray-800 transition-colors">
+            <Button type="button" variant="ghost" size="icon" className="rounded-none shadow-none hover:bg-transparent hover:shadow-none" aria-label="Subject information">
               <Info size={18} />
-            </button>
+            </Button>
           </Card>
 
           {/* ── Activity overdue banner ── */}
@@ -1688,34 +1699,35 @@ export default function SubjectLessonTab({
                       collapsedCompetencies[group.key] ?? false;
 
                     return (
-                      <div
+                      <Card
                         key={group.key}
-                        className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
+                        className="flex w-full flex-col overflow-hidden border-black bg-white p-0 shadow-md hover:shadow-none"
                       >
                         {/* ── Competency Header Accordion Bar ── */}
-                        <button
-                          type="button"
+                        <Card.Header
+                          role="button"
+                          tabIndex={0}
+                          aria-expanded={!isCollapsed}
                           onClick={() => toggleStudentCompCollapse(group.key)}
-                          className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 text-left cursor-pointer hover:bg-[#fae498] transition-colors group"
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              toggleStudentCompCollapse(group.key);
+                            }
+                          }}
+                          className="mb-0 flex-row items-center justify-between border-b-2 border-black bg-primary px-4 py-3.5 text-left cursor-pointer"
                         >
                           <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                            <div className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors">
-                              {isCollapsed ? (
-                                <ChevronRight size={16} className="text-black" />
-                              ) : (
-                                <ChevronDown size={16} className="text-black" />
-                              )}
-                            </div>
                             <div className="min-w-0 flex-1">
                               <div className="mb-0.5 flex flex-wrap items-center gap-2">
                                 <Award size={18} className="text-black shrink-0" />
-                                <h4 className="truncate text-base md:text-lg font-bold text-gray-950">
+                                <Card.Title className="truncate text-base font-bold text-gray-950 md:text-lg">
                                   {group.competency_code || group.competency_statement}
-                                </h4>
+                                </Card.Title>
                                 <Badge
                                   variant="secondary"
                                   size="sm"
-                                  className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                                  className="rounded-none border border-black bg-white text-xs font-bold text-black"
                                 >
                                   {group.lessons.length} lesson
                                   {group.lessons.length === 1 ? "" : "s"}
@@ -1728,64 +1740,65 @@ export default function SubjectLessonTab({
                               )}
                             </div>
                           </div>
-                        </button>
+                        </Card.Header>
 
                         {/* ── Competency Lessons Body ── */}
                         {!isCollapsed && (
-                          <div className="flex flex-col gap-2 p-3 bg-white">
+                          <Card.Content className="flex flex-col gap-2 bg-white p-3">
                             {group.lessons.map(renderStudentLessonItem)}
-                          </div>
+                          </Card.Content>
                         )}
-                      </div>
+                      </Card>
                     );
                   })}
 
                   {/* ── Standalone / Unassigned Lessons Section ── */}
                   {unassignedLessons.length > 0 && (
-                    <div className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
+                    <Card className="flex w-full flex-col overflow-hidden border-black bg-white p-0 shadow-md hover:shadow-none">
                       {competencyGroups.length > 0 ? (
                         <>
-                          <button
-                            type="button"
+                          <Card.Header
+                            role="button"
+                            tabIndex={0}
+                            aria-expanded={isUnassignedExpanded}
                             onClick={() =>
                               setIsUnassignedExpanded((prev) => !prev)
                             }
-                            className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 text-left cursor-pointer hover:bg-[#fae498] transition-colors group"
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                setIsUnassignedExpanded((prev) => !prev);
+                              }
+                            }}
+                            className="mb-0 flex-row items-center justify-between border-b-2 border-black bg-primary px-4 py-3.5 text-left cursor-pointer"
                           >
                             <div className="flex items-center gap-2">
-                              <div className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors">
-                                {isUnassignedExpanded ? (
-                                  <ChevronDown size={16} className="text-black" />
-                                ) : (
-                                  <ChevronRight size={16} className="text-black" />
-                                )}
-                              </div>
                               <BookOpen size={16} className="text-black shrink-0" />
-                              <h4 className="text-sm font-bold text-black">
+                              <Card.Title className="text-sm font-bold text-black">
                                 Unassigned Lessons
-                              </h4>
+                              </Card.Title>
                               <Badge
                                 variant="secondary"
                                 size="sm"
-                                className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                                className="rounded-none border border-black bg-white text-xs font-bold text-black"
                               >
                                 {unassignedLessons.length}
                               </Badge>
                             </div>
-                          </button>
+                          </Card.Header>
 
                           {isUnassignedExpanded && (
-                            <div className="flex flex-col gap-2 p-3 bg-white">
+                            <Card.Content className="flex flex-col gap-2 bg-white p-3">
                               {unassignedLessons.map(renderStudentLessonItem)}
-                            </div>
+                            </Card.Content>
                           )}
                         </>
                       ) : (
-                        <div className="flex flex-col gap-2 p-3 bg-white/70">
+                        <Card.Content className="flex flex-col gap-2 bg-white p-3">
                           {unassignedLessons.map(renderStudentLessonItem)}
-                        </div>
+                        </Card.Content>
                       )}
-                    </div>
+                    </Card>
                   )}
                 </div>
               </div>
@@ -1814,7 +1827,7 @@ export default function SubjectLessonTab({
               {/* Modal header */}
               <Dialog.Header
                 position="fixed"
-                className="bg-[#F6E9B2] text-black"
+                className="bg-primary text-black"
               >
                 <div>
                   <p className="text-xs">Student classwork detail</p>
@@ -1834,23 +1847,23 @@ export default function SubjectLessonTab({
                   {detailError}
                 </Card>
               ) : selectedClasswork ? (
-                <div className="grid max-h-[calc(90vh-88px)] min-w-0 gap-5 overflow-y-auto overflow-x-hidden p-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,1fr)]">
+                <div className="flex max-h-[calc(90vh-88px)] min-w-0 flex-col gap-5 overflow-y-auto overflow-x-hidden p-5">
                   {/* Left: details */}
                   <div className="min-w-0 space-y-4">
                     {/* Status + title card */}
-                    <Card className="block w-full shadow-none">
+                    <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge
                           variant="surface"
                           size="sm"
-                          className="bg-[#7ABA78] text-black"
+                          className="border border-black bg-[#7ABA78] text-black"
                         >
                           {selectedClasswork.classwork_type || "Classwork"}
                         </Badge>
                         <Badge
                           variant="outline"
                           size="sm"
-                          className="border-gray-300 capitalize"
+                          className="border border-gray-300 capitalize"
                         >
                           {statusLabel(
                             selectedQuizAttempt?.status ??
@@ -1863,7 +1876,7 @@ export default function SubjectLessonTab({
                         {selectedClasswork.title}
                       </h3>
                       <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
-                        <div className="rounded-lg bg-gray-50 p-3">
+                        <Card className="block w-full border-black bg-gray-50 p-3 shadow-none hover:shadow-none">
                           <div className="mb-1 flex items-center gap-1 font-semibold text-gray-600">
                             <CalendarDays size={14} />
                             Due
@@ -1875,26 +1888,26 @@ export default function SubjectLessonTab({
                               ).toLocaleString()
                               : "No due date"}
                           </p>
-                        </div>
-                        <div className="rounded-lg bg-gray-50 p-3">
+                        </Card>
+                        <Card className="block w-full border-black bg-gray-50 p-3 shadow-none hover:shadow-none">
                           <p className="font-semibold text-gray-600">Points</p>
                           <p className="font-bold">
                             {selectedClasswork.total_points ?? "Not set"}
                           </p>
-                        </div>
-                        <div className="rounded-lg bg-gray-50 p-3">
+                        </Card>
+                        <Card className="block w-full border-black bg-gray-50 p-3 shadow-none hover:shadow-none">
                           <p className="font-semibold text-gray-600">Teacher</p>
                           <p className="font-bold">
                             {selectedClasswork.teacher_name || "Teacher"}
                           </p>
-                        </div>
+                        </Card>
                       </div>
                     </Card>
 
                     {/* Description + instructions */}
                     {(selectedClasswork.description ||
                       selectedClasswork.instructions) && (
-                        <Card className="block w-full shadow-none">
+                        <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
                           {selectedClasswork.description && (
                             <div>
                               <h4 className="font-bold">Description</h4>
@@ -1918,16 +1931,16 @@ export default function SubjectLessonTab({
                     {isQuizType(selectedClasswork.classwork_type) &&
                       selectedClasswork.linked_lessons &&
                       selectedClasswork.linked_lessons.length > 0 && (
-                        <Card className="block w-full shadow-none border-2 border-black bg-[#F8F6ED]">
+                        <Card className="block w-full border-black bg-primary shadow-none hover:shadow-none">
                           <div className="mb-2 flex items-center gap-2">
                             <GraduationCap size={18} className="text-black" />
                             <h4 className="font-bold text-black">Coverage</h4>
                           </div>
                           <div className="space-y-3">
                             {selectedClasswork.linked_lessons.map((lesson) => (
-                              <div
+                              <Card
                                 key={lesson.lesson_id}
-                                className="rounded-lg border border-black/20 bg-white p-3.5 shadow-sm"
+                                className="block w-full border-black bg-white p-3.5 shadow-none hover:shadow-none"
                               >
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-bold uppercase text-gray-500">Lesson:</span>
@@ -1951,7 +1964,7 @@ export default function SubjectLessonTab({
                                       {lesson.readings.map((reading) => (
                                         <div
                                           key={reading.classwork_id}
-                                          className="flex items-center gap-2 rounded border border-black/15 bg-[#F6E9B2]/40 px-2.5 py-1.5 text-xs"
+                                          className="flex items-center gap-2 border border-black/15 bg-[#F6E9B2]/40 px-2.5 py-1.5 text-xs"
                                         >
                                           <BookOpen size={13} className="text-black shrink-0" />
                                           <span className="font-bold text-black">{reading.title}</span>
@@ -1982,7 +1995,7 @@ export default function SubjectLessonTab({
                                     />
                                   </div>
                                 )}
-                              </div>
+                              </Card>
                             ))}
                           </div>
                         </Card>
@@ -1990,7 +2003,7 @@ export default function SubjectLessonTab({
 
                     {/* Classwork File Attachments (Only shown when files are directly attached) */}
                     {selectedClasswork.attachments && selectedClasswork.attachments.length > 0 && (
-                      <Card className="block w-full shadow-none">
+                      <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
                         <div className="mb-3 flex items-center gap-2">
                           <Paperclip size={18} />
                           <h4 className="font-bold">Attached Files</h4>
@@ -2007,7 +2020,7 @@ export default function SubjectLessonTab({
                   </div>
 
                   {/* Right: submission or quiz attempt */}
-                  <Card className="block w-full shadow-none">
+                  <Card className="block w-full border-black bg-white shadow-none hover:shadow-none">
                     <div className="mb-3 flex items-center gap-2">
                       {isQuizType(selectedClasswork.classwork_type) ? (
                         <ClipboardList size={18} />
@@ -2067,7 +2080,7 @@ export default function SubjectLessonTab({
                           </div>
                         ) : selectedQuizAttempt ? (
                           <>
-                            <div className="rounded-lg border border-black bg-white p-3 text-sm">
+                            <Card className="block w-full border-black bg-white p-3 text-sm shadow-none hover:shadow-none">
                               <div className="flex items-center justify-between gap-3">
                                 <span className="font-bold capitalize">
                                   {statusLabel(selectedQuizAttempt.status)}
@@ -2077,7 +2090,7 @@ export default function SubjectLessonTab({
                                   {selectedQuizAttempt.max_attempts}
                                 </span>
                               </div>
-                              <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-gray-600">
+                              <Card className="mt-2 flex w-full flex-wrap gap-2 border-black bg-white p-2 text-xs font-semibold text-gray-600 shadow-none hover:shadow-none">
                                 <span>
                                   {selectedQuizAttempt.questions.length} questions
                                 </span>
@@ -2092,7 +2105,7 @@ export default function SubjectLessonTab({
                                     {selectedQuizAttempt.duration_minutes} minutes
                                   </span>
                                 ) : null}
-                              </div>
+                              </Card>
                               {selectedQuizAttempt.grade !== null &&
                                 selectedQuizAttempt.grade !== undefined ? (
                                 <p className="mt-2 text-sm font-bold">
@@ -2110,7 +2123,7 @@ export default function SubjectLessonTab({
                                   )}
                                 </p>
                               ) : null}
-                            </div>
+                            </Card>
 
                             {selectedQuizAttempt.status !== "pending" ? (
                               <div className="space-y-2">
@@ -2142,40 +2155,40 @@ export default function SubjectLessonTab({
                                         : "Summary Scheduled"}
                                   </button>
                                 ) : null}
-                                <button
+                                <Button
                                   type="button"
                                   onClick={startQuizAttempt}
                                   disabled={
                                     !selectedQuizAttempt.can_submit ||
                                     isQuizSubmitting
                                   }
-                                  className="w-full rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="w-full rounded-none border-black bg-success text-sm font-bold text-black shadow-none hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   {selectedQuizAttempt.status === "not_started"
                                     ? "Start Quiz"
                                     : "Retake Quiz"}
-                                </button>
+                                </Button>
                               </div>
                             ) : (
                               <>
-                                <div className="rounded-lg border border-black bg-white p-3 text-sm font-semibold">
+                                <Card className="block w-full border-black bg-white p-3 text-sm font-semibold shadow-none hover:shadow-none">
                                   <p>Your quiz attempt is in progress.</p>
                                   <p className="mt-1 text-gray-600">
                                     Time left:{" "}
                                     {formatExamTimer(quizRemainingSeconds)}
                                   </p>
-                                </div>
-                                <button
+                                </Card>
+                                <Button
                                   type="button"
                                   onClick={() => setIsQuizFullscreen(true)}
                                   disabled={
                                     !selectedQuizAttempt.can_submit ||
                                     isQuizSubmitting
                                   }
-                                  className="w-full rounded-lg border border-black bg-[#7ABA78] px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="w-full rounded-none border-black bg-success text-sm font-bold text-black shadow-none hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   Continue Exam
-                                </button>
+                                </Button>
                               </>
                             )}
                           </>

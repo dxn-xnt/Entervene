@@ -84,32 +84,26 @@ export default function LessonClassworkList({
     { value: "title", label: "Title A-Z" },
   ];
 
-  // Collapsed state for competencies: expand first competency by default, collapse others
   const [collapsedCompetencies, setCollapsedCompetencies] = useState<Record<number, boolean>>({});
   const [isUnassignedExpanded, setIsUnassignedExpanded] = useState<boolean>(false);
 
   useEffect(() => {
-    if (competencies.length > 0) {
-      setCollapsedCompetencies((prev) => {
-        const next: Record<number, boolean> = { ...prev };
-        competencies.forEach((comp, idx) => {
-          if (next[comp.competency_id] === undefined) {
-            // Expand only the first competency by default
-            next[comp.competency_id] = idx !== 0;
-          }
-        });
-        return next;
+    setCollapsedCompetencies((previous) => {
+      const next = { ...previous };
+      competencies.forEach((competency, index) => {
+        if (next[competency.competency_id] === undefined) {
+          next[competency.competency_id] = index !== 0;
+        }
       });
-      setIsUnassignedExpanded(false);
-    } else {
-      setIsUnassignedExpanded(true);
-    }
+      return next;
+    });
+    setIsUnassignedExpanded(competencies.length === 0);
   }, [competencies]);
 
   const toggleCompetencyCollapse = (competencyId: number) => {
-    setCollapsedCompetencies((prev) => ({
-      ...prev,
-      [competencyId]: !prev[competencyId],
+    setCollapsedCompetencies((previous) => ({
+      ...previous,
+      [competencyId]: !previous[competencyId],
     }));
   };
 
@@ -481,35 +475,34 @@ export default function LessonClassworkList({
             }
 
             return (
-              <div
+              <Card
                 key={comp.competency_id}
-                className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden min-w-0 w-full"
+                className="flex w-full min-w-0 flex-col overflow-hidden border-black bg-white p-0 transition-none hover:shadow-md"
               >
-                {/* ── Competency Header Accordion Bar ── */}
-                <div className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 gap-3 min-w-0 w-full">
+                {/* ── Competency Header ── */}
+                <Card.Header className="mb-0 flex-row items-center justify-between gap-3 border-b-2 border-black bg-primary px-4 py-3.5">
                   <div
                     role="button"
                     tabIndex={0}
+                    aria-expanded={!isCollapsed}
                     onClick={() => toggleCompetencyCollapse(comp.competency_id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ")
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
                         toggleCompetencyCollapse(comp.competency_id);
+                      }
                     }}
-                    className="flex min-w-0 flex-1 items-center gap-3 text-left cursor-pointer group"
+                    className="min-w-0 flex-1 cursor-pointer text-left"
                   >
-                    <div className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors shrink-0">
-                      {isCollapsed ? <ChevronRight size={16} className="text-black" /> : <ChevronDown size={16} className="text-black" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
                       <div className="mb-1 flex flex-wrap items-center gap-2 min-w-0">
                         <Award size={20} className="text-black shrink-0" />
-                        <h4 className="text-base sm:text-lg md:text-xl font-bold text-gray-950 break-words line-clamp-2">
+                        <Card.Title className="text-base font-bold text-gray-950 sm:text-lg md:text-xl break-words line-clamp-2">
                           {comp.competency_code || comp.statement}
-                        </h4>
+                        </Card.Title>
                         <Badge
                           variant="secondary"
                           size="sm"
-                          className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
+                          className="bg-white text-xs font-bold text-black"
                         >
                           {compLessons.length} lesson{compLessons.length === 1 ? "" : "s"}
                         </Badge>
@@ -517,7 +510,7 @@ export default function LessonClassworkList({
                           <Badge
                             variant="secondary"
                             size="sm"
-                            className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
+                            className="bg-white text-xs font-bold text-black"
                           >
                             {comp.target_hours} hrs
                           </Badge>
@@ -528,7 +521,6 @@ export default function LessonClassworkList({
                           {comp.statement}
                         </p>
                       )}
-                    </div>
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
@@ -545,35 +537,41 @@ export default function LessonClassworkList({
                       </Button>
                     )}
                     {openCompetencyForm && (
-                      <button
+                      <Button
                         type="button"
+                        variant="outline"
+                        size="icon"
                         onClick={() => openCompetencyForm(comp)}
                         title="Edit Competency"
-                        className="rounded border-2 border-black bg-white p-1.5 text-black hover:bg-yellow-50 cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                        aria-label="Edit competency"
+                        className="border-black bg-white text-black hover:bg-yellow-50"
                       >
                         <Pencil size={14} />
-                      </button>
+                      </Button>
                     )}
                     {onArchiveCompetency && (
-                      <button
+                      <Button
                         type="button"
+                        variant="outline"
+                        size="icon"
                         onClick={() => onArchiveCompetency(comp.competency_id)}
                         title="Archive Competency"
-                        className="rounded border-2 border-black bg-white p-1.5 text-red-600 hover:bg-red-50 cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                        aria-label="Archive competency"
+                        className="border-black bg-white text-red-600 hover:bg-red-50"
                       >
                         <Trash2 size={14} />
-                      </button>
+                      </Button>
                     )}
                   </div>
-                </div>
+                </Card.Header>
 
-                {/* ── Competency Body (Lessons) ── */}
+                {/* ── Competency Lessons ── */}
                 {!isCollapsed && (
-                  <div className="flex flex-col gap-3 p-4 bg-white">
+                  <Card.Content className="flex flex-col gap-3 bg-white p-4">
                     {compLessons.length > 0 ? (
                       compLessons.map(renderLessonItem)
                     ) : (
-                      <div className="flex items-center justify-between rounded-lg border-2 border-dashed border-black bg-[#FFFDF0] p-4">
+                      <div className="flex items-center justify-between border-2 border-dashed border-black bg-[#FFFDF0] p-4">
                         <div className="flex items-center gap-2 text-xs font-bold text-black">
                           <BookOpen size={16} className="text-black" />
                           <span>No lessons assigned to this competency yet.</span>
@@ -592,9 +590,9 @@ export default function LessonClassworkList({
                         )}
                       </div>
                     )}
-                  </div>
+                  </Card.Content>
                 )}
-              </div>
+              </Card>
             );
           })}
 
