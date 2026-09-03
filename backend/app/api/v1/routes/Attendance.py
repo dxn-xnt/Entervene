@@ -14,6 +14,8 @@ from app.schemas.Attendance import (
     LeaveRequestCreate,
     LeaveRequestResponse,
     LeaveRequestUpdate,
+    QRScanAttendanceRequest,
+    QRScanAttendanceResponse,
 )
 from app.services.attendance.AttendanceService import (
     _get_staff_id_from_user_id,
@@ -25,10 +27,25 @@ from app.services.attendance.AttendanceService import (
     get_student_attendance_logs,
     get_student_attendance_summary,
     get_student_leave_requests,
+    record_qr_scan_attendance,
     update_leave_request_status,
 )
 
 router = APIRouter()
+
+
+@router.post("/scan", response_model=QRScanAttendanceResponse)
+def scan_qr_attendance(
+    payload: QRScanAttendanceRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Record attendance via QR code scan for the current teacher's selected class session.
+    """
+    user_id = UUID(current_user["sub"])
+    staff_id = _get_staff_id_from_user_id(db, user_id)
+    return record_qr_scan_attendance(db=db, payload=payload, recorded_by_staff_id=staff_id)
 
 
 @router.post("", response_model=list[AttendanceRecordResponse])
