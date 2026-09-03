@@ -4,6 +4,7 @@ import {
   ArrowDownAZ,
   ArrowLeft,
   ArrowUpDown,
+  ArrowUpRight,
   Award,
   BookOpen,
   CheckCircle2,
@@ -25,6 +26,7 @@ import {
 import { LoadingPanel } from "@/components/loading-panel";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { Accordion } from "@/components/retroui/Accordion";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
@@ -89,6 +91,7 @@ import type {
   TeacherAdvisoryStudentItem,
 } from "@/types/adminClasses";
 import type { SuggestionResponse } from "@/types/suggestion";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 
 interface LessonAttachment {
   lesson_attachment_id: number;
@@ -257,22 +260,19 @@ export default function TeacherClassDetail() {
                     <Breadcrumb.Separator />
                     <Breadcrumb.Item>
                       <Breadcrumb.Link
-                        onClick={() => navigate("/teacher/classes")}
-                        className="cursor-pointer"
+                        onClick={() => navigate(`/teacher/classes/${detail.class_id}/subjects/${currentSubject?.subject_id}`)}
+                        className="cursor-pointer text-xl"
                       >
-                        {detail.section_name}
+                        {currentSubject?.subject_name || "Subject"}
+
                       </Breadcrumb.Link>
                     </Breadcrumb.Item>
-                    {currentSubject && (
-                      <>
-                        <Breadcrumb.Separator />
-                        <Breadcrumb.Item>
-                          <Breadcrumb.Page>
-                            {currentSubject.subject_name}
-                          </Breadcrumb.Page>
-                        </Breadcrumb.Item>
-                      </>
-                    )}
+                    <Breadcrumb.Separator />
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Page>
+                        {detail.section_name}
+                      </Breadcrumb.Page>
+                    </Breadcrumb.Item>
                   </Breadcrumb.List>
                 </Breadcrumb>
               </div>
@@ -311,50 +311,68 @@ export default function TeacherClassDetail() {
 
             <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
 
-            <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
-              <Card.Content>
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <Card.Title className="mb-0 text-2xl sm:text-3xl font-extrabold">
-                      {currentSubject?.subject_name || detail.section_name}
-                    </Card.Title>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    size="sm"
-                    className="w-fit font-black"
-                  >
-                    {statusLabel}
-                  </Badge>
-                </div>
-                <p className="text-sm font-semibold text-gray-900 mt-1">
-                  Section: {detail.section_name} • {detail.academic_level} - {detail.academic_year} | Active
-                  since {activeSince}
-                </p>
-              </Card.Content>
-            </Card>
+              <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
+                <Card.Content>
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <Card.Title className="mb-0 text-2xl sm:text-3xl font-extrabold">
+                        {currentSubject?.subject_name || detail.section_name}
+                      </Card.Title>
+                    </div>
+                    <div className="flex flex-row gap-2">
+                      <Badge
+                        variant="outline"
+                        size="sm"
+                        className="w-fit font-black"
+                      >
+                        {statusLabel}
+                      </Badge>
+                      <Button
+                        variant="secondary"
+                        className="shadow-none w-7 p-1"
+                        size="sm"
+                        title={`View ${currentSubject?.subject_name || detail.section_name}`}
+                        onClick={() => {
+                          if (currentSubject) {
+                            navigate(
+                              `/teacher/classes/${detail.class_id}/subjects/${currentSubject.subject_id}`,
+                            );
+                          }
+                        }}
+                      >
+                        <ArrowUpRight className="size-4" />
+                      </Button>
+                    </div>
 
-            {tab === "lessons" && (
-              <OverviewTab
-                detail={detail}
-                initialSubjectId={initialSubjectId}
-              />
-            )}
-            {tab === "students" && (
-              <StudentsTab
-                detail={detail}
-                subjectId={currentSubject?.subject_id || initialSubjectId}
-              />
-            )}
-            {tab === "classwork" && (
-              <ClassworkTab
-                detail={detail}
-                subjectId={currentSubject?.subject_id || initialSubjectId}
-              />
-            )}
+                  </div>
+                  <p className="text-xs">
+                    {detail.section_name} | {detail.academic_level} |  Active
+                    since {activeSince}
+                  </p>
+                </Card.Content>
+              </Card>
+
+              {tab === "lessons" && (
+                <OverviewTab
+                  detail={detail}
+                  initialSubjectId={initialSubjectId}
+                />
+              )}
+              {tab === "students" && (
+                <StudentsTab
+                  detail={detail}
+                  subjectId={currentSubject?.subject_id || initialSubjectId}
+                />
+              )}
+              {tab === "classwork" && (
+                <ClassworkTab
+                  detail={detail}
+                  subjectId={currentSubject?.subject_id || initialSubjectId}
+                />
+              )}
+            </div>
           </div>
         </div>
-      </div>
       </div>
     </AppLayout>
   );
@@ -849,37 +867,33 @@ function OverviewTab({
     const isLoadingCw = loadingClassworkId === lesson.lesson_id;
 
     return (
-      <div key={lesson.lesson_id} className="flex flex-col gap-2 min-w-0 w-full">
-        {/* Lesson Card with Warm Yellow Theme */}
-        <div className="w-full min-w-0 rounded-lg border-2 border-black bg-[#F6E9B2] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:border-black transition-all">
-          <div className="flex items-start justify-between gap-3 min-w-0">
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2 mb-1.5 min-w-0">
+      <Accordion
+        key={lesson.lesson_id}
+        value={isExpanded ? [String(lesson.lesson_id)] : []}
+        onValueChange={() => toggleLesson(lesson.lesson_id)}
+        className="w-full"
+      >
+        <Accordion.Item
+          value={String(lesson.lesson_id)}
+          className="border-2 border-black bg-primary"
+        >
+          <Accordion.Header className="p-4 items-center">
+            <div className="flex flex-col items-start gap-1 min-w-0 text-left">
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
                 <h4 className="text-base sm:text-lg font-bold text-black break-words line-clamp-2">
                   {lesson.title}
                 </h4>
-                <Badge
-                  variant="outline"
-                  size="sm"
-                  className="border-2 border-black bg-white text-black font-bold text-xs shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
-                >
+                <Badge variant="outline" size="sm">
                   {lesson.is_published ? "Published" : "Draft"}
                 </Badge>
                 {lesson.attachments && lesson.attachments.length > 0 && (
-                  <Badge
-                    size="sm"
-                    className="border-2 border-black bg-white text-black font-bold text-xs shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0 gap-1"
-                  >
+                  <Badge size="sm">
                     <Paperclip size={10} />
                     {lesson.attachments.length} material
                     {lesson.attachments.length === 1 ? "" : "s"}
                   </Badge>
                 )}
-                <Badge
-                  variant="outline"
-                  size="sm"
-                  className="border-2 border-black bg-white text-black font-bold text-xs shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
-                >
+                <Badge variant="outline" size="sm">
                   {classworks.length} classwork{classworks.length === 1 ? "" : "s"}
                 </Badge>
               </div>
@@ -887,53 +901,34 @@ function OverviewTab({
                 {lesson.description || lesson.content || "Lesson folder"}
               </p>
             </div>
+          </Accordion.Header>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => toggleLesson(lesson.lesson_id)}
-                className="p-1.5 rounded-full border-2 border-black bg-white hover:bg-yellow-50 transition-colors cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] shrink-0"
-                title={isExpanded ? "Collapse classworks" : "Expand classworks"}
-              >
-                {isExpanded ? (
-                  <ChevronDown size={16} />
-                ) : (
-                  <ChevronRight size={16} />
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Expanded linked classworks (White Card with Yellow Badges) */}
-        {isExpanded && (
-          <div className="ml-4 pl-3 border-l-2 border-black space-y-2 py-1 min-w-0">
+          <Accordion.Content className="p-3 border-t-2 border-black bg-white space-y-2">
             {isLoadingCw ? (
               <LoadingPanel label="Loading classworks..." />
             ) : classworks.length === 0 ? (
-              <div className="flex items-center justify-between rounded border-2 border-dashed border-black/40 bg-white p-3 text-xs text-gray-500 font-medium">
+              <div className="flex items-center justify-between border-2 border-dashed border-black/40 bg-white p-3 text-xs text-gray-500 font-medium">
                 <span>No classworks assigned to this lesson yet.</span>
               </div>
             ) : (
               classworks.map((cw) => (
-                <div
+                <Card
                   key={cw.classwork_assignment_id}
                   onClick={() => openClassworkDetail(cw)}
-                  className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3.5 rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFFDF0] hover:translate-x-0.5 transition-all cursor-pointer min-w-0 group"
+                  className="flex items-center justify-between gap-3 shadow-none bg-white hover:translate-x-1 hover:bg-accent transition-all cursor-pointer min-w-0 group"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="shrink-0 text-black">
                       <ClassworkIcon type={cw.classwork_type} size={18} />
                     </span>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold truncate text-black group-hover:underline">
+                      <p className="text-sm font-semibold truncate text-black">
                         {cw.title}
                       </p>
-                      <p className="text-[11px] text-gray-600 font-bold uppercase tracking-wider">
-                        {cw.classwork_type || "Classwork"}
+                      <p className="text-xs text-muted-foreground">
                         {cw.due_date
-                          ? ` • Due ${new Date(cw.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                          : " • No due date"}
+                          ? `Due ${new Date(cw.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                          : "No due date"}
                         {cw.total_points !== null && cw.total_points !== undefined
                           ? ` • ${cw.total_points} pts`
                           : ""}
@@ -942,17 +937,17 @@ function OverviewTab({
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {cw.classwork_category && (
-                      <span className="border-2 border-black bg-[#F6E9B2] px-3 py-1 text-[11px] font-black text-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
-                        {cw.classwork_category.replace(/_/g, " ")}
-                      </span>
+                      <Badge size="sm" variant="secondary" className="capitalize">
+                        {(cw.classwork_type || "Classwork").replace(/_/g, " ").toLowerCase()}
+                      </Badge>
                     )}
                   </div>
-                </div>
+                </Card>
               ))
             )}
-          </div>
-        )}
-      </div>
+          </Accordion.Content>
+        </Accordion.Item>
+      </Accordion>
     );
   };
 
@@ -997,7 +992,7 @@ function OverviewTab({
       ) : (
         /* ── State 3: Default All-Competencies Overview (Image 1 Layout) ── */
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:grid-rows-[auto_1fr] items-stretch min-w-0">
-          <div className="flex flex-col gap-2 min-w-0">
+          <div className="flex flex-col gap-1 min-w-0">
             <h3 className="text-xl font-semibold">Overview</h3>
             <div className="grid gap-4 md:grid-cols-3 min-w-0">
               <OverviewCard
@@ -1042,40 +1037,21 @@ function OverviewTab({
 
                 {/* Search & Sort Controls */}
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
-                  <label className="relative flex-1 sm:max-w-xs">
+                  <label className="relative flex-1 sm:max-w-sm">
                     <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                     <Input
                       value={lessonSearch}
                       onChange={(e) => setLessonSearch(e.target.value)}
                       placeholder="Search competencies or lessons..."
-                      className="h-10 w-full border-2 border-black pl-9 pr-3 shadow-none bg-white font-medium"
+                      className="h-10 w-full border-2 border-black pl-9 pr-3 bg-white"
                     />
                   </label>
 
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Select
-                      value={lessonSort}
-                      onValueChange={(v) =>
-                        setLessonSort(
-                          v as "order" | "newest" | "oldest" | "title",
-                        )
-                      }
-                    >
-                      <Select.Trigger className="h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold">
-                        <Select.Value placeholder="Sort by" />
-                      </Select.Trigger>
-                      <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                        <Select.Item value="order">Lesson order</Select.Item>
-                        <Select.Item value="newest">Newest first</Select.Item>
-                        <Select.Item value="oldest">Oldest first</Select.Item>
-                        <Select.Item value="title">Title A-Z</Select.Item>
-                      </Select.Content>
-                    </Select>
-
-                    {(selectedSubjectId || currentSubjectLoad?.subject_id || detail.subject_loads[0]?.subject_id) && (
+                  <div className="flex items-center flex-wrap items-end">
+                    {/* {(selectedSubjectId || currentSubjectLoad?.subject_id || detail.subject_loads[0]?.subject_id) && (
                       <Button
-                        type="button"
-                        variant="outline"
+                        variant="link"
+                        size="sm"
                         onClick={() => {
                           const targetId =
                             selectedSubjectId ||
@@ -1087,13 +1063,31 @@ function OverviewTab({
                             );
                           }
                         }}
-                        className="h-10 gap-1.5 border-2 border-black bg-[#F6E9B2] hover:bg-[#fae498] text-black text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] whitespace-nowrap"
+                        className="whitespace-nowrap shadow-none gap-1"
                         title="Go to Subject View"
                       >
-                        <BookOpen size={16} />
-                        Subject View
+                        View Subject
+                        <ArrowUpRight size={20} />
                       </Button>
-                    )}
+                    )} */}
+                    <Select
+                      value={lessonSort}
+                      onValueChange={(v) =>
+                        setLessonSort(
+                          v as "order" | "newest" | "oldest" | "title",
+                        )
+                      }
+                    >
+                      <Select.Trigger className="h-10 text-sm bg-white">
+                        <Select.Value placeholder="Sort by" />
+                      </Select.Trigger>
+                      <Select.Content className="border-2 border-black bg-white">
+                        <Select.Item value="order">Lesson order</Select.Item>
+                        <Select.Item value="newest">Newest first</Select.Item>
+                        <Select.Item value="oldest">Oldest first</Select.Item>
+                        <Select.Item value="title">Title A-Z</Select.Item>
+                      </Select.Content>
+                    </Select>
                   </div>
                 </div>
               </div>
@@ -1126,7 +1120,7 @@ function OverviewTab({
                     return (
                       <div
                         key={comp.competency_id}
-                        className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden min-w-0"
+                        className="flex flex-col border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden min-w-0"
                       >
                         {/* Competency Header Bar */}
                         <div
@@ -1144,7 +1138,7 @@ function OverviewTab({
                         >
                           <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
                             <div
-                              className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-100 transition-colors shrink-0"
+                              className=" border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-100 transition-colors shrink-0"
                             >
                               {isCollapsed ? (
                                 <ChevronRight
@@ -1200,7 +1194,7 @@ function OverviewTab({
                             {compLessons.length > 0 ? (
                               compLessons.map(renderLessonCard)
                             ) : (
-                              <div className="flex items-center justify-between rounded-lg border-2 border-dashed border-black bg-[#FFFDF0] p-4">
+                              <div className="flex items-center justify-between border-2 border-dashed border-black bg-[#FFFDF0] p-4">
                                 <div className="flex items-center gap-2 text-xs font-bold text-black">
                                   <BookOpen size={16} className="text-black" />
                                   <span>
@@ -1217,7 +1211,7 @@ function OverviewTab({
 
                   {/* Standalone / Unassigned Lessons Section */}
                   {unassignedLessons.length > 0 && (
-                    <div className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden min-w-0 w-full">
+                    <div className="flex flex-col p-0 min-w-0 w-full">
                       {competencies.length > 0 ? (
                         <>
                           <div
@@ -1230,10 +1224,10 @@ function OverviewTab({
                               if (e.key === "Enter" || e.key === " ")
                                 setIsUnassignedExpanded((prev) => !prev);
                             }}
-                            className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 text-left cursor-pointer group min-w-0 w-full"
+                            className="flex items-center justify-between border-b-2 border-black bg-background text-left cursor-pointer group min-w-0 w-full"
                           >
                             <div className="flex items-center gap-2 min-w-0">
-                              <div className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors shrink-0">
+                              <div className="rounded border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors shrink-0">
                                 {isUnassignedExpanded ? (
                                   <ChevronDown
                                     size={16}
@@ -1270,7 +1264,7 @@ function OverviewTab({
                           )}
                         </>
                       ) : (
-                        <div className="flex flex-col gap-3 p-4 bg-white min-w-0 w-full">
+                        <div className="flex flex-col gap-3 bg-white min-w-0 w-full">
                           {unassignedLessons.map(renderLessonCard)}
                         </div>
                       )}
@@ -1431,8 +1425,8 @@ function OverviewTab({
                           <p className="font-bold text-sm">
                             {selectedClasswork.due_date
                               ? new Date(
-                                  selectedClasswork.due_date,
-                                ).toLocaleString()
+                                selectedClasswork.due_date,
+                              ).toLocaleString()
                               : "No due date"}
                           </p>
                         </div>
@@ -1460,31 +1454,31 @@ function OverviewTab({
 
                   {(selectedClasswork.description ||
                     selectedClasswork.instructions) && (
-                    <Card className="block border-2 border-black">
-                      <Card.Content className="space-y-3">
-                        {selectedClasswork.description && (
-                          <div>
-                            <Card.Title className="mb-1 font-bold text-sm">
-                              Description
-                            </Card.Title>
-                            <p className="text-sm text-gray-800">
-                              {selectedClasswork.description}
-                            </p>
-                          </div>
-                        )}
-                        {selectedClasswork.instructions && (
-                          <div>
-                            <Card.Title className="mb-1 font-bold text-sm">
-                              Instructions
-                            </Card.Title>
-                            <p className="whitespace-pre-wrap text-sm text-gray-800 bg-gray-50 p-3 border border-gray-200 rounded">
-                              {selectedClasswork.instructions}
-                            </p>
-                          </div>
-                        )}
-                      </Card.Content>
-                    </Card>
-                  )}
+                      <Card className="block border-2 border-black">
+                        <Card.Content className="space-y-3">
+                          {selectedClasswork.description && (
+                            <div>
+                              <Card.Title className="mb-1 font-bold text-sm">
+                                Description
+                              </Card.Title>
+                              <p className="text-sm text-gray-800">
+                                {selectedClasswork.description}
+                              </p>
+                            </div>
+                          )}
+                          {selectedClasswork.instructions && (
+                            <div>
+                              <Card.Title className="mb-1 font-bold text-sm">
+                                Instructions
+                              </Card.Title>
+                              <p className="whitespace-pre-wrap text-sm text-gray-800 bg-gray-50 p-3 border border-gray-200 rounded">
+                                {selectedClasswork.instructions}
+                              </p>
+                            </div>
+                          )}
+                        </Card.Content>
+                      </Card>
+                    )}
 
                   {/* Reference Materials / Attachments */}
                   <Card className="block border-2 border-black">
@@ -1499,7 +1493,7 @@ function OverviewTab({
                         </Badge>
                       </div>
                       {selectedClasswork.attachments &&
-                      selectedClasswork.attachments.length > 0 ? (
+                        selectedClasswork.attachments.length > 0 ? (
                         <div className="space-y-2">
                           {selectedClasswork.attachments.map((file) => (
                             <div
@@ -1646,9 +1640,9 @@ function OverviewTab({
                             setLessonDraft((current) =>
                               current
                                 ? {
-                                    ...current,
-                                    order_index: event.target.value,
-                                  }
+                                  ...current,
+                                  order_index: event.target.value,
+                                }
                                 : current,
                             )
                           }
@@ -1672,9 +1666,9 @@ function OverviewTab({
                           setLessonDraft((current) =>
                             current
                               ? {
-                                  ...current,
-                                  description: event.target.value,
-                                }
+                                ...current,
+                                description: event.target.value,
+                              }
                               : current,
                           )
                         }
@@ -1868,8 +1862,8 @@ function StudentsTab({
         setSelectedPeriodId(
           String(
             data.default_academic_period_id ||
-              data.periods[0]?.academic_period_id ||
-              "",
+            data.periods[0]?.academic_period_id ||
+            "",
           ),
         );
       } catch {
@@ -1973,7 +1967,7 @@ function StudentsTab({
         </div>
 
         {detailError && (
-          <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 font-medium">
+          <div className="border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 font-medium">
             {detailError}
           </div>
         )}
@@ -2077,45 +2071,37 @@ function StudentsTab({
   );
 }
 
-const classworkTabs: Array<TabItem<TabId>> = [
-  { id: "all", label: "All", icon: ClipboardList },
-  { id: "readings", label: "Readings", icon: BookOpen },
-  { id: "activities", label: "Activities", icon: CheckSquare },
-  { id: "assignments", label: "Assignments", icon: FileText },
-  { id: "quizzes", label: "Quizzes", icon: ClipboardList },
-];
-
 const classworkCreateOptions: Array<{
   type: ClassworkKind;
   title: string;
   description: string;
   icon: LucideIcon;
 }> = [
-  {
-    type: "READING",
-    title: "Reading",
-    description: "Create and publish class topics or resources for learners",
-    icon: BookOpen,
-  },
-  {
-    type: "QUIZ",
-    title: "Quiz",
-    description: "Build and assign quizzes to assess learner understanding",
-    icon: ClipboardList,
-  },
-  {
-    type: "ASSIGNMENT",
-    title: "Assignment",
-    description: "Post tasks or projects for students to complete and submit",
-    icon: FileText,
-  },
-  {
-    type: "ACTIVITY",
-    title: "Activity",
-    description: "Design interactive tasks to enhance learner engagement",
-    icon: CheckSquare,
-  },
-];
+    {
+      type: "READING",
+      title: "Reading",
+      description: "Create and publish class topics or resources for learners",
+      icon: BookOpen,
+    },
+    {
+      type: "QUIZ",
+      title: "Quiz",
+      description: "Build and assign quizzes to assess learner understanding",
+      icon: ClipboardList,
+    },
+    {
+      type: "ASSIGNMENT",
+      title: "Assignment",
+      description: "Post tasks or projects for students to complete and submit",
+      icon: FileText,
+    },
+    {
+      type: "ACTIVITY",
+      title: "Activity",
+      description: "Design interactive tasks to enhance learner engagement",
+      icon: CheckSquare,
+    },
+  ];
 
 const classworkTabType: Partial<Record<TabId, string>> = {
   readings: "READING",
@@ -2140,7 +2126,6 @@ function ClassworkTab({
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortMode, setSortMode] = useState<SortMode>("newest");
-  const [showFilters, setShowFilters] = useState(false);
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [selectedType, setSelectedType] = useState<ClassworkKind | null>(null);
   const [selected, setSelected] = useState<TeacherClasswork | null>(null);
@@ -2226,15 +2211,6 @@ function ClassworkTab({
     setSelectedType(null);
   };
 
-  const cycleSort = () => {
-    setSortMode((current) =>
-      current === "newest"
-        ? "oldest"
-        : current === "oldest"
-          ? "title"
-          : "newest",
-    );
-  };
 
   if (selected) {
     return (
@@ -2260,15 +2236,14 @@ function ClassworkTab({
   }
 
   return (
-    <div className="flex flex-col gap-3 min-w-0">
+    <div className="flex flex-col gap-2 min-w-0">
       <header className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Text as="h3" className="text-xl font-bold">
+          <Text as="h3" className="text-xl font-bold ">
             Classwork
           </Text>
         </div>
-
-        <Button
+        {/* <Button
           type="button"
           onClick={openCreateWizard}
           className="gap-2"
@@ -2276,87 +2251,43 @@ function ClassworkTab({
           <Plus className="size-4" />
           <span className="hidden sm:inline">New Classwork</span>
           <span className="sm:hidden">New</span>
-        </Button>
+        </Button> */}
       </header>
 
-      <Tabs
-        tabs={classworkTabs}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-      />
-
-      <main className="flex flex-col gap-4 pt-1">
+      <main className="flex flex-col gap-4">
         {error && (
-          <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className=" border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
         )}
 
-        <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
-          <label className="relative shadow-md transition-shadow hover:shadow-none">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
+          <label className="relative flex-1 sm:max-w-sm">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search classwork..."
-              className="h-10 w-full border-black pl-9 pr-3 shadow-none"
+              className="h-10 w-full border-2 border-black pl-9 pr-3 bg-white"
             />
           </label>
 
-          <Button
-            variant="outline"
-            size="md"
-            onClick={() => setShowFilters((current) => !current)}
-            className="gap-1.5"
-          >
-            <Filter size={15} />
-            Add Filter
-          </Button>
-
-          <Button
-            variant="outline"
-            size="md"
-            onClick={cycleSort}
-            className="gap-1.5"
-            title={`Current sort: ${sortMode}`}
-          >
-            {sortMode === "title" ? (
-              <ArrowDownAZ size={15} />
-            ) : (
-              <ArrowUpDown size={15} />
-            )}
-            Sort By
-          </Button>
-
-          {statusFilter !== "all" && (
-            <Badge
-              variant="secondary"
-              size="sm"
-              className="flex w-fit items-center gap-2 capitalize cursor-pointer"
-              onClick={() => setStatusFilter("all")}
+          <div className="flex items-center gap-2 shrink-0">
+            <Select
+              value={statusFilter}
+              onValueChange={(val) => setStatusFilter(val)}
             >
-              {statusFilter}
-              <X size={13} />
-            </Badge>
-          )}
+              <Select.Trigger className="h-10 text-sm bg-white">
+                <Select.Value placeholder="Filter status" />
+              </Select.Trigger>
+              <Select.Content className="border-2 border-black bg-white">
+                <Select.Item value="all">All statuses</Select.Item>
+                <Select.Item value="published">Published</Select.Item>
+                <Select.Item value="draft">Draft</Select.Item>
+              </Select.Content>
+            </Select>
+          </div>
         </div>
-
-        {showFilters && (
-          <section className="grid gap-3 rounded-lg border border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:grid-cols-2">
-            <label className="text-xs font-bold">
-              Publication status
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-                className="mt-1 w-full rounded border border-gray-700 bg-white px-3 py-2 text-sm font-medium"
-              >
-                <option value="all">All statuses</option>
-                <option value="published">Published</option>
-                <option value="draft">Draft</option>
-              </select>
-            </label>
-          </section>
-        )}
 
         {isLoading ? (
           <p className="py-12 text-center text-sm font-semibold text-gray-500">
@@ -2373,13 +2304,38 @@ function ClassworkTab({
             ))}
           </section>
         ) : (
-          <Card className="flex flex-col justify-center items-center p-8">
-            <ClipboardList className="mx-auto mb-2 text-gray-400" size={28} />
-            <p className="font-bold">No classworks found</p>
-            <p className="mt-1 text-sm text-gray-500">
-              No classwork items match the selected filter criteria for this subject.
-            </p>
-          </Card>
+          <>
+            <Empty className="shadow-md hover:shadow-none transition-shadow">
+              <EmptyHeader>
+                <EmptyMedia>
+                  <div className="flex items-center gap-2">
+                    <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
+                      <BookOpen className="size-5 text-black" />
+                    </div>
+                    <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
+                      <CheckSquare className="size-5 text-black" />
+                    </div>
+                    <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
+                      <FileText className="size-5 text-black" />
+                    </div>
+                    <div className="flex size-10 items-center justify-center border-2 border-black bg-primary">
+                      <ClipboardList className="size-5 text-black" />
+                    </div>
+                  </div>
+                </EmptyMedia>
+                <EmptyTitle>No Classworks Found</EmptyTitle>
+                <EmptyDescription className="text-center whitespace-nowrap">
+                  No classwork items match the selected filter criteria for this subject.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button size="sm" variant="default" onClick={openCreateWizard}>
+                  Create Classwork
+                </Button>
+              </EmptyContent>
+            </Empty>
+          </>
+
         )}
       </main>
 
@@ -2396,12 +2352,12 @@ function ClassworkTab({
               <Dialog.Header position="fixed" asChild>
                 <div className="flex items-center justify-between w-full">
                   <Text as="h5" className="font-sans text-xl font-bold">
-                    Choose Classwork Type
+                    Create Classwork
                   </Text>
                   <button
                     type="button"
                     onClick={closeCreateWizard}
-                    className="cursor-pointer text-white hover:text-gray-200"
+                    className="cursor-pointer text-black"
                   >
                     <X size={18} />
                   </button>
@@ -2416,7 +2372,7 @@ function ClassworkTab({
                         key={option.type}
                         type="button"
                         onClick={() => setSelectedType(option.type)}
-                        className="rounded-lg border-2 border-black bg-[#7ABA78] p-5 text-left shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 cursor-pointer text-black"
+                        className="border-2 border-black bg-accent p-5 text-left shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-1 cursor-pointer text-black"
                       >
                         <div className="flex items-center gap-2">
                           <Icon size={20} className="text-black" />
@@ -2727,22 +2683,22 @@ function StudentRow({
                         )}
                         {(item.status === "COMPLETED" ||
                           item.status === "DISMISSED") && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              updateSuggestion(
-                                item.student_suggestion_id,
-                                "archive",
-                              )
-                            }
-                            className="gap-1 border-black px-2 py-1 font-bold shadow-none"
-                          >
-                            <Archive size={12} />
-                            Archive
-                          </Button>
-                        )}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                updateSuggestion(
+                                  item.student_suggestion_id,
+                                  "archive",
+                                )
+                              }
+                              className="gap-1 border-black px-2 py-1 font-bold shadow-none"
+                            >
+                              <Archive size={12} />
+                              Archive
+                            </Button>
+                          )}
                         {item.status === "COMPLETED" && (
                           <span className="inline-flex items-center gap-1 font-bold text-green-700">
                             <CheckCircle2 size={12} />

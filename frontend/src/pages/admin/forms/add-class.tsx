@@ -159,7 +159,7 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
         <div className="flex items-center justify-between w-full">
           <Text as="h5" className="font-sans text-xl font-bold">{dialogTitle}</Text>
           {!saveSuccess && (
-            <Text as="h5" className="font-sans text-md font-bold">(Step {stepIndex} of 3)</Text>
+            <Text as="h5" className="font-sans text-md font-bold">Step {stepIndex} of 3</Text>
           )}
         </div>
       </Dialog.Header>
