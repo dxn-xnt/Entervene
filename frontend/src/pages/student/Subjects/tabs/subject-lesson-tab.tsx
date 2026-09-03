@@ -1316,7 +1316,7 @@ export default function SubjectLessonTab({
     return (
       <div key={lesson.lesson_id} id={`student-lesson-${lesson.lesson_id}`}>
         {/* ── Lesson card ── */}
-        <Card className="w-full bg-[#F6E9B2] flex items-center justify-between shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-black">
+        <Card className="flex w-full items-center justify-between border-black bg-white shadow-md hover:shadow-none">
           <button
             type="button"
             onClick={() => openLessonDetail(lesson)}
@@ -1327,10 +1327,10 @@ export default function SubjectLessonTab({
                 {lesson.title}
               </Card.Title>
               {lesson.attachments.length > 0 && (
-                <span className="rounded-full border border-black bg-[#7ABA78] px-2 py-0.5 text-[10px] font-bold">
+                <Badge variant="secondary" size="sm" className="rounded-none border border-black bg-success px-2 py-0.5 text-[10px] font-bold text-black">
                   {lesson.attachments.length} material
                   {lesson.attachments.length === 1 ? "" : "s"}
-                </span>
+                </Badge>
               )}
             </div>
             <p className="text-xs text-gray-700 mt-0.5">
@@ -1369,9 +1369,9 @@ export default function SubjectLessonTab({
                 Loading classworks...
               </div>
             ) : classworks.length === 0 ? (
-              <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-400">
+              <Card className="block w-full border-gray-200 bg-white px-4 py-3 text-sm text-gray-400 shadow-md hover:shadow-none">
                 No classworks linked to this lesson.
-              </div>
+              </Card>
             ) : (
               classworks.map((cw) => {
                 const badge = getStatusBadge(cw.submission_status, cw.due_date);
@@ -1380,9 +1380,9 @@ export default function SubjectLessonTab({
                   <Card
                     key={cw.classwork_assignment_id}
                     onClick={() => !isLoading && openClassworkDetail(cw)}
-                    className="block w-full cursor-pointer border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    className="block w-full cursor-pointer"
                   >
-                    <Card.Content className="flex items-center justify-between gap-4 py-2.5 px-3">
+                    <Card.Content className="flex items-center justify-between gap-4">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <ClassworkIcon type={cw.classwork_type} size={18} />
@@ -1570,16 +1570,16 @@ export default function SubjectLessonTab({
         />
       ) : (
         <>
-          <Card className="flex justify-between bg-[#F6E9B2]">
+          <Card className="flex justify-between border-black bg-primary shadow-md hover:shadow-none">
             <div>
               <Card.Title className="text-2xl font-bold">
                 {displaySubjectName}
               </Card.Title>
               <p className="text-sm">{displayTeacherName}</p>
             </div>
-            <button className="hover:text-gray-800 transition-colors">
+            <Button type="button" variant="ghost" size="icon" className="rounded-none shadow-none hover:bg-transparent hover:shadow-none" aria-label="Subject information">
               <Info size={18} />
-            </button>
+            </Button>
           </Card>
 
           {/* ── Activity overdue banner ── */}
@@ -1699,34 +1699,35 @@ export default function SubjectLessonTab({
                       collapsedCompetencies[group.key] ?? false;
 
                     return (
-                      <div
+                      <Card
                         key={group.key}
-                        className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
+                        className="flex w-full flex-col overflow-hidden border-black bg-white p-0 shadow-md hover:shadow-none"
                       >
                         {/* ── Competency Header Accordion Bar ── */}
-                        <button
-                          type="button"
+                        <Card.Header
+                          role="button"
+                          tabIndex={0}
+                          aria-expanded={!isCollapsed}
                           onClick={() => toggleStudentCompCollapse(group.key)}
-                          className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 text-left cursor-pointer hover:bg-[#fae498] transition-colors group"
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              toggleStudentCompCollapse(group.key);
+                            }
+                          }}
+                          className="mb-0 flex-row items-center justify-between border-b-2 border-black bg-primary px-4 py-3.5 text-left cursor-pointer"
                         >
                           <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                            <div className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors">
-                              {isCollapsed ? (
-                                <ChevronRight size={16} className="text-black" />
-                              ) : (
-                                <ChevronDown size={16} className="text-black" />
-                              )}
-                            </div>
                             <div className="min-w-0 flex-1">
                               <div className="mb-0.5 flex flex-wrap items-center gap-2">
                                 <Award size={18} className="text-black shrink-0" />
-                                <h4 className="truncate text-base md:text-lg font-bold text-gray-950">
+                                <Card.Title className="truncate text-base font-bold text-gray-950 md:text-lg">
                                   {group.competency_code || group.competency_statement}
-                                </h4>
+                                </Card.Title>
                                 <Badge
                                   variant="secondary"
                                   size="sm"
-                                  className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                                  className="rounded-none border border-black bg-white text-xs font-bold text-black"
                                 >
                                   {group.lessons.length} lesson
                                   {group.lessons.length === 1 ? "" : "s"}
@@ -1739,64 +1740,65 @@ export default function SubjectLessonTab({
                               )}
                             </div>
                           </div>
-                        </button>
+                        </Card.Header>
 
                         {/* ── Competency Lessons Body ── */}
                         {!isCollapsed && (
-                          <div className="flex flex-col gap-2 p-3 bg-white">
+                          <Card.Content className="flex flex-col gap-2 bg-white p-3">
                             {group.lessons.map(renderStudentLessonItem)}
-                          </div>
+                          </Card.Content>
                         )}
-                      </div>
+                      </Card>
                     );
                   })}
 
                   {/* ── Standalone / Unassigned Lessons Section ── */}
                   {unassignedLessons.length > 0 && (
-                    <div className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
+                    <Card className="flex w-full flex-col overflow-hidden border-black bg-white p-0 shadow-md hover:shadow-none">
                       {competencyGroups.length > 0 ? (
                         <>
-                          <button
-                            type="button"
+                          <Card.Header
+                            role="button"
+                            tabIndex={0}
+                            aria-expanded={isUnassignedExpanded}
                             onClick={() =>
                               setIsUnassignedExpanded((prev) => !prev)
                             }
-                            className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 text-left cursor-pointer hover:bg-[#fae498] transition-colors group"
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                setIsUnassignedExpanded((prev) => !prev);
+                              }
+                            }}
+                            className="mb-0 flex-row items-center justify-between border-b-2 border-black bg-primary px-4 py-3.5 text-left cursor-pointer"
                           >
                             <div className="flex items-center gap-2">
-                              <div className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-50 transition-colors">
-                                {isUnassignedExpanded ? (
-                                  <ChevronDown size={16} className="text-black" />
-                                ) : (
-                                  <ChevronRight size={16} className="text-black" />
-                                )}
-                              </div>
                               <BookOpen size={16} className="text-black shrink-0" />
-                              <h4 className="text-sm font-bold text-black">
+                              <Card.Title className="text-sm font-bold text-black">
                                 Unassigned Lessons
-                              </h4>
+                              </Card.Title>
                               <Badge
                                 variant="secondary"
                                 size="sm"
-                                className="border-2 border-black bg-white text-black text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                                className="rounded-none border border-black bg-white text-xs font-bold text-black"
                               >
                                 {unassignedLessons.length}
                               </Badge>
                             </div>
-                          </button>
+                          </Card.Header>
 
                           {isUnassignedExpanded && (
-                            <div className="flex flex-col gap-2 p-3 bg-white">
+                            <Card.Content className="flex flex-col gap-2 bg-white p-3">
                               {unassignedLessons.map(renderStudentLessonItem)}
-                            </div>
+                            </Card.Content>
                           )}
                         </>
                       ) : (
-                        <div className="flex flex-col gap-2 p-3 bg-white/70">
+                        <Card.Content className="flex flex-col gap-2 bg-white p-3">
                           {unassignedLessons.map(renderStudentLessonItem)}
-                        </div>
+                        </Card.Content>
                       )}
-                    </div>
+                    </Card>
                   )}
                 </div>
               </div>
