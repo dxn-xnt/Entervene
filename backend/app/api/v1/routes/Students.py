@@ -102,6 +102,37 @@ def _classmate_count(db: Session, student: Student, class_: Class, assignment: S
     )
 
 
+@router.get("/me/profile")
+def get_my_profile(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_student(current_user)
+    student = _resolve_student(db, current_user["sub"])
+
+    grade_level = None
+    section_name = None
+    try:
+        assignment, class_, level, year, adviser = _current_class_row(db, student)
+        grade_level = level.level_name or (f"Grade {level.grade_level}" if level.grade_level else None)
+        section_name = class_.section_name
+    except HTTPException:
+        grade_level = None
+        section_name = None
+
+    return {
+        "student_id": str(student.student_id),
+        "user_id": str(student.user_id),
+        "student_name": _student_full_name(student),
+        "first_name": student.first_name,
+        "last_name": student.last_name,
+        "student_lrn": student.student_lrn,
+        "gender": student.gender,
+        "grade_level": grade_level,
+        "section_name": section_name,
+    }
+
+
 @router.get("/me/class")
 def get_my_class(
     current_user: dict = Depends(get_current_user),
@@ -460,3 +491,4 @@ def get_my_todos(
         "completed": completed_items,
         "all": all_items,
     }
+

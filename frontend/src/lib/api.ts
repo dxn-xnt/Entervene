@@ -30,6 +30,7 @@ export type User = {
   role: UserRole;
   created_at: string;
   account_status: string;
+  lrn?: string | null;
   subjects?: string[];
   class_count?: number;
   section?: string | null;
@@ -45,6 +46,7 @@ export type User = {
 export type UserDetail = User & {
   staff_id?: string;
   student_id?: string;
+  lrn?: string | null;
   first_name?: string;
   middle_name?: string;
   last_name?: string;
@@ -1779,6 +1781,26 @@ export async function getMySchedule(
     throw new ApiRequestError("Failed to fetch schedule", response.status, null);
   }
   return (await response.json()) as DynamicScheduleResponse;
+}
+
+export interface MyStudentProfileResponse {
+  student_id: string;
+  user_id: string;
+  student_name: string;
+  first_name: string;
+  last_name: string;
+  student_lrn: string;
+  gender?: string | null;
+  grade_level?: string | null;
+  section_name?: string | null;
+}
+
+export async function getMyStudentProfile(): Promise<MyStudentProfileResponse> {
+  const response = await apiFetch("/api/v1/students/me/profile");
+  if (!response.ok) {
+    throw new ApiRequestError("Failed to fetch student profile", response.status, null);
+  }
+  return (await response.json()) as MyStudentProfileResponse;
 }
 
 export interface DepedClusterRead {

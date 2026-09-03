@@ -14,7 +14,7 @@ from app.db.Base import Base
 class AttendanceRecord(Base):
     __tablename__ = "attendance_record"
     __table_args__ = (
-        UniqueConstraint("student_id", "class_id", "date", name="uq_attendance_student_class_date"),
+        UniqueConstraint("student_id", "class_id", "subject_id", "date", name="uq_attendance_student_class_subject_date"),
     )
 
     attendance_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

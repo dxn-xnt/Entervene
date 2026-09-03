@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
+from app.models.academic.StudentCLass import StudentClass
 from app.models.attendance.Attendance import AttendanceRecord, LeaveRequest
 from app.models.people.Student import Student
 from app.models.people.AcademicStaff import AcademicStaff
@@ -16,6 +17,8 @@ from app.schemas.Attendance import (
     LeaveRequestCreate,
     LeaveRequestResponse,
     LeaveRequestUpdate,
+    QRScanAttendanceRequest,
+    QRScanAttendanceResponse,
 )
 
 
@@ -135,6 +138,126 @@ def batch_mark_attendance(
 
     db.commit()
     return results
+
+
+def record_qr_scan_attendance(
+    db: Session,
+    payload: QRScanAttendanceRequest,
+    recorded_by_staff_id: str | None = None,
+) -> QRScanAttendanceResponse:
+    """Record student attendance via QR code scan.
+    
+    Validates that:
+    1. Student exists.
+    2. Student is actively enrolled in the selected class (section).
+    3. Teacher has authorization (including substitution permissions if subject_id specified).
+    4. Handles duplicates:
+       - If already marked 'present': returns is_duplicate=True without changes.
+       - If already marked 'excused': does NOT overwrite approved excuse, returns is_duplicate=True.
+       - If marked 'absent' or 'late': updates to 'present'.
+       - If not marked: creates new record with 'present'.
+    5. Server strictly computes date.today() (never trusts client date).
+    """
+    today = date.today()
+
+    # 1. Fetch student
+    student = db.query(Student).filter(Student.student_id == payload.student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found.")
+
+    student_name = f"{student.first_name} {student.last_name}"
+
+    # 2. Check enrollment in class
+    enrollment = (
+        db.query(StudentClass)
+        .filter(
+            StudentClass.student_id == payload.student_id,
+            StudentClass.class_id == payload.class_id,
+            StudentClass.enrollment_status == "enrolled",
+        )
+        .first()
+    )
+    if not enrollment:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{student_name} is not actively enrolled in this class section.",
+        )
+
+    # 3. Check substitution / teacher write permissions
+    if recorded_by_staff_id and payload.subject_id:
+        from app.models.academic.SubjectLoad import SubjectLoad
+        from app.services.academic.SubstitutionService import SubstitutionService
+        loads = db.query(SubjectLoad).filter(
+            SubjectLoad.class_id == payload.class_id,
+            SubjectLoad.subject_id == payload.subject_id,
+            SubjectLoad.status.in_(["active", "published"]),
+        ).all()
+        for sl in loads:
+            if sl.staff_id == recorded_by_staff_id:
+                SubstitutionService.assert_can_write(db, recorded_by_staff_id, sl.subject_load_id, today)
+
+    # 4. Check existing attendance record for (student_id, class_id, subject_id, today)
+    existing_q = db.query(AttendanceRecord).filter(
+        AttendanceRecord.student_id == payload.student_id,
+        AttendanceRecord.class_id == payload.class_id,
+        AttendanceRecord.date == today,
+    )
+    if payload.subject_id is not None:
+        existing_q = existing_q.filter(AttendanceRecord.subject_id == payload.subject_id)
+    else:
+        existing_q = existing_q.filter(AttendanceRecord.subject_id.is_(None))
+
+    existing = existing_q.first()
+
+    is_duplicate = False
+    if existing:
+        if existing.status == "present":
+            is_duplicate = True
+            message = f"{student_name} is already marked present for today's session."
+            record = existing
+        elif existing.status == "excused":
+            is_duplicate = True
+            message = f"{student_name} has an approved excused absence. Record not overwritten."
+            record = existing
+        else:
+            old_status = existing.status
+            existing.status = "present"
+            existing.recorded_by_staff_id = recorded_by_staff_id
+            db.commit()
+            db.refresh(existing)
+            record = existing
+            message = f"{student_name} marked present (updated from {old_status})."
+    else:
+        record = AttendanceRecord(
+            student_id=payload.student_id,
+            class_id=payload.class_id,
+            subject_id=payload.subject_id,
+            date=today,
+            status="present",
+            recorded_by_staff_id=recorded_by_staff_id,
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        message = f"{student_name} marked present successfully."
+
+    resolved_subject_name = None
+    if getattr(record, "subject", None):
+        resolved_subject_name = record.subject.subject_name
+
+    return QRScanAttendanceResponse(
+        attendance_id=record.attendance_id,
+        student_id=record.student_id,
+        student_name=student_name,
+        student_lrn=student.student_lrn,
+        class_id=record.class_id,
+        subject_id=record.subject_id,
+        subject_name=resolved_subject_name,
+        date=record.date,
+        status=record.status,
+        is_duplicate=is_duplicate,
+        message=message,
+    )
 
 
 def get_class_attendance_logs(

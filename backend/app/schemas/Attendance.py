@@ -40,6 +40,30 @@ class AttendanceRecordUpdate(BaseModel):
     remarks: str | None = None
 
 
+# ---------------------------------------------------------------------------
+# QR Scan Attendance Schemas
+# ---------------------------------------------------------------------------
+
+class QRScanAttendanceRequest(BaseModel):
+    student_id: UUID
+    class_id: int
+    subject_id: int | None = None
+
+
+class QRScanAttendanceResponse(BaseModel):
+    attendance_id: int
+    student_id: UUID
+    student_name: str | None = None
+    student_lrn: str | None = None
+    class_id: int
+    subject_id: int | None = None
+    subject_name: str | None = None
+    date: date
+    status: str
+    is_duplicate: bool = False
+    message: str
+
+
 class AttendanceRecordResponse(BaseModel):
     attendance_id: int
     student_id: UUID
