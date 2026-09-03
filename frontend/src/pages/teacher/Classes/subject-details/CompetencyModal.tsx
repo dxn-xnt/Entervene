@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Award } from "lucide-react";
+import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
@@ -134,121 +134,97 @@ export default function CompetencyModal({
 
   return (
     <Dialog open={isModalOpen} disablePointerDismissal={true} onOpenChange={(val) => !val && handleClose()}>
-      <Dialog.Content
-        size="md"
-        className="w-[95vw] max-w-xl border-2 border-black bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-0 overflow-hidden"
-      >
-        <Dialog.Header className="bg-[#F6E9B2] border-black">
-          <div className="flex items-center gap-2.5">
-            <Award className="size-6 text-black" />
-            <h2 className="text-xl font-black text-black">
+      <Dialog.Content size="md">
+        <Dialog.Header position="static">
+          <div>
+            <h2 className="font-sans text-xl font-bold">
               {targetCompetency ? "Edit Learning Competency" : "Add Learning Competency"}
             </h2>
+            <p className="text-sm font-normal">
+              Define the learning standard used to group lessons and build the Table of Specifications.
+            </p>
           </div>
         </Dialog.Header>
 
-        <div className="bg-yellow-50/70 border-b border-black/10 px-6 py-2.5">
-          <p className="text-xs text-black/70 font-medium">
-            Define the DepEd learning standard that will group lessons and power the Table of Specifications (TOS).
-          </p>
-        </div>
+        <form onSubmit={handleSubmit}>
+          <section className="flex max-h-[72vh] flex-col gap-4 overflow-y-auto p-4">
+            {error && (
+              <Alert status="error">
+                <Alert.Description>{error}</Alert.Description>
+              </Alert>
+            )}
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-6">
-          {error && (
-            <div className="rounded border-2 border-red-500 bg-red-50 p-3 text-xs font-bold text-red-700">
-              {error}
-            </div>
-          )}
-
-          {/* Row 1: MELC Code & Target Hours */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-2 flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-gray-900">
-                Competency Code <span className="text-gray-500 font-normal">(e.g. M7AL-IIa-1)</span>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+                <span>Competency Code <span className="text-muted-foreground">(e.g. M7AL-IIa-1)</span></span>
+                <Input
+                  value={competencyCode}
+                  onChange={(e) => setCompetencyCode(e.target.value)}
+                  placeholder="Optional MELC Code"
+                  className="w-full font-mono"
+                />
               </label>
-              <Input
-                value={competencyCode}
-                onChange={(e) => setCompetencyCode(e.target.value)}
-                placeholder="Optional MELC Code"
-                className="h-10 text-xs border-2 border-black shadow-none font-mono bg-white"
-              />
-            </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-gray-900">
-                Target Hours
+              <label className="flex flex-col gap-1 text-sm">
+                <span>Target Hours</span>
+                <Input
+                  type="number"
+                  min="0"
+                  value={targetHours}
+                  onChange={(e) => setTargetHours(e.target.value)}
+                  className="w-full"
+                />
               </label>
-              <Input
-                type="number"
-                min="0"
-                value={targetHours}
-                onChange={(e) => setTargetHours(e.target.value)}
-                className="h-10 text-xs border-2 border-black shadow-none bg-white font-semibold"
-              />
             </div>
-          </div>
 
-          {/* Row 2: Competency Statement */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-gray-900">
-              Competency Statement <span className="text-red-500">*</span>
+            <label className="flex flex-col gap-1 text-sm">
+              <span>Competency Statement <span className="text-destructive">*</span></span>
+              <textarea
+                required
+                rows={3}
+                value={statement}
+                onChange={(e) => setStatement(e.target.value)}
+                placeholder="e.g. Translates verbal phrases to mathematical expressions and vice versa."
+                className="w-full resize-none rounded border-2 border-border bg-background px-4 py-2 text-sm shadow-md transition focus:outline-hidden focus:shadow-xs"
+              />
             </label>
-            <textarea
-              required
-              rows={3}
-              value={statement}
-              onChange={(e) => setStatement(e.target.value)}
-              placeholder="e.g. Translates verbal phrases to mathematical expressions and vice versa."
-              className="w-full rounded-md border-2 border-black p-3 text-xs font-medium shadow-none focus:outline-none focus:ring-2 focus:ring-primary bg-white resize-none"
-            />
-          </div>
 
-          {/* Row 3: Description / Notes & Order Index */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-2 flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-gray-900">
-                Description / Notes <span className="text-gray-500 font-normal">(Optional)</span>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+                <span>Description / Notes <span className="text-muted-foreground">(Optional)</span></span>
+                <Input
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Brief quarter or unit note"
+                  className="w-full"
+                />
               </label>
-              <Input
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Brief quarter or unit note"
-                className="h-10 text-xs border-2 border-black shadow-none bg-white"
-              />
-            </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-gray-900">
-                Order Index
+              <label className="flex flex-col gap-1 text-sm">
+                <span>Order Index</span>
+                <Input
+                  type="number"
+                  min="1"
+                  value={orderIndex}
+                  onChange={(e) => setOrderIndex(e.target.value)}
+                  className="w-full"
+                />
               </label>
-              <Input
-                type="number"
-                min="1"
-                value={orderIndex}
-                onChange={(e) => setOrderIndex(e.target.value)}
-                className="h-10 text-xs border-2 border-black shadow-none bg-white font-semibold"
-              />
             </div>
-          </div>
+          </section>
 
-          {/* Dialog Action Buttons */}
-          <div className="mt-4 pt-4 border-t-2 border-black/10 flex items-center justify-end gap-3">
+          <Dialog.Footer position="static">
             <Button
               type="button"
               variant="outline"
-              size="sm"
               onClick={handleClose}
               disabled={isSubmitting}
-          className="border-2 border-black bg-white hover:bg-gray-100 font-bold px-4 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              variant="default"
-              size="sm"
               disabled={isSubmitting}
-          className="border-2 border-black bg-primary hover:opacity-90 text-black font-bold px-5 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
             >
               {isSubmitting
                 ? "Saving..."
@@ -256,7 +232,7 @@ export default function CompetencyModal({
                 ? "Save Changes"
                 : "Create Competency"}
             </Button>
-          </div>
+          </Dialog.Footer>
         </form>
       </Dialog.Content>
     </Dialog>
