@@ -148,11 +148,11 @@ export function LessonGoalProgress({
   sortedGoalLessons = [],
   classworksByLesson = {},
   className = "flex-1 min-w-0",
-  title = "Weekly Goals",
+  title = "Lesson Goals",
 }: LessonGoalProgressProps) {
   return (
     <div className={className}>
-      <h3 className="text-xl font-bold mb-3">{title}</h3>
+      <h3 className="text-xl font-bold mb-1">{title}</h3>
       <Card className="w-full">
         {!sortedGoalLessons || sortedGoalLessons.length === 0 ? (
           <Card.Content className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-black/60">
@@ -160,92 +160,86 @@ export function LessonGoalProgress({
           </Card.Content>
         ) : (
           sortedGoalLessons.map((lesson) => {
-          const cws = classworksByLesson[lesson.lesson_id];
-          const orderedClassworks = cws
-            ? [...cws].sort(
-              (a, b) => classworkGoalScore(a) - classworkGoalScore(b),
-            )
-            : [];
-          const isLoadingCws = cws === undefined;
+            const cws = classworksByLesson[lesson.lesson_id];
+            const orderedClassworks = cws
+              ? [...cws].sort(
+                (a, b) => classworkGoalScore(a) - classworkGoalScore(b),
+              )
+              : [];
+            const isLoadingCws = cws === undefined;
 
-          return (
-            <div key={lesson.lesson_id} className="flex flex-col gap-2 mb-3">
-              {/* Lesson header - plain text, no box */}
-              <Card.Description>{lesson.title}</Card.Description>
+            return (
+              <div key={lesson.lesson_id} className="flex flex-col gap-2 mb-3">
+                {/* Lesson header - plain text, no box */}
+                <Card.Description>{lesson.title}</Card.Description>
 
-              {/* Timeline */}
-              {isLoadingCws ? (
-                <div className="flex items-center gap-2 pl-4 py-1">
-                  <div className="w-3 h-3 rounded-full border-2 border-gray-300 bg-gray-200 animate-pulse shrink-0" />
-                  <p className="text-xs text-gray-400">Loading...</p>
-                </div>
-              ) : (
-                <div className="relative">
-                  {/* Lesson Completion */}
-                  <TimelineItem
-                    isFirst={true}
-                    isLast={orderedClassworks.length === 0}
-                    status="upcoming"
-                  >
-                    <div className="text-center border-2 px-3 py-1 bg-muted text-muted-foreground border-muted-foreground">
-                      <p className="text-md">Lesson Completion</p>
-                    </div>
-                  </TimelineItem>
+                {/* Timeline */}
+                {isLoadingCws ? (
+                  <div className="flex items-center gap-2 pl-4 py-1">
+                    <div className="w-3 h-3 rounded-full border-2 border-gray-300 bg-gray-200 animate-pulse shrink-0" />
+                    <p className="text-xs text-gray-400">Loading...</p>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    {/* Lesson Completion */}
+                    <TimelineItem
+                      isFirst={true}
+                      isLast={orderedClassworks.length === 0}
+                      status="upcoming"
+                    >
+                      <div className="text-center border-2 px-3 py-1 bg-muted text-muted-foreground border-muted-foreground">
+                        <p className="text-xs">Lesson Completion</p>
+                      </div>
+                    </TimelineItem>
 
-                  {/* Classwork items */}
-                  {orderedClassworks.length === 0 ? (
-                    <p className="text-[11px] text-gray-400 pl-6 mt-1">
-                      No classworks linked
-                    </p>
-                  ) : (
-                    orderedClassworks.map((cw, idx) => {
-                      const badge = getStatusBadge(
-                        cw.submission_status,
-                        cw.due_date,
-                      );
-                      const itemStatus: "done" | "ongoing" | "upcoming" =
-                        isCompletedClasswork(cw.submission_status)
-                          ? "done"
-                          : cw.submission_status === "in_progress" ||
-                            cw.submission_status === "late"
-                            ? "ongoing"
-                            : "upcoming";
+                    {/* Classwork items */}
+                    {orderedClassworks.length === 0 ? (
+                      <p className="text-[11px] text-gray-400 pl-6 mt-1">
+                        No classworks linked
+                      </p>
+                    ) : (
+                      orderedClassworks.map((cw, idx) => {
+                        const badge = getStatusBadge(
+                          cw.submission_status,
+                          cw.due_date,
+                        );
+                        const itemStatus: "done" | "ongoing" | "upcoming" =
+                          isCompletedClasswork(cw.submission_status)
+                            ? "done"
+                            : cw.submission_status === "in_progress" ||
+                              cw.submission_status === "late"
+                              ? "ongoing"
+                              : "upcoming";
 
-                      return (
-                        <TimelineItem
-                          key={cw.classwork_assignment_id}
-                          isFirst={false}
-                          isLast={idx === orderedClassworks.length - 1}
-                          status={itemStatus}
-                        >
-                          <div className="flex items-center justify-between gap-2 w-full border-2 px-3 py-2">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="shrink-0">
-                                <ClassworkIcon
-                                  type={cw.classwork_type}
-                                  size={13}
-                                />
-                              </span>
-                              <p className="text-md truncate">{cw.title}</p>
+                        return (
+                          <TimelineItem
+                            key={cw.classwork_assignment_id}
+                            isFirst={false}
+                            isLast={idx === orderedClassworks.length - 1}
+                            status={itemStatus}
+                          >
+                            <div className="flex items-center justify-between gap-2 w-full border-2 px-3 py-2 hover:bg-accent">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <p className="text-xs font-semibold truncate">{cw.title}</p>
+                              </div>
+                              {badge && (
+                                <Badge
+                                  variant="secondary"
+                                  className={`text-[10px] font-bold px-1.5 py-0.5 shrink-0 whitespace-nowrap ${badge.cls}`}
+                                >
+                                  {badge.label}
+                                </Badge>
+                              )}
                             </div>
-                            {badge && (
-                              <Badge
-                                variant="secondary"
-                                className={`text-[10px] font-bold px-1.5 py-0.5 shrink-0 whitespace-nowrap ${badge.cls}`}
-                              >
-                                {badge.label}
-                              </Badge>
-                            )}
-                          </div>
-                        </TimelineItem>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        }))}
+                          </TimelineItem>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          }))}
       </Card>
     </div>
   );

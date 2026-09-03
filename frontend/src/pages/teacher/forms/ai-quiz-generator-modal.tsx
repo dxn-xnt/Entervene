@@ -522,7 +522,7 @@ export default function AIQuizGeneratorModal({
         <Dialog.Header
           position="fixed"
           asChild
-          className="border-black bg-[#F6E9B2]"
+          className="border-black bg-primary"
         >
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">

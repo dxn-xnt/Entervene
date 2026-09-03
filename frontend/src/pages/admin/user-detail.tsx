@@ -146,6 +146,7 @@ export default function AdminUserDetail() {
   const data = useMemo(() => mergeAnalytics(effectiveRole, analytics), [effectiveRole, analytics]);
   const isPending = (user?.account_status || "").toLowerCase() === "pending";
   const isArchived = (user?.account_status || "").toLowerCase() === "archived";
+  const statusStyle = getStatusStyle(user?.account_status);
   const actionDisabledReason = isPending
     ? "Pending accounts cannot be edited or archived until the invitation is accepted."
     : undefined;
@@ -191,12 +192,11 @@ export default function AdminUserDetail() {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
 
-            {/* Breadcrumb Header with Context Actions */}
             <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-background py-4 px-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="md:hidden" />
                 <Breadcrumb>
-                  <Breadcrumb.List className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black flex items-center gap-2">
+                  <Breadcrumb.List>
                     <Breadcrumb.Item>
                       <Breadcrumb.Link
                         href="/admin/users"
@@ -204,9 +204,8 @@ export default function AdminUserDetail() {
                           e.preventDefault();
                           navigate("/admin/users");
                         }}
-                        className="text-muted-foreground"
                       >
-                        User Management
+                        Users
                       </Breadcrumb.Link>
                     </Breadcrumb.Item>
                     <Breadcrumb.Separator />
@@ -217,7 +216,7 @@ export default function AdminUserDetail() {
                           e.preventDefault();
                           navigate(`/admin/users?tab=${effectiveRole}`);
                         }}
-                        className="text-xl text-muted-foreground font-semibold capitalize"
+                        className="capitalize"
                       >
                         {effectiveRole}
                       </Breadcrumb.Link>
@@ -226,7 +225,7 @@ export default function AdminUserDetail() {
                       <>
                         <Breadcrumb.Separator />
                         <Breadcrumb.Item>
-                          <Breadcrumb.Page className="text-black font-extrabold">
+                          <Breadcrumb.Page>
                             {user.name}
                           </Breadcrumb.Page>
                         </Breadcrumb.Item>
@@ -237,7 +236,7 @@ export default function AdminUserDetail() {
               </div>
 
               {user && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
                     variant="default"
@@ -264,23 +263,16 @@ export default function AdminUserDetail() {
               )}
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
-
-            {/* {loading && (
-              <Card className="flex items-center justify-center gap-3 py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
-                <Loader size="sm" />
-                Loading user details
-              </Card>
-            )} */}
+            <div className="border-t border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
 
             {!loading && error && (
-              <Alert status="error" className="mb-4">
+              <Alert status="error">
                 <Alert.Description>{error}</Alert.Description>
               </Alert>
             )}
 
             {!loading && notice && (
-              <Alert status="success" className="mb-4">
+              <Alert status="success">
                 <Alert.Description>{notice}</Alert.Description>
               </Alert>
             )}
@@ -296,12 +288,12 @@ export default function AdminUserDetail() {
                   }
                   extra={user.role === "student" ? user.email : undefined}
                   avatarVariant={user.role === "student" ? "student" : user.role === "teacher" ? "teacher" : "default"}
-                  statusLabel={getStatusStyle(user.account_status).label}
-                  statusVariant={getStatusStyle(user.account_status).variant}
-                  isPending={(user.account_status || "").toLowerCase() === "pending"}
+                  statusLabel={statusStyle.label}
+                  statusVariant={statusStyle.variant}
+                  isPending={isPending}
                 />
 
-                {effectiveRole === "student" && <StudentAnalytics user={user} data={data} />}
+                {effectiveRole === "student" && <StudentAnalytics data={data} />}
                 {effectiveRole === "teacher" && <TeacherAnalytics user={user} data={data} />}
                 {effectiveRole === "admin" && <AdminAnalytics data={data} />}
               </div>
@@ -397,16 +389,16 @@ function EditUserModal({
 
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <Dialog.Content size="xl" className="border-2 border-black shadow-[6px_7px_0_#000] p-0 overflow-hidden">
-        <Dialog.Header className="border-b border-black/30 bg-background text-foreground">
+      <Dialog.Content size="2xl">
+        <Dialog.Header position="static">
           <div>
-            <h2 className="text-lg font-bold">Edit User</h2>
-            <p className="text-xs text-muted-foreground">Update profile information only. Role changes are handled separately.</p>
+            <h2 className="font-sans text-xl font-bold">Edit User</h2>
+            <p className="text-sm font-normal">Update profile information only. Role changes are handled separately.</p>
           </div>
         </Dialog.Header>
 
         <form onSubmit={submit}>
-          <div className="grid max-h-[70vh] gap-3 overflow-y-auto px-5 py-4">
+          <section className="grid max-h-[72vh] gap-4 overflow-y-auto p-4">
             <div className="grid gap-3 md:grid-cols-3">
               <EditField label="First Name">
                 <Input
@@ -448,7 +440,7 @@ function EditUserModal({
                 value={form.account_status}
                 onValueChange={(val) => setField("account_status", val)}
               >
-                <Select.Trigger className="w-full bg-background border-2 border-black">
+                <Select.Trigger className="w-full min-w-0">
                   <Select.Value placeholder="Select status" />
                 </Select.Trigger>
                 <Select.Content>
@@ -469,7 +461,7 @@ function EditUserModal({
                       value={form.grade_level !== null && form.grade_level !== undefined ? String(form.grade_level) : ""}
                       onValueChange={(val) => setField("grade_level", val ? Number(val) : null)}
                     >
-                      <Select.Trigger className="w-full bg-background border-2 border-black">
+                      <Select.Trigger className="w-full min-w-0">
                         <Select.Value placeholder="Select..." />
                       </Select.Trigger>
                       <Select.Content>
@@ -527,7 +519,7 @@ function EditUserModal({
                     value={form.employment_status || ""}
                     onValueChange={(val) => setField("employment_status", val)}
                   >
-                    <Select.Trigger className="w-full bg-background border-2 border-black">
+                    <Select.Trigger className="w-full min-w-0">
                       <Select.Value placeholder="Select status" />
                     </Select.Trigger>
                     <Select.Content>
@@ -544,15 +536,15 @@ function EditUserModal({
               <EditField label="Address">
                 <textarea
                   rows={3}
-                  className="w-full rounded border-2 border-black bg-background px-4 py-2 text-sm text-foreground shadow-md transition focus:outline-hidden focus:shadow-xs resize-none"
+                  className="w-full resize-none rounded border-2 border-border bg-background px-4 py-2 text-sm text-foreground shadow-md transition focus:outline-hidden focus:shadow-xs"
                   value={form.address || ""}
                   onChange={(event) => setField("address", event.target.value)}
                 />
               </EditField>
             )}
-          </div>
+          </section>
 
-          <Dialog.Footer className="flex justify-end gap-2 border-t border-black/30 px-5 py-4">
+          <Dialog.Footer position="static">
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
@@ -568,7 +560,7 @@ function EditUserModal({
 
 function EditField({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
+    <label className="flex flex-col gap-1 text-sm">
       {label}
       {children}
     </label>
@@ -597,7 +589,7 @@ function ArchiveUserDialog({
 
 function Panel({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
-    <Card className="p-4 shadow-[4px_5px_0_#000] w-full">
+    <Card className="w-full p-4">
       <Card.Header className="p-0 mb-3">
         <Card.Title className="text-lg font-bold leading-tight mb-0">{title}</Card.Title>
         {subtitle && <p className="text-[10px] text-muted-foreground">{subtitle}</p>}
@@ -640,30 +632,32 @@ function SmallLineChart({ data, xKey }: { data: Array<Record<string, number | st
   );
 }
 
+type OverviewMetric = {
+  title: string;
+  count: string;
+  stat?: string;
+  statDescription?: string;
+};
+
+function OverviewGrid({ metrics }: { metrics: OverviewMetric[] }) {
+  return (
+    <div className="grid gap-3 md:grid-cols-3">
+      {metrics.map((metric) => (
+        <OverviewCard key={metric.title} {...metric} />
+      ))}
+    </div>
+  );
+}
+
 function TeacherAnalytics({ user, data }: { user: UserDetail; data: ReturnType<typeof mergeAnalytics> }) {
   const summary = data.summary;
   return (
     <>
-      <div className="grid gap-3 md:grid-cols-3">
-        <OverviewCard
-          title="Class Handled"
-          count={String(user.class_count ?? valueNumber(summary.classesHandled))}
-          stat="2+"
-          statDescription="increased from previous academic year"
-        />
-        <OverviewCard
-          title="Subjects Handled"
-          count={String(user.subjects?.length || valueNumber(summary.subjectsHandled))}
-          stat="2+"
-          statDescription="increased from previous academic year"
-        />
-        <OverviewCard
-          title="Class Performance"
-          count={`${valueNumber(summary.classPerformance)}%`}
-          stat="8%"
-          statDescription="increased from previous academic year"
-        />
-      </div>
+      <OverviewGrid metrics={[
+        { title: "Class Handled", count: String(user.class_count ?? valueNumber(summary.classesHandled)), stat: "2+", statDescription: "increased from previous academic year" },
+        { title: "Subjects Handled", count: String(user.subjects?.length || valueNumber(summary.subjectsHandled)), stat: "2+", statDescription: "increased from previous academic year" },
+        { title: "Class Performance", count: `${valueNumber(summary.classPerformance)}%`, stat: "8%", statDescription: "increased from previous academic year" },
+      ]} />
       <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
         <Panel title="Period Class Performance" subtitle="Average student score across all handled subjects">
           <SmallLineChart data={data.period_performance} xKey="period" />
@@ -680,7 +674,7 @@ function TeacherAnalytics({ user, data }: { user: UserDetail; data: ReturnType<t
   );
 }
 
-function StudentAnalytics({ data }: { user: UserDetail; data: ReturnType<typeof mergeAnalytics> }) {
+function StudentAnalytics({ data }: { data: ReturnType<typeof mergeAnalytics> }) {
   const summary = data.summary;
   const lms = data.lms_behavior;
   const weakSubjects = data.subject_mastery
@@ -697,27 +691,15 @@ function StudentAnalytics({ data }: { user: UserDetail; data: ReturnType<typeof 
               <div className="text-[10px] font-normal text-foreground">{summary.modelConfidence} model confidence</div>
             </div>
           </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <OverviewCard
-              title="Written Works Average"
-              count={String(displayMetric(summary.writtenWorksAverage))}
-              statDescription="out of 100"
-            />
-            <OverviewCard
-              title="Performance Average"
-              count={String(displayMetric(summary.performanceAverage))}
-              statDescription="out of 100"
-            />
-            <OverviewCard
-              title="Completion Rate"
-              count={
-                typeof summary.completionRate === "number"
-                  ? `${summary.completionRate}%`
-                  : String(displayMetric(summary.completionRate))
-              }
-              statDescription="activities done"
-            />
-          </div>
+          <OverviewGrid metrics={[
+            { title: "Written Works Average", count: String(displayMetric(summary.writtenWorksAverage)), statDescription: "out of 100" },
+            { title: "Performance Average", count: String(displayMetric(summary.performanceAverage)), statDescription: "out of 100" },
+            {
+              title: "Completion Rate",
+              count: typeof summary.completionRate === "number" ? `${summary.completionRate}%` : String(displayMetric(summary.completionRate)),
+              statDescription: "activities done",
+            },
+          ]} />
         </div>
         <Panel title="LMS Behavior">
           <div className="grid gap-2">
@@ -751,26 +733,11 @@ function AdminAnalytics({ data }: { data: ReturnType<typeof mergeAnalytics> }) {
   const summary = data.summary;
   return (
     <>
-      <div className="grid gap-3 md:grid-cols-3">
-        <OverviewCard
-          title="Classes Made"
-          count={String(valueNumber(summary.classesMade))}
-          stat="2+"
-          statDescription="increased from previous academic year"
-        />
-        <OverviewCard
-          title="Subject Loads Assigned"
-          count={String(valueNumber(summary.subjectLoadsAssigned))}
-          stat="2+"
-          statDescription="increased from previous academic year"
-        />
-        <OverviewCard
-          title="Subjects Added"
-          count={String(valueNumber(summary.subjectsAdded))}
-          stat="8%"
-          statDescription="increased from previous academic year"
-        />
-      </div>
+      <OverviewGrid metrics={[
+        { title: "Classes Made", count: String(valueNumber(summary.classesMade)), stat: "2+", statDescription: "increased from previous academic year" },
+        { title: "Subject Loads Assigned", count: String(valueNumber(summary.subjectLoadsAssigned)), stat: "2+", statDescription: "increased from previous academic year" },
+        { title: "Subjects Added", count: String(valueNumber(summary.subjectsAdded)), stat: "8%", statDescription: "increased from previous academic year" },
+      ]} />
       <div className="grid gap-3 lg:grid-cols-[1.4fr_0.8fr]">
         <Panel title="Subject Breakdown" subtitle="Avg. score per subject handled">
           <SubjectBars rows={data.subject_breakdown} />
@@ -783,7 +750,7 @@ function AdminAnalytics({ data }: { data: ReturnType<typeof mergeAnalytics> }) {
 
 function MiniStat({ label, value }: { label: string; value: unknown }) {
   return (
-    <Card className="p-3 border border-black/60 shadow-none hover:shadow-none">
+    <Card className="border border-border p-3 shadow-none">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="text-2xl font-black">{String(value)}</div>
     </Card>
@@ -835,7 +802,7 @@ function ClassworkTable({ rows }: { rows: Array<Record<string, number | string |
   return (
     <section className="space-y-2">
       <h2 className="text-lg font-bold">Classwork</h2>
-      <Table wrapperClassName="shadow-[4px_5px_0_#000] rounded-lg overflow-hidden border-2 border-black">
+      <Table wrapperClassName="overflow-hidden rounded-lg border-2 border-black">
         <Table.Header>
           <Table.Row>
             <Table.Head className="text-xs font-semibold">Classwork Name</Table.Head>

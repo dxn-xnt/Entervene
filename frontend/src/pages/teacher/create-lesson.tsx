@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen } from "lucide-react";
-import { Card } from "@/components/retroui/Card";
+import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
@@ -269,34 +268,28 @@ export default function CreateLessonModal({
 
   return (
     <Dialog open disablePointerDismissal={true} onOpenChange={(open) => !open && handleClose()}>
-      <Dialog.Content
-        size="md"
-        className="w-[95vw] max-w-2xl max-h-[88vh] flex flex-col border-2 border-black bg-[#FBFBEE] p-0 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
-      >
-        <Dialog.Header className="shrink-0 bg-[#F6E9B2] border-black">
-          <div className="flex items-center gap-2.5">
-            <BookOpen className="size-6 text-black" />
-            <div>
-              <h2 className="text-xl font-black text-black leading-tight">Add Lesson</h2>
-              <p className="text-xs text-black/70 font-medium">
-                Create a draft or publish it to selected sections.
-              </p>
-            </div>
+      <Dialog.Content size="md">
+        <Dialog.Header position="static">
+          <div>
+            <h2 className="font-sans text-xl font-bold">Add Lesson</h2>
+            <p className="text-sm font-normal">
+              Create a draft or publish it to selected sections.
+            </p>
           </div>
         </Dialog.Header>
 
-        <div className="flex-1 min-h-0 overflow-y-auto space-y-4 p-6">
+        <section className="flex max-h-[72vh] flex-col gap-4 overflow-y-auto p-4">
           {error && (
-            <div className="rounded border-2 border-red-600 bg-red-50 p-3 text-xs font-bold text-red-700">
-              {error}
-            </div>
+            <Alert status="error">
+              <Alert.Description>{error}</Alert.Description>
+            </Alert>
           )}
 
           <div className="grid gap-4 sm:grid-cols-[1fr_140px]">
             <div className="flex flex-col gap-1.5">
               <label
                 htmlFor="subject"
-                className="text-xs font-bold text-gray-900"
+                className="text-sm"
               >
                 Subject
               </label>
@@ -311,11 +304,11 @@ export default function CreateLessonModal({
                 <Select.Trigger
                   id="subject"
                   disabled={isLoading || isSubmitting}
-                  className="h-10 w-full border-2 border-black bg-white text-xs font-semibold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                  className="w-full min-w-0"
                 >
                   <Select.Value placeholder="Select Subject" />
                 </Select.Trigger>
-                <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <Select.Content>
                   {subjects.map((subject) => (
                     <Select.Item
                       key={subject.subject_id}
@@ -330,7 +323,7 @@ export default function CreateLessonModal({
             <div className="flex flex-col gap-1.5">
               <label
                 htmlFor="lesson-order"
-                className="text-xs font-bold text-gray-900"
+                className="text-sm"
               >
                 Lesson order
               </label>
@@ -342,7 +335,7 @@ export default function CreateLessonModal({
                 value={orderIndex}
                 onChange={(event) => setOrderIndex(event.target.value)}
                 disabled={isSubmitting}
-                className="h-10 w-full border-2 border-black bg-white text-xs font-semibold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                className="w-full"
               />
             </div>
           </div>
@@ -351,14 +344,14 @@ export default function CreateLessonModal({
           <div className="flex flex-col gap-1.5">
             <label
               htmlFor="competency"
-              className="text-xs font-bold text-gray-900"
+              className="text-sm"
             >
-              Learning Competency <span className="text-red-500">*</span>
+              Learning Competency <span className="text-destructive">*</span>
             </label>
             {competencies.length === 0 ? (
-              <div className="rounded border-2 border-amber-400 bg-amber-50 p-3 text-xs font-semibold text-amber-900">
+              <Alert status="warning">
                 ⚠️ No learning competencies found for this subject. Please create a Learning Competency first before adding lessons.
-              </div>
+              </Alert>
             ) : (
               <Select
                 value={competencyId}
@@ -367,11 +360,11 @@ export default function CreateLessonModal({
                 <Select.Trigger
                   id="competency"
                   disabled={isSubmitting || !subjectId}
-                  className="h-10 w-full border-2 border-black bg-white text-xs font-semibold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                  className="w-full min-w-0"
                 >
                   <Select.Value placeholder="Select a learning competency..." />
                 </Select.Trigger>
-                <Select.Content className="max-h-60 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <Select.Content className="max-h-60">
                   {competencies.map((comp) => (
                     <Select.Item
                       key={comp.competency_id}
@@ -387,19 +380,19 @@ export default function CreateLessonModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <p className="text-xs font-bold text-gray-900">Class or section</p>
+            <p className="text-sm">Class or section</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {classesForSubject.map((item) => (
                 <label
                   key={item.subject_load_id}
-                  className="flex items-center gap-2 rounded border-2 border-black bg-white px-3 py-2 text-xs font-semibold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer hover:bg-yellow-50"
+                  className="flex cursor-pointer items-center gap-2 rounded border-2 border-border bg-background px-3 py-2 text-sm shadow-md transition hover:bg-accent"
                 >
                   <input
                     type="checkbox"
                     checked={classIds.includes(item.class_id)}
                     onChange={() => toggleClass(item.class_id)}
                     disabled={isSubmitting}
-                    className="accent-black size-4"
+                    className="size-4 accent-black"
                   />
                   {item.section_name}
                 </label>
@@ -410,15 +403,15 @@ export default function CreateLessonModal({
           <div className="flex flex-col gap-1.5">
             <label
               htmlFor="lesson"
-              className="text-xs font-bold text-gray-900"
+              className="text-sm"
             >
-              Lesson name <span className="text-red-500">*</span>
+              Lesson name <span className="text-destructive">*</span>
             </label>
             <Input
               id="lesson"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              className="h-10 w-full border-2 border-black bg-white text-xs font-semibold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+              className="w-full"
               placeholder="e.g. Term 1: Variables and Expressions"
               disabled={isSubmitting}
             />
@@ -427,7 +420,7 @@ export default function CreateLessonModal({
           <div className="flex flex-col gap-1.5">
             <label
               htmlFor="description"
-              className="text-xs font-bold text-gray-900"
+              className="text-sm"
             >
               Description / Topic
             </label>
@@ -436,7 +429,7 @@ export default function CreateLessonModal({
               rows={2}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              className="w-full rounded border-2 border-black bg-white p-3 text-xs font-medium outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] resize-none"
+              className="w-full resize-none rounded border-2 border-border bg-background px-4 py-2 text-sm shadow-md transition focus:outline-hidden focus:shadow-xs"
               placeholder="Short lesson summary or unit overview"
               disabled={isSubmitting}
             />
@@ -445,7 +438,7 @@ export default function CreateLessonModal({
           <div className="flex flex-col gap-1.5">
             <label
               htmlFor="lesson-content"
-              className="text-xs font-bold text-gray-900"
+              className="text-sm"
             >
               Lesson content
             </label>
@@ -454,48 +447,41 @@ export default function CreateLessonModal({
               rows={4}
               value={content}
               onChange={(event) => setContent(event.target.value)}
-              className="w-full rounded border-2 border-black bg-white p-3 text-xs font-medium outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] resize-none"
+              className="w-full resize-none rounded border-2 border-border bg-background px-4 py-2 text-sm shadow-md transition focus:outline-hidden focus:shadow-xs"
               placeholder="Write the lesson notes or learning content students will read."
               disabled={isSubmitting}
             />
           </div>
 
-          <Card className="block border-2 border-black bg-yellow-50/60 shadow-none p-3">
-            <p className="text-xs text-black/80 font-medium">
+          <Alert status="info">
+            <Alert.Description>
               💡 Tip: Upload lesson materials as Reading classworks so they can be
               scheduled, locked, and tracked alongside quizzes and activities.
-            </p>
-          </Card>
-        </div>
+            </Alert.Description>
+          </Alert>
+        </section>
 
-        <Dialog.Footer className="shrink-0 flex items-center justify-end gap-3 border-t-2 border-black bg-white px-6 py-3.5">
+        <Dialog.Footer position="static" className="flex-wrap">
           <Button
             type="button"
             variant="outline"
-            size="sm"
             onClick={handleClose}
             disabled={isSubmitting}
-          className="border-2 border-black bg-white hover:bg-gray-100 font-bold px-4 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
           >
             Cancel
           </Button>
           <Button
             type="button"
             variant="outline"
-            size="sm"
             onClick={() => submitLesson(false)}
             disabled={isSubmitting}
-            className="border-2 border-black bg-white hover:bg-yellow-50 text-black font-bold px-4 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
           >
             {isSubmitting ? "Saving..." : "Save as Draft"}
           </Button>
           <Button
             type="button"
-            variant="default"
-            size="sm"
             onClick={() => submitLesson(true)}
             disabled={isSubmitting}
-            className="border-2 border-black bg-primary hover:opacity-90 text-black font-bold px-5 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
           >
             {isSubmitting ? "Saving..." : "Publish Lesson"}
           </Button>
