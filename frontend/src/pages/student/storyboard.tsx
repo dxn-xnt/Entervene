@@ -6,8 +6,6 @@ import { Button } from "@/components/retroui/Button";
 import { Text } from "@/components/retroui/Text";
 import {
   ArrowUpRight,
-  Search,
-  X,
   CheckCircle2,
   FileText,
   Calendar,
@@ -21,12 +19,7 @@ import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
 import {
   apiFetch,
-  getMyClass,
-  getMyClassmates,
   getStudentTodos,
-  type StudentClassmateItem,
-  type StudentClassmatesResponse,
-  type StudentMyClassSummary,
   type TodoItem,
 } from "@/lib/api";
 import { Badge } from "@/components/retroui/Badge";
@@ -44,13 +37,6 @@ const StoryBoard = () => {
   const navigate = useNavigate();
   const [subjects, setSubjects] = useState<EnrolledSubject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [myClass, setMyClass] = useState<StudentMyClassSummary | null>(null);
-  const [isClassmatesOpen, setIsClassmatesOpen] = useState(false);
-  const [classmates, setClassmates] =
-    useState<StudentClassmatesResponse | null>(null);
-  const [isClassmatesLoading, setIsClassmatesLoading] = useState(false);
-  const [classmatesError, setClassmatesError] = useState("");
-  const [classmatesSearch, setClassmatesSearch] = useState("");
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [isTodosLoading, setIsTodosLoading] = useState(true);
 
@@ -60,10 +46,6 @@ const StoryBoard = () => {
       .then((data) => setSubjects(data))
       .catch(() => { })
       .finally(() => setIsLoading(false));
-
-    getMyClass()
-      .then((data) => setMyClass(data))
-      .catch(() => { });
 
     getStudentTodos()
       .then((data) => {
@@ -108,21 +90,6 @@ const StoryBoard = () => {
     );
   };
 
-  const openClassmates = () => {
-    setIsClassmatesOpen(true);
-    if (classmates || isClassmatesLoading) return;
-    setIsClassmatesLoading(true);
-    setClassmatesError("");
-    getMyClassmates()
-      .then((data) => setClassmates(data))
-      .catch((error) =>
-        setClassmatesError(
-          error instanceof Error ? error.message : "Unable to load classmates.",
-        ),
-      )
-      .finally(() => setIsClassmatesLoading(false));
-  };
-
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
@@ -136,17 +103,6 @@ const StoryBoard = () => {
                 </h1>
               </div>
               <div className="flex items-center gap-2">
-                {myClass && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="md"
-                    onClick={openClassmates}
-                    className="whitespace-nowrap"
-                  >
-                    Classmates ({myClass.classmate_count})
-                  </Button>
-                )}
                 <Button
                   type="button"
                   size="md"
@@ -298,142 +254,8 @@ const StoryBoard = () => {
           </div>
         </div>
       </div>
-      {isClassmatesOpen && (
-        <ClassmatesModal
-          classmates={classmates?.classmates ?? []}
-          isLoading={isClassmatesLoading}
-          error={classmatesError}
-          search={classmatesSearch}
-          sectionName={
-            classmates?.section_name ?? myClass?.section_name ?? "Classmates"
-          }
-          onSearchChange={setClassmatesSearch}
-          onClose={() => setIsClassmatesOpen(false)}
-        />
-      )}
     </AppLayout>
   );
 };
 
 export default StoryBoard;
-
-function ClassmatesModal({
-  classmates,
-  isLoading,
-  error,
-  search,
-  sectionName,
-  onSearchChange,
-  onClose,
-}: {
-  classmates: StudentClassmateItem[];
-  isLoading: boolean;
-  error: string;
-  search: string;
-  sectionName: string;
-  onSearchChange: (value: string) => void;
-  onClose: () => void;
-}) {
-  const query = search.trim().toLocaleLowerCase();
-  const filtered = classmates
-    .filter(
-      (student) =>
-        !query || student.full_name.toLocaleLowerCase().includes(query),
-    )
-    .sort((a, b) => a.full_name.localeCompare(b.full_name));
-  const groups = groupClassmates(filtered);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
-      <section className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border-2 border-black bg-[#fffdf5] shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-        <header className="flex items-center justify-between border-b-2 border-black bg-[#f7e9aa] px-5 py-4">
-          <div>
-            <h2 className="text-xl font-semibold">{sectionName} Classmates</h2>
-            <p className="text-sm text-black/70">Read-only class roster</p>
-          </div>
-          <button
-            type="button"
-            aria-label="Close classmates"
-            onClick={onClose}
-            className="grid size-9 place-items-center rounded-full border border-black bg-white"
-          >
-            <X size={18} />
-          </button>
-        </header>
-
-        <div className="border-b border-black p-4">
-          <label className="flex h-10 items-center gap-2 border border-black bg-white px-3">
-            <Search size={16} />
-            <input
-              value={search}
-              onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Search classmates..."
-              className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none"
-            />
-          </label>
-        </div>
-
-        <div className="min-h-0 overflow-y-auto p-4">
-          {isLoading ? (
-            <LoadingPanel label="Loading classmates..." />
-          ) : error ? (
-            <p className="py-10 text-center text-sm text-red-600">{error}</p>
-          ) : filtered.length === 0 ? (
-            <EmptyStateCard title="No classmates found." />
-          ) : (
-            <div className="grid gap-3">
-              {groups.map(([label, students]) => (
-                <section
-                  key={label}
-                  className="overflow-hidden rounded-lg border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
-                >
-                  <div className="flex items-center justify-between bg-[#f7e9aa] px-4 py-2 text-sm font-semibold uppercase">
-                    <span>{label}</span>
-                    <span className="rounded-full border border-black bg-white px-2 py-0.5 text-xs normal-case">
-                      {students.length}
-                    </span>
-                  </div>
-                  {students.map((student) => (
-                    <div
-                      key={student.student_id}
-                      className="flex min-h-12 items-center gap-3 border-t border-black/15 px-4 py-2"
-                    >
-                      <div className="grid size-8 shrink-0 place-items-center rounded-full border border-[#c97900] bg-[#ffd27a] text-sm font-semibold">
-                        {(student.avatar_initial || student.full_name || "?")
-                          .charAt(0)
-                          .toUpperCase()}
-                      </div>
-                      <p className="min-w-0 truncate text-sm font-semibold">
-                        {student.full_name}
-                      </p>
-                    </div>
-                  ))}
-                </section>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function groupClassmates(
-  students: StudentClassmateItem[],
-): Array<[string, StudentClassmateItem[]]> {
-  const groups: Array<[string, StudentClassmateItem[]]> = [
-    ["Male", []],
-    ["Female", []],
-    ["Other/Unspecified", []],
-  ];
-
-  students.forEach((student) => {
-    const gender = (student.gender || "").trim().toLocaleLowerCase();
-    if (["male", "m", "boy"].includes(gender)) groups[0][1].push(student);
-    else if (["female", "f", "girl"].includes(gender))
-      groups[1][1].push(student);
-    else groups[2][1].push(student);
-  });
-
-  return groups.filter(([, items]) => items.length > 0);
-}
