@@ -55,6 +55,39 @@ export type LeaveRequestItem = {
   updated_at: string | null;
 };
 
+export type QRScanAttendancePayload = {
+  student_id: string;
+  class_id: number;
+  subject_id?: number;
+};
+
+export type QRScanAttendanceResponse = {
+  attendance_id: number;
+  student_id: string;
+  student_name: string | null;
+  student_lrn: string | null;
+  class_id: number;
+  subject_id: number | null;
+  subject_name?: string | null;
+  date: string;
+  status: string;
+  is_duplicate: boolean;
+  message: string;
+};
+
+export async function scanQRAttendance(payload: QRScanAttendancePayload): Promise<QRScanAttendanceResponse> {
+  const res = await apiFetch("/api/v1/attendance/scan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.detail || "Failed to scan QR attendance");
+  }
+  return res.json();
+}
+
 export async function recordBatchAttendance(payload: BatchAttendancePayload): Promise<AttendanceRecordItem[]> {
   const res = await apiFetch("/api/v1/attendance", {
     method: "POST",

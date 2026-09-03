@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
@@ -18,9 +18,11 @@ import { apiFetch, getTeacherAdvisoryClasses } from "@/lib/api";
 import {
   getClassAttendanceLogs,
   recordBatchAttendance,
+  scanQRAttendance,
   type AttendanceStatus,
   type AttendanceRecordItem,
 } from "@/lib/attendance-api";
+import { Html5Qrcode } from "html5-qrcode";
 import {
   Search,
   Save,
@@ -30,6 +32,12 @@ import {
   Table as TableIcon,
   X,
   ArrowUpRight,
+  QrCode,
+  Camera,
+  CameraOff,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
@@ -97,15 +105,37 @@ type StudentSummaryStats = {
   logByDate: Map<string, AttendanceRecordItem>;
 };
 
+type RecentScanItem = {
+  id: string;
+  student_id: string;
+  student_name: string;
+  student_lrn?: string | null;
+  status: string;
+  is_duplicate: boolean;
+  message: string;
+  timestamp: string;
+  type: "success" | "duplicate" | "excused" | "error";
+};
+
 export default function TeacherAttendancePage() {
   const [targets, setTargets] = useState<AttendanceTarget[]>([]);
   const [selectedTargetKey, setSelectedTargetKey] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0],
   );
-  const [activeTab, setActiveTab] = useState<"marking" | "summary">(
+  const [activeTab, setActiveTab] = useState<"marking" | "summary" | "scan">(
     "marking",
   );
+
+  // Scanner States
+  const [recentScans, setRecentScans] = useState<RecentScanItem[]>([]);
+  const [scannerRunning, setScannerRunning] = useState(false);
+  const [scannerError, setScannerError] = useState<string | null>(null);
+
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const isStartingRef = useRef(false);
+  const isStoppingRef = useRef(false);
+  const lastScanRef = useRef<{ text: string; time: number }>({ text: "", time: 0 });
 
   // Summary View Options
   const [summaryLayout, setSummaryLayout] = useState<"summary" | "date_grid">(
@@ -324,6 +354,205 @@ export default function TeacherAttendancePage() {
     }
   };
 
+  // QR Scan Handler
+  const handleQrScan = async (decodedText: string) => {
+    if (!selectedClassId) return;
+
+    // Cooldown throttle to prevent double-scan within 2.5 seconds
+    const now = Date.now();
+    if (
+      lastScanRef.current.text === decodedText &&
+      now - lastScanRef.current.time < 2500
+    ) {
+      return;
+    }
+    lastScanRef.current = { text: decodedText, time: now };
+
+    const timeStr = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+
+    try {
+      const res = await scanQRAttendance({
+        student_id: decodedText,
+        class_id: selectedClassId,
+        subject_id: selectedSubjectId,
+      });
+
+      const isExcused = res.status === "excused";
+      const isDuplicate = res.is_duplicate;
+      const scanType: "success" | "duplicate" | "excused" = isExcused
+        ? "excused"
+        : isDuplicate
+        ? "duplicate"
+        : "success";
+
+      // Update studentList status in-place if marked present
+      if (!isExcused && res.status === "present") {
+        setStudentList((prev) =>
+          prev.map((item) =>
+            item.student_id === res.student_id
+              ? { ...item, status: "present" }
+              : item,
+          ),
+        );
+      }
+
+      setRecentScans((prev) => [
+        {
+          id: Math.random().toString(36).substring(2, 9),
+          student_id: res.student_id,
+          student_name: res.student_name || "Enrolled Student",
+          student_lrn: res.student_lrn,
+          status: res.status,
+          is_duplicate: isDuplicate,
+          message: res.message,
+          timestamp: timeStr,
+          type: scanType,
+        },
+        ...prev.slice(0, 49),
+      ]);
+    } catch (err: any) {
+      setRecentScans((prev) => [
+        {
+          id: Math.random().toString(36).substring(2, 9),
+          student_id: decodedText,
+          student_name: "Unenrolled / Invalid ID",
+          status: "rejected",
+          is_duplicate: false,
+          message: err.message || "Student is not enrolled in this section.",
+          timestamp: timeStr,
+          type: "error",
+        },
+        ...prev.slice(0, 49),
+      ]);
+    }
+  };
+
+  const releaseMediaTracks = () => {
+    try {
+      const readerElem = document.getElementById("attendance-qr-reader");
+      if (readerElem) {
+        const videoElem = readerElem.querySelector("video");
+        if (videoElem && videoElem.srcObject) {
+          const stream = videoElem.srcObject as MediaStream;
+          stream.getTracks().forEach((track) => {
+            try {
+              track.stop();
+            } catch (_) {}
+          });
+          videoElem.srcObject = null;
+        }
+      }
+    } catch (_) {}
+  };
+
+  const stopScanner = async () => {
+    if (isStoppingRef.current) return;
+    isStoppingRef.current = true;
+
+    try {
+      const instance = scannerRef.current;
+      if (instance) {
+        if (instance.isScanning) {
+          await instance.stop().catch((err) => {
+            console.warn("Gracefully handled scanner stop error:", err);
+          });
+        }
+        try {
+          instance.clear();
+        } catch (_) {}
+        scannerRef.current = null;
+      }
+    } catch (err) {
+      console.warn("Error stopping QR scanner:", err);
+    } finally {
+      releaseMediaTracks();
+      setScannerRunning(false);
+      isStoppingRef.current = false;
+    }
+  };
+
+  const startScanner = async () => {
+    if (isStartingRef.current || isStoppingRef.current) return;
+    const el = document.getElementById("attendance-qr-reader");
+    if (!el) return;
+
+    if (scannerRef.current?.isScanning) {
+      setScannerRunning(true);
+      return;
+    }
+
+    isStartingRef.current = true;
+    try {
+      if (scannerRef.current) {
+        try {
+          scannerRef.current.clear();
+        } catch (_) {}
+        scannerRef.current = null;
+      }
+
+      releaseMediaTracks();
+
+      const html5QrCode = new Html5Qrcode("attendance-qr-reader");
+      scannerRef.current = html5QrCode;
+
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: { width: 240, height: 240 },
+          aspectRatio: 1.0,
+        },
+        (decodedText) => {
+          handleQrScan(decodedText);
+        },
+        () => {}
+      );
+
+      // If a stop was requested while start() was awaiting, stop immediately
+      if (isStoppingRef.current) {
+        await html5QrCode.stop().catch(() => {});
+        releaseMediaTracks();
+        setScannerRunning(false);
+        return;
+      }
+
+      setScannerRunning(true);
+      setScannerError(null);
+    } catch (err: any) {
+      console.warn("Failed to start camera scanner:", err);
+      releaseMediaTracks();
+      setScannerRunning(false);
+      setScannerError("Camera permission denied or camera device not found.");
+    } finally {
+      isStartingRef.current = false;
+    }
+  };
+
+  // Scanner lifecycle management when activeTab changes
+  useEffect(() => {
+    let isMounted = true;
+
+    if (activeTab !== "scan") {
+      void stopScanner();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (!isMounted) return;
+      void startScanner();
+    }, 150);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+      void stopScanner();
+    };
+  }, [activeTab, selectedClassId, selectedSubjectId]);
+
   // Filtered Students
   const filteredStudents = useMemo(() => {
     if (!search.trim()) return studentList;
@@ -448,13 +677,23 @@ export default function TeacherAttendancePage() {
                     icon: Users,
                   },
                   {
+                    id: "scan",
+                    label: "QR Scanner",
+                    icon: QrCode,
+                  },
+                  {
                     id: "summary",
                     label: "Attendance Summary & Logs",
                     icon: BarChart3,
                   },
                 ]}
                 activeTab={activeTab}
-                onTabChange={setActiveTab}
+                onTabChange={(tab) => {
+                  if (activeTab === "scan" && tab !== "scan") {
+                    void stopScanner();
+                  }
+                  setActiveTab(tab as any);
+                }}
               />
             </div>
 
@@ -490,7 +729,7 @@ export default function TeacherAttendancePage() {
               />
             </div>
 
-            {activeTab === "marking" ? (
+            {activeTab === "marking" && (
               <>
                 {/* Filters & Control Bar */}
                 <div className="flex flex-row gap-4 items-center w-full mb-1">
@@ -692,9 +931,16 @@ export default function TeacherAttendancePage() {
                                         .toUpperCase()}
                                     </Avatar.Fallback>
                                   </Avatar>
-                                  <span className="font-semibold text-base">
-                                    {student.student_name}
-                                  </span>
+                                  <div>
+                                    <span className="font-semibold text-base block leading-tight">
+                                      {student.student_name}
+                                    </span>
+                                    {student.student_lrn && (
+                                      <span className="text-[11px] text-muted-foreground font-mono">
+                                        LRN: {student.student_lrn}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </Table.Cell>
 
@@ -781,7 +1027,218 @@ export default function TeacherAttendancePage() {
                 {/* Quick Bulk Actions & Save Bar */}
 
               </>
-            ) : (
+            )}
+
+            {/* Scan Mode Tab */}
+            <div className={activeTab === "scan" ? "flex flex-col gap-4" : "hidden"}>
+                {/* Session Context Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-4 p-4 border-2 border-border bg-card shadow-sm rounded-md">
+                  <div className="flex flex-col gap-1 min-w-[280px] max-w-md w-full sm:w-auto">
+                    <Label className="font-sans text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Current Class Session
+                    </Label>
+                    <Select
+                      value={selectedTargetKey}
+                      onValueChange={(val) => setSelectedTargetKey(val)}
+                    >
+                      <Select.Trigger className="w-full">
+                        <Select.Value placeholder="Select class / subject" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        {advisoryTargets.length > 0 && (
+                          <Select.Group>
+                            <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
+                              Advisory Classes (Homeroom Attendance)
+                            </Select.Label>
+                            {advisoryTargets.map((t) => (
+                              <Select.Item key={t.key} value={t.key} className="text-sm">
+                                {t.label}
+                              </Select.Item>
+                            ))}
+                          </Select.Group>
+                        )}
+                        {subjectTargets.length > 0 && (
+                          <Select.Group>
+                            <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
+                              Subject Teaching Classes
+                            </Select.Label>
+                            {subjectTargets.map((t) => (
+                              <Select.Item key={t.key} value={t.key} className="text-sm">
+                                {t.label}
+                              </Select.Item>
+                            ))}
+                          </Select.Group>
+                        )}
+                      </Select.Content>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <div className="text-xs text-muted-foreground font-semibold">Session Date</div>
+                      <div className="text-sm font-bold text-foreground">
+                        {new Date().toLocaleDateString(undefined, {
+                          weekday: "short",
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </div>
+                    </div>
+                    <div className="h-8 w-[1px] bg-border" />
+                    <div className="text-right">
+                      <div className="text-xs text-muted-foreground font-semibold">Attendance Progress</div>
+                      <div className="text-sm font-bold text-emerald-500">
+                        {stats.present} / {stats.total} Present ({stats.rate}%)
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Scanner & Live Feed Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                  {/* Left Column: Camera Viewport */}
+                  <div className="lg:col-span-6 flex flex-col gap-3">
+                    <Card className="p-4 border-2 border-border bg-card shadow-retro flex flex-col items-center">
+                      <div className="w-full flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Camera className="w-4 h-4 text-primary" />
+                          <span className="text-sm font-bold">Webcam QR Scanner</span>
+                        </div>
+                        <Badge variant={scannerRunning ? "surface" : "outline"} className="text-xs">
+                          {scannerRunning ? "Camera Active" : "Paused"}
+                        </Badge>
+                      </div>
+
+                      {/* Video Container */}
+                      <div className="w-full max-w-[380px] aspect-square rounded-lg border-2 border-border bg-black relative overflow-hidden flex items-center justify-center shadow-inner">
+                        <div id="attendance-qr-reader" className="w-full h-full" />
+                        {scannerError && (
+                          <div className="absolute inset-0 bg-background/95 p-4 flex flex-col items-center justify-center text-center gap-2 z-10">
+                            <AlertTriangle className="w-8 h-8 text-destructive" />
+                            <p className="text-xs font-semibold text-destructive">{scannerError}</p>
+                            <Button size="sm" variant="outline" onClick={() => startScanner()} className="mt-2 text-xs">
+                              Retry Camera
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="w-full flex items-center justify-between mt-4 pt-3 border-t border-border">
+                        <p className="text-xs text-muted-foreground">
+                          Hold student QR ID badge steady facing the webcam.
+                        </p>
+                        <Button
+                          type="button"
+                          variant={scannerRunning ? "outline" : "default"}
+                          size="sm"
+                          onClick={() => {
+                            if (scannerRunning) stopScanner();
+                            else startScanner();
+                          }}
+                          className="gap-1.5"
+                        >
+                          {scannerRunning ? <CameraOff className="w-4 h-4" /> : <Camera className="w-4 h-4" />}
+                          {scannerRunning ? "Pause Scanner" : "Start Scanner"}
+                        </Button>
+                      </div>
+                    </Card>
+                  </div>
+
+                  {/* Right Column: Live Scanned Stream */}
+                  <div className="lg:col-span-6 flex flex-col gap-3">
+                    <Card className="p-4 border-2 border-border bg-card shadow-retro flex-1 flex flex-col min-h-[420px]">
+                      <div className="flex items-center justify-between pb-3 border-b border-border mb-3">
+                        <div className="flex items-center gap-2">
+                          <QrCode className="w-4 h-4 text-primary" />
+                          <span className="text-sm font-bold">Live Scan Activity</span>
+                        </div>
+                        {recentScans.length > 0 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setRecentScans([])}
+                            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            Clear Feed
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto max-h-[480px] space-y-2 pr-1">
+                        {recentScans.length === 0 ? (
+                          <div className="h-full flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+                            <QrCode className="w-10 h-10 stroke-[1.5] mb-2 opacity-40" />
+                            <p className="text-sm font-semibold">Waiting for scans...</p>
+                            <p className="text-xs text-muted-foreground mt-1 max-w-[260px]">
+                              Scanned students will show up here with real-time enrollment verification and duplicate prevention.
+                            </p>
+                          </div>
+                        ) : (
+                          recentScans.map((scan) => (
+                            <div
+                              key={scan.id}
+                              className={cn(
+                                "p-3 rounded-md border-2 transition-all flex items-start justify-between gap-3 text-sm",
+                                scan.type === "success"
+                                  ? "border-emerald-500/60 bg-emerald-500/10 text-foreground"
+                                  : scan.type === "duplicate" || scan.type === "excused"
+                                  ? "border-amber-500/60 bg-amber-500/10 text-foreground"
+                                  : "border-destructive/60 bg-destructive/10 text-foreground"
+                              )}
+                            >
+                              <div className="flex items-start gap-2.5">
+                                {scan.type === "success" ? (
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                                ) : scan.type === "duplicate" || scan.type === "excused" ? (
+                                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                                ) : (
+                                  <XCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                                )}
+                                <div>
+                                  <div className="font-bold leading-tight">{scan.student_name}</div>
+                                  <div className="text-xs text-muted-foreground mt-0.5">{scan.message}</div>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="text-[10px] font-mono text-muted-foreground block">
+                                  {scan.timestamp}
+                                </span>
+                                <Badge
+                                  variant={
+                                    scan.type === "success"
+                                      ? "solid"
+                                      : scan.type === "error"
+                                      ? "outline"
+                                      : "surface"
+                                  }
+                                  className={cn(
+                                    "text-[10px] uppercase font-bold mt-1",
+                                    scan.type === "success" && "bg-emerald-600 text-white",
+                                    scan.type === "error" && "border-destructive text-destructive"
+                                  )}
+                                >
+                                  {scan.type === "success"
+                                    ? "Present"
+                                    : scan.type === "excused"
+                                    ? "Excused"
+                                    : scan.type === "duplicate"
+                                    ? "Duplicate"
+                                    : "Rejected"}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </Card>
+                  </div>
+                </div>
+              </div>
+
+            {/* Summary Tab */}
+            {activeTab === "summary" && (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-center mb-1">
                   {/* Class Selector */}
