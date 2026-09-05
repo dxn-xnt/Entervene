@@ -26,6 +26,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { API_URL, apiFetch } from "@/lib/api";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
+import { LoadingPanel } from "@/components/loading-panel";
 
 interface Attachment {
   classwork_attachment_id: number;
@@ -1190,11 +1191,7 @@ export default function SubjectClassworkTab({
   };
 
   if (isLoading) {
-    return (
-      <div className="py-8 text-center">
-        <p className="text-gray-500">Loading classworks...</p>
-      </div>
-    );
+    return <LoadingPanel label="Loading classworks..." />;
   }
 
   if (error) {
