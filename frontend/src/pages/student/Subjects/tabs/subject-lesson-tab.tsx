@@ -2135,8 +2135,10 @@ export default function SubjectLessonTab({
                                   </div>
                                 ) : null}
                                 {selectedQuizAttempt.status !== "not_started" ? (
-                                  <button
+                                  <Button
                                     type="button"
+                                    variant="outline"
+                                    size="sm"
                                     onClick={() => {
                                       setQuizReviewMode(true);
                                       setQuizCurrentIndex(0);
@@ -2145,7 +2147,7 @@ export default function SubjectLessonTab({
                                     disabled={
                                       !selectedQuizAttempt.summary_available
                                     }
-                                    className="w-full rounded-lg border border-black bg-white px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="w-full rounded-none border-black bg-white text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
                                   >
                                     {selectedQuizAttempt.summary_available
                                       ? "View Summary"
@@ -2153,7 +2155,7 @@ export default function SubjectLessonTab({
                                         "NEVER"
                                         ? "Summary Not Available"
                                         : "Summary Scheduled"}
-                                  </button>
+                                  </Button>
                                 ) : null}
                                 <Button
                                   type="button"
@@ -2162,7 +2164,7 @@ export default function SubjectLessonTab({
                                     !selectedQuizAttempt.can_submit ||
                                     isQuizSubmitting
                                   }
-                                  className="w-full rounded-none border-black bg-success text-sm font-bold text-black shadow-none hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="w-full rounded-none border-black bg-success text-sm font-bold text-black hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   {selectedQuizAttempt.status === "not_started"
                                     ? "Start Quiz"

@@ -4,6 +4,8 @@ import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
+import { Badge } from "@/components/retroui/Badge";
+import { Button } from "@/components/retroui/Button";
 import { Table } from "@/components/retroui/Table";
 import { Filter, ArrowUpDown } from "lucide-react";
 import { getStudentTodos, type TodoItem } from "@/lib/api";
@@ -46,6 +48,8 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
   const completedCount = todos.filter((t) => t.is_submitted || t.status === "completed" || t.grade !== null).length;
   const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
   const gradableTodos = todos.filter((t) => t.is_graded !== false && t.type?.toUpperCase() !== "READING");
+  const masteryLabel =
+    completionRate >= 80 ? "High" : completionRate >= 50 ? "Moderate" : "Low";
 
   return (
     <AppLayout>
@@ -78,8 +82,8 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
               <h2 className="text-2xl md:text-4xl font-bold tracking-tight">
                 Subject Performance
               </h2>
-              <div className="flex flex-col md:flex-row md:gap-6">
-                <Card className="flex flex-1 flex-col gap-1 p-4 md:p-6">
+              <div className="flex flex-col gap-4 md:flex-row md:gap-6">
+                <Card className="flex flex-1 flex-col gap-1 border-black bg-white p-4 shadow-md hover:shadow-none md:p-6">
                   <Card.Title className="text-sm font-medium">
                     Completion Rate
                   </Card.Title>
@@ -91,17 +95,18 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
                   </Card.Content>
                 </Card>
 
-                <Card className="flex flex-col flex-1 gap-2 p-4 md:p-6">
+                <Card className="flex flex-1 flex-col gap-2 border-black bg-white p-4 shadow-md hover:shadow-none md:p-6">
                   <Card.Title className="text-sm font-medium">
                     Subject Lesson Mastery
                   </Card.Title>
-                  <Card.Content className="inline-block border rounded-md px-4 py-2 text-center w-fit">
-                    <p className="text-xs text-muted-foreground mb-1">
-                      Mastery level
-                    </p>
-                    <p className="text-base font-semibold">
-                      {completionRate >= 80 ? "😊 High" : completionRate >= 50 ? "😐 Moderate" : "😟 Low"}
-                    </p>
+                  <Card.Content>
+                    <Badge
+                      variant="secondary"
+                      size="md"
+                      className="rounded-none border border-black bg-white font-bold text-black"
+                    >
+                      Mastery level: {masteryLabel}
+                    </Badge>
                   </Card.Content>
                   <p className="text-sm text-muted-foreground">
                     {completionRate >= 80
@@ -117,19 +122,19 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
                   Classwork
                 </p>
                 <div className="flex flex-row items-center gap-4 text-sm">
-                  <button className="flex items-center gap-1">
+                  <Button type="button" variant="outline" size="sm" className="gap-1 rounded-none border-black bg-white">
                     <Filter className="size-4" />
                     Add Filter
-                  </button>
-                  <button className="flex items-center gap-1">
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" className="gap-1 rounded-none border-black bg-white">
                     <ArrowUpDown className="size-4" />
                     Sort By
-                  </button>
+                  </Button>
                 </div>
               </div>
               <Table
                 wrapperClassName="shadow-md transition-all hover:shadow-none"
-                className="table-fixed bg-card"
+                className="table-fixed bg-white"
               >
                 <Table.Body>
                   {loading ? (
@@ -167,7 +172,7 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
                             {item.title}
                           </Table.Cell>
                           <Table.Cell className="w-32">
-                            <span className="inline-flex items-center rounded-full border px-3 py-1 text-xs">
+                            <span className="inline-flex items-center border px-3 py-1 text-xs">
                               {item.type}
                             </span>
                           </Table.Cell>
@@ -180,7 +185,7 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
                                 </span>
                               </>
                             ) : (
-                              <span className="text-xs text-gray-500 font-normal bg-gray-100 px-2 py-1 rounded-full">Score hidden</span>
+                              <Badge variant="outline" size="sm" className="rounded-none border border-gray-300 bg-gray-100 text-xs font-normal text-gray-500">Score hidden</Badge>
                             )}
                           </Table.Cell>
                         </Table.Row>
