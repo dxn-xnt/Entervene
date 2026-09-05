@@ -173,7 +173,6 @@ export default function ToDo() {
                       <h3 className="text-xl md:text-3xl font-semibold">Past Due</h3>
                       {pastDueItems.length === 0 ? (
                         <EmptyStateCard
-                          icon={<CheckCircle2 size={24} className="text-green-500" />}
                           title="No past due items!"
                           description="Great job keeping up with your deadlines."
                         />

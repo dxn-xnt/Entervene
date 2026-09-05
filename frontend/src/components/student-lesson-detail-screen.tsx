@@ -47,7 +47,7 @@ export function StudentLessonDetailScreen({
 
   return (
     <div className="space-y-4">
-      <header className="-mx-4 border-b border-gray-200 px-4 pb-4 md:-mx-6 md:px-6">
+      <header className="-mx-4 -mt-4 flex items-center gap-3 border-b-2 border-black bg-background px-4 py-4 md:-mx-6 md:px-6">
         <Breadcrumb>
           <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
             <Breadcrumb.Item>
@@ -77,7 +77,7 @@ export function StudentLessonDetailScreen({
         </Breadcrumb>
       </header>
 
-      <Card className="block w-full border-black bg-primary">
+      <Card className="block w-full border-black bg-primary shadow-md hover:shadow-none">
         <Card.Title className="text-2xl font-bold">{lesson.title}</Card.Title>
         <p className="mt-1 text-sm font-semibold text-gray-800">
           {lesson.description || "No lesson description provided."}
@@ -111,9 +111,6 @@ export function StudentLessonDetailScreen({
           <section className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold">Classwork</h3>
-              <span className="text-xs font-semibold text-gray-500">
-                See all
-              </span>
             </div>
             {renderLessonClassworkCards(lesson)}
           </section>

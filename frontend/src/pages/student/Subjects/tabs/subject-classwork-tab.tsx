@@ -26,6 +26,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { API_URL, apiFetch } from "@/lib/api";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
+import { LoadingPanel } from "@/components/loading-panel";
 
 interface Attachment {
   classwork_attachment_id: number;
@@ -1190,11 +1191,7 @@ export default function SubjectClassworkTab({
   };
 
   if (isLoading) {
-    return (
-      <div className="py-8 text-center">
-        <p className="text-gray-500">Loading classworks...</p>
-      </div>
-    );
+    return <LoadingPanel label="Loading classworks..." />;
   }
 
   if (error) {
@@ -1680,8 +1677,10 @@ export default function SubjectClassworkTab({
                                 ) : null}
                                 {selectedQuizAttempt.status !==
                                 "not_started" ? (
-                                  <button
+                                  <Button
                                     type="button"
+                                    variant="outline"
+                                    size="sm"
                                     onClick={() => {
                                       setQuizReviewMode(true);
                                       setQuizCurrentIndex(0);
@@ -1690,7 +1689,7 @@ export default function SubjectClassworkTab({
                                     disabled={
                                       !selectedQuizAttempt.summary_available
                                     }
-                                    className="w-full rounded-lg border border-black bg-white px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="w-full rounded-none border-black bg-white text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
                                   >
                                     {selectedQuizAttempt.summary_available
                                       ? "View Summary"
@@ -1698,7 +1697,7 @@ export default function SubjectClassworkTab({
                                           "NEVER"
                                         ? "Summary Not Available"
                                         : "Summary Scheduled"}
-                                  </button>
+                                  </Button>
                                 ) : null}
                                 <Button
                                   type="button"

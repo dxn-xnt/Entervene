@@ -83,6 +83,27 @@ const Notifications = () => {
       n.notification_type === "risk_alert",
   );
 
+  const activeTabIsEmpty =
+    activeTab === "classworks"
+      ? classworkItems.length === 0
+      : activeTab === "announcements"
+        ? announcementItems.length === 0
+        : notifications.length === 0;
+
+  const emptyStateTitle =
+    activeTab === "classworks"
+      ? "No classwork notifications yet."
+      : activeTab === "announcements"
+        ? "No announcements yet."
+        : "No notifications yet.";
+
+  const activeTabTitle =
+    activeTab === "classworks"
+      ? "Classworks"
+      : activeTab === "announcements"
+        ? "Announcements"
+        : null;
+
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-hidden">
@@ -117,19 +138,26 @@ const Notifications = () => {
             </div>
 
             <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
-
-              {loading ? (
-                <LoadingPanel label="Loading notifications..." />
-              ) : notifications.length === 0 ? (
-                <EmptyStateCard title="No announcements yet." />
-              ) : (
-                <div className="flex flex-col gap-5 w-full">
+              <section className="flex w-full flex-col gap-3">
+                {activeTabTitle && (
+                  <h3 className="text-xl font-semibold md:text-3xl">
+                    {activeTabTitle}
+                  </h3>
+                )}
+                {loading ? (
+                  <LoadingPanel label="Loading notifications..." />
+                ) : activeTabIsEmpty ? (
+                  <EmptyStateCard title={emptyStateTitle} />
+                ) : (
+                  <div className="flex flex-col gap-5 w-full">
                   {(activeTab === "all" || activeTab === "classworks") &&
                     classworkItems.length > 0 && (
                       <section className="flex flex-col gap-3 w-full">
-                        <h2 className="text-xl md:text-3xl font-semibold">
-                          Classwork
-                        </h2>
+                        {activeTab === "all" && (
+                          <h2 className="text-xl md:text-3xl font-semibold">
+                            Classwork
+                          </h2>
+                        )}
                         {classworkItems.map((card) => (
                           <div
                             key={card.notification_id}
@@ -164,9 +192,11 @@ const Notifications = () => {
                   {(activeTab === "all" || activeTab === "announcements") &&
                     announcementItems.length > 0 && (
                       <section className="flex flex-col gap-3 w-full">
-                        <h2 className="text-xl md:text-3xl font-semibold">
-                          Announcement
-                        </h2>
+                        {activeTab === "all" && (
+                          <h2 className="text-xl md:text-3xl font-semibold">
+                            Announcements
+                          </h2>
+                        )}
                         {announcementItems.map((card) => (
                           <div
                             key={card.notification_id}
@@ -197,8 +227,9 @@ const Notifications = () => {
                         ))}
                       </section>
                     )}
-                </div>
-              )}
+                  </div>
+                )}
+              </section>
             </div>
           </div>
         </div>

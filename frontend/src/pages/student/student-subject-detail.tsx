@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { BookOpen, ClipboardList, Loader2 } from "lucide-react";
+import { BookOpen, ClipboardList } from "lucide-react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
@@ -103,15 +103,9 @@ const StudentSubjectDetail = () => {
                             {subjectInfo.subject_name}
                           </Breadcrumb.Page>
                         ) : (
-                          <div className="flex items-center gap-3">
-                            <Loader2
-                              className="animate-spin text-gray-400"
-                              size={20}
-                            />
-                            <span className="text-gray-400 text-lg">
-                              Loading subject...
-                            </span>
-                          </div>
+                          <span className="text-lg text-gray-400">
+                            Loading subject...
+                          </span>
                         )}
                       </Breadcrumb.Item>
                     </Breadcrumb.List>
