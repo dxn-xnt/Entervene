@@ -3,6 +3,7 @@ import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
+import { Badge } from "@/components/retroui/Badge";
 import { useAuth } from "@/context/AuthContext";
 import { Avatar } from "@/components/retroui/Avatar";
 import {
@@ -144,7 +145,7 @@ const StudentProfile = () => {
             </header>
 
             <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
-              <Card className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 md:p-6">
+              <Card className="flex flex-col items-start justify-between gap-4 border-black bg-primary p-4 shadow-md hover:shadow-none sm:flex-row sm:items-center md:p-6">
                 <div className="flex flex-row items-center gap-4">
                   <Avatar
                     variant="student"
@@ -209,12 +210,16 @@ const StudentProfile = () => {
                   </p>
                 </div>
 
-                <Card className="flex flex-col gap-3 p-4">
+                <Card className="flex flex-col gap-3 border-black bg-white p-4 shadow-md hover:shadow-none">
                   <div className="flex flex-row items-center justify-between">
                     <p className="font-semibold">{monthLabel}</p>
-                    <button className="text-xs text-muted-foreground border rounded-md px-2 py-1">
+                    <Badge
+                      variant="secondary"
+                      size="sm"
+                      className="rounded-none border border-black bg-primary text-xs font-bold text-black"
+                    >
                       Today
-                    </button>
+                    </Badge>
                   </div>
 
                   <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">
@@ -232,9 +237,9 @@ const StudentProfile = () => {
                         {week.map((day) => (
                           <span
                             key={day.key}
-                            className={`flex items-center justify-center rounded-md py-1 ${
+                            className={`flex items-center justify-center py-1 ${
                               weekIdx === currentWeekIndex
-                                ? "bg-green-400 font-semibold"
+                                ? "bg-black font-semibold text-white"
                                 : ""
                             } ${
                               !day.isCurrentMonth &&
