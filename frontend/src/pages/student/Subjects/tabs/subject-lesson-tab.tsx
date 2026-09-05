@@ -1462,9 +1462,7 @@ export default function SubjectLessonTab({
 
     if (classworkLoadingId === lesson.lesson_id) {
       return (
-        <div className="text-center py-4 text-sm text-gray-400">
-          Loading classworks...
-        </div>
+        <LoadingPanel label="Loading classworks..." className="py-6" />
       );
     }
 
