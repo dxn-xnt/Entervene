@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { ApiRequestError, getClassDetail, getClassFormOptions, updateClass } from "@/lib/api";
 import type { AdviserOption, ClassDetailResponse, ClassFormOptions, UpdateClassRequest } from "@/types/adminClasses";
 import Field from "@/components/admin/classes/fields/Field";
-import ModalShell from "./modal-shell";
 import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
@@ -107,107 +106,119 @@ export default function EditClass({
   }
 
   return (
-    <ModalShell title="Edit Class" onClose={onClose}>
-      {loading ? (
-        <StatePanel message="Loading class details..." />
-      ) : loadError || !classDetail || !options ? (
-        <StatePanel message="Unable to load class details." detail={loadError}>
-          <Button variant={"outline"} onClick={onClose}>Back to Classes</Button>
-        </StatePanel>
-      ) : (
-        <div className="flex">
-          <div className="grid gap-3 p-4">
-            <Field label="Academic Year">
-              <Input
-                readOnly
-                value={classDetail.academic_year.year_label}
-                className="bg-muted/50 text-muted-foreground text-base"
-              />
-            </Field>
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog.Content size="lg">
+        <Dialog.Header>
+          <Text as="h5" className="font-sans text-xl font-bold">
+            Edit Class
+          </Text>
+        </Dialog.Header>
 
-            <Field label="Academic Level">
-              <Input
-                readOnly
-                value={classDetail.academic_level.level_name}
-                className="bg-muted/50 text-muted-foreground text-base"
-              />
-            </Field>
-
-            <Field label="Section Name">
-              <Input
-                className="text-base"
-                value={sectionName}
-                onChange={(event) => {
-                  setSectionName(event.target.value);
-                  setSaveError("");
-                  setSaveSuccess("");
-                }}
-                placeholder="Section name"
-              />
-            </Field>
-
-            <Field label="Class Adviser">
-              <Select
-                className="text-base"
-                value={adviserStaffId}
-                onChange={(event) => {
-                  setAdviserStaffId(event.target.value);
-                  setSaveError("");
-                  setSaveSuccess("");
-                }}
-              >
-                <Select.Trigger className="w-full text-base">
-                  <Select.Value placeholder="Select class adviser..." />
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Group>
-                    <Select.Item value="__none__">No adviser assigned</Select.Item>
-                    {adviserOptions.map((adviser) => (
-                      <Select.Item key={adviser.staff_id} value={adviser.staff_id}>
-                        {adviserName(adviser)}
-                      </Select.Item>
-                    ))}
-                  </Select.Group>
-                </Select.Content>
-              </Select>
-
-              <Text as="p" className="mt-1 text-xs text-muted-foreground font-medium">
-                {classDetail.adviser
-                  ? "Choose No adviser assigned to make this class temporarily unassigned."
-                  : adviserOptions.length
-                    ? "This class has no adviser. Select an available teacher to assign one."
-                    : "This class has no adviser, and no available teachers can be assigned right now."}
-              </Text>
-            </Field>
+        {loading ? (
+          <div className="p-6">
+            <StatePanel message="Loading class details..." />
           </div>
+        ) : loadError || !classDetail || !options ? (
+          <div className="p-6">
+            <StatePanel message="Unable to load class details." detail={loadError}>
+              <Button variant="outline" onClick={onClose}>
+                Back to Classes
+              </Button>
+            </StatePanel>
+          </div>
+        ) : (
+          <>
+            <section className="flex flex-col gap-4 p-5 max-h-[80vh] overflow-y-auto">
+              <div className="grid gap-4">
+                <Field label="Academic Year">
+                  <Input
+                    readOnly
+                    value={classDetail.academic_year.year_label}
+                    className="bg-muted/50 text-muted-foreground text-base"
+                  />
+                </Field>
 
-          {saveError && (
-            <div className="rounded-md border-2 border-destructive bg-destructive/10 p-3 text-sm font-semibold text-destructive">
-              {saveError}
-            </div>
-          )}
+                <Field label="Academic Level">
+                  <Input
+                    readOnly
+                    value={classDetail.academic_level.level_name}
+                    className="bg-muted/50 text-muted-foreground text-base"
+                  />
+                </Field>
 
-          {saveSuccess && (
-            <div className="rounded-md border-2 border-primary bg-primary/10 p-3 text-sm font-semibold text-primary">
-              {saveSuccess}
-            </div>
-          )}
+                <Field label="Section Name">
+                  <Input
+                    className="text-base"
+                    value={sectionName}
+                    onChange={(event) => {
+                      setSectionName(event.target.value);
+                      setSaveError("");
+                      setSaveSuccess("");
+                    }}
+                    placeholder="Section name"
+                  />
+                </Field>
 
-          <Dialog.Footer>
-            <Button variant={"outline"} disabled={saving} onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              variant={"default"}
-              disabled={saving}
-              onClick={saveClass}
-            >
-              Save Changes
-            </Button>
-          </Dialog.Footer>
-        </div>
-      )}
-    </ModalShell>
+                <Field label="Class Adviser">
+                  <Select
+                    className="text-base"
+                    value={adviserStaffId}
+                    onChange={(event) => {
+                      setAdviserStaffId(event.target.value);
+                      setSaveError("");
+                      setSaveSuccess("");
+                    }}
+                  >
+                    <Select.Trigger className="w-full text-base">
+                      <Select.Value placeholder="Select class adviser..." />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Group>
+                        <Select.Item value="__none__">No adviser assigned</Select.Item>
+                        {adviserOptions.map((adviser) => (
+                          <Select.Item key={adviser.staff_id} value={adviser.staff_id}>
+                            {adviserName(adviser)}
+                          </Select.Item>
+                        ))}
+                      </Select.Group>
+                    </Select.Content>
+                  </Select>
+
+                  <Text as="p" className="mt-1 text-xs text-muted-foreground font-medium">
+                    {classDetail.adviser
+                      ? "Choose No adviser assigned to make this class temporarily unassigned."
+                      : adviserOptions.length
+                        ? "This class has no adviser. Select an available teacher to assign one."
+                        : "This class has no adviser, and no available teachers can be assigned right now."}
+                  </Text>
+                </Field>
+              </div>
+
+              {saveError && (
+                <div className="rounded-md border-2 border-destructive bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+                  {saveError}
+                </div>
+              )}
+
+              {saveSuccess && (
+                <div className="rounded-md border-2 border-primary bg-primary/10 p-3 text-sm font-semibold text-primary">
+                  {saveSuccess}
+                </div>
+              )}
+            </section>
+
+            <Dialog.Footer>
+              <Button variant="outline" disabled={saving} onClick={onClose}>
+                Cancel
+              </Button>
+              <Button variant="default" disabled={saving} onClick={saveClass}>
+                Save Changes
+              </Button>
+            </Dialog.Footer>
+          </>
+        )}
+      </Dialog.Content>
+    </Dialog>
   );
 }
 
