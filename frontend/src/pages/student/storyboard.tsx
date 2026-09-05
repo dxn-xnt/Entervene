@@ -6,7 +6,6 @@ import { Button } from "@/components/retroui/Button";
 import { Text } from "@/components/retroui/Text";
 import {
   ArrowUpRight,
-  CheckCircle2,
   FileText,
   Calendar,
   Check,
@@ -70,7 +69,9 @@ const StoryBoard = () => {
           );
           if (match) targetClassId = match.class_id;
         }
-      } catch { }
+      } catch (error) {
+        console.error("Unable to resolve the class for this to-do item:", error);
+      }
     }
 
     if (targetClassId && item.subject_id) {
@@ -143,7 +144,7 @@ const StoryBoard = () => {
 
                 {/* Right side: Top Card + To do Card */}
                 <div className="flex flex-col gap-4 w-full lg:w-[30%] shrink-0">
-                  <Card className="block w-full">
+                  <Card className="block w-full border-black bg-white shadow-md hover:shadow-none">
                     <Card.Content className="">
                       <div className="flex flex-col gap-1">
                         <div className="flex flex-row gap-2 items-center">
@@ -189,41 +190,48 @@ const StoryBoard = () => {
                     </Card.Content>
                   </Card>
 
-                  <Card className="block w-full">
+                  <Card className="block w-full border-black bg-white shadow-md hover:shadow-none">
                     <Card.Content>
                       <div className="flex items-center justify-between mb-4">
                         <Card.Title className="mb-0 text-2xl md:text-3xl">
                           To do
                         </Card.Title>
 
-                        <button
+                        <Button
                           type="button"
+                          variant="outline"
+                          size="icon"
                           onClick={() => navigate(routes.student.todo)}
-                          className="rounded-full border-2 border-black cursor-pointer p-1 transition-all hover:shadow-none"
+                          className="rounded-none border-black bg-white"
+                          aria-label="View all to-do items"
                         >
                           <ArrowUpRight size={18} />
-                        </button>
+                        </Button>
                       </div>
 
                       {isTodosLoading ? (
                         <LoadingPanel label="Loading to-do items..." />
                       ) : todos.length === 0 ? (
-                        <div className="flex flex-col items-center gap-2 px-6 py-12 text-center text-gray-500">
-                          <CheckCircle2 size={24} className="text-green-500" />
-                          <p className="text-base font-bold">
-                            All caught up!
-                          </p>
-                          <p className="text-sm font-normal text-gray-500">
-                            No pending tasks
-                          </p>
-                        </div>
+                        <EmptyStateCard
+                          title="All caught up!"
+                          description="No pending tasks"
+                          className="border-none bg-white shadow-none hover:shadow-none"
+                        />
                       ) : (
                         <div className="flex flex-col gap-2.5">
                           {todos.map((item) => (
-                            <div
+                            <Card
                               key={item.assignment_id}
                               onClick={() => openTodo(item)}
-                              className="flex items-center gap-3 border-2 border-black bg-white p-3 rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer hover:bg-yellow-50 transition-colors"
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  openTodo(item);
+                                }
+                              }}
+                              role="button"
+                              tabIndex={0}
+                              className="flex w-full cursor-pointer items-center gap-3 border-black bg-white p-3 shadow-md hover:shadow-none"
                             >
                               <FileText
                                 size={20}
@@ -238,11 +246,15 @@ const StoryBoard = () => {
                                 </p>
                               </div>
                               {item.status === "pastdue" && (
-                                <span className="shrink-0 text-[10px] uppercase font-bold text-red-700 bg-red-100 border border-red-400 px-1.5 py-0.5 rounded">
+                                <Badge
+                                  variant="secondary"
+                                  size="sm"
+                                  className="shrink-0 rounded-none border border-red-400 bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700"
+                                >
                                   Past Due
-                                </span>
+                                </Badge>
                               )}
-                            </div>
+                            </Card>
                           ))}
                         </div>
                       )}

@@ -26,8 +26,9 @@ import { EmptyStateCard } from "@/components/empty-state-card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
-import { SortButton } from "@/components/sort-button";
+import { Select } from "@/components/retroui/Select";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
+import { LoadingPanel } from "@/components/loading-panel";
 import type { StudentLesson as Lesson } from "@/types/student-subject";
 
 const LOCKED_CLASSWORK_MESSAGE =
@@ -1461,9 +1462,7 @@ export default function SubjectLessonTab({
 
     if (classworkLoadingId === lesson.lesson_id) {
       return (
-        <div className="text-center py-4 text-sm text-gray-400">
-          Loading classworks...
-        </div>
+        <LoadingPanel label="Loading classworks..." className="py-6" />
       );
     }
 
@@ -1520,18 +1519,7 @@ export default function SubjectLessonTab({
 
   // ─── Loading skeleton ──────────────────────────────────────────────────
   if (isLoading) {
-    return (
-      <div className="space-y-3 animate-pulse">
-        <div className="h-20 rounded-lg border border-black bg-[#F6E9B2] shadow-md" />
-        <div className="h-12 rounded-lg border border-black bg-pink-100 shadow-md" />
-        {[1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className="h-16 rounded-lg border border-black bg-[#F6E9B2] shadow-md"
-          />
-        ))}
-      </div>
-    );
+    return <LoadingPanel label="Loading lessons..." />;
   }
 
   // ─── Error state ───────────────────────────────────────────────────────
@@ -1539,12 +1527,14 @@ export default function SubjectLessonTab({
     return (
       <div className="text-center py-10">
         <p className="text-red-500 mb-4">{error}</p>
-        <button
+        <Button
+          type="button"
+          size="sm"
           onClick={fetchLessons}
-          className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-semibold"
+          className="rounded-none border-black bg-primary font-semibold text-black"
         >
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
@@ -1688,9 +1678,18 @@ export default function SubjectLessonTab({
                 {/* Lessons header row */}
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-xl font-bold tracking-tight">Lessons</h3>
-                  <SortButton onClick={() => setSortAsc((v) => !v)}>
-                    Sort By
-                  </SortButton>
+                  <Select
+                    value={sortAsc ? "oldest" : "newest"}
+                    onValueChange={(value) => setSortAsc(value === "oldest")}
+                  >
+                    <Select.Trigger className="w-40 border-black bg-white shadow-md hover:shadow-none">
+                      <Select.Value placeholder="Sort by" />
+                    </Select.Trigger>
+                    <Select.Content className="border-2 border-black bg-white shadow-md">
+                      <Select.Item value="newest">Newest first</Select.Item>
+                      <Select.Item value="oldest">Oldest first</Select.Item>
+                    </Select.Content>
+                  </Select>
                 </div>
 
                 <div className="space-y-3">
@@ -2135,8 +2134,10 @@ export default function SubjectLessonTab({
                                   </div>
                                 ) : null}
                                 {selectedQuizAttempt.status !== "not_started" ? (
-                                  <button
+                                  <Button
                                     type="button"
+                                    variant="outline"
+                                    size="sm"
                                     onClick={() => {
                                       setQuizReviewMode(true);
                                       setQuizCurrentIndex(0);
@@ -2145,7 +2146,7 @@ export default function SubjectLessonTab({
                                     disabled={
                                       !selectedQuizAttempt.summary_available
                                     }
-                                    className="w-full rounded-lg border border-black bg-white px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="w-full rounded-none border-black bg-white text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
                                   >
                                     {selectedQuizAttempt.summary_available
                                       ? "View Summary"
@@ -2153,7 +2154,7 @@ export default function SubjectLessonTab({
                                         "NEVER"
                                         ? "Summary Not Available"
                                         : "Summary Scheduled"}
-                                  </button>
+                                  </Button>
                                 ) : null}
                                 <Button
                                   type="button"
@@ -2162,7 +2163,7 @@ export default function SubjectLessonTab({
                                     !selectedQuizAttempt.can_submit ||
                                     isQuizSubmitting
                                   }
-                                  className="w-full rounded-none border-black bg-success text-sm font-bold text-black shadow-none hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="w-full rounded-none border-black bg-success text-sm font-bold text-black hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   {selectedQuizAttempt.status === "not_started"
                                     ? "Start Quiz"

@@ -4,7 +4,8 @@ import { toPng } from "html-to-image";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
-import { Download, QrCode, ShieldCheck } from "lucide-react";
+import { Card } from "@/components/retroui/Card";
+import { Download, ShieldCheck } from "lucide-react";
 
 interface StudentQRBadgeModalProps {
   isOpen: boolean;
@@ -30,18 +31,16 @@ export default function StudentQRBadgeModal({
 
   const handleDownload = async () => {
     if (!cardRef.current || downloading) return;
+
     try {
       setDownloading(true);
 
-      // Target specifically the inner badge card element only with 3x print resolution
       let dataUrl: string;
       try {
         dataUrl = await toPng(cardRef.current, {
           pixelRatio: 3,
           cacheBust: true,
-          style: {
-            margin: "0",
-          },
+          style: { margin: "0" },
         });
       } catch (fontErr) {
         console.warn("Retrying badge export with skipFonts:", fontErr);
@@ -49,9 +48,7 @@ export default function StudentQRBadgeModal({
           pixelRatio: 3,
           cacheBust: true,
           skipFonts: true,
-          style: {
-            margin: "0",
-          },
+          style: { margin: "0" },
         });
       }
 
@@ -63,10 +60,8 @@ export default function StudentQRBadgeModal({
         .trim()
         .replace(/[^a-zA-Z0-9_-]/g, "_");
 
-      const filename = `QR-Badge-${identifier}.png`;
-
       const link = document.createElement("a");
-      link.download = filename;
+      link.download = `QR-Badge-${identifier}.png`;
       link.href = dataUrl;
       document.body.appendChild(link);
       link.click();
@@ -86,83 +81,74 @@ export default function StudentQRBadgeModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content className="max-w-md p-6 bg-card text-card-foreground border-2 border-border shadow-retro">
-        <Dialog.Header>
-          <Dialog.Title className="flex items-center gap-2 text-lg font-bold">
-            <QrCode className="w-5 h-5 text-primary" />
-            Student Attendance QR Card
-          </Dialog.Title>
-          <Dialog.Description className="text-xs text-muted-foreground">
-            Permanent, secure QR badge encoding the student identifier for class attendance.
-          </Dialog.Description>
+      <Dialog.Content className="max-w-md rounded-none border-2 border-black bg-white p-0 text-black shadow-md">
+        <Dialog.Header className="border-black bg-primary text-black">
+          <div className="flex min-w-0 flex-col items-start">
+            <Dialog.Title className="text-lg font-bold">
+              Student Attendance QR Card
+            </Dialog.Title>
+            <Dialog.Description className="mt-1 text-xs font-medium text-black/70">
+              Permanent, secure QR badge encoding the student identifier for class attendance.
+            </Dialog.Description>
+          </div>
         </Dialog.Header>
 
-        {/* Printable Badge Card Wrapper (keeps margin in modal, but keeps cardRef margin-free for clean PNG export) */}
-        <div className="my-4">
-          <div
-            ref={cardRef}
-            className="p-5 rounded-lg border-2 border-border bg-card shadow-sm flex flex-col items-center text-center relative overflow-hidden print:m-0 print:border-black"
-          >
-            {/* Top Banner */}
-            <div className="w-full flex items-center justify-between border-b border-border/60 pb-3 mb-4">
+        <div ref={cardRef} className="m-5">
+          <Card className="relative flex w-full flex-col items-center overflow-hidden shadow-none p-5 text-center print:border-black print:shadow-none">
+            <div className="mb-4 flex w-full items-center justify-between border-b border-black pb-3">
               <div className="flex items-center gap-2 text-left">
-                <div className="w-7 h-7 rounded bg-primary/10 border border-primary/30 flex items-center justify-center text-primary font-bold text-xs">
+                <div className="flex size-8 items-center justify-center border border-black bg-primary text-xs font-bold text-black">
                   EV
                 </div>
                 <div>
                   <div className="text-xs font-bold tracking-tight">ENTERVENE ACADEMY</div>
-                  <div className="text-[10px] text-muted-foreground">Student Pass & Attendance</div>
+                  <div className="text-[10px] text-gray-600">Student Pass & Attendance</div>
                 </div>
               </div>
-              <Badge variant="surface" className="text-[10px] uppercase font-semibold">
+              <Badge variant="secondary" size="sm" className="rounded-none border border-black bg-primary text-[10px] font-bold uppercase text-black">
                 Permanent
               </Badge>
             </div>
 
-            {/* Student Details */}
             <div className="mb-3">
-              <h3 className="text-base font-bold text-foreground tracking-tight">
+              <Card.Title className="text-base font-bold tracking-tight text-black">
                 {student.student_name}
-              </h3>
-              <div className="flex items-center justify-center gap-2 mt-1 text-xs text-muted-foreground font-medium">
+              </Card.Title>
+              <div className="mt-1 flex items-center justify-center gap-2 text-xs font-medium text-gray-600">
                 {gradeLevelText && <span>{gradeLevelText}</span>}
                 {gradeLevelText && student.section_name && <span>•</span>}
                 {student.section_name && <span>{student.section_name}</span>}
               </div>
             </div>
 
-            {/* QR Code Container */}
-            <div className="p-3 bg-white rounded-md border-2 border-border shadow-inner my-2 flex items-center justify-center">
+            <Card className="my-2 flex items-center justify-center border-black bg-white p-3 !shadow-none hover:!shadow-none">
               <QRCodeSVG
                 value={student.student_id}
                 size={180}
                 level="H"
                 includeMargin={false}
-                className="w-full h-auto"
+                className="h-auto w-full"
               />
-            </div>
+            </Card>
 
-            {/* Privacy & ID Note */}
-            <div className="mt-3 text-[11px] text-muted-foreground flex items-center gap-1.5 font-mono">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+            <div className="mt-3 flex items-center gap-1.5 font-mono text-[11px] text-gray-600">
+              <ShieldCheck className="size-3.5 text-success" />
               <span className="truncate max-w-[240px]">ID: {student.student_id}</span>
             </div>
-          </div>
+          </Card>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center justify-end mt-4 pt-3 border-t border-border">
+        <Dialog.Footer className="border-black bg-white">
           <Button
-            variant="default"
             size="sm"
             onClick={handleDownload}
             disabled={downloading}
-            className="gap-1.5"
+            className="gap-1.5 rounded-none border-black bg-success hover:bg-success text-black"
           >
-            <Download className="w-4 h-4" />
+            <Download className="size-4" />
             {downloading ? "Downloading..." : "Download Badge"}
           </Button>
-        </div>
+        </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
   );
