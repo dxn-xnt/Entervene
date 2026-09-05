@@ -138,7 +138,7 @@ const Notifications = () => {
             </div>
 
             <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
-              <section className="flex w-full flex-col gap-4">
+              <section className="flex w-full flex-col gap-3">
                 {activeTabTitle && (
                   <h3 className="text-xl font-semibold md:text-3xl">
                     {activeTabTitle}
