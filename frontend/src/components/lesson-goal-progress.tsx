@@ -220,6 +220,7 @@ export function LessonGoalProgress({
                           >
                             <div className="flex items-center justify-between gap-2 w-full border-2 px-3 py-2 hover:bg-accent">
                               <div className="flex items-center gap-1.5 min-w-0">
+                                <ClassworkIcon type={cw.classwork_type} />
                                 <p className="text-xs font-semibold truncate">{cw.title}</p>
                               </div>
                               {badge && (

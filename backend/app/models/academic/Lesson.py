@@ -11,7 +11,6 @@ from app.db.Base import Base
 if TYPE_CHECKING:
     from app.models.academic.Competency import Competency
     from app.models.academic.LessonAssignment import LessonAssignment
-    from app.models.academic.LessonAttachment import LessonAttachment
 
 
 class Lesson(Base):
@@ -35,6 +34,5 @@ class Lesson(Base):
     staff: Mapped[object] = relationship("AcademicStaff", backref="lessons")
     subject: Mapped[object] = relationship("Subject", backref="lessons")
     competency: Mapped["Competency | None"] = relationship("Competency", back_populates="lessons")
-    attachments: Mapped[list["LessonAttachment"]] = relationship("LessonAttachment", back_populates="lesson", cascade="all, delete-orphan")
     assignments: Mapped[list["LessonAssignment"]] = relationship("LessonAssignment", back_populates="lesson", cascade="all, delete-orphan")
 

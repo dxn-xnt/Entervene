@@ -107,15 +107,11 @@ def adviser_send_context():
     user = UserAccount(
         user_id=user_id_teacher,
         email="maria@school.edu",
-        ref_type="staff",
-        ref_id=teacher.staff_id,
         account_status="active",
     )
     sub_user = UserAccount(
         user_id=user_id_sub,
         email="carlos@school.edu",
-        ref_type="staff",
-        ref_id=sub_teacher.staff_id,
         account_status="active",
     )
     db.add_all([user, sub_user])

@@ -32,7 +32,7 @@ export function SubjectCard({
 
   return (
     <Card
-      className="group relative flex min-w-80 flex-col justify-between shadow-none p-3 hover:-translate-y-1 cursor-pointer"
+      className={`group relative flex min-w-80 flex-col justify-between shadow-none p-3 hover:-translate-y-1 cursor-pointer ${className || ""}`}
       onClick={onClick}
     >
       <div className="flex flex-col items-start justify-between gap-2">
@@ -44,16 +44,15 @@ export function SubjectCard({
             2 Pending Classworks
           </Badge>
         </div>
-        <div className="flex flex-row w-full -mt-2">
+        <div className="flex flex-row items-center gap-1.5 w-full -mt-2">
           <p className="text-sm font-semibold">
             {teacher}
           </p>
-          {/* <Badge size="sm" variant="solid">
-              Advisory
-            </Badge> */}
-          {/* <Badge size="sm" variant=sm"secondary">
-            {load.grade_level}
-          </Badge> */}
+          {badges?.map((b, idx) => (
+            <Badge key={idx} size="sm" variant={b.variant || "secondary"}>
+              {b.label}
+            </Badge>
+          ))}
         </div>
         <div className="flex flex-col w-full gap-1">
           <p className="text-xs font-normal">Completion</p>

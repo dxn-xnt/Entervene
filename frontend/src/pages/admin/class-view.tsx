@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Pencil, Plus, Users } from "lucide-react";
+import { BookOpen, Pencil, Users } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";

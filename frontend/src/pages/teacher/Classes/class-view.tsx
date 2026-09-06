@@ -1,9 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
-  ArrowDownAZ,
   ArrowLeft,
-  ArrowUpDown,
   ArrowUpRight,
   Award,
   BookOpen,
@@ -13,11 +11,9 @@ import {
   ChevronRight,
   ClipboardList,
   FileText,
-  Filter,
   Lightbulb,
   Paperclip,
   Pencil,
-  Plus,
   Search,
   Users,
   X,
@@ -27,7 +23,7 @@ import { LoadingPanel } from "@/components/loading-panel";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Accordion } from "@/components/retroui/Accordion";
-import { Tabs, type TabItem } from "@/components/retroui/Tabs";
+import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
 import { Card } from "@/components/retroui/Card";
 import { Input } from "@/components/retroui/Input";
@@ -2160,10 +2156,10 @@ function ClassworkTab({
 
   const [items, setItems] = useState<TeacherClasswork[]>([]);
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
-  const [activeTab, setActiveTab] = useState<TabId>("all");
+  const [activeTab] = useState<TabId>("all");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [sortMode, setSortMode] = useState<SortMode>("newest");
+  const [sortMode] = useState<SortMode>("newest");
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [selectedType, setSelectedType] = useState<ClassworkKind | null>(null);
   const [selected, setSelected] = useState<TeacherClasswork | null>(null);

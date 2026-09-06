@@ -16,7 +16,6 @@ from app.models.academic.Class_ import Class
 from app.models.academic.Competency import Competency
 from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAssignment import LessonAssignment
-from app.models.academic.LessonAttachment import LessonAttachment
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.auth.UserAccount import UserAccount
@@ -35,7 +34,6 @@ TABLES = [
     Competency.__table__,
     Lesson.__table__,
     LessonAssignment.__table__,
-    LessonAttachment.__table__,
 ]
 
 
