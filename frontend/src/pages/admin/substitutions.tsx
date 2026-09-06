@@ -204,7 +204,7 @@ export default function AdminSubstitutions() {
               />
             </div>
 
-            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+            <div className="border-t-1 border-border -mt-[1px] px-4 md:px-6 flex flex-col gap-3">
               {/* Summary Metric Cards */}
               <div className="grid grid-cols-1 gap-4 py-2 sm:grid-cols-3 md:py-4">
                 <OverviewCard title="Active Substitutions" count={String(activeCount)} />
@@ -212,227 +212,227 @@ export default function AdminSubstitutions() {
                 <OverviewCard title="Total Tracked" count={String(substitutions.length)} />
               </div>
 
-        <div className="flex justify-start py-1">
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search teacher, class, subject..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 text-sm"
-            />
-          </div>
-        </div>
+              <div className="flex justify-start -mt-3!">
+                <div className="relative w-full sm:w-72">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search teacher, class, subject..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 min-w-100 text-sm"
+                  />
+                </div>
+              </div>
 
-        {/* Table Content */}
-        <Card className="mt-1 w-full rounded-none border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-          {isLoading ? (
-            <LoadingPanel label="Loading substitution records..." />
-          ) : error ? (
-            <div className="p-8 text-center text-sm text-destructive flex flex-col items-center gap-2">
-              <AlertCircle className="h-5 w-5" />
-              <span>{error}</span>
-              <Button variant="outline" size="sm" onClick={fetchSubstitutions} className="mt-2">
-                Retry
-              </Button>
-            </div>
-          ) : filteredSubstitutions.length === 0 ? (
-            <EmptyStateCard
-              icon={<UserCheck size={24} />}
-              title="No substitutions found"
-              description={
-                searchQuery
-                  ? "Try adjusting your search terms or filters."
-                  : "Assign a substitute when a teacher goes on maternity leave or extended leave."
-              }
-              className="border-0 shadow-none"
-            />
-          ) : (
-            <div className="overflow-x-auto">
-              <Table className="w-full border-collapse text-sm">
-                <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black uppercase">
-                  <Table.Row>
-                    <Table.Head className="font-black text-black">Teacher on Leave</Table.Head>
-                    <Table.Head className="font-black text-black">Class & Subject</Table.Head>
-                    <Table.Head className="font-black text-black">Substitute Teacher</Table.Head>
-                    <Table.Head className="font-black text-black">Coverage Window</Table.Head>
-                    <Table.Head className="font-black text-black">Status</Table.Head>
-                    <Table.Head className="font-black text-black">Reason</Table.Head>
-                    <Table.Head className="text-right font-black text-black">Actions</Table.Head>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {filteredSubstitutions.map((sub) => {
-                    const isFuture = sub.start_date > todayStr;
-                    const isActionLoading = actionLoadingId === sub.substitution_id || (sub.batch_id && actionLoadingId === sub.batch_id);
-                    const isBatchRow = Boolean(sub.batch_id && (batchCounts[sub.batch_id] || 0) > 1);
-                    const batchTotal = sub.batch_id ? (batchCounts[sub.batch_id] || 0) : 0;
+              {/* Table Content */}
+              <Card className="mt-1 w-full rounded-none border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                {isLoading ? (
+                  <LoadingPanel label="Loading substitution records..." />
+                ) : error ? (
+                  <div className="p-8 text-center text-sm text-destructive flex flex-col items-center gap-2">
+                    <AlertCircle className="h-5 w-5" />
+                    <span>{error}</span>
+                    <Button variant="outline" size="sm" onClick={fetchSubstitutions} className="mt-2">
+                      Retry
+                    </Button>
+                  </div>
+                ) : filteredSubstitutions.length === 0 ? (
+                  <EmptyStateCard
+                    icon={<UserCheck size={24} />}
+                    title="No substitutions found"
+                    description={
+                      searchQuery
+                        ? "Try adjusting your search terms or filters."
+                        : "Assign a substitute when a teacher goes on maternity leave or extended leave."
+                    }
+                    className="border-0 shadow-none"
+                  />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table className="w-full border-collapse text-sm">
+                      <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black uppercase">
+                        <Table.Row>
+                          <Table.Head className="font-black text-black">Teacher on Leave</Table.Head>
+                          <Table.Head className="font-black text-black">Class & Subject</Table.Head>
+                          <Table.Head className="font-black text-black">Substitute Teacher</Table.Head>
+                          <Table.Head className="font-black text-black">Coverage Window</Table.Head>
+                          <Table.Head className="font-black text-black">Status</Table.Head>
+                          <Table.Head className="font-black text-black">Reason</Table.Head>
+                          <Table.Head className="text-right font-black text-black">Actions</Table.Head>
+                        </Table.Row>
+                      </Table.Header>
+                      <Table.Body>
+                        {filteredSubstitutions.map((sub) => {
+                          const isFuture = sub.start_date > todayStr;
+                          const isActionLoading = actionLoadingId === sub.substitution_id || (sub.batch_id && actionLoadingId === sub.batch_id);
+                          const isBatchRow = Boolean(sub.batch_id && (batchCounts[sub.batch_id] || 0) > 1);
+                          const batchTotal = sub.batch_id ? (batchCounts[sub.batch_id] || 0) : 0;
 
-                    return (
-                      <Table.Row key={sub.substitution_id} className="border-b border-black/10 hover:bg-yellow-50/50">
-                        <Table.Cell>
-                          <div className="text-sm font-extrabold text-black">{sub.original_staff_name}</div>
-                          <div className="text-xs text-muted-foreground font-mono">
-                            {sub.original_staff_id}
-                          </div>
-                          {isBatchRow && (
-                            <Badge variant="secondary" className="mt-1 text-[10px] bg-primary/10 text-primary border-primary/20 flex items-center gap-1 w-fit">
-                              <Layers className="h-3 w-3" />
-                              <span>Program Batch ({batchTotal} loads)</span>
-                            </Badge>
-                          )}
-                        </Table.Cell>
+                          return (
+                            <Table.Row key={sub.substitution_id} className="border-b border-black/10 hover:bg-yellow-50/50">
+                              <Table.Cell>
+                                <div className="text-sm font-extrabold text-black">{sub.original_staff_name}</div>
+                                <div className="text-xs text-muted-foreground font-mono">
+                                  {sub.original_staff_id}
+                                </div>
+                                {isBatchRow && (
+                                  <Badge variant="secondary" className="mt-1 text-[10px] bg-primary/10 text-primary border-primary/20 flex items-center gap-1 w-fit">
+                                    <Layers className="h-3 w-3" />
+                                    <span>Program Batch ({batchTotal} loads)</span>
+                                  </Badge>
+                                )}
+                              </Table.Cell>
 
-                        <Table.Cell>
-                          <div className="font-medium text-sm">
-                            {sub.subject_name}{" "}
-                            {sub.subject_codename ? (
-                              <span className="text-xs text-muted-foreground font-mono">
-                                ({sub.subject_codename})
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {sub.section_name} • {sub.period_name}
-                          </div>
-                        </Table.Cell>
+                              <Table.Cell>
+                                <div className="font-medium text-sm">
+                                  {sub.subject_name}{" "}
+                                  {sub.subject_codename ? (
+                                    <span className="text-xs text-muted-foreground font-mono">
+                                      ({sub.subject_codename})
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {sub.section_name} • {sub.period_name}
+                                </div>
+                              </Table.Cell>
 
-                        <Table.Cell>
-                          <div className="flex items-center gap-1.5 text-sm font-bold text-black">
-                            <UserCheck className="h-3.5 w-3.5" />
-                            <span>{sub.substitute_staff_name}</span>
-                          </div>
-                          <div className="text-xs text-muted-foreground font-mono">
-                            {sub.substitute_staff_id}
-                          </div>
-                        </Table.Cell>
+                              <Table.Cell>
+                                <div className="flex items-center gap-1.5 text-sm font-bold text-black">
+                                  <UserCheck className="h-3.5 w-3.5" />
+                                  <span>{sub.substitute_staff_name}</span>
+                                </div>
+                                <div className="text-xs text-muted-foreground font-mono">
+                                  {sub.substitute_staff_id}
+                                </div>
+                              </Table.Cell>
 
-                        <Table.Cell>
-                          <div className="text-xs flex items-center gap-1.5 font-medium">
-                            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span>{sub.start_date}</span>
-                            <span className="text-muted-foreground">→</span>
-                            <span>{sub.end_date || "Open-ended"}</span>
-                          </div>
-                          {isFuture && sub.status === "active" && (
-                            <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">
-                              Starts in advance
-                            </span>
-                          )}
-                        </Table.Cell>
+                              <Table.Cell>
+                                <div className="text-xs flex items-center gap-1.5 font-medium">
+                                  <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                                  <span>{sub.start_date}</span>
+                                  <span className="text-muted-foreground">→</span>
+                                  <span>{sub.end_date || "Open-ended"}</span>
+                                </div>
+                                {isFuture && sub.status === "active" && (
+                                  <span className="text-[11px] text-blue-600 dark:text-blue-400 font-medium">
+                                    Starts in advance
+                                  </span>
+                                )}
+                              </Table.Cell>
 
-                        <Table.Cell>
-                          {sub.status === "active" ? (
-                            <Badge
-                              variant="outline"
-                              className="bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300"
-                            >
-                              Active
-                            </Badge>
-                          ) : sub.status === "completed" ? (
-                            <Badge variant="outline" className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                              Completed
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300">
-                              Cancelled
-                            </Badge>
-                          )}
-                        </Table.Cell>
-
-                        <Table.Cell className="max-w-[180px] truncate text-xs text-muted-foreground">
-                          {sub.reason || "—"}
-                        </Table.Cell>
-
-                        <Table.Cell className="text-right">
-                          {sub.status === "active" && (
-                            <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                              {/* Row-level Adjust */}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setSelectedAdjustTarget({ type: "single", substitution: sub })}
-                                title="Adjust this specific load's end date"
-                                className="h-7 px-2 text-xs"
-                              >
-                                <Edit className="h-3 w-3 mr-1" />
-                                Adjust
-                              </Button>
-
-                              {/* Row-level End Today */}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleEndEarly(sub)}
-                                disabled={Boolean(isActionLoading)}
-                                title="End this load today"
-                                className="h-7 px-2 text-xs text-amber-600 border-amber-300 hover:bg-amber-50"
-                              >
-                                <StopCircle className="h-3 w-3 mr-1" />
-                                End Today
-                              </Button>
-
-                              {/* Batch Actions if multi-load batch */}
-                              {isBatchRow && sub.batch_id && (
-                                <>
-                                  <Button
-                                    size="sm"
+                              <Table.Cell>
+                                {sub.status === "active" ? (
+                                  <Badge
                                     variant="outline"
-                                    onClick={() =>
-                                      setSelectedAdjustTarget({
-                                        type: "batch",
-                                        batchId: sub.batch_id!,
-                                        batchCount: batchTotal,
-                                        originalTeacherName: sub.original_staff_name,
-                                        substituteTeacherName: sub.substitute_staff_name,
-                                        startDate: sub.start_date,
-                                        currentEndDate: sub.end_date,
-                                      })
-                                    }
-                                    title="Adjust end date for all loads in this program takeover"
-                                    className="h-7 px-2 text-xs text-primary border-primary/30 hover:bg-primary/5"
+                                    className="bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300"
                                   >
-                                    <Layers className="h-3 w-3 mr-1" />
-                                    Adjust All ({batchTotal})
-                                  </Button>
+                                    Active
+                                  </Badge>
+                                ) : sub.status === "completed" ? (
+                                  <Badge variant="outline" className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                    Completed
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300">
+                                    Cancelled
+                                  </Badge>
+                                )}
+                              </Table.Cell>
 
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleEndBatchEarly(sub.batch_id!, batchTotal, sub.original_staff_name)}
-                                    disabled={Boolean(isActionLoading)}
-                                    title="End all loads in this program takeover today"
-                                    className="h-7 px-2 text-xs text-amber-700 border-amber-400 bg-amber-50/50 hover:bg-amber-100"
-                                  >
-                                    End All ({batchTotal})
-                                  </Button>
-                                </>
-                              )}
+                              <Table.Cell className="max-w-[180px] truncate text-xs text-muted-foreground">
+                                {sub.reason || "—"}
+                              </Table.Cell>
 
-                              {isFuture && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleCancel(sub)}
-                                  disabled={Boolean(isActionLoading)}
-                                  title="Cancel future substitution"
-                                  className="h-7 px-2 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
-                                >
-                                  <XCircle className="h-3 w-3 mr-1" />
-                                  Cancel
-                                </Button>
-                              )}
-                            </div>
-                          )}
-                        </Table.Cell>
-                      </Table.Row>
-                    );
-                  })}
-                </Table.Body>
-              </Table>
-            </div>
-          )}
-        </Card>
+                              <Table.Cell className="text-right">
+                                {sub.status === "active" && (
+                                  <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                    {/* Row-level Adjust */}
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => setSelectedAdjustTarget({ type: "single", substitution: sub })}
+                                      title="Adjust this specific load's end date"
+                                      className="h-7 px-2 text-xs"
+                                    >
+                                      <Edit className="h-3 w-3 mr-1" />
+                                      Adjust
+                                    </Button>
+
+                                    {/* Row-level End Today */}
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleEndEarly(sub)}
+                                      disabled={Boolean(isActionLoading)}
+                                      title="End this load today"
+                                      className="h-7 px-2 text-xs text-amber-600 border-amber-300 hover:bg-amber-50"
+                                    >
+                                      <StopCircle className="h-3 w-3 mr-1" />
+                                      End Today
+                                    </Button>
+
+                                    {/* Batch Actions if multi-load batch */}
+                                    {isBatchRow && sub.batch_id && (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() =>
+                                            setSelectedAdjustTarget({
+                                              type: "batch",
+                                              batchId: sub.batch_id!,
+                                              batchCount: batchTotal,
+                                              originalTeacherName: sub.original_staff_name,
+                                              substituteTeacherName: sub.substitute_staff_name,
+                                              startDate: sub.start_date,
+                                              currentEndDate: sub.end_date,
+                                            })
+                                          }
+                                          title="Adjust end date for all loads in this program takeover"
+                                          className="h-7 px-2 text-xs text-primary border-primary/30 hover:bg-primary/5"
+                                        >
+                                          <Layers className="h-3 w-3 mr-1" />
+                                          Adjust All ({batchTotal})
+                                        </Button>
+
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => handleEndBatchEarly(sub.batch_id!, batchTotal, sub.original_staff_name)}
+                                          disabled={Boolean(isActionLoading)}
+                                          title="End all loads in this program takeover today"
+                                          className="h-7 px-2 text-xs text-amber-700 border-amber-400 bg-amber-50/50 hover:bg-amber-100"
+                                        >
+                                          End All ({batchTotal})
+                                        </Button>
+                                      </>
+                                    )}
+
+                                    {isFuture && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleCancel(sub)}
+                                        disabled={Boolean(isActionLoading)}
+                                        title="Cancel future substitution"
+                                        className="h-7 px-2 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+                                      >
+                                        <XCircle className="h-3 w-3 mr-1" />
+                                        Cancel
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
+                              </Table.Cell>
+                            </Table.Row>
+                          );
+                        })}
+                      </Table.Body>
+                    </Table>
+                  </div>
+                )}
+              </Card>
             </div>
           </div>
         </div>

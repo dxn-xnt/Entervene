@@ -2,11 +2,16 @@
 
 import * as React from "react";
 import { Alert } from "@/components/retroui/Alert";
-import { Button } from "@/components/retroui/Button";
-import { Dialog } from "@/components/retroui/Dialog";
-import { Input } from "@/components/retroui/Input";
-import { Text } from "@/components/retroui/Text";
 import { Badge } from "@/components/retroui/Badge";
+import { Button } from "@/components/retroui/Button";
+import { Card } from "@/components/retroui/Card";
+import { Checkbox } from "@/components/retroui/Checkbox";
+import { Dialog } from "@/components/retroui/Dialog";
+import { Empty } from "@/components/retroui/Empty";
+import { Input } from "@/components/retroui/Input";
+import { Loader } from "@/components/retroui/Loader";
+import { Select } from "@/components/retroui/Select";
+import { Text } from "@/components/retroui/Text";
 import {
   getUsers,
   getTeacherSubjectLoads,
@@ -14,8 +19,7 @@ import {
   type User,
   type TeacherLoadSummaryItem,
 } from "@/lib/api";
-import { AlertCircle, Calendar, CheckSquare, Clock, Info, Loader2, Square, UserCheck, Users } from "lucide-react";
-
+import { AlertCircle, Calendar, CheckSquare, Clock, Info, Square, UserCheck, Users } from "lucide-react";
 
 interface AssignSubstituteModalProps {
   initialStaffId?: string;
@@ -192,260 +196,282 @@ export default function AssignSubstituteModal({
   };
 
   return (
-    <Dialog.Content size="lg" className="max-w-2xl max-h-[90vh] flex flex-col">
-      <Dialog.Header position="static">
+    <Dialog.Content size="xl">
+      <Dialog.Header>
         <div className="flex items-center gap-2">
-          <UserCheck className="h-5 w-5 text-primary" />
-          <Text as="h5" className="font-sans text-lg font-bold">
+          <UserCheck className="size-5" />
+          <span className="font-sans text-lg font-bold">
             Assign Substitute Teacher
-          </Text>
+          </span>
         </div>
       </Dialog.Header>
 
-      <form onSubmit={handleSubmit} className="space-y-4 pt-2 overflow-y-auto px-1 flex-1">
-        {errorMsg && (
-          <Alert status="error" className="flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <div className="text-sm">{errorMsg}</div>
-          </Alert>
-        )}
-
-        {/* 1. Teacher on Leave */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Teacher on Leave (Original Teacher)
-          </label>
-          {initialStaffId ? (
-            <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/40 font-medium text-sm">
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <span>{initialStaffName || initialStaffId}</span>
-              </div>
-              <Badge variant="secondary">ID: {initialStaffId}</Badge>
-            </div>
-          ) : (
-            <select
-              value={selectedOriginalStaffId}
-              onChange={(e) => setSelectedOriginalStaffId(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              disabled={isLoadingTeachers}
-            >
-              <option value="">-- Select Teacher on Leave --</option>
-              {teachers.map((t) => (
-                <option key={t.staff_id || t.id} value={t.staff_id}>
-                  {t.name} ({t.staff_id}) {t.employment_status ? `• ${t.employment_status}` : ""}
-                </option>
-              ))}
-            </select>
+      <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+        <section className="flex flex-col gap-4 overflow-y-auto p-5 max-h-[72vh]">
+          {errorMsg && (
+            <Alert status="error" className="flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <Alert.Title className="text-sm font-semibold">{errorMsg}</Alert.Title>
+            </Alert>
           )}
-        </div>
 
-        {/* 2. Select Subject Loads (Whole Program Takeover) */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <span>Teaching Program to Cover</span>
-              {isLoadingLoads && <Loader2 className="h-3 w-3 animate-spin" />}
+          {/* 1. Teacher on Leave */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-foreground">
+              Teacher on Leave (Original Teacher)
             </label>
-
-            {availableLoads.length > 0 && (
-              <button
-                type="button"
-                onClick={handleToggleSelectAll}
-                className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+            {initialStaffId ? (
+              <Card className="flex items-center justify-between p-3 bg-muted/40 font-medium text-sm">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span>{initialStaffName || initialStaffId}</span>
+                </div>
+                <Badge variant="surface">ID: {initialStaffId}</Badge>
+              </Card>
+            ) : (
+              <Select
+                value={selectedOriginalStaffId}
+                onChange={(e) => setSelectedOriginalStaffId(e.target.value)}
+                disabled={isLoadingTeachers}
               >
-                {allAvailableSelected ? (
-                  <>
-                    <CheckSquare className="h-3.5 w-3.5" />
-                    <span>Deselect All</span>
-                  </>
-                ) : (
-                  <>
-                    <Square className="h-3.5 w-3.5" />
-                    <span>Select All (Entire Program)</span>
-                  </>
-                )}
-              </button>
+                <Select.Trigger className="w-full text-sm">
+                  <Select.Value placeholder="Select Teacher on Leave..." />
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Group>
+                    {teachers.map((t) => (
+                      <Select.Item key={t.staff_id || t.id} value={t.staff_id || t.id}>
+                        {t.name} ({t.staff_id || t.id}) {t.employment_status ? `• ${t.employment_status}` : ""}
+                      </Select.Item>
+                    ))}
+                  </Select.Group>
+                </Select.Content>
+              </Select>
             )}
           </div>
 
-          {selectedOriginalStaffId ? (
-            teacherLoads.length === 0 && !isLoadingLoads ? (
-              <div className="p-4 text-center text-sm text-muted-foreground border rounded-lg bg-muted/20">
-                No active published subject loads found for this teacher.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="text-xs text-muted-foreground flex justify-between items-center px-1">
-                  <span>Click individual cards or select all to assign the entire program.</span>
-                  <span className="font-semibold text-foreground">
-                    {selectedLoadIds.length} of {teacherLoads.length} selected
-                  </span>
-                </div>
+          {/* 2. Select Subject Loads (Whole Program Takeover) */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                <span>Teaching Program to Cover</span>
+                {isLoadingLoads && <Loader size="sm" />}
+              </label>
 
-                <div className="grid grid-cols-1 gap-2 max-h-52 overflow-y-auto pr-1">
-                  {teacherLoads.map((load) => {
-                    const isSelected = selectedLoadIds.includes(load.subject_load_id);
-                    const isCovered = load.has_active_substitution;
+              {availableLoads.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleToggleSelectAll}
+                  className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  {allAvailableSelected ? (
+                    <>
+                      <CheckSquare className="h-3.5 w-3.5" />
+                      <span>Deselect All</span>
+                    </>
+                  ) : (
+                    <>
+                      <Square className="h-3.5 w-3.5" />
+                      <span>Select All (Entire Program)</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
 
-                    return (
-                      <div
-                        key={load.subject_load_id}
-                        onClick={() => {
-                          if (!isCovered) handleToggleLoad(load.subject_load_id);
-                        }}
-                        className={`p-3 rounded-lg border transition-all flex items-start justify-between ${
-                          isCovered
+            {selectedOriginalStaffId ? (
+              teacherLoads.length === 0 && !isLoadingLoads ? (
+                <Empty className="p-4 border shadow-none bg-muted/20">
+                  <Empty.Content>
+                    <Empty.Description className="text-sm font-semibold">
+                      No active published subject loads found for this teacher.
+                    </Empty.Description>
+                  </Empty.Content>
+                </Empty>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <div className="text-xs text-muted-foreground flex justify-between items-center px-1">
+                    <span>Click individual cards or select all to assign the entire program.</span>
+                    <span className="font-semibold text-foreground">
+                      {selectedLoadIds.length} of {teacherLoads.length} selected
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 max-h-52 overflow-y-auto pr-1">
+                    {teacherLoads.map((load) => {
+                      const isSelected = selectedLoadIds.includes(load.subject_load_id);
+                      const isCovered = load.has_active_substitution;
+
+                      return (
+                        <Card
+                          key={load.subject_load_id}
+                          onClick={() => {
+                            if (!isCovered) handleToggleLoad(load.subject_load_id);
+                          }}
+                          className={`p-3 transition-all flex items-start justify-between ${isCovered
                             ? "opacity-60 bg-muted/30 border-dashed cursor-not-allowed"
                             : isSelected
-                            ? "border-primary bg-primary/5 ring-1 ring-primary cursor-pointer"
-                            : "border-border hover:bg-muted/40 cursor-pointer"
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            disabled={isCovered}
-                            onChange={() => {
-                              if (!isCovered) handleToggleLoad(load.subject_load_id);
-                            }}
-                            className="mt-1 rounded border-gray-300 text-primary focus:ring-primary h-4 w-4 pointer-events-none"
-                          />
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-semibold text-sm">
-                                {load.subject_name} {load.subject_codename ? `(${load.subject_codename})` : ""}
-                              </span>
-                              <Badge variant="outline" className="text-xs font-normal">
-                                {load.section_name}
-                              </Badge>
-                              {load.is_active_period && (
-                                <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]">
-                                  Active Term
+                              ? "border-primary bg-primary/10 shadow-sm cursor-pointer"
+                              : "hover:bg-muted/40 cursor-pointer"
+                            }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <Checkbox
+                              checked={isSelected}
+                              disabled={isCovered}
+                              onCheckedChange={() => {
+                                if (!isCovered) handleToggleLoad(load.subject_load_id);
+                              }}
+                              size="sm"
+                            />
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-semibold text-sm">
+                                  {load.subject_name} {load.subject_codename ? `(${load.subject_codename})` : ""}
+                                </span>
+                                <Badge variant="outline" className="text-xs font-normal">
+                                  {load.section_name}
                                 </Badge>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                              <span className="flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                {load.start_time && load.end_time
-                                  ? `${load.start_time} - ${load.end_time}`
-                                  : "No fixed time"}
-                              </span>
-                              <span>• {load.period_name}</span>
-                              {load.days_of_week && load.days_of_week.length > 0 && (
-                                <span>• {load.days_of_week.map((d) => d.slice(0, 3)).join(", ")}</span>
-                              )}
+                                {load.is_active_period && (
+                                  <Badge variant="surface" size="sm">
+                                    Active Term
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {load.start_time && load.end_time
+                                    ? `${load.start_time} - ${load.end_time}`
+                                    : "No fixed time"}
+                                </span>
+                                <span>• {load.period_name}</span>
+                                {load.days_of_week && load.days_of_week.length > 0 && (
+                                  <span>• {load.days_of_week.map((d) => d.slice(0, 3)).join(", ")}</span>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {isCovered && (
-                          <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300 text-xs shrink-0 ml-2">
-                            Covered by {load.active_substitute_name}
-                          </Badge>
-                        )}
-                      </div>
-                    );
-                  })}
+                          {isCovered && (
+                            <Badge variant="outline" className="text-xs shrink-0 ml-2">
+                              Covered by {load.active_substitute_name}
+                            </Badge>
+                          )}
+                        </Card>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )
-          ) : (
-            <div className="p-3 text-xs text-muted-foreground border rounded-lg bg-muted/10">
-              Select a teacher above to view and assign their teaching program.
-            </div>
-          )}
-        </div>
-
-        {/* 3. Select Substitute Teacher (Grouped Dropdown) */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex justify-between items-center">
-            <span>Substitute Teacher</span>
-            {dedicatedSubs.length > 0 && (
-              <span className="text-[11px] font-normal text-emerald-600 dark:text-emerald-400">
-                {dedicatedSubs.length} dedicated substitute(s) available
-              </span>
+              )
+            ) : (
+              <Card className="p-3 text-xs text-muted-foreground bg-muted/10">
+                Select a teacher above to view and assign their teaching program.
+              </Card>
             )}
-          </label>
-          <select
-            value={selectedSubstituteStaffId}
-            onChange={(e) => setSelectedSubstituteStaffId(e.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            disabled={isLoadingTeachers}
-          >
-            <option value="">-- Select Substitute Teacher --</option>
-            {dedicatedSubs.length > 0 && (
-              <optgroup label="🌟 Dedicated Substitute Teachers">
-                {dedicatedSubs.map((t) => (
-                  <option key={t.staff_id || t.id} value={t.staff_id}>
-                    {t.name} ({t.staff_id}) • Substitute
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {regularFaculty.length > 0 && (
-              <optgroup label="Regular / Other Faculty (Peer Coverage)">
-                {regularFaculty.map((t) => (
-                  <option key={t.staff_id || t.id} value={t.staff_id}>
-                    {t.name} ({t.staff_id}) {t.employment_status ? `• ${t.employment_status}` : ""}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-          {dedicatedSubs.length === 0 && candidateTeachers.length > 0 && (
-            <div className="flex items-center gap-1.5 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 p-2 rounded border border-amber-200">
-              <Info className="h-3.5 w-3.5 shrink-0" />
-              <span>No teachers currently have 'Substitute' employment status. You may select regular faculty for peer coverage or update a teacher's status in Users.</span>
-            </div>
-          )}
-        </div>
-
-        {/* 4. Dates & Reason */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              <span>Start Date *</span>
-            </label>
-            <Input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              required
-            />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              <span>Expected End Date (Optional)</span>
+          {/* 3. Select Substitute Teacher (Grouped Dropdown) */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-muted-foreground flex justify-between items-center">
+              <span>Substitute Teacher</span>
+              {dedicatedSubs.length > 0 && (
+                <span className="text-xs font-normal text-primary">
+                  {dedicatedSubs.length} dedicated substitute(s) available
+                </span>
+              )}
+            </label>
+            <Select
+              value={selectedSubstituteStaffId}
+              onChange={(e) => setSelectedSubstituteStaffId(e.target.value)}
+              disabled={isLoadingTeachers}
+            >
+              <Select.Trigger className="w-full text-sm">
+                <Select.Value placeholder="Select Substitute Teacher..." />
+              </Select.Trigger>
+              <Select.Content>
+                {dedicatedSubs.length > 0 && (
+                  <Select.Group>
+                    <Select.Label className="px-2 py-1 text-xs font-bold text-muted-foreground">
+                      Dedicated Substitute Teachers
+                    </Select.Label>
+                    {dedicatedSubs.map((t) => (
+                      <Select.Item key={t.staff_id || t.id} value={t.staff_id || t.id}>
+                        {t.name} ({t.staff_id || t.id}) • Substitute
+                      </Select.Item>
+                    ))}
+                  </Select.Group>
+                )}
+                {regularFaculty.length > 0 && (
+                  <Select.Group>
+                    <Select.Label className="px-2 py-1 text-xs font-bold text-muted-foreground">
+                      Regular / Other Faculty (Peer Coverage)
+                    </Select.Label>
+                    {regularFaculty.map((t) => (
+                      <Select.Item key={t.staff_id || t.id} value={t.staff_id || t.id}>
+                        {t.name} ({t.staff_id || t.id}) {t.employment_status ? `• ${t.employment_status}` : ""}
+                      </Select.Item>
+                    ))}
+                  </Select.Group>
+                )}
+              </Select.Content>
+            </Select>
+            {dedicatedSubs.length === 0 && candidateTeachers.length > 0 && (
+              <Alert status="warning" className="flex items-center gap-2 p-2">
+                <Info className="h-4 w-4 shrink-0" />
+                <Alert.Title className="text-xs font-medium">
+                  No teachers currently have &apos;Substitute&apos; employment status. You may select regular faculty for peer coverage or update a teacher&apos;s status in Users.
+                </Alert.Title>
+              </Alert>
+            )}
+          </div>
+
+          {/* 4. Dates & Reason */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
+                <span>Start Date *</span>
+              </label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
+                <span>Expected End Date (Optional)</span>
+              </label>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                min={startDate}
+              />
+              <Text as="p" className="text-xs text-muted-foreground">
+                Leave blank for indefinite duration.
+              </Text>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-muted-foreground">
+              Reason / Notes
             </label>
             <Input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              min={startDate}
+              type="text"
+              placeholder="e.g. Maternity Leave (approx. 6 months)"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
             />
-            <p className="text-[11px] text-muted-foreground">Leave blank for indefinite duration.</p>
           </div>
-        </div>
+        </section>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Reason / Notes
-          </label>
-          <Input
-            type="text"
-            placeholder="e.g. Maternity Leave (approx. 6 months)"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </div>
-
-        <Dialog.Footer position="static" className="pt-2">
+        <Dialog.Footer>
           <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
@@ -455,7 +481,7 @@ export default function AssignSubstituteModal({
           >
             {isSubmitting ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader size="sm" className="mr-2" />
                 Assigning ({selectedLoadIds.length} loads)...
               </>
             ) : (
