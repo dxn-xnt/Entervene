@@ -10,7 +10,6 @@ import {
   type StudentTodosResponse,
   type TodoItem as ApiTodoItem,
 } from "@/lib/api";
-import { CheckCircle2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { EmptyStateCard } from "@/components/empty-state-card";
 

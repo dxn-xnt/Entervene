@@ -3,7 +3,7 @@
 > **System**: Entervene — AI-Enhanced Learning Management System for Student Risk Management & Academic Success  
 > **Generated Date**: 2026-09-06  
 > **Database Dialect**: PostgreSQL 15+ (Production) | SQLite 3 (Development / Testing)  
-> **Database Scope**: **60 Tables** across **12 Functional Domains** | **574 Documented Attributes**  
+> **Database Scope**: **58 Tables** across **12 Functional Domains** | **556 Documented Attributes**  
 > **ORM**: SQLAlchemy 2.0 with Alembic Migrations  
 
 ---
@@ -32,16 +32,14 @@
   - [`subject_offering_pathway`](#table-subject_offering_pathway) — Junction table linking subject offerings to specific academi...
   - [`competency`](#table-competency) — Stores DepEd Most Essential Learning Competencies (MELCs) an...
   - [`class`](#table-class) — Represents academic class sections (e.g., Grade 10 - Rizal),...
-- [**Scheduling & Faculty Workload**](#scheduling--faculty-workload) (4 tables)
-  - [`period_template`](#table-period_template) — Defines reusable class schedule bell templates (e.g., Mornin...
+- [**Scheduling & Faculty Workload**](#scheduling--faculty-workload) (3 tables)
   - [`period_template_slot`](#table-period_template_slot) — Individual time periods within a bell schedule template (sta...
   - [`subject_load`](#table-subject_load) — Faculty teaching loads and section schedules, supporting mul...
   - [`teacher_substitution`](#table-teacher_substitution) — Manages temporary teacher substitution assignments when a fa...
-- [**Enrollment & Lesson Delivery**](#enrollment--lesson-delivery) (5 tables)
+- [**Enrollment & Lesson Delivery**](#enrollment--lesson-delivery) (4 tables)
   - [`student_class`](#table-student_class) — Student section enrollment records, linking learners to clas...
   - [`lesson`](#table-lesson) — Instructional content, lecture modules, and learning package...
   - [`lesson_assignment`](#table-lesson_assignment) — Distributes lessons to specific classes with scheduled avail...
-  - [`lesson_attachment`](#table-lesson_attachment) — File uploads and digital resources attached to lesson module...
   - [`lesson_plan`](#table-lesson_plan) — AI-assisted lesson planning records supporting instructional...
 - [**Classwork, Activities & Submissions**](#classwork-activities--submissions) (8 tables)
   - [`classwork`](#table-classwork) — Assessments, assignments, activities, and reading tasks assi...
@@ -93,8 +91,8 @@
 | **Authentication & Authorization** | 5 | `role`, `user_account`, `user_roles`, `user_login_log`, `invitation_token` | Defines access control roles within the system (e.g., ADMIN, TEACHER, STUDE... |
 | **People & User Profiles** | 2 | `academic_staff`, `student` | Stores profile and institutional credentials for teachers, administrators, ... |
 | **Academic Structure & Curriculum Hierarchy** | 12 | `academic_year`, `academic_level`, `academic_period`, `academic_pathway`, `deped_cluster`, `academic_level_pathway_scope`, `subject_groups`, `subject`, `subject_offering`, `subject_offering_pathway`, `competency`, `class` | Defines institutional school years (e.g., 2025-2026), marking whether a sch... |
-| **Scheduling & Faculty Workload** | 4 | `period_template`, `period_template_slot`, `subject_load`, `teacher_substitution` | Defines reusable class schedule bell templates (e.g., Morning Shift, Aftern... |
-| **Enrollment & Lesson Delivery** | 5 | `student_class`, `lesson`, `lesson_assignment`, `lesson_attachment`, `lesson_plan` | Student section enrollment records, linking learners to classes for a speci... |
+| **Scheduling & Faculty Workload** | 3 | `period_template_slot`, `subject_load`, `teacher_substitution` | Individual time periods within a bell schedule template (start time, end ti... |
+| **Enrollment & Lesson Delivery** | 4 | `student_class`, `lesson`, `lesson_assignment`, `lesson_plan` | Student section enrollment records, linking learners to classes for a speci... |
 | **Classwork, Activities & Submissions** | 8 | `classwork`, `classwork_assignment`, `classwork_attachment`, `classwork_lesson`, `student_submission`, `submission_attachment`, `tos_exam`, `tos_question` | Assessments, assignments, activities, and reading tasks assigned to student... |
 | **Assessment, Quizzes & Examinations** | 6 | `question`, `question_option`, `quiz`, `quiz_question`, `quiz_answer`, `quiz_setting` | Question bank repository storing multiple-choice, essay, and open-ended que... |
 | **Grading System & DepEd Assessment** | 6 | `grading_template`, `grading_template_component`, `assessment_item`, `student_assessment_score`, `student_period_grade`, `grade_submission_log` | Defines DepEd grading percentage distributions (Written Work, Performance T... |
@@ -129,10 +127,10 @@
 
 ### <a id="table-user_account"></a> Table: `user_account`
 
-**Description**: Core authentication table storing system credentials, account status, polymorphic entity references, and audit timestamps.
+**Description**: Core authentication table storing system credentials, account status, verification state, and audit timestamps.
 
 - **Primary Key**: `user_id`
-- **Total Attributes**: 11
+- **Total Attributes**: 8
 - **Foreign Keys**: None (Root / Independent Entity)
 - **Unique Constraints**: `(email)`
 
@@ -140,13 +138,10 @@
 
 | Column Name | Data Type | Nullable | Key / Constraint | Default | Description & System Usage |
 |---|---|:---:|:---:|---|---|
-| `user_id` | `UUID` | No | **PK** | `<function uuid4 at 0x000001D019FA7060>` | Foreign key referencing the associated user account. |
+| `user_id` | `UUID` | No | **PK** | `<function uuid4 at 0x000001D4F4D16FB0>` | Foreign key referencing the associated user account. |
 | `email` | `VARCHAR(255)` | No | UNIQUE | - | Stores email. |
 | `password_hash` | `VARCHAR(255)` | Yes | - | - | Bcrypt/Argon2 password hash (nullable for invited users pending onboarding). |
-| `invitation_token` | `VARCHAR(255)` | Yes | - | - | Legacy onboarding token string (active onboarding managed via invitation_token table). |
 | `account_status` | `VARCHAR(50)` | Yes | - | `active` | State of user account: 'active', 'inactive', 'suspended'. |
-| `ref_type` | `VARCHAR(50)` | Yes | - | - | Polymorphic reference type ('staff' or 'student') linking to personal profile. |
-| `ref_id` | `VARCHAR(50)` | Yes | - | - | Polymorphic entity identifier (matches staff_id or student_lrn). |
 | `last_login` | `DATETIME` | Yes | - | - | Timestamp of most recent successful user authentication. |
 | `email_verified_at` | `DATETIME` | Yes | - | - | Timestamp when user email was verified. |
 | `created_at` | `DATETIME` | Yes | - | `now()` | Timestamp when this record was originally created in the database. |
@@ -204,11 +199,11 @@
 
 | Column Name | Data Type | Nullable | Key / Constraint | Default | Description & System Usage |
 |---|---|:---:|:---:|---|---|
-| `token_id` | `UUID` | No | **PK** | `<function uuid4 at 0x000001D01A161FE0>` | Foreign key reference to token. |
+| `token_id` | `UUID` | No | **PK** | `<function uuid4 at 0x000001D4F4ED1F30>` | Foreign key reference to token. |
 | `user_id` | `UUID` | No | FK → `user_account.user_id` | - | Foreign key referencing the associated user account. |
 | `token_hash` | `VARCHAR(64)` | No | UNIQUE | - | Stores token hash. |
-| `expires_at` | `DATETIME` | No | - | `<function _48h_from_now at 0x000001D01A162140>` | Stores expires at. |
-| `created_at` | `DATETIME` | Yes | - | `<function InvitationToken.<lambda> at 0x000001D01A162350>` | Timestamp when this record was originally created in the database. |
+| `expires_at` | `DATETIME` | No | - | `<function _48h_from_now at 0x000001D4F4ED2090>` | Stores expires at. |
+| `created_at` | `DATETIME` | Yes | - | `<function InvitationToken.<lambda> at 0x000001D4F4ED22A0>` | Timestamp when this record was originally created in the database. |
 
 ---
 
@@ -250,7 +245,7 @@
 - **Primary Key**: `student_id`
 - **Total Attributes**: 14
 - **Foreign Keys**: `academic_level_id` → `academic_level.academic_level_id` ON DELETE RESTRICT; `user_id` → `user_account.user_id` ON DELETE SET NULL
-- **Unique Constraints**: `(user_id)`, `(student_lrn)`, `(email)`
+- **Unique Constraints**: `(student_lrn)`, `(email)`, `(user_id)`
 
 #### Attributes
 
@@ -539,7 +534,7 @@
 - **Primary Key**: `class_id`
 - **Total Attributes**: 12
 - **Foreign Keys**: `adviser_staff_id` → `academic_staff.staff_id` ON DELETE SET NULL; `academic_year_id` → `academic_year.academic_year_id`; `academic_level_id` → `academic_level.academic_level_id`; `academic_period_id` → `academic_period.academic_period_id`; `pathway_id` → `academic_pathway.id` ON DELETE SET NULL; `paired_class_id` → `class.class_id` ON DELETE SET NULL
-- **Unique Constraints**: `(class_id, academic_year_id)`, `(adviser_staff_id, academic_year_id)`
+- **Unique Constraints**: `(adviser_staff_id, academic_year_id)`, `(class_id, academic_year_id)`
 
 #### Attributes
 
@@ -561,29 +556,6 @@
 ---
 
 ## Scheduling & Faculty Workload
-
-### <a id="table-period_template"></a> Table: `period_template`
-
-**Description**: Defines reusable class schedule bell templates (e.g., Morning Shift, Afternoon Shift).
-
-- **Primary Key**: `template_id`
-- **Total Attributes**: 8
-- **Foreign Keys**: None (Root / Independent Entity)
-
-#### Attributes
-
-| Column Name | Data Type | Nullable | Key / Constraint | Default | Description & System Usage |
-|---|---|:---:|:---:|---|---|
-| `template_id` | `INTEGER` | No | **PK** | - | Foreign key reference to template. |
-| `template_group` | `VARCHAR(50)` | No | - | - | Stores template group. |
-| `period_number` | `INTEGER` | No | - | - | Stores period number. |
-| `period_label` | `VARCHAR(50)` | No | - | - | Stores period label. |
-| `start_time` | `VARCHAR(5)` | No | - | - | Time specification for start time. |
-| `end_time` | `VARCHAR(5)` | No | - | - | Time specification for end time. |
-| `duration_mins` | `INTEGER` | No | - | - | Stores duration mins. |
-| `is_break` | `BOOLEAN` | Yes | - | `False` | Boolean flag indicating whether break. |
-
----
 
 ### <a id="table-period_template_slot"></a> Table: `period_template_slot`
 
@@ -748,28 +720,6 @@
 | `publish_date` | `DATETIME` | Yes | - | - | Calendar date for publish date. |
 | `is_published` | `BOOLEAN` | Yes | - | `False` | Boolean flag indicating whether published. |
 | `created_at` | `DATETIME` | Yes | - | `now()` | Timestamp when this record was originally created in the database. |
-
----
-
-### <a id="table-lesson_attachment"></a> Table: `lesson_attachment`
-
-**Description**: File uploads and digital resources attached to lesson modules.
-
-- **Primary Key**: `lesson_attachment_id`
-- **Total Attributes**: 7
-- **Foreign Keys**: `lesson_id` → `lesson.lesson_id` ON DELETE CASCADE
-
-#### Attributes
-
-| Column Name | Data Type | Nullable | Key / Constraint | Default | Description & System Usage |
-|---|---|:---:|:---:|---|---|
-| `lesson_attachment_id` | `INTEGER` | No | **PK** | - | Primary key unique identifier for lesson_attachment. |
-| `lesson_id` | `INTEGER` | No | FK → `lesson.lesson_id` | - | Foreign key reference to lesson. |
-| `file_name` | `VARCHAR(255)` | No | - | - | Name or label for lesson attachment. |
-| `file_path` | `TEXT` | No | - | - | Stores file path. |
-| `file_type` | `VARCHAR(100)` | Yes | - | - | Stores file type. |
-| `file_size` | `BIGINT` | No | - | - | Stores file size. |
-| `uploaded_at` | `DATETIME` | Yes | - | `now()` | Stores uploaded at. |
 
 ---
 
@@ -1591,7 +1541,7 @@
 
 | Column Name | Data Type | Nullable | Key / Constraint | Default | Description & System Usage |
 |---|---|:---:|:---:|---|---|
-| `notification_id` | `UUID` | No | **PK** | `<function uuid4 at 0x000001D01A588250>` | Primary key unique identifier for notification. |
+| `notification_id` | `UUID` | No | **PK** | `<function uuid4 at 0x000001D4F5257950>` | Primary key unique identifier for notification. |
 | `user_id` | `UUID` | No | FK → `user_account.user_id` | - | Foreign key referencing the associated user account. |
 | `notification_type` | `VARCHAR(60)` | No | - | - | Stores notification type. |
 | `title` | `VARCHAR(255)` | No | - | - | Stores title. |

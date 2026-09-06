@@ -37,10 +37,10 @@ DOMAIN_MAPPING = {
         "subject", "subject_offering", "subject_offering_pathway", "competency", "class"
     ],
     "Scheduling & Faculty Workload": [
-        "period_template", "period_template_slot", "subject_load", "teacher_substitution"
+        "period_template_slot", "subject_load", "teacher_substitution"
     ],
     "Enrollment & Lesson Delivery": [
-        "student_class", "lesson", "lesson_assignment", "lesson_attachment", "lesson_plan"
+        "student_class", "lesson", "lesson_assignment", "lesson_plan"
     ],
     "Classwork, Activities & Submissions": [
         "classwork", "classwork_assignment", "classwork_attachment", "classwork_lesson",
@@ -70,7 +70,7 @@ DOMAIN_MAPPING = {
 
 TABLE_DESCRIPTIONS = {
     "role": "Defines access control roles within the system (e.g., ADMIN, TEACHER, STUDENT). Controls permission scopes across the entire platform.",
-    "user_account": "Core authentication table storing system credentials, account status, polymorphic entity references, and audit timestamps.",
+    "user_account": "Core authentication table storing system credentials, account status, verification state, and audit timestamps.",
     "user_roles": "Junction table mapping users to their assigned system roles (Many-to-Many relationship between user_account and role).",
     "user_login_log": "Security and activity tracking table recording user authentication events, timestamps, and IP addresses.",
     "invitation_token": "Manages secure onboarding tokens for new staff and student registration, tracking expiration and activation status.",
@@ -88,14 +88,12 @@ TABLE_DESCRIPTIONS = {
     "subject_offering_pathway": "Junction table linking subject offerings to specific academic pathways (strands).",
     "competency": "Stores DepEd Most Essential Learning Competencies (MELCs) and curriculum objectives linked to subjects.",
     "class": "Represents academic class sections (e.g., Grade 10 - Rizal), assigned to an adviser, grade level, and academic year.",
-    "period_template": "Defines reusable class schedule bell templates (e.g., Morning Shift, Afternoon Shift).",
     "period_template_slot": "Individual time periods within a bell schedule template (start time, end time, period order).",
     "subject_load": "Faculty teaching loads and section schedules, supporting multi-version draft and publish workflows for Subject Load Studio.",
     "teacher_substitution": "Manages temporary teacher substitution assignments when a faculty member is on leave or unavailable.",
     "student_class": "Student section enrollment records, linking learners to classes for a specific academic year.",
     "lesson": "Instructional content, lecture modules, and learning packages authored by teachers, linked to curriculum competencies.",
     "lesson_assignment": "Distributes lessons to specific classes with scheduled availability dates.",
-    "lesson_attachment": "File uploads and digital resources attached to lesson modules.",
     "lesson_plan": "AI-assisted lesson planning records supporting instructional objectives, DepEd 4As framework, and teaching notes.",
     "classwork": "Assessments, assignments, activities, and reading tasks assigned to students.",
     "classwork_assignment": "Publishes classwork to specific class sections with deadlines and submission rules.",
@@ -154,10 +152,7 @@ def get_column_description(table_name, col_name):
     # Context-specific column descriptions
     specific = {
         ("user_account", "password_hash"): "Bcrypt/Argon2 password hash (nullable for invited users pending onboarding).",
-        ("user_account", "invitation_token"): "Legacy onboarding token string (active onboarding managed via invitation_token table).",
         ("user_account", "account_status"): "State of user account: 'active', 'inactive', 'suspended'.",
-        ("user_account", "ref_type"): "Polymorphic reference type ('staff' or 'student') linking to personal profile.",
-        ("user_account", "ref_id"): "Polymorphic entity identifier (matches staff_id or student_lrn).",
         ("user_account", "last_login"): "Timestamp of most recent successful user authentication.",
         ("user_account", "email_verified_at"): "Timestamp when user email was verified.",
         
