@@ -1,3 +1,7 @@
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -19,6 +23,12 @@ class Settings(BaseSettings):
     cookie_domain: str | None = None
     groq_api_key: str | None = None
     gemini_api_key: str | None = None
+    mail_driver: str = "console"
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    mail_from_name: str = "Entervene Academic Portal"
 
     @field_validator("debug", mode="before")
     @classmethod

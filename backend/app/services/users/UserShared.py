@@ -107,6 +107,7 @@ def create_pending_account(db: Session, email: str, role_name: str) -> tuple[Use
         email=email,
         password_hash=None,
         account_status="pending",
+        email_status="pending",
     )
     db.add(account)
     db.flush()

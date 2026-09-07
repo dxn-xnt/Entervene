@@ -7,7 +7,7 @@ import { Input } from "../../components/retroui/Input";
 import { Loader } from "../../components/retroui/Loader";
 import { Avatar } from "../../components/retroui/Avatar";
 import { Tabs, type TabItem } from "../../components/retroui/Tabs";
-import { getUsers, type User, type UserRole } from "../../lib/api";
+import { getUsers, resendUserInvitation, type User, type UserRole } from "../../lib/api";
 import {
   BookOpen,
   GraduationCap,
@@ -207,6 +207,19 @@ export default function AdminUsers() {
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
     new Set(),
   );
+  const [resendingId, setResendingId] = useState<string | null>(null);
+
+  const handleResend = useCallback(async (user: User) => {
+    try {
+      setResendingId(user.id);
+      await resendUserInvitation(user.id);
+      await fetchUsers();
+    } catch (err: any) {
+      alert(err.message || "Failed to resend invitation.");
+    } finally {
+      setResendingId(null);
+    }
+  }, []);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -568,6 +581,8 @@ export default function AdminUsers() {
                                     user={user}
                                     showGrade={isUnassigned}
                                     onOpenUser={openUser}
+                                    onResend={handleResend}
+                                    isResending={resendingId === user.id}
                                   />
                                 ))}
                               </Table.Body>
@@ -612,6 +627,8 @@ export default function AdminUsers() {
                               activeTab={activeTab}
                               onOpenUser={openUser}
                               onAssignSubstitute={(u) => setSelectedTeacherForSub(u)}
+                              onResend={handleResend}
+                              isResending={resendingId === user.id}
                             />
                           ))}
                         </Table.Body>
@@ -675,10 +692,14 @@ function StudentRow({
   user,
   showGrade,
   onOpenUser,
+  onResend,
+  isResending,
 }: {
   user: User;
   showGrade: boolean;
   onOpenUser: (user: User) => void;
+  onResend?: (user: User) => void;
+  isResending?: boolean;
 }) {
   const gradeLevel = getStudentGradeLevel(user);
   const sectionName = getSectionDisplayName(user.section);
@@ -693,7 +714,12 @@ function StudentRow({
       </Table.Cell>
 
       <Table.Cell className="text-center w-36">
-        <StatusBadge status={user.account_status} />
+        <StatusBadge
+          status={user.account_status}
+          emailStatus={user.email_status}
+          onResend={() => onResend?.(user)}
+          isResending={isResending}
+        />
       </Table.Cell>
 
       <Table.Cell className="text-center w-40">
@@ -727,15 +753,48 @@ function StudentRow({
 
 // ─── Teacher / Admin components (unchanged) ───────────────────────────────────
 
-function StatusBadge({ status }: { status: string | undefined | null }) {
+function StatusBadge({
+  status,
+  emailStatus,
+  onResend,
+  isResending,
+}: {
+  status: string | undefined | null;
+  emailStatus?: string;
+  onResend?: () => void;
+  isResending?: boolean;
+}) {
   const style = getStatusStyle(status);
+  const isPending = (status || "").toLowerCase() === "pending";
+
   return (
-    <Badge
-      size="sm"
-      variant={style.variant}
-    >
-      {style.label}
-    </Badge>
+    <div className="flex flex-col items-center gap-1">
+      <Badge
+        size="sm"
+        variant={style.variant}
+      >
+        {style.label}
+      </Badge>
+      {isPending && emailStatus === "failed" && (
+        <Badge
+          size="sm"
+          variant="solid"
+          className="bg-red-600 hover:bg-red-700 text-white text-[10px] px-1.5 py-0 font-bold cursor-pointer transition-colors shadow-none"
+          onClick={(e) => {
+            e.stopPropagation();
+            onResend?.();
+          }}
+          title="Email delivery failed. Click to resend invitation."
+        >
+          {isResending ? "Resending..." : "Email Failed ↺"}
+        </Badge>
+      )}
+      {isPending && emailStatus === "pending" && (
+        <span className="text-[10px] text-amber-600 font-semibold animate-pulse">
+          Sending invite...
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -744,11 +803,15 @@ function UserRow({
   activeTab,
   onOpenUser,
   onAssignSubstitute,
+  onResend,
+  isResending,
 }: {
   user: User;
   activeTab: TabId;
   onOpenUser: (user: User) => void;
   onAssignSubstitute?: (user: User) => void;
+  onResend?: (user: User) => void;
+  isResending?: boolean;
 }) {
   const { shown, extra } = visibleSubjects(user.subjects);
 
@@ -763,7 +826,12 @@ function UserRow({
         </Table.Cell>
         <Table.Cell className="text-center w-36">
           <div className="flex flex-col items-center gap-1">
-            <StatusBadge status={user.account_status} />
+            <StatusBadge
+              status={user.account_status}
+              emailStatus={user.email_status}
+              onResend={() => onResend?.(user)}
+              isResending={isResending}
+            />
             {user.is_on_leave && (
               <Badge
                 size="sm"
@@ -836,7 +904,12 @@ function UserRow({
         <NameCell name={user.name} subtitle={user.email} role={user.role} />
       </Table.Cell>
       <Table.Cell className="text-center w-36">
-        <StatusBadge status={user.account_status} />
+        <StatusBadge
+          status={user.account_status}
+          emailStatus={user.email_status}
+          onResend={() => onResend?.(user)}
+          isResending={isResending}
+        />
       </Table.Cell>
       <Table.Cell className="text-right w-36">
         <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">

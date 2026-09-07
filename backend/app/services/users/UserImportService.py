@@ -4,13 +4,14 @@ import io
 from typing import Any, Callable
 
 import pandas as pd
-from fastapi import HTTPException, UploadFile
+from fastapi import BackgroundTasks, HTTPException, UploadFile
 from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.FileUpload import MAX_FILE_SIZE
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.Student import Student
+from app.services.MailService import send_batch_invitations, send_invitation_email as _default_single_sender
 from app.services.users.UserShared import (
     LRN_RE,
     attach_staff_profile,
@@ -182,7 +183,9 @@ async def import_users_file(
     db: Session,
     file: UploadFile,
     role: str,
-    invitation_sender: Callable[[str, str], None],
+    invitation_sender: Callable[[str, str], None] | None = None,
+    batch_invitation_sender: Callable[[list[dict]], Any] | None = None,
+    background_tasks: BackgroundTasks | None = None,
 ) -> dict:
     if role not in ("Teacher", "Student"):
         raise HTTPException(status_code=400, detail="role must be Teacher or Student")
@@ -217,6 +220,7 @@ async def import_users_file(
     # all-or-nothing and avoids invitations pointing to rolled-back accounts.
     created: list[str] = []
     invitations_to_send: list[tuple[str, str]] = []
+    batch_items: list[dict[str, str]] = []
     try:
         for row in valid_rows:
             email = row["email"]
@@ -226,6 +230,11 @@ async def import_users_file(
             else:
                 attach_student_profile(db, account.user_id, row)
             invitations_to_send.append((email, raw_token))
+            batch_items.append({
+                "email": email,
+                "token": raw_token,
+                "user_id": str(account.user_id),
+            })
             created.append(email)
         db.commit()
     except Exception:
@@ -233,8 +242,27 @@ async def import_users_file(
         raise
 
     # Phase 3: email delivery is deliberately outside the database transaction.
-    for email, raw_token in invitations_to_send:
-        invitation_sender(email, raw_token)
+    # Check if a custom mock/sender was provided (e.g., in unit tests)
+    has_custom_single = invitation_sender is not None and invitation_sender is not _default_single_sender
+    has_custom_batch = batch_invitation_sender is not None and batch_invitation_sender is not send_batch_invitations
+
+    if has_custom_single:
+        for email, raw_token in invitations_to_send:
+            invitation_sender(email, raw_token)
+    elif has_custom_batch:
+        if background_tasks is not None:
+            background_tasks.add_task(batch_invitation_sender, batch_items)
+        else:
+            batch_invitation_sender(batch_items)
+    else:
+        # Default production path: background batch delivery with connection reuse
+        if background_tasks is not None:
+            background_tasks.add_task(send_batch_invitations, batch_items)
+        elif invitation_sender is not None:
+            for email, raw_token in invitations_to_send:
+                invitation_sender(email, raw_token)
+        else:
+            send_batch_invitations(batch_items)
 
     return {
         "message": "Student import completed" if role == "Student" else "User import completed",
