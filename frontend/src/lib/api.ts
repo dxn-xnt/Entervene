@@ -30,6 +30,7 @@ export type User = {
   role: UserRole;
   created_at: string;
   account_status: string;
+  email_status?: "pending" | "sent" | "failed" | string;
   lrn?: string | null;
   subjects?: string[];
   class_count?: number;
@@ -486,6 +487,19 @@ export async function getUserDetail(userId: string) {
   }
 
   return (await response.json()) as UserDetail;
+}
+
+export async function resendUserInvitation(userId: string): Promise<{ message: string }> {
+  const response = await apiFetch(`/api/v1/users/${encodeURIComponent(userId)}/resend-invitation`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || "Unable to resend invitation. Please try again.");
+  }
+
+  return (await response.json()) as { message: string };
 }
 
 export async function getUserAnalytics(userId: string) {

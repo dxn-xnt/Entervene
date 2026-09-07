@@ -12,6 +12,7 @@ class UserAccount(Base):
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=True)
     account_status = Column(String(50), default="active")
+    email_status = Column(String(20), default="pending", server_default="pending", nullable=False)
     last_login = Column(DateTime(timezone=True))
     email_verified_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())

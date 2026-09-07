@@ -6,6 +6,12 @@ pip install -r requirements.txt
 uvicorn app.main:app
 uvicorn app.main:app --host 0.0.0.0 --reload
 
+entervenemnsts@gmail.com
+mnsts2000
+
+password in the app password for the google account
+kpjc wnfa ckzv cast
+
 
 #frontend
 npm run dev
