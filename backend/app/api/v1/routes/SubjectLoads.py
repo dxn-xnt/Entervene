@@ -352,7 +352,7 @@ def update_period_templates(
                 new_end = item.end_time
                 grp = db_slot.template_group
 
-                # Automatically cascade time updates to matching unlocked subject loads by slot_id or time window
+                # Automatically cascade time updates to matching subject loads (including locked/published schedules) by slot_id or time window
                 if db_slot.slot_type == "CLASS" and (old_start != new_start or old_end != new_end):
                     target_classes = db.query(Class).filter(
                         (Class.period_template_group == grp) | ((Class.period_template_group == None) & (grp == "JHS_45MIN"))
@@ -367,8 +367,6 @@ def update_period_templates(
                                 (SubjectLoad.start_time == old_start) &
                                 (SubjectLoad.end_time == old_end)
                             ),
-                            SubjectLoad.status != "published",
-                            SubjectLoad.is_locked == False,
                         ).update(
                             {
                                 SubjectLoad.start_time: new_start,

@@ -6,7 +6,7 @@ import { apiFetch } from "@/lib/api";
 import type { SubjectLoadStudioData } from "@/lib/api";
 import { useSettings } from "@/context/SettingsContext";
 import { validatePeriodTimeRange } from "@/lib/time-utils";
-import { Clock, Save, Coffee, Utensils, Sunrise, Plus, Trash2, FolderPlus } from "lucide-react";
+import { Clock, Save, Coffee, Utensils, Sunrise, Plus, Trash2, FolderPlus, AlertTriangle } from "lucide-react";
 
 export type PeriodTemplateSlotItem = {
   slot_id?: number | null;
@@ -480,9 +480,15 @@ export default function BreakConfigDrawer({
                 {formatGroupName(activeGroup)}
               </span>.
             </p>
-            <p className="text-xs text-black/80 leading-relaxed">
-              This will automatically cascade any modified period times to all matching unlocked subject schedules across your classes. Locked or published sections will remain protected.
-            </p>
+            <div className="p-3 border-2 border-amber-800 bg-amber-50 rounded text-amber-950 text-xs font-semibold flex items-start gap-2">
+              <AlertTriangle className="size-4 shrink-0 text-amber-800 mt-0.5" />
+              <div>
+                <p className="font-bold text-amber-900 mb-0.5">Schedule Cascade Notice</p>
+                <p className="leading-relaxed">
+                  Saving will automatically update the bell schedule and cascade time changes to <strong>all matching subject loads (including locked and published sections)</strong> across classes in this group. Active student and teacher timetables will reflect these new times immediately.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="border-t-2 border-black bg-gray-50 px-5 py-3 flex items-center justify-end gap-2">
