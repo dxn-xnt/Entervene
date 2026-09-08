@@ -4,6 +4,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "../../components/retroui/Badge";
 import { Table } from "../../components/retroui/Table";
 import { Input } from "../../components/retroui/Input";
+import { Card } from "../../components/retroui/Card";
 import { Loader } from "../../components/retroui/Loader";
 import { Avatar } from "../../components/retroui/Avatar";
 import { Tabs, type TabItem } from "../../components/retroui/Tabs";
@@ -598,9 +599,9 @@ export default function AdminUsers() {
               {!loading && activeTab !== "student" && (
                 <>
                   {displayUsers.length === 0 ? (
-                    <div className="rounded-xl border border-black bg-background py-12 text-center text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+                    <Card className="py-12 text-center text-sm text-black">
                       {emptyText}
-                    </div>
+                    </Card>
                   ) : (
                     <div className="overflow-hidden border border-black bg-background shadow-[4px_5px_0_#000]">
                       <Table className="border-1 shadow-none">
