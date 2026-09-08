@@ -5,7 +5,6 @@ import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
-import { Text } from "@/components/retroui/Text";
 import { Badge } from "@/components/retroui/Badge";
 import {
   getUsers,
@@ -192,17 +191,17 @@ export default function AssignSubstituteModal({
   };
 
   return (
-    <Dialog.Content size="lg" className="max-w-2xl max-h-[90vh] flex flex-col">
-      <Dialog.Header position="static">
-        <div className="flex items-center gap-2">
-          <UserCheck className="h-5 w-5 text-primary" />
-          <Text as="h5" className="font-sans text-lg font-bold">
+    <Dialog.Content size="lg" className="w-[calc(100%-2rem)] max-w-2xl lg:max-w-2xl max-h-[90svh] overflow-hidden font-sans">
+      <Dialog.Header className="shrink-0 gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Dialog.Title className="font-head text-lg leading-tight">
             Assign Substitute Teacher
-          </Text>
+          </Dialog.Title>
         </div>
       </Dialog.Header>
 
-      <form onSubmit={handleSubmit} className="space-y-4 pt-2 overflow-y-auto px-1 flex-1">
+      <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
         {errorMsg && (
           <Alert status="error" className="flex items-start gap-2">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -216,10 +215,10 @@ export default function AssignSubstituteModal({
             Teacher on Leave (Original Teacher)
           </label>
           {initialStaffId ? (
-            <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/40 font-medium text-sm">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-2 border-black bg-background p-3 text-sm font-medium">
+              <div className="flex min-w-0 items-center gap-2">
                 <Users className="h-4 w-4 text-muted-foreground" />
-                <span>{initialStaffName || initialStaffId}</span>
+                <span className="break-words">{initialStaffName || initialStaffId}</span>
               </div>
               <Badge variant="secondary">ID: {initialStaffId}</Badge>
             </div>
@@ -227,7 +226,7 @@ export default function AssignSubstituteModal({
             <select
               value={selectedOriginalStaffId}
               onChange={(e) => setSelectedOriginalStaffId(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="min-h-10 w-full min-w-0 rounded-none border-2 border-black bg-background px-3 py-2 text-sm shadow-md focus:outline-hidden focus:shadow-xs"
               disabled={isLoadingTeachers}
             >
               <option value="">-- Select Teacher on Leave --</option>
@@ -242,7 +241,7 @@ export default function AssignSubstituteModal({
 
         {/* 2. Select Subject Loads (Whole Program Takeover) */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
               <span>Teaching Program to Cover</span>
               {isLoadingLoads && <Loader2 className="h-3 w-3 animate-spin" />}
@@ -252,7 +251,7 @@ export default function AssignSubstituteModal({
               <button
                 type="button"
                 onClick={handleToggleSelectAll}
-                className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                className="flex cursor-pointer items-center gap-1 text-xs font-semibold text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 {allAvailableSelected ? (
                   <>
@@ -271,19 +270,19 @@ export default function AssignSubstituteModal({
 
           {selectedOriginalStaffId ? (
             teacherLoads.length === 0 && !isLoadingLoads ? (
-              <div className="p-4 text-center text-sm text-muted-foreground border rounded-lg bg-muted/20">
+              <div className="border-2 border-black bg-background px-4 py-6 text-center text-sm text-muted-foreground">
                 No active published subject loads found for this teacher.
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="text-xs text-muted-foreground flex justify-between items-center px-1">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>Click individual cards or select all to assign the entire program.</span>
-                  <span className="font-semibold text-foreground">
+                  <span className="shrink-0 font-semibold text-foreground">
                     {selectedLoadIds.length} of {teacherLoads.length} selected
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 gap-2 max-h-52 overflow-y-auto pr-1">
+                <div className="grid grid-cols-1 gap-2">
                   {teacherLoads.map((load) => {
                     const isSelected = selectedLoadIds.includes(load.subject_load_id);
                     const isCovered = load.has_active_substitution;
@@ -294,15 +293,15 @@ export default function AssignSubstituteModal({
                         onClick={() => {
                           if (!isCovered) handleToggleLoad(load.subject_load_id);
                         }}
-                        className={`p-3 rounded-lg border transition-all flex items-start justify-between ${
+                        className={`flex flex-col items-start justify-between gap-3 border-2 p-3 transition-colors sm:flex-row ${
                           isCovered
-                            ? "opacity-60 bg-muted/30 border-dashed cursor-not-allowed"
+                            ? "border-black border-dashed bg-muted/30 opacity-60 cursor-not-allowed"
                             : isSelected
-                            ? "border-primary bg-primary/5 ring-1 ring-primary cursor-pointer"
-                            : "border-border hover:bg-muted/40 cursor-pointer"
+                            ? "border-black bg-primary/15 cursor-pointer"
+                            : "border-black bg-background hover:bg-accent/30 cursor-pointer"
                         }`}
                       >
-                        <div className="flex items-start gap-3">
+                        <div className="flex min-w-0 items-start gap-3">
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -310,11 +309,11 @@ export default function AssignSubstituteModal({
                             onChange={() => {
                               if (!isCovered) handleToggleLoad(load.subject_load_id);
                             }}
-                            className="mt-1 rounded border-gray-300 text-primary focus:ring-primary h-4 w-4 pointer-events-none"
+                            className="pointer-events-none mt-0.5 size-4 shrink-0 accent-primary"
                           />
-                          <div className="space-y-1">
+                          <div className="min-w-0 space-y-2">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-semibold text-sm">
+                              <span className="break-words text-sm font-semibold">
                                 {load.subject_name} {load.subject_codename ? `(${load.subject_codename})` : ""}
                               </span>
                               <Badge variant="outline" className="text-xs font-normal">
@@ -326,7 +325,7 @@ export default function AssignSubstituteModal({
                                 </Badge>
                               )}
                             </div>
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                               <span className="flex items-center gap-1">
                                 <Clock className="h-3 w-3" />
                                 {load.start_time && load.end_time
@@ -342,7 +341,7 @@ export default function AssignSubstituteModal({
                         </div>
 
                         {isCovered && (
-                          <Badge variant="secondary" className="bg-amber-100 text-amber-800 border-amber-300 text-xs shrink-0 ml-2">
+                          <Badge variant="secondary" className="max-w-full whitespace-normal break-words border-amber-300 bg-amber-100 text-xs text-amber-800 sm:max-w-40">
                             Covered by {load.active_substitute_name}
                           </Badge>
                         )}
@@ -353,7 +352,7 @@ export default function AssignSubstituteModal({
               </div>
             )
           ) : (
-            <div className="p-3 text-xs text-muted-foreground border rounded-lg bg-muted/10">
+            <div className="border-2 border-black bg-background p-4 text-sm text-muted-foreground">
               Select a teacher above to view and assign their teaching program.
             </div>
           )}
@@ -361,7 +360,7 @@ export default function AssignSubstituteModal({
 
         {/* 3. Select Substitute Teacher (Grouped Dropdown) */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex justify-between items-center">
+          <label className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             <span>Substitute Teacher</span>
             {dedicatedSubs.length > 0 && (
               <span className="text-[11px] font-normal text-emerald-600 dark:text-emerald-400">
@@ -372,7 +371,7 @@ export default function AssignSubstituteModal({
           <select
             value={selectedSubstituteStaffId}
             onChange={(e) => setSelectedSubstituteStaffId(e.target.value)}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            className="min-h-10 w-full min-w-0 rounded-none border-2 border-black bg-background px-3 py-2 text-sm shadow-md focus:outline-hidden focus:shadow-xs"
             disabled={isLoadingTeachers}
           >
             <option value="">-- Select Substitute Teacher --</option>
@@ -396,7 +395,7 @@ export default function AssignSubstituteModal({
             )}
           </select>
           {dedicatedSubs.length === 0 && candidateTeachers.length > 0 && (
-            <div className="flex items-center gap-1.5 text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 p-2 rounded border border-amber-200">
+            <div className="flex items-start gap-2 border-2 border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
               <Info className="h-3.5 w-3.5 shrink-0" />
               <span>No teachers currently have 'Substitute' employment status. You may select regular faculty for peer coverage or update a teacher's status in Users.</span>
             </div>
@@ -404,21 +403,22 @@ export default function AssignSubstituteModal({
         </div>
 
         {/* 4. Dates & Reason */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="min-w-0 space-y-1.5">
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
               <Calendar className="h-3 w-3" />
               <span>Start Date *</span>
             </label>
             <Input
               type="date"
+              className="w-full min-w-0 bg-background border-2 border-black"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
               required
             />
           </div>
 
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
               <Calendar className="h-3 w-3" />
               <span>Expected End Date (Optional)</span>
@@ -426,6 +426,7 @@ export default function AssignSubstituteModal({
             <Input
               type="date"
               value={endDate}
+              className="w-full min-w-0 bg-background border-2 border-black"
               onChange={(e) => setEndDate(e.target.value)}
               min={startDate}
             />
@@ -439,18 +440,22 @@ export default function AssignSubstituteModal({
           </label>
           <Input
             type="text"
+            className="w-full min-w-0 bg-background border-2 border-black"
             placeholder="e.g. Maternity Leave (approx. 6 months)"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
         </div>
 
-        <Dialog.Footer position="static" className="pt-2">
-          <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
+        </div>
+
+        <Dialog.Footer position="static" className="shrink-0 flex-col gap-3 border-black bg-background px-5 py-3 sm:flex-row">
+          <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
           <Button
             type="submit"
+            className="w-full sm:w-auto"
             disabled={isSubmitting || selectedLoadIds.length === 0 || !selectedSubstituteStaffId}
           >
             {isSubmitting ? (
