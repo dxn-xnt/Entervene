@@ -4,6 +4,7 @@ import { SettingsProvider } from "./context/SettingsContext";
 import { AcademicPeriodProvider } from "./context/AcademicPeriodContext";
 import ProtectedRoute from "./components/protected-route";
 import Login from "./pages/Login";
+import Landing from "./pages/Landing";
 import { routes } from "@/../routes";
 import SetupPassword from "./pages/SetupPassword";
 import { NavigationProgress } from "./components/navigation-progress";
@@ -86,12 +87,12 @@ const App = () => {
           <BrowserRouter>
             <NavigationProgress />
             <Routes>
+              <Route path="/" element={<Landing />} />
               <Route path={routes.auth.login} element={<Login />} />
               <Route path="/setup-password" element={<SetupPassword />} />
 
               {/* Admin */}
               <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
-                <Route index element={<Navigate to={routes.admin.dashboard} replace />} />
                 <Route path={routes.admin.dashboard} element={<AdminDashboard />} />
                 <Route path={routes.admin.subjects} element={<AdminSubjects />} />
                 <Route path={routes.admin.subjectLevel} element={<AdminSubjectLevel />} />
@@ -115,7 +116,6 @@ const App = () => {
 
               {/* Teacher */}
               <Route element={<ProtectedRoute allowedRoles={["teacher"]} />}>
-                <Route index element={<Navigate to={routes.teacher.dashboard} replace />} />
                 <Route path={routes.teacher.dashboard} element={<TeacherDashboard />} />
                 <Route path={routes.teacher.classes} element={<ClassesPage />} />
                 <Route path={routes.teacher.classSections} element={<ClassSections />} />
@@ -145,7 +145,6 @@ const App = () => {
 
               {/* Student */}
               <Route element={<ProtectedRoute allowedRoles={["student"]} />}>
-                <Route index element={<Navigate to={routes.student.board} replace />} />
                 <Route path={routes.student.board} element={<StudentBoard />} />
                 <Route path={routes.student.profile} element={<StudentProfile />} />
                 <Route path={routes.student.subjects} element={<StudentSubjects />} />

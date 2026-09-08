@@ -126,11 +126,15 @@ export const Button = React.forwardRef<HTMLButtonElement, IButtonProps>(
         className={cn(buttonVariants({ variant, size }), className)}
         {...props}
       >
-        {Icon && React.createElement(Icon, {
-          "aria-hidden": true,
-          className: "mr-2 size-4 shrink-0",
-        })}
-        {children}
+        {asChild ? children : (
+          <>
+            {Icon && React.createElement(Icon, {
+              "aria-hidden": true,
+              className: "mr-2 size-4 shrink-0",
+            })}
+            {children}
+          </>
+        )}
       </Comp>
     );
   },
