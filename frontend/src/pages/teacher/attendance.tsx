@@ -457,7 +457,7 @@ export default function TeacherAttendancePage() {
       const instance = scannerRef.current;
       if (instance) {
         if (instance.isScanning) {
-          await instance.stop().catch((err) => {
+          await instance.stop().catch((err: unknown) => {
             console.warn("Gracefully handled scanner stop error:", err);
           });
         }
@@ -506,7 +506,7 @@ export default function TeacherAttendancePage() {
           qrbox: { width: 240, height: 240 },
           aspectRatio: 1.0,
         },
-        (decodedText) => {
+        (decodedText: string) => {
           handleQrScan(decodedText);
         },
         () => {}

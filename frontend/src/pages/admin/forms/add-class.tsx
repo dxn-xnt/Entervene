@@ -108,27 +108,27 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
 
         <section className="grid gap-4 p-4 md:grid-cols-2">
           <Card
-            className="cursor-pointer transition hover:bg-muted/50"
+            className="cursor-pointer transition bg-primary"
             onClick={() => setMode("import")}
           >
             <div className="flex items-center gap-3 font-semibold mb-2">
-              <Download className="size-5 text-primary" />
+              <Download className="size-5 text-black" />
               <span>Import from File</span>
             </div>
-            <Text as="p" className="text-sm text-muted-foreground">
+            <Text as="p" className="text-sm text-black">
               Upload a CSV file to add multiple classes and student assignments at once.
             </Text>
           </Card>
 
           <Card
-            className="cursor-pointer transition hover:bg-muted/50"
+            className="cursor-pointer transition bg-primary"
             onClick={() => setMode("manual")}
           >
             <div className="flex items-center gap-3 font-semibold mb-2">
-              <UserPlus className="size-5 text-primary" />
+              <UserPlus className="size-5 text-black" />
               <span>Create Manually</span>
             </div>
-            <Text as="p" className="text-sm text-muted-foreground">
+            <Text as="p" className="text-sm text-black">
               Add individual class sections, assign advisers, and manage students step by step.
             </Text>
           </Card>

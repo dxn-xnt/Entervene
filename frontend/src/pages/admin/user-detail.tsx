@@ -17,6 +17,7 @@ import {
   archiveUser,
   getUserAnalytics,
   getUserDetail,
+  resendUserInvitation,
   updateUser,
   type UpdateUserPayload,
   type UserAnalytics,
@@ -24,7 +25,8 @@ import {
   type UserRole,
 } from "../../lib/api";
 import { mergeAnalytics } from "../../mocks/userAnalytics";
-import { Archive, Pencil } from "lucide-react";
+import { Archive, Pencil, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -146,10 +148,28 @@ export default function AdminUserDetail() {
   const data = useMemo(() => mergeAnalytics(effectiveRole, analytics), [effectiveRole, analytics]);
   const isPending = (user?.account_status || "").toLowerCase() === "pending";
   const isArchived = (user?.account_status || "").toLowerCase() === "archived";
+  const [resending, setResending] = useState(false);
   const statusStyle = getStatusStyle(user?.account_status);
   const actionDisabledReason = isPending
     ? "Pending accounts cannot be edited or archived until the invitation is accepted."
     : undefined;
+
+  async function handleResendInvitation() {
+    if (!userId) return;
+    setResending(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await resendUserInvitation(userId);
+      setNotice(res.message || "Invitation resent successfully.");
+      const updated = await getUserDetail(userId);
+      setUser(updated);
+    } catch (err: any) {
+      setError(err instanceof Error ? err.message : "Failed to resend invitation.");
+    } finally {
+      setResending(false);
+    }
+  }
 
   async function handleUpdate(payload: UpdateUserPayload) {
     if (!userId) return;
@@ -237,6 +257,19 @@ export default function AdminUserDetail() {
 
               {user && (
                 <div className="flex flex-wrap items-center gap-2">
+                  {isPending && (
+                    <Button
+                      type="button"
+                      variant="default"
+                      onClick={handleResendInvitation}
+                      disabled={resending}
+                      className="gap-2"
+                      title="Send a new invitation email with an updated 48-hour activation link"
+                    >
+                      <RefreshCw className={cn("size-3.5", resending && "animate-spin")} />
+                      {resending ? "Resending..." : "Resend Invitation"}
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="default"
@@ -274,6 +307,25 @@ export default function AdminUserDetail() {
             {!loading && notice && (
               <Alert status="success">
                 <Alert.Description>{notice}</Alert.Description>
+              </Alert>
+            )}
+
+            {!loading && user && isPending && user.email_status === "failed" && (
+              <Alert status="error" className="border-2 border-red-500 bg-red-50 text-red-900">
+                <Alert.Description className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span>
+                    <strong>Invitation Email Failed:</strong> The invitation email could not be delivered to <strong>{user.email}</strong>.
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="bg-red-600 hover:bg-red-700 text-white shrink-0 shadow-none"
+                    onClick={handleResendInvitation}
+                    disabled={resending}
+                  >
+                    {resending ? "Resending..." : "Resend Invitation"}
+                  </Button>
+                </Alert.Description>
               </Alert>
             )}
 

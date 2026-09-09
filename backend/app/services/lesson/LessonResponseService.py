@@ -40,10 +40,7 @@ def build_lesson_response(lesson: Lesson, db: Session) -> LessonResponse:
         competency_statement=competency.statement if competency else None,
         created_by_staff_id=lesson.created_by_staff_id,
         teacher_name=f"{staff.first_name} {staff.last_name}" if staff else None,
-        attachments=[
-            build_lesson_attachment_response(attachment)
-            for attachment in lesson.attachments
-        ],
+        attachments=[],
         created_at=lesson.created_at,
         updated_at=lesson.updated_at,
     )

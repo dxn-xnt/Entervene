@@ -53,7 +53,9 @@ const Subject = () => {
         for (const item of loads) {
             const existing = bySubject.get(item.subject_id);
             if (existing) {
-                existing.classes.push(item);
+                if (!existing.classes.some((cls) => cls.class_id === item.class_id)) {
+                    existing.classes.push(item);
+                }
             } else {
                 bySubject.set(item.subject_id, {
                     subject_id: item.subject_id,
@@ -98,23 +100,55 @@ const Subject = () => {
                                 <p className="py-8 text-center text-gray-500">Loading subjects...</p>
                             ) : (
                                 subjects.map((subject) => {
+                                    const isSingleSection = subject.classes.length === 1;
                                     const firstClass = subject.classes[0];
-                                    return (
-                                        <button
-                                            key={subject.subject_id}
-                                            type="button"
-                                            onClick={() => {
-                                                if (firstClass) {
+
+                                    if (isSingleSection && firstClass) {
+                                        return (
+                                            <button
+                                                key={subject.subject_id}
+                                                type="button"
+                                                onClick={() => {
                                                     navigate(`/teacher/classes/${firstClass.class_id}/subjects/${subject.subject_id}`);
-                                                }
-                                            }}
-                                            className="flex flex-col gap-1 rounded-lg border border-black bg-white px-4 py-3 text-left shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                                                }}
+                                                className="flex flex-col gap-1 rounded-lg border border-black bg-white px-4 py-3 text-left shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 cursor-pointer"
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <p className="text-2xl font-bold text-gray-950">{subject.subject_name}</p>
+                                                    <ChevronRight size={20} className="text-gray-500" />
+                                                </div>
+                                                <p className="text-xs font-medium text-gray-700">
+                                                    {firstClass.section_name} · Assigned to 1 section
+                                                </p>
+                                            </button>
+                                        );
+                                    }
+
+                                    return (
+                                        <div
+                                            key={subject.subject_id}
+                                            className="flex flex-col gap-2 rounded-lg border border-black bg-white px-4 py-3 text-left shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                                         >
-                                            <p className="text-2xl font-bold text-gray-950">{subject.subject_name}</p>
-                                            <p className="text-xs font-medium text-gray-700">
-                                                Assigned to {subject.classes.length} section{subject.classes.length === 1 ? "" : "s"}
-                                            </p>
-                                        </button>
+                                            <div>
+                                                <p className="text-2xl font-bold text-gray-950">{subject.subject_name}</p>
+                                                <p className="text-xs font-medium text-gray-700">
+                                                    Assigned to {subject.classes.length} sections · Select a section below:
+                                                </p>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2 pt-1">
+                                                {subject.classes.map((cls) => (
+                                                    <button
+                                                        key={cls.subject_load_id}
+                                                        type="button"
+                                                        onClick={() => navigate(`/teacher/classes/${cls.class_id}/subjects/${cls.subject_id}`)}
+                                                        className="inline-flex items-center gap-1.5 rounded-md border border-black bg-[#F6E9B2] px-3 py-1.5 text-xs font-bold text-gray-900 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 cursor-pointer"
+                                                    >
+                                                        <span>{cls.section_name}</span>
+                                                        <ChevronRight size={14} />
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
                                     );
                                 })
                             )}

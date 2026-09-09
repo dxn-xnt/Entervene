@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { X, Plus, Trash2, FileText, BookOpen, CheckSquare, ClipboardList } from "lucide-react";
+import { Plus, Trash2, FileText } from "lucide-react";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/retroui/Button";
-import { Card } from "@/components/retroui/Card";
 import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
@@ -26,7 +25,7 @@ import type {
   TeacherClassLoad,
   TeacherLesson,
 } from "@/types/classwork";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 
 interface CreateClassworkModalProps {
   selectedType: ClassworkKind;

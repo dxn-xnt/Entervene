@@ -385,6 +385,9 @@ export default function AddUserModal({
   };
 
   const handleField = (field: keyof ManualFormData, value: string) => {
+    if (field === "contactNumber") {
+      value = value.replace(/\D/g, "").slice(0, 11);
+    }
     setForm((prev) => {
       if (field === "role" && value === "Admin") {
         return { ...prev, role: value as Role, dob: "" };
@@ -395,6 +398,10 @@ export default function AddUserModal({
 
   const handleManualSubmit = async () => {
     if (manualSubmitting) return;
+    if (form.role !== "Admin" && form.contactNumber && !/^\d{11}$/.test(form.contactNumber)) {
+      window.alert("Contact number must contain exactly 11 digits.");
+      return;
+    }
     if (form.dob && !/^\d{4}-\d{2}-\d{2}$/.test(form.dob)) {
       window.alert("DOB must use YYYY-MM-DD format.");
       return;
@@ -732,7 +739,12 @@ export default function AddUserModal({
                   </Field>
                   <Field label="Contact Number">
                     <Input
-                      placeholder="+63 9XX XXX XXXX"
+                      type="tel"
+                      inputMode="numeric"
+                      autoComplete="tel-national"
+                      maxLength={11}
+                      pattern="[0-9]{11}"
+                      placeholder="09XXXXXXXXX"
                       value={form.contactNumber}
                       onChange={(e) =>
                         handleField("contactNumber", e.target.value)

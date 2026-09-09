@@ -196,12 +196,12 @@ export default function AssignSubstituteModal({
   };
 
   return (
-    <Dialog.Content size="xl">
-      <Dialog.Header>
-        <div className="flex items-center gap-2">
-          <UserCheck className="size-5" />
-          <span className="font-sans text-lg font-bold">
+    <Dialog.Content size="lg" className="w-[calc(100%-2rem)] max-w-2xl lg:max-w-2xl max-h-[90svh] overflow-hidden font-sans">
+      <Dialog.Header className="shrink-0 gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Dialog.Title className="font-head text-lg leading-tight">
             Assign Substitute Teacher
+          </Dialog.Title>
           </span>
         </div>
       </Dialog.Header>
@@ -214,6 +214,14 @@ export default function AssignSubstituteModal({
               <Alert.Title className="text-sm font-semibold">{errorMsg}</Alert.Title>
             </Alert>
           )}
+      <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+        {errorMsg && (
+          <Alert status="error" className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <div className="text-sm">{errorMsg}</div>
+          </Alert>
+        )}
 
           {/* 1. Teacher on Leave */}
           <div className="flex flex-col gap-1.5">
@@ -249,6 +257,35 @@ export default function AssignSubstituteModal({
               </Select>
             )}
           </div>
+        {/* 1. Teacher on Leave */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Teacher on Leave (Original Teacher)
+          </label>
+          {initialStaffId ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-2 border-black bg-background p-3 text-sm font-medium">
+              <div className="flex min-w-0 items-center gap-2">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <span className="break-words">{initialStaffName || initialStaffId}</span>
+              </div>
+              <Badge variant="secondary">ID: {initialStaffId}</Badge>
+            </div>
+          ) : (
+            <select
+              value={selectedOriginalStaffId}
+              onChange={(e) => setSelectedOriginalStaffId(e.target.value)}
+              className="min-h-10 w-full min-w-0 rounded-none border-2 border-black bg-background px-3 py-2 text-sm shadow-md focus:outline-hidden focus:shadow-xs"
+              disabled={isLoadingTeachers}
+            >
+              <option value="">-- Select Teacher on Leave --</option>
+              {teachers.map((t) => (
+                <option key={t.staff_id || t.id} value={t.staff_id}>
+                  {t.name} ({t.staff_id}) {t.employment_status ? `• ${t.employment_status}` : ""}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
 
           {/* 2. Select Subject Loads (Whole Program Takeover) */}
           <div className="flex flex-col gap-2">
@@ -278,6 +315,26 @@ export default function AssignSubstituteModal({
                 </button>
               )}
             </div>
+            {availableLoads.length > 0 && (
+              <button
+                type="button"
+                onClick={handleToggleSelectAll}
+                className="flex cursor-pointer items-center gap-1 text-xs font-semibold text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                {allAvailableSelected ? (
+                  <>
+                    <CheckSquare className="h-3.5 w-3.5" />
+                    <span>Deselect All</span>
+                  </>
+                ) : (
+                  <>
+                    <Square className="h-3.5 w-3.5" />
+                    <span>Select All (Entire Program)</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
 
             {selectedOriginalStaffId ? (
               teacherLoads.length === 0 && !isLoadingLoads ? (
@@ -352,6 +409,48 @@ export default function AssignSubstituteModal({
                               </div>
                             </div>
                           </div>
+                            ? "border-black bg-primary/15 cursor-pointer"
+                            : "border-black bg-background hover:bg-accent/30 cursor-pointer"
+                        }`}
+                      >
+                        <div className="flex min-w-0 items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={isCovered}
+                            onChange={() => {
+                              if (!isCovered) handleToggleLoad(load.subject_load_id);
+                            }}
+                            className="pointer-events-none mt-0.5 size-4 shrink-0 accent-primary"
+                          />
+                          <div className="min-w-0 space-y-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="break-words text-sm font-semibold">
+                                {load.subject_name} {load.subject_codename ? `(${load.subject_codename})` : ""}
+                              </span>
+                              <Badge variant="outline" className="text-xs font-normal">
+                                {load.section_name}
+                              </Badge>
+                              {load.is_active_period && (
+                                <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]">
+                                  Active Term
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {load.start_time && load.end_time
+                                  ? `${load.start_time} - ${load.end_time}`
+                                  : "No fixed time"}
+                              </span>
+                              <span>• {load.period_name}</span>
+                              {load.days_of_week && load.days_of_week.length > 0 && (
+                                <span>• {load.days_of_week.map((d) => d.slice(0, 3)).join(", ")}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
 
                           {isCovered && (
                             <Badge variant="outline" className="text-xs shrink-0 ml-2">
@@ -370,6 +469,23 @@ export default function AssignSubstituteModal({
               </Card>
             )}
           </div>
+                        {isCovered && (
+                          <Badge variant="secondary" className="max-w-full whitespace-normal break-words border-amber-300 bg-amber-100 text-xs text-amber-800 sm:max-w-40">
+                            Covered by {load.active_substitute_name}
+                          </Badge>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )
+          ) : (
+            <div className="border-2 border-black bg-background p-4 text-sm text-muted-foreground">
+              Select a teacher above to view and assign their teaching program.
+            </div>
+          )}
+        </div>
 
           {/* 3. Select Substitute Teacher (Grouped Dropdown) */}
           <div className="flex flex-col gap-1.5">
@@ -425,6 +541,49 @@ export default function AssignSubstituteModal({
               </Alert>
             )}
           </div>
+        {/* 3. Select Substitute Teacher (Grouped Dropdown) */}
+        <div className="space-y-1.5">
+          <label className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <span>Substitute Teacher</span>
+            {dedicatedSubs.length > 0 && (
+              <span className="text-[11px] font-normal text-emerald-600 dark:text-emerald-400">
+                {dedicatedSubs.length} dedicated substitute(s) available
+              </span>
+            )}
+          </label>
+          <select
+            value={selectedSubstituteStaffId}
+            onChange={(e) => setSelectedSubstituteStaffId(e.target.value)}
+            className="min-h-10 w-full min-w-0 rounded-none border-2 border-black bg-background px-3 py-2 text-sm shadow-md focus:outline-hidden focus:shadow-xs"
+            disabled={isLoadingTeachers}
+          >
+            <option value="">-- Select Substitute Teacher --</option>
+            {dedicatedSubs.length > 0 && (
+              <optgroup label="🌟 Dedicated Substitute Teachers">
+                {dedicatedSubs.map((t) => (
+                  <option key={t.staff_id || t.id} value={t.staff_id}>
+                    {t.name} ({t.staff_id}) • Substitute
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {regularFaculty.length > 0 && (
+              <optgroup label="Regular / Other Faculty (Peer Coverage)">
+                {regularFaculty.map((t) => (
+                  <option key={t.staff_id || t.id} value={t.staff_id}>
+                    {t.name} ({t.staff_id}) {t.employment_status ? `• ${t.employment_status}` : ""}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+          {dedicatedSubs.length === 0 && candidateTeachers.length > 0 && (
+            <div className="flex items-start gap-2 border-2 border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+              <Info className="h-3.5 w-3.5 shrink-0" />
+              <span>No teachers currently have 'Substitute' employment status. You may select regular faculty for peer coverage or update a teacher's status in Users.</span>
+            </div>
+          )}
+        </div>
 
           {/* 4. Dates & Reason */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -440,6 +599,21 @@ export default function AssignSubstituteModal({
                 required
               />
             </div>
+        {/* 4. Dates & Reason */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="min-w-0 space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              <span>Start Date *</span>
+            </label>
+            <Input
+              type="date"
+              className="w-full min-w-0 bg-background border-2 border-black"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              required
+            />
+          </div>
 
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
@@ -457,6 +631,21 @@ export default function AssignSubstituteModal({
               </Text>
             </div>
           </div>
+          <div className="min-w-0 space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              <span>Expected End Date (Optional)</span>
+            </label>
+            <Input
+              type="date"
+              value={endDate}
+              className="w-full min-w-0 bg-background border-2 border-black"
+              onChange={(e) => setEndDate(e.target.value)}
+              min={startDate}
+            />
+            <p className="text-[11px] text-muted-foreground">Leave blank for indefinite duration.</p>
+          </div>
+        </div>
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-muted-foreground">
@@ -470,13 +659,30 @@ export default function AssignSubstituteModal({
             />
           </div>
         </section>
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Reason / Notes
+          </label>
+          <Input
+            type="text"
+            className="w-full min-w-0 bg-background border-2 border-black"
+            placeholder="e.g. Maternity Leave (approx. 6 months)"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </div>
 
         <Dialog.Footer>
           <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
+        </div>
+
+        <Dialog.Footer position="static" className="shrink-0 flex-col gap-3 border-black bg-background px-5 py-3 sm:flex-row">
+          <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
           <Button
             type="submit"
+            className="w-full sm:w-auto"
             disabled={isSubmitting || selectedLoadIds.length === 0 || !selectedSubstituteStaffId}
           >
             {isSubmitting ? (

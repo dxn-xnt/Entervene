@@ -58,6 +58,7 @@ def _base_user_query(db: Session):
             UserAccount.email,
             UserAccount.created_at,
             UserAccount.account_status,
+            UserAccount.email_status,
             Role.role_name,
             AcademicStaff.staff_id,
             AcademicStaff.first_name.label("staff_first_name"),
@@ -178,6 +179,8 @@ def list_users(
             "created_at": user.created_at.date().isoformat() if user.created_at else "",
             "account_status": user.account_status,
         }
+        if user.account_status == "pending":
+            item["email_status"] = getattr(user, "email_status", "sent") or "sent"
         if client_role == "teacher" and user.staff_id:
             summary = teacher_summaries.get(user.staff_id, {"subjects": set(), "class_ids": set()})
             item["staff_id"] = user.staff_id
@@ -212,6 +215,7 @@ def get_user_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any]:
         "role": client_role,
         "created_at": user.created_at.date().isoformat() if user.created_at else "",
         "account_status": user.account_status,
+        "email_status": getattr(user, "email_status", "sent") or "sent",
         "first_name": capitalize_name(first_name),
         "middle_name": capitalize_name(middle_name),
         "last_name": capitalize_name(last_name),

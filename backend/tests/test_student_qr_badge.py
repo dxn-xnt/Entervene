@@ -77,7 +77,6 @@ def setup_test_db():
     student_user = UserAccount(
         user_id=student_user_id,
         email="juan.delacruz@student.ph",
-        ref_type="student",
         account_status="active",
         password_hash="fakehash",
     )

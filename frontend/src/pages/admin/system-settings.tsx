@@ -14,7 +14,6 @@ import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
 import { ArrowUpRight, Lock, Pencil, Plus, Calendar, Save } from "lucide-react";
-import { LoadingPanel } from "@/components/loading-panel";
 import AddAcademicPeriodModal from "./forms/add-academic-period";
 import AddGradingTemplateModal from "./forms/add-grading-template";
 import AddPathwayModal from "./forms/add-pathway";
@@ -64,7 +63,6 @@ export default function AdminSystemSettings() {
   const { refetch: refetchGlobalSettings } = useSettings();
 
   // Loading state
-  const [isLoadingSettings, setIsLoadingSettings] = React.useState(true);
   const [isSavingThresholds, setIsSavingThresholds] = React.useState(false);
   const [isSavingScope, setIsSavingScope] = React.useState(false);
 
@@ -241,7 +239,6 @@ export default function AdminSystemSettings() {
   }, []);
 
   const loadSettingsFromBackend = React.useCallback(async () => {
-    setIsLoadingSettings(true);
     try {
       const [settingsData, yearsData, levelsData] = await Promise.all([
         getAllSettings(),
@@ -286,8 +283,6 @@ export default function AdminSystemSettings() {
       ]);
     } catch (err) {
       console.error("Failed to load system settings", err);
-    } finally {
-      setIsLoadingSettings(false);
     }
   }, [fetchGradingTemplatesList, loadAcademicPeriodsForYear, loadPathwayScopes, loadPathways]);
 
@@ -517,9 +512,6 @@ export default function AdminSystemSettings() {
                   System Settings
                 </h1>
               </div>
-              {isLoadingSettings && (
-                <LoadingPanel label="Loading settings..." />
-              )}
             </header>
 
             <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
