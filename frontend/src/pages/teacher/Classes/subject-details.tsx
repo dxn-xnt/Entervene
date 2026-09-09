@@ -668,7 +668,7 @@ export default function SubjectDetails() {
 
     const oversized = selected.find((file) => file.size > maxMaterialSize);
     if (oversized) {
-      setError(`${oversized.name} is larger than the 4 MB file limit.`);
+      setError(`${oversized.name} is larger than the 10 MB file limit.`);
       return;
     }
 

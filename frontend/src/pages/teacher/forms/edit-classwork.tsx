@@ -68,7 +68,7 @@ export default function EditClassworkModal({
       (file) => file.size > maxClassworkMaterialSize,
     );
     if (oversized) {
-      setError(`${oversized.name} is larger than the 4 MB limit.`);
+      setError(`${oversized.name} is larger than the 10 MB limit.`);
       return;
     }
     setError("");

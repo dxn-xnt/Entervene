@@ -324,7 +324,7 @@ export default function ClassworkFormModal({
                   Upload Material
                 </label>
                 <span className="text-xs font-medium text-gray-500">
-                  PDF, DOCX, PPTX, JPG, PNG | 4 MB each
+                  PDF, DOCX, PPTX, JPG, PNG | 10 MB each
                 </span>
               </div>
 

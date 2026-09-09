@@ -96,7 +96,7 @@ export default function CreateClassworkModal({
       (file) => file.size > maxClassworkMaterialSize,
     );
     if (oversized) {
-      setCreateError(`${oversized.name} is larger than the 4 MB limit.`);
+      setCreateError(`${oversized.name} is larger than the 10 MB limit.`);
       return;
     }
     setCreateError("");
