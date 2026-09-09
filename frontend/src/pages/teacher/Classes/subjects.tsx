@@ -53,7 +53,9 @@ const Subject = () => {
         for (const item of loads) {
             const existing = bySubject.get(item.subject_id);
             if (existing) {
-                existing.classes.push(item);
+                if (!existing.classes.some((cls) => cls.class_id === item.class_id)) {
+                    existing.classes.push(item);
+                }
             } else {
                 bySubject.set(item.subject_id, {
                     subject_id: item.subject_id,

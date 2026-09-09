@@ -195,7 +195,10 @@ const TeacherClasses = () => {
           loads: [],
         });
       }
-      groups.get(load.subject_id)!.loads.push(load);
+      const targetGroup = groups.get(load.subject_id)!;
+      if (!targetGroup.loads.some((existing) => existing.class_id === load.class_id)) {
+        targetGroup.loads.push(load);
+      }
     });
 
     return Array.from(groups.values())
