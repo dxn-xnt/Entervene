@@ -134,16 +134,16 @@ def send_invitation_email(email: str, token: str) -> None:
         "+------------------------------------------------------------+"
     )
 
-    mail_driver = (getattr(settings, "mail_driver", None) or os.getenv("MAIL_DRIVER", "console")).lower()
+    mail_driver = (os.getenv("MAIL_DRIVER") or getattr(settings, "mail_driver", "console")).lower()
     if mail_driver == "console":
         logger.info("[MailService] MAIL_DRIVER is set to 'console'. Skipping SMTP delivery.")
         return
 
-    smtp_host = getattr(settings, "smtp_host", None) or os.getenv("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(getattr(settings, "smtp_port", None) or os.getenv("SMTP_PORT", 587))
-    smtp_user = getattr(settings, "smtp_user", None) or os.getenv("SMTP_USER")
-    smtp_pass = getattr(settings, "smtp_password", None) or os.getenv("SMTP_PASSWORD")
-    from_name = getattr(settings, "mail_from_name", None) or os.getenv("MAIL_FROM_NAME", "Entervene Academic Portal")
+    smtp_host = os.getenv("SMTP_HOST") or getattr(settings, "smtp_host", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT") or getattr(settings, "smtp_port", 587))
+    smtp_user = os.getenv("SMTP_USER") or getattr(settings, "smtp_user", None)
+    smtp_pass = os.getenv("SMTP_PASSWORD") or getattr(settings, "smtp_password", None)
+    from_name = os.getenv("MAIL_FROM_NAME") or getattr(settings, "mail_from_name", "Entervene Academic Portal")
 
     if not smtp_user or not smtp_pass:
         logger.warning(f"SMTP_USER or SMTP_PASSWORD not configured. Skipping real email delivery to {email}.")
@@ -173,8 +173,8 @@ def send_batch_invitations(items: list[dict], delay_seconds: float = 0.35) -> di
     :param delay_seconds: Delay between consecutive sends.
     :return: Dict of {'sent': list[str], 'failed': list[str]}
     """
-    frontend_url = (getattr(settings, "frontend_url", None) or os.getenv("FRONTEND_URL", "http://localhost:5173")).rstrip("/")
-    mail_driver = (getattr(settings, "mail_driver", None) or os.getenv("MAIL_DRIVER", "console")).lower()
+    frontend_url = (os.getenv("FRONTEND_URL") or getattr(settings, "frontend_url", "http://localhost:5173")).rstrip("/")
+    mail_driver = (os.getenv("MAIL_DRIVER") or getattr(settings, "mail_driver", "console")).lower()
 
     sent: list[str] = []
     failed: list[str] = []
@@ -194,11 +194,11 @@ def send_batch_invitations(items: list[dict], delay_seconds: float = 0.35) -> di
             sent.append(email)
         return {"sent": sent, "failed": failed}
 
-    smtp_host = getattr(settings, "smtp_host", None) or os.getenv("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(getattr(settings, "smtp_port", None) or os.getenv("SMTP_PORT", 587))
-    smtp_user = getattr(settings, "smtp_user", None) or os.getenv("SMTP_USER")
-    smtp_pass = getattr(settings, "smtp_password", None) or os.getenv("SMTP_PASSWORD")
-    from_name = getattr(settings, "mail_from_name", None) or os.getenv("MAIL_FROM_NAME", "Entervene Academic Portal")
+    smtp_host = os.getenv("SMTP_HOST") or getattr(settings, "smtp_host", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT") or getattr(settings, "smtp_port", 587))
+    smtp_user = os.getenv("SMTP_USER") or getattr(settings, "smtp_user", None)
+    smtp_pass = os.getenv("SMTP_PASSWORD") or getattr(settings, "smtp_password", None)
+    from_name = os.getenv("MAIL_FROM_NAME") or getattr(settings, "mail_from_name", "Entervene Academic Portal")
 
     if not smtp_user or not smtp_pass:
         logger.warning("SMTP credentials not configured. Marking batch as failed.")

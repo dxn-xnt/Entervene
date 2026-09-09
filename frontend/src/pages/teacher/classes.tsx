@@ -195,7 +195,10 @@ const TeacherClasses = () => {
           loads: [],
         });
       }
-      groups.get(load.subject_id)!.loads.push(load);
+      const targetGroup = groups.get(load.subject_id)!;
+      if (!targetGroup.loads.some((existing) => existing.class_id === load.class_id)) {
+        targetGroup.loads.push(load);
+      }
     });
 
     return Array.from(groups.values())
@@ -259,25 +262,32 @@ const TeacherClasses = () => {
                                 </Badge>
                               )}
                             </div>
-                            <div className="flex flex-row gap-3">
+                            <div className="flex flex-row items-center gap-3">
+                              {group.loads.length > 1 && (
+                                <span className="text-xs text-muted-foreground hidden sm:inline">
+                                  Select a section below
+                                </span>
+                              )}
                               <Badge variant="secondary">
                                 {group.loads.length} section{group.loads.length !== 1 ? "s" : ""}
                               </Badge>
-                              <Button
-                                variant="secondary"
-                                className="shadow-none"
-                                size="icon"
-                                title={`View ${group.subjectName}`}
-                                onClick={() => {
-                                  if (group.loads[0]) {
-                                    navigate(
-                                      `/teacher/classes/${group.loads[0].class_id}/subjects/${group.subjectId}`,
-                                    );
-                                  }
-                                }}
-                              >
-                                <ArrowUpRight className="size-4" />
-                              </Button>
+                              {group.loads.length === 1 && (
+                                <Button
+                                  variant="secondary"
+                                  className="shadow-none"
+                                  size="icon"
+                                  title={`View ${group.subjectName}`}
+                                  onClick={() => {
+                                    if (group.loads[0]) {
+                                      navigate(
+                                        `/teacher/classes/${group.loads[0].class_id}/subjects/${group.subjectId}`,
+                                      );
+                                    }
+                                  }}
+                                >
+                                  <ArrowUpRight className="size-4" />
+                                </Button>
+                              )}
                             </div>
                           </div>
                           <div className="pt-3 flex gap-3 overflow-auto pb-2">

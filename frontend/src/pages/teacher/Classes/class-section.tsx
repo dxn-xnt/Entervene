@@ -87,7 +87,9 @@ export default function ClassSections() {
     loads.forEach((load) => {
       const existing = byClass.get(load.class_id);
       if (existing) {
-        existing.subjects.push(load);
+        if (!existing.subjects.some((s) => s.subject_id === load.subject_id)) {
+          existing.subjects.push(load);
+        }
       } else {
         byClass.set(load.class_id, {
           class_id: load.class_id,
