@@ -86,20 +86,11 @@ export const AssessmentTab: React.FC<AssessmentTabProps> = ({
 
   return (
     <div className="flex w-full flex-col gap-6">
-      {/* Section Header */}
-      <div className="space-y-1 border-b-2 border-border pb-3">
-        <h2 className="text-xl font-bold">Assessment</h2>
-
-        <p className="text-sm text-muted-foreground">
-          Describe how you will monitor and evaluate student learning.
-        </p>
-      </div>
-
       {/* Side-by-Side 2 Column Desktop Layout */}
       <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
         {/* Formative Assessment Column */}
-        <Card className="block h-full w-full border-black p-5 transition-none hover:shadow-md flex flex-col gap-2">
-          <Card.Header className="mb-0 flex-row flex-wrap items-center justify-between gap-2 border-b-2 border-border pb-2">
+        <Card className="block h-full w-full p-5 transition-none hover:shadow-md flex flex-col gap-2">
+          <Card.Header className="mb-0 flex-row flex-wrap items-center justify-between gap-2 pb-2">
             <div>
               <Label className="font-bold">Formative Assessment</Label>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -130,7 +121,7 @@ export const AssessmentTab: React.FC<AssessmentTabProps> = ({
 
         {/* Evaluation Tasks Column */}
         <Card className="block h-full w-full border-black p-5 transition-none hover:shadow-md flex flex-col gap-3">
-          <Card.Header className="mb-0 flex-row flex-wrap items-center justify-between gap-2 border-b-2 border-border pb-2">
+          <Card.Header className="mb-0 flex-row flex-wrap items-center justify-between gap-2 pb-2">
             <div>
               <Label className="font-bold">Evaluation Tasks</Label>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -149,7 +140,7 @@ export const AssessmentTab: React.FC<AssessmentTabProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={addTask}
-                className="h-7 gap-1 border-black bg-white text-xs shadow-none hover:shadow-none"
+                className="gap-1 border-black bg-white text-xs shadow-none hover:shadow-none"
               >
                 <Plus className="size-3" /> Add Task
               </Button>
@@ -158,9 +149,7 @@ export const AssessmentTab: React.FC<AssessmentTabProps> = ({
           <Card.Content className="flex w-full flex-1 flex-col gap-2.5 overflow-y-auto">
             {assessment.tasks.map((task, idx) => (
               <div key={task.id} className="flex w-full items-start gap-2">
-                <span className="mt-2.5 w-5 shrink-0 text-right text-xs font-medium text-muted-foreground">
-                  {idx + 1}.
-                </span>
+
                 <textarea
                   rows={2}
                   placeholder={`Evaluation task ${idx + 1}…`}

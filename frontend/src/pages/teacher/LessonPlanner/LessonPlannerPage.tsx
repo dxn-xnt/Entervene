@@ -1,45 +1,48 @@
-import { useParams, Link } from "react-router-dom";
-import AppLayout from "@/layouts/app-layout";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { ArrowLeft } from "lucide-react";
-import { Button } from "@/components/retroui/Button";
+import { useParams, useNavigate } from "react-router-dom";
+import { Dialog } from "@/components/retroui/Dialog";
 import { LessonPlannerWizard } from "./LessonPlannerWizard";
 import { routes } from "@/../routes";
 
-const LessonPlannerPage = () => {
-  const { planId } = useParams<{ planId?: string }>();
-  const numericPlanId = planId ? parseInt(planId, 10) : undefined;
+interface LessonPlannerPageProps {
+  open?: boolean;
+  onClose?: () => void;
+  planId?: number;
+}
+
+const LessonPlannerPage = ({
+  open = true,
+  onClose,
+  planId: propPlanId,
+}: LessonPlannerPageProps) => {
+  const { planId: paramPlanId } = useParams<{ planId?: string }>();
+  const navigate = useNavigate();
+
+  const numericPlanId =
+    propPlanId ?? (paramPlanId ? parseInt(paramPlanId, 10) : undefined);
+
+  const handleClose = () => {
+    if (onClose) {
+      onClose();
+    } else {
+      navigate(routes.teacher.lessonPlanner);
+    }
+  };
 
   return (
-    <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
-        <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col">
-            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-
-                <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
-                  {numericPlanId ? "Edit Lesson Plan" : "New Lesson Plan"}
-                </h1>
-              </div>
-
-              <Link to={routes.teacher.lessonPlanner}>
-                <Button variant="default" size="md" className="gap-2">
-                  <ArrowLeft size={16} />
-                  <span className="hidden sm:inline">Back to Lesson Plans</span>
-                  <span className="sm:hidden">Back</span>
-                </Button>
-              </Link>
-            </header>
-
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
-              <LessonPlannerWizard planId={numericPlanId} />
-            </div>
-          </div>
-        </div>
-      </div>
-    </AppLayout>
+    <Dialog
+      open={open}
+      disablePointerDismissal={true}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) handleClose();
+      }}
+    >
+      <Dialog.Content
+        size="4xl"
+        className="max-h-[90vh] w-[95vw] max-w-6xl flex flex-col bg-white border-2 border-black p-0 gap-0 rounded-lg overflow-hidden shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
+      >
+        <LessonPlannerWizard planId={numericPlanId} onClose={handleClose} />
+      </Dialog.Content>
+    </Dialog>
   );
 };
 

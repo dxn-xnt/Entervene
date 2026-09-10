@@ -114,15 +114,6 @@ export const LearningExpTab: React.FC<LearningExpTabProps> = ({
 
   return (
     <div className="flex w-full flex-col gap-6">
-      {/* Section Header */}
-      <div className="space-y-1 border-b-2 border-border pb-3">
-        <h2 className="text-xl font-bold">Learning Experience</h2>
-
-        <p className="text-sm text-muted-foreground">
-          Describe how you will structure student learning activities.
-        </p>
-      </div>
-
       {/* Pre-Lesson Activity & Integration Opportunities Side-by-Side on Desktop */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-1.5">
@@ -193,7 +184,7 @@ export const LearningExpTab: React.FC<LearningExpTabProps> = ({
       </div>
 
       {/* Lesson Flow */}
-      <div className="flex flex-col gap-4 border-t-2 border-border pt-6">
+      <div className="flex flex-col gap-4">
         <div>
           <Label className="font-bold">Lesson Flow</Label>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -287,7 +278,7 @@ export const LearningExpTab: React.FC<LearningExpTabProps> = ({
       </div>
 
       {/* Learning Resources */}
-      <div className="flex flex-col gap-1.5 border-t-2 border-border pt-6">
+      <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <Label className="font-bold">Learning Resources</Label>
           <AIAssistButton

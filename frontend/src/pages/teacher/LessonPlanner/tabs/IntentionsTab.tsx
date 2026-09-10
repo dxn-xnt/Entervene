@@ -183,15 +183,6 @@ export const IntentionsTab: React.FC<IntentionsTabProps> = ({
 
   return (
     <div className="flex w-full flex-col gap-6">
-      {/* Section Header */}
-      <div className="space-y-1 border-b-2 border-border pb-3">
-        <h2 className="text-xl font-bold">Intentions</h2>
-
-        <p className="text-sm text-muted-foreground">
-          Define what students will learn and what you know about them.
-        </p>
-      </div>
-
       {/* Learning Competencies */}
       <div className="flex flex-col gap-3 w-full">
         <div className="flex items-center justify-between flex-wrap gap-2 w-full">
@@ -334,7 +325,7 @@ export const IntentionsTab: React.FC<IntentionsTabProps> = ({
       </div>
 
       {/* Learner Context */}
-      <div className="flex flex-col gap-6 border-t-2 border-border pt-6">
+      <div className="flex flex-col gap-6">
         <div className="space-y-1">
           <Label className="text-lg font-bold">Learner Context</Label>
 

@@ -56,15 +56,6 @@ export const InfoTab: React.FC<InfoTabProps> = ({
 }) => {
   return (
     <div className="flex w-full flex-col gap-6">
-      {/* Section Header */}
-      <div className="space-y-1 border-b-2 border-border pb-3">
-        <h2 className="text-xl font-bold">Lesson Information</h2>
-
-        <p className="text-sm text-muted-foreground">
-          Fill in the basic details of the lesson plan.
-        </p>
-      </div>
-
       <div className="flex flex-col gap-6">
         {/* Lesson Title */}
         <FormField label="Lesson Title" required error={errors.title}>
@@ -139,31 +130,28 @@ export const InfoTab: React.FC<InfoTabProps> = ({
           </FormField>
         </div>
 
-        {/* Divider */}
-        <div className="border-t-2 border-border pt-6">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <FormField label="References / Materials">
-              <textarea
-                id="references"
-                rows={4}
-                placeholder="List your references, books, or online materials..."
-                value={draft.references}
-                onChange={(e) => onChange("references", e.target.value)}
-                className="min-h-[120px] w-full resize-y border-2 border-black bg-background px-3 py-2 text-sm shadow-none outline-none focus:border-black"
-              />
-            </FormField>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <FormField label="References / Materials">
+            <textarea
+              id="references"
+              rows={4}
+              placeholder="List your references, books, or online materials..."
+              value={draft.references}
+              onChange={(e) => onChange("references", e.target.value)}
+              className="min-h-[120px] w-full resize-y border-2 border-black bg-background px-3 py-2 text-sm shadow-none outline-none focus:border-black"
+            />
+          </FormField>
 
-            <FormField label="AI Use Declaration">
-              <textarea
-                id="ai-declaration"
-                rows={4}
-                placeholder="Declare if and how AI tools were used in preparing this lesson plan..."
-                value={draft.ai_declaration}
-                onChange={(e) => onChange("ai_declaration", e.target.value)}
-                className="min-h-[120px] w-full resize-y border-2 border-black bg-background px-3 py-2 text-sm shadow-none outline-none focus:border-black"
-              />
-            </FormField>
-          </div>
+          <FormField label="AI Use Declaration">
+            <textarea
+              id="ai-declaration"
+              rows={4}
+              placeholder="Declare if and how AI tools were used in preparing this lesson plan..."
+              value={draft.ai_declaration}
+              onChange={(e) => onChange("ai_declaration", e.target.value)}
+              className="min-h-[120px] w-full resize-y border-2 border-black bg-background px-3 py-2 text-sm shadow-none outline-none focus:border-black"
+            />
+          </FormField>
         </div>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Text } from "@/components/retroui/Text";
@@ -11,13 +11,26 @@ import { Eye, EyeOff } from "lucide-react";
 import { routes } from "@/../routes";
 
 const Login = () => {
-  const { login } = useAuth();
+  const { login, role, isLoading } = useAuth();
   const navigate = useNavigate();
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState(() => {
+    return localStorage.getItem("saved_email") || "";
+  });
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(() => {
+    return localStorage.getItem("remember_me") === "true";
+  });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && role) {
+      if (role === "admin") navigate(routes.admin.dashboard, { replace: true });
+      else if (role === "teacher") navigate(routes.teacher.dashboard, { replace: true });
+      else if (role === "student") navigate(routes.student.board, { replace: true });
+    }
+  }, [isLoading, role, navigate]);
 
   const handleLogin = async () => {
     setError("");
@@ -35,6 +48,14 @@ const Login = () => {
 
     setLoading(true);
     try {
+      if (rememberMe) {
+        localStorage.setItem("remember_me", "true");
+        localStorage.setItem("saved_email", email);
+      } else {
+        localStorage.removeItem("remember_me");
+        localStorage.removeItem("saved_email");
+      }
+
       const matchedRole = await login(email, password);
       if (matchedRole === "admin") navigate(routes.admin.dashboard);
       else if (matchedRole === "teacher") navigate(routes.teacher.dashboard);
@@ -122,8 +143,14 @@ const Login = () => {
             </div>
 
             <div className="flex gap-2 items-center">
-              <Checkbox />
-              <Text>Remember me</Text>
+              <Checkbox
+                id="remember-me"
+                checked={rememberMe}
+                onCheckedChange={(checked) => setRememberMe(checked === true)}
+              />
+              <Label htmlFor="remember-me" className="cursor-pointer select-none">
+                Remember me
+              </Label>
             </div>
 
             <Button

@@ -37,16 +37,6 @@ export const WaysForwardTab: React.FC<WaysForwardTabProps> = ({
 
   return (
     <div className="flex w-full flex-col gap-6">
-      {/* Section Header */}
-      <div className="space-y-1 border-b-2 border-border pb-3">
-        <h2 className="text-xl font-bold">Ways Forward</h2>
-
-        <p className="text-sm text-muted-foreground">
-          Plan how you will extend learning and reflect on the lesson's
-          effectiveness.
-        </p>
-      </div>
-
       {/* Side-by-Side 2 Column Desktop Layout */}
       <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
         {/* Extended Learning Opportunities */}
