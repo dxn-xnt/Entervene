@@ -2,7 +2,7 @@ import React from "react";
 import { Input } from "@/components/retroui/Input";
 import { Label } from "@/components/retroui/Label";
 import { cn } from "@/lib/utils";
-import type { LessonPlanDraft, ValidationErrors } from "../useLessonPlanner";
+import type { LessonPlanDraft, ValidationErrors } from "../use-lesson-planner";
 import { AlertCircle } from "lucide-react";
 
 interface InfoTabProps {

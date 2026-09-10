@@ -75,7 +75,7 @@ export function CurriculumFilters({
   };
 
   return (
-    <div className="rounded-lg border-2 border-black bg-background p-3 shadow-[3px_3px_0_#000]">
+    <>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_160px_220px_180px_auto]">
         <label className="relative min-w-0">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
@@ -134,9 +134,6 @@ export function CurriculumFilters({
           Reset
         </Button>
       </div>
-      {isJhs ? (
-        <p className="mt-2 text-xs font-semibold text-black/70">Grades 7 to 10 use the General pathway.</p>
-      ) : null}
-    </div>
+    </>
   );
 }

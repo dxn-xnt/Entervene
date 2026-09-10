@@ -17,8 +17,8 @@ import {
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
-import { TOSGeneratorScreen } from "../Classes/subject-details/TOSGeneratorScreen";
-import type { CompetencyItem } from "../Classes/subject-details/types";
+import { TOSGeneratorScreen } from "../classes-view/subject-details/tos-generator-screen";
+import type { CompetencyItem } from "../classes-view/subject-details/types";
 
 interface SubjectOption {
   subject_id: number;

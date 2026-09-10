@@ -31,7 +31,7 @@ import {
   type ConflictItem,
   type TeacherWorkloadItem,
 } from "@/lib/api";
-import BreakConfigDrawer, { type PeriodTemplateSlotItem } from "@/pages/admin/forms/BreakConfigDrawer";
+import BreakConfigDrawer, { type PeriodTemplateSlotItem } from "@/pages/admin/forms/break-config-drawer";
 import {
   AlertTriangle,
   CheckCircle2,
