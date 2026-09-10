@@ -18,7 +18,7 @@ from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
-from app.models.attendance.Attendance import AttendanceRecord, LeaveRequest
+from app.models.attendance.Attendance import AttendanceRecord
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
@@ -37,7 +37,6 @@ TABLES = [
     Student.__table__,
     StudentClass.__table__,
     AttendanceRecord.__table__,
-    LeaveRequest.__table__,
 ]
 
 

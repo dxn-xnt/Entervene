@@ -54,7 +54,7 @@ DOMAIN_MAPPING = {
         "student_assessment_score", "student_period_grade", "grade_submission_log"
     ],
     "Attendance & Learner Welfare": [
-        "attendance_record", "leave_request"
+        "attendance_record"
     ],
     "AI Early Warning System & Risk Management": [
         "ai_model_version", "ai_prediction", "ai_prediction_feature",
@@ -116,7 +116,6 @@ TABLE_DESCRIPTIONS = {
     "student_period_grade": "Computed quarterly/period grades for students per subject load, storing transmuted DepEd grades.",
     "grade_submission_log": "Audit trail logging formal grade submissions, approvals, and post-submission alterations.",
     "attendance_record": "Daily/session attendance records tracking present, absent, late, or excused statuses.",
-    "leave_request": "Learner and faculty leave of absence requests, approvals, and supporting excuse documentation.",
     "ai_model_version": "Registry of trained machine learning models (XGBoost, Random Forest) with performance metrics.",
     "ai_prediction": "Core Early Warning System predictions, classifying student academic risk (At-Risk, Moderate, Safe) with confidence scores.",
     "ai_prediction_feature": "Stores feature importances and SHAP values explaining why a student was classified as at-risk.",

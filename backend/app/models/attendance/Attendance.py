@@ -34,22 +34,3 @@ class AttendanceRecord(Base):
     recorded_by: Mapped[object] = relationship("AcademicStaff")
 
 
-class LeaveRequest(Base):
-    __tablename__ = "leave_request"
-
-    leave_request_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    student_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("student.student_id", ondelete="CASCADE"), nullable=False, index=True)
-    class_id: Mapped[int] = mapped_column(Integer, ForeignKey("class.class_id", ondelete="CASCADE"), nullable=False, index=True)
-    start_date: Mapped[date_type] = mapped_column(Date, nullable=False)
-    end_date: Mapped[date_type] = mapped_column(Date, nullable=False)
-    reason: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")  # pending, approved, rejected
-    reviewed_by_staff_id: Mapped[str | None] = mapped_column(String(20), ForeignKey("academic_staff.staff_id", ondelete="SET NULL"), nullable=True)
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
-    student: Mapped[object] = relationship("Student")
-    class_: Mapped[object] = relationship("Class")
-    reviewed_by: Mapped[object] = relationship("AcademicStaff")
-
