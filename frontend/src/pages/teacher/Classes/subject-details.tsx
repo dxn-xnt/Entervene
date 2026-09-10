@@ -896,7 +896,7 @@ export default function SubjectDetails() {
                 />
               </main>
             ) : isTOSOpen && subjectId ? (
-              <main className="py-4 px-4 md:px-6">
+              <main>
                 <TOSGeneratorScreen
                   subjectId={Number(subjectId)}
                   subjectName={subjectName || "Subject"}

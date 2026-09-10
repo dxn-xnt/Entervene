@@ -213,7 +213,7 @@ export const TeacherTOSPage: React.FC = () => {
       <AppLayout>
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col">
-            <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
+            <div className="flex flex-1 flex-col">
               <TOSGeneratorScreen
                 subjectId={activeSubject?.subject_id ?? 0}
                 subjectName={activeSubject?.subject_name ?? ""}
@@ -264,7 +264,7 @@ export const TeacherTOSPage: React.FC = () => {
 
             <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
               {/* Filter Toolbar */}
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between rounded-lg border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              <Card className="flex flex-col gap-4 rounded-none md:flex-row md:flex-wrap md:items-center md:justify-between">
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Subject Filter Dropdown */}
                   <div className="w-full sm:w-auto">
@@ -272,7 +272,7 @@ export const TeacherTOSPage: React.FC = () => {
                       value={selectedSubjectFilter}
                       onValueChange={setSelectedSubjectFilter}
                     >
-                      <Select.Trigger className="h-9 w-full text-xs font-black sm:w-52">
+                      <Select.Trigger aria-label="Filter by subject" className="h-9 w-full rounded-none text-xs font-bold sm:w-52">
                         <Select.Value placeholder="All Assigned Subjects" />
                       </Select.Trigger>
                       <Select.Content>
@@ -290,20 +290,21 @@ export const TeacherTOSPage: React.FC = () => {
                   </div>
 
                   {/* Academic Term Filter Chips */}
-                  <div className="flex items-center gap-1 overflow-x-auto">
+                  <div className="flex flex-wrap items-center gap-2">
                     {(["ALL", "Term 1", "Term 2", "Term 3"] as const).map(
                       (qTab) => (
-                        <button
+                        <Button
                           key={qTab}
                           type="button"
+                          size="sm"
+                          variant={selectedQuarterFilter === qTab ? "default" : "outline"}
+                          autoIcon={false}
+                          aria-pressed={selectedQuarterFilter === qTab}
                           onClick={() => setSelectedQuarterFilter(qTab)}
-                          className={`px-3 py-1 text-xs font-black rounded border-2 transition-all ${selectedQuarterFilter === qTab
-                              ? "border-black bg-[#FFD54F] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                              : "border-transparent bg-gray-100 text-gray-700 hover:bg-gray-200"
-                            }`}
+                          className="h-9 rounded-none px-3 text-xs font-bold"
                         >
                           {qTab === "ALL" ? "All Terms" : `${qTab}`}
-                        </button>
+                        </Button>
                       ),
                     )}
                   </div>
@@ -311,15 +312,16 @@ export const TeacherTOSPage: React.FC = () => {
 
                 {/* Search Input */}
                 <div className="relative w-full md:w-64">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                  <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
+                    aria-label="Search exam or subject"
                     placeholder="Search exam or subject..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="h-9 w-full pl-8 text-xs font-bold border-2 border-black"
+                    className="h-9 w-full rounded-none pl-8 text-xs font-bold border-2 border-border"
                   />
                 </div>
-              </div>
+              </Card>
 
               {/* Exams Grid */}
               {isLoading || isOpeningExam ? (
