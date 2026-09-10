@@ -8,11 +8,14 @@ from sqlalchemy.orm import Session
 
 from app.core.Dependencies import get_current_user, get_optional_staff_id, get_staff_id, require_role
 from app.db.Session import get_db
+from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.AcademicYear import AcademicYear
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
 from app.schemas.Prediction import (
     DashboardAtRiskResponse,
     DashboardFilterOptionsResponse,
+    DashboardGradeGroupSummary,
     ModelPerformanceSummaryResponse,
     PredictionBuildFeaturesRequest,
     PredictionBuiltFeaturesResponse,
@@ -50,7 +53,10 @@ from app.services.prediction.PredictionReadService import (
     get_teacher_reviews_for_prediction,
 )
 from app.services.prediction.TeacherRiskReviewService import review_prediction_risk
-from app.services.prediction.DashboardPredictionService import get_dashboard_at_risk_predictions
+from app.services.prediction.DashboardPredictionService import (
+    get_dashboard_at_risk_predictions,
+    get_dashboard_grade_summaries,
+)
 from app.services.prediction.DashboardFilterService import get_dashboard_filter_options
 
 router = APIRouter()
@@ -80,6 +86,8 @@ def _summary(prediction: AIPrediction) -> dict[str, Any]:
 
 
 def _service_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, PermissionError):
+        return HTTPException(status_code=403, detail=str(exc))
     status_code = 404 if isinstance(exc, LookupError) else 400
     return HTTPException(status_code=status_code, detail=str(exc))
 
@@ -115,7 +123,9 @@ def _with_readiness(scoring_result: dict[str, Any], built: dict[str, Any]) -> di
 def dashboard_at_risk(
     class_id: int | None = None,
     subject_id: int | None = None,
-    term: int | None = Query(None, ge=1, le=3),
+    academic_period_id: int | None = Query(None, description="Primary term filter matching academic_period.academic_period_id"),
+    term: int | None = Query(None, ge=1, le=3, description="Legacy fallback mapping to active year's period sequence"),
+    grade_level: int | None = Query(None, ge=1, le=12, description="Grade level filter (7-12)"),
     risk_level: str | None = None,
     search: str | None = None,
     sort_by: str | None = None,
@@ -131,7 +141,9 @@ def dashboard_at_risk(
         db,
         class_id=class_id,
         subject_id=subject_id,
+        academic_period_id=academic_period_id,
         term=term,
+        grade_level=grade_level,
         risk_level=risk_level,
         search=search,
         sort_by=sort_by,
@@ -140,15 +152,89 @@ def dashboard_at_risk(
         offset=offset,
         staff_id=staff_id,
         is_admin=is_admin,
+        enrolled_only=True,
+    )
+
+
+@router.get("/dashboard/at-risk/historical", response_model=DashboardAtRiskResponse)
+def dashboard_at_risk_historical(
+    class_id: int | None = None,
+    subject_id: int | None = None,
+    academic_period_id: int | None = Query(None, description="Primary term filter matching academic_period.academic_period_id"),
+    term: int | None = Query(None, ge=1, le=3, description="Legacy fallback mapping to active year's period sequence"),
+    grade_level: int | None = Query(None, ge=1, le=12, description="Grade level filter (7-12)"),
+    risk_level: str | None = None,
+    search: str | None = None,
+    sort_by: str | None = None,
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
+    limit: int = Query(25, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    """Dedicated endpoint for administrative inspection of historical benchmark records (Universe 2)."""
+    return get_dashboard_at_risk_predictions(
+        db,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=academic_period_id,
+        term=term,
+        grade_level=grade_level,
+        risk_level=risk_level,
+        search=search,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=limit,
+        offset=offset,
+        staff_id=None,
+        is_admin=True,
+        enrolled_only=False,
+    )
+
+
+@router.get("/dashboard/grade-summaries", response_model=list[DashboardGradeGroupSummary])
+def dashboard_grade_summaries(
+    academic_period_id: int | None = Query(None, description="Term filter; defaults to None for all terms"),
+    term: int | None = Query(None, ge=1, le=3, description="Legacy term fallback"),
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
+    db: Session = Depends(get_db),
+):
+    is_admin = current_user.get("role") == "admin"
+    if academic_period_id is None and term is not None:
+        period_id = (
+            db.query(AcademicPeriod.academic_period_id)
+            .join(AcademicYear, AcademicPeriod.academic_year_id == AcademicYear.academic_year_id)
+            .filter(
+                AcademicYear.is_active == True,
+                AcademicPeriod.period_sequence == term,
+            )
+            .scalar()
+        )
+        if period_id is None:
+            period_id = (
+                db.query(AcademicPeriod.academic_period_id)
+                .filter(AcademicPeriod.period_sequence == term)
+                .scalar()
+            )
+        academic_period_id = period_id
+
+    return get_dashboard_grade_summaries(
+        db,
+        staff_id=staff_id,
+        is_admin=is_admin,
+        academic_period_id=academic_period_id,
     )
 
 
 @router.get("/dashboard/filters", response_model=DashboardFilterOptionsResponse)
 def dashboard_filters(
     current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
-    return get_dashboard_filter_options(db)
+    is_admin = current_user.get("role") == "admin"
+    return get_dashboard_filter_options(db, staff_id=staff_id, is_admin=is_admin)
 
 
 # ---------------------------------------------------------------------------
@@ -354,12 +440,18 @@ def evaluate_outcome(
 def read_prediction_detail(
     prediction_id: int,
     current_user: dict = Depends(require_role("admin", "teacher")),
-    staff_id: str = Depends(get_staff_id),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
+    is_admin = current_user.get("role") == "admin"
     try:
-        return get_prediction_detail(db, prediction_id=prediction_id, staff_id=staff_id)
-    except LookupError as exc:
+        return get_prediction_detail(
+            db,
+            prediction_id=prediction_id,
+            staff_id=staff_id,
+            is_admin=is_admin,
+        )
+    except (LookupError, PermissionError) as exc:
         raise _service_error(exc) from exc
 
 

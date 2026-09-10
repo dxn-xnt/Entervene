@@ -9,16 +9,37 @@ from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
 from app.models.ai.PredictionOutcome import PredictionOutcome
 from app.models.ai.TeacherRiskReview import TeacherRiskReview
+from app.models.people.Student import Student
+from app.models.academic.Class_ import Class
+from app.models.academic.Subject import Subject
+from app.models.academic.AcademicLevel import AcademicLevel
 from app.services.prediction.PredictionExplanationService import (
     build_prediction_causes,
     build_recommended_actions,
 )
+from app.services.prediction.TeacherAssignmentResolver import resolve_teacher_for_load
 
 
 def _to_float(value: Any) -> float | None:
     if value is None:
         return None
     return float(value)
+
+
+def _format_student_name(student: Student | None) -> str | None:
+    if student is None:
+        return None
+    last = (student.last_name or "").strip()
+    first = (student.first_name or "").strip()
+    if last and first and last != "0" and first != "Unknown":
+        return f"{last}, {first}"
+    if first and first != "Unknown":
+        return first
+    if last and last != "0":
+        return last
+    if student.student_lrn:
+        return f"Student {student.student_lrn}"
+    return f"Student {str(student.student_id)[:8]}"
 
 
 def _model_version(version: AIModelVersion | None) -> dict[str, Any] | None:
@@ -125,19 +146,70 @@ def get_prediction_detail(
     db: Session,
     prediction_id: int,
     staff_id: str | None = None,
+    is_admin: bool = True,
 ) -> dict[str, Any]:
     prediction = _load_prediction(db, prediction_id)
+
+    # Resolve responsible teacher assignment using canonical triplet resolver
+    teacher_info = resolve_teacher_for_load(
+        db,
+        prediction.class_id,
+        prediction.subject_id,
+        prediction.target_period_id,
+    )
+
+    # Server-side teacher role isolation
+    if not is_admin:
+        if not staff_id or teacher_info.staff_id != staff_id:
+            raise PermissionError("Access denied. You are not assigned to this class, subject, and term.")
+
+    # Retrieve relational entities for display
+    student = db.get(Student, prediction.student_id)
+    student_name = _format_student_name(student)
+    student_lrn = student.student_lrn if student else None
+
+    class_obj = db.get(Class, prediction.class_id)
+    class_name = class_obj.section_name if class_obj else None
+
+    grade_level = None
+    level_name = None
+    if class_obj and class_obj.academic_level_id:
+        level_obj = db.get(AcademicLevel, class_obj.academic_level_id)
+        if level_obj:
+            grade_level = level_obj.grade_level
+            level_name = level_obj.level_name
+
+    subject_obj = db.get(Subject, prediction.subject_id)
+    subject_name = subject_obj.subject_name if subject_obj else None
+    subject_codename = subject_obj.subject_codename if subject_obj else None
+
     feature_rows = _features(db, prediction_id)
     causes = build_prediction_causes(prediction, feature_rows)
     review_rows = _reviews(db, prediction_id)
     current_user_review = None
     if staff_id is not None:
         current_user_review = next((_review(row) for row in _reviews(db, prediction_id, staff_id)), None)
+
     return {
         "prediction_id": prediction.prediction_id,
         "student_id": prediction.student_id,
+        "student_name": student_name,
+        "student_lrn": student_lrn,
+        "grade_level": grade_level,
+        "level_name": level_name,
         "class_id": prediction.class_id,
+        "class_name": class_name,
         "subject_id": prediction.subject_id,
+        "subject_name": subject_name,
+        "subject_codename": subject_codename,
+        "teacher_name": teacher_info.teacher_name,
+        "teacher_staff_id": teacher_info.staff_id,
+        "teacher_status_label": teacher_info.status_label,
+        "is_substitute": teacher_info.is_substitute,
+        "substitution_id": teacher_info.substitution_id,
+        "substitute_start_date": teacher_info.substitute_start_date,
+        "substitute_end_date": teacher_info.substitute_end_date,
+        "original_teacher_name": teacher_info.original_teacher_name,
         "source_period_id": prediction.source_period_id,
         "target_period_id": prediction.target_period_id,
         "predicted_period_grade": _to_float(prediction.predicted_period_grade),

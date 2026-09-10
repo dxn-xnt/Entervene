@@ -229,14 +229,19 @@ def score_student_prediction(
         db=db,
     )
 
+    is_insufficient = (
+        risk_result.risk_level == "INSUFFICIENT_DATA"
+        or risk_result.data_status == "INSUFFICIENT_DATA"
+    )
+
     return {
         "model_version_id": model_version.model_version_id,
         "model_name": model_version.model_name,
         "model_type": model_version.model_type,
         "algorithm": model_version.algorithm,
-        "predicted_period_grade": round(predicted_grade, 2),
+        "predicted_period_grade": None if is_insufficient else round(predicted_grade, 2),
         "risk_level": risk_result.risk_level,
-        "risk_score": risk_result.risk_score,
+        "risk_score": None if is_insufficient else risk_result.risk_score,
         "data_status": risk_result.data_status,
         "reasons": risk_result.reasons,
         "recommended_action": risk_result.recommended_action,
