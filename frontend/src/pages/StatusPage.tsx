@@ -19,7 +19,7 @@ export default function StatusPage({ variant = "error" }: { variant?: keyof type
   }, [state.label]);
 
   return (
-    <div className="status-shell retro-squares-bg">
+    <div className="status-shell retro-squares-bg retro-squares-motion">
       <header className="status-header"><a className="status-brand" href="/">ENTERVENE</a></header>
       <main className="status-main">
         <section className="status-panel" aria-labelledby="status-title">

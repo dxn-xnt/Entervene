@@ -15,7 +15,7 @@ const Landing = () => {
   }
 
   return (
-    <div className="retro-squares-bg flex min-h-svh flex-col">
+    <div className="retro-squares-bg retro-squares-motion flex min-h-svh flex-col">
     <main className="flex flex-1 items-center justify-center px-6 py-12">
       <section className="w-full max-w-[560px] text-center" aria-labelledby="landing-title">
         <h1
