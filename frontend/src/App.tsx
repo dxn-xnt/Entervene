@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import StatusPage from "./pages/StatusPage";
 import { AuthProvider } from "./context/AuthContext";
 import { SettingsProvider } from "./context/SettingsContext";
 import { AcademicPeriodProvider } from "./context/AcademicPeriodContext";
@@ -89,6 +90,9 @@ const App = () => {
             <Toaster />
             <Routes>
               <Route path="/" element={<Landing />} />
+              <Route path="/maintenance" element={<StatusPage variant="maintenance" />} />
+              <Route path="/unavailable" element={<StatusPage variant="unavailable" />} />
+              <Route path="/error" element={<StatusPage />} />
               <Route path={routes.auth.login} element={<Login />} />
               <Route path="/setup-password" element={<SetupPassword />} />
 
@@ -162,7 +166,7 @@ const App = () => {
 
               <Route
                 path="*"
-                element={<Navigate to={routes.auth.login} replace />}
+                element={<StatusPage variant="not-found" />}
               />
             </Routes>
           </BrowserRouter>
