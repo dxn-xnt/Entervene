@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Archive, Award, Info, Paperclip, Plus, Trash2, Users, X } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import AppLayout from "@/layouts/app-layout";
 import { API_URL, apiFetch } from "@/lib/api";
 import AttachmentDisplay from "@/components/attachment-display";
@@ -660,15 +661,17 @@ export default function SubjectDetails() {
       return !allowedMaterialExtensions.includes(extension);
     });
     if (invalidType) {
-      setError(
-        `${invalidType.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`,
-      );
+      const msg = `${invalidType.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`;
+      setError(msg);
+      toast.error(msg);
       return;
     }
 
     const oversized = selected.find((file) => file.size > maxMaterialSize);
     if (oversized) {
-      setError(`${oversized.name} is larger than the 4 MB file limit.`);
+      const msg = `${oversized.name} is larger than the 10 MB file limit.`;
+      setError(msg);
+      toast.error(msg);
       return;
     }
 
@@ -752,7 +755,9 @@ export default function SubjectDetails() {
     // Quiz question files go through the quiz import flow, not classwork attachments.
     const allowsMaterialUpload = classworkDraft.classwork_type !== "QUIZ";
     if (!classworkDraft.title.trim()) {
-      setError("Classwork title is required.");
+      const msg = "Classwork title is required.";
+      setError(msg);
+      toast.error(msg);
       return;
     }
     const totalPoints = Number(classworkDraft.total_points);
@@ -761,7 +766,9 @@ export default function SubjectDetails() {
       classworkDraft.total_points &&
       Number.isNaN(totalPoints)
     ) {
-      setError("Total points must be a number.");
+      const msg = "Total points must be a number.";
+      setError(msg);
+      toast.error(msg);
       return;
     }
 
@@ -852,9 +859,10 @@ export default function SubjectDetails() {
       setClassworkDraft(emptyClassworkDraft);
       setClassworkMaterials([]);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Unable to create classwork.",
-      );
+      const msg =
+        err instanceof Error ? err.message : "Unable to create classwork.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setIsCreatingClasswork(false);
     }
