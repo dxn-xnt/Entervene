@@ -13,7 +13,7 @@ import {
   type User,
   type TeacherLoadSummaryItem,
 } from "@/lib/api";
-import { AlertCircle, Calendar, CheckSquare, Clock, Info, Loader2, Square, UserCheck, Users } from "lucide-react";
+import { AlertCircle, Calendar, CheckSquare, Clock, Info, Loader2, Square, Users } from "lucide-react";
 
 
 interface AssignSubstituteModalProps {
