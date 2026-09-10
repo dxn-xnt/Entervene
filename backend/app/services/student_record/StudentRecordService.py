@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -32,6 +33,7 @@ from app.schemas.StudentRecord import (
     BulkSendGradesToAdviserResponse,
     ClassworkCategoryHeader,
     GradebookCategoryHeaderGroup,
+    GradingWeightsInfo,
     SendGradeToAdviserItemResponse,
     SendStudentGradeRequest,
     StudentClassworkResult,
@@ -407,6 +409,16 @@ def teacher_student_gradebook(
             )
         ],
         studentGrades=student_rows,
+        grading_weights=GradingWeightsInfo(
+            template_id=weights.template_id,
+            template_name=weights.template_name,
+            ww_weight=weights.ww_weight,
+            pt_weight=weights.pt_weight,
+            exams_weight=weights.qa_weight,
+            ww_percentage=int(round(weights.ww_weight * 100)),
+            pt_percentage=int(round(weights.pt_weight * 100)),
+            exams_percentage=int(round(weights.qa_weight * 100)),
+        ),
     )
 
 
@@ -608,13 +620,48 @@ FALLBACK_GRADING_WEIGHTS = GradingWeights(
 
 def _match_component_category(name: str) -> str | None:
     """Classify a grading template component name into WW, PT, or QA."""
-    n = (name or "").upper().replace("-", " ").replace("_", " ")
-    if any(k in n for k in ("QUARTER", "EXAM", "PERIODIC", "QA", "ASSESSMENT", "TERM")):
-        return "QA"
-    if any(k in n for k in ("PERFORMANCE", "PROJECT", "ACTIVITY", "PT", "PRODUCT", "TASK")):
-        return "PT"
-    if any(k in n for k in ("WRITTEN", "SEATWORK", "QUIZ", "WW", "WORK")):
+    raw = (name or "").strip()
+    if not raw:
+        return None
+    n = raw.upper().replace("-", " ").replace("_", " ")
+    words = set(re.findall(r"\b[A-Z0-9]+\b", n))
+
+    # Precedence 1: Explicit Examination Signals
+    has_exam_signal = any(k in words for k in ("EXAM", "EXAMS", "EXAMINATION", "EXAMINATIONS", "PERIODIC", "PERIODICAL", "QA", "MIDTERM", "SUMMATIVE")) or "QUARTERLY" in n
+    has_term_assessment = "TERM ASSESSMENT" in n or "TERM EXAM" in n or "QUARTERLY ASSESSMENT" in n
+
+    # Exception: "Periodic Quiz" / "Quizzes" has quiz keyword, which is Written Work
+    has_quiz = any(k in words for k in ("QUIZ", "QUIZZES"))
+    if has_quiz and not any(k in words for k in ("EXAM", "EXAMS", "EXAMINATION", "EXAMINATIONS", "MIDTERM")):
         return "WW"
+
+    if has_exam_signal or has_term_assessment:
+        return "QA"
+
+    # Precedence 2: Standalone 'TERM' without exam keywords
+    if "TERM" in words:
+        if any(p in words for p in ("PROJECT", "PROJECTS", "PERFORMANCE", "TASK", "TASKS", "PORTFOLIO", "PORTFOLIOS", "PRODUCT", "PRACTICUM")):
+            return "PT"
+        return "QA"
+
+    # Precedence 3: Performance Task Signals
+    pt_keywords = {
+        "PERFORMANCE", "PERFORMANCES", "PROJECT", "PROJECTS", "ACTIVITY", "ACTIVITIES",
+        "PT", "PRODUCT", "PRODUCTS", "TASK", "TASKS", "PORTFOLIO", "PORTFOLIOS",
+        "DEMONSTRATION", "DEMONSTRATIONS", "PRACTICUM",
+    }
+    if words.intersection(pt_keywords) or "PERFORMANCE TASK" in n or "PERFORMANCE TASKS" in n:
+        return "PT"
+
+    # Precedence 4: Written Work Signals
+    ww_keywords = {
+        "WRITTEN", "SEATWORK", "SEATWORKS", "QUIZ", "QUIZZES", "WW",
+        "WORK", "WORKS", "ASSIGNMENT", "ASSIGNMENTS", "EXERCISE", "EXERCISES",
+        "MODULE", "MODULES",
+    }
+    if words.intersection(ww_keywords) or "WRITTEN WORK" in n or "WRITTEN WORKS" in n:
+        return "WW"
+
     return None
 
 
@@ -628,9 +675,10 @@ def resolve_subject_grading_weights(
     1. Looks up Subject.default_grading_template (by template ID or template_name).
     2. Falls back to GradingTemplate linked directly to subject_id.
     3. Falls back to GradingTemplate linked to academic_level_id (where subject_id is None).
-    4. Matches component names for WW, PT, and QA/Exams.
-    5. Normalizes weights so their sum equals 1.0 (100%).
-    6. If no valid template or components found, returns FALLBACK_GRADING_WEIGHTS.
+    4. Safety fallback: active "Core Subjects" template.
+    5. Matches component names for WW, PT, and QA/Exams.
+    6. Normalizes weights so their sum equals 1.0 (100%).
+    7. If no valid template or components found, returns FALLBACK_GRADING_WEIGHTS.
     """
     subject = db.query(Subject).filter(Subject.subject_id == subject_id).first()
     if not subject:
@@ -667,10 +715,17 @@ def resolve_subject_grading_weights(
             GradingTemplate.status == "active",
         ).first()
 
+    # 4. Safety fallback: active "Core Subjects" template
+    if not template:
+        template = db.query(GradingTemplate).filter(
+            func.lower(GradingTemplate.template_name) == "core subjects",
+            GradingTemplate.status == "active",
+        ).first()
+
     if not template or not template.components:
         return FALLBACK_GRADING_WEIGHTS
 
-    # 4. Extract component weights
+    # 5. Extract component weights
     ww_raw = 0.0
     pt_raw = 0.0
     qa_raw = 0.0

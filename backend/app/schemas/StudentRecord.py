@@ -165,10 +165,22 @@ class StudentGradebookRow(BaseModel):
     finalized_by_name: Optional[str] = None
 
 
+class GradingWeightsInfo(BaseModel):
+    template_id: Optional[int] = None
+    template_name: Optional[str] = None
+    ww_weight: float
+    pt_weight: float
+    exams_weight: float
+    ww_percentage: int
+    pt_percentage: int
+    exams_percentage: int
+
+
 class StudentGradebookResponse(BaseModel):
     scope: StudentRecordScope
     classwork: list[GradebookCategoryHeaderGroup]
     studentGrades: list[StudentGradebookRow]
+    grading_weights: Optional[GradingWeightsInfo] = None
 
 
 class SendStudentGradeRequest(BaseModel):

@@ -44,6 +44,8 @@ def test_match_component_category():
     assert _match_component_category("Seatworks / Quizzes") == "WW"
     assert _match_component_category("Performance Tasks") == "PT"
     assert _match_component_category("Project / Activity") == "PT"
+    assert _match_component_category("Exams") == "QA"
+    assert _match_component_category("Exam") == "QA"
     assert _match_component_category("Quarterly Assessment") == "QA"
     assert _match_component_category("Quarterly/Term Assessment") == "QA"
     assert _match_component_category("Periodic Exam") == "QA"
@@ -65,6 +67,35 @@ def test_resolve_weights_fallback_when_no_template(db: Session):
     assert weights.pt_weight == FALLBACK_GRADING_WEIGHTS.pt_weight
     assert weights.qa_weight == FALLBACK_GRADING_WEIGHTS.qa_weight
     assert weights.template_id is None
+
+
+def test_resolve_weights_core_subjects_safety_fallback(db: Session):
+    # When "Core Subjects" exists, an unassigned subject safely falls back to it
+    core_tpl = GradingTemplate(
+        template_name="Core Subjects",
+        status="active",
+    )
+    db.add(core_tpl)
+    db.flush()
+
+    c1 = GradingTemplateComponent(grading_template_id=core_tpl.grading_template_id, component_name="Written Works", weight=Decimal("25.00"), display_order=1)
+    c2 = GradingTemplateComponent(grading_template_id=core_tpl.grading_template_id, component_name="Performance Tasks", weight=Decimal("50.00"), display_order=2)
+    c3 = GradingTemplateComponent(grading_template_id=core_tpl.grading_template_id, component_name="Exams", weight=Decimal("25.00"), display_order=3)
+    db.add_all([c1, c2, c3])
+
+    subject = Subject(
+        subject_name="Subject Without Template",
+        subject_codename="NOTPL2",
+        default_grading_template=None,
+    )
+    db.add(subject)
+    db.commit()
+
+    weights = resolve_subject_grading_weights(db, subject.subject_id)
+    assert weights.template_id == core_tpl.grading_template_id
+    assert pytest.approx(weights.ww_weight, 0.001) == 0.25
+    assert pytest.approx(weights.pt_weight, 0.001) == 0.50
+    assert pytest.approx(weights.qa_weight, 0.001) == 0.25
 
 
 def test_resolve_weights_by_template_name(db: Session):
