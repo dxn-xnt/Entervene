@@ -230,3 +230,20 @@ def test_runtime_only_risk_fields_are_allowed_but_not_model_features(db, tmp_pat
     assert "late_submission_count" not in result["feature_columns_used"]
     assert result["risk_level"] == "MODERATE_RISK"
     assert "two_or_more_missing_activities" in result["triggered_rules"]
+
+
+def test_score_student_prediction_suppresses_grade_on_insufficient_data(db, tmp_path: Path):
+    artifact_path = tmp_path / "model.joblib"
+    joblib.dump(FakeRegressor(86.42), artifact_path)
+    add_model_version(db, str(artifact_path))
+
+    # Coverage < 0.50 triggers INSUFFICIENT_DATA in RiskEngine
+    result = score_student_prediction(
+        db,
+        sample_input(subject_SCIENCE=1, data_coverage_ratio=0.30),
+    )
+
+    assert result["risk_level"] == "INSUFFICIENT_DATA"
+    assert result["data_status"] == "INSUFFICIENT_DATA"
+    assert result["predicted_period_grade"] is None
+    assert result["risk_score"] is None

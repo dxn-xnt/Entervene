@@ -27,6 +27,7 @@ from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
+from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.ai.AIModelVersion import AIModelVersion
@@ -43,6 +44,7 @@ TABLES = [
     Student.__table__,
     AcademicPeriod.__table__,
     Class.__table__,
+    StudentClass.__table__,
     Subject.__table__,
     SubjectLoad.__table__,
     AIModelVersion.__table__,
@@ -148,6 +150,27 @@ def dashboard_context():
         dob=date(2010, 3, 3),
     )
     db.add_all([student_a, student_b, student_c])
+    db.flush()
+
+    sc_a = StudentClass(
+        student_id=student_a.student_id,
+        class_id=class_a.class_id,
+        academic_year_id=year.academic_year_id,
+        enrollment_status="enrolled",
+    )
+    sc_b = StudentClass(
+        student_id=student_b.student_id,
+        class_id=class_a.class_id,
+        academic_year_id=year.academic_year_id,
+        enrollment_status="enrolled",
+    )
+    sc_c = StudentClass(
+        student_id=student_c.student_id,
+        class_id=class_b.class_id,
+        academic_year_id=year.academic_year_id,
+        enrollment_status="enrolled",
+    )
+    db.add_all([sc_a, sc_b, sc_c])
     db.flush()
 
     model_ver = AIModelVersion(
@@ -347,6 +370,103 @@ class TestDashboardAtRisk:
         assert "predicted_period_grade" in item
         assert "risk_score" in item
         assert "risk_level" in item
+
+    def test_enrolled_only_isolation(self, dashboard_context):
+        """Verify that standard /dashboard/at-risk strictly returns enrolled students,
+        while /dashboard/at-risk/historical returns un-enrolled historical predictions."""
+        db = dashboard_context["db"]
+        client = dashboard_context["client"]
+
+        # Create an un-enrolled 4th student with a prediction
+        student_unrolled = Student(
+            student_id=uuid.uuid4(),
+            student_lrn="100000000099",
+            first_name="Historical",
+            last_name="Student",
+            gender="FEMALE",
+            dob=date(2010, 5, 5),
+        )
+        db.add(student_unrolled)
+        db.flush()
+
+        p_unrolled = AIPrediction(
+            student_id=student_unrolled.student_id,
+            class_id=dashboard_context["classes"]["rizal"].class_id,
+            subject_id=dashboard_context["subjects"]["math"].subject_id,
+            source_period_id=dashboard_context["terms"]["t1"].academic_period_id,
+            target_period_id=dashboard_context["terms"]["t1"].academic_period_id,
+            predicted_period_grade=Decimal("75.00"),
+            risk_score=Decimal("0.70"),
+            risk_level="MODERATE_RISK",
+            data_status="SUFFICIENT",
+            model_version_id=1,
+        )
+        db.add(p_unrolled)
+        db.commit()
+
+        # 1. Standard endpoint (/dashboard/at-risk) MUST exclude un-enrolled student
+        r_enrolled = client.get("/api/v1/predictions/dashboard/at-risk")
+        assert r_enrolled.status_code == 200
+        data_enrolled = r_enrolled.json()
+        assert data_enrolled["total"] == 4
+        assert not any(item["student_lrn"] == "100000000099" for item in data_enrolled["items"])
+
+        # 2. Historical endpoint (/dashboard/at-risk/historical) includes un-enrolled student
+        r_hist = client.get("/api/v1/predictions/dashboard/at-risk/historical")
+        assert r_hist.status_code == 200
+        data_hist = r_hist.json()
+        assert data_hist["total"] == 5
+        assert any(item["student_lrn"] == "100000000099" for item in data_hist["items"])
+
+    def test_historical_endpoint_teacher_forbidden(self, dashboard_context):
+        """Assert that a teacher role receives HTTP 403 Forbidden on the historical endpoint."""
+        db = dashboard_context["db"]
+        teacher_identity = {"sub": str(uuid.uuid4()), "role": "teacher"}
+        app = FastAPI()
+        app.include_router(predictions_router, prefix="/api/v1/predictions")
+        app.dependency_overrides[get_db] = lambda: db
+        app.dependency_overrides[get_current_user] = lambda: teacher_identity
+
+        with TestClient(app) as teacher_client:
+            r = teacher_client.get("/api/v1/predictions/dashboard/at-risk/historical")
+            assert r.status_code == 403
+
+    def test_no_duplicate_prediction_rows_with_multiple_enrollments(self, dashboard_context):
+        """Verify that multiple StudentClass records across academic years or section transfers
+        do not cause prediction rows to duplicate or fan out in /dashboard/at-risk."""
+        db = dashboard_context["db"]
+        client = dashboard_context["client"]
+
+        # 1. Create a prior academic year
+        prior_year = AcademicYear(
+            year_label="2025-2026",
+            start_date=date(2025, 6, 1),
+            end_date=date(2026, 3, 31),
+        )
+        db.add(prior_year)
+        db.flush()
+
+        # 2. Add an old/transferred enrollment record for student_a in prior_year
+        # (simulating a student with multiple StudentClass records across their history)
+        sc_old = StudentClass(
+            student_id=dashboard_context["students"]["a"].student_id,
+            class_id=dashboard_context["classes"]["mabini"].class_id,
+            academic_year_id=prior_year.academic_year_id,
+            enrollment_status="transferred",
+        )
+        db.add(sc_old)
+        db.commit()
+
+        # 3. Query /dashboard/at-risk
+        r = client.get("/api/v1/predictions/dashboard/at-risk")
+        assert r.status_code == 200
+        data = r.json()
+
+        # Ensure no duplicate prediction_ids exist
+        prediction_ids = [item["prediction_id"] for item in data["items"]]
+        assert len(prediction_ids) == len(set(prediction_ids)), "Duplicate prediction_id detected in results!"
+        assert data["total"] == 4, f"Expected 4 predictions, got {data['total']}"
+        assert data["risk_summary"]["total"] == 4, f"Expected risk_summary total 4, got {data['risk_summary']['total']}"
 
 
 # ============================================================

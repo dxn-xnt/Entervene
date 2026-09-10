@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.services.prediction.ModelScoringService import DEFAULT_MODEL_NAME
+from app.services.prediction.TeacherAssignmentResolver import TeacherStatusLabel
 
 
 class PredictionFeatureInput(BaseModel):
@@ -127,7 +128,7 @@ class PredictionOutcomeRead(BaseModel):
 class PredictionCauseRead(BaseModel):
     code: str
     label: str
-    value: str
+    value: str | None = None
     severity: str
     explanation: str
 
@@ -193,8 +194,23 @@ class PredictionDetailResponse(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
     prediction_id: int
     student_id: UUID
+    student_name: str | None = None
+    student_lrn: str | None = None
+    grade_level: int | None = None
+    level_name: str | None = None
     class_id: int
+    class_name: str | None = None
     subject_id: int
+    subject_name: str | None = None
+    subject_codename: str | None = None
+    teacher_name: str | None = None
+    teacher_staff_id: str | None = None
+    teacher_status_label: TeacherStatusLabel = TeacherStatusLabel.UNASSIGNED
+    is_substitute: bool = False
+    substitution_id: int | None = None
+    substitute_start_date: date | None = None
+    substitute_end_date: date | None = None
+    original_teacher_name: str | None = None
     source_period_id: int
     target_period_id: int
     predicted_period_grade: float | None = None
@@ -313,9 +329,14 @@ class DashboardPredictionItem(BaseModel):
     student_name: str
     student_lrn: str
     class_name: str
+    grade_level: int | None = None
     subject_name: str
+    subject_codename: str | None = None
     term_label: str
     term_number: int
+    teacher_name: str | None = None
+    teacher_staff_id: str | None = None
+    teacher_status_label: TeacherStatusLabel = TeacherStatusLabel.UNASSIGNED
     predicted_period_grade: float | None = None
     risk_level: str
     risk_score: float | None = None
@@ -340,14 +361,21 @@ class DashboardAtRiskResponse(BaseModel):
     offset: int
 
 
+class DashboardGradeOption(BaseModel):
+    grade_level: int
+    level_name: str
+
+
 class DashboardClassOption(BaseModel):
     class_id: int
     section_name: str
+    grade_level: int | None = None
 
 
 class DashboardSubjectOption(BaseModel):
     subject_id: int
     subject_name: str
+    subject_codename: str | None = None
 
 
 class DashboardTermOption(BaseModel):
@@ -357,7 +385,27 @@ class DashboardTermOption(BaseModel):
 
 
 class DashboardFilterOptionsResponse(BaseModel):
+    grades: list[DashboardGradeOption] = Field(default_factory=list)
     classes: list[DashboardClassOption] = Field(default_factory=list)
     subjects: list[DashboardSubjectOption] = Field(default_factory=list)
     terms: list[DashboardTermOption] = Field(default_factory=list)
+
+
+class DashboardSectionSummaryItem(BaseModel):
+    class_id: int
+    section_name: str
+    grade_level: int
+    total_students: int
+    at_risk_count: int
+    high_risk_count: int
+    moderate_risk_count: int
+
+
+class DashboardGradeGroupSummary(BaseModel):
+    grade_level: int
+    level_name: str
+    total_students: int
+    at_risk_count: int
+    sections: list[DashboardSectionSummaryItem] = Field(default_factory=list)
+
 

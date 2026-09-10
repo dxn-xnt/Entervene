@@ -54,11 +54,12 @@ const RISK_LABELS: Record<string, string> = {
   MODERATE_RISK: "Moderate",
   NEEDS_MONITORING: "Monitoring",
   LOW_RISK: "Low Risk",
-  INSUFFICIENT_DATA: "No Data",
+  INSUFFICIENT_DATA: "Insufficient Data",
 };
 
 const SEVERITY_COLORS: Record<string, string> = {
   HIGH: "text-red-600",
+  ATTENTION: "text-amber-600",
   MODERATE: "text-amber-600",
   LOW: "text-gray-500",
 };
@@ -194,6 +195,83 @@ export default function PredictionDetailSheet({
           </div>
         ) : detail ? (
           <div className="flex flex-col gap-5 p-4">
+            {/* ── Metadata & Student / Teacher Context Card ── */}
+            <Card className="shadow-none border-2 border-black p-4 bg-yellow-50/60 flex flex-col gap-3">
+              <div className="flex items-start justify-between gap-2 border-b border-black/20 pb-2">
+                <div>
+                  <h2 className="text-base font-black text-black">
+                    {detail.student_name || "Unknown Student"}
+                  </h2>
+                  <p className="text-xs font-semibold text-gray-600 font-mono">
+                    LRN: {detail.student_lrn || "—"}
+                  </p>
+                </div>
+                <Badge variant="solid" size="sm" className="bg-black text-white font-bold shrink-0">
+                  {detail.level_name || (detail.grade_level ? `Grade ${detail.grade_level}` : "—")}{detail.class_name ? ` • ${detail.class_name}` : ""}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <p className="font-extrabold uppercase text-gray-500">Subject</p>
+                  <p className="font-bold text-black text-sm">
+                    {detail.subject_name || "—"}
+                  </p>
+                  {detail.subject_codename && (
+                    <p className="font-mono text-[10px] text-gray-500">{detail.subject_codename}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="font-extrabold uppercase text-gray-500">Teacher</p>
+                  {detail.teacher_status_label === "ASSIGNED" && (
+                    <div>
+                      <p className="font-bold text-black text-sm">{detail.teacher_name || "Assigned Teacher"}</p>
+                      {detail.teacher_staff_id && (
+                        <p className="font-mono text-[10px] text-gray-500">{detail.teacher_staff_id}</p>
+                      )}
+                    </div>
+                  )}
+                  {detail.teacher_status_label === "SUBSTITUTE_ACTIVE" && (
+                    <div>
+                      <Badge size="sm" className="bg-amber-400 text-black border border-black font-bold mb-1">
+                        Active Substitute
+                      </Badge>
+                      <p className="font-bold text-black text-sm">{detail.teacher_name}</p>
+                      {detail.original_teacher_name && (
+                        <p className="text-[10px] text-gray-600 font-medium">
+                          Covering for {detail.original_teacher_name}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {detail.teacher_status_label === "NO_CONFIRMED_TEACHER" && (
+                    <div>
+                      <Badge size="sm" className="bg-orange-100 text-orange-800 border border-orange-400 font-bold">
+                        No Confirmed Teacher Assigned
+                      </Badge>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Schedule is in draft status</p>
+                    </div>
+                  )}
+                  {detail.teacher_status_label === "HISTORICAL_UNMAPPED" && (
+                    <div>
+                      <Badge size="sm" className="bg-gray-100 text-gray-800 border border-gray-400 font-bold">
+                        Historical Record (Unmapped Subject)
+                      </Badge>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Legacy seeded assessment</p>
+                    </div>
+                  )}
+                  {detail.teacher_status_label === "UNASSIGNED" && (
+                    <div>
+                      <Badge size="sm" className="bg-rose-100 text-rose-800 border border-rose-400 font-bold">
+                        Unassigned Subject Load
+                      </Badge>
+                      <p className="text-[10px] text-gray-500 mt-0.5">No teacher currently assigned</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+
             {/* ── Summary ── */}
             <Card className="shadow-none">
               <div className="flex items-center justify-between mb-3">
@@ -212,16 +290,25 @@ export default function PredictionDetailSheet({
                 <div>
                   <p className="text-gray-500">Predicted Grade</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {detail.predicted_period_grade?.toFixed(2) ?? "—"}
+                    {detail.risk_level === "INSUFFICIENT_DATA" || detail.predicted_period_grade === null
+                      ? "—"
+                      : detail.predicted_period_grade.toFixed(2)}
                   </p>
                 </div>
                 <div>
                   <p className="text-gray-500">Risk Score</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {detail.risk_score?.toFixed(1) ?? "—"}
+                    {detail.risk_level === "INSUFFICIENT_DATA" || detail.risk_score === null
+                      ? "—"
+                      : detail.risk_score.toFixed(1)}
                   </p>
                 </div>
               </div>
+              {detail.risk_level === "INSUFFICIENT_DATA" && (
+                <p className="text-xs text-amber-600 font-semibold mt-2">
+                  Evaluation deferred until more grades are recorded
+                </p>
+              )}
               {detail.generated_at && (
                 <p className="text-xs text-gray-400 mt-2">
                   Generated{" "}
@@ -262,9 +349,11 @@ export default function PredictionDetailSheet({
                       <p className="text-xs text-gray-500 mt-0.5">
                         {cause.explanation}
                       </p>
-                      <p className="text-xs font-mono text-gray-400 mt-0.5">
-                        Value: {cause.value}
-                      </p>
+                      {cause.value && (
+                        <p className="text-xs font-mono text-gray-400 mt-0.5">
+                          Value: {cause.value}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>

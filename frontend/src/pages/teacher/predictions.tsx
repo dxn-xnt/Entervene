@@ -2,20 +2,23 @@ import { useCallback, useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { OverviewCard } from "@/components/overview-cards";
+import { Button } from "@/components/retroui/Button";
 import { cn } from "@/lib/utils";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
-import { PredictionGradeSection, type GradeGroup } from "@/components/predictions/prediction-grade-section";
+import { PredictionGradeSection } from "@/components/predictions/prediction-grade-section";
 import type {
   DashboardAtRiskResponse,
   DashboardFilters,
+  DashboardGradeGroupSummary,
   DashboardQueryParams,
   RiskSummary,
 } from "@/lib/prediction-api";
 import {
   fetchDashboardAtRisk,
   fetchDashboardFilters,
+  fetchDashboardGradeSummaries,
 } from "@/lib/prediction-api";
 
 const EMPTY_SUMMARY: RiskSummary = {
@@ -26,13 +29,6 @@ const EMPTY_SUMMARY: RiskSummary = {
   INSUFFICIENT_DATA: 0,
   total: 0,
 };
-
-const MOCK_GRADE_GROUPS: GradeGroup[] = [
-  { grade: 7, classes: ["Rizal", "Mabini", "Luna"], highRisk: 8, monitoring: 14 },
-  { grade: 8, classes: ["Bonifacio", "Del Pilar"], highRisk: 5, monitoring: 9 },
-  { grade: 9, classes: ["Aguinaldo", "Jacinto", "Silang"], highRisk: 12, monitoring: 7 },
-  { grade: 10, classes: ["Lapu-Lapu", "Tupas"], highRisk: 3, monitoring: 11 },
-];
 
 const RISK_CARDS = [
   {
@@ -57,7 +53,7 @@ const RISK_CARDS = [
   },
   {
     key: "INSUFFICIENT_DATA" as const,
-    label: "No Data",
+    label: "Insufficient Data",
     activeClass: "bg-gray-200 ring-2 ring-black",
   },
 ];
@@ -66,12 +62,14 @@ export default function PredictionsDashboard() {
   // ── State ──
   const [data, setData] = useState<DashboardAtRiskResponse | null>(null);
   const [filters, setFilters] = useState<DashboardFilters | null>(null);
+  const [gradeSummaries, setGradeSummaries] = useState<DashboardGradeGroupSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filter values
+  const [gradeLevel, setGradeLevel] = useState<number | undefined>();
   const [classId, setClassId] = useState<number | undefined>();
   const [subjectId, setSubjectId] = useState<number | undefined>();
-  const [term, setTerm] = useState<number | undefined>();
+  const [academicPeriodId, setAcademicPeriodId] = useState<number | undefined>();
   const [riskLevel, setRiskLevel] = useState<string | undefined>();
   const [search, setSearch] = useState("");
 
@@ -82,9 +80,7 @@ export default function PredictionsDashboard() {
   const limit = 5;
 
   // Detail sheet
-  const [selectedPrediction, setSelectedPrediction] = useState<number | null>(
-    null,
-  );
+  const [selectedPrediction, setSelectedPrediction] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   // ── Fetch filters once ──
@@ -92,14 +88,22 @@ export default function PredictionsDashboard() {
     fetchDashboardFilters().then(setFilters).catch(console.error);
   }, []);
 
+  // ── Fetch dynamic grade summaries on period change ──
+  useEffect(() => {
+    fetchDashboardGradeSummaries({ academic_period_id: academicPeriodId })
+      .then(setGradeSummaries)
+      .catch(console.error);
+  }, [academicPeriodId]);
+
   // ── Fetch data on filter/sort/page change ──
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const params: DashboardQueryParams = {
+        grade_level: gradeLevel,
         class_id: classId,
         subject_id: subjectId,
-        term,
+        academic_period_id: academicPeriodId,
         risk_level: riskLevel,
         search: search.trim() || undefined,
         sort_by: sortBy,
@@ -114,16 +118,14 @@ export default function PredictionsDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [classId, subjectId, term, riskLevel, search, sortBy, sortOrder, offset]);
+  }, [gradeLevel, classId, subjectId, academicPeriodId, riskLevel, search, sortBy, sortOrder, offset]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   // Debounce search
-  const [searchTimer, setSearchTimer] = useState<ReturnType<
-    typeof setTimeout
-  > | null>(null);
+  const [searchTimer, setSearchTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const handleSearchChange = (value: string) => {
     setSearch(value);
     if (searchTimer) clearTimeout(searchTimer);
@@ -151,9 +153,10 @@ export default function PredictionsDashboard() {
   };
 
   const handleClearAll = () => {
+    setGradeLevel(undefined);
     setClassId(undefined);
     setSubjectId(undefined);
-    setTerm(undefined);
+    setAcademicPeriodId(undefined);
     setRiskLevel(undefined);
     setSearch("");
     setOffset(0);
@@ -164,7 +167,39 @@ export default function PredictionsDashboard() {
     setSheetOpen(true);
   };
 
-  const summary = data?.risk_summary ?? EMPTY_SUMMARY;
+  // ── Dynamic Enrolled Cohort Summary ──
+  const totalEnrolledStudents = gradeSummaries.reduce((acc, g) => acc + g.total_students, 0);
+  const totalAtRisk = gradeSummaries.reduce((acc, g) => acc + g.at_risk_count, 0);
+  const totalHighRisk = gradeSummaries.reduce(
+    (acc, g) => acc + g.sections.reduce((sAcc, s) => sAcc + s.high_risk_count, 0),
+    0
+  );
+  const totalModerateRisk = gradeSummaries.reduce(
+    (acc, g) => acc + g.sections.reduce((sAcc, s) => sAcc + s.moderate_risk_count, 0),
+    0
+  );
+
+  const isFilterActive = Boolean(
+    gradeLevel !== undefined ||
+    classId !== undefined ||
+    subjectId !== undefined ||
+    academicPeriodId !== undefined ||
+    riskLevel !== undefined ||
+    search.trim() !== ""
+  );
+
+  const enrolledSummary: RiskSummary = {
+    HIGH_RISK: totalHighRisk,
+    MODERATE_RISK: 0,
+    NEEDS_MONITORING: totalModerateRisk,
+    LOW_RISK: 0,
+    INSUFFICIENT_DATA: Math.max(0, totalEnrolledStudents - totalAtRisk),
+    total: totalEnrolledStudents,
+  };
+
+  const summary = (data?.risk_summary && data.risk_summary.total > 0)
+    ? data.risk_summary
+    : (enrolledSummary.total > 0 ? enrolledSummary : EMPTY_SUMMARY);
 
   return (
     <AppLayout>
@@ -196,7 +231,6 @@ export default function PredictionsDashboard() {
                         count={String(count)}
                         className={cn(
                           "w-full border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all",
-
                           isActive
                             ? `${card.activeClass} shadow-none translate-x-[2px] translate-y-[2px]`
                             : "hover:translate-x-[-1px] hover:translate-y-[-1px]"
@@ -207,17 +241,21 @@ export default function PredictionsDashboard() {
                 })}
               </div>
 
-              {/* ── Chart + Filters row ── */}
+              {/* ── Main Content Area ── */}
               <div className="flex flex-col lg:flex-row gap-5">
-                {/* Filters + table */}
                 <div className="flex-1 flex flex-col gap-4 min-w-0">
                   <PredictionFilters
                     filters={filters}
+                    gradeLevel={gradeLevel}
                     classId={classId}
                     subjectId={subjectId}
-                    term={term}
+                    academicPeriodId={academicPeriodId}
                     riskLevel={riskLevel}
                     search={search}
+                    onGradeChange={(v) => {
+                      setGradeLevel(v);
+                      setOffset(0);
+                    }}
                     onClassChange={(v) => {
                       setClassId(v);
                       setOffset(0);
@@ -226,8 +264,8 @@ export default function PredictionsDashboard() {
                       setSubjectId(v);
                       setOffset(0);
                     }}
-                    onTermChange={(v) => {
-                      setTerm(v);
+                    onPeriodChange={(v) => {
+                      setAcademicPeriodId(v);
                       setOffset(0);
                     }}
                     onRiskChange={(v) => {
@@ -238,37 +276,75 @@ export default function PredictionsDashboard() {
                     onClearAll={handleClearAll}
                   />
 
-                  {loading && !data ? (
-                    <div className="flex items-center justify-center py-20 text-gray-400">
-                      Loading predictions...
+                  {isFilterActive ? (
+                    /* ── Filtered Predictions View ── */
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between py-2 border-b-2 border-black">
+                        <div>
+                          <h2 className="text-xl font-black uppercase tracking-tight text-black">Filtered Student Predictions</h2>
+                          <p className="text-xs text-gray-600 font-semibold">
+                            Showing matching predictions for active criteria ({data?.total ?? 0} results)
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleClearAll}
+                          className="border-2 border-black font-bold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                        >
+                          Clear Filters
+                        </Button>
+                      </div>
+
+                      {loading && !data ? (
+                        <div className="flex items-center justify-center py-20 text-gray-400">
+                          Loading predictions...
+                        </div>
+                      ) : (
+                        <PredictionTable
+                          items={data?.items ?? []}
+                          total={data?.total ?? 0}
+                          limit={data?.limit ?? limit}
+                          offset={data?.offset ?? 0}
+                          sortBy={sortBy}
+                          sortOrder={sortOrder}
+                          onSort={handleSort}
+                          onPageChange={setOffset}
+                          onRowClick={handleRowClick}
+                        />
+                      )}
                     </div>
                   ) : (
-                    <PredictionTable
-                      items={data?.items ?? []}
-                      total={data?.total ?? 0}
-                      limit={data?.limit ?? limit}
-                      offset={data?.offset ?? 0}
-                      sortBy={sortBy}
-                      sortOrder={sortOrder}
-                      onSort={handleSort}
-                      onPageChange={setOffset}
-                      onRowClick={handleRowClick}
-                    />
-                  )}
+                    /* ── Default Grade Cohort Overview ── */
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-1">
+                        <div>
+                          <h2 className="text-xl font-black uppercase tracking-tight text-black">Grade Cohort Summaries</h2>
+                          <p className="text-xs text-gray-600 font-semibold">
+                            Showing all {gradeSummaries.length} grade levels ({totalEnrolledStudents} actively enrolled students across 11 sections)
+                          </p>
+                        </div>
+                      </div>
 
-                  {/* ── Grade Groups ── */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 -mt-2">
-                    {MOCK_GRADE_GROUPS.map((group) => (
-                      <PredictionGradeSection key={group.grade} group={group} />
-                    ))}
-                  </div>
+                      {gradeSummaries.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {gradeSummaries.map((group) => (
+                            <PredictionGradeSection key={group.grade_level} group={group} />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-6 bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] rounded-none text-center text-sm font-semibold text-gray-600">
+                          No grade overview summaries found for this scope.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-
 
       {/* ── Detail Sheet ── */}
       <PredictionDetailSheet
