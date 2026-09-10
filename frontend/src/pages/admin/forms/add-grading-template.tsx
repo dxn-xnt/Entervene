@@ -59,7 +59,7 @@ export default function AddGradingTemplateModal({
         components: [
           { component_name: "Written Work", weight: ww, display_order: 1 },
           { component_name: "Performance Task", weight: pt, display_order: 2 },
-          { component_name: "Quarterly Assessment", weight: qa, display_order: 3 },
+          { component_name: "Exams", weight: qa, display_order: 3 },
         ],
       });
 
@@ -123,7 +123,7 @@ export default function AddGradingTemplateModal({
           </div>
           <div className="flex flex-col gap-2">
             <Text as="h6" className="font-sans text-sm font-medium">
-              Quarterly/Term Assessment %
+              Exams %
             </Text>
             <Input
               type="number"

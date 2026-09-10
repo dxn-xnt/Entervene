@@ -733,7 +733,6 @@ export default function AddUserModal({
                       <Select.Content>
                         <Select.Item value="Male">Male</Select.Item>
                         <Select.Item value="Female">Female</Select.Item>
-                        <Select.Item value="Other">Other</Select.Item>
                       </Select.Content>
                     </Select>
                   </Field>

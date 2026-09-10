@@ -506,6 +506,10 @@ const TeacherGradeView = () => {
 
   const renderTermTable = () => {
     const { males, females } = groupStudentsByGender(filtered);
+    const weights = gradebook?.grading_weights;
+    const wwLabel = weights?.ww_percentage != null ? `Written Works (${weights.ww_percentage}%)` : "Written Works";
+    const ptLabel = weights?.pt_percentage != null ? `Performance Tasks (${weights.pt_percentage}%)` : "Performance Task";
+    const examsLabel = weights?.exams_percentage != null ? `Exams (${weights.exams_percentage}%)` : "Exams";
 
     const renderTermGroup = (group: typeof males, label: string) => {
       if (group.length === 0) return null;
@@ -658,7 +662,7 @@ const TeacherGradeView = () => {
                 })
               }
             >
-              Written Works
+              {wwLabel}
             </Table.Head>
             <Table.Head
               className="w-[20%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
@@ -675,7 +679,7 @@ const TeacherGradeView = () => {
                 })
               }
             >
-              Performance Task
+              {ptLabel}
             </Table.Head>
             <Table.Head
               className="w-[12%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
@@ -692,7 +696,7 @@ const TeacherGradeView = () => {
                 })
               }
             >
-              Exams
+              {examsLabel}
             </Table.Head>
             <Table.Head className="w-[8%] text-center font-black text-black">Initial Grade</Table.Head>
             <Table.Head className="w-[8%] text-center font-black text-black">Term Grade</Table.Head>
@@ -887,6 +891,11 @@ const TeacherGradeView = () => {
                   </Breadcrumb.Item>
                 </Breadcrumb.List>
               </Breadcrumb>
+              {gradebook?.grading_weights?.template_name && (
+                <span className="hidden sm:inline-flex items-center gap-1 ml-2 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-950 border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]" title={`Assigned Template: ${gradebook.grading_weights.template_name}`}>
+                  {gradebook.grading_weights.template_name}
+                </span>
+              )}
 
               <div className="flex flex-row items-center gap-2 ml-auto">
                 {!isViewOnly && activeTab.startsWith("term-") && (

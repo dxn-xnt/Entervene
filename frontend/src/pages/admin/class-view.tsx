@@ -69,7 +69,7 @@ function formatClassDate(value: string | null) {
 
 
 function groupClassStudents(students: ClassStudentListItem[]) {
-  const order = ["Male", "Female", "Other", "Unspecified"];
+  const order = ["Male", "Female", "Unspecified"];
   return order
     .map(
       (gender) =>
@@ -82,7 +82,7 @@ function groupClassStudents(students: ClassStudentListItem[]) {
 }
 
 function normalizedStudentGender(gender: string) {
-  if (gender === "Female" || gender === "Male" || gender === "Other") return gender;
+  if (gender === "Female" || gender === "Male") return gender;
   return "Unspecified";
 }
 

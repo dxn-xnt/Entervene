@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { Tabs } from "@/components/retroui/Tabs";
-import SubjectSuggestionsTab from "@/pages/student/Subjects/tabs/subject-suggestions-tab";
+import SubjectSuggestionsTab from "@/pages/student/subjects-view/tabs/subject-suggestions-tab";
 import { routes } from "@/../routes";
 import type { StudentLesson } from "@/types/student-subject";
 

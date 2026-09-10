@@ -12,6 +12,7 @@ interface PredictionTableProps {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   hideClass?: boolean;
+  hideSubject?: boolean;
   hidePagination?: boolean;
   onSort: (column: string) => void;
   onPageChange: (newOffset: number) => void;
@@ -68,6 +69,7 @@ export default function PredictionTable({
   sortBy,
   sortOrder,
   hideClass = false,
+  hideSubject = false,
   hidePagination = false,
   onSort,
   onPageChange,
@@ -75,12 +77,13 @@ export default function PredictionTable({
 }: PredictionTableProps) {
   const currentPage = Math.floor(offset / limit) + 1;
   const totalPages = Math.ceil(total / limit) || 1;
+  const colSpanCount = 4 + (!hideClass ? 1 : 0) + (!hideSubject ? 1 : 0);
 
   return (
     <div className="flex flex-col">
       <Table wrapperClassName="border-0 shadow-md mb-2">
-        <Table.Header className="text-black">
-          <Table.Row className="border-b-2 border-black hover:bg-yellow-300">
+        <Table.Header className="text-black bg-yellow-400">
+          <Table.Row className="border-b-2 border-black bg-yellow-400 hover:bg-yellow-400">
             <Table.Head className="font-extrabold text-black whitespace-nowrap">
               <SortableHeader
                 label="Student"
@@ -92,7 +95,7 @@ export default function PredictionTable({
             </Table.Head>
             {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">LRN</Table.Head> */}
             {!hideClass && <Table.Head className="font-extrabold text-black whitespace-nowrap">Class</Table.Head>}
-            <Table.Head className="font-extrabold text-black whitespace-nowrap">Subject</Table.Head>
+            {!hideSubject && <Table.Head className="font-extrabold text-black whitespace-nowrap">Subject</Table.Head>}
             {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">Term</Table.Head> */}
             <Table.Head className="font-extrabold text-black whitespace-nowrap">
               <SortableHeader
@@ -122,7 +125,7 @@ export default function PredictionTable({
           {items.length === 0 ? (
             <Table.Row>
               <Table.Cell
-                colSpan={hideClass ? 6 : 7}
+                colSpan={colSpanCount}
                 className="text-center py-12"
               >
                 <div className="flex flex-col items-center justify-center gap-2">
@@ -156,7 +159,7 @@ export default function PredictionTable({
                     {item.student_lrn}
                   </Table.Cell> */}
                   {!hideClass && <Table.Cell className="font-normal whitespace-nowrap">{item.class_name}</Table.Cell>}
-                  <Table.Cell className="font-normal whitespace-nowrap">{item.subject_name}</Table.Cell>
+                  {!hideSubject && <Table.Cell className="font-normal whitespace-nowrap">{item.subject_name}</Table.Cell>}
                   {/* <Table.Cell className="font-normal whitespace-nowrap">{item.term_label}</Table.Cell> */}
                   <Table.Cell className="font-black text-base whitespace-nowrap">
                     {item.risk_level === "INSUFFICIENT_DATA" || item.predicted_period_grade === null

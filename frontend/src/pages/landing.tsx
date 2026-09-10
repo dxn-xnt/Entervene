@@ -15,7 +15,8 @@ const Landing = () => {
   }
 
   return (
-    <main className="retro-squares-bg flex min-h-svh items-center justify-center px-6 py-12">
+    <div className="retro-squares-bg retro-squares-motion flex min-h-svh flex-col">
+    <main className="flex flex-1 items-center justify-center px-6 py-12">
       <section className="w-full max-w-[560px] text-center" aria-labelledby="landing-title">
         <h1
           id="landing-title"
@@ -39,6 +40,8 @@ const Landing = () => {
         </Button>
       </section>
     </main>
+    <footer className="status-footer">Medellin National Science and Technology School<span>Ad Astra.</span></footer>
+    </div>
   );
 };
 

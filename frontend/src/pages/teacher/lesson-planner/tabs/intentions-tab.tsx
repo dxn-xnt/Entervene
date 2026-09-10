@@ -4,8 +4,8 @@ import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Plus, Trash2, AlertCircle } from "lucide-react";
-import type { LessonPlanDraft, ValidationErrors } from "../useLessonPlanner";
-import { AIAssistButton } from "../components/AIAssistButton";
+import type { LessonPlanDraft, ValidationErrors } from "../use-lesson-planner";
+import { AIAssistButton } from "../components/ai-assist-button";
 
 interface IntentionsTabProps {
   draft: LessonPlanDraft;

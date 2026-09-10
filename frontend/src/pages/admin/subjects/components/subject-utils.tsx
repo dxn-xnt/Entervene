@@ -7,7 +7,7 @@ import type {
   SubjectOfferingPathway,
   SubjectStatus,
 } from "@/lib/api";
-import type { CurriculumGradeValue, CurriculumPathwayValue, CurriculumStatusValue } from "./CurriculumFilters";
+import type { CurriculumGradeValue, CurriculumPathwayValue, CurriculumStatusValue } from "./curriculum-filters";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 

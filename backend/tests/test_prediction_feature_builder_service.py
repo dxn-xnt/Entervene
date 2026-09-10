@@ -584,3 +584,27 @@ def test_cumulative_grade_avg_excludes_future_terms(three_term_context):
 
     # Only Term 1 (90) and Term 2 (80) should be included: (90 + 80) / 2 = 85.0
     assert result["features"]["cumulative_period_grade_avg"] == pytest.approx(85.0)
+
+
+def test_exams_category_maps_to_quarterly_assessment_percent(feature_context):
+    """Confirm that EXAMS category maps to QUARTERLY_ASSESSMENT and produces identical numeric feature."""
+    from app.services.prediction.PredictionFeatureBuilderService import map_classwork_category
+
+    # 1. Verify category mapping: EXAMS, EXAM, and QUARTERLY_ASSESSMENT map to the same component
+    assert map_classwork_category("ANY", "EXAMS") == "QUARTERLY_ASSESSMENT"
+    assert map_classwork_category("ANY", "EXAM") == "QUARTERLY_ASSESSMENT"
+    assert map_classwork_category("EXAM", None) == "QUARTERLY_ASSESSMENT"
+    assert map_classwork_category("ANY", "QUARTERLY_ASSESSMENT") == "QUARTERLY_ASSESSMENT"
+
+    # 2. Verify pipeline generates quarterly_assessment_percent from period grade
+    add_period_grade(
+        feature_context,
+        feature_context["periods"][1],
+        grade=86.0,
+        quarterly_assessment_percent=82.0,
+    )
+
+    result = build(feature_context)
+    assert result["features"]["quarterly_assessment_percent"] == 82.0
+
+

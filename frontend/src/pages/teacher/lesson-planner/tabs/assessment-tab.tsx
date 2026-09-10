@@ -3,8 +3,8 @@ import { Card } from "@/components/retroui/Card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
-import type { LessonPlanDraft } from "../useLessonPlanner";
-import { AIAssistButton } from "../components/AIAssistButton";
+import type { LessonPlanDraft } from "../use-lesson-planner";
+import { AIAssistButton } from "../components/ai-assist-button";
 
 interface AssessmentTabProps {
   draft: LessonPlanDraft;

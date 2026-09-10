@@ -1,4 +1,4 @@
-import SetupPassword from "../src/pages/SetupPassword";
+import SetupPassword from "../src/pages/setup-password";
 
 export const routes = {
   auth: {

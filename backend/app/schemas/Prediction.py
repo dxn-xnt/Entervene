@@ -376,6 +376,7 @@ class DashboardSubjectOption(BaseModel):
     subject_id: int
     subject_name: str
     subject_codename: str | None = None
+    period_index: int | None = None
 
 
 class DashboardTermOption(BaseModel):

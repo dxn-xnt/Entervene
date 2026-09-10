@@ -1,12 +1,13 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import StatusPage from "./pages/StatusPage";
 import { AuthProvider } from "./context/AuthContext";
 import { SettingsProvider } from "./context/SettingsContext";
 import { AcademicPeriodProvider } from "./context/AcademicPeriodContext";
 import ProtectedRoute from "./components/protected-route";
-import Login from "./pages/Login";
-import Landing from "./pages/Landing";
+import Login from "./pages/login";
+import Landing from "./pages/landing";
 import { routes } from "@/../routes";
-import SetupPassword from "./pages/SetupPassword";
+import SetupPassword from "./pages/setup-password";
 import { NavigationProgress } from "./components/navigation-progress";
 import { Toaster } from "./components/retroui/Sonner";
 
@@ -37,10 +38,10 @@ import TeacherDashboard from "./pages/teacher/dashboard";
 import TeacherProfile from "./pages/teacher/profile-view";
 // import TeacherClasses from "./pages/teacher/Classworks";
 import ClassesPage from "./pages/teacher/classes";
-import TeacherClassDetail from "./pages/teacher/Classes/class-view";
-import SubjectDetails from "./pages/teacher/Classes/subject-details";
-import AdvisoryClassDetail from "./pages/teacher/Classes/advisory-class-view";
-import ClassSections from "./pages/teacher/Classes/class-section";
+import TeacherClassDetail from "./pages/teacher/classes-view/class-view";
+import SubjectDetails from "./pages/teacher/classes-view/subject-details";
+import AdvisoryClassDetail from "./pages/teacher/classes-view/advisory-class-view";
+import ClassSections from "./pages/teacher/classes-view/class-section";
 import TeacherClassworks from "./pages/teacher/classworks";
 // import TeacherLessons from "./pages/teacher/lessons";
 // import TeacherInterventions from "./pages/teacher/interventions";
@@ -52,9 +53,9 @@ import TeacherAttendance from "./pages/teacher/attendance";
 import PredictionsDashboard from "./pages/teacher/predictions";
 import GradesPredictions from "./pages/teacher/grade-predictions";
 import SectionPredictions from "./pages/teacher/section-predictions";
-import LessonPlannerPage from "./pages/teacher/LessonPlanner/LessonPlannerPage";
-import LessonPlannerListPage from "./pages/teacher/LessonPlanner/LessonPlannerListPage";
-import TeacherTOSPage from "./pages/teacher/TOS/TeacherTOSPage";
+import LessonPlannerPage from "./pages/teacher/lesson-planner/lesson-planner-page";
+import LessonPlannerListPage from "./pages/teacher/lesson-planner/lesson-planner-list-page";
+import TeacherTOSPage from "./pages/teacher/tos/teacher-tos-page";
 
 // // Student pages
 import StudentBoard from "./pages/student/storyboard";
@@ -62,7 +63,7 @@ import StudentProfile from "./pages/student/student-profile";
 import StudentSubjects from "./pages/student/subjects";
 import StudentSubjectDetail from "./pages/student/student-subject-detail";
 import StudentInterventions from "./pages/student/student-interventions";
-import StudentGrades from "./pages/student/Grades/grades";
+import StudentGrades from "./pages/student/grades/grades";
 import StudentTodo from "./pages/student/todo";
 import StudentTodoView from "./pages/student/todo-view";
 import StudentNotifications from "./pages/student/notifications";
@@ -89,6 +90,9 @@ const App = () => {
             <Toaster />
             <Routes>
               <Route path="/" element={<Landing />} />
+              <Route path="/maintenance" element={<StatusPage variant="maintenance" />} />
+              <Route path="/unavailable" element={<StatusPage variant="unavailable" />} />
+              <Route path="/error" element={<StatusPage />} />
               <Route path={routes.auth.login} element={<Login />} />
               <Route path="/setup-password" element={<SetupPassword />} />
 
@@ -162,7 +166,7 @@ const App = () => {
 
               <Route
                 path="*"
-                element={<Navigate to={routes.auth.login} replace />}
+                element={<StatusPage variant="not-found" />}
               />
             </Routes>
           </BrowserRouter>

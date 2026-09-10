@@ -644,10 +644,22 @@ export type StudentGradebookRow = {
   finalized_by_name?: string | null;
 };
 
+export type GradingWeightsInfo = {
+  template_id?: number | null;
+  template_name?: string | null;
+  ww_weight: number;
+  pt_weight: number;
+  exams_weight: number;
+  ww_percentage: number;
+  pt_percentage: number;
+  exams_percentage: number;
+};
+
 export type StudentGradebookResponse = {
   scope: any;
   classwork: GradebookCategoryHeaderGroup[];
   studentGrades: StudentGradebookRow[];
+  grading_weights?: GradingWeightsInfo | null;
 };
 
 export type TermGradeSummaryRow = {

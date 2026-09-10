@@ -98,8 +98,6 @@ def _student_gender_group(value) -> str:
         return "Female"
     if gender in {"male", "m", "boy"}:
         return "Male"
-    if gender:
-        return "Other"
     return "Unspecified"
 
 
@@ -108,8 +106,6 @@ def _gender_count_key(group: str) -> str:
         return "female"
     if group == "Male":
         return "male"
-    if group == "Other":
-        return "other"
     return "unspecified"
 
 

@@ -18,12 +18,12 @@ import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Badge } from "@/components/retroui/Badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import ClassworkFormModal from "./subject-details/ClassworkFormModal";
-import CompetencyModal from "./subject-details/CompetencyModal";
+import ClassworkFormModal from "./subject-details/classwork-form-modal";
+import CompetencyModal from "./subject-details/competency-modal";
 import LessonClassworkList from "./subject-details/lesson-classwork-list";
-import SubjectClassworkTab from "./subject-details/SubjectClassworkTab";
-import TeacherLessonDetailScreen from "./subject-details/TeacherLessonDetailScreen";
-import TOSGeneratorScreen from "./subject-details/TOSGeneratorScreen";
+import SubjectClassworkTab from "./subject-details/subject-classwork-tab";
+import TeacherLessonDetailScreen from "./subject-details/teacher-lesson-detail-screen";
+import TOSGeneratorScreen from "./subject-details/tos-generator-screen";
 import {
   LOCKED_CLASSWORK_MESSAGE,
   allowedMaterialExtensions,

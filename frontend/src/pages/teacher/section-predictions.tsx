@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { OverviewCard } from "@/components/overview-cards";
 import { cn } from "@/lib/utils";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
 import { useAuth } from "@/context/AuthContext";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import type {
   DashboardAtRiskResponse,
   DashboardFilters,
   DashboardQueryParams,
-  RiskSummary,
+  DashboardSubjectOption,
 } from "@/lib/prediction-api";
 import {
   fetchDashboardAtRisk,
@@ -20,47 +20,12 @@ import {
 } from "@/lib/prediction-api";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 
-const EMPTY_SUMMARY: RiskSummary = {
-  HIGH_RISK: 0,
-  MODERATE_RISK: 0,
-  NEEDS_MONITORING: 0,
-  LOW_RISK: 0,
-  INSUFFICIENT_DATA: 0,
-  total: 0,
-};
-
-const RISK_CARDS = [
-  {
-    key: "HIGH_RISK" as const,
-    label: "High Risk",
-    activeClass: "bg-red-200 ring-2 ring-black",
-  },
-  {
-    key: "MODERATE_RISK" as const,
-    label: "Moderate Risk",
-    activeClass: "bg-amber-200 ring-2 ring-black",
-  },
-  {
-    key: "NEEDS_MONITORING" as const,
-    label: "Monitoring",
-    activeClass: "bg-yellow-200 ring-2 ring-black",
-  },
-  {
-    key: "LOW_RISK" as const,
-    label: "Low Risk",
-    activeClass: "bg-emerald-200 ring-2 ring-black",
-  },
-  {
-    key: "INSUFFICIENT_DATA" as const,
-    label: "Insufficient Data",
-    activeClass: "bg-gray-200 ring-2 ring-black",
-  },
-];
-
 export default function SectionPredictions() {
   const { role } = useAuth();
   const baseRole = role === "admin" ? "admin" : "teacher";
   const { grade, classId: classSlug } = useParams<{ grade: string; classId: string }>();
+
+  const { selectedPeriodId } = useAcademicPeriod();
 
   // ── State ──
   const [data, setData] = useState<DashboardAtRiskResponse | null>(null);
@@ -68,8 +33,20 @@ export default function SectionPredictions() {
   const [loading, setLoading] = useState(true);
 
   // Filter values
+  const [academicPeriodId, setAcademicPeriodId] = useState<number | undefined>(
+    selectedPeriodId ?? undefined
+  );
+  const [termInitialized, setTermInitialized] = useState(false);
+
+  // Sync initial term from AcademicPeriodContext once available
+  useEffect(() => {
+    if (!termInitialized && selectedPeriodId) {
+      setAcademicPeriodId(selectedPeriodId);
+      setTermInitialized(true);
+    }
+  }, [selectedPeriodId, termInitialized]);
+
   const [subjectId, setSubjectId] = useState<number | undefined>();
-  const [academicPeriodId, setAcademicPeriodId] = useState<number | undefined>();
   const [riskLevel, setRiskLevel] = useState<string | undefined>();
   const [search, setSearch] = useState("");
 
@@ -82,11 +59,6 @@ export default function SectionPredictions() {
   // Detail sheet
   const [selectedPrediction, setSelectedPrediction] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-
-  // ── Fetch filters once ──
-  useEffect(() => {
-    fetchDashboardFilters().then(setFilters).catch(console.error);
-  }, []);
 
   // Resolve numeric class ID from route param
   const resolvedClassId =
@@ -102,8 +74,74 @@ export default function SectionPredictions() {
 
   const numericGrade = grade ? Number(grade) : undefined;
 
-  // ── Fetch data on filter/sort/page change ──
+  // ── Fetch scoped filters when class or period changes ──
+  useEffect(() => {
+    if (!resolvedClassId) {
+      // If resolvedClassId is not yet resolved, fetch global filters to discover classes
+      fetchDashboardFilters().then(setFilters).catch(console.error);
+      return;
+    }
+
+    fetchDashboardFilters({
+      class_id: resolvedClassId,
+      academic_period_id: academicPeriodId,
+    })
+      .then(setFilters)
+      .catch(console.error);
+  }, [resolvedClassId, academicPeriodId]);
+
+  // ── Compute sorted subjects ──
+  // If a specific term is selected: period_index asc (nulls last) -> alphabetical
+  // If "All Terms" (academicPeriodId === undefined): pure alphabetical fallback
+  const sortedSubjects: DashboardSubjectOption[] = useMemo(() => {
+    if (!filters?.subjects || filters.subjects.length === 0) return [];
+    const list = [...filters.subjects];
+
+    if (academicPeriodId !== undefined) {
+      return list.sort((a, b) => {
+        const aSlot = a.period_index;
+        const bSlot = b.period_index;
+        if (aSlot !== null && aSlot !== undefined && bSlot !== null && bSlot !== undefined) {
+          if (aSlot !== bSlot) return aSlot - bSlot;
+          return a.subject_name.localeCompare(b.subject_name);
+        }
+        if (aSlot !== null && aSlot !== undefined) return -1;
+        if (bSlot !== null && bSlot !== undefined) return 1;
+        return a.subject_name.localeCompare(b.subject_name);
+      });
+    }
+
+    return list.sort((a, b) => a.subject_name.localeCompare(b.subject_name));
+  }, [filters?.subjects, academicPeriodId]);
+
+  // ── Sync active subject selection with sorted subjects list ──
+  // Preserve current selection if still valid; otherwise default to first tab
+  useEffect(() => {
+    if (sortedSubjects.length === 0) {
+      setSubjectId(undefined);
+      return;
+    }
+    const exists = sortedSubjects.some((s) => s.subject_id === subjectId);
+    if (!exists) {
+      setSubjectId(sortedSubjects[0].subject_id);
+      setOffset(0);
+    }
+  }, [sortedSubjects, subjectId]);
+
+  // ── Fetch predictions data on filter/sort/page change ──
   const loadData = useCallback(async () => {
+    // If filters loaded and there are 0 subjects, skip querying
+    if (filters && sortedSubjects.length === 0) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
+
+    // Wait until subjectId is determined if subjects exist
+    if (sortedSubjects.length > 0 && subjectId === undefined) {
+      return;
+    }
+
     setLoading(true);
     try {
       const params: DashboardQueryParams = {
@@ -118,6 +156,7 @@ export default function SectionPredictions() {
         limit,
         offset,
       };
+
       const result = await fetchDashboardAtRisk(params);
       setData(result);
     } catch (err) {
@@ -125,7 +164,19 @@ export default function SectionPredictions() {
     } finally {
       setLoading(false);
     }
-  }, [resolvedClassId, numericGrade, subjectId, academicPeriodId, riskLevel, search, sortBy, sortOrder, offset]);
+  }, [
+    resolvedClassId,
+    numericGrade,
+    subjectId,
+    academicPeriodId,
+    riskLevel,
+    search,
+    sortBy,
+    sortOrder,
+    offset,
+    filters,
+    sortedSubjects.length,
+  ]);
 
   useEffect(() => {
     loadData();
@@ -154,14 +205,7 @@ export default function SectionPredictions() {
     setOffset(0);
   };
 
-  const handleRiskClick = (level: string | undefined) => {
-    setRiskLevel(level);
-    setOffset(0);
-  };
-
   const handleClearAll = () => {
-    setSubjectId(undefined);
-    setAcademicPeriodId(undefined);
     setRiskLevel(undefined);
     setSearch("");
     setOffset(0);
@@ -171,8 +215,6 @@ export default function SectionPredictions() {
     setSelectedPrediction(predictionId);
     setSheetOpen(true);
   };
-
-  const summary = data?.risk_summary ?? EMPTY_SUMMARY;
 
   return (
     <AppLayout>
@@ -214,92 +256,92 @@ export default function SectionPredictions() {
             </header>
 
             <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
-              {/* ── Main Content: Table on Left + Risk Cards on Right ── */}
-              <div className="flex flex-col lg:flex-row gap-5 items-start">
-                {/* Left Column: Filters + Table */}
-                <div className="flex-1 flex flex-col gap-4 min-w-0 w-full">
-                  <PredictionFilters
-                    filters={filters}
-                    gradeLevel={numericGrade}
-                    classId={resolvedClassId}
-                    subjectId={subjectId}
-                    academicPeriodId={academicPeriodId}
-                    riskLevel={riskLevel}
-                    search={search}
-                    hideClassFilter
-                    hideGradeFilter
-                    onSubjectChange={(v) => {
-                      setSubjectId(v);
-                      setOffset(0);
-                    }}
-                    onPeriodChange={(v) => {
-                      setAcademicPeriodId(v);
-                      setOffset(0);
-                    }}
-                    onRiskChange={(v) => {
-                      setRiskLevel(v);
-                      setOffset(0);
-                    }}
-                    onSearchChange={handleSearchChange}
-                    onClearAll={handleClearAll}
-                  />
+              <div className="flex flex-col gap-4 w-full">
+                {/* ── Filters Bar ── */}
+                <PredictionFilters
+                  filters={filters}
+                  gradeLevel={numericGrade}
+                  classId={resolvedClassId}
+                  subjectId={subjectId}
+                  academicPeriodId={academicPeriodId}
+                  riskLevel={riskLevel}
+                  search={search}
+                  hideClassFilter
+                  hideGradeFilter
+                  hideSubjectFilter
+                  riskSummary={data?.risk_summary}
+                  onSubjectChange={(v) => {
+                    setSubjectId(v);
+                    setOffset(0);
+                  }}
+                  onPeriodChange={(v) => {
+                    setAcademicPeriodId(v);
+                    setOffset(0);
+                  }}
+                  onRiskChange={(v) => {
+                    setRiskLevel(v);
+                    setOffset(0);
+                  }}
+                  onSearchChange={handleSearchChange}
+                  onClearAll={handleClearAll}
+                />
 
-                  {loading && !data ? (
-                    <div className="flex items-center justify-center py-20 text-gray-400 font-semibold">
-                      Loading {sectionDisplayName} predictions...
-                    </div>
-                  ) : (data?.items.length ?? 0) === 0 ? (
-                    <div className="p-8 bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-center">
-                      <p className="text-lg font-bold text-gray-900">
-                        No at-risk predictions recorded yet for {sectionDisplayName}.
-                      </p>
-                      <p className="text-sm text-gray-600 mt-1 max-w-md mx-auto">
-                        This section currently has 0 recorded risk assessments. Students will appear here as soon as predictions are generated.
-                      </p>
-                    </div>
-                  ) : (
-                    <PredictionTable
-                      items={data?.items ?? []}
-                      total={data?.total ?? 0}
-                      limit={data?.limit ?? limit}
-                      offset={data?.offset ?? 0}
-                      sortBy={sortBy}
-                      sortOrder={sortOrder}
-                      hideClass
-                      onSort={handleSort}
-                      onPageChange={setOffset}
-                      onRowClick={handleRowClick}
-                    />
-                  )}
-                </div>
-
-                {/* Right Column: Risk Summary Cards */}
-                <div className="w-full lg:w-64 xl:w-72 shrink-0 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-3">
-                  {RISK_CARDS.map((card) => {
-                    const count = summary[card.key];
-                    const isActive = riskLevel === card.key;
-
-                    return (
-                      <button
-                        key={card.key}
-                        type="button"
-                        onClick={() => handleRiskClick(isActive ? undefined : card.key)}
-                        className="text-left cursor-pointer transition-transform active:translate-x-[2px] active:translate-y-[2px] w-full"
-                      >
-                        <OverviewCard
-                          title={card.label}
-                          count={String(count)}
+                {/* ── Subject Tabs ── */}
+                {sortedSubjects.length > 0 && (
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                    {sortedSubjects.map((s) => {
+                      const isActive = subjectId === s.subject_id;
+                      return (
+                        <button
+                          key={s.subject_id}
+                          type="button"
+                          onClick={() => {
+                            setSubjectId(s.subject_id);
+                            setOffset(0);
+                          }}
                           className={cn(
-                            "w-full border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all",
+                            "px-4 py-1.5 text-xs md:text-sm font-bold rounded-md whitespace-nowrap transition-all cursor-pointer border-2",
                             isActive
-                              ? `${card.activeClass} shadow-none translate-x-[2px] translate-y-[2px]`
-                              : "hover:translate-x-[-1px] hover:translate-y-[-1px]"
+                              ? "bg-yellow-400 border-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                              : "bg-white border-transparent text-gray-700 hover:bg-gray-100 hover:border-black"
                           )}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
+                        >
+                          {s.subject_name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* ── Table & Empty States (Full Width) ── */}
+                {loading && !data ? (
+                  <div className="flex items-center justify-center py-20 text-gray-400 font-semibold">
+                    Loading {sectionDisplayName} predictions...
+                  </div>
+                ) : sortedSubjects.length === 0 ? (
+                  <div className="p-8 bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-center">
+                    <p className="text-lg font-bold text-gray-900">
+                      No subjects available for {sectionDisplayName}.
+                    </p>
+                    <p className="text-sm text-gray-600 mt-1 max-w-md mx-auto">
+                      There are no subjects offered or assigned for this section in the selected term.
+                    </p>
+                  </div>
+                ) : (
+                  <PredictionTable
+                    items={data?.items ?? []}
+                    total={data?.total ?? 0}
+                    limit={data?.limit ?? limit}
+                    offset={data?.offset ?? 0}
+                    sortBy={sortBy}
+                    sortOrder={sortOrder}
+                    hideClass
+                    hideSubject
+                    onSort={handleSort}
+                    onPageChange={setOffset}
+                    onRowClick={handleRowClick}
+                  />
+                )}
               </div>
             </div>
           </div>

@@ -38,7 +38,7 @@ import { Button } from "@/components/retroui/Button";
 import { Avatar } from "@/components/retroui/Avatar";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
 
-import CompetencyModal from "./subject-details/CompetencyModal";
+import CompetencyModal from "./subject-details/competency-modal";
 import CreateLessonModal from "@/pages/teacher/create-lesson";
 import ClassworkCard from "../classworks/classwork-card";
 import ClassworkView from "../classwork-view";
@@ -52,10 +52,10 @@ import type {
   TeacherClassLoad,
   TeacherClasswork,
 } from "@/types/classwork";
-import ClassworkFormModal from "./subject-details/ClassworkFormModal";
-import TeacherLessonDetailScreen from "./subject-details/TeacherLessonDetailScreen";
-import TeacherCompetencyDetailScreen from "./subject-details/TeacherCompetencyDetailScreen";
-import { StudentRecordDetail } from "./subject-details/StudentRecordsPanel";
+import ClassworkFormModal from "./subject-details/classwork-form-modal";
+import TeacherLessonDetailScreen from "./subject-details/teacher-lesson-detail-screen";
+import TeacherCompetencyDetailScreen from "./subject-details/teacher-competency-detail-screen";
+import { StudentRecordDetail } from "./subject-details/student-records-panel";
 import {
   getTeacherRecordPeriods,
   getTeacherStudentRecordDetail,
@@ -2795,13 +2795,13 @@ function StateInline({ message }: { message: string }) {
 }
 
 function normalizedStudentGender(gender: string) {
-  if (gender === "Female" || gender === "Male" || gender === "Other")
+  if (gender === "Female" || gender === "Male")
     return gender;
   return "Unspecified";
 }
 
 function groupStudents(students: TeacherAdvisoryStudentItem[]) {
-  const order = ["Male", "Female", "Other", "Unspecified"];
+  const order = ["Male", "Female", "Unspecified"];
   return order
     .map(
       (gender) =>

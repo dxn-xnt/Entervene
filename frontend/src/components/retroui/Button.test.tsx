@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
-import Landing from "@/pages/Landing";
+import Landing from "@/pages/landing";
 import { Button } from "./Button";
 
 describe("Button", () => {
