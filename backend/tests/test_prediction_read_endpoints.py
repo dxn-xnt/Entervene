@@ -19,6 +19,7 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
+from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
@@ -38,6 +39,7 @@ TABLES = [
     AcademicPeriod.__table__,
     Class.__table__,
     Subject.__table__,
+    SubjectLoad.__table__,
     AIModelVersion.__table__,
     AIPrediction.__table__,
     AIPredictionFeature.__table__,
@@ -136,6 +138,16 @@ def prediction_read_context():
         is_active=True,
     )
     db.add_all([staff, other_staff, student, source_period, target_period, class_, subject, model_version])
+    db.flush()
+    load = SubjectLoad(
+        class_id=class_.class_id,
+        subject_id=subject.subject_id,
+        academic_period_id=target_period.academic_period_id,
+        staff_id=staff.staff_id,
+        status="published",
+        is_active_version=True,
+    )
+    db.add(load)
     db.flush()
     prediction = AIPrediction(
         student_id=student.student_id,

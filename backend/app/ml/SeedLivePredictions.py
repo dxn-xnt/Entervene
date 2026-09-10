@@ -413,6 +413,12 @@ def main() -> None:
             risk_score = None
 
         risk_level = row.get("risk_level", "NEEDS_MONITORING").strip()
+        if risk_level == "INSUFFICIENT_DATA":
+            predicted_grade = None
+            risk_score = None
+            data_status = "INSUFFICIENT_DATA"
+        else:
+            data_status = "SUFFICIENT"
 
         prediction_batch.append({
             "student_id": stu_uuid,
@@ -423,7 +429,7 @@ def main() -> None:
             "predicted_period_grade": predicted_grade,
             "risk_score": risk_score,
             "risk_level": risk_level,
-            "data_status": "SUFFICIENT",
+            "data_status": data_status,
             "model_version_id": args.model_version_id,
         })
         inserted_count += 1

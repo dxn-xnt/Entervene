@@ -19,11 +19,19 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        'user_account',
-        sa.Column('email_status', sa.String(length=20), server_default='pending', nullable=False),
-    )
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [c['name'] for c in inspector.get_columns('user_account')]
+    if 'email_status' not in columns:
+        op.add_column(
+            'user_account',
+            sa.Column('email_status', sa.String(length=20), server_default='pending', nullable=False),
+        )
 
 
 def downgrade() -> None:
-    op.drop_column('user_account', 'email_status')
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [c['name'] for c in inspector.get_columns('user_account')]
+    if 'email_status' in columns:
+        op.drop_column('user_account', 'email_status')

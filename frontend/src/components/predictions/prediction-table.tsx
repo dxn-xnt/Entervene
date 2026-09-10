@@ -12,6 +12,7 @@ interface PredictionTableProps {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   hideClass?: boolean;
+  hidePagination?: boolean;
   onSort: (column: string) => void;
   onPageChange: (newOffset: number) => void;
   onRowClick: (predictionId: number) => void;
@@ -22,7 +23,7 @@ const RISK_BADGE_VARIANTS: Record<string, { bg: string; text: string }> = {
   MODERATE_RISK: { bg: "bg-amber-500 text-white border-2 border-black font-extrabold", text: "Moderate" },
   NEEDS_MONITORING: { bg: "bg-yellow-400 text-black border-2 border-black font-extrabold", text: "Monitoring" },
   LOW_RISK: { bg: "bg-emerald-500 text-white border-2 border-black font-extrabold", text: "Low Risk" },
-  INSUFFICIENT_DATA: { bg: "bg-gray-300 text-black border-2 border-black font-extrabold", text: "No Data" },
+  INSUFFICIENT_DATA: { bg: "bg-gray-300 text-black border-2 border-black font-extrabold", text: "Insufficient Data" },
 };
 
 function SortableHeader({
@@ -67,6 +68,7 @@ export default function PredictionTable({
   sortBy,
   sortOrder,
   hideClass = false,
+  hidePagination = false,
   onSort,
   onPageChange,
   onRowClick,
@@ -157,9 +159,9 @@ export default function PredictionTable({
                   <Table.Cell className="font-normal whitespace-nowrap">{item.subject_name}</Table.Cell>
                   {/* <Table.Cell className="font-normal whitespace-nowrap">{item.term_label}</Table.Cell> */}
                   <Table.Cell className="font-black text-base whitespace-nowrap">
-                    {item.predicted_period_grade !== null
-                      ? item.predicted_period_grade.toFixed(2)
-                      : "—"}
+                    {item.risk_level === "INSUFFICIENT_DATA" || item.predicted_period_grade === null
+                      ? "—"
+                      : item.predicted_period_grade.toFixed(2)}
                   </Table.Cell>
                   <Table.Cell className="whitespace-nowrap">
                     <Badge
@@ -171,7 +173,9 @@ export default function PredictionTable({
                     </Badge>
                   </Table.Cell>
                   <Table.Cell className="font-bold text-gray-900 whitespace-nowrap">
-                    {item.risk_score !== null ? item.risk_score.toFixed(1) : "—"}
+                    {item.risk_level === "INSUFFICIENT_DATA" || item.risk_score === null
+                      ? "—"
+                      : item.risk_score.toFixed(1)}
                   </Table.Cell>
                   {/* <Table.Cell className="text-right whitespace-nowrap">
                     <Button
@@ -194,7 +198,7 @@ export default function PredictionTable({
       </Table>
 
       {/* Bottom Sticky Pagination Footer */}
-      {total > 0 && (
+      {!hidePagination && total > 0 && (
         <div className="sticky bottom-0 z-20 flex flex-col sm:flex-row items-center justify-between px-1 py-3 bg-white gap-3 shrink-0">
           <p className="text-md font-normal tracking-wide">
             Showing <span className="font-bold text-md">{offset + 1} </span>–

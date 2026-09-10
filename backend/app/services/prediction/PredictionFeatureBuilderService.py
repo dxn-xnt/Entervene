@@ -496,8 +496,13 @@ def build_prediction_features_from_records(
     _normalised_period_sequence = round(
         (source_period.period_sequence / source_period.total_periods_in_year) * 4, 4
     )
+    # Fallback grade_level from class_.academic_level if student.academic_level is None
+    _grade_level = getattr(student.academic_level, "grade_level", None)
+    if _grade_level is None and class_ is not None and getattr(class_, "academic_level", None) is not None:
+        _grade_level = class_.academic_level.grade_level
+
     features: dict[str, Any] = {
-        "grade_level": getattr(student.academic_level, "grade_level", None),
+        "grade_level": _grade_level,
         "period_sequence": _normalised_period_sequence,
         "source_period_grade": source_period_grade,
         "written_work_percent": component_features["written_work_percent"],
