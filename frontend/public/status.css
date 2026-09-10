@@ -16,3 +16,15 @@
 @media (max-width: 480px) { .status-actions { flex-direction: column; } .status-footer { align-items: flex-start; font-size: 10px; } }
 
 .status-icon { position: absolute; bottom: 0; right: -4px; display: grid; place-items: center; width: 56px; height: 56px; background: var(--card, #fff); color: var(--foreground, #000); border: 2px solid var(--border, #000); box-shadow: 3px 3px 0 var(--border, #000); transform: rotate(8deg); }
+
+/* One complete tile per loop keeps the diagonal drift seamless. */
+.retro-squares-motion::before {
+  animation: retro-squares-drift 80s linear infinite;
+}
+@keyframes retro-squares-drift {
+  from { background-position: 0 0; }
+  to { background-position: 600px -600px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .retro-squares-motion::before { animation: none; }
+}
