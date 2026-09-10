@@ -8,7 +8,7 @@ from fastapi import BackgroundTasks, HTTPException, UploadFile
 from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
-from app.core.FileUpload import MAX_FILE_SIZE
+MAX_USER_IMPORT_FILE_SIZE = 4 * 1024 * 1024  # 4 MB (keep bulk CSV/Excel roster import capped at 4MB)
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.Student import Student
 from app.services.MailService import send_batch_invitations, send_invitation_email as _default_single_sender
@@ -80,8 +80,8 @@ def _validate_optional_dob(row: dict[str, Any], row_number: int, errors: list[di
 async def _read_import_rows(file: UploadFile) -> tuple[list[dict[str, str]], set[str]]:
     filename = (file.filename or "").lower()
     content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail=f"File too large. Maximum is {MAX_FILE_SIZE} bytes.")
+    if len(content) > MAX_USER_IMPORT_FILE_SIZE:
+        raise HTTPException(status_code=400, detail=f"File too large. Maximum is {MAX_USER_IMPORT_FILE_SIZE} bytes (4 MB).")
 
     if filename.endswith(".csv"):
         reader = csv.DictReader(io.StringIO(_decode_csv_content(content)))

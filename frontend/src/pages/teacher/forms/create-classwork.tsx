@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Plus, Trash2, FileText } from "lucide-react";
+import { toast } from "sonner";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/retroui/Button";
 import { Text } from "@/components/retroui/Text";
@@ -68,6 +69,13 @@ export default function CreateClassworkModal({
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState("");
 
+  const setFormError = (msg: string) => {
+    setCreateError(msg);
+    if (msg) {
+      toast.error(msg);
+    }
+  };
+
   const selectedSubjectLoads = useMemo(
     () =>
       loads
@@ -87,7 +95,7 @@ export default function CreateClassworkModal({
         !allowedClassworkMaterialExtensions.includes(fileExtension(file.name)),
     );
     if (invalid) {
-      setCreateError(
+      setFormError(
         `${invalid.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`,
       );
       return;
@@ -96,7 +104,7 @@ export default function CreateClassworkModal({
       (file) => file.size > maxClassworkMaterialSize,
     );
     if (oversized) {
-      setCreateError(`${oversized.name} is larger than the 4 MB limit.`);
+      setFormError(`${oversized.name} is larger than the 10 MB limit.`);
       return;
     }
     setCreateError("");
@@ -150,7 +158,7 @@ export default function CreateClassworkModal({
   const goToAssignStep = () => {
     const validationError = validateDetails();
     if (validationError) {
-      setCreateError(validationError);
+      setFormError(validationError);
       return;
     }
     setSelectedClassIds((current) => {
@@ -224,7 +232,7 @@ export default function CreateClassworkModal({
         if (!isActive) return;
         setAvailableLessons([]);
         setSelectedLessonIds([]);
-        setCreateError(
+        setFormError(
           err instanceof Error
             ? err.message
             : "Unable to load lessons for selected sections.",
@@ -245,16 +253,16 @@ export default function CreateClassworkModal({
   const handleCreateClasswork = async () => {
     const validationError = validateDetails();
     if (validationError) {
-      setCreateError(validationError);
+      setFormError(validationError);
       setCreateStep("details");
       return;
     }
     if (selectedClassIds.length === 0) {
-      setCreateError("Select at least one section to assign this classwork.");
+      setFormError("Select at least one section to assign this classwork.");
       return;
     }
     if (selectedLessonIds.length === 0) {
-      setCreateError("Select the lesson where this classwork should appear.");
+      setFormError("Select the lesson where this classwork should appear.");
       return;
     }
 
@@ -311,7 +319,7 @@ export default function CreateClassworkModal({
 
       onSuccess();
     } catch (err) {
-      setCreateError(
+      setFormError(
         err instanceof Error ? err.message : "Unable to create classwork.",
       );
     } finally {
@@ -356,6 +364,16 @@ export default function CreateClassworkModal({
         </Dialog.Header>
 
         <section className="flex flex-col gap-4 p-5 max-h-[70vh] overflow-y-auto">
+          {createError && (
+            <Alert
+              status="error"
+              onClose={() => setCreateError("")}
+            >
+              <Alert.Title>Error</Alert.Title>
+              <Alert.Description>{createError}</Alert.Description>
+            </Alert>
+          )}
+
           {createStep === "details" && (
             <div className="grid gap-3">
               <Field label="Subject">
@@ -784,17 +802,6 @@ export default function CreateClassworkModal({
                 )}
               </Field>
             </div>
-          )}
-          {createError && (
-            <Alert
-              status="error"
-              position="top-right"
-              duration={5000}
-              onClose={() => setCreateError("")}
-            >
-              <Alert.Title>Error</Alert.Title>
-              <Alert.Description>{createError}</Alert.Description>
-            </Alert>
           )}
         </section>
 

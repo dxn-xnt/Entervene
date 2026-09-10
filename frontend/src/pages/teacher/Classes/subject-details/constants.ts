@@ -17,4 +17,4 @@ export const emptyClassworkDraft: ClassworkDraft = {
 };
 
 export const allowedMaterialExtensions = [".pdf", ".docx", ".pptx", ".jpg", ".jpeg", ".png"];
-export const maxMaterialSize = 4 * 1024 * 1024;
+export const maxMaterialSize = 10 * 1024 * 1024;
