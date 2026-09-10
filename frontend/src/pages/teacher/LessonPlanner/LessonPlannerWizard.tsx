@@ -2,8 +2,6 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/retroui/Button";
-import { Badge } from "@/components/retroui/Badge";
-import { Card } from "@/components/retroui/Card";
 import {
   FileText,
   Target,
@@ -19,6 +17,8 @@ import {
   FileDown,
 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
+import { Dialog } from "@/components/retroui/Dialog";
+import { Text } from "@/components/retroui/Text";
 
 import { InfoTab } from "./tabs/InfoTab";
 import { IntentionsTab } from "./tabs/IntentionsTab";
@@ -38,6 +38,8 @@ const TABS = [
   {
     value: "info",
     label: "Info",
+    headerTitle: "Information",
+    headerDescription: "Fill in the basic details of the lesson plan.",
     icon: FileText,
     color: "text-blue-600",
     bgColor: "bg-blue-50",
@@ -46,6 +48,8 @@ const TABS = [
   {
     value: "intentions",
     label: "Intentions",
+    headerTitle: "Intentions",
+    headerDescription: "Define what students will learn and what you know about them.",
     icon: Target,
     color: "text-purple-600",
     bgColor: "bg-purple-50",
@@ -54,6 +58,8 @@ const TABS = [
   {
     value: "learning",
     label: "Learning Exp.",
+    headerTitle: "Learning Experiences",
+    headerDescription: "Map out the flow of learning tasks across the lesson phases.",
     icon: BookOpen,
     color: "text-emerald-600",
     bgColor: "bg-emerald-50",
@@ -62,6 +68,8 @@ const TABS = [
   {
     value: "assessment",
     label: "Assessment",
+    headerTitle: "Assessments",
+    headerDescription: "Describe how you will monitor and evaluate student learning.",
     icon: ClipboardCheck,
     color: "text-orange-600",
     bgColor: "bg-orange-50",
@@ -70,6 +78,8 @@ const TABS = [
   {
     value: "ways",
     label: "Ways Forward",
+    headerTitle: "Ways Forward",
+    headerDescription: "Plan how you will extend learning and reflect on the lesson's effectiveness.",
     icon: ArrowRight,
     color: "text-rose-600",
     bgColor: "bg-rose-50",
@@ -81,10 +91,12 @@ type TabValue = (typeof TABS)[number]["value"];
 
 interface LessonPlannerWizardProps {
   planId?: number;
+  onClose?: () => void;
 }
 
 export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
   planId,
+  onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<TabValue>("info");
   const auth = useAuth();
@@ -130,7 +142,11 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
       } else if (format === "word") {
         exportLessonPlanWord(draft, teacherName);
       }
-      navigate(routes.teacher.lessonPlanner);
+      if (onClose) {
+        onClose();
+      } else {
+        navigate(routes.teacher.lessonPlanner);
+      }
     }
   };
 
@@ -141,82 +157,59 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
   }
 
   return (
-    <div className="flex flex-col gap-6 w-full">
-      {/* Global error banner */}
-      {apiError && (
-        <div className="flex items-center gap-2.5 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 shadow-2xs w-full animate-in fade-in slide-in-from-top-1 duration-200">
-          <AlertCircle className="size-5 shrink-0 text-red-600" />
-          <div className="flex-1">
-            <p className="font-semibold text-red-900">Validation Error</p>
-            <p className="text-xs text-red-700 mt-0.5">{apiError}</p>
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+      <Dialog.Header asChild position="static" className="border-b-2 border-border shrink-0">
+        <div className="flex items-center justify-between w-full">
+          <div>
+            <Text as="h5" className="font-sans text-xl font-bold">
+              {TABS[currentIndex]?.headerTitle || "Lesson Plan"}
+            </Text>
+            {TABS[currentIndex]?.headerDescription && (
+              <p className="text-xs md:text-sm font-normal text-foreground">
+                {TABS[currentIndex].headerDescription}
+              </p>
+            )}
           </div>
+          <Text as="h5" className="font-sans text-base font-semibold shrink-0">
+            Step {currentIndex + 1} of {TABS.length}
+          </Text>
         </div>
-      )}
+      </Dialog.Header>
 
-      {/* Save success banner */}
-      {saveSuccess && (
-        <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 w-full">
-          <CheckCircle className="size-4 shrink-0" />
-          Draft saved successfully.
-        </div>
-      )}
+      <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-6 [scrollbar-gutter:stable]">
+        {/* Global error banner */}
+        {apiError && (
+          <div className="flex items-center gap-2.5 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 shadow-2xs w-full animate-in fade-in slide-in-from-top-1 duration-200">
+            <AlertCircle className="size-5 shrink-0 text-red-600" />
+            <div className="flex-1">
+              <p className="font-semibold text-red-900">Validation Error</p>
+              <p className="text-xs text-red-700 mt-0.5">{apiError}</p>
+            </div>
+          </div>
+        )}
 
-      {/* Progress stepper */}
-      <div className="flex items-center justify-center overflow-x-auto py-2">
-        {TABS.map((tab, idx) => {
-          const Icon = tab.icon;
-          const isDone = idx < currentIndex;
-          const isActive = tab.value === activeTab;
+        {/* Save success banner */}
+        {saveSuccess && (
+          <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 w-full">
+            <CheckCircle className="size-4 shrink-0" />
+            Draft saved successfully.
+          </div>
+        )}
 
-          return (
-            <React.Fragment key={tab.value}>
-              <Button
-                type="button"
-                variant={isActive ? "default" : "outline"}
-                size="sm"
-                onClick={() => setActiveTab(tab.value)}
-                className="gap-2 shrink-0"
-              >
-                {isDone ? <CheckCircle size={16} /> : <Icon size={16} />}
+        {/* Tab content */}
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as TabValue)}
+          className="w-full flex flex-col"
+        >
+          <TabsList className="hidden">
+            {TABS.map((t) => (
+              <TabsTrigger key={t.value} value={t.value}>
+                {t.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-                <span>{tab.label}</span>
-
-                {isActive && (
-                  <Badge size="sm" variant="secondary">
-                    Current
-                  </Badge>
-                )}
-              </Button>
-
-              {idx < TABS.length - 1 && (
-                <div className="mx-3 flex w-10 items-center">
-                  <div
-                    className={`h-[2px] w-full rounded-full transition-colors ${
-                      isDone ? "bg-primary" : "bg-border"
-                    }`}
-                  />
-                </div>
-              )}
-            </React.Fragment>
-          );
-        })}
-      </div>
-
-      {/* Tab content */}
-      <Tabs
-        value={activeTab}
-        onValueChange={(v) => setActiveTab(v as TabValue)}
-        className="w-full flex flex-col"
-      >
-        <TabsList className="hidden">
-          {TABS.map((t) => (
-            <TabsTrigger key={t.value} value={t.value}>
-              {t.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        <Card className="w-full block">
           <TabsContent value="info" className="w-full">
             <InfoTab
               draft={draft}
@@ -262,23 +255,37 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
               }
             />
           </TabsContent>
-        </Card>
-      </Tabs>
+        </Tabs>
+      </div>
 
-      {/* Footer (Single location for action buttons) */}
-      <div className="flex items-center justify-between pt-2 border-t w-full gap-4 flex-wrap">
-        <Button
-          variant="outline"
-          onClick={goPrev}
-          disabled={isFirst}
-          className="gap-2"
-        >
-          <ChevronLeft className="size-4" />
-          Previous
-        </Button>
+      {/* Dialog Footer using default Dialog structure */}
+      <Dialog.Footer className="flex items-center justify-between border-t-2 border-border bg-background px-6 py-3.5 gap-3 w-full shrink-0 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="default"
+            onClick={goPrev}
+            disabled={isFirst}
+            className="gap-2"
+          >
+            <ChevronLeft className="size-4" />
+            Previous
+          </Button>
+          {onClose && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={isSaving || isSubmitting}
+            >
+              Cancel
+            </Button>
+          )}
+        </div>
 
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <Button
+            type="button"
             variant="outline"
             onClick={handleSaveDraft}
             disabled={isSaving || isSubmitting}
@@ -329,13 +336,13 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
               </Button>
             </>
           ) : (
-            <Button onClick={goNext} className="gap-2">
+            <Button type="button" onClick={goNext} className="gap-2">
               Next
               <ChevronRight className="size-4" />
             </Button>
           )}
         </div>
-      </div>
+      </Dialog.Footer>
     </div>
   );
 };
