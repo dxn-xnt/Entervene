@@ -1473,7 +1473,7 @@ export default function SubjectDetails() {
                           size="sm"
                           onClick={() =>
                             navigate(
-                              `/teacher/classworks?classworkId=${selectedClasswork.classwork_id}`,
+                              `/teacher/classworks/${selectedClasswork.classwork_id}`,
                             )
                           }
                           className="border-black bg-white font-bold"
