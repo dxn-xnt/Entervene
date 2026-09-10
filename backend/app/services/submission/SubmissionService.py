@@ -204,7 +204,7 @@ def assert_student_can_modify_submission(
 
 def student_has_excused_exemption(db: Session, student_id: UUID, class_id: int, check_date: datetime) -> bool:
     try:
-        from app.models.attendance.Attendance import AttendanceRecord, LeaveRequest
+        from app.models.attendance.Attendance import AttendanceRecord
 
         d_val = check_date.date()
         att = db.query(AttendanceRecord).filter(
@@ -214,16 +214,6 @@ def student_has_excused_exemption(db: Session, student_id: UUID, class_id: int, 
             AttendanceRecord.status == "excused",
         ).first()
         if att:
-            return True
-
-        leave = db.query(LeaveRequest).filter(
-            LeaveRequest.student_id == student_id,
-            LeaveRequest.class_id == class_id,
-            LeaveRequest.status == "approved",
-            LeaveRequest.start_date <= d_val,
-            LeaveRequest.end_date >= d_val,
-        ).first()
-        if leave:
             return True
     except Exception as err:
         print(f"[Attendance Exemption Check Error] {err}")
