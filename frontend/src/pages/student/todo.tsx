@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { AlertCircle, CheckCircle2, Clock } from "lucide-react";
 import { Tabs } from "../../components/retroui/Tabs";
 import ToDoItem from "../../components/to-do-item";
 import AppLayout from "@/layouts/app-layout";
@@ -14,9 +15,9 @@ import { LoadingPanel } from "@/components/loading-panel";
 import { EmptyStateCard } from "@/components/empty-state-card";
 
 const todoTabs = [
-  { id: "pending", label: "Pending" },
-  { id: "pastdue", label: "Past Due" },
-  { id: "completed", label: "Completed" },
+  { id: "pending", label: "Pending", icon: Clock },
+  { id: "pastdue", label: "Past Due", icon: AlertCircle },
+  { id: "completed", label: "Completed", icon: CheckCircle2 },
 ];
 
 export default function ToDo() {

@@ -1,5 +1,5 @@
 import { type Dispatch, type SetStateAction } from "react";
-import { ArrowRight, FileText, Trash2, Upload } from "lucide-react";
+import { ArrowRight, FileText, Loader2, Plus, Trash2, Upload, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ClassworkDraft, Lesson } from "./types";
 import { Button } from "@/components/retroui/Button";
@@ -421,15 +421,22 @@ export default function ClassworkFormModal({
             variant="outline"
             onClick={closeClassworkForm}
             disabled={isCreatingClasswork}
+            className="gap-2"
           >
+            <X className="size-4" />
             Cancel
           </Button>
           <Button
             type="button"
             onClick={createClassworkForLesson}
             disabled={isCreatingClasswork}
-            className="bg-[#7ABA78] text-black hover:bg-[#6aa868]"
+            className="gap-2 bg-[#7ABA78] text-black hover:bg-[#6aa868]"
           >
+            {isCreatingClasswork ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Plus className="size-4" />
+            )}
             {isCreatingClasswork ? "Adding..." : classworkModalTitle}
           </Button>
         </div>

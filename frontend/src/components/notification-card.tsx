@@ -17,7 +17,7 @@ type NotificationCardProps = {
 
 export function NotificationCard({ title, description, date, user, badge, isRead, className }: NotificationCardProps) {
     return (
-        <Card className={cn("@container/card p-4 w-full flex flex-col gap-2", isRead ? "bg-muted/30" : "bg-card border-2 border-black", className)}>
+        <Card className={cn("@container/card p-4 w-full flex flex-col gap-2", isRead ? "bg-muted" : "bg-card border-2 border-black", className)}>
             <Card.Header className="mb-0">
                 <div className="flex flex-row justify-between items-start gap-4">
                     <Card.Description className="text-lg font-bold leading-snug text-foreground break-words flex-1">{title}</Card.Description>

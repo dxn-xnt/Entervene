@@ -10,6 +10,10 @@ import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import {
+  Archive,
+  Award,
+  BookOpen,
+  Calendar,
   Copy,
   DownloadIcon,
   Plus,
@@ -73,10 +77,10 @@ import {
 } from "@/lib/api";
 
 const MODULE_TABS: Array<TabItem<AdminSubjectSection>> = [
-  { id: "catalog", label: "Subject Catalog" },
-  { id: "offerings", label: "Curriculum Plan" },
-  { id: "grading", label: "Grading Templates" },
-  { id: "archived", label: "Archived" },
+  { id: "catalog", label: "Subject Catalog", icon: BookOpen },
+  { id: "offerings", label: "Curriculum Plan", icon: Calendar },
+  { id: "grading", label: "Grading Templates", icon: Award },
+  { id: "archived", label: "Archived", icon: Archive },
 ];
 
 export default function AdminSubjects() {

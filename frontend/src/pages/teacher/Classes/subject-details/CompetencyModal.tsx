@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Loader2, Plus, Save, X } from "lucide-react";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -134,7 +135,7 @@ export default function CompetencyModal({
 
   return (
     <Dialog open={isModalOpen} disablePointerDismissal={true} onOpenChange={(val) => !val && handleClose()}>
-      <Dialog.Content size="md">
+      <Dialog.Content size="lg">
         <Dialog.Header position="static">
           <div>
             <h2 className="font-sans text-xl font-bold">
@@ -219,18 +220,28 @@ export default function CompetencyModal({
               variant="outline"
               onClick={handleClose}
               disabled={isSubmitting}
+              className="gap-2"
             >
+              <X className="size-4" />
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={isSubmitting}
+              className="gap-2"
             >
+              {isSubmitting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : targetCompetency ? (
+                <Save className="size-4" />
+              ) : (
+                <Plus className="size-4" />
+              )}
               {isSubmitting
                 ? "Saving..."
                 : targetCompetency
-                ? "Save Changes"
-                : "Create Competency"}
+                  ? "Save Changes"
+                  : "Create Competency"}
             </Button>
           </Dialog.Footer>
         </form>

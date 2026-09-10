@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Loader2, Save, Upload, X } from "lucide-react";
 import { Alert } from "@/components/retroui/Alert";
 import { Button } from "@/components/retroui/Button";
 import { Select } from "@/components/retroui/Select";
@@ -467,7 +468,9 @@ export default function CreateLessonModal({
             variant="outline"
             onClick={handleClose}
             disabled={isSubmitting}
+            className="gap-2"
           >
+            <X className="size-4" />
             Cancel
           </Button>
           <Button
@@ -475,14 +478,26 @@ export default function CreateLessonModal({
             variant="outline"
             onClick={() => submitLesson(false)}
             disabled={isSubmitting}
+            className="gap-2"
           >
+            {isSubmitting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Save className="size-4" />
+            )}
             {isSubmitting ? "Saving..." : "Save as Draft"}
           </Button>
           <Button
             type="button"
             onClick={() => submitLesson(true)}
             disabled={isSubmitting}
+            className="gap-2"
           >
+            {isSubmitting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Upload className="size-4" />
+            )}
             {isSubmitting ? "Saving..." : "Publish Lesson"}
           </Button>
         </Dialog.Footer>

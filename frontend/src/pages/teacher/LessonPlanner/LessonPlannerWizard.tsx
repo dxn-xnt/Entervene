@@ -15,6 +15,7 @@ import {
   Loader2,
   AlertCircle,
   FileDown,
+  X,
 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -277,7 +278,9 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
               variant="outline"
               onClick={onClose}
               disabled={isSaving || isSubmitting}
+              className="gap-2"
             >
+              <X className="size-4" />
               Cancel
             </Button>
           )}
