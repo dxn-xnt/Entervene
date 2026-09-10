@@ -373,11 +373,11 @@ export default function SubjectClassworkTab({
                   {classworkCreateOptions.map((option) => {
                     const Icon = option.icon;
                     return (
-                      <button
+                      <Button
                         key={option.type}
                         type="button"
                         onClick={() => setSelectedType(option.type)}
-                        className="rounded-lg border-2 border-black bg-[#7ABA78] p-5 text-left shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 cursor-pointer text-black"
+                        className="flex-col items-start bg-success p-5 text-left text-black hover:bg-success"
                       >
                         <div className="flex items-center gap-2">
                           <Icon size={20} className="text-black" />
@@ -388,7 +388,7 @@ export default function SubjectClassworkTab({
                         <p className="mt-2 text-xs font-semibold text-black/80">
                           {option.description}
                         </p>
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
