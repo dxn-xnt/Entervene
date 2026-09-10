@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Download, X } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Download, FileText, X } from "lucide-react";
 
 interface PDFViewerProps {
   pdfUrl: string;
@@ -8,30 +8,83 @@ interface PDFViewerProps {
   onClose?: () => void;
 }
 
-export default function PDFViewer({ pdfUrl, downloadUrl, fileName, onClose }: PDFViewerProps) {
-  const [isFullscreen, setIsFullscreen] = useState(false);
+export default function PDFViewer({
+  pdfUrl,
+  downloadUrl,
+  fileName,
+  onClose,
+}: PDFViewerProps) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose?.();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    let iframeDoc: Document | null = null;
+    const iframe = iframeRef.current;
+    const handleIframeLoad = () => {
+      try {
+        iframeDoc = iframe?.contentDocument || iframe?.contentWindow?.document || null;
+        iframeDoc?.addEventListener("keydown", handleKeyDown);
+      } catch {
+        // Sandboxed / browser plugin restriction
+      }
+    };
+
+    if (iframe) {
+      iframe.addEventListener("load", handleIframeLoad);
+    }
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      try {
+        iframeDoc?.removeEventListener("keydown", handleKeyDown);
+        iframe?.removeEventListener("load", handleIframeLoad);
+      } catch {
+        // Ignore cleanup errors
+      }
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
 
   return (
-    <div className="flex flex-col gap-3 border border-gray-300 rounded-lg overflow-hidden bg-gray-100">
-      {/* Header */}
-      <div className="bg-gray-800 text-white px-4 py-3 flex justify-between items-center">
-        <div className="flex-1">
-          <p className="font-medium truncate">{fileName}</p>
+    <div className="fixed inset-0 z-50 flex flex-col bg-neutral-950 text-white">
+      {/* Top Bar Header */}
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-neutral-800 bg-neutral-900 px-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <FileText className="size-5 shrink-0 text-red-400" />
+          <p className="truncate text-sm font-medium text-neutral-200" title={fileName}>
+            {fileName}
+          </p>
         </div>
-        <div className="flex gap-2">
-          <a
-            href={downloadUrl || pdfUrl}
-            download={fileName}
-            className="p-2 hover:bg-gray-700 rounded transition-colors"
-            title="Download PDF"
-          >
-            <Download size={20} />
-          </a>
+        <div className="flex items-center gap-2 shrink-0">
+          {(downloadUrl || pdfUrl) && (
+            <a
+              href={downloadUrl || pdfUrl}
+              download={fileName}
+              className="rounded p-2 text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white"
+              title="Download PDF"
+            >
+              <Download size={18} />
+            </a>
+          )}
           {onClose && (
             <button
+              type="button"
               onClick={onClose}
-              className="p-2 hover:bg-gray-700 rounded transition-colors"
-              title="Close"
+              className="rounded p-2 text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white"
+              title="Close viewer (Esc)"
             >
               <X size={20} />
             </button>
@@ -39,24 +92,14 @@ export default function PDFViewer({ pdfUrl, downloadUrl, fileName, onClose }: PD
         </div>
       </div>
 
-      {/* PDF Viewer */}
-      <div className={isFullscreen ? "fixed inset-0 z-50 bg-black" : "h-[600px]"}>
+      {/* PDF Viewport */}
+      <div className="relative flex-1 w-full h-full min-h-0 bg-neutral-950">
         <iframe
+          ref={iframeRef}
           src={`${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1`}
-          className="w-full h-full"
+          className="w-full h-full border-0"
           title={fileName}
         />
-      </div>
-
-      {/* Controls */}
-      <div className="bg-gray-700 text-white px-4 py-2 text-sm flex justify-between items-center">
-        <p>Use the PDF toolbar to navigate and zoom</p>
-        <button
-          onClick={() => setIsFullscreen(!isFullscreen)}
-          className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm transition-colors"
-        >
-          {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-        </button>
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import Landing from "./pages/Landing";
 import { routes } from "@/../routes";
 import SetupPassword from "./pages/SetupPassword";
 import { NavigationProgress } from "./components/navigation-progress";
+import { Toaster } from "./components/retroui/Sonner";
 
 // import StudentApp from "./pages/StudentInterfaces/StudentApp";
 // import TeacherApp from "./pages/teacher/TeacherApp";
@@ -86,6 +87,7 @@ const App = () => {
         <AcademicPeriodProvider>
           <BrowserRouter>
             <NavigationProgress />
+            <Toaster />
             <Routes>
               <Route path="/" element={<Landing />} />
               <Route path={routes.auth.login} element={<Login />} />

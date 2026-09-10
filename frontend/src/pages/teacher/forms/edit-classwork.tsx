@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { FileText, Pencil, Plus, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
@@ -44,6 +45,13 @@ export default function EditClassworkModal({
   const [isUploadingEditMaterials, setIsUploadingEditMaterials] = useState(false);
   const [error, setError] = useState("");
 
+  const setFormError = (msg: string) => {
+    setError(msg);
+    if (msg) {
+      toast.error(msg);
+    }
+  };
+
   useEffect(() => {
     setCurrentClasswork(classwork);
     setEditDraft(classworkToEditDraft(classwork));
@@ -59,7 +67,7 @@ export default function EditClassworkModal({
         !allowedClassworkMaterialExtensions.includes(fileExtension(file.name)),
     );
     if (invalid) {
-      setError(
+      setFormError(
         `${invalid.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`,
       );
       return;
@@ -68,7 +76,7 @@ export default function EditClassworkModal({
       (file) => file.size > maxClassworkMaterialSize,
     );
     if (oversized) {
-      setError(`${oversized.name} is larger than the 4 MB limit.`);
+      setFormError(`${oversized.name} is larger than the 10 MB limit.`);
       return;
     }
     setError("");
@@ -120,7 +128,7 @@ export default function EditClassworkModal({
       setEditMaterials([]);
       onSuccess(updated);
     } catch (err) {
-      setError(
+      setFormError(
         err instanceof Error
           ? err.message
           : "Unable to upload classwork material.",
@@ -154,7 +162,7 @@ export default function EditClassworkModal({
       setCurrentClasswork(updated);
       onSuccess(updated);
     } catch (err) {
-      setError(
+      setFormError(
         err instanceof Error
           ? err.message
           : "Unable to remove classwork material.",
@@ -173,14 +181,14 @@ export default function EditClassworkModal({
         ? Number(editDraft.total_points)
         : null;
     if (!editDraft.title.trim()) {
-      setError("Classwork title is required.");
+      setFormError("Classwork title is required.");
       return;
     }
     if (
       totalPoints !== null &&
       (!Number.isFinite(totalPoints) || totalPoints <= 0)
     ) {
-      setError("Total points must be greater than zero.");
+      setFormError("Total points must be greater than zero.");
       return;
     }
     const attempts = Number(editDraft.max_attempts);
@@ -188,7 +196,7 @@ export default function EditClassworkModal({
       isQuizType(editDraft.classwork_type) &&
       (!Number.isInteger(attempts) || attempts <= 0)
     ) {
-      setError("Allowed attempts must be a positive whole number.");
+      setFormError("Allowed attempts must be a positive whole number.");
       return;
     }
 
@@ -260,7 +268,7 @@ export default function EditClassworkModal({
       onSuccess(updated);
       onClose();
     } catch (err) {
-      setError(
+      setFormError(
         err instanceof Error ? err.message : "Unable to update classwork.",
       );
     } finally {
