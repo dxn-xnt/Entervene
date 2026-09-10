@@ -757,13 +757,13 @@ function BulkActionBar({
 }
 
 function groupStudents(students: ClassStudentListItem[]) {
-  const groups = ["Male", "Female", "Other", "Unspecified"].map(
+  const groups = ["Male", "Female", "Unspecified"].map(
     (gender) => [gender, students.filter((student) => normalizedGender(student.gender) === gender)] as const
   );
   return groups.filter(([gender, group]) => gender === "Male" || gender === "Female" || group.length > 0);
 }
 
 function normalizedGender(gender: string | null | undefined) {
-  if (gender === "Female" || gender === "Male" || gender === "Other") return gender;
+  if (gender === "Female" || gender === "Male") return gender;
   return "Unspecified";
 }

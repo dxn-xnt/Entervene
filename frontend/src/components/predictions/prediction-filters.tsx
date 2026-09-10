@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { DashboardFilters } from "@/lib/prediction-api";
+import type { DashboardFilters, RiskSummary } from "@/lib/prediction-api";
 import { Select } from "@/components/retroui/Select";
 import { Input } from "@/components/retroui/Input";
 import { Button } from "@/components/retroui/Button";
@@ -16,6 +16,8 @@ interface PredictionFiltersProps {
   search: string;
   hideClassFilter?: boolean;
   hideGradeFilter?: boolean;
+  hideSubjectFilter?: boolean;
+  riskSummary?: RiskSummary | null;
   onGradeChange?: (value: number | undefined) => void;
   onClassChange?: (value: number | undefined) => void;
   onSubjectChange: (value: number | undefined) => void;
@@ -45,6 +47,8 @@ export default function PredictionFilters({
   search,
   hideClassFilter = false,
   hideGradeFilter = false,
+  hideSubjectFilter = false,
+  riskSummary,
   onGradeChange,
   onClassChange,
   onSubjectChange,
@@ -75,7 +79,7 @@ export default function PredictionFilters({
   const hasActiveFilters =
     (!hideGradeFilter && gradeLevel !== undefined) ||
     (!hideClassFilter && classId !== undefined) ||
-    subjectId !== undefined ||
+    (!hideSubjectFilter && subjectId !== undefined) ||
     activePeriod !== undefined ||
     riskLevel !== undefined ||
     search.trim().length > 0;
@@ -142,24 +146,26 @@ export default function PredictionFilters({
         )}
 
         {/* Subject Filter */}
-        <Select
-          value={subjectId !== undefined ? String(subjectId) : "all"}
-          onValueChange={(v) =>
-            onSubjectChange(v === "all" ? undefined : Number(v))
-          }
-        >
-          <Select.Trigger className="w-[160px] bg-white">
-            <Select.Value placeholder="All Subjects" />
-          </Select.Trigger>
-          <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <Select.Item value="all">All Subjects</Select.Item>
-            {filters?.subjects.map((s) => (
-              <Select.Item key={s.subject_id} value={String(s.subject_id)}>
-                {s.subject_codename ? `${s.subject_name} (${s.subject_codename})` : s.subject_name}
-              </Select.Item>
-            ))}
-          </Select.Content>
-        </Select>
+        {!hideSubjectFilter && (
+          <Select
+            value={subjectId !== undefined ? String(subjectId) : "all"}
+            onValueChange={(v) =>
+              onSubjectChange(v === "all" ? undefined : Number(v))
+            }
+          >
+            <Select.Trigger className="w-[160px] bg-white">
+              <Select.Value placeholder="All Subjects" />
+            </Select.Trigger>
+            <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <Select.Item value="all">All Subjects</Select.Item>
+              {filters?.subjects.map((s) => (
+                <Select.Item key={s.subject_id} value={String(s.subject_id)}>
+                  {s.subject_codename ? `${s.subject_name} (${s.subject_codename})` : s.subject_name}
+                </Select.Item>
+              ))}
+            </Select.Content>
+          </Select>
+        )}
 
         {/* Term Filter (Binds directly to academic_period_id) */}
         <Select
@@ -191,15 +197,22 @@ export default function PredictionFilters({
           }
         >
           <Select.Trigger className="w-[170px] bg-white">
-            <Select.Value placeholder="All Risk Levels" />
+            <Select.Value placeholder="All Risk Levels">
+              {riskLevel ? (RISK_OPTIONS.find((r) => r.value === riskLevel)?.label ?? riskLevel) : "All Risk Levels"}
+            </Select.Value>
           </Select.Trigger>
           <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <Select.Item value="all">All Risk Levels</Select.Item>
-            {RISK_OPTIONS.map((r) => (
-              <Select.Item key={r.value} value={r.value}>
-                {r.label}
-              </Select.Item>
-            ))}
+            <Select.Item value="all">
+              All Risk Levels{riskSummary ? ` (${riskSummary.total})` : ""}
+            </Select.Item>
+            {RISK_OPTIONS.map((r) => {
+              const count = riskSummary ? riskSummary[r.value as keyof RiskSummary] : undefined;
+              return (
+                <Select.Item key={r.value} value={r.value}>
+                  {r.label}{count !== undefined ? ` (${count})` : ""}
+                </Select.Item>
+              );
+            })}
           </Select.Content>
         </Select>
 

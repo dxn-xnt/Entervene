@@ -178,7 +178,7 @@ def attach_staff_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
         last_name=capitalize_name(data.get("last_name")),
         dob=parse_optional_date(data),
         suffix=data.get("suffix", ""),
-        gender=data.get("gender", ""),
+        gender=data.get("gender", "").strip().capitalize() if data.get("gender") else "",
         contact_number=data.get("contact_number", ""),
         address=data.get("address", ""),
         email=data.get("email", ""),
@@ -201,9 +201,12 @@ def validate_prior_gwa(data: dict[str, Any]) -> Decimal | None:
 
 
 def attach_student_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
-    gender = data.get("gender", "").strip()
-    if not gender:
+    raw_gender = data.get("gender", "").strip()
+    if not raw_gender:
         raise HTTPException(status_code=400, detail="Gender is required for student profiles")
+    gender = raw_gender.capitalize()
+    if gender not in {"Male", "Female"}:
+        raise HTTPException(status_code=400, detail="Gender must be Male or Female")
         
     db.add(Student(
         student_id=uuid.uuid4(),

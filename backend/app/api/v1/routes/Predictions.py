@@ -229,12 +229,20 @@ def dashboard_grade_summaries(
 
 @router.get("/dashboard/filters", response_model=DashboardFilterOptionsResponse)
 def dashboard_filters(
+    class_id: int | None = Query(None, description="Optional class ID to scope subjects"),
+    academic_period_id: int | None = Query(None, description="Optional academic period ID to scope subjects"),
     current_user: dict = Depends(require_role("admin", "teacher")),
     staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
     is_admin = current_user.get("role") == "admin"
-    return get_dashboard_filter_options(db, staff_id=staff_id, is_admin=is_admin)
+    return get_dashboard_filter_options(
+        db,
+        staff_id=staff_id,
+        is_admin=is_admin,
+        class_id=class_id,
+        academic_period_id=academic_period_id,
+    )
 
 
 # ---------------------------------------------------------------------------

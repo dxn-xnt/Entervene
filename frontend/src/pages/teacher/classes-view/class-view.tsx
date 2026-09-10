@@ -2795,13 +2795,13 @@ function StateInline({ message }: { message: string }) {
 }
 
 function normalizedStudentGender(gender: string) {
-  if (gender === "Female" || gender === "Male" || gender === "Other")
+  if (gender === "Female" || gender === "Male")
     return gender;
   return "Unspecified";
 }
 
 function groupStudents(students: TeacherAdvisoryStudentItem[]) {
-  const order = ["Male", "Female", "Other", "Unspecified"];
+  const order = ["Male", "Female", "Unspecified"];
   return order
     .map(
       (gender) =>
