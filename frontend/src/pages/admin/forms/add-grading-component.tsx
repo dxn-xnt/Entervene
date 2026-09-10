@@ -61,7 +61,7 @@ function rowsFromOptions(options: GradingTemplateFormOptions | null): ComponentR
     : [
       { component_name: "Written Works", weight: 25, display_order: 1 },
       { component_name: "Performance Tasks", weight: 50, display_order: 2 },
-      { component_name: "Quarterly/Term Assessment", weight: 25, display_order: 3 },
+      { component_name: "Exams", weight: 25, display_order: 3 },
     ];
   return defaults.map((component, index) =>
     newComponentRow(index + 1, {

@@ -921,7 +921,7 @@ export default function AdminSubjects() {
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div>
                         <h2 className="text-xl font-semibold">Grading Setup</h2>
-                        <p className="text-sm">Create reusable grading templates such as Written Works, Performance Tasks, and Term Assessment.</p>
+                        <p className="text-sm">Create reusable grading templates such as Written Works, Performance Tasks, and Exams.</p>
                       </div>
                     </div>
                   </RetroCard>
