@@ -21,6 +21,7 @@ import AdjustSubstitutionModal, { type AdjustModalTarget } from "./forms/adjust-
 import {
   AlertCircle,
   Calendar,
+  CheckCircle2,
   Edit,
   Layers,
   Plus,
@@ -40,10 +41,10 @@ function getErrorMessage(error: unknown, fallback: string) {
 type SubstitutionTab = "all" | "active" | "completed" | "cancelled";
 
 const substitutionTabs: Array<TabItem<SubstitutionTab>> = [
-  { id: "all", label: "All" },
-  { id: "active", label: "Active" },
-  { id: "completed", label: "Completed" },
-  { id: "cancelled", label: "Cancelled" },
+  { id: "all", label: "All", icon: Layers },
+  { id: "active", label: "Active", icon: UserCheck },
+  { id: "completed", label: "Completed", icon: CheckCircle2 },
+  { id: "cancelled", label: "Cancelled", icon: XCircle },
 ];
 
 export default function AdminSubstitutions() {

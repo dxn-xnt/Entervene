@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Trash2, FileText } from "lucide-react";
+import { ArrowLeft, ArrowRight, FileText, Loader2, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import Field from "@/components/admin/classes/fields/Field";
 import { Button } from "@/components/retroui/Button";
@@ -812,7 +812,9 @@ export default function CreateClassworkModal({
             <Button
               variant="outline"
               onClick={onClose}
+              className="gap-2"
             >
+              <X className="size-4" />
               Close
             </Button>
             <div className="flex flex-row gap-3">
@@ -826,21 +828,29 @@ export default function CreateClassworkModal({
                   }
                 }}
                 disabled={isCreating}
+                className="gap-2"
               >
+                <ArrowLeft className="size-4" />
                 {createStep === "details" ? "Back" : "Previous"}
               </Button>
 
               {createStep === "details" ? (
-                <Button onClick={goToAssignStep} disabled={isCreating}>
+                <Button onClick={goToAssignStep} disabled={isCreating} className="gap-2">
                   Next
+                  <ArrowRight className="size-4" />
                 </Button>
               ) : (
                 <Button
                   onClick={handleCreateClasswork}
                   disabled={isCreating}
-                  className="bg-[#7ABA78] hover:bg-[#6ab368]"
+                  className="gap-2 bg-[#7ABA78] hover:bg-[#6ab368]"
                 >
-                  {isCreating ? "Create" : "Assign"}
+                  {isCreating ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Plus className="size-4" />
+                  )}
+                  {isCreating ? "Creating..." : "Assign"}
                 </Button>
               )}
             </div>

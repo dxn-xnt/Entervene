@@ -4,7 +4,7 @@ import AppLayout from "@/layouts/app-layout";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { NotificationCard } from "@/components/notification-card";
 import { Button } from "@/components/retroui/Button";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Bell, FileCheck, Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import {
@@ -17,9 +17,9 @@ import {
 type NotificationTabId = "all" | "interventions" | "submissions";
 
 const tabs: Array<TabItem<NotificationTabId>> = [
-  { id: "all", label: "All" },
-  { id: "interventions", label: "Interventions" },
-  { id: "submissions", label: "Submissions" },
+  { id: "all", label: "All", icon: Bell },
+  { id: "interventions", label: "Interventions", icon: AlertTriangle },
+  { id: "submissions", label: "Submissions", icon: FileCheck },
 ];
 
 export default function AdminNotifications() {

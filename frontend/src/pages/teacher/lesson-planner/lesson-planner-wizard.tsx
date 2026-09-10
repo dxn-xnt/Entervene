@@ -15,23 +15,24 @@ import {
   Loader2,
   AlertCircle,
   FileDown,
+  X,
 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
 
-import { InfoTab } from "./tabs/InfoTab";
-import { IntentionsTab } from "./tabs/IntentionsTab";
-import { LearningExpTab } from "./tabs/LearningExpTab";
-import { AssessmentTab } from "./tabs/AssessmentTab";
-import { WaysForwardTab } from "./tabs/WaysForwardTab";
-import { useLessonPlanner } from "./useLessonPlanner";
-import type { LessonPlanDraft } from "./useLessonPlanner";
+import { InfoTab } from "./tabs/info-tab";
+import { IntentionsTab } from "./tabs/intentions-tab";
+import { LearningExpTab } from "./tabs/learning-exp-tab";
+import { AssessmentTab } from "./tabs/assessment-tab";
+import { WaysForwardTab } from "./tabs/ways-forward-tab";
+import { useLessonPlanner } from "./use-lesson-planner";
+import type { LessonPlanDraft } from "./use-lesson-planner";
 import { useAuth } from "@/context/AuthContext";
 import {
   exportLessonPlanPDF,
   exportLessonPlanWord,
-} from "./LessonPlanExporter";
+} from "./lesson-plan-exporter";
 import { routes } from "@/../routes";
 
 const TABS = [
@@ -277,7 +278,9 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
               variant="outline"
               onClick={onClose}
               disabled={isSaving || isSubmitting}
+              className="gap-2"
             >
+              <X className="size-4" />
               Cancel
             </Button>
           )}

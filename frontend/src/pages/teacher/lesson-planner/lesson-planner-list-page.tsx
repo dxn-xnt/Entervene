@@ -14,6 +14,8 @@ import {
   Loader2,
   Search,
   Calendar,
+  CheckCircle2,
+  FileEdit,
 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { apiFetch } from "@/lib/api";
@@ -33,9 +35,9 @@ interface LessonPlanItem {
 }
 
 const TABS = [
-  { id: "all", label: "All Plans" },
-  { id: "submitted", label: "Submitted" },
-  { id: "drafts", label: "Drafts" },
+  { id: "all", label: "All Plans", icon: BookOpen },
+  { id: "submitted", label: "Submitted", icon: CheckCircle2 },
+  { id: "drafts", label: "Drafts", icon: FileEdit },
 ];
 
 export const LessonPlannerListPage: React.FC = () => {

@@ -4,7 +4,7 @@ import { Button } from "@/components/retroui/Button";
 import { NotificationCard } from "@/components/notification-card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
-import { Loader2 } from "lucide-react";
+import { Bell, Megaphone, FileCheck, AlertTriangle, Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import {
@@ -15,10 +15,10 @@ import {
 } from "@/lib/notifications-api";
 
 const tabs = [
-  { id: "all", label: "All" },
-  { id: "announcements", label: "Announcements" },
-  { id: "submissions", label: "Submissions" },
-  { id: "interventions", label: "Interventions" },
+  { id: "all", label: "All", icon: Bell },
+  { id: "announcements", label: "Announcements", icon: Megaphone },
+  { id: "submissions", label: "Submissions", icon: FileCheck },
+  { id: "interventions", label: "Interventions", icon: AlertTriangle },
 ];
 
 const Notifications = () => {

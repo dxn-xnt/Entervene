@@ -263,31 +263,25 @@ const TeacherClasses = () => {
                               )}
                             </div>
                             <div className="flex flex-row items-center gap-3">
-                              {group.loads.length > 1 && (
-                                <span className="text-xs text-muted-foreground hidden sm:inline">
-                                  Select a section below
-                                </span>
-                              )}
                               <Badge variant="secondary">
                                 {group.loads.length} section{group.loads.length !== 1 ? "s" : ""}
                               </Badge>
-                              {group.loads.length === 1 && (
-                                <Button
-                                  variant="secondary"
-                                  className="shadow-none"
-                                  size="icon"
-                                  title={`View ${group.subjectName}`}
-                                  onClick={() => {
-                                    if (group.loads[0]) {
-                                      navigate(
-                                        `/teacher/classes/${group.loads[0].class_id}/subjects/${group.subjectId}`,
-                                      );
-                                    }
-                                  }}
-                                >
-                                  <ArrowUpRight className="size-4" />
-                                </Button>
-                              )}
+
+                              <Button
+                                variant="secondary"
+                                className="shadow-none"
+                                size="icon"
+                                title={`View ${group.subjectName}`}
+                                onClick={() => {
+                                  if (group.loads[0]) {
+                                    navigate(
+                                      `/teacher/classes/${group.loads[0].class_id}/subjects/${group.subjectId}`,
+                                    );
+                                  }
+                                }}
+                              >
+                                <ArrowUpRight className="size-4" />
+                              </Button>
                             </div>
                           </div>
                           <div className="pt-3 flex gap-3 overflow-auto pb-2">

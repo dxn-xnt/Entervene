@@ -3,8 +3,8 @@ import { Label } from "@/components/retroui/Label";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Plus, Trash2 } from "lucide-react";
-import type { LessonPlanDraft, FlowStep } from "../useLessonPlanner";
-import { AIAssistButton } from "../components/AIAssistButton";
+import type { LessonPlanDraft, FlowStep } from "../use-lesson-planner";
+import { AIAssistButton } from "../components/ai-assist-button";
 
 interface LearningExpTabProps {
   draft: LessonPlanDraft;

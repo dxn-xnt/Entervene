@@ -1,4 +1,4 @@
-import type { LessonPlanDraft } from "./useLessonPlanner";
+import type { LessonPlanDraft } from "./use-lesson-planner";
 
 // Helper to format array items nicely
 function formatArray(arr: string[] | undefined): string {

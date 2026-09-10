@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { Dialog } from "@/components/retroui/Dialog";
-import { LessonPlannerWizard } from "./LessonPlannerWizard";
+import { LessonPlannerWizard } from "./lesson-planner-wizard";
 import { routes } from "@/../routes";
 
 interface LessonPlannerPageProps {

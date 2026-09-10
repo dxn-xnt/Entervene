@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { BookOpen, ChevronRight, ClipboardList } from "lucide-react";
 import { Tabs } from "@/components/retroui/Tabs";
 import SubjectLessonTab from "./tabs/subject-lesson-tab";
 import SubjectClassworkTab from "./tabs/subject-classwork-tab";
@@ -12,8 +12,8 @@ type SubjectDetailProps = {
 };
 
 const tabs = [
-  { id: "lessons", label: "Lessons" },
-  { id: "classwork", label: "Classwork" },
+  { id: "lessons", label: "Lessons", icon: BookOpen },
+  { id: "classwork", label: "Classwork", icon: ClipboardList },
 ];
 
 const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {

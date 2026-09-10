@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Plus } from "lucide-react";
+import { Check, Plus, UserPlus, Users } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
 import type {
   ClassAssignmentStudent,
@@ -36,8 +36,8 @@ type BulkAction =
   | null;
 
 const MODAL_TABS: Array<TabItem<ModalTab>> = [
-  { id: "enrolled", label: "Enrolled Students" },
-  { id: "available", label: "Unassigned Students" },
+  { id: "enrolled", label: "Enrolled Students", icon: Users },
+  { id: "available", label: "Unassigned Students", icon: UserPlus },
 ];
 
 export default function EditStudentList({
