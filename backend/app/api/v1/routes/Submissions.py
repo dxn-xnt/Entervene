@@ -136,10 +136,11 @@ def download_submission_attachment(
     attachment_id: int,
     request: Request,
     token: Optional[str] = Query(None, description="JWT token as fallback for browser-based access"),
+    inline: bool = Query(False, description="Display supported files in the browser instead of downloading"),
     db: Session = Depends(get_db),
 ):
     payload = auth_payload_from_request(request, ACCESS_COOKIE_NAME, token)
-    return download_submission_file(submission_id, attachment_id, payload, db)
+    return download_submission_file(submission_id, attachment_id, payload, inline, db)
 
 
 @router.put("/{submission_id}/grade", response_model=SubmissionResponse)

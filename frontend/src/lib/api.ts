@@ -439,7 +439,7 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   startProgress();
   try {
     const response = await request(path, init);
-    const isAuthRequest = path.startsWith("/api/v1/auth/");
+    const isAuthRequest = path.startsWith("/api/v1/auth/") || path.includes("/api/v1/auth/");
 
     if (response.status === 401 && !isAuthRequest && await refreshAccessToken()) {
       const retryResponse = await request(path, init);

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Download, FileText, X } from "lucide-react";
 
 interface PDFViewerProps {
@@ -51,15 +52,19 @@ export default function PDFViewer({
   }, [onClose]);
 
   useEffect(() => {
-    const originalOverflow = document.body.style.overflow;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
     return () => {
-      document.body.style.overflow = originalOverflow;
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
     };
   }, []);
 
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-neutral-950 text-white">
+  return createPortal(
+    <div className="fixed inset-0 z-[10000] flex h-full w-full flex-col bg-neutral-950 text-white m-0 p-0 border-0 overflow-hidden">
       {/* Top Bar Header */}
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-neutral-800 bg-neutral-900 px-4">
         <div className="flex min-w-0 items-center gap-2.5">
@@ -93,14 +98,17 @@ export default function PDFViewer({
       </div>
 
       {/* PDF Viewport */}
-      <div className="relative flex-1 w-full h-full min-h-0 bg-neutral-950">
+      <div className="relative flex-1 w-full min-h-0 bg-neutral-950 overflow-hidden">
         <iframe
           ref={iframeRef}
           src={`${pdfUrl}#toolbar=1&navpanes=0&scrollbar=1`}
-          className="w-full h-full border-0"
+          className="w-full h-full border-0 block"
+          style={{ overflow: "hidden" }}
+          scrolling="no"
           title={fileName}
         />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -807,6 +807,9 @@ def test_attachment_downloads_are_scoped_and_debug_route_is_removed(authz_contex
     assert c["client"].get(sub_url, headers=_bearer(c, "owner", "teacher")).status_code == 200
     assert c["client"].get(sub_url, headers=_bearer(c, "other_teacher", "teacher")).status_code == 403
     assert c["client"].get(sub_url, headers=_bearer(c, "student", "student")).status_code == 200
+    sub_inline_resp = c["client"].get(f"{sub_url}?inline=true", headers=_bearer(c, "owner", "teacher"))
+    assert sub_inline_resp.status_code == 200
+    assert "inline" in sub_inline_resp.headers.get("content-disposition", "")
     assert c["client"].get(sub_url, headers=_bearer(c, "other_student", "student")).status_code == 403
     assert c["client"].get(
         f"/api/v1/submissions/classwork/{c['classwork'].classwork_id}/debug"
