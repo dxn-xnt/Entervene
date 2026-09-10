@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, X, Pencil } from "lucide-react";
+import { Check, X, Pencil, BarChart3, HelpCircle, Users } from "lucide-react";
 import type { QuizAnalysis } from "./quiz-builder-types";
 import type { TeacherClasswork } from "@/types/classwork";
 import { Select } from "@/components/retroui/Select";
@@ -8,9 +8,9 @@ import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Card } from "@/components/retroui/Card";
 
 const QUIZ_TABS: Array<TabItem<"overview" | "questions" | "students">> = [
-  { id: "overview", label: "Overview" },
-  { id: "questions", label: "Questions" },
-  { id: "students", label: "Students" },
+  { id: "overview", label: "Overview", icon: BarChart3 },
+  { id: "questions", label: "Questions", icon: HelpCircle },
+  { id: "students", label: "Students", icon: Users },
 ];
 
 interface QuizAnalysisViewProps {

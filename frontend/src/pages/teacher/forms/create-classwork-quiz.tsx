@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { X, FileText, Pencil, Sparkles, FileDown, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, FileDown, FileText, Loader2, Pencil, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { Text } from "@/components/retroui/Text";
 import { Dialog } from "@/components/retroui/Dialog";
@@ -1860,7 +1860,9 @@ export default function CreateClassworkQuizModal({
                         }
                     }}
                     disabled={isCreating}
+                    className="gap-2"
                 >
+                    <ArrowLeft className="size-4" />
                     {createStep === "quiz-source" ? "Back" : "Previous"}
                 </Button>
 
@@ -1877,20 +1879,28 @@ export default function CreateClassworkQuizModal({
                             }
                         }}
                         disabled={isCreating}
+                        className="gap-2"
                     >
                         Next
+                        <ArrowRight className="size-4" />
                     </Button>
                 ) : createStep === "quiz" ? (
-                    <Button type="button" onClick={goToAssignStep} disabled={isCreating}>
+                    <Button type="button" onClick={goToAssignStep} disabled={isCreating} className="gap-2">
                         Next
+                        <ArrowRight className="size-4" />
                     </Button>
                 ) : (
                     <Button
                         type="button"
                         onClick={handleCreateQuiz}
                         disabled={isCreating}
-                        className="bg-[#7ABA78] hover:bg-[#6ab368]"
+                        className="gap-2 bg-[#7ABA78] hover:bg-[#6ab368]"
                     >
+                        {isCreating ? (
+                            <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                            <Plus className="size-4" />
+                        )}
                         {isCreating ? "Creating..." : "Assign"}
                     </Button>
                 )}

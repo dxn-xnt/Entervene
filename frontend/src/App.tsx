@@ -41,7 +41,6 @@ import TeacherClassDetail from "./pages/teacher/Classes/class-view";
 import SubjectDetails from "./pages/teacher/Classes/subject-details";
 import AdvisoryClassDetail from "./pages/teacher/Classes/advisory-class-view";
 import ClassSections from "./pages/teacher/Classes/class-section";
-import Subjects from "./pages/teacher/Classes/subjects";
 import TeacherClassworks from "./pages/teacher/classworks";
 // import TeacherLessons from "./pages/teacher/lessons";
 // import TeacherInterventions from "./pages/teacher/interventions";
@@ -121,10 +120,8 @@ const App = () => {
                 <Route path={routes.teacher.dashboard} element={<TeacherDashboard />} />
                 <Route path={routes.teacher.classes} element={<ClassesPage />} />
                 <Route path={routes.teacher.classSections} element={<ClassSections />} />
-                <Route path={routes.teacher.subjects} element={<Subjects />} />
                 <Route path={routes.teacher.classDetail} element={<TeacherClassDetail />} />
                 <Route path={routes.teacher.advisoryClassDetail} element={<AdvisoryClassDetail />} />
-                <Route path={routes.teacher.classSubjects} element={<Subjects />} />
                 <Route path={routes.teacher.subjectDetail} element={<SubjectDetails />} />
                 <Route path={routes.teacher.classworks} element={<TeacherClassworks />} />
                 <Route path={routes.teacher.classworkDetail} element={<ClassworkView />} />
