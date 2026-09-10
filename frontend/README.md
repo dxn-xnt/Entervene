@@ -1,5 +1,32 @@
 # React + TypeScript + Vite
 
+## Error and maintenance pages
+
+Run `npm run dev` from `frontend`, then open the URL printed by Vite with:
+
+- `/maintenance`: scheduled maintenance design.
+- `/unavailable`: service unavailable design.
+- `/error`: unexpected error design.
+- `/this-page-does-not-exist`: missing-page design (all unmatched routes use it).
+- `/unavailable.html`: standalone fallback; does not require React, JavaScript, login, or the backend.
+
+These preview URLs do not turn maintenance on. To show maintenance across the app,
+set `VITE_MAINTENANCE_MODE=true` in `frontend/.env.local`, then restart Vite.
+For production, set it before building and redeploy. Remove it or set it to `false`
+and rebuild/redeploy to restore the app. This is a frontend display switch, not a
+backend access control.
+
+An app-level error boundary displays the error design for React rendering failures.
+API failures continue to use their existing handling; they do not automatically
+redirect to `/unavailable`.
+
+For an actual origin outage, configure your hosting provider/reverse proxy to serve
+`dist/unavailable.html` with HTTP 503 for upstream 502/503/504 failures, and keep
+`dist/status.css` accessible on that fallback host. The static page is copied to
+`dist` during the build. It cannot be served by an origin that is itself completely
+offline; a working proxy/CDN or separate fallback host must serve it. Hosting
+configuration is deployment-specific and is not enabled by these preview routes.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
