@@ -334,8 +334,8 @@ export default function SubjectClassworkTab({
             ))}
           </section>
         ) : (
-          <Card className="flex flex-col justify-center items-center p-8">
-            <ClipboardList className="mx-auto mb-2 text-gray-400" size={28} />
+          <Card className="flex flex-col justify-center items-center p-12">
+            {/* <ClipboardList className="mx-auto mb-2 text-gray-400" size={28} /> */}
             <p className="font-bold">No classworks found</p>
             <p className="mt-1 text-sm text-gray-500">
               No classwork items match the selected filter criteria for this subject.

@@ -1032,9 +1032,9 @@ export default function TeacherAttendancePage() {
             {/* Scan Mode Tab */}
             <div className={activeTab === "scan" ? "flex flex-col gap-4" : "hidden"}>
                 {/* Session Context Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-4 p-4 border-2 border-border bg-card shadow-sm rounded-md">
+                <Card className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex flex-col gap-1 min-w-[280px] max-w-md w-full sm:w-auto">
-                    <Label className="font-sans text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    <Label className="font-sans text-xs font-bold uppercase tracking-wider text-black">
                       Current Class Session
                     </Label>
                     <Select
@@ -1093,7 +1093,7 @@ export default function TeacherAttendancePage() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </Card>
 
                 {/* Scanner & Live Feed Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
