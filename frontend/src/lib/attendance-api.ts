@@ -40,21 +40,6 @@ export type AttendanceSummaryResponse = {
   attendance_rate: number;
 };
 
-export type LeaveRequestItem = {
-  leave_request_id: number;
-  student_id: string;
-  student_name: string | null;
-  class_id: number;
-  start_date: string;
-  end_date: string;
-  reason: string;
-  status: LeaveStatus;
-  reviewed_by_staff_id: string | null;
-  reviewed_at: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-};
-
 export type QRScanAttendancePayload = {
   student_id: string;
   class_id: number;
@@ -113,46 +98,6 @@ export async function getClassAttendanceLogs(
   return res.json();
 }
 
-export async function getMyAttendanceSummary(
-  classId?: number,
-  subjectId?: number
-): Promise<AttendanceSummaryResponse> {
-  const params = new URLSearchParams();
-  if (classId) params.append("class_id", String(classId));
-  if (subjectId) params.append("subject_id", String(subjectId));
-
-  const queryString = params.toString() ? `?${params.toString()}` : "";
-  const res = await apiFetch(`/api/v1/attendance/student/my-summary${queryString}`);
-  if (!res.ok) throw new Error("Failed to fetch attendance summary");
-  return res.json();
-}
-
-export async function getMyAttendanceLogs(
-  classId?: number,
-  subjectId?: number
-): Promise<AttendanceRecordItem[]> {
-  const params = new URLSearchParams();
-  if (classId) params.append("class_id", String(classId));
-  if (subjectId) params.append("subject_id", String(subjectId));
-
-  const queryString = params.toString() ? `?${params.toString()}` : "";
-  const res = await apiFetch(`/api/v1/attendance/student/my-logs${queryString}`);
-  if (!res.ok) throw new Error("Failed to fetch attendance history");
-  return res.json();
-}
-
-export async function getMyLeaveRequests(
-  classId?: number
-): Promise<LeaveRequestItem[]> {
-  const params = new URLSearchParams();
-  if (classId) params.append("class_id", String(classId));
-
-  const queryString = params.toString() ? `?${params.toString()}` : "";
-  const res = await apiFetch(`/api/v1/attendance/student/my-leave-requests${queryString}`);
-  if (!res.ok) throw new Error("Failed to fetch leave requests");
-  return res.json();
-}
-
 export async function getStudentAttendanceSummary(
   studentId: string,
   classId?: number
@@ -166,44 +111,3 @@ export async function getStudentAttendanceSummary(
   return res.json();
 }
 
-export async function submitLeaveRequest(payload: {
-  class_id: number;
-  start_date: string;
-  end_date: string;
-  reason: string;
-}): Promise<LeaveRequestItem> {
-  const res = await apiFetch("/api/v1/attendance/leave-request", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error("Failed to submit leave request");
-  return res.json();
-}
-
-export async function getClassLeaveRequests(
-  classId: number,
-  status?: LeaveStatus
-): Promise<LeaveRequestItem[]> {
-  const params = new URLSearchParams();
-  if (status) params.append("status", status);
-
-  const queryString = params.toString() ? `?${params.toString()}` : "";
-  const res = await apiFetch(`/api/v1/attendance/class/${classId}/leave-requests${queryString}`);
-  if (!res.ok) throw new Error("Failed to fetch class leave requests");
-  return res.json();
-}
-
-export async function reviewLeaveRequest(
-  leaveRequestId: number,
-  status: LeaveStatus,
-  remarks?: string
-): Promise<LeaveRequestItem> {
-  const res = await apiFetch(`/api/v1/attendance/leave-request/${leaveRequestId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status, remarks }),
-  });
-  if (!res.ok) throw new Error("Failed to update leave request status");
-  return res.json();
-}

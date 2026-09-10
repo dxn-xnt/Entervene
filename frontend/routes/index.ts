@@ -65,7 +65,6 @@ export const routes = {
     todo: "/student/todo",
     todoView: "/student/todo/:subject/:quizTitle",
     notifications: "/student/notifications",
-    attendance: "/student/attendance",
 
     // Quiz attempt pages — assignmentId is classwork_assignment.assignment_id
     quizView: "/student/quiz/:assignmentId",
