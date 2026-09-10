@@ -17,6 +17,8 @@ import {
   Search,
   Clock,
 } from "lucide-react";
+import { Card } from "@/components/retroui/Card";
+import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
@@ -683,13 +685,13 @@ export function TOSGeneratorScreen({
   }, [savedExams, examFilterQuarter, examSearchQuery]);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col">
       {/* ── Breadcrumb & Action Header ── */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <Breadcrumb>
-          <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
+      <header className="flex flex-wrap items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
+        <Breadcrumb className="min-w-0 w-auto flex-1">
+          <Breadcrumb.List className="flex items-center gap-2 text-2xl md:text-4xl font-bold tracking-tight text-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-inherit">
             <Breadcrumb.Item>
-              <Breadcrumb.Link onClick={onBack} className="cursor-pointer hover:text-black">
+              <Breadcrumb.Link onClick={onBack} className="cursor-pointer hover:text-foreground">
                 {parentLabel || (currentSubjectName || "TOS Generator")}
               </Breadcrumb.Link>
             </Breadcrumb.Item>
@@ -702,14 +704,14 @@ export function TOSGeneratorScreen({
           </Breadcrumb.List>
         </Breadcrumb>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="ml-auto flex flex-row flex-nowrap items-center gap-2 [&>button]:shrink-0 [&>button]:whitespace-nowrap">
           {step === "saved-list" ? (
             <>
               <Button
                 variant="outline"
                 size="md"
                 onClick={onBack}
-                className="gap-2"
+                className="rounded-none gap-2"
               >
                 <ArrowLeft className="size-4" /> Back to {parentLabel || (currentSubjectName || "TOS Generator")}
               </Button>
@@ -717,7 +719,7 @@ export function TOSGeneratorScreen({
                 variant="default"
                 size="md"
                 onClick={startNewExam}
-                className="gap-2"
+                className="rounded-none gap-2"
               >
                 <Plus className="size-4" /> New TOS
               </Button>
@@ -728,7 +730,7 @@ export function TOSGeneratorScreen({
                 variant="outline"
                 size="md"
                 onClick={onBack}
-                className="gap-2"
+                className="rounded-none gap-2"
               >
                 <ArrowLeft className="size-4" /> Back to {parentLabel || "TOS Exams"}
               </Button>
@@ -737,7 +739,7 @@ export function TOSGeneratorScreen({
                 variant="outline"
                 disabled={isSaving}
                 onClick={handleSaveDraft}
-                className="gap-2"
+                className="rounded-none gap-2"
               >
                 <Save className="size-4" />
                 {isSaving ? "Saving..." : "Save Draft"}
@@ -745,23 +747,22 @@ export function TOSGeneratorScreen({
             </>
           )}
         </div>
-      </div>
-
-      <div className="-mx-4 md:-mx-6 border-b-2 border-black" />
+      </header>
 
       {/* ── Main Container (Full-Width, No Sidebar Inside Wizard) ── */}
-      <div className="rounded-lg border-2 border-black bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
+      <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
+      <Card className="block p-0 rounded-none border-2 border-border bg-card shadow-lg overflow-hidden">
         {/* Top Banner */}
-        <div className="flex flex-col gap-2 border-b-2 border-black bg-[#E3F2FD] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 border-b-2 border-border bg-accent px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg border-2 border-black bg-[#FFD54F] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-              <TableProperties className="h-5 w-5 text-black" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-none border-2 border-border bg-primary shadow-sm">
+              <TableProperties className="h-5 w-5 text-foreground" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-black">
+              <h2 className="text-lg font-bold text-foreground">
                 {step === "saved-list" ? "My TOS Exams" : "Table of Specifications (TOS) Generator"}
               </h2>
-              <p className="text-xs font-semibold text-gray-700">
+              <p className="text-xs font-semibold text-muted-foreground">
                 {currentSubjectName
                   ? `${currentSubjectName} • ${step === "saved-list" ? "Assessment Blueprint & Question Archive" : `${quarter} Assessment Blueprint & AI Exam Creator (${language})`}`
                   : `Select subject curriculum & configure ${quarter} blueprint (${language})`}
@@ -769,7 +770,7 @@ export function TOSGeneratorScreen({
             </div>
           </div>
           {saveSuccessMsg && (
-            <span className="text-xs font-bold text-green-800 bg-green-100 border border-green-700 rounded px-2.5 py-1">
+            <span className="text-xs font-bold text-foreground bg-success/10 border border-success rounded-none px-2.5 py-1">
               {saveSuccessMsg}
             </span>
           )}
@@ -777,63 +778,63 @@ export function TOSGeneratorScreen({
 
         {/* Stepper Navigation (Only shown when inside wizard steps) */}
         {step !== "saved-list" && (
-          <div className="flex items-center justify-between border-b-2 border-black bg-[#FFF9C4] px-6 py-2.5 text-xs font-bold">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-border bg-accent px-6 py-2.5 text-xs font-bold">
             <div className="flex items-center gap-2 overflow-x-auto">
               <button
                 onClick={() => setStep("test-parts")}
-                className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${step === "test-parts" ? "border border-black bg-[#FFD54F] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "text-gray-600 hover:text-black"}`}
+                className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 ${step === "test-parts" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-black text-[10px] text-white">1</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded-none bg-secondary text-[10px] text-secondary-foreground">1</span>
                 Test Parts
               </button>
-              <span className="text-gray-400">→</span>
+              <span className="text-muted-foreground">→</span>
               <button
                 onClick={() => setStep("competencies")}
-                className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${step === "competencies" ? "border border-black bg-[#FFD54F] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "text-gray-600 hover:text-black"}`}
+                className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 ${step === "competencies" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-black text-[10px] text-white">2</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded-none bg-secondary text-[10px] text-secondary-foreground">2</span>
                 Competencies
               </button>
-              <span className="text-gray-400">→</span>
+              <span className="text-muted-foreground">→</span>
               <button
                 onClick={() => setStep("difficulty")}
-                className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${step === "difficulty" ? "border border-black bg-[#FFD54F] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "text-gray-600 hover:text-black"}`}
+                className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 ${step === "difficulty" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-black text-[10px] text-white">3</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded-none bg-secondary text-[10px] text-secondary-foreground">3</span>
                 Difficulty
               </button>
-              <span className="text-gray-400">→</span>
+              <span className="text-muted-foreground">→</span>
               <button
                 onClick={() => {
                   handleRecalculate();
                   setStep("blueprint");
                 }}
-                className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${step === "blueprint" ? "border border-black bg-[#FFD54F] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "text-gray-600 hover:text-black"}`}
+                className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 ${step === "blueprint" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-black text-[10px] text-white">4</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded-none bg-secondary text-[10px] text-secondary-foreground">4</span>
                 Blueprint Table
               </button>
-              <span className="text-gray-400">→</span>
+              <span className="text-muted-foreground">→</span>
               <button
                 disabled={rows.length === 0}
                 onClick={() => setStep("ai-review")}
-                className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${step === "ai-review" ? "border border-black bg-[#FFD54F] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "text-gray-600 hover:text-black"} disabled:opacity-40`}
+                className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 ${step === "ai-review" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"} disabled:opacity-40`}
               >
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-black text-[10px] text-white">5</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded-none bg-secondary text-[10px] text-secondary-foreground">5</span>
                 Questions ({questions.length})
               </button>
-              <span className="text-gray-400">→</span>
+              <span className="text-muted-foreground">→</span>
               <button
                 disabled={questions.length === 0}
                 onClick={() => setStep("export")}
-                className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${step === "export" ? "border border-black bg-[#FFD54F] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "text-gray-600 hover:text-black"} disabled:opacity-40`}
+                className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 ${step === "export" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"} disabled:opacity-40`}
               >
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-black text-[10px] text-white">6</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded-none bg-secondary text-[10px] text-secondary-foreground">6</span>
                 Export
               </button>
             </div>
 
-            <Badge variant="outline" className="border-black bg-white font-bold">
+            <Badge variant="outline" className="rounded-none border-border bg-card font-bold">
               Total Target Items: {totalItems}
             </Badge>
           </div>
@@ -847,7 +848,7 @@ export function TOSGeneratorScreen({
           {step === "saved-list" && (
             <div className="space-y-6">
               {/* Filter & Action Toolbar */}
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b-2 border-black pb-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b-2 border-border pb-4">
                 {/* Academic Term Tabs */}
                 <div className="flex items-center gap-1.5 overflow-x-auto">
                   {(["ALL", "Term 1", "Term 2", "Term 3"] as const).map((qTab) => (
@@ -855,9 +856,9 @@ export function TOSGeneratorScreen({
                       key={qTab}
                       type="button"
                       onClick={() => setExamFilterQuarter(qTab)}
-                      className={`px-3 py-1 text-xs font-black rounded border-2 transition-all ${examFilterQuarter === qTab
-                          ? "border-black bg-[#FFD54F] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                          : "border-transparent bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      className={`px-3 py-1 text-xs font-black rounded-none border-2 transition-all ${examFilterQuarter === qTab
+                          ? "border-border bg-primary text-primary-foreground shadow-sm"
+                          : "border-transparent bg-muted/20 text-muted-foreground hover:bg-muted/20"
                         }`}
                     >
                       {qTab === "ALL" ? "All Terms" : `${qTab} Exams`}
@@ -868,17 +869,17 @@ export function TOSGeneratorScreen({
                 {/* Search Bar & New Button */}
                 <div className="flex items-center gap-2">
                   <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                     <Input
                       placeholder="Search exam title..."
                       value={examSearchQuery}
                       onChange={(e) => setExamSearchQuery(e.target.value)}
-                      className="h-8 w-48 pl-8 text-xs font-semibold border-2 border-black"
+                      className="rounded-none h-8 w-48 pl-8 text-xs font-semibold border-2 border-border"
                     />
                   </div>
                   <Button
                     size="sm"
-                    className="border-2 border-black bg-[#FFD54F] font-black text-xs text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                    className="rounded-none border-2 border-border bg-primary font-black text-xs text-primary-foreground shadow-sm hover:bg-primary-hover"
                     onClick={startNewExam}
                   >
                     <Plus className="mr-1 h-3.5 w-3.5" /> New TOS
@@ -889,16 +890,16 @@ export function TOSGeneratorScreen({
               {/* Exam Cards Grid */}
               {isLoadingSaved ? (
                 <div className="py-16 text-center">
-                  <RefreshCw className="mx-auto h-8 w-8 animate-spin text-gray-400" />
-                  <p className="mt-3 text-xs font-bold text-gray-600">Loading your Table of Specifications...</p>
+                  <RefreshCw className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+                  <p className="mt-3 text-xs font-bold text-muted-foreground">Loading your Table of Specifications...</p>
                 </div>
               ) : filteredSavedExams.length === 0 ? (
-                <div className="rounded-lg border-2 border-dashed border-black/30 bg-[#FAFAFA] px-6 py-12 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl border-2 border-black bg-[#FFD54F] shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                    <TableProperties className="h-7 w-7 text-black" />
+                <Card className="block rounded-none border-2 border-dashed border-border/30 bg-muted/20 px-6 py-12 text-center shadow-md">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-none border-2 border-border bg-primary shadow">
+                    <TableProperties className="h-7 w-7 text-foreground" />
                   </div>
-                  <h3 className="mt-4 text-base font-bold text-black">No TOS Exams Found</h3>
-                  <p className="mx-auto mt-1 max-w-sm text-sm font-normal text-gray-500">
+                  <h3 className="mt-4 text-base font-bold text-foreground">No TOS Exams Found</h3>
+                  <p className="mx-auto mt-1 max-w-sm text-sm font-normal text-muted-foreground">
                     {savedExams.length === 0
                       ? "Create your first Table of Specifications blueprint and exam questionnaire."
                       : "No exam matches the selected quarter or search query."}
@@ -906,60 +907,60 @@ export function TOSGeneratorScreen({
                   <Button
                     size="sm"
                     onClick={startNewExam}
-                    className="mt-5 border-2 border-black bg-[#FFD54F] font-black text-xs text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                    className="rounded-none mt-5 border-2 border-border bg-primary font-black text-xs text-primary-foreground shadow hover:bg-primary-hover"
                   >
                     <Plus className="mr-1.5 h-4 w-4" /> Create New TOS
                   </Button>
-                </div>
+                </Card>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {filteredSavedExams.map((ex) => {
                     const isFinal = ex.status === "FINALIZED" || ex.question_count > 0;
 
                     return (
-                      <div
+                      <Card
                         key={ex.tos_exam_id}
-                        className="flex flex-col justify-between rounded-lg border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-transform hover:-translate-y-0.5"
+                        className="flex flex-col justify-between rounded-none border-2 border-border bg-card p-5 shadow-md transition-transform hover:-translate-y-0.5"
                       >
                         <div>
                           {/* Top Badges */}
-                          <div className="flex items-center justify-between gap-2 border-b border-black/10 pb-2.5">
+                          <div className="flex items-center justify-between gap-2 border-b border-border/10 pb-2.5">
                             <Badge
                               variant="outline"
-                              className="border-black bg-[#E3F2FD] text-blue-950 font-black text-[10px]"
+                              className="rounded-none border-border bg-accent text-primary-foreground font-black text-[10px]"
                             >
                               {ex.quarter || "Term 1"}
                             </Badge>
                             <Badge
                               variant="outline"
-                              className={`border-black font-black text-[10px] ${isFinal ? "bg-[#C8E6C9] text-green-950" : "bg-[#FFF9C4] text-yellow-950"}`}
+                              className={`rounded-none border-border font-black text-[10px] ${isFinal ? "bg-success/20 text-foreground" : "bg-accent text-primary-foreground"}`}
                             >
                               {isFinal ? "COMPLETED" : "DRAFT"}
                             </Badge>
                           </div>
 
                           {/* Title */}
-                          <h4 className="mt-3 text-sm font-black text-black line-clamp-2">
+                          <h4 className="rounded-none mt-3 text-sm font-black text-foreground line-clamp-2">
                             {ex.title}
                           </h4>
-                          <p className="text-[11px] font-semibold text-gray-500 mt-0.5">
+                          <p className="text-[11px] font-semibold text-muted-foreground mt-0.5">
                             {ex.subject_name || currentSubjectName}
                           </p>
 
                           {/* Metric Badges */}
                           <div className="flex flex-wrap items-center gap-1.5 text-[11px] pt-1">
-                            <span className="rounded border border-black/30 bg-gray-50 px-2 py-0.5 font-bold text-gray-700">
+                            <span className="rounded-none border border-border/30 bg-muted/20 px-2 py-0.5 font-bold text-muted-foreground">
                               {ex.total_items || 0} Target Items
                             </span>
-                            <span className="rounded border border-black/30 bg-purple-50 px-2 py-0.5 font-bold text-purple-900">
+                            <span className="rounded-none border border-border/30 bg-accent px-2 py-0.5 font-bold text-primary-foreground">
                               {ex.question_count || 0} Questions
                             </span>
                           </div>
                         </div>
 
                         {/* Card Footer */}
-                        <div className="mt-5 flex items-center justify-between border-t border-black/20 pt-3 text-[11px]">
-                          <span className="flex items-center gap-1 text-gray-400 font-medium">
+                        <div className="mt-5 flex items-center justify-between border-t border-border/20 pt-3 text-[11px]">
+                          <span className="flex items-center gap-1 text-muted-foreground font-medium">
                             <Clock className="h-3 w-3" />
                             {new Date(ex.updated_at || ex.created_at).toLocaleDateString()}
                           </span>
@@ -970,7 +971,7 @@ export function TOSGeneratorScreen({
                               variant="outline"
                               onClick={() => handleDeleteExam(ex.tos_exam_id)}
                               disabled={deletingExamId === ex.tos_exam_id}
-                              className="h-7 border-2 border-black bg-red-50 px-2 text-xs font-bold text-red-700 hover:bg-red-100 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                              className="rounded-none h-7 border-2 border-border bg-destructive/10 px-2 text-xs font-bold text-destructive hover:bg-destructive/10 shadow-xs"
                               title="Delete Draft"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -978,13 +979,13 @@ export function TOSGeneratorScreen({
                             <Button
                               size="sm"
                               onClick={() => handleLoadExam(ex.tos_exam_id)}
-                              className="h-7 border-2 border-black bg-[#FFD54F] px-3 text-xs font-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                              className="rounded-none h-7 border-2 border-border bg-primary px-3 text-xs font-black text-primary-foreground shadow-sm hover:bg-primary-hover"
                             >
                               Open Exam <ArrowRight className="ml-1 h-3 w-3" />
                             </Button>
                           </div>
                         </div>
-                      </div>
+                      </Card>
                     );
                   })}
                 </div>
@@ -999,69 +1000,74 @@ export function TOSGeneratorScreen({
             <div className="space-y-6">
               <div>
                 <h3 className="text-base font-bold">Step 1 — Configure Assessment Parts</h3>
-                <p className="text-xs text-gray-600">
+                <p className="text-xs text-muted-foreground">
                   Define the subject curriculum, exam language, and item-type composition. The sum of all parts determines your total target items.
                 </p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div>
-                  <label className="text-xs font-bold text-gray-700 block">Subject Curriculum</label>
-                  <select
-                    value={currentSubjectId || ""}
-                    onChange={(e) => handleSubjectChange(Number(e.target.value))}
-                    className="mt-1 w-full rounded-md border-2 border-black bg-white px-3 py-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none cursor-pointer"
-                  >
-                    <option value="">-- Select Subject Curriculum --</option>
-                    {availableSubjects.map((s) => (
-                      <option key={s.subject_id} value={s.subject_id}>
-                        {s.subject_name} {s.section_name ? `(${s.section_name})` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="text-xs font-bold text-muted-foreground block">Subject Curriculum</label>
+                  <Select value={currentSubjectId ? String(currentSubjectId) : ""}
+                    onValueChange={(value) => handleSubjectChange(Number(value))}>
+                    <Select.Trigger aria-label="Subject Curriculum" className="mt-1 w-full min-w-0 rounded-none text-xs font-bold">
+                      <Select.Value placeholder="-- Select Subject Curriculum --" />
+                    </Select.Trigger>
+                    <Select.Content className="rounded-none border-2">
+                      {availableSubjects.map((s) => (
+                        <Select.Item key={s.subject_id} value={String(s.subject_id)}>
+                          {s.subject_name} {s.section_name ? `(${s.section_name})` : ""}
+                        </Select.Item>
+                      ))}
+                    </Select.Content>
+                  </Select>
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-gray-700 block">Exam Language</label>
-                  <select
-                    value={language}
-                    onChange={(e) => setLanguage(e.target.value as "English" | "Filipino")}
-                    className="mt-1 w-full rounded-md border-2 border-black bg-white px-3 py-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none cursor-pointer"
-                  >
-                    <option value="English">English</option>
-                    <option value="Filipino">Filipino</option>
-                  </select>
+                  <label className="text-xs font-bold text-muted-foreground block">Exam Language</label>
+                  <Select value={language}
+                    onValueChange={(value) => setLanguage(value as "English" | "Filipino")}>
+                    <Select.Trigger aria-label="Exam Language" className="mt-1 w-full min-w-0 rounded-none text-xs font-bold">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content className="rounded-none border-2">
+                      <Select.Item value="English">English</Select.Item>
+                      <Select.Item value="Filipino">Filipino</Select.Item>
+                    </Select.Content>
+                  </Select>
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-gray-700 block">Exam Title</label>
+                  <label className="text-xs font-bold text-muted-foreground block">Exam Title</label>
                   <Input
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="e.g. Summative Assessment 1"
-                    className="mt-1 border-2 border-black font-semibold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    className="rounded-none mt-1 border-2 border-border font-semibold shadow-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-gray-700 block">Academic Term (Trimester)</label>
-                  <select
-                    value={quarter}
-                    onChange={(e) => setQuarter(e.target.value)}
-                    className="mt-1 w-full rounded-md border-2 border-black bg-white px-3 py-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none cursor-pointer"
-                  >
-                    <option value="Term 1">1st Term (Term 1)</option>
-                    <option value="Term 2">2nd Term (Term 2)</option>
-                    <option value="Term 3">3rd Term (Term 3)</option>
-                  </select>
+                  <label className="text-xs font-bold text-muted-foreground block">Academic Term (Trimester)</label>
+                  <Select value={quarter}
+                    onValueChange={(value) => setQuarter(value)}>
+                    <Select.Trigger aria-label="Academic Term" className="mt-1 w-full min-w-0 rounded-none text-xs font-bold">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content className="rounded-none border-2">
+                      <Select.Item value="Term 1">1st Term (Term 1)</Select.Item>
+                      <Select.Item value="Term 2">2nd Term (Term 2)</Select.Item>
+                      <Select.Item value="Term 3">3rd Term (Term 3)</Select.Item>
+                    </Select.Content>
+                  </Select>
                 </div>
               </div>
 
-              <div className="rounded-lg border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                <div className="flex items-center justify-between border-b-2 border-black pb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-gray-700">Question Types & Item Composition</span>
-                  <span className="text-xs font-bold text-black">
-                    Total Items Target: <span className="text-lg font-black text-blue-700">{totalItems}</span>
+              <Card className="block rounded-none border-2 border-border bg-card p-5 shadow-md">
+                <div className="flex items-center justify-between border-b-2 border-border pb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Question Types & Item Composition</span>
+                  <span className="text-xs font-bold text-foreground">
+                    Total Items Target: <span className="text-lg font-black text-foreground">{totalItems}</span>
                   </span>
                 </div>
 
@@ -1081,11 +1087,11 @@ export function TOSGeneratorScreen({
                     return (
                       <div
                         key={t.type}
-                        className="flex flex-col gap-2 rounded-md border-2 border-black bg-[#FAFAFA] p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] sm:flex-row sm:items-center sm:justify-between"
+                        className="flex flex-col gap-2 rounded-none border-2 border-border bg-muted/20 p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div>
-                          <p className="text-xs font-black text-black">{t.label}</p>
-                          <p className="text-[11px] text-gray-500 font-medium">Tag: {t.type}</p>
+                          <p className="text-xs font-black text-foreground">{t.label}</p>
+                          <p className="text-[11px] text-muted-foreground font-medium">Tag: {t.type}</p>
                         </div>
 
                         <div className="flex items-center gap-2">
@@ -1101,7 +1107,7 @@ export function TOSGeneratorScreen({
                                   setTestParts(filtered);
                                 }
                               }}
-                              className={`rounded border-2 px-2.5 py-1 text-[11px] font-extrabold transition-all ${count === preset ? "border-black bg-[#FFD54F] text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "border-black/30 bg-white text-gray-700 hover:bg-yellow-50"}`}
+                              className={`rounded-none border-2 px-2.5 py-1 text-[11px] font-extrabold transition-all ${count === preset ? "border-border bg-primary text-primary-foreground shadow-sm" : "border-border/30 bg-card text-muted-foreground hover:bg-accent"}`}
                             >
                               {preset}
                             </button>
@@ -1119,27 +1125,27 @@ export function TOSGeneratorScreen({
                                 setTestParts(filtered);
                               }
                             }}
-                            className="h-9 w-20 border-2 border-black text-center font-black text-sm"
+                            className="rounded-none h-9 w-20 border-2 border-border text-center font-black text-sm"
                           />
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              </div>
+              </Card>
 
               <div className="flex justify-between gap-2 pt-2">
                 <Button
                   variant="outline"
                   onClick={onBack}
-                  className="border-2 border-black font-bold"
+                  className="rounded-none border-2 border-border font-bold"
                 >
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Cancel & Back
                 </Button>
                 <Button
                   disabled={totalItems <= 0 || !currentSubjectId}
                   onClick={() => setStep("competencies")}
-                  className="border-2 border-black bg-[#FFD54F] font-bold text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28] disabled:opacity-50"
+                  className="rounded-none border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover disabled:opacity-50"
                 >
                   Next: Competencies & Days <ArrowRight className="ml-1.5 h-4 w-4" />
                 </Button>
@@ -1155,37 +1161,33 @@ export function TOSGeneratorScreen({
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 className="text-base font-bold">Step 2 — Learning Competencies & Days Taught</h3>
-                  <p className="text-xs text-gray-600">
+                  <p className="text-xs text-muted-foreground">
                     Select curriculum competencies from your database or add ad-hoc topics. Enter the number of days taught per competency.
                   </p>
                 </div>
-                <Badge variant="outline" className="border-black bg-[#E3F2FD] font-bold text-xs py-1 px-2.5 self-start sm:self-auto">
+                <Badge variant="outline" className="rounded-none border-border bg-accent font-bold text-xs py-1 px-2.5 self-start sm:self-auto">
                   Total Days: {totalDays}
                 </Badge>
               </div>
 
               {/* Competency Picker Bar */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border-2 border-black bg-[#FFF9C4] p-3.5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              <Card className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-none border-2 border-border bg-accent p-3.5 shadow">
                 <div className="flex-1">
-                  <select
-                    onChange={(e) => {
-                      handleSelectCompetency(e.target.value);
-                      e.target.value = "";
-                    }}
-                    className="w-full h-9 rounded border-2 border-black bg-white px-3 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] outline-none cursor-pointer focus:bg-yellow-50"
-                  >
-                    <option value="">
-                      {availableCompetencies.length > 0
+                  <Select value="" onValueChange={handleSelectCompetency} disabled={availableCompetencies.length === 0}>
+                    <Select.Trigger aria-label="Add Curriculum Competency" className="mt-1 w-full min-w-0 rounded-none text-xs font-bold">
+                      <Select.Value placeholder={availableCompetencies.length > 0
                         ? `+ Select Competency from Curriculum (${availableCompetencies.length} available)...`
-                        : "All curriculum competencies added to assessment"}
-                    </option>
-                    {availableCompetencies.map((c) => (
-                      <option key={c.competency_id} value={c.competency_id}>
-                        {c.competency_code ? `[${c.competency_code}] ` : ""}
-                        {c.statement.length > 90 ? `${c.statement.substring(0, 90)}...` : c.statement}
-                      </option>
-                    ))}
-                  </select>
+                        : "All curriculum competencies added to assessment"} />
+                    </Select.Trigger>
+                    <Select.Content className="rounded-none border-2">
+                      {availableCompetencies.map((c) => (
+                        <Select.Item key={c.competency_id} value={String(c.competency_id)}>
+                          {c.competency_code ? `[${c.competency_code}] ` : ""}
+                          {c.statement.length > 90 ? `${c.statement.substring(0,90)}...` : c.statement}
+                        </Select.Item>
+                      ))}
+                    </Select.Content>
+                  </Select>
                 </div>
 
                 <Button
@@ -1198,46 +1200,46 @@ export function TOSGeneratorScreen({
                       { label: `Ad-hoc Topic #${compInputs.length + 1}`, days: 2, is_adhoc: true },
                     ]);
                   }}
-                  className="border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100 h-9 text-xs shrink-0"
+                  className="rounded-none border-2 border-border bg-card font-bold shadow-sm hover:bg-muted/20 h-9 text-xs shrink-0"
                 >
                   <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Ad-hoc Topic
                 </Button>
-              </div>
+              </Card>
 
               {/* Competency Items List */}
               <div className="space-y-3">
                 {compInputs.length === 0 ? (
-                  <div className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-12 text-center">
-                    <p className="text-xs font-bold text-gray-600">No competencies selected yet.</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">
+                  <Card className="block rounded-none border-2 border-dashed border-border bg-muted/20 px-6 py-12 text-center">
+                    <p className="text-xs font-bold text-muted-foreground">No competencies selected yet.</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
                       Use the dropdown above to add competencies from your curriculum bank or add an ad-hoc topic.
                     </p>
-                  </div>
+                  </Card>
                 ) : (
                   compInputs.map((comp, idx) => {
                     const isCurriculum = !!comp.competency_id;
 
                     return (
-                      <div
+                      <Card
                         key={idx}
-                        className="flex flex-col gap-2.5 rounded-lg border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                        className="flex flex-col gap-2.5 rounded-none border-2 border-border bg-card p-4 shadow"
                       >
                         {/* 1. Top row: Competency name/code (Bold, larger font) + Weight % badge aligned top-right (small/muted) */}
-                        <div className="flex items-center justify-between gap-2 border-b border-black/10 pb-2">
+                        <div className="flex items-center justify-between gap-2 border-b border-border/10 pb-2">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm sm:text-base font-black text-black">
+                            <span className="text-sm sm:text-base font-black text-foreground">
                               {comp.code || `Competency #${idx + 1}`}
                             </span>
                             <Badge
                               variant="outline"
-                              className={`border-black text-[10px] font-black ${isCurriculum ? "bg-[#E3F2FD] text-blue-950" : "bg-amber-100 text-amber-950"
+                              className={`rounded-none border-border text-[10px] font-black ${isCurriculum ? "bg-accent text-primary-foreground" : "bg-accent text-primary-foreground"
                                 }`}
                             >
                               {isCurriculum ? "CURRICULUM" : "AD-HOC TOPIC"}
                             </Badge>
                           </div>
 
-                          <span className="rounded border border-black/30 bg-gray-100 px-2 py-0.5 text-[11px] font-bold text-gray-600 shrink-0">
+                          <span className="rounded-none border border-border/30 bg-muted/20 px-2 py-0.5 text-[11px] font-bold text-muted-foreground shrink-0">
                             {totalDays > 0 ? `${((comp.days / totalDays) * 100).toFixed(1)}% Weight` : "0% Weight"}
                           </span>
                         </div>
@@ -1245,12 +1247,12 @@ export function TOSGeneratorScreen({
                         {/* 2. Middle: Full competency statement wrapped across multiple lines — no truncation, regular weight */}
                         <div className="py-1">
                           {isCurriculum ? (
-                            <p className="text-xs sm:text-sm font-medium text-gray-800 leading-relaxed whitespace-normal break-words select-text">
+                            <p className="text-xs sm:text-sm font-medium text-foreground leading-relaxed whitespace-normal break-words select-text">
                               {comp.label}
                             </p>
                           ) : (
                             <div>
-                              <label className="text-[11px] font-bold text-gray-600 block mb-1">Topic Description</label>
+                              <label className="text-[11px] font-bold text-muted-foreground block mb-1">Topic Description</label>
                               <textarea
                                 rows={2}
                                 value={comp.label}
@@ -1260,16 +1262,16 @@ export function TOSGeneratorScreen({
                                   setCompInputs(updated);
                                 }}
                                 placeholder="Enter ad-hoc topic description..."
-                                className="w-full rounded border-2 border-black/60 bg-white p-2 text-xs sm:text-sm font-medium text-gray-900 leading-relaxed outline-none focus:border-black"
+                                className="w-full rounded-none border-2 border-border/60 bg-card p-2 text-xs sm:text-sm font-medium text-foreground leading-relaxed outline-none focus:border-border"
                               />
                             </div>
                           )}
                         </div>
 
                         {/* 3. Bottom row: Days Taught input + delete icon */}
-                        <div className="flex items-center justify-between border-t border-black/10 pt-2.5">
+                        <div className="flex items-center justify-between border-t border-border/10 pt-2.5">
                           <div className="flex items-center gap-2">
-                            <label className="text-xs font-bold text-gray-700">Days Taught:</label>
+                            <label className="text-xs font-bold text-muted-foreground">Days Taught:</label>
                             <Input
                               type="number"
                               min="1"
@@ -1279,9 +1281,9 @@ export function TOSGeneratorScreen({
                                 updated[idx].days = Math.max(1, parseInt(e.target.value) || 1);
                                 setCompInputs(updated);
                               }}
-                              className="h-8 w-20 border-2 border-black text-center font-black text-xs shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] bg-white"
+                              className="rounded-none h-8 w-20 border-2 border-border text-center font-black text-xs shadow-xs bg-card"
                             />
-                            <span className="text-[11px] text-gray-500 font-semibold">day(s)</span>
+                            <span className="text-[11px] text-muted-foreground font-semibold">day(s)</span>
                           </div>
 
                           <Button
@@ -1290,13 +1292,13 @@ export function TOSGeneratorScreen({
                             onClick={() => {
                               setCompInputs(compInputs.filter((_, i) => i !== idx));
                             }}
-                            className="h-8 border-2 border-black bg-red-50 px-2.5 text-xs font-bold text-red-700 hover:bg-red-100 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                            className="rounded-none h-8 border-2 border-border bg-destructive/10 px-2.5 text-xs font-bold text-destructive hover:bg-destructive/10 shadow-xs"
                             title="Remove Competency"
                           >
                             <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
                           </Button>
                         </div>
-                      </div>
+                      </Card>
                     );
                   })
                 )}
@@ -1306,14 +1308,14 @@ export function TOSGeneratorScreen({
                 <Button
                   variant="outline"
                   onClick={() => setStep("test-parts")}
-                  className="border-2 border-black font-bold"
+                  className="rounded-none border-2 border-border font-bold"
                 >
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
                 </Button>
                 <Button
                   disabled={compInputs.length === 0 || totalDays <= 0}
                   onClick={() => setStep("difficulty")}
-                  className="border-2 border-black bg-[#FFD54F] font-bold text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                  className="rounded-none border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover"
                 >
                   Next: Difficulty Ratio <ArrowRight className="ml-1.5 h-4 w-4" />
                 </Button>
@@ -1328,16 +1330,16 @@ export function TOSGeneratorScreen({
             <div className="space-y-6">
               <div>
                 <h3 className="text-base font-bold">Step 3 — Cognitive & Difficulty Balance</h3>
-                <p className="text-xs text-gray-600">
+                <p className="text-xs text-muted-foreground">
                   Configure the target difficulty ratio. Standard DepEd ratio is 60% Easy, 30% Average, 10% Difficult.
                 </p>
               </div>
 
-              <div className="rounded-lg border-2 border-black bg-white p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <Card className="block rounded-none border-2 border-border bg-card p-6 shadow-md">
                 <div className="grid gap-6 sm:grid-cols-3">
-                  <div className="space-y-2 rounded-lg border-2 border-black bg-[#E8F5E9] p-4 text-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                    <p className="text-xs font-black text-green-900 uppercase tracking-wider">Easy (60%)</p>
-                    <p className="text-[11px] font-semibold text-green-700">Remember & Understand</p>
+                  <Card className="block space-y-2 rounded-none border-2 border-border bg-success/10 p-4 text-center shadow-sm">
+                    <p className="text-xs font-black text-foreground uppercase tracking-wider">Easy (60%)</p>
+                    <p className="text-[11px] font-semibold text-foreground">Remember & Understand</p>
                     <Input
                       type="number"
                       min="0"
@@ -1346,16 +1348,16 @@ export function TOSGeneratorScreen({
                       onChange={(e) =>
                         setDifficultyRatio({ ...difficultyRatio, easy: parseInt(e.target.value) || 0 })
                       }
-                      className="mx-auto h-12 w-24 border-2 border-black text-center text-xl font-black bg-white"
+                      className="rounded-none mx-auto h-12 w-24 border-2 border-border text-center text-xl font-black bg-card"
                     />
-                    <span className="text-xs font-bold text-gray-600 block">
+                    <span className="text-xs font-bold text-muted-foreground block">
                       ≈ {Math.round((totalItems * (difficultyRatio.easy || 0)) / 100)} Items
                     </span>
-                  </div>
+                  </Card>
 
-                  <div className="space-y-2 rounded-lg border-2 border-black bg-[#FFF9C4] p-4 text-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                    <p className="text-xs font-black text-yellow-900 uppercase tracking-wider">Average (30%)</p>
-                    <p className="text-[11px] font-semibold text-yellow-700">Apply & Analyze</p>
+                  <Card className="block space-y-2 rounded-none border-2 border-border bg-accent p-4 text-center shadow-sm">
+                    <p className="text-xs font-black text-foreground uppercase tracking-wider">Average (30%)</p>
+                    <p className="text-[11px] font-semibold text-foreground">Apply & Analyze</p>
                     <Input
                       type="number"
                       min="0"
@@ -1364,16 +1366,16 @@ export function TOSGeneratorScreen({
                       onChange={(e) =>
                         setDifficultyRatio({ ...difficultyRatio, average: parseInt(e.target.value) || 0 })
                       }
-                      className="mx-auto h-12 w-24 border-2 border-black text-center text-xl font-black bg-white"
+                      className="rounded-none mx-auto h-12 w-24 border-2 border-border text-center text-xl font-black bg-card"
                     />
-                    <span className="text-xs font-bold text-gray-600 block">
+                    <span className="text-xs font-bold text-muted-foreground block">
                       ≈ {Math.round((totalItems * (difficultyRatio.average || 0)) / 100)} Items
                     </span>
-                  </div>
+                  </Card>
 
-                  <div className="space-y-2 rounded-lg border-2 border-black bg-[#FFEBEE] p-4 text-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                    <p className="text-xs font-black text-red-900 uppercase tracking-wider">Difficult (10%)</p>
-                    <p className="text-[11px] font-semibold text-red-700">Evaluate & Create</p>
+                  <Card className="block space-y-2 rounded-none border-2 border-border bg-destructive/10 p-4 text-center shadow-sm">
+                    <p className="text-xs font-black text-destructive uppercase tracking-wider">Difficult (10%)</p>
+                    <p className="text-[11px] font-semibold text-destructive">Evaluate & Create</p>
                     <Input
                       type="number"
                       min="0"
@@ -1382,20 +1384,20 @@ export function TOSGeneratorScreen({
                       onChange={(e) =>
                         setDifficultyRatio({ ...difficultyRatio, difficult: parseInt(e.target.value) || 0 })
                       }
-                      className="mx-auto h-12 w-24 border-2 border-black text-center text-xl font-black bg-white"
+                      className="rounded-none mx-auto h-12 w-24 border-2 border-border text-center text-xl font-black bg-card"
                     />
-                    <span className="text-xs font-bold text-gray-600 block">
+                    <span className="text-xs font-bold text-muted-foreground block">
                       ≈ {Math.round((totalItems * (difficultyRatio.difficult || 0)) / 100)} Items
                     </span>
-                  </div>
+                  </Card>
                 </div>
 
-                <div className="mt-6 flex items-center justify-between border-t-2 border-black pt-4">
+                <div className="mt-6 flex items-center justify-between border-t-2 border-border pt-4">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold">Sum of Target Ratios:</span>
                     <Badge
                       variant="outline"
-                      className={`border-black font-extrabold ${difficultyRatio.easy + difficultyRatio.average + difficultyRatio.difficult === 100 ? "bg-green-200 text-green-900" : "bg-red-200 text-red-900"}`}
+                      className={`rounded-none border-border font-extrabold ${difficultyRatio.easy + difficultyRatio.average + difficultyRatio.difficult === 100 ? "bg-success/10 text-foreground" : "bg-destructive/10 text-destructive"}`}
                     >
                       {difficultyRatio.easy + difficultyRatio.average + difficultyRatio.difficult}%
                     </Badge>
@@ -1404,18 +1406,18 @@ export function TOSGeneratorScreen({
                     size="sm"
                     variant="outline"
                     onClick={() => setDifficultyRatio({ easy: 60, average: 30, difficult: 10 })}
-                    className="border-2 border-black text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    className="rounded-none border-2 border-border text-xs font-bold shadow-sm"
                   >
                     Reset to 60/30/10 Standard
                   </Button>
                 </div>
-              </div>
+              </Card>
 
               <div className="flex justify-between gap-2 pt-2">
                 <Button
                   variant="outline"
                   onClick={() => setStep("competencies")}
-                  className="border-2 border-black font-bold"
+                  className="rounded-none border-2 border-border font-bold"
                 >
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
                 </Button>
@@ -1425,7 +1427,7 @@ export function TOSGeneratorScreen({
                     handleRecalculate();
                     setStep("blueprint");
                   }}
-                  className="border-2 border-black bg-[#FFD54F] font-bold text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                  className="rounded-none border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover"
                 >
                   Calculate Blueprint <ArrowRight className="ml-1.5 h-4 w-4" />
                 </Button>
@@ -1441,7 +1443,7 @@ export function TOSGeneratorScreen({
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                 <div>
                   <h3 className="text-base font-bold">Step 4 — Table of Specifications Blueprint</h3>
-                  <p className="text-xs text-gray-600">
+                  <p className="text-xs text-muted-foreground">
                     Auto-computed via Largest Remainder Method with column reconciliation. Every cognitive level cell is interactive and editable.
                   </p>
                 </div>
@@ -1450,7 +1452,7 @@ export function TOSGeneratorScreen({
                     size="sm"
                     variant="outline"
                     onClick={handleRecalculate}
-                    className="border-2 border-black bg-white text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    className="rounded-none border-2 border-border bg-card text-xs font-bold shadow-sm"
                   >
                     <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Recalculate
                   </Button>
@@ -1464,7 +1466,7 @@ export function TOSGeneratorScreen({
                         setIsExporting(null);
                       }
                     }}
-                    className="border-2 border-black bg-[#E3F2FD] text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#BBDEFB]"
+                    className="rounded-none border-2 border-border bg-accent text-xs font-bold shadow-sm hover:bg-primary"
                   >
                     <FileDown className="mr-1.5 h-3.5 w-3.5" /> Blueprint PDF
                   </Button>
@@ -1478,7 +1480,7 @@ export function TOSGeneratorScreen({
                         setIsExporting(null);
                       }
                     }}
-                    className="border-2 border-black bg-[#E8F5E9] text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#C8E6C9]"
+                    className="rounded-none border-2 border-border bg-success/10 text-xs font-bold shadow-sm hover:bg-success/20"
                   >
                     <FileText className="mr-1.5 h-3.5 w-3.5" /> Word (.docx)
                   </Button>
@@ -1486,17 +1488,17 @@ export function TOSGeneratorScreen({
               </div>
 
               {/* Informative Hint Banner */}
-              <div className="flex items-center gap-2 rounded-lg border-2 border-black bg-[#FFF9C4] px-4 py-2.5 text-xs font-bold text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <Card className="flex items-center gap-2 rounded-none border-2 border-border bg-accent px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-sm">
                 <span className="text-base">💡</span>
                 <span>
                   <strong>Interactive Cells:</strong> The number inputs under Bloom's Taxonomy (Rem, Und, App, Ana, Eva, Cre) are fully editable. Changes update the Easy/Average/Difficult subtotals and Grand Totals automatically.
                 </span>
-              </div>
+              </Card>
 
               {!draftValidation.valid && (
-                <div className="rounded-lg border-2 border-red-500 bg-red-50 p-3 text-xs font-bold text-red-800">
+                <Card className="block rounded-none border-2 border-destructive bg-destructive/10 p-3 text-xs font-bold text-destructive">
                   <div className="flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4 text-red-600" />
+                    <AlertCircle className="h-4 w-4 text-destructive" />
                     <span>Blueprint Validation Warnings:</span>
                   </div>
                   <ul className="mt-1 list-disc pl-5 font-normal">
@@ -1504,31 +1506,31 @@ export function TOSGeneratorScreen({
                       <li key={i}>{err}</li>
                     ))}
                   </ul>
-                </div>
+                </Card>
               )}
 
               {/* DepEd Standard 2-Tier Structured Table */}
-              <div className="overflow-x-auto rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <Card className="block p-0 overflow-x-auto rounded-none border-2 border-border bg-card shadow-md">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     {/* Header Row 1 */}
-                    <tr className="border-b-2 border-black bg-[#EAEAEA] font-black text-black">
-                      <th rowSpan={2} className="border-r-2 border-black px-4 py-3 min-w-[240px]">
+                    <tr className="border-b-2 border-border bg-muted font-black text-foreground">
+                      <th rowSpan={2} className="border-r-2 border-border px-4 py-3 min-w-[240px]">
                         Competency / Learning Objective
                       </th>
-                      <th rowSpan={2} className="border-r-2 border-black px-3 py-3 text-center w-16">
+                      <th rowSpan={2} className="border-r-2 border-border px-3 py-3 text-center w-16">
                         Days
                       </th>
-                      <th rowSpan={2} className="border-r-2 border-black px-3 py-3 text-center w-16">
+                      <th rowSpan={2} className="border-r-2 border-border px-3 py-3 text-center w-16">
                         % Wt
                       </th>
-                      <th rowSpan={2} className="border-r-2 border-black px-3 py-3 text-center bg-blue-100 w-16">
+                      <th rowSpan={2} className="border-r-2 border-border px-3 py-3 text-center bg-accent w-16">
                         Items
                       </th>
-                      <th colSpan={6} className="border-r-2 border-black px-2 py-2 text-center bg-[#FFF8E1]">
+                      <th colSpan={6} className="border-r-2 border-border px-2 py-2 text-center bg-accent">
                         Cognitive Process Dimensions (Bloom's Taxonomy)
                       </th>
-                      <th colSpan={3} className="border-r-2 border-black px-2 py-2 text-center bg-[#F3E5F5]">
+                      <th colSpan={3} className="border-r-2 border-border px-2 py-2 text-center bg-accent">
                         Difficulty Distribution
                       </th>
                       <th rowSpan={2} className="px-3 py-3 text-center min-w-[100px]">
@@ -1537,18 +1539,18 @@ export function TOSGeneratorScreen({
                     </tr>
 
                     {/* Header Row 2 */}
-                    <tr className="border-b-2 border-black bg-[#F5F5F5] font-bold text-black text-[11px]">
+                    <tr className="border-b-2 border-border bg-muted/30 font-bold text-foreground text-[11px]">
                       {/* Bloom */}
-                      <th className="border-r border-black p-2 text-center bg-emerald-50 text-emerald-900">Remember</th>
-                      <th className="border-r border-black p-2 text-center bg-emerald-50 text-emerald-900">Understand</th>
-                      <th className="border-r border-black p-2 text-center bg-amber-50 text-amber-900">Apply</th>
-                      <th className="border-r border-black p-2 text-center bg-amber-50 text-amber-900">Analyze</th>
-                      <th className="border-r border-black p-2 text-center bg-rose-50 text-rose-900">Evaluate</th>
-                      <th className="border-r-2 border-black p-2 text-center bg-rose-50 text-rose-900">Create</th>
+                      <th className="border-r border-border p-2 text-center bg-success/10 text-foreground">Remember</th>
+                      <th className="border-r border-border p-2 text-center bg-success/10 text-foreground">Understand</th>
+                      <th className="border-r border-border p-2 text-center bg-accent text-primary-foreground">Apply</th>
+                      <th className="border-r border-border p-2 text-center bg-accent text-primary-foreground">Analyze</th>
+                      <th className="border-r border-border p-2 text-center bg-destructive/10 text-destructive">Evaluate</th>
+                      <th className="border-r-2 border-border p-2 text-center bg-destructive/10 text-destructive">Create</th>
                       {/* Difficulty */}
-                      <th className="border-r border-black p-2 text-center bg-emerald-100 text-emerald-950 font-black">Easy</th>
-                      <th className="border-r border-black p-2 text-center bg-amber-100 text-amber-950 font-black">Average</th>
-                      <th className="border-r-2 border-black p-2 text-center bg-rose-100 text-rose-950 font-black">Difficult</th>
+                      <th className="border-r border-border p-2 text-center bg-success/10 text-foreground font-black">Easy</th>
+                      <th className="border-r border-border p-2 text-center bg-accent text-primary-foreground font-black">Average</th>
+                      <th className="border-r-2 border-border p-2 text-center bg-destructive/10 text-destructive font-black">Difficult</th>
                     </tr>
                   </thead>
 
@@ -1556,98 +1558,98 @@ export function TOSGeneratorScreen({
                     {rows.map((r, idx) => {
                       const rowVal = validateTOSRow(r);
                       return (
-                        <tr key={idx} className="border-b-2 border-black font-semibold hover:bg-yellow-50/30 transition-colors">
-                          <td className="border-r-2 border-black p-3">
-                            <p className="font-extrabold text-black text-xs leading-snug">{r.label}</p>
-                            {r.code && <span className="text-[10px] font-bold text-gray-500">{r.code}</span>}
+                        <tr key={idx} className="border-b-2 border-border font-semibold hover:bg-accent transition-colors">
+                          <td className="border-r-2 border-border p-3">
+                            <p className="font-extrabold text-foreground text-xs leading-snug">{r.label}</p>
+                            {r.code && <span className="text-[10px] font-bold text-muted-foreground">{r.code}</span>}
                             {rowVal.reconciliation_note && (
-                              <p className="mt-1 text-[10px] text-amber-800 font-bold">
+                              <p className="mt-1 text-[10px] text-foreground font-bold">
                                 ℹ️ {rowVal.reconciliation_note}
                               </p>
                             )}
                           </td>
-                          <td className="border-r-2 border-black p-2 text-center font-black">{r.days}</td>
-                          <td className="border-r-2 border-black p-2 text-center text-gray-600 font-bold">
+                          <td className="border-r-2 border-border p-2 text-center font-black">{r.days}</td>
+                          <td className="border-r-2 border-border p-2 text-center text-muted-foreground font-bold">
                             {r.weight_percent.toFixed(1)}%
                           </td>
-                          <td className="border-r-2 border-black p-2 text-center font-black text-sm bg-blue-50/60">
+                          <td className="border-r-2 border-border p-2 text-center font-black text-sm bg-accent">
                             {r.items}
                           </td>
 
                           {/* Editable Bloom Input Cells */}
-                          <td className="border-r border-black p-2 text-center bg-emerald-50/30">
+                          <td className="border-r border-border p-2 text-center bg-success/10">
                             <input
                               type="number"
                               min="0"
                               value={r.remember}
                               onChange={(e) => handleCellEdit(idx, "remember", parseInt(e.target.value) || 0)}
-                              className="h-8 w-12 rounded border-2 border-black bg-white text-center font-black text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-50 focus:bg-yellow-100 focus:outline-none"
+                              className="h-8 w-12 rounded-none border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
                             />
                           </td>
-                          <td className="border-r border-black p-2 text-center bg-emerald-50/30">
+                          <td className="border-r border-border p-2 text-center bg-success/10">
                             <input
                               type="number"
                               min="0"
                               value={r.understand}
                               onChange={(e) => handleCellEdit(idx, "understand", parseInt(e.target.value) || 0)}
-                              className="h-8 w-12 rounded border-2 border-black bg-white text-center font-black text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-50 focus:bg-yellow-100 focus:outline-none"
+                              className="h-8 w-12 rounded-none border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
                             />
                           </td>
-                          <td className="border-r border-black p-2 text-center bg-amber-50/30">
+                          <td className="border-r border-border p-2 text-center bg-accent">
                             <input
                               type="number"
                               min="0"
                               value={r.apply}
                               onChange={(e) => handleCellEdit(idx, "apply", parseInt(e.target.value) || 0)}
-                              className="h-8 w-12 rounded border-2 border-black bg-white text-center font-black text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-50 focus:bg-yellow-100 focus:outline-none"
+                              className="h-8 w-12 rounded-none border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
                             />
                           </td>
-                          <td className="border-r border-black p-2 text-center bg-amber-50/30">
+                          <td className="border-r border-border p-2 text-center bg-accent">
                             <input
                               type="number"
                               min="0"
                               value={r.analyze}
                               onChange={(e) => handleCellEdit(idx, "analyze", parseInt(e.target.value) || 0)}
-                              className="h-8 w-12 rounded border-2 border-black bg-white text-center font-black text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-50 focus:bg-yellow-100 focus:outline-none"
+                              className="h-8 w-12 rounded-none border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
                             />
                           </td>
-                          <td className="border-r border-black p-2 text-center bg-rose-50/30">
+                          <td className="border-r border-border p-2 text-center bg-destructive/10">
                             <input
                               type="number"
                               min="0"
                               value={r.evaluate}
                               onChange={(e) => handleCellEdit(idx, "evaluate", parseInt(e.target.value) || 0)}
-                              className="h-8 w-12 rounded border-2 border-black bg-white text-center font-black text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-50 focus:bg-yellow-100 focus:outline-none"
+                              className="h-8 w-12 rounded-none border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
                             />
                           </td>
-                          <td className="border-r-2 border-black p-2 text-center bg-rose-50/30">
+                          <td className="border-r-2 border-border p-2 text-center bg-destructive/10">
                             <input
                               type="number"
                               min="0"
                               value={r.create_}
                               onChange={(e) => handleCellEdit(idx, "create_", parseInt(e.target.value) || 0)}
-                              className="h-8 w-12 rounded border-2 border-black bg-white text-center font-black text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-50 focus:bg-yellow-100 focus:outline-none"
+                              className="h-8 w-12 rounded-none border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
                             />
                           </td>
 
                           {/* Difficulty Pill Cells */}
-                          <td className="border-r border-black p-2 text-center">
-                            <span className="inline-block px-2.5 py-0.5 rounded-full border border-emerald-400 bg-emerald-100 text-emerald-950 font-black text-xs">
+                          <td className="border-r border-border p-2 text-center">
+                            <span className="inline-block px-2.5 py-0.5 rounded-none border border-success bg-success/10 text-foreground font-black text-xs">
                               {r.easy}
                             </span>
                           </td>
-                          <td className="border-r border-black p-2 text-center">
-                            <span className="inline-block px-2.5 py-0.5 rounded-full border border-amber-400 bg-amber-100 text-amber-950 font-black text-xs">
+                          <td className="border-r border-border p-2 text-center">
+                            <span className="inline-block px-2.5 py-0.5 rounded-none border border-border bg-accent text-primary-foreground font-black text-xs">
                               {r.average}
                             </span>
                           </td>
-                          <td className="border-r-2 border-black p-2 text-center">
-                            <span className="inline-block px-2.5 py-0.5 rounded-full border border-rose-400 bg-rose-100 text-rose-950 font-black text-xs">
+                          <td className="border-r-2 border-border p-2 text-center">
+                            <span className="inline-block px-2.5 py-0.5 rounded-none border border-destructive bg-destructive/10 text-destructive font-black text-xs">
                               {r.difficult}
                             </span>
                           </td>
 
-                          <td className="p-2 text-center font-black text-gray-800">
+                          <td className="p-2 text-center font-black text-foreground">
                             {r.items > 0 ? `${r.item_start}–${r.item_end}` : "-"}
                           </td>
                         </tr>
@@ -1656,49 +1658,49 @@ export function TOSGeneratorScreen({
 
                     {/* Grand Total Row */}
                     {grandTotal && (
-                      <tr className="bg-[#E5E5E5] font-black text-black text-xs">
-                        <td className="border-r-2 border-black p-3">TOTAL ASSESSMENT TARGETS</td>
-                        <td className="border-r-2 border-black p-2 text-center">{grandTotal.days}</td>
-                        <td className="border-r-2 border-black p-2 text-center">100.0%</td>
-                        <td className="border-r-2 border-black p-2 text-center text-blue-900 bg-blue-200 text-sm">
+                      <tr className="bg-muted font-black text-foreground text-xs">
+                        <td className="border-r-2 border-border p-3">TOTAL ASSESSMENT TARGETS</td>
+                        <td className="border-r-2 border-border p-2 text-center">{grandTotal.days}</td>
+                        <td className="border-r-2 border-border p-2 text-center">100.0%</td>
+                        <td className="border-r-2 border-border p-2 text-center text-primary-foreground bg-accent text-sm">
                           {grandTotal.items}
                         </td>
-                        <td className="border-r border-black p-2 text-center bg-emerald-100">{grandTotal.remember}</td>
-                        <td className="border-r border-black p-2 text-center bg-emerald-100">{grandTotal.understand}</td>
-                        <td className="border-r border-black p-2 text-center bg-amber-100">{grandTotal.apply}</td>
-                        <td className="border-r border-black p-2 text-center bg-amber-100">{grandTotal.analyze}</td>
-                        <td className="border-r border-black p-2 text-center bg-rose-100">{grandTotal.evaluate}</td>
-                        <td className="border-r-2 border-black p-2 text-center bg-rose-100">{grandTotal.create_}</td>
-                        <td className="border-r border-black p-2 text-center bg-emerald-200 text-emerald-950 font-black">
+                        <td className="border-r border-border p-2 text-center bg-success/10">{grandTotal.remember}</td>
+                        <td className="border-r border-border p-2 text-center bg-success/10">{grandTotal.understand}</td>
+                        <td className="border-r border-border p-2 text-center bg-accent">{grandTotal.apply}</td>
+                        <td className="border-r border-border p-2 text-center bg-accent">{grandTotal.analyze}</td>
+                        <td className="border-r border-border p-2 text-center bg-destructive/10">{grandTotal.evaluate}</td>
+                        <td className="border-r-2 border-border p-2 text-center bg-destructive/10">{grandTotal.create_}</td>
+                        <td className="border-r border-border p-2 text-center bg-success/10 text-foreground font-black">
                           {grandTotal.easy}
                         </td>
-                        <td className="border-r border-black p-2 text-center bg-amber-200 text-amber-950 font-black">
+                        <td className="border-r border-border p-2 text-center bg-accent text-primary-foreground font-black">
                           {grandTotal.average}
                         </td>
-                        <td className="border-r-2 border-black p-2 text-center bg-rose-200 text-rose-950 font-black">
+                        <td className="border-r-2 border-border p-2 text-center bg-destructive/10 text-destructive font-black">
                           {grandTotal.difficult}
                         </td>
-                        <td className="p-2 text-center font-black text-black">
+                        <td className="p-2 text-center font-black text-foreground">
                           {grandTotal.items > 0 ? `1–${grandTotal.items}` : "-"}
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
-              </div>
+              </Card>
 
               <div className="flex justify-between gap-2 pt-2">
                 <Button
                   variant="outline"
                   onClick={() => setStep("difficulty")}
-                  className="border-2 border-black font-bold"
+                  className="rounded-none border-2 border-border font-bold"
                 >
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
                 </Button>
                 <Button
                   disabled={isGenerating}
                   onClick={handleGenerateQuestions}
-                  className="border-2 border-black bg-[#FFD54F] font-bold text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                  className="rounded-none border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover"
                 >
                   {isGenerating ? (
                     <>
@@ -1706,7 +1708,7 @@ export function TOSGeneratorScreen({
                     </>
                   ) : (
                     <>
-                      <Sparkles className="mr-1.5 h-4 w-4 text-purple-700" /> Generate Exam Questions (AI)
+                      <Sparkles className="mr-1.5 h-4 w-4 text-foreground" /> Generate Exam Questions (AI)
                     </>
                   )}
                 </Button>
@@ -1722,7 +1724,7 @@ export function TOSGeneratorScreen({
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                 <div>
                   <h3 className="text-base font-bold">Step 5 — Review & Polish Exam Questions</h3>
-                  <p className="text-xs text-gray-600">
+                  <p className="text-xs text-muted-foreground">
                     Generated based on your Table of Specifications quota with difficulty & cognitive level tags.
                   </p>
                 </div>
@@ -1732,14 +1734,14 @@ export function TOSGeneratorScreen({
                     variant="outline"
                     disabled={isGenerating}
                     onClick={handleGenerateQuestions}
-                    className="border-2 border-black bg-white text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    className="rounded-none border-2 border-border bg-card text-xs font-bold shadow-sm"
                   >
                     <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Regenerate All ({totalItems})
                   </Button>
                   <Button
                     size="sm"
                     onClick={() => setStep("export")}
-                    className="border-2 border-black bg-[#FFD54F] text-xs font-bold text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                    className="rounded-none border-2 border-border bg-primary text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary-hover"
                   >
                     Proceed to Export <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                   </Button>
@@ -1747,29 +1749,29 @@ export function TOSGeneratorScreen({
               </div>
 
               {generationProgress && (
-                <div className="rounded-lg border-2 border-blue-500 bg-blue-50 p-4 text-center text-xs font-bold text-blue-800 animate-pulse">
+                <Card className="block rounded-none border-2 border-border bg-accent p-4 text-center text-xs font-bold text-primary-foreground animate-pulse">
                   {generationProgress}
-                </div>
+                </Card>
               )}
 
               {generationError && (
-                <div className="rounded-lg border-2 border-red-500 bg-red-50 p-3 text-xs font-bold text-red-800">
+                <Card className="block rounded-none border-2 border-destructive bg-destructive/10 p-3 text-xs font-bold text-destructive">
                   {generationError}
-                </div>
+                </Card>
               )}
 
               {questions.length === 0 ? (
-                <div className="rounded-lg border-2 border-dashed border-gray-300 px-6 py-12 text-center">
-                  <Sparkles className="mx-auto h-8 w-8 text-yellow-500" />
-                  <p className="mt-2 text-sm font-bold text-gray-700">No questions generated yet.</p>
+                <Card className="block rounded-none border-2 border-dashed border-border px-6 py-12 text-center">
+                  <Sparkles className="mx-auto h-8 w-8 text-foreground" />
+                  <p className="mt-2 text-sm font-bold text-muted-foreground">No questions generated yet.</p>
                   <Button
                     size="sm"
                     onClick={handleGenerateQuestions}
-                    className="mt-3 border-2 border-black bg-[#FFD54F] font-bold text-black"
+                    className="rounded-none mt-3 border-2 border-border bg-primary font-bold text-primary-foreground"
                   >
                     Generate {totalItems} Questions Now
                   </Button>
-                </div>
+                </Card>
               ) : (
                 <div className="space-y-6">
                   {groupedQuestions.map((grp, gIdx) => {
@@ -1777,37 +1779,37 @@ export function TOSGeneratorScreen({
                     const bloomActual = buildBloomSummary(grpQuestions);
 
                     return (
-                      <div
+                      <Card
                         key={gIdx}
-                        className="rounded-lg border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                        className="block rounded-none border-2 border-border bg-card p-5 shadow-md"
                       >
                         {/* Competency Group Header */}
-                        <div className="flex flex-col justify-between border-b-2 border-black pb-3 sm:flex-row sm:items-center">
+                        <div className="flex flex-col justify-between border-b-2 border-border pb-3 sm:flex-row sm:items-center">
                           <div>
-                            <h4 className="font-extrabold text-black text-sm">{grp.label}</h4>
+                            <h4 className="font-extrabold text-foreground text-sm">{grp.label}</h4>
                             <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs font-bold">
-                              <span className="text-gray-600 font-semibold mr-1">Cognitive Distribution:</span>
-                              <Badge variant="outline" className="border-black bg-emerald-50 text-[10px]">
+                              <span className="text-muted-foreground font-semibold mr-1">Cognitive Distribution:</span>
+                              <Badge variant="outline" className="rounded-none border-border bg-success/10 text-[10px]">
                                 Rem: {bloomActual.REMEMBER}
                               </Badge>
-                              <Badge variant="outline" className="border-black bg-emerald-50 text-[10px]">
+                              <Badge variant="outline" className="rounded-none border-border bg-success/10 text-[10px]">
                                 Und: {bloomActual.UNDERSTAND}
                               </Badge>
-                              <Badge variant="outline" className="border-black bg-amber-50 text-[10px]">
+                              <Badge variant="outline" className="rounded-none border-border bg-accent text-[10px]">
                                 App: {bloomActual.APPLY}
                               </Badge>
-                              <Badge variant="outline" className="border-black bg-amber-50 text-[10px]">
+                              <Badge variant="outline" className="rounded-none border-border bg-accent text-[10px]">
                                 Ana: {bloomActual.ANALYZE}
                               </Badge>
-                              <Badge variant="outline" className="border-black bg-rose-50 text-[10px]">
+                              <Badge variant="outline" className="rounded-none border-border bg-destructive/10 text-[10px]">
                                 Eva: {bloomActual.EVALUATE}
                               </Badge>
-                              <Badge variant="outline" className="border-black bg-rose-50 text-[10px]">
+                              <Badge variant="outline" className="rounded-none border-border bg-destructive/10 text-[10px]">
                                 Cre: {bloomActual.CREATE}
                               </Badge>
                             </div>
                           </div>
-                          <Badge variant="outline" className="mt-2 border-black bg-[#FFD54F] font-black text-xs sm:mt-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                          <Badge variant="outline" className="rounded-none mt-2 border-border bg-primary font-black text-xs sm:mt-0 shadow-xs">
                             {grp.questions.length} Item(s)
                           </Badge>
                         </div>
@@ -1818,21 +1820,21 @@ export function TOSGeneratorScreen({
                             const isEditingThis = editingQuestionIdx === globalIdx;
 
                             return (
-                              <div
+                              <Card
                                 key={globalIdx}
-                                className="rounded-lg border-2 border-black bg-[#FAFAFA] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                                className="block rounded-none border-2 border-border bg-muted/20 p-4 shadow"
                               >
                                 {isEditingThis && editQuestionForm ? (
                                   /* Inline Edit Mode */
                                   <div className="space-y-3">
-                                    <div className="flex items-center justify-between border-b-2 border-black pb-2">
+                                    <div className="flex items-center justify-between border-b-2 border-border pb-2">
                                       <span className="font-extrabold text-xs">Edit Question #{globalIdx + 1}</span>
                                       <div className="flex items-center gap-2">
                                         <Button
                                           size="sm"
                                           variant="outline"
                                           onClick={() => setEditingQuestionIdx(null)}
-                                          className="h-7 border-2 border-black bg-white text-xs font-bold"
+                                          className="rounded-none h-7 border-2 border-border bg-card text-xs font-bold"
                                         >
                                           Cancel
                                         </Button>
@@ -1844,7 +1846,7 @@ export function TOSGeneratorScreen({
                                             setQuestions(updated);
                                             setEditingQuestionIdx(null);
                                           }}
-                                          className="h-7 border-2 border-black bg-[#FFD54F] text-xs font-bold text-black"
+                                          className="rounded-none h-7 border-2 border-border bg-primary text-xs font-bold text-primary-foreground"
                                         >
                                           Save
                                         </Button>
@@ -1852,81 +1854,87 @@ export function TOSGeneratorScreen({
                                     </div>
 
                                     <div>
-                                      <label className="text-[11px] font-bold text-gray-700">Question Prompt</label>
+                                      <label className="text-[11px] font-bold text-muted-foreground">Question Prompt</label>
                                       <textarea
                                         rows={3}
                                         value={editQuestionForm.question_text}
                                         onChange={(e) =>
                                           setEditQuestionForm({ ...editQuestionForm, question_text: e.target.value })
                                         }
-                                        className="mt-1 w-full rounded border-2 border-black bg-white p-2.5 text-xs font-semibold"
+                                        className="mt-1 w-full rounded-none border-2 border-border bg-card p-2.5 text-xs font-semibold"
                                       />
                                     </div>
 
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                       <div>
-                                        <label className="text-[11px] font-bold text-gray-700">Question Type</label>
-                                        <select
-                                          value={editQuestionForm.question_type}
-                                          onChange={(e) =>
+                                        <label className="text-[11px] font-bold text-muted-foreground">Question Type</label>
+                                        <Select value={editQuestionForm.question_type}
+                                          onValueChange={(value) =>
                                             setEditQuestionForm({
                                               ...editQuestionForm,
-                                              question_type: e.target.value as TestPartType,
+                                              question_type: value as TestPartType,
                                             })
-                                          }
-                                          className="mt-1 w-full rounded border-2 border-black bg-white p-2 text-xs font-bold"
-                                        >
-                                          <option value="MULTIPLE_CHOICE">Multiple Choice</option>
-                                          <option value="TRUE_FALSE">True / False</option>
-                                          <option value="IDENTIFICATION">Identification</option>
-                                          <option value="MATCHING">Matching Type</option>
-                                          <option value="ESSAY">Essay</option>
-                                        </select>
+                                          }>
+                                          <Select.Trigger aria-label="Question Type" className="mt-1 w-full min-w-0 rounded-none text-xs font-bold">
+                                            <Select.Value />
+                                          </Select.Trigger>
+                                          <Select.Content className="rounded-none border-2">
+                                            <Select.Item value="MULTIPLE_CHOICE">Multiple Choice</Select.Item>
+                                            <Select.Item value="TRUE_FALSE">True / False</Select.Item>
+                                            <Select.Item value="IDENTIFICATION">Identification</Select.Item>
+                                            <Select.Item value="MATCHING">Matching Type</Select.Item>
+                                            <Select.Item value="ESSAY">Essay</Select.Item>
+                                          </Select.Content>
+                                        </Select>
                                       </div>
 
                                       <div>
-                                        <label className="text-[11px] font-bold text-gray-700">Difficulty</label>
-                                        <select
-                                          value={editQuestionForm.difficulty_band || "EASY"}
-                                          onChange={(e) =>
+                                        <label className="text-[11px] font-bold text-muted-foreground">Difficulty</label>
+                                        <Select value={editQuestionForm.difficulty_band || "EASY"}
+                                          onValueChange={(value) =>
                                             setEditQuestionForm({
                                               ...editQuestionForm,
-                                              difficulty_band: e.target.value as DifficultyBand,
+                                              difficulty_band: value as DifficultyBand,
                                             })
-                                          }
-                                          className="mt-1 w-full rounded border-2 border-black bg-white p-2 text-xs font-bold"
-                                        >
-                                          <option value="EASY">Easy</option>
-                                          <option value="AVERAGE">Average</option>
-                                          <option value="DIFFICULT">Difficult</option>
-                                        </select>
+                                          }>
+                                          <Select.Trigger aria-label="Difficulty" className="mt-1 w-full min-w-0 rounded-none text-xs font-bold">
+                                            <Select.Value />
+                                          </Select.Trigger>
+                                          <Select.Content className="rounded-none border-2">
+                                            <Select.Item value="EASY">Easy</Select.Item>
+                                            <Select.Item value="AVERAGE">Average</Select.Item>
+                                            <Select.Item value="DIFFICULT">Difficult</Select.Item>
+                                          </Select.Content>
+                                        </Select>
                                       </div>
 
                                       <div>
-                                        <label className="text-[11px] font-bold text-gray-700">Cognitive Level</label>
-                                        <select
-                                          value={editQuestionForm.cognitive_level || "REMEMBER"}
-                                          onChange={(e) =>
+                                        <label className="text-[11px] font-bold text-muted-foreground">Cognitive Level</label>
+                                        <Select value={editQuestionForm.cognitive_level || "REMEMBER"}
+                                          onValueChange={(value) =>
                                             setEditQuestionForm({
                                               ...editQuestionForm,
-                                              cognitive_level: e.target.value as CognitiveLevel,
+                                              cognitive_level: value as CognitiveLevel,
                                             })
-                                          }
-                                          className="mt-1 w-full rounded border-2 border-black bg-white p-2 text-xs font-bold"
-                                        >
-                                          <option value="REMEMBER">Remember</option>
-                                          <option value="UNDERSTAND">Understand</option>
-                                          <option value="APPLY">Apply</option>
-                                          <option value="ANALYZE">Analyze</option>
-                                          <option value="EVALUATE">Evaluate</option>
-                                          <option value="CREATE">Create</option>
-                                        </select>
+                                          }>
+                                          <Select.Trigger aria-label="Cognitive Level" className="mt-1 w-full min-w-0 rounded-none text-xs font-bold">
+                                            <Select.Value />
+                                          </Select.Trigger>
+                                          <Select.Content className="rounded-none border-2">
+                                            <Select.Item value="REMEMBER">Remember</Select.Item>
+                                            <Select.Item value="UNDERSTAND">Understand</Select.Item>
+                                            <Select.Item value="APPLY">Apply</Select.Item>
+                                            <Select.Item value="ANALYZE">Analyze</Select.Item>
+                                            <Select.Item value="EVALUATE">Evaluate</Select.Item>
+                                            <Select.Item value="CREATE">Create</Select.Item>
+                                          </Select.Content>
+                                        </Select>
                                       </div>
                                     </div>
 
                                     {editQuestionForm.options && editQuestionForm.options.length > 0 && (
                                       <div className="space-y-1.5 pt-2">
-                                        <label className="text-[11px] font-bold text-gray-700">Options & Correct Answer</label>
+                                        <label className="text-[11px] font-bold text-muted-foreground">Options & Correct Answer</label>
                                         {editQuestionForm.options.map((opt, oIdx) => (
                                           <div key={oIdx} className="flex items-center gap-2">
                                             <input
@@ -1948,7 +1956,7 @@ export function TOSGeneratorScreen({
                                                 updatedOpts[oIdx].option_text = e.target.value;
                                                 setEditQuestionForm({ ...editQuestionForm, options: updatedOpts });
                                               }}
-                                              className="h-8 border-2 border-black bg-white text-xs font-semibold"
+                                              className="rounded-none h-8 border-2 border-border bg-card text-xs font-semibold"
                                             />
                                           </div>
                                         ))}
@@ -1956,42 +1964,42 @@ export function TOSGeneratorScreen({
                                     )}
 
                                     <div>
-                                      <label className="text-[11px] font-bold text-gray-700">Answer Key / Explanation</label>
+                                      <label className="text-[11px] font-bold text-muted-foreground">Answer Key / Explanation</label>
                                       <Input
                                         value={editQuestionForm.explanation || ""}
                                         onChange={(e) =>
                                           setEditQuestionForm({ ...editQuestionForm, explanation: e.target.value })
                                         }
                                         placeholder="Model answer or grading rubric..."
-                                        className="mt-1 border-2 border-black bg-white text-xs font-semibold"
+                                        className="rounded-none mt-1 border-2 border-border bg-card text-xs font-semibold"
                                       />
                                     </div>
                                   </div>
                                 ) : (
                                   /* Display Mode */
                                   <div className="space-y-3">
-                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/20 pb-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/20 pb-2">
                                       <div className="flex flex-wrap items-center gap-2">
-                                        <span className="font-black text-sm text-black">#{globalIdx + 1}.</span>
+                                        <span className="font-black text-sm text-foreground">#{globalIdx + 1}.</span>
                                         <Badge
                                           variant="outline"
-                                          className="border-2 border-black bg-white text-[11px] font-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                                          className="rounded-none border-2 border-border bg-card text-[11px] font-black shadow-xs"
                                         >
                                           {q.question_type.replace(/_/g, " ")}
                                         </Badge>
                                         <Badge
                                           variant="outline"
-                                          className={`border-2 border-black text-[11px] font-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${q.difficulty_band === "EASY" ? "bg-emerald-100 text-emerald-950" : q.difficulty_band === "AVERAGE" ? "bg-amber-100 text-amber-950" : "bg-rose-100 text-rose-950"}`}
+                                          className={`border-2 border-border text-[11px] font-black shadow-xs ${q.difficulty_band === "EASY" ? "bg-success/10 text-foreground" : q.difficulty_band === "AVERAGE" ? "bg-accent text-primary-foreground" : "bg-destructive/10 text-destructive"}`}
                                         >
                                           {q.difficulty_band || "EASY"}
                                         </Badge>
                                         <Badge
                                           variant="outline"
-                                          className="border-2 border-black bg-purple-100 text-[11px] text-purple-950 font-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                                          className="rounded-none border-2 border-border bg-accent text-[11px] text-primary-foreground font-black shadow-xs"
                                         >
                                           {q.cognitive_level || "REMEMBER"}
                                         </Badge>
-                                        <span className="text-[11px] font-bold text-gray-500">{q.points || 1} pt</span>
+                                        <span className="text-[11px] font-bold text-muted-foreground">{q.points || 1} pt</span>
                                       </div>
 
                                       <div className="flex items-center gap-1.5">
@@ -2002,7 +2010,7 @@ export function TOSGeneratorScreen({
                                             setEditingQuestionIdx(globalIdx);
                                             setEditQuestionForm({ ...q });
                                           }}
-                                          className="h-7 border-2 border-black bg-white px-2.5 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-50"
+                                          className="rounded-none h-7 border-2 border-border bg-card px-2.5 text-xs font-bold shadow-sm hover:bg-accent"
                                         >
                                           <Edit3 className="h-3.5 w-3.5 mr-1" /> Edit
                                         </Button>
@@ -2011,7 +2019,7 @@ export function TOSGeneratorScreen({
                                           variant="outline"
                                           disabled={regeneratingIdx === globalIdx}
                                           onClick={() => handleRegenerateQuestion(globalIdx)}
-                                          className="h-7 border-2 border-black bg-white px-2.5 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-50"
+                                          className="rounded-none h-7 border-2 border-border bg-card px-2.5 text-xs font-bold shadow-sm hover:bg-accent"
                                         >
                                           <RefreshCw className={`h-3.5 w-3.5 ${regeneratingIdx === globalIdx ? "animate-spin" : ""}`} />
                                         </Button>
@@ -2021,7 +2029,7 @@ export function TOSGeneratorScreen({
                                           onClick={() => {
                                             setQuestions(questions.filter((_, i) => i !== globalIdx));
                                           }}
-                                          className="h-7 border-2 border-black bg-red-50 px-2 text-xs font-bold text-red-700 hover:bg-red-100 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                          className="rounded-none h-7 border-2 border-border bg-destructive/10 px-2 text-xs font-bold text-destructive hover:bg-destructive/10 shadow-sm"
                                         >
                                           <Trash2 className="h-3.5 w-3.5" />
                                         </Button>
@@ -2029,7 +2037,7 @@ export function TOSGeneratorScreen({
                                     </div>
 
                                     {/* Question Text */}
-                                    <p className="text-xs font-bold text-black leading-relaxed">{q.question_text}</p>
+                                    <p className="text-xs font-bold text-foreground leading-relaxed">{q.question_text}</p>
 
                                     {/* Options Display */}
                                     {q.options && q.options.length > 0 ? (
@@ -2037,30 +2045,30 @@ export function TOSGeneratorScreen({
                                         {q.options.map((opt, oIdx) => (
                                           <div
                                             key={oIdx}
-                                            className={`flex items-center gap-2 rounded-md border-2 p-2 text-xs font-semibold ${opt.is_correct ? "border-emerald-600 bg-emerald-50 text-emerald-950 font-bold shadow-[2px_2px_0px_0px_rgba(16,185,129,0.3)]" : "border-black/20 bg-white text-gray-800"}`}
+                                            className={`flex items-center gap-2 rounded-none border-2 p-2 text-xs font-semibold ${opt.is_correct ? "border-success bg-success/10 text-foreground font-bold shadow-sm" : "border-border/20 bg-card text-foreground"}`}
                                           >
-                                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-black/40 text-[10px] font-black">
+                                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-none border border-border/40 text-[10px] font-black">
                                               {String.fromCharCode(65 + oIdx)}
                                             </span>
                                             <span className="flex-1">{opt.option_text}</span>
-                                            {opt.is_correct && <Check className="h-4 w-4 text-emerald-700 shrink-0" />}
+                                            {opt.is_correct && <Check className="h-4 w-4 text-foreground shrink-0" />}
                                           </div>
                                         ))}
                                       </div>
                                     ) : (
                                       q.explanation && (
-                                        <div className="rounded border-2 border-dashed border-black/30 bg-amber-50/80 p-2.5 text-xs text-amber-950 font-medium">
+                                        <div className="rounded-none border-2 border-dashed border-border/30 bg-accent p-2.5 text-xs text-primary-foreground font-medium">
                                           <strong>Model Key / Rubric:</strong> {q.explanation}
                                         </div>
                                       )
                                     )}
                                   </div>
                                 )}
-                              </div>
+                              </Card>
                             );
                           })}
                         </div>
-                      </div>
+                      </Card>
                     );
                   })}
                 </div>
@@ -2070,14 +2078,14 @@ export function TOSGeneratorScreen({
                 <Button
                   variant="outline"
                   onClick={() => setStep("blueprint")}
-                  className="border-2 border-black font-bold"
+                  className="rounded-none border-2 border-border font-bold"
                 >
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Blueprint
                 </Button>
                 <Button
                   disabled={questions.length === 0}
                   onClick={() => setStep("export")}
-                  className="border-2 border-black bg-[#FFD54F] font-bold text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFCA28]"
+                  className="rounded-none border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover"
                 >
                   Proceed to Final Export <ArrowRight className="ml-1.5 h-4 w-4" />
                 </Button>
@@ -2092,19 +2100,19 @@ export function TOSGeneratorScreen({
             <div className="space-y-6">
               <div>
                 <h3 className="text-base font-bold">Step 6 — Export Assessment Questionnaire</h3>
-                <p className="text-xs text-gray-600">
+                <p className="text-xs text-muted-foreground">
                   Export your finalized assessment package formatted with official DepEd headers and layouts.
                 </p>
               </div>
 
               <div className="grid gap-6 sm:grid-cols-2">
                 {/* Blueprint Summary Card */}
-                <div className="rounded-lg border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                  <h4 className="font-bold text-black flex items-center gap-2">
-                    <TableProperties className="h-4 w-4 text-blue-700" />
+                <Card className="block rounded-none border-2 border-border bg-card p-5 shadow-md">
+                  <h4 className="font-bold text-foreground flex items-center gap-2">
+                    <TableProperties className="h-4 w-4 text-foreground" />
                     Table of Specifications Document
                   </h4>
-                  <p className="mt-1 text-xs text-gray-600">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     15-column competency matrix grid with Bloom cognitive distribution and item placement.
                   </p>
 
@@ -2118,7 +2126,7 @@ export function TOSGeneratorScreen({
                           setIsExporting(null);
                         }
                       }}
-                      className="border-2 border-black bg-[#E3F2FD] font-bold text-black hover:bg-[#BBDEFB] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      className="rounded-none border-2 border-border bg-accent font-bold text-primary-foreground hover:bg-primary shadow-sm"
                     >
                       <FileDown className="mr-2 h-4 w-4" /> Export Blueprint PDF (Landscape Legal)
                     </Button>
@@ -2131,26 +2139,26 @@ export function TOSGeneratorScreen({
                           setIsExporting(null);
                         }
                       }}
-                      className="border-2 border-black bg-white font-bold text-black hover:bg-gray-100 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      className="rounded-none border-2 border-border bg-card font-bold text-foreground hover:bg-muted/20 shadow-sm"
                     >
                       <FileText className="mr-2 h-4 w-4" /> Export Blueprint Word (.docx)
                     </Button>
                   </div>
-                </div>
+                </Card>
 
                 {/* Exam Paper Card */}
-                <div className="rounded-lg border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                  <h4 className="font-bold text-black flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-yellow-600" />
+                <Card className="block rounded-none border-2 border-border bg-card p-5 shadow-md">
+                  <h4 className="font-bold text-foreground flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-foreground" />
                     Summative Examination Paper
                   </h4>
-                  <p className="mt-1 text-xs text-gray-600">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     Formatted exam questionnaire supporting all 5 question types (MC, T/F, ID, Matching, Essay).
                   </p>
 
-                  <div className="mt-4 flex items-center gap-2 rounded border-2 border-black bg-yellow-50 p-2.5">
+                  <div className="mt-4 flex items-center gap-2 rounded-none border-2 border-border bg-accent p-2.5">
                     <Switch checked={includeAnswerKey} onCheckedChange={setIncludeAnswerKey} />
-                    <label className="text-xs font-bold text-black">Append Answer Key at bottom</label>
+                    <label className="text-xs font-bold text-foreground">Append Answer Key at bottom</label>
                   </div>
 
                   <div className="mt-4 flex flex-col gap-2">
@@ -2166,7 +2174,7 @@ export function TOSGeneratorScreen({
                         });
                         setIsExporting(null);
                       }}
-                      className="border-2 border-black bg-[#FFD54F] font-bold text-black hover:bg-[#FFCA28] shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      className="rounded-none border-2 border-border bg-primary font-bold text-primary-foreground hover:bg-primary-hover shadow-sm"
                     >
                       <FileDown className="mr-2 h-4 w-4" /> Export Exam Paper PDF (Portrait Legal)
                     </Button>
@@ -2182,19 +2190,19 @@ export function TOSGeneratorScreen({
                         });
                         setIsExporting(null);
                       }}
-                      className="border-2 border-black bg-white font-bold text-black hover:bg-gray-100 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      className="rounded-none border-2 border-border bg-card font-bold text-foreground hover:bg-muted/20 shadow-sm"
                     >
                       <FileText className="mr-2 h-4 w-4" /> Export Exam Paper Word (.docx)
                     </Button>
                   </div>
-                </div>
+                </Card>
               </div>
 
-              <div className="flex justify-between gap-2 pt-4 border-t-2 border-black">
+              <div className="flex justify-between gap-2 pt-4 border-t-2 border-border">
                 <Button
                   variant="outline"
                   onClick={() => setStep("ai-review")}
-                  className="border-2 border-black font-bold"
+                  className="rounded-none border-2 border-border font-bold"
                 >
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Review
                 </Button>
@@ -2203,7 +2211,7 @@ export function TOSGeneratorScreen({
                     handleSaveDraft();
                     setStep("saved-list");
                   }}
-                  className="border-2 border-black bg-[#C8E6C9] font-bold text-green-900 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                  className="rounded-none border-2 border-border bg-success/20 font-bold text-foreground shadow"
                 >
                   <CheckCircle2 className="mr-1.5 h-4 w-4" /> Save & Return to TOS Archive
                 </Button>
@@ -2211,6 +2219,7 @@ export function TOSGeneratorScreen({
             </div>
           )}
         </div>
+      </Card>
       </div>
     </div>
   );
