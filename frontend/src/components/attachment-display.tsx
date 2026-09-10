@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Download, FileText, File, X, Image as ImageIcon } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Download, Eye, FileText, File, X, Image as ImageIcon } from "lucide-react";
 import PDFViewer from "./pdf-viewer";
-import { apiFetch } from "@/lib/api";
+import { API_URL, apiFetch } from "@/lib/api";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "./retroui/Card";
 
@@ -27,6 +28,10 @@ function formatFileSize(bytes: number): string {
   const sizes = ["Bytes", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+}
+
+function isModifiedClick(e: React.MouseEvent): boolean {
+  return e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.button !== 0;
 }
 
 export default function AttachmentDisplay({
@@ -68,12 +73,15 @@ export default function AttachmentDisplay({
     };
     window.addEventListener("keydown", handleKeyDown);
 
-    const originalOverflow = document.body.style.overflow;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = originalOverflow;
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
     };
   }, [selectedImage]);
 
@@ -106,9 +114,16 @@ export default function AttachmentDisplay({
     return "";
   };
 
-  const getInlineUrl = (attachment: Attachment): string => {
-    const url = getAttachmentUrl(attachment);
+  const resolveAbsoluteUrl = (url: string): string => {
     if (!url) return "";
+    if (/^https?:\/\//i.test(url)) return url;
+    return `${API_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+  };
+
+  const getInlineUrl = (attachment: Attachment): string => {
+    const rawUrl = getAttachmentUrl(attachment);
+    if (!rawUrl) return "";
+    const url = resolveAbsoluteUrl(rawUrl);
     return `${url}${url.includes("?") ? "&" : "?"}inline=true`;
   };
 
@@ -217,49 +232,51 @@ export default function AttachmentDisplay({
         />
       )}
 
-      {selectedImage && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-neutral-950 text-white">
-          {/* Top Bar Header */}
-          <div className="flex h-14 shrink-0 items-center justify-between border-b border-neutral-800 bg-neutral-900 px-4">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <ImageIcon className="size-5 shrink-0 text-blue-400" />
-              <p
-                className="truncate text-sm font-medium text-neutral-200"
-                title={selectedImage.name}
-              >
-                {selectedImage.name}
-              </p>
+      {selectedImage &&
+        createPortal(
+          <div className="fixed inset-0 z-[10000] flex h-full w-full flex-col bg-neutral-950 text-white m-0 p-0 border-0 overflow-hidden">
+            {/* Top Bar Header */}
+            <div className="flex h-14 shrink-0 items-center justify-between border-b border-neutral-800 bg-neutral-900 px-4">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <ImageIcon className="size-5 shrink-0 text-blue-400" />
+                <p
+                  className="truncate text-sm font-medium text-neutral-200"
+                  title={selectedImage.name}
+                >
+                  {selectedImage.name}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href={selectedImage.url}
+                  download={selectedImage.name}
+                  className="rounded p-2 text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white"
+                  title="Download Image"
+                >
+                  <Download size={18} />
+                </a>
+                <button
+                  type="button"
+                  onClick={closeImagePreview}
+                  className="rounded p-2 text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white"
+                  title="Close viewer (Esc)"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <a
-                href={selectedImage.url}
-                download={selectedImage.name}
-                className="rounded p-2 text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white"
-                title="Download Image"
-              >
-                <Download size={18} />
-              </a>
-              <button
-                type="button"
-                onClick={closeImagePreview}
-                className="rounded p-2 text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white"
-                title="Close viewer (Esc)"
-              >
-                <X size={20} />
-              </button>
-            </div>
-          </div>
 
-          {/* Image Viewport */}
-          <div className="relative flex-1 w-full h-full min-h-0 flex items-center justify-center p-4 overflow-auto bg-neutral-950">
-            <img
-              src={selectedImage.url}
-              alt={selectedImage.name}
-              className="max-h-full max-w-full object-contain select-none shadow-2xl"
-            />
-          </div>
-        </div>
-      )}
+            {/* Image Viewport */}
+            <div className="relative flex-1 w-full min-h-0 flex items-center justify-center p-4 overflow-hidden bg-neutral-950">
+              <img
+                src={selectedImage.url}
+                alt={selectedImage.name}
+                className="max-h-full max-w-full object-contain select-none shadow-2xl"
+              />
+            </div>
+          </div>,
+          document.body
+        )}
 
       <div className="space-y-2">
         {previewError && (
@@ -303,18 +320,34 @@ export default function AttachmentDisplay({
                 <div className="flex shrink-0 flex-wrap gap-2 sm:ml-2 sm:justify-end">
                   {(isPdfFile || isImageFile) && url && (
                     <Button
-                      type="button"
+                      asChild
                       variant="outline"
                       size="sm"
-                      className="shadow-none"
-                      onClick={() =>
-                        isPdfFile
-                          ? handleOpenPdf(attachment)
-                          : handleOpenImage(attachment)
-                      }
-                      disabled={imageLoadingName === attachment.file_name}
+                      className={`shadow-none ${imageLoadingName === attachment.file_name ? "pointer-events-none opacity-50" : ""}`}
                     >
-                      View
+                      <a
+                        href={getInlineUrl(attachment)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-disabled={imageLoadingName === attachment.file_name}
+                        onClick={(e) => {
+                          if (imageLoadingName === attachment.file_name) {
+                            e.preventDefault();
+                            return;
+                          }
+                          if (!isModifiedClick(e)) {
+                            e.preventDefault();
+                            if (isPdfFile) {
+                              handleOpenPdf(attachment);
+                            } else {
+                              handleOpenImage(attachment);
+                            }
+                          }
+                        }}
+                      >
+                        <Eye className="mr-2 size-4 shrink-0" aria-hidden="true" />
+                        View
+                      </a>
                     </Button>
                   )}
                   {url && (

@@ -697,7 +697,8 @@ def download_submission_file(
     submission_id: int,
     attachment_id: int,
     payload: dict,
-    db: Session,
+    inline: bool = False,
+    db: Session = None,
 ) -> FileResponse:
     submission = db.query(StudentSubmission).filter(StudentSubmission.submission_id == submission_id).first()
     if not submission:
@@ -718,6 +719,7 @@ def download_submission_file(
         path=str(path),
         filename=cast(str, attachment.file_name),
         media_type=cast(Optional[str], attachment.file_type) or "application/octet-stream",
+        content_disposition_type="inline" if inline else "attachment",
     )
 
 
