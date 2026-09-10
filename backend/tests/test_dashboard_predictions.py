@@ -19,7 +19,7 @@ from sqlalchemy import CheckConstraint, create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.core.Dependencies import get_current_user
+from app.core.Dependencies import get_current_user, get_optional_staff_id
 from app.api.v1.routes.Predictions import router as predictions_router
 from app.db.Base import Base
 from app.db.Session import get_db
@@ -29,7 +29,9 @@ from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
+from app.models.academic.PeriodTemplateSlot import PeriodTemplateSlot
 from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.auth.UserAccount import UserAccount
@@ -46,7 +48,9 @@ TABLES = [
     Class.__table__,
     StudentClass.__table__,
     Subject.__table__,
+    PeriodTemplateSlot.__table__,
     SubjectLoad.__table__,
+    TeacherSubstitution.__table__,
     AIModelVersion.__table__,
     AIPrediction.__table__,
 ]
@@ -499,3 +503,301 @@ def test_dashboard_filters(dashboard_context):
     t_seqs = [t.get("term_number") for t in data["terms"]]
     assert 1 in t_seqs
     assert 2 in t_seqs
+
+
+def test_dashboard_filters_with_class_id_admin(dashboard_context):
+    db = dashboard_context["db"]
+    client = dashboard_context["client"]
+    rizal = dashboard_context["classes"]["rizal"]
+    mabini = dashboard_context["classes"]["mabini"]
+    math = dashboard_context["subjects"]["math"]
+    sci = dashboard_context["subjects"]["sci"]
+    t1 = dashboard_context["terms"]["t1"]
+
+    # Seed loads: Math in Rizal, Sci in Mabini
+    load_rizal = SubjectLoad(
+        class_id=rizal.class_id,
+        subject_id=math.subject_id,
+        academic_period_id=t1.academic_period_id,
+        status="published",
+        is_active_version=True,
+    )
+    load_mabini = SubjectLoad(
+        class_id=mabini.class_id,
+        subject_id=sci.subject_id,
+        academic_period_id=t1.academic_period_id,
+        status="published",
+        is_active_version=True,
+    )
+    db.add_all([load_rizal, load_mabini])
+    db.commit()
+
+    # Admin querying with class_id = rizal
+    r = client.get(f"/api/v1/predictions/dashboard/filters?class_id={rizal.class_id}")
+    assert r.status_code == 200
+    data = r.json()
+    subj_ids = [s["subject_id"] for s in data["subjects"]]
+    assert math.subject_id in subj_ids
+    assert sci.subject_id not in subj_ids
+
+
+def test_dashboard_filters_with_class_id_teacher_scoped(dashboard_context):
+    db = dashboard_context["db"]
+    client = dashboard_context["client"]
+    rizal = dashboard_context["classes"]["rizal"]
+    math = dashboard_context["subjects"]["math"]
+    sci = dashboard_context["subjects"]["sci"]
+    t1 = dashboard_context["terms"]["t1"]
+
+    teacher_staff = AcademicStaff(
+        staff_id="T_SCOPED_01",
+        first_name="Alice",
+        last_name="Guin",
+    )
+    other_staff = AcademicStaff(
+        staff_id="T_OTHER_01",
+        first_name="Bob",
+        last_name="Ong",
+    )
+    db.add_all([teacher_staff, other_staff])
+    db.commit()
+
+    load_math = SubjectLoad(
+        class_id=rizal.class_id,
+        subject_id=math.subject_id,
+        academic_period_id=t1.academic_period_id,
+        staff_id=teacher_staff.staff_id,
+        status="published",
+        is_active_version=True,
+    )
+    load_sci = SubjectLoad(
+        class_id=rizal.class_id,
+        subject_id=sci.subject_id,
+        academic_period_id=t1.academic_period_id,
+        staff_id=other_staff.staff_id,
+        status="published",
+        is_active_version=True,
+    )
+    db.add_all([load_math, load_sci])
+    db.commit()
+
+    # Act as teacher_staff
+    client.app.dependency_overrides[get_current_user] = lambda: {"sub": str(uuid.uuid4()), "role": "teacher"}
+    client.app.dependency_overrides[get_optional_staff_id] = lambda: teacher_staff.staff_id
+    try:
+        r = client.get(f"/api/v1/predictions/dashboard/filters?class_id={rizal.class_id}")
+        assert r.status_code == 200
+        data = r.json()
+        subj_ids = [s["subject_id"] for s in data["subjects"]]
+        assert math.subject_id in subj_ids
+        assert sci.subject_id not in subj_ids
+    finally:
+        client.app.dependency_overrides[get_current_user] = lambda: {"sub": str(uuid.uuid4()), "role": "admin"}
+        client.app.dependency_overrides[get_optional_staff_id] = lambda: None
+
+
+def test_dashboard_filters_with_class_id_substitute_teacher(dashboard_context):
+    db = dashboard_context["db"]
+    client = dashboard_context["client"]
+    rizal = dashboard_context["classes"]["rizal"]
+    sci = dashboard_context["subjects"]["sci"]
+    t1 = dashboard_context["terms"]["t1"]
+
+    orig_staff = AcademicStaff(
+        staff_id="T_ORIG_01",
+        first_name="Original",
+        last_name="Teacher",
+    )
+    sub_staff = AcademicStaff(
+        staff_id="T_SUB_01",
+        first_name="Substitute",
+        last_name="Teacher",
+    )
+    db.add_all([orig_staff, sub_staff])
+    db.commit()
+
+    load_sci = SubjectLoad(
+        class_id=rizal.class_id,
+        subject_id=sci.subject_id,
+        academic_period_id=t1.academic_period_id,
+        staff_id=orig_staff.staff_id,
+        status="published",
+        is_active_version=True,
+    )
+    db.add(load_sci)
+    db.commit()
+
+    # Active substitution covering today
+    sub = TeacherSubstitution(
+        subject_load_id=load_sci.subject_load_id,
+        original_staff_id=orig_staff.staff_id,
+        substitute_staff_id=sub_staff.staff_id,
+        start_date=date.today(),
+        status="active",
+    )
+    db.add(sub)
+    db.commit()
+
+    # Act as substitute teacher
+    client.app.dependency_overrides[get_current_user] = lambda: {"sub": str(uuid.uuid4()), "role": "teacher"}
+    client.app.dependency_overrides[get_optional_staff_id] = lambda: sub_staff.staff_id
+    try:
+        r = client.get(f"/api/v1/predictions/dashboard/filters?class_id={rizal.class_id}")
+        assert r.status_code == 200
+        data = r.json()
+        subj_ids = [s["subject_id"] for s in data["subjects"]]
+        assert sci.subject_id in subj_ids
+    finally:
+        client.app.dependency_overrides[get_current_user] = lambda: {"sub": str(uuid.uuid4()), "role": "admin"}
+        client.app.dependency_overrides[get_optional_staff_id] = lambda: None
+
+
+def test_dashboard_filters_with_class_id_teacher_no_loads(dashboard_context):
+    db = dashboard_context["db"]
+    client = dashboard_context["client"]
+    rizal = dashboard_context["classes"]["rizal"]
+
+    empty_staff = AcademicStaff(
+        staff_id="T_EMPTY_01",
+        first_name="No",
+        last_name="Loads",
+    )
+    db.add(empty_staff)
+    db.commit()
+
+    client.app.dependency_overrides[get_current_user] = lambda: {"sub": str(uuid.uuid4()), "role": "teacher"}
+    client.app.dependency_overrides[get_optional_staff_id] = lambda: empty_staff.staff_id
+    try:
+        r = client.get(f"/api/v1/predictions/dashboard/filters?class_id={rizal.class_id}")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["subjects"] == []
+    finally:
+        client.app.dependency_overrides[get_current_user] = lambda: {"sub": str(uuid.uuid4()), "role": "admin"}
+        client.app.dependency_overrides[get_optional_staff_id] = lambda: None
+
+
+def test_dashboard_filters_with_class_id_and_period(dashboard_context):
+    db = dashboard_context["db"]
+    client = dashboard_context["client"]
+    rizal = dashboard_context["classes"]["rizal"]
+    math = dashboard_context["subjects"]["math"]
+    sci = dashboard_context["subjects"]["sci"]
+    t1 = dashboard_context["terms"]["t1"]
+    t2 = dashboard_context["terms"]["t2"]
+
+    load_t1 = SubjectLoad(
+        class_id=rizal.class_id,
+        subject_id=math.subject_id,
+        academic_period_id=t1.academic_period_id,
+        status="published",
+        is_active_version=True,
+    )
+    load_t2 = SubjectLoad(
+        class_id=rizal.class_id,
+        subject_id=sci.subject_id,
+        academic_period_id=t2.academic_period_id,
+        status="published",
+        is_active_version=True,
+    )
+    db.add_all([load_t1, load_t2])
+    db.commit()
+
+    # Query for t1 only
+    r1 = client.get(f"/api/v1/predictions/dashboard/filters?class_id={rizal.class_id}&academic_period_id={t1.academic_period_id}")
+    assert r1.status_code == 200
+    data1 = r1.json()
+    subj_ids1 = [s["subject_id"] for s in data1["subjects"]]
+    assert math.subject_id in subj_ids1
+    assert sci.subject_id not in subj_ids1
+
+    # Query for t2 only
+    r2 = client.get(f"/api/v1/predictions/dashboard/filters?class_id={rizal.class_id}&academic_period_id={t2.academic_period_id}")
+    assert r2.status_code == 200
+    data2 = r2.json()
+    subj_ids2 = [s["subject_id"] for s in data2["subjects"]]
+    assert sci.subject_id in subj_ids2
+    assert math.subject_id not in subj_ids2
+
+
+def test_dashboard_filters_all_terms_alphabetical_fallback(dashboard_context):
+    db = dashboard_context["db"]
+    client = dashboard_context["client"]
+    rizal = dashboard_context["classes"]["rizal"]
+    level = db.query(AcademicLevel).first()
+    t1 = dashboard_context["terms"]["t1"]
+    t2 = dashboard_context["terms"]["t2"]
+
+    subj_z = Subject(subject_name="Zoology", subject_codename="ZOO", academic_level_id=level.academic_level_id)
+    subj_a = Subject(subject_name="Algebra", subject_codename="ALG", academic_level_id=level.academic_level_id)
+    subj_m = Subject(subject_name="Music", subject_codename="MUS", academic_level_id=level.academic_level_id)
+    db.add_all([subj_z, subj_a, subj_m])
+    db.commit()
+
+    slot1 = PeriodTemplateSlot(template_group="TEST", slot_name="P1", start_time="08:00", end_time="09:00", display_order=1)
+    slot2 = PeriodTemplateSlot(template_group="TEST", slot_name="P2", start_time="09:00", end_time="10:00", display_order=2)
+    db.add_all([slot1, slot2])
+    db.commit()
+
+    db.add_all([
+        SubjectLoad(class_id=rizal.class_id, subject_id=subj_z.subject_id, academic_period_id=t1.academic_period_id, slot_id=slot1.slot_id, status="published", is_active_version=True),
+        SubjectLoad(class_id=rizal.class_id, subject_id=subj_a.subject_id, academic_period_id=t1.academic_period_id, slot_id=slot2.slot_id, status="published", is_active_version=True),
+        SubjectLoad(class_id=rizal.class_id, subject_id=subj_m.subject_id, academic_period_id=t2.academic_period_id, status="published", is_active_version=True),
+    ])
+    db.commit()
+
+    # "All Terms": academic_period_id omitted -> alphabetical
+    r = client.get(f"/api/v1/predictions/dashboard/filters?class_id={rizal.class_id}")
+    assert r.status_code == 200
+    data = r.json()
+    names = [s["subject_name"] for s in data["subjects"]]
+    filtered_names = [n for n in names if n in ["Algebra", "Music", "Zoology"]]
+    assert filtered_names == ["Algebra", "Music", "Zoology"]
+    for s in data["subjects"]:
+        assert s["period_index"] is None
+
+
+def test_dashboard_filters_subject_period_index_ordering(dashboard_context):
+    db = dashboard_context["db"]
+    client = dashboard_context["client"]
+    rizal = dashboard_context["classes"]["rizal"]
+    level = db.query(AcademicLevel).first()
+    t1 = dashboard_context["terms"]["t1"]
+
+    subj_early = Subject(subject_name="Early Subject", subject_codename="EARLY", academic_level_id=level.academic_level_id)
+    subj_late = Subject(subject_name="Late Subject", subject_codename="LATE", academic_level_id=level.academic_level_id)
+    subj_unscheduled = Subject(subject_name="Alpha Unscheduled", subject_codename="UNSCHED", academic_level_id=level.academic_level_id)
+    db.add_all([subj_early, subj_late, subj_unscheduled])
+    db.commit()
+
+    slot_late = PeriodTemplateSlot(template_group="TEST", slot_name="P5", start_time="13:00", end_time="14:00", display_order=5)
+    slot_early = PeriodTemplateSlot(template_group="TEST", slot_name="P2", start_time="09:00", end_time="10:00", display_order=2)
+    db.add_all([slot_late, slot_early])
+    db.commit()
+
+    db.add_all([
+        SubjectLoad(class_id=rizal.class_id, subject_id=subj_early.subject_id, academic_period_id=t1.academic_period_id, slot_id=slot_early.slot_id, status="published", is_active_version=True),
+        SubjectLoad(class_id=rizal.class_id, subject_id=subj_late.subject_id, academic_period_id=t1.academic_period_id, slot_id=slot_late.slot_id, status="published", is_active_version=True),
+        SubjectLoad(class_id=rizal.class_id, subject_id=subj_unscheduled.subject_id, academic_period_id=t1.academic_period_id, status="published", is_active_version=True),
+    ])
+    db.commit()
+
+    r = client.get(f"/api/v1/predictions/dashboard/filters?class_id={rizal.class_id}&academic_period_id={t1.academic_period_id}")
+    assert r.status_code == 200
+    data = r.json()
+    relevant = [s for s in data["subjects"] if s["subject_name"] in ["Early Subject", "Late Subject", "Alpha Unscheduled"]]
+    assert relevant[0]["subject_name"] == "Early Subject"
+    assert relevant[0]["period_index"] == 2
+    assert relevant[1]["subject_name"] == "Late Subject"
+    assert relevant[1]["period_index"] == 5
+    assert relevant[2]["subject_name"] == "Alpha Unscheduled"
+    assert relevant[2]["period_index"] is None
+
+
+def test_dashboard_filters_without_class_id_unchanged(dashboard_context):
+    client = dashboard_context["client"]
+    r = client.get("/api/v1/predictions/dashboard/filters")
+    assert r.status_code == 200
+    data = r.json()
+    for s in data["subjects"]:
+        assert s["period_index"] is None

@@ -171,7 +171,21 @@ def main() -> None:
                         help="Parse and resolve without writing to DB.")
     parser.add_argument("--replace", action="store_true",
                         help="Delete existing predictions for this model version first.")
+    parser.add_argument(
+        "--force-synthetic-seeding",
+        action="store_true",
+        help="Explicitly override safety guards to seed synthetic students and LIVE_IMPORT subjects.",
+    )
     args = parser.parse_args()
+
+    if not args.force_synthetic_seeding and not args.dry_run:
+        print(
+            "ERROR: Safety guard active! Re-seeding synthetic students and LIVE_IMPORT subjects\n"
+            "is blocked by default to prevent contaminating operational databases.\n"
+            "If you intentionally want to run this on a blank dev database, provide --force-synthetic-seeding.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     default_csv = Path(__file__).resolve().parents[1] / "data" / "live_predictions" / "final_student_risk_predictions.csv"
 
@@ -205,6 +219,7 @@ def main() -> None:
 
     from app.db.Session import SessionLocal
     from app.models.people.Student import Student
+    from app.models.academic.StudentCLass import StudentClass
     from app.models.academic.AcademicPeriod import AcademicPeriod
     from app.models.academic.Subject import Subject
     from app.models.academic.Class_ import Class
@@ -213,6 +228,29 @@ def main() -> None:
     from app.models.ai.PredictionOutcome import PredictionOutcome
 
     db = SessionLocal()
+
+    # Safety Guard: Never seed synthetic data into a database with real enrolled students
+    enrolled_count = db.query(StudentClass).count()
+    users_with_students = db.query(Student).filter(Student.user_id.isnot(None)).count()
+    if enrolled_count > 0 or users_with_students > 0:
+        print(
+            f"CRITICAL SAFETY ABORT: Target database contains {enrolled_count} active student class enrollments\n"
+            f"and {users_with_students} linked student user accounts. Synthetic seeding is permanently disabled\n"
+            f"on databases containing real enrolled students!",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Idempotency Check: Prevent duplicate additive seeding of LIVE_IMPORT subjects
+    if not args.replace and not args.dry_run:
+        existing_live_imports = db.query(Subject).filter(Subject.subject_group == "LIVE_IMPORT").count()
+        if existing_live_imports > 0:
+            print(
+                f"IDEMPOTENCY ABORT: Database already contains {existing_live_imports} LIVE_IMPORT subjects.\n"
+                f"Additive seeding is blocked. Use --replace to overwrite existing predictions.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     # ------------------------------------------------------------------ Phase 0: ensure subjects
     print("=== Phase 0: Ensure required subjects exist ===")

@@ -162,6 +162,8 @@ def _validate_import_rows(
             raw_gender = normalized.get("gender", "").strip()
             if not raw_gender:
                 errors.append(_import_error(index, "gender", raw_gender, "Gender is required"))
+            elif raw_gender.capitalize() not in {"Male", "Female"}:
+                errors.append(_import_error(index, "gender", raw_gender, "Gender must be Male or Female"))
 
             raw_gwa = next((normalized.get(k) for k in ("prior_gwa", "general_average", "gwa") if normalized.get(k) not in (None, "")), "")
             if raw_gwa:

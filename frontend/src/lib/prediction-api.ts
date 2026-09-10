@@ -69,6 +69,7 @@ export interface DashboardSubjectOption {
   subject_id: number;
   subject_name: string;
   subject_codename?: string | null;
+  period_index?: number | null;
 }
 
 export interface DashboardTermOption {
@@ -227,8 +228,14 @@ export async function fetchDashboardAtRisk(
   return response.json();
 }
 
-export async function fetchDashboardFilters(): Promise<DashboardFilters> {
-  const response = await apiFetch("/api/v1/predictions/dashboard/filters");
+export async function fetchDashboardFilters(
+  params?: { class_id?: number; academic_period_id?: number }
+): Promise<DashboardFilters> {
+  const query = new URLSearchParams();
+  if (params?.class_id !== undefined) query.set("class_id", String(params.class_id));
+  if (params?.academic_period_id !== undefined) query.set("academic_period_id", String(params.academic_period_id));
+  const qs = query.toString();
+  const response = await apiFetch(`/api/v1/predictions/dashboard/filters${qs ? `?${qs}` : ""}`);
   if (!response.ok) throw new Error("Failed to load dashboard filters.");
   return response.json();
 }
