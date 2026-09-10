@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import { type Dispatch, type SetStateAction } from "react";
 import { ArrowRight, FileText, Trash2, Upload } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { ClassworkDraft, Lesson } from "./types";
@@ -33,6 +33,7 @@ export default function ClassworkFormModal({
 }: ClassworkFormModalProps) {
   const navigate = useNavigate();
   const location = useLocation();
+
   const isReadingDraft = classworkDraft.classwork_type === "READING";
   const isQuizDraft = classworkDraft.classwork_type === "QUIZ";
   const isQuarterlyAssessment =
