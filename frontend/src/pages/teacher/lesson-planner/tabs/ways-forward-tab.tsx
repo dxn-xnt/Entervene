@@ -1,7 +1,7 @@
 import React from "react";
 import { Label } from "@/components/ui/label";
-import type { LessonPlanDraft } from "../useLessonPlanner";
-import { AIAssistButton } from "../components/AIAssistButton";
+import type { LessonPlanDraft } from "../use-lesson-planner";
+import { AIAssistButton } from "../components/ai-assist-button";
 import { CheckCircle } from "lucide-react";
 
 interface WaysForwardTabProps {

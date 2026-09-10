@@ -1,7 +1,14 @@
-import { Archive, Check, Pencil, RotateCcw } from "lucide-react";
+import { Archive, Check, Ellipsis, Pencil, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
-import { Card as RetroCard } from "@/components/retroui/Card";
+import { Card } from "@/components/retroui/Card";
+import { Table } from "@/components/retroui/Table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatPeriodLabel } from "@/lib/academic-periods";
 import type {
   SubjectListItem,
@@ -55,7 +62,7 @@ type CurriculumPlanTableProps = {
   academicYearLabel: string;
   gradeLabel: string;
   pathwayLabel: string;
-  pathway: SubjectOfferingPathway | "all";
+  pathway?: SubjectOfferingPathway | "all";
   readOnly?: boolean;
   readOnlyReason?: string;
   onEdit: (offering: SubjectOfferingListItem) => void;
@@ -70,7 +77,7 @@ function subjectCode(value: string | null) {
 function statusBadge(status: SubjectStatus) {
   return (
     <Badge size="sm" variant={status === "active" ? "surface" : "outline"}>
-      {status}
+      {status === "active" ? "Active" : "Archived"}
     </Badge>
   );
 }
@@ -145,7 +152,6 @@ export function CurriculumPlanTable({
   academicYearLabel,
   gradeLabel,
   pathwayLabel,
-  pathway,
   readOnly = false,
   readOnlyReason,
   onEdit,
@@ -156,109 +162,125 @@ export function CurriculumPlanTable({
   const rows = groupOfferingsForCurriculumPlan(offerings, terms, catalogSubjects);
 
   return (
-    <RetroCard className="w-full overflow-hidden p-0">
-      <div className="border-b-2 border-black bg-[#fff1b8] p-3">
+    <Card className="w-full overflow-hidden p-0 shadow-md">
+      <Card.Header className="border-b-2 border-black bg-primary p-3 mb-0">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-          <div>
-            <h2 className="text-xl font-bold">
-              {gradeLabel} • {pathwayLabel} • {academicYearLabel}
-            </h2>
-            <p className="text-sm font-semibold">
-              {rows.length} subject{rows.length === 1 ? "" : "s"} • {terms.length} term{terms.length === 1 ? "" : "s"}
-            </p>
+          <div className="flex flex-col gap-1">
+            <div className="flex flex-row gap-2 items-end">
+              <h2 className="text-2xl font-bold">
+                {gradeLabel}
+              </h2>
+              <p className="mb-0.5 text-base">
+                ({academicYearLabel})
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Badge size="sm" variant="solid">
+                {rows.length} subject{rows.length === 1 ? "" : "s"}
+              </Badge>
+              <Badge size="sm" variant="solid">
+                {terms.length} term{terms.length === 1 ? "" : "s"}
+              </Badge>
+            </div>
           </div>
           <Badge size="sm" variant="outline">
-            {pathway === "all" ? "Mixed pathway" : "Curriculum Plan"}
+            {pathwayLabel}
           </Badge>
         </div>
-      </div>
+      </Card.Header>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1080px] text-left text-sm">
-          <thead className="border-b-2 border-black bg-[#fff7d6]">
-            <tr>
-              <th className="px-3 py-2 font-bold">Subject</th>
-              <th className="px-3 py-2 font-bold">Code</th>
-              <th className="px-3 py-2 font-bold">Group</th>
-              {terms.map((term) => (
-                <th key={term.academic_period_id} className="px-3 py-2 text-center font-bold">
-                  {formatPeriodLabel(term)}
-                </th>
-              ))}
-              <th className="px-3 py-2 font-bold">Minutes</th>
-              <th className="px-3 py-2 font-bold">Grading Template</th>
-              <th className="px-3 py-2 font-bold">Status</th>
-              <th className="px-3 py-2 text-right font-bold">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.key} className="border-b border-black/20 last:border-b-0">
-                <td className="px-3 py-2 font-semibold">{row.subjectName}</td>
-                <td className="px-3 py-2">{subjectCode(row.subjectCode)}</td>
-                <td className="px-3 py-2">{row.subjectGroup || "Ungrouped"}</td>
-                {terms.map((term) => {
-                  const termOffering = row.termOfferings.get(term.academic_period_id);
-                  return (
-                    <td key={term.academic_period_id} className="px-3 py-2 text-center">
-                      {termOffering ? (
-                        <span
-                          className="inline-grid size-7 place-items-center rounded-full border-2 border-black bg-[#bbf7d0]"
-                          title={`${row.subjectName} is offered in ${formatPeriodLabel(term)}`}
-                        >
-                          <Check className="size-4" />
-                        </span>
-                      ) : (
-                        <span className="text-black/50">-</span>
-                      )}
-                    </td>
-                  );
-                })}
-                <td className="px-3 py-2">{row.minutes ? `${row.minutes} mins` : "—"}</td>
-                <td className="px-3 py-2">{row.gradingTemplate || "No template"}</td>
-                <td className="px-3 py-2">{statusBadge(row.status)}</td>
-                <td className="px-3 py-2">
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8"
-                      onClick={() => onEdit(row.primaryOffering)}
-                      disabled={readOnly}
-                      title={readOnly ? readOnlyReason : "Edit offering"}
-                    >
-                      <Pencil className="mr-1 size-4" /> Edit
-                    </Button>
-                    {row.primaryOffering.status === "active" ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8"
-                        onClick={() => onArchive(row.primaryOffering)}
-                        disabled={readOnly}
-                        title={readOnly ? readOnlyReason : "Archive offering"}
-                      >
-                        <Archive className="mr-1 size-4" /> Archive
-                      </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8"
-                        onClick={() => onRestore(row.primaryOffering)}
-                        disabled={readOnly}
-                        title={readOnly ? readOnlyReason : "Restore offering"}
-                      >
-                        <RotateCcw className="mr-1 size-4" /> Restore
-                      </Button>
-                    )}
-                  </div>
-                </td>
-              </tr>
+      <Table wrapperClassName="border-0" className="border-0 shadow-none">
+        <Table.Header className="bg-primary text-black font-sans border-b-2 border-border">
+          <Table.Row className="border-b-2 border-black hover:bg-transparent">
+            <Table.Head className="font-bold text-sm text-black">Subject</Table.Head>
+            <Table.Head className="font-bold text-sm text-black">Code</Table.Head>
+            <Table.Head className="font-bold text-sm text-black">Group</Table.Head>
+            {terms.map((term) => (
+              <Table.Head key={term.academic_period_id} className="text-center font-bold text-sm text-black">
+                {formatPeriodLabel(term)}
+              </Table.Head>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </RetroCard>
+            <Table.Head className="font-bold text-sm text-black">Minutes</Table.Head>
+            <Table.Head className="font-bold text-sm text-black">Grading Template</Table.Head>
+            <Table.Head className="w-10 text-center font-bold text-sm text-black">Status</Table.Head>
+            <Table.Head className="w-8 text-right font-bold text-sm text-black">Actions</Table.Head>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
+          {rows.map((row) => (
+            <Table.Row key={row.key} className="border-b border-border last:border-b-0">
+              <Table.Cell className="font-semibold">{row.subjectName}</Table.Cell>
+              <Table.Cell>{subjectCode(row.subjectCode)}</Table.Cell>
+              <Table.Cell>{row.subjectGroup || "Ungrouped"}</Table.Cell>
+              {terms.map((term) => {
+                const termOffering = row.termOfferings.get(term.academic_period_id);
+                return (
+                  <Table.Cell key={term.academic_period_id} className="text-center">
+                    {termOffering ? (
+                      <span
+                        className="inline-grid size-7 place-items-center rounded-full border-2 border-black bg-primary"
+                        title={`${row.subjectName} is offered in ${formatPeriodLabel(term)}`}
+                      >
+                        <Check className="size-4" />
+                      </span>
+                    ) : (
+                      <span className="text-black/50">-</span>
+                    )}
+                  </Table.Cell>
+                );
+              })}
+              <Table.Cell>{row.minutes ? `${row.minutes} mins` : "—"}</Table.Cell>
+              <Table.Cell>{row.gradingTemplate || "No template"}</Table.Cell>
+              <Table.Cell className="w-10 text-center">{statusBadge(row.status)}</Table.Cell>
+              <Table.Cell>
+                <div className="flex w- justify-end">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 w-8 p-0"
+                        disabled={readOnly}
+                        title={readOnly ? readOnlyReason : "Actions"}
+                        aria-label="Actions"
+                      >
+                        <Ellipsis className="size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="border-2 min-w-[140px]">
+                      <DropdownMenuItem
+                        onClick={() => onEdit(row.primaryOffering)}
+                        disabled={readOnly}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <Pencil className="size-4" /> Edit
+                      </DropdownMenuItem>
+                      {row.primaryOffering.status === "active" ? (
+                        <DropdownMenuItem
+                          onClick={() => onArchive(row.primaryOffering)}
+                          disabled={readOnly}
+                          className="gap-2 cursor-pointer"
+                        >
+                          <Archive className="size-4" /> Archive
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem
+                          onClick={() => onRestore(row.primaryOffering)}
+                          disabled={readOnly}
+                          className="gap-2 cursor-pointer"
+                        >
+                          <RotateCcw className="size-4" /> Restore
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </Table.Cell>
+            </Table.Row>
+          ))}
+        </Table.Body>
+      </Table>
+    </Card>
   );
 }
+

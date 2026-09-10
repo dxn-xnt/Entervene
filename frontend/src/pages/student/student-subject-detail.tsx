@@ -5,8 +5,8 @@ import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tabs, type TabItem } from "../../components/retroui/Tabs";
-import SubjectLessonTab from "./Subjects/tabs/subject-lesson-tab";
-import SubjectClassworkTab from "./Subjects/tabs/subject-classwork-tab";
+import SubjectLessonTab from "./subjects-view/tabs/subject-lesson-tab";
+import SubjectClassworkTab from "./subjects-view/tabs/subject-classwork-tab";
 import { routes } from "@/../routes";
 import { apiFetch } from "@/lib/api";
 
