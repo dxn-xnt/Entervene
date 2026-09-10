@@ -7,16 +7,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.models.academic.StudentCLass import StudentClass
-from app.models.attendance.Attendance import AttendanceRecord, LeaveRequest
+from app.models.attendance.Attendance import AttendanceRecord
 from app.models.people.Student import Student
 from app.models.people.AcademicStaff import AcademicStaff
 from app.schemas.Attendance import (
     BatchAttendanceCreate,
     AttendanceRecordResponse,
     AttendanceSummaryResponse,
-    LeaveRequestCreate,
-    LeaveRequestResponse,
-    LeaveRequestUpdate,
     QRScanAttendanceRequest,
     QRScanAttendanceResponse,
 )
@@ -55,23 +52,6 @@ def _to_attendance_response(
         recorded_by_staff_id=getattr(record, "recorded_by_staff_id"),
         created_at=getattr(record, "created_at"),
         updated_at=getattr(record, "updated_at"),
-    )
-
-
-def _to_leave_request_response(leave_req: LeaveRequest, student_name: str | None = None) -> LeaveRequestResponse:
-    return LeaveRequestResponse(
-        leave_request_id=getattr(leave_req, "leave_request_id"),
-        student_id=getattr(leave_req, "student_id"),
-        student_name=student_name,
-        class_id=getattr(leave_req, "class_id"),
-        start_date=getattr(leave_req, "start_date"),
-        end_date=getattr(leave_req, "end_date"),
-        reason=getattr(leave_req, "reason"),
-        status=getattr(leave_req, "status"),
-        reviewed_by_staff_id=getattr(leave_req, "reviewed_by_staff_id"),
-        reviewed_at=getattr(leave_req, "reviewed_at"),
-        created_at=getattr(leave_req, "created_at"),
-        updated_at=getattr(leave_req, "updated_at"),
     )
 
 
@@ -368,76 +348,6 @@ def get_risk_adjusted_attendance_rate(
     }
 
 
-def create_leave_request(
-    db: Session,
-    student_id: UUID,
-    payload: LeaveRequestCreate,
-) -> LeaveRequestResponse:
-    """Submit a leave of absence request for a student."""
-    leave_req = LeaveRequest(
-        student_id=student_id,
-        class_id=payload.class_id,
-        start_date=payload.start_date,
-        end_date=payload.end_date,
-        reason=payload.reason,
-        status="pending",
-    )
-    db.add(leave_req)
-    db.commit()
-    db.refresh(leave_req)
-
-    student = db.query(Student).filter(Student.student_id == student_id).first()
-    student_name = f"{student.first_name} {student.last_name}" if student else None
-
-    return _to_leave_request_response(leave_req, student_name=student_name)
-
-
-def get_class_leave_requests(
-    db: Session,
-    class_id: int,
-    status_filter: Optional[str] = None,
-) -> list[LeaveRequestResponse]:
-    """Retrieve leave requests for a class."""
-    query = (
-        db.query(LeaveRequest, Student)
-        .join(Student, Student.student_id == LeaveRequest.student_id)
-        .filter(LeaveRequest.class_id == class_id)
-    )
-
-    if status_filter:
-        query = query.filter(LeaveRequest.status == status_filter)
-
-    query = query.order_by(LeaveRequest.created_at.desc())
-    rows = query.all()
-
-    return [
-        _to_leave_request_response(req, student_name=f"{student.first_name} {student.last_name}")
-        for req, student in rows
-    ]
-
-
-def update_leave_request_status(
-    db: Session,
-    leave_request_id: int,
-    payload: LeaveRequestUpdate,
-    reviewed_by_staff_id: str | None = None,
-) -> LeaveRequestResponse:
-    """Approve or reject a student leave request."""
-    leave_req = db.query(LeaveRequest).filter(LeaveRequest.leave_request_id == leave_request_id).first()
-    if not leave_req:
-        raise HTTPException(status_code=404, detail="Leave request not found")
-
-    leave_req.status = payload.status
-    leave_req.reviewed_by_staff_id = reviewed_by_staff_id
-    leave_req.reviewed_at = datetime.now(timezone.utc)
-
-    db.commit()
-    db.refresh(leave_req)
-
-    student = db.query(Student).filter(Student.student_id == leave_req.student_id).first()
-    student_name = f"{student.first_name} {student.last_name}" if student else None
-
-    return _to_leave_request_response(leave_req, student_name=student_name)
 
 
 def get_student_attendance_logs(
@@ -471,26 +381,4 @@ def get_student_attendance_logs(
         for record, student, subject in rows
     ]
 
-
-def get_student_leave_requests(
-    db: Session,
-    student_id: UUID,
-    class_id: Optional[int] = None,
-) -> list[LeaveRequestResponse]:
-    """Retrieve submitted leave requests for a specific student."""
-    query = (
-        db.query(LeaveRequest, Student)
-        .join(Student, Student.student_id == LeaveRequest.student_id)
-        .filter(LeaveRequest.student_id == student_id)
-    )
-    if class_id:
-        query = query.filter(LeaveRequest.class_id == class_id)
-
-    query = query.order_by(LeaveRequest.created_at.desc())
-    rows = query.all()
-
-    return [
-        _to_leave_request_response(req, student_name=f"{student.first_name} {student.last_name}")
-        for req, student in rows
-    ]
 

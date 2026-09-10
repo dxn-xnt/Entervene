@@ -1380,7 +1380,7 @@ function OverviewTab({
                       size="sm"
                       onClick={() =>
                         navigate(
-                          `/teacher/classworks?classworkId=${selectedClasswork.classwork_id}`,
+                          `/teacher/classworks/${selectedClasswork.classwork_id}`,
                         )
                       }
                       className="border-2 border-black bg-white hover:bg-gray-50 font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-xs"
@@ -1575,7 +1575,7 @@ function OverviewTab({
                         size="sm"
                         onClick={() =>
                           navigate(
-                            `/teacher/classworks?classworkId=${selectedClasswork.classwork_id}`,
+                            `/teacher/classworks/${selectedClasswork.classwork_id}`,
                           )
                         }
                         className="w-full border-2 border-black bg-black text-white font-bold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-800"
