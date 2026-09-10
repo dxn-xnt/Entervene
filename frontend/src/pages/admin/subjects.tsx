@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
+import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
 import { Card as RetroCard } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Input } from "@/components/retroui/Input";
-import { Loader } from "@/components/retroui/Loader";
 import { Select } from "@/components/retroui/Select";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -33,6 +33,7 @@ import {
   OfferingModal,
   OfferingRow,
   SubjectGradeSection,
+  SubjectCatalogCard,
   SubjectRow,
   defaultPathwayForGrade,
   downloadBlob,
@@ -967,99 +968,114 @@ export default function AdminSubjects() {
               ) : null}
 
               {activeSection === "archived" ? (
-                <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                  <RetroCard className="p-4">
-                    <h2 className="text-xl font-semibold">Archived Catalog Subjects</h2>
-                    <p className="mb-4 text-sm">Subjects no longer used in the catalog.</p>
-                    {isLoadingCatalog ? (
-                      <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
-                        <Loader size="sm" />
-                        Loading archived subjects...
+                <section className="flex flex-col gap-4">
+                  <RetroCard className="flex flex-col bg-primary">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-xl font-bold">Archived Catalog Subjects</h2>
+                        <p className="text-sm">Subjects no longer used in the catalog.</p>
                       </div>
-                    ) : archivedSubjects.length === 0 ? (
-                      <p className="text-sm">No archived catalog subjects.</p>
-                    ) : (
-                      <div className="flex flex-col gap-3">
-                        {archivedSubjects.map((subject) => (
-                          <SubjectRow
-                            key={subject.subject_id}
-                            subject={subject}
-                            onRestore={(itemToRestore) =>
-                              setPendingAction({
-                                kind: "subject",
-                                action: "restore",
-                                id: itemToRestore.subject_id,
-                                label: itemToRestore.subject_name,
-                              })
-                            }
-                          />
-                        ))}
-                      </div>
-                    )}
+                      <Badge variant="outline" className="border-border">
+                        {archivedSubjects.length} subject
+                        {archivedSubjects.length !== 1 ? "s" : ""}
+                      </Badge>
+                    </div>
+                    <div >
+                      {archivedSubjects.length === 0 ? (
+                        <p className="text-sm">No archived catalog subjects.</p>
+                      ) : (
+                        <div className="flex gap-3 overflow-auto pb-2 pt-1">
+                          {archivedSubjects.map((subject) => (
+                            <SubjectCatalogCard
+                              key={subject.subject_id}
+                              subject={subject}
+                              onRestore={(itemToRestore) =>
+                                setPendingAction({
+                                  kind: "subject",
+                                  action: "restore",
+                                  id: itemToRestore.subject_id,
+                                  label: itemToRestore.subject_name,
+                                })
+                              }
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </RetroCard>
 
-                  <RetroCard className="p-4">
-                    <h2 className="text-xl font-semibold">Archived Subject Offerings</h2>
-                    <p className="mb-4 text-sm">Offerings removed from the active school year/pathway setup.</p>
-                    {isLoadingOfferings ? (
-                      <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
-                        <Loader size="sm" />
-                        Loading archived offerings...
+                  <RetroCard className="flex flex-col bg-primary">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-xl font-bold">Archived Subject Offerings</h2>
+                        <p className="text-sm">Offerings removed from the active school year/pathway setup.</p>
                       </div>
-                    ) : archivedOfferings.length === 0 ? (
-                      <p className="text-sm">No archived subject offerings.</p>
-                    ) : (
-                      <div className="flex flex-col gap-3">
-                        {archivedOfferings.map((offering) => (
-                          <OfferingRow
-                            key={offering.subject_offering_id}
-                            offering={offering}
-                            readOnly={isViewingInactiveAcademicYear}
-                            readOnlyReason={readOnlyReason}
-                            onRestore={(itemToRestore) =>
-                              setPendingAction({
-                                kind: "offering",
-                                action: "restore",
-                                id: itemToRestore.subject_offering_id,
-                                label: itemToRestore.subject.subject_name,
-                              })
-                            }
-                          />
-                        ))}
-                      </div>
-                    )}
+                      <Badge variant="outline" className="border-border">
+                        {archivedOfferings.length} offering
+                        {archivedOfferings.length !== 1 ? "s" : ""}
+                      </Badge>
+                    </div>
+                    <div>
+                      {archivedOfferings.length === 0 ? (
+                        <p className="text-sm">No archived subject offerings.</p>
+                      ) : (
+                        <div className="flex gap-3 overflow-auto pb-2 pt-1">
+                          {archivedOfferings.map((offering) => (
+                            <OfferingRow
+                              key={offering.subject_offering_id}
+                              offering={offering}
+                              readOnly={isViewingInactiveAcademicYear}
+                              readOnlyReason={readOnlyReason}
+                              onRestore={(itemToRestore) =>
+                                setPendingAction({
+                                  kind: "offering",
+                                  action: "restore",
+                                  id: itemToRestore.subject_offering_id,
+                                  label: itemToRestore.subject.subject_name,
+                                })
+                              }
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </RetroCard>
 
-                  <RetroCard className="p-4">
-                    <h2 className="text-xl font-semibold">Archived Grading Templates</h2>
-                    <p className="mb-4 text-sm">Reusable grading setups hidden from active use.</p>
-                    {isLoadingGradingTemplates ? (
-                      <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
-                        <Loader size="sm" />
-                        Loading archived templates...
+                  <RetroCard className="flex flex-col bg-primary">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-xl font-bold">Archived Grading Templates</h2>
+                        <p className="text-sm">Reusable grading setups hidden from active use.</p>
                       </div>
-                    ) : archivedGradingTemplates.length === 0 ? (
-                      <p className="text-sm">No archived grading templates.</p>
-                    ) : (
-                      <div className="flex flex-col gap-3">
-                        {archivedGradingTemplates.map((template) => (
-                          <GradingTemplateRow
-                            key={template.grading_template_id}
-                            template={template}
-                            readOnly={isViewingInactiveAcademicYear}
-                            readOnlyReason={readOnlyReason}
-                            onRestore={(itemToRestore) =>
-                              setPendingAction({
-                                kind: "grading",
-                                action: "restore",
-                                id: itemToRestore.grading_template_id,
-                                label: itemToRestore.template_name,
-                              })
-                            }
-                          />
-                        ))}
-                      </div>
-                    )}
+                      <Badge variant="outline" className="border-border">
+                        {archivedGradingTemplates.length} template
+                        {archivedGradingTemplates.length !== 1 ? "s" : ""}
+                      </Badge>
+                    </div>
+                    <div className="pt-3">
+                      {archivedGradingTemplates.length === 0 ? (
+                        <p className="text-sm">No archived grading templates.</p>
+                      ) : (
+                        <div className="flex flex-col gap-3">
+                          {archivedGradingTemplates.map((template) => (
+                            <GradingTemplateRow
+                              key={template.grading_template_id}
+                              template={template}
+                              readOnly={isViewingInactiveAcademicYear}
+                              readOnlyReason={readOnlyReason}
+                              onRestore={(itemToRestore) =>
+                                setPendingAction({
+                                  kind: "grading",
+                                  action: "restore",
+                                  id: itemToRestore.grading_template_id,
+                                  label: itemToRestore.template_name,
+                                })
+                              }
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </RetroCard>
                 </section>
               ) : null}

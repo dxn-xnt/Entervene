@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from "react";
-import StatusPage from "@/pages/StatusPage";
+import StatusPage from "@/pages/status-page";
 
 export default class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };

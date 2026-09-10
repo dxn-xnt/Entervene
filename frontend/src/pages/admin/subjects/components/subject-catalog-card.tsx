@@ -1,7 +1,7 @@
 import { Button } from "@/components/retroui/Button";
 import { Card as RetroCard } from "@/components/retroui/Card";
 import { Link } from "react-router-dom";
-import { ArchiveIcon, EllipsisIcon, PenIcon } from "lucide-react";
+import { ArchiveIcon, EllipsisIcon, PenIcon, RotateCcw } from "lucide-react";
 import type { SubjectListItem } from "@/lib/api";
 import { subjectCode, subjectRouteGrade } from "./subject-utils";
 import { Badge } from "@/components/retroui/Badge";
@@ -11,10 +11,12 @@ export function SubjectCatalogCard({
   subject,
   onEdit,
   onArchive,
+  onRestore,
 }: {
   subject: SubjectListItem;
   onEdit?: (subject: SubjectListItem) => void;
-  onArchive: (subject: SubjectListItem) => void;
+  onArchive?: (subject: SubjectListItem) => void;
+  onRestore?: (subject: SubjectListItem) => void;
 }) {
   const routeGrade = encodeURIComponent(subjectRouteGrade(subject.academic_level));
 
@@ -60,9 +62,30 @@ export function SubjectCatalogCard({
                     <PenIcon className="size-4" /> Edit
                   </DropdownMenuItem>
                 ) : null}
-                <DropdownMenuItem onClick={() => onArchive(subject)} className="gap-2">
-                  <ArchiveIcon className="size-4" /> Archive
-                </DropdownMenuItem>
+                {onArchive ? (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onArchive(subject);
+                    }}
+                    className="gap-2"
+                  >
+                    <ArchiveIcon className="size-4" /> Archive
+                  </DropdownMenuItem>
+                ) : null}
+                {onRestore ? (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onRestore(subject);
+                    }}
+                    className="gap-2"
+                  >
+                    <RotateCcw className="size-4" /> Restore
+                  </DropdownMenuItem>
+                ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

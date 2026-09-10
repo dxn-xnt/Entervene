@@ -1,8 +1,10 @@
 import { Button } from "@/components/retroui/Button";
 import { Card as RetroCard } from "@/components/retroui/Card";
-import { Archive, Pencil, RotateCcw } from "lucide-react";
+import { ArchiveIcon, EllipsisIcon, PenIcon, RotateCcw } from "lucide-react";
 import type { SubjectOfferingListItem } from "@/lib/api";
-import { pathwayLabel, statusBadge, subjectCode } from "./subject-utils";
+import { pathwayLabel, subjectCode } from "./subject-utils";
+import { Badge } from "@/components/retroui/Badge";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export function OfferingRow({
   offering,
@@ -20,55 +22,66 @@ export function OfferingRow({
   readOnlyReason?: string;
 }) {
   return (
-    <RetroCard className="p-3">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-bold">{offering.subject.subject_name}</p>
-            {statusBadge(offering.status)}
+    <RetroCard className="group relative flex min-w-90 flex-col justify-between shadow-none p-3 hover:-translate-y-1">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-2xl font-bold leading-tight mr-5">{offering.subject.subject_name}</p>
+            <p className="text-sm font-semibold">{subjectCode(offering.subject)}</p>
           </div>
-          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm md:grid-cols-3">
-            <span><strong>Code:</strong> {subjectCode(offering.subject)}</span>
-            <span><strong>Year:</strong> {offering.academic_year.year_label}</span>
-            <span><strong>Grade:</strong> {offering.academic_level.level_name}</span>
-            <span><strong>Term:</strong> {offering.academic_period.period_name}</span>
-            <span className="col-span-2"><strong>Pathway:</strong> {pathwayLabel(offering.pathway)}</span>
+          <div className="flex items-center gap-2">
+            <Badge variant={offering.status === "active" ? "secondary" : "default"}>
+              {offering.status === "active" ? "Active" : "Archived"}
+            </Badge>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="p-2 shadow-none"
+                  aria-label="More options"
+                  disabled={readOnly}
+                  title={readOnly ? readOnlyReason : undefined}
+                >
+                  <EllipsisIcon className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="border-2">
+                {onEdit ? (
+                  <DropdownMenuItem
+                    onClick={() => onEdit(offering)}
+                    disabled={readOnly}
+                    className="gap-2"
+                  >
+                    <PenIcon className="size-4" /> Edit
+                  </DropdownMenuItem>
+                ) : null}
+                {offering.status === "active" && onArchive ? (
+                  <DropdownMenuItem
+                    onClick={() => onArchive(offering)}
+                    disabled={readOnly}
+                    className="gap-2"
+                  >
+                    <ArchiveIcon className="size-4" /> Archive
+                  </DropdownMenuItem>
+                ) : null}
+                {offering.status === "archived" && onRestore ? (
+                  <DropdownMenuItem
+                    onClick={() => onRestore(offering)}
+                    disabled={readOnly}
+                    className="gap-2"
+                  >
+                    <RotateCcw className="size-4" /> Restore
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
-        <div className="flex shrink-0 gap-2">
-          {onEdit ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onEdit(offering)}
-              disabled={readOnly}
-              title={readOnly ? readOnlyReason : "Edit offering"}
-            >
-              <Pencil className="size-4 mr-2" /> Edit
-            </Button>
-          ) : null}
-          {offering.status === "active" && onArchive ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onArchive(offering)}
-              disabled={readOnly}
-              title={readOnly ? readOnlyReason : "Archive offering"}
-            >
-              <Archive className="size-4 mr-2" /> Archive
-            </Button>
-          ) : null}
-          {offering.status === "archived" && onRestore ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onRestore(offering)}
-              disabled={readOnly}
-              title={readOnly ? readOnlyReason : "Restore offering"}
-            >
-              <RotateCcw className="size-4 mr-2" /> Restore
-            </Button>
-          ) : null}
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <span className="font-semibold">{offering.academic_level.level_name} • {offering.academic_period.period_name}</span>
+          <span className="text-right font-semibold text-black/70">{offering.academic_year.year_label}</span>
+          <span className="col-span-2 line-clamp-1">{pathwayLabel(offering.pathway)}</span>
         </div>
       </div>
     </RetroCard>

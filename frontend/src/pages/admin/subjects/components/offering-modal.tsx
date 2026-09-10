@@ -22,7 +22,7 @@ import {
   type SubjectOfferingPathway,
   type SubjectStatus,
 } from "@/lib/api";
-import { SubjectPicker } from "./SubjectPicker";
+import { SubjectPicker } from "./subject-picker";
 import {
   FALLBACK_PERIODS,
   isJuniorHighGrade,
