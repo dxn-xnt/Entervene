@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, Numeric, String
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -35,6 +35,10 @@ class AIPrediction(Base):
     risk_level = Column(String(30), nullable=False)
     data_status = Column(String(30), nullable=False)
     model_version_id = Column(Integer, ForeignKey("ai_model_version.model_version_id", ondelete="RESTRICT"), nullable=True)
+    # Null is retained for legacy predictions. New audited generation will save
+    # a versioned evidence payload in a later Phase-1 service change.
+    evidence_snapshot = Column(JSON, nullable=True)
+    generation_request_id = Column(String(100), nullable=True, unique=True)
     generated_at = Column(DateTime(timezone=True), server_default=func.now())
 
     student = relationship("Student", backref="ai_predictions")

@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
@@ -23,7 +24,20 @@ from app.schemas.Activity import (
 )
 
 
-def _verify_teacher_scope(db: Session, staff_id: str, class_id: int, subject_id: int):
+def _verify_teacher_scope(
+    db: Session,
+    staff_id: str,
+    class_id: int,
+    subject_id: int,
+    academic_period_id: int | None = None,
+):
+    if academic_period_id is not None:
+        period = db.get(AcademicPeriod, academic_period_id)
+        class_ = db.get(Class, class_id)
+        if period is None:
+            raise HTTPException(status_code=400, detail="Academic period was not found")
+        if class_ is None or class_.academic_year_id != period.academic_year_id:
+            raise HTTPException(status_code=400, detail="Academic period does not belong to the target class year")
     row = (
         db.query(SubjectLoad)
         .filter(
@@ -31,9 +45,12 @@ def _verify_teacher_scope(db: Session, staff_id: str, class_id: int, subject_id:
             SubjectLoad.class_id == class_id,
             SubjectLoad.subject_id == subject_id,
             SubjectLoad.status.in_(["active", "published"]),
+            SubjectLoad.is_active_version.is_(True),
         )
-        .first()
     )
+    if academic_period_id is not None:
+        row = row.filter(SubjectLoad.academic_period_id == academic_period_id)
+    row = row.first()
     if not row:
         raise HTTPException(
             status_code=403,
@@ -43,7 +60,13 @@ def _verify_teacher_scope(db: Session, staff_id: str, class_id: int, subject_id:
 
 
 def create_activity(db: Session, staff_id: str, payload: ActivityCreateRequest):
-    _verify_teacher_scope(db, staff_id, payload.class_id, payload.subject_id)
+    _verify_teacher_scope(
+        db,
+        staff_id,
+        payload.class_id,
+        payload.subject_id,
+        payload.academic_period_id,
+    )
 
     classwork = Classwork(
         title=payload.title,
@@ -70,6 +93,7 @@ def create_activity(db: Session, staff_id: str, payload: ActivityCreateRequest):
     assignment = ClassworkAssignment(
         classwork_id=classwork.classwork_id,
         class_id=payload.class_id,
+        academic_period_id=payload.academic_period_id,
         assigned_by_staff_id=staff_id,
         due_date=payload.due_date,
         is_published=True,

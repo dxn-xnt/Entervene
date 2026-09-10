@@ -200,6 +200,7 @@ def authz_context(tmp_path):
     assignment = ClassworkAssignment(
         classwork_id=classwork.classwork_id,
         class_id=allowed_class.class_id,
+        academic_period_id=period.academic_period_id,
         assigned_by_staff_id=owner.staff_id,
         is_published=True,
     )
@@ -249,6 +250,7 @@ def authz_context(tmp_path):
             "owner": owner,
             "student": student,
             "subject": subject,
+            "period": period,
             "allowed_class": allowed_class,
             "other_class": other_class,
             "classwork": classwork,
@@ -318,6 +320,7 @@ def test_quiz_classwork_creation_saves_builder_atomically(authz_context):
             "total_points": "10",
             "is_published": "true",
             "class_ids": json.dumps([c["allowed_class"].class_id]),
+            "academic_period_id": str(c["period"].academic_period_id),
             "lesson_ids": json.dumps([]),
             "due_date": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
             "max_attempts": "1",
@@ -349,6 +352,7 @@ def test_quiz_classwork_creation_rolls_back_when_builder_fails(authz_context):
             "total_points": "10",
             "is_published": "true",
             "class_ids": json.dumps([c["allowed_class"].class_id]),
+            "academic_period_id": str(c["period"].academic_period_id),
             "lesson_ids": json.dumps([]),
             "due_date": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
             "max_attempts": "1",
@@ -387,7 +391,7 @@ def test_assignment_rejects_class_without_active_teacher_subject_load(authz_cont
     before = c["db"].query(ClassworkAssignment).count()
     response = c["client"].post(
         f"/api/v1/classwork-assignments/classwork/{c['classwork'].classwork_id}/assign",
-        json={"class_ids": [c["other_class"].class_id]},
+        json={"class_ids": [c["other_class"].class_id], "academic_period_id": c["period"].academic_period_id},
     )
 
     assert response.status_code == 403
@@ -420,6 +424,7 @@ def test_assignment_rejects_invalid_schedule_and_attempts(authz_context):
         url,
         json={
             "class_ids": [c["allowed_class"].class_id],
+            "academic_period_id": c["period"].academic_period_id,
             "due_date": "2025-10-29T00:00:00",
             "lock_date": "2025-10-30T00:00:00",
         },
@@ -428,7 +433,7 @@ def test_assignment_rejects_invalid_schedule_and_attempts(authz_context):
     c["db"].commit()
     invalid_attempts = c["client"].post(
         url,
-        json={"class_ids": [c["allowed_class"].class_id], "max_attempts": 0},
+        json={"class_ids": [c["allowed_class"].class_id], "academic_period_id": c["period"].academic_period_id, "max_attempts": 0},
     )
 
     assert invalid_schedule.status_code == 400
@@ -458,6 +463,7 @@ def test_atomic_classwork_create_rolls_back_on_upload_failure(authz_context, mon
             "total_points": "10",
             "is_published": "true",
             "class_ids": f"[{c['allowed_class'].class_id}]",
+            "academic_period_id": str(c["period"].academic_period_id),
             "max_attempts": "1",
         },
         files=[("files", ("broken.pdf", b"%PDF", "application/pdf"))],
@@ -504,6 +510,7 @@ def test_atomic_classwork_create_persists_assignments_materials_and_lesson(authz
             "total_points": "10",
             "is_published": "true",
             "class_ids": f"[{c['allowed_class'].class_id}]",
+            "academic_period_id": str(c["period"].academic_period_id),
             "lesson_ids": f"[{lesson.lesson_id}]",
             "due_date": "2025-10-31T00:00:00",
             "max_attempts": "2",
@@ -532,6 +539,7 @@ def test_reading_classwork_create_does_not_require_scores_or_attempts(authz_cont
             "classwork_type": "READING",
             "subject_id": str(c["subject"].subject_id),
             "class_ids": f"[{c['allowed_class'].class_id}]",
+            "academic_period_id": str(c["period"].academic_period_id),
             "is_published": "true",
         },
     )

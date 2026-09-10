@@ -144,6 +144,16 @@ def prediction_api_context():
         algorithm="RandomForestRegressor",
         artifact_path="data/models/model.joblib",
         is_active=True,
+        feature_schema_json={
+            "feature_columns": [
+                "grade_level", "source_period_grade", "assessment_completion_rate",
+                "cumulative_period_grade_avg",
+            ],
+            "target_column": "target_next_period_grade",
+            "excluded_columns": [],
+            "column_mappings": {},
+            "required_runtime_columns": [],
+        },
     )
     db.add_all([
         student,
@@ -306,9 +316,34 @@ def add_assessment(context, component, item_number, raw_score=None, max_score=10
 
 def seed_ready_record_features(context):
     add_period_grade(context, grade=86)
-    add_assessment(context, "WRITTEN_WORK", 1, raw_score=84)
-    add_assessment(context, "PERFORMANCE_TASK", 1, raw_score=88)
-    add_assessment(context, "QUARTERLY_ASSESSMENT", 1, raw_score=82)
+    classwork = Classwork(
+        title="Scoped route evidence",
+        classwork_type="QUIZ",
+        classwork_category="WRITTEN_WORK",
+        total_points=100,
+        is_published=True,
+        is_graded=True,
+        subject_id=context["subject"].subject_id,
+        created_by_staff_id=context["staff"].staff_id,
+    )
+    context["db"].add(classwork)
+    context["db"].flush()
+    assignment = ClassworkAssignment(
+        classwork_id=classwork.classwork_id,
+        class_id=context["class"].class_id,
+        academic_period_id=context["source_period"].academic_period_id,
+        assigned_by_staff_id=context["staff"].staff_id,
+        is_published=True,
+    )
+    context["db"].add(assignment)
+    context["db"].flush()
+    context["db"].add(StudentSubmission(
+        student_id=context["student"].student_id,
+        classwork_assignment_id=assignment.classwork_assignment_id,
+        status="graded",
+        grade=84,
+    ))
+    context["db"].commit()
 
 
 def test_preview_endpoint_calls_scoring_and_returns_risk_fields(prediction_api_context, monkeypatch):

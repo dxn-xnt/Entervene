@@ -48,6 +48,7 @@ from app.services.prediction.PredictionSuggestionService import (
 )
 from app.services.prediction.PredictionOutcomeService import evaluate_prediction_outcome
 from app.services.prediction.PredictionPersistenceService import score_and_persist_prediction
+from app.services.prediction.PredictionGenerationTransaction import run_prediction_generation_transaction
 from app.services.prediction.PredictionReadService import (
     get_prediction_detail,
     get_teacher_reviews_for_prediction,
@@ -285,7 +286,9 @@ def preview_prediction_from_records(
     db: Session = Depends(get_db),
 ):
     try:
-        built = build_prediction_features_from_records(db, **_records_request_payload(payload))
+        built = build_prediction_features_from_records(
+            db, **_records_request_payload(payload), model_name=payload.model_name or DEFAULT_MODEL_NAME
+        )
         if not built["ready"]:
             return insufficient_prediction_response(built)
         scoring_result = score_student_prediction(
@@ -305,20 +308,29 @@ def create_prediction_from_records(
     db: Session = Depends(get_db),
 ):
     try:
-        built = build_prediction_features_from_records(db, **_records_request_payload(payload))
-        if not built["ready"]:
-            return insufficient_prediction_response(built)
-        persist_request = {
-            **_records_request_payload(payload),
-            "features": built["features"],
-        }
-        result = score_and_persist_prediction(
-            db,
-            persist_request,
-            model_name=payload.model_name or DEFAULT_MODEL_NAME,
-            replace_existing=payload.replace_existing,
+        record_scope = _records_request_payload(payload)
+
+        def generate(generation_db: Session):
+            built = build_prediction_features_from_records(
+                generation_db, **record_scope, model_name=payload.model_name or DEFAULT_MODEL_NAME
+            )
+            if not built["ready"]:
+                return insufficient_prediction_response(built)
+            result = score_and_persist_prediction(
+                generation_db,
+                {**record_scope, "features": built["features"]},
+                model_name=payload.model_name or DEFAULT_MODEL_NAME,
+                replace_existing=payload.replace_existing,
+                commit=False,
+            )
+            return _with_readiness(result, built)
+
+        return run_prediction_generation_transaction(
+            record_scope,
+            payload.model_name or DEFAULT_MODEL_NAME,
+            generate,
+            bind=db.get_bind(),
         )
-        return _with_readiness(result, built)
     except (ValueError, LookupError, FileNotFoundError) as exc:
         raise _service_error(exc) from exc
 
@@ -333,11 +345,17 @@ def create_prediction(
         request_data = payload.model_dump()
         model_name = request_data.pop("model_name") or DEFAULT_MODEL_NAME
         replace_existing = bool(request_data.pop("replace_existing", False))
-        return score_and_persist_prediction(
-            db,
+        return run_prediction_generation_transaction(
             request_data,
-            model_name=model_name,
-            replace_existing=replace_existing,
+            model_name,
+            lambda generation_db: score_and_persist_prediction(
+                generation_db,
+                request_data,
+                model_name=model_name,
+                replace_existing=replace_existing,
+                commit=False,
+            ),
+            bind=db.get_bind(),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -585,4 +603,3 @@ def list_prediction_suggestions(
         }
         for s in suggestions
     ]
-

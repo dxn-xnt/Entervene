@@ -8,6 +8,14 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.models.ai.AIModelVersion import AIModelVersion
+from app.services.prediction.FeatureCatalog import (
+    DISPLAY_ONLY,
+    GRADE_MODEL_INPUT,
+    RISK_ONLY,
+    TRAINING_TARGET,
+    feature_definition,
+    validate_grade_model_feature_schema,
+)
 from app.services.prediction.RiskEngine import RiskEngineInput, evaluate_risk
 
 
@@ -121,9 +129,25 @@ def _mapped_input(input_data: dict[str, Any], column_mappings: dict[str, str]) -
 
 def prepare_feature_row(input_data: dict[str, Any], feature_schema: dict[str, Any]) -> tuple[pd.DataFrame, list[str]]:
     feature_columns = list(feature_schema["feature_columns"])
+    validate_grade_model_feature_schema(feature_columns)
     column_mappings = dict(feature_schema.get("column_mappings") or {})
-    mapped = _mapped_input(input_data, column_mappings)
+    for source, target in column_mappings.items():
+        target_definition = feature_definition(target)
+        source_definition = feature_definition(source)
+        if target_definition is None or target_definition.allowed_use != GRADE_MODEL_INPUT:
+            raise ValueError(f"Model column mapping targets a prohibited feature: {target}")
+        if source_definition is None or source_definition.allowed_use != GRADE_MODEL_INPUT:
+            raise ValueError(f"Model column mapping aliases a prohibited feature: {source}")
     warnings: list[str] = []
+    for field_name in input_data:
+        definition = feature_definition(field_name)
+        if definition is None:
+            raise ValueError(f"Unknown prediction feature is not registered in the feature catalog: {field_name}")
+        if definition.allowed_use in {DISPLAY_ONLY, TRAINING_TARGET}:
+            warnings.append(f"Ignored non-model feature: {field_name}")
+        elif definition.allowed_use not in {GRADE_MODEL_INPUT, RISK_ONLY}:
+            raise ValueError(f"Prediction feature is not permitted in a model request: {field_name}")
+    mapped = _mapped_input(input_data, column_mappings)
     row: dict[str, Any] = {}
     has_previous = mapped.get("has_previous_period")
 
@@ -143,12 +167,6 @@ def prepare_feature_row(input_data: dict[str, Any], feature_schema: dict[str, An
             warnings.append("Missing grade_trend_vs_previous_period defaulted to 0 because has_previous_period is false.")
         else:
             raise ValueError(f"Missing required model feature: {feature}")
-
-    for field_name in input_data:
-        if field_name in RUNTIME_RISK_FIELDS:
-            continue
-        if _is_identity_or_leakage_field(field_name):
-            warnings.append(f"Ignored identity/leakage field for model scoring: {field_name}")
 
     frame = pd.DataFrame([row], columns=feature_columns)
     non_numeric = []
