@@ -23,7 +23,7 @@ class Class(Base):
     academic_period_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("academic_period.academic_period_id"), nullable=True)
     pathway_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("academic_pathway.id", ondelete="SET NULL"), nullable=True)
     paired_class_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("class.class_id", ondelete="SET NULL"), nullable=True)
-    period_template_group: Mapped[str] = mapped_column(String(50), nullable=False, default="JHS_45MIN")
+    period_template_group: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

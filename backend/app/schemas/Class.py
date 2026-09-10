@@ -268,6 +268,7 @@ class BatchCreateSectionRequest(BaseModel):
     section_name: str
     adviser_staff_id: str
     pathway: str = "general"
+    period_template_group: str | None = None
     student_ids: list[UUID]
 
 
@@ -281,6 +282,7 @@ class CreatedClassItem(BaseModel):
     section_name: str
     adviser_staff_id: str
     pathway: str = "general"
+    period_template_group: str | None = None
     student_count: int
 
 

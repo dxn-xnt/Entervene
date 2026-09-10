@@ -9,6 +9,7 @@ from app.models.academic.Subject import Subject
 from app.models.academic.SubjectOffering import SubjectOffering
 from app.models.academic.AcademicPathway import AcademicPathway
 from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
+from app.core.pathways import canonicalize_pathway
 from app.services.subject_offerings.SubjectOfferingShared import (
     ALLOWED_OFFERING_STATUSES,
     DEFAULT_OFFERING_STATUS,
@@ -138,11 +139,11 @@ def list_subject_offerings_data(
             )
         )
     elif pathway is not None and pathway != "all":
-        # Match by pathway code or legacy string
-        norm = normalized_text(pathway)
-        if norm == "both":
+        canon = canonicalize_pathway(pathway)
+        if canon == "both":
             query = query.filter(
                 or_(
+                    Subject.is_core.is_(True),
                     ~SubjectOffering.offering_pathways.any(),
                     SubjectOffering.offering_pathways.any(
                         SubjectOfferingPathway.pathway.has(
@@ -156,39 +157,7 @@ def list_subject_offerings_data(
                     ),
                 )
             )
-        elif norm in ("stem_medical", "medical-courses", "medical"):
-            query = query.filter(
-                SubjectOffering.offering_pathways.any(
-                    SubjectOfferingPathway.pathway.has(
-                        or_(
-                            func.lower(AcademicPathway.code).in_(["stem_medical", "medical-courses", "medical"]),
-                            func.lower(AcademicPathway.code).like("%medical%"),
-                        )
-                    )
-                ),
-                ~SubjectOffering.subject_offering_id.in_(
-                    db.query(SubjectOfferingPathway.subject_offering_id)
-                    .group_by(SubjectOfferingPathway.subject_offering_id)
-                    .having(func.count(SubjectOfferingPathway.pathway_id) > 1)
-                ),
-            )
-        elif norm in ("stem_engineering", "engineering-math", "engineering"):
-            query = query.filter(
-                SubjectOffering.offering_pathways.any(
-                    SubjectOfferingPathway.pathway.has(
-                        or_(
-                            func.lower(AcademicPathway.code).in_(["stem_engineering", "engineering-math", "engineering"]),
-                            func.lower(AcademicPathway.code).like("%engineering%"),
-                        )
-                    )
-                ),
-                ~SubjectOffering.subject_offering_id.in_(
-                    db.query(SubjectOfferingPathway.subject_offering_id)
-                    .group_by(SubjectOfferingPathway.subject_offering_id)
-                    .having(func.count(SubjectOfferingPathway.pathway_id) > 1)
-                ),
-            )
-        elif norm == "general":
+        elif canon == "general":
             query = query.filter(
                 or_(
                     ~SubjectOffering.offering_pathways.any(),
@@ -200,11 +169,21 @@ def list_subject_offerings_data(
                 )
             )
         else:
+            # Specific pathway filter: include this pathway's specialized subjects PLUS shared subjects
             query = query.filter(
-                SubjectOffering.offering_pathways.any(
-                    SubjectOfferingPathway.pathway.has(
-                        func.lower(AcademicPathway.code) == norm
-                    )
+                or_(
+                    Subject.is_core.is_(True),
+                    ~SubjectOffering.offering_pathways.any(),
+                    SubjectOffering.offering_pathways.any(
+                        SubjectOfferingPathway.pathway.has(
+                            func.lower(AcademicPathway.code) == canon
+                        )
+                    ),
+                    SubjectOffering.subject_offering_id.in_(
+                        db.query(SubjectOfferingPathway.subject_offering_id)
+                        .group_by(SubjectOfferingPathway.subject_offering_id)
+                        .having(func.count(SubjectOfferingPathway.pathway_id) > 1)
+                    ),
                 )
             )
 

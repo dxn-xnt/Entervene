@@ -317,12 +317,29 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                     submitted_student_ids.append(student_id)
                     section_student_ids.append(student_id)
 
+            pw_id = _resolve_class_pathway_id(db, pathway=getattr(section, "pathway", None))
+            template_group = getattr(section, "period_template_group", None)
+            if not template_group:
+                if academic_level.grade_level >= 11:
+                    pw_obj = db.query(AcademicPathway).filter(AcademicPathway.id == pw_id).first() if pw_id else None
+                    pw_code = (pw_obj.code if pw_obj else "").lower()
+                    sec_lower = section_name.lower()
+                    if "engineering" in pw_code or "medical" in pw_code or "campos" in sec_lower or "zara" in sec_lower:
+                        template_group = "SHS_CAMPOS_ZARA"
+                    elif "general" in pw_code or "del mundo" in sec_lower or "reyes" in sec_lower or "abm" in pw_code or "humss" in pw_code:
+                        template_group = "SHS_DELMUNDO_REYES"
+                    else:
+                        template_group = None
+                else:
+                    template_group = "JHS_45MIN"
+
             normalized_sections.append(
                 {
                     "section_name": section_name,
                     "section_key": section_key,
                     "adviser_staff_id": adviser_id,
-                    "pathway_id": _resolve_class_pathway_id(db, pathway=getattr(section, "pathway", None)),
+                    "pathway_id": pw_id,
+                    "period_template_group": template_group,
                     "student_ids": section_student_ids,
                 }
             )
@@ -456,6 +473,7 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                 academic_level_id=academic_level.academic_level_id,
                 academic_period_id=None,
                 pathway_id=section.get("pathway_id"),
+                period_template_group=section.get("period_template_group"),
                 class_status="active",
             )
             db.add(class_)
@@ -478,6 +496,7 @@ def batch_create_classes(db: Session, payload: Any) -> dict[str, Any]:
                     "section_name": class_.section_name,
                     "adviser_staff_id": class_.adviser_staff_id,
                     "pathway": class_.pathway.code if class_.pathway else "general",
+                    "period_template_group": class_.period_template_group,
                     "student_count": len(section["student_ids"]),
                 }
                 for class_, section in created

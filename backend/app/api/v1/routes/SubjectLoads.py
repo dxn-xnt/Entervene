@@ -24,6 +24,7 @@ from app.schemas.SubjectLoad import (
     SubjectLoadItem,
     PeriodTemplateSlotSchema,
 )
+from pydantic import BaseModel
 from sqlalchemy import text
 from app.services.academic.ConflictDetectorService import ConflictDetectorService
 from app.services.academic.AutoSchedulerService import AutoSchedulerService
@@ -112,21 +113,95 @@ def ensure_default_period_templates(db: Session):
     db.commit()
 
 
+def ensure_shs_template_groups_backfilled(db: Session):
+    """
+    Idempotent one-time backfill:
+    - Inspects all classes in the database.
+    - Maps Senior High (Grade 11-12) sections currently set to 'JHS_45MIN' or None
+      to their proper SHS template group ('SHS_CAMPOS_ZARA' or 'SHS_DELMUNDO_REYES').
+    - Sets JHS sections to 'JHS_45MIN' if None.
+    - Re-aligns existing Grade 11 draft loads for Zara and Campos to valid non-overlapping SHS periods.
+    - Guarded by Setting(key='shs_template_groups_backfilled_v1') so it runs strictly once.
+    """
+    from app.models.settings.Setting import Setting, SettingType
+    try:
+        flag = db.query(Setting).filter(Setting.key == "shs_template_groups_backfilled_v1").first()
+        if flag:
+            return
+    except Exception:
+        return
+
+    classes = db.query(Class).all()
+    for c in classes:
+        lvl = db.query(AcademicLevel).filter(AcademicLevel.academic_level_id == c.academic_level_id).first()
+        grade = lvl.grade_level if lvl else c.academic_level_id
+        sec_name = (c.section_name or "").lower()
+        pw_code = (c.pathway.code if c.pathway else "").lower()
+
+        if grade >= 11:
+            if not c.period_template_group or c.period_template_group == "JHS_45MIN":
+                if "del mundo" in sec_name or "reyes" in sec_name or "general" in pw_code:
+                    c.period_template_group = "SHS_DELMUNDO_REYES"
+                else:
+                    c.period_template_group = "SHS_CAMPOS_ZARA"
+        else:
+            if c.period_template_group is None:
+                c.period_template_group = "JHS_45MIN"
+
+    # Re-align Zara (class 12) & Campos (class 13) draft loads to valid SHS periods
+    # Non-overlapping SHS slots avoiding break walls (10:00-10:24 Morning Recess, 12:00-13:00 Lunch):
+    # Zara: HAP1 (34), HSF1 (35), Research 1 (38), StatProb (39)
+    # Campos: IntroEng1 (36), StatProb (39), Research 1 (38)
+    zara_schedule = {
+        34: ("08:00", "09:00"),
+        35: ("09:00", "10:00"),
+        38: ("10:24", "12:00"),
+        39: ("13:00", "14:00"),
+    }
+    campos_schedule = {
+        36: ("08:00", "09:00"),
+        39: ("09:00", "10:00"),
+        38: ("15:30", "16:30"),
+    }
+
+    shs_loads = db.query(SubjectLoad).filter(SubjectLoad.class_id.in_([12, 13])).all()
+    for sl in shs_loads:
+        if sl.class_id == 12 and sl.subject_id in zara_schedule:
+            st, et = zara_schedule[sl.subject_id]
+            sl.start_time = st
+            sl.end_time = et
+        elif sl.class_id == 13 and sl.subject_id in campos_schedule:
+            st, et = campos_schedule[sl.subject_id]
+            sl.start_time = st
+            sl.end_time = et
+
+    db.add(
+        Setting(
+            key="shs_template_groups_backfilled_v1",
+            value="true",
+            type=SettingType.BOOLEAN,
+            group="general",
+            is_public=False,
+            description="Migration flag: one-time SHS period template group backfill completed.",
+        )
+    )
+    db.commit()
+
+
+from app.core.pathways import canonicalize_pathway, CANONICAL_MEDICAL, CANONICAL_ENGINEERING, PATHWAY_BOTH, PATHWAY_GENERAL
+
+
 def offering_pathway_code(so: SubjectOffering) -> str:
     pathway_links = getattr(so, "offering_pathways", None) or []
     if not pathway_links:
-        return getattr(so, "pathway", None) or "general"
+        return canonicalize_pathway(getattr(so, "pathway", None))
     if len(pathway_links) == 1:
         pw = getattr(pathway_links[0], "pathway", None)
         if pw and getattr(pw, "code", None):
-            code = str(pw.code).lower()
-            if "medical" in code:
-                return "stem_medical"
-            if "engineering" in code:
-                return "stem_engineering"
-            return code
-        return "general"
-    return "both"
+            return canonicalize_pathway(pw.code)
+        return PATHWAY_GENERAL
+    return PATHWAY_BOTH
+
 
 
 @router.get("/studio-data")
@@ -136,6 +211,7 @@ def get_subject_load_studio_data(
     db: Session = Depends(get_db),
 ):
     ensure_default_period_templates(db)
+    ensure_shs_template_groups_backfilled(db)
     years = db.query(AcademicYear).all()
     periods = db.query(AcademicPeriod).all()
     
@@ -206,7 +282,7 @@ def get_subject_load_studio_data(
                 "academic_year_id": c.academic_year_id,
                 "pathway": class_pathway_code(c),
                 "paired_class_id": getattr(c, "paired_class_id", None),
-                "period_template_group": getattr(c, "period_template_group", None) or "JHS_45MIN",
+                "period_template_group": getattr(c, "period_template_group", None),
             }
             for c in classes
         ],
@@ -395,6 +471,60 @@ def update_period_templates(
             db.add(new_slot)
     db.commit()
     return {"message": "Period templates updated and cascaded to schedules successfully."}
+
+
+class UpdateClassTemplateGroupRequest(BaseModel):
+    template_group: str | None = None
+
+
+@router.put("/classes/{class_id}/template-group")
+def update_class_template_group(
+    class_id: int,
+    payload: UpdateClassTemplateGroupRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    cls = db.query(Class).filter(Class.class_id == class_id).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    cls.period_template_group = payload.template_group
+    db.commit()
+
+    # Re-validate loads for this class against the new template
+    period = db.query(AcademicPeriod).filter(AcademicPeriod.is_active == True).first()
+    period_id = period.academic_period_id if period else 1
+
+    class_loads = db.query(SubjectLoad).filter(
+        SubjectLoad.class_id == class_id,
+        SubjectLoad.academic_period_id == period_id,
+    ).all()
+
+    load_items = [
+        SubjectLoadItem(
+            subject_load_id=l.subject_load_id,
+            class_id=l.class_id,
+            subject_id=l.subject_id,
+            staff_id=l.staff_id,
+            academic_period_id=l.academic_period_id,
+            start_time=l.start_time,
+            end_time=l.end_time,
+            days_of_week=l.days_of_week or [],
+            status=l.status or "draft",
+            is_locked=bool(l.is_locked),
+        )
+        for l in class_loads
+    ]
+
+    validation_res = ConflictDetectorService.validate_loads(db=db, loads=load_items, academic_period=period)
+
+    return {
+        "message": f"Successfully updated bell schedule template for section '{cls.section_name}'.",
+        "class_id": cls.class_id,
+        "period_template_group": cls.period_template_group,
+        "conflicts": [c.dict() if hasattr(c, "dict") else c for c in validation_res.conflicts],
+        "is_valid": validation_res.is_valid,
+    }
 
 
 @router.post("/validate", response_model=ValidationResultResponse)

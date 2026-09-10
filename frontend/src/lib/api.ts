@@ -1666,6 +1666,7 @@ export type SubjectOfferingStudioItem = {
   academic_level_id: number;
   academic_period_id: number;
   pathway: string;
+  pathway_ids?: number[];
   minutes?: number | null;
 };
 
