@@ -15,6 +15,7 @@ import AddClassworkScoreModal from "./forms/add-classwork-score";
 import EnterManualScoresModal from "./forms/enter-manual-scores";
 import {
   getTeacherGradebook,
+  exportTeacherClassRecord,
   getTeacherAvailablePeriods,
   getTeacherTermSummary,
   sendStudentGradeToAdviser,
@@ -164,6 +165,7 @@ const TeacherGradeView = () => {
     isBulk?: boolean;
   } | null>(null);
   const [toastMessage, setToastMessage] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const fetchGradebook = () => {
     setRefresh((prev) => prev + 1);
@@ -333,10 +335,7 @@ const TeacherGradeView = () => {
   const displaySectionName = gradebook?.scope?.section_name ?? termSummary?.scope?.section_name ?? section ?? "Section";
   const displaySubjectName = gradebook?.scope?.subject_name ?? termSummary?.scope?.subject_name ?? subject ?? "Subject";
 
-  const handleExportCSV = () => {
-    let csv = "";
-    let filename = "";
-
+  const handleExport = async () => {
     if (activeTab === "summary") {
       if (!termSummary) return;
       const headers = ["Gender", "Learner's Name", ...periods.map((p) => p.period_name), "Final Grade", "Remarks"];
@@ -357,62 +356,44 @@ const TeacherGradeView = () => {
           s.remark || "",
         ]),
       ];
-      csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-      filename = `${displaySectionName}_${displaySubjectName}_Summary.csv`;
-    } else {
-      if (!gradebook) return;
-      const headers = [
-        "Gender",
-        "Learner's Name",
-        ...cg.writtenWork.map((w) => `WW: ${w.title} (${w.maxScore})`),
-        ...cg.performanceTask.map((p) => `PT: ${p.title} (${p.maxScore})`),
-        ...examItems.map((q) => `Exam: ${q.title} (${q.maxScore})`),
-        "Initial Grade",
-        "Term Grade",
-        "Descriptor",
-      ];
-      const { males, females } = groupStudentsByGender(raw);
-      const rows = [
-        ...males.map((sg) => {
-          const sgExams = sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []);
-          return [
-            "Male",
-            `"${sg.name}"`,
-            ...sg.writtenWork.map((s) => (s !== null && s !== undefined ? s : "")),
-            ...sg.performanceTask.map((s) => (s !== null && s !== undefined ? s : "")),
-            ...sgExams.map((s) => (s !== null && s !== undefined ? s : "")),
-            fmt(sg.initial_grade),
-            fmt(sg.transmuted_grade),
-            sg.transmuted_grade != null && sg.performance_descriptor ? `"${sg.performance_descriptor}"` : "",
-          ];
-        }),
-        ...females.map((sg) => {
-          const sgExams = sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []);
-          return [
-            "Female",
-            `"${sg.name}"`,
-            ...sg.writtenWork.map((s) => (s !== null && s !== undefined ? s : "")),
-            ...sg.performanceTask.map((s) => (s !== null && s !== undefined ? s : "")),
-            ...sgExams.map((s) => (s !== null && s !== undefined ? s : "")),
-            fmt(sg.initial_grade),
-            fmt(sg.transmuted_grade),
-            sg.transmuted_grade != null && sg.performance_descriptor ? `"${sg.performance_descriptor}"` : "",
-          ];
-        }),
-      ];
-      csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-      const activePeriodName = periods.find((p) => `term-${p.academic_period_id}` === activeTab)?.period_name || "Term";
-      filename = `${displaySectionName}_${displaySubjectName}_${activePeriodName}.csv`;
-    }
+      const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+      const filename = `${displaySectionName}_${displaySubjectName}_Summary.csv`;
 
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.setAttribute("download", filename);
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+      // Prepend UTF-8 BOM to ensure proper character rendering in Excel
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.setAttribute("download", filename);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } else {
+      if (!activePeriodId || !section || !subject) {
+        setToastMessage({ type: "error", text: "Please select a valid term and subject before exporting." });
+        return;
+      }
+
+      try {
+        setIsExporting(true);
+        const { blob, filename } = await exportTeacherClassRecord(section, subject, activePeriodId);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.setAttribute("download", filename);
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setToastMessage({ type: "success", text: "DepEd Class Record (.xlsx) exported successfully." });
+      } catch (err: any) {
+        console.error("Export error:", err);
+        setToastMessage({ type: "error", text: err?.message || "Failed to export class record. Please try again." });
+      } finally {
+        setIsExporting(false);
+      }
+    }
   };
 
   const renderSummaryTable = () => {
@@ -913,8 +894,21 @@ const TeacherGradeView = () => {
                     <Send className="size-4 mr-2" /> Send All to Adviser
                   </Button>
                 )}
-                <Button variant={"outline"} className="whitespace-nowrap font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100" onClick={handleExportCSV}>
-                  <Download className="size-4 mr-2" /> Export Grades
+                <Button
+                  variant={"outline"}
+                  disabled={isExporting}
+                  className="whitespace-nowrap font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100 disabled:opacity-50"
+                  onClick={handleExport}
+                >
+                  {isExporting ? (
+                    <>
+                      <Loader2 className="size-4 mr-2 animate-spin" /> Exporting...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="size-4 mr-2" /> Export Grades
+                    </>
+                  )}
                 </Button>
               </div>
             </header>
