@@ -12,6 +12,11 @@ import { Carousel } from "@/components/retroui/Carousel";
 import { Card } from "@/components/retroui/Card";
 import { Calendar } from "@/components/retroui/Calendar";
 import { formatPeriodLabel, periodTotal } from "@/lib/academic-periods";
+import {
+    createAcademicPeriods,
+    getAcademicYearsSettings,
+    type AcademicYearSettingItem,
+} from "@/lib/settings-api";
 
 
 interface DatePickerProps {
@@ -144,9 +149,31 @@ function PeriodCard({
     );
 }
 
-export default function AddAcademicPeriodModal() {
-    const [academicYear, setAcademicYear] = React.useState<string>("2026-2027");
+interface AddAcademicPeriodModalProps {
+    onClose?: () => void;
+    onSaved?: () => void | Promise<void>;
+}
+
+export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademicPeriodModalProps = {}) {
+    const [academicYears, setAcademicYears] = React.useState<AcademicYearSettingItem[]>([]);
+    const [academicYear, setAcademicYear] = React.useState<string>("");
     const [periodType, setPeriodType] = React.useState<string>("TERM");
+    const [isSaving, setIsSaving] = React.useState(false);
+    const [error, setError] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        getAcademicYearsSettings()
+            .then((years) => {
+                setAcademicYears(years);
+                const active = years.find((y) => y.is_active) || years[0];
+                if (active) {
+                    setAcademicYear(active.year_label);
+                }
+            })
+            .catch((err) => {
+                console.error("Failed to load academic years:", err);
+            });
+    }, []);
 
     const totalPeriods = React.useMemo(() => periodTotal(periodType), [periodType]);
 
@@ -157,18 +184,26 @@ export default function AddAcademicPeriodModal() {
     // Reset/reinitialize dates when academicYear or periodType changes
     React.useEffect(() => {
         setDates(Array.from({ length: totalPeriods }).map(() => ({})));
+        setError(null);
     }, [academicYear, totalPeriods]);
 
     // Parse the academic year limits
     const { ayStart, ayEnd } = React.useMemo(() => {
+        const selectedAyObj = academicYears.find((y) => y.year_label === academicYear);
+        if (selectedAyObj?.startDate && selectedAyObj?.endDate) {
+            return {
+                ayStart: new Date(selectedAyObj.startDate),
+                ayEnd: new Date(selectedAyObj.endDate),
+            };
+        }
         const [startYearStr, endYearStr] = academicYear.split("-");
-        const startYear = parseInt(startYearStr, 10) || 2026;
-        const endYear = parseInt(endYearStr, 10) || 2027;
+        const startYear = parseInt(startYearStr, 10) || new Date().getFullYear();
+        const endYear = parseInt(endYearStr, 10) || startYear + 1;
         return {
-            ayStart: new Date(startYear, 0, 1), // January 1 of start year
-            ayEnd: new Date(endYear, 11, 31),    // December 31 of end year
+            ayStart: new Date(startYear, 0, 1),
+            ayEnd: new Date(endYear, 11, 31),
         };
-    }, [academicYear]);
+    }, [academicYear, academicYears]);
 
     const handleDateChange = (idx: number, field: "startDate" | "endDate", value: Date | undefined) => {
         setDates(prev => {
@@ -176,6 +211,7 @@ export default function AddAcademicPeriodModal() {
             next[idx] = { ...next[idx], [field]: value };
             return next;
         });
+        setError(null);
     };
 
     // Start date calculations:
@@ -244,6 +280,55 @@ export default function AddAcademicPeriodModal() {
         return max;
     };
 
+    const handleConfirm = async () => {
+        const selectedAyObj = academicYears.find((y) => y.year_label === academicYear);
+        if (!selectedAyObj) {
+            setError("Please select a valid academic year.");
+            return;
+        }
+
+        // Validate all periods are filled
+        for (let i = 0; i < totalPeriods; i++) {
+            const p = dates[i];
+            if (!p?.startDate || !p?.endDate) {
+                setError(`Please select both start and end dates for ${formatPeriodLabel({ period_type: periodType, period_sequence: i + 1 })}.`);
+                return;
+            }
+            if (p.startDate > p.endDate) {
+                setError(`Start date cannot be after end date for ${formatPeriodLabel({ period_type: periodType, period_sequence: i + 1 })}.`);
+                return;
+            }
+        }
+
+        setIsSaving(true);
+        setError(null);
+        try {
+            const payload = {
+                academic_year_id: selectedAyObj.academic_year_id,
+                period_type: periodType,
+                periods: dates.slice(0, totalPeriods).map((p, idx) => ({
+                    period_sequence: idx + 1,
+                    start_date: format(p.startDate!, "yyyy-MM-dd"),
+                    end_date: format(p.endDate!, "yyyy-MM-dd"),
+                })),
+            };
+
+            await createAcademicPeriods(payload);
+            if (onSaved) {
+                await onSaved();
+            }
+            if (onClose) {
+                onClose();
+            }
+        } catch (err: unknown) {
+            console.error("Failed to save academic periods:", err);
+            const msg = err instanceof Error ? err.message : "Failed to create academic periods.";
+            setError(msg);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     return (
         <Dialog.Content size={"lg"}>
             <Dialog.Header position={"fixed"} asChild>
@@ -253,35 +338,28 @@ export default function AddAcademicPeriodModal() {
                 <section className="text-md">
                     <div className="flex flex-col gap-3">
                         <div className="flex flex-col gap-1">
-                            <label htmlFor="academic-year" className="text-sm">Academic Year</label>
+                            <label htmlFor="academic-year" className="text-sm font-semibold">Academic Year</label>
                             <Select value={academicYear} onValueChange={setAcademicYear}>
                                 <Select.Trigger className="w-full">
-                                    <Select.Value placeholder="Academic Year" />
+                                    <Select.Value placeholder="Select Academic Year" />
                                 </Select.Trigger>
                                 <Select.Content>
                                     <Select.Group>
-                                        <Select.Item value="2025-2026">2025-2026</Select.Item>
-                                        <Select.Item value="2026-2027">2026-2027</Select.Item>
+                                        {academicYears.length === 0 ? (
+                                            <Select.Item value="none" disabled>Loading academic years...</Select.Item>
+                                        ) : (
+                                            academicYears.map((ay) => (
+                                                <Select.Item key={ay.academic_year_id} value={ay.year_label}>
+                                                    {ay.year_label} {ay.is_active ? "(Active)" : ""}
+                                                </Select.Item>
+                                            ))
+                                        )}
                                     </Select.Group>
                                 </Select.Content>
                             </Select>
                         </div>
-                        {/* <div className="flex flex-col gap-1">
-                            <label htmlFor="year-level" className="text-sm">Year Level</label>
-                            <Select value={level} onValueChange={setLevel}>
-                                <Select.Trigger className="w-full">
-                                    <Select.Value placeholder="Year Level" />
-                                </Select.Trigger>
-                                <Select.Content>
-                                    <Select.Group>
-                                        <Select.Item value="junior-high">Junior High</Select.Item>
-                                        <Select.Item value="senior-high">Senior High</Select.Item>
-                                    </Select.Group>
-                                </Select.Content>
-                            </Select>
-                        </div> */}
                         <div className="flex flex-col gap-1">
-                            <label htmlFor="end-date" className="text-sm">Period Type</label>
+                            <label htmlFor="period-type" className="text-sm font-semibold">Period Type</label>
                             <Select value={periodType} onValueChange={setPeriodType}>
                                 <Select.Trigger className="w-full">
                                     <Select.Value placeholder="Period Type" />
@@ -318,16 +396,20 @@ export default function AddAcademicPeriodModal() {
                             <Carousel.Previous className="top-1/2" />
                             <Carousel.Next className="top-1/2" />
                         </Carousel>
+
+                        {error ? (
+                            <p className="text-sm font-semibold text-red-600">{error}</p>
+                        ) : null}
                     </div>
                 </section>
             </section>
             <Dialog.Footer>
-                <Dialog.Trigger>
-                    <Button>Confirm</Button>
-                </Dialog.Trigger>
-                <Dialog.Trigger>
-                    <Button variant={"outline"}>Close</Button>
-                </Dialog.Trigger>
+                <Button onClick={handleConfirm} disabled={isSaving || !academicYear}>
+                    Confirm
+                </Button>
+                <Button variant={"outline"} onClick={onClose} disabled={isSaving}>
+                    Close
+                </Button>
             </Dialog.Footer>
         </Dialog.Content>
     );

@@ -4,6 +4,7 @@ import { Button } from "@/components/retroui/Button";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import type { GradingTemplateSubjectOption, SubjectAcademicLevel } from "@/lib/api";
+import { Badge } from "@/components/retroui/Badge";
 
 const ANY_GRADE = "any";
 
@@ -85,23 +86,23 @@ export function TemplateSubjectPicker({
   return (
     <div className="flex flex-col gap-3">
       {assignedSubjects.length > 0 ? (
-        <div className="flex flex-col gap-2 rounded-md border-2 border-black bg-[#fff1b8] p-3 shadow-[2px_2px_0_#000]">
+        <div className="flex flex-col gap-2 rounded border-2 border-black p-3 shadow-[2px_2px_0_#000]">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-wider text-black/70">
-              Assigned Subjects ({assignedSubjects.length})
+            <p className="text-base font-semibold">
+              Assigned Subjects <span className="text-sm font-medium">({assignedSubjects.length})</span>
             </p>
-            <Button type="button" size="sm" variant="outline" onClick={clearAll} disabled={disabled} className="h-7 text-xs">
+            <Button type="button" size="sm" variant="secondary" onClick={clearAll} disabled={disabled} className="h-7 text-xs shadow-none">
               Clear All
             </Button>
           </div>
           <div className="flex flex-wrap gap-2 pt-1">
             {assignedSubjects.map((subject) => (
-              <span
+              <Badge
                 key={subject.subject_id}
-                className="inline-flex items-center gap-1.5 rounded-md border-2 border-black bg-white px-2.5 py-1 text-xs font-bold shadow-[2px_2px_0_#000]"
+                variant="surface"
+                className="flex gap-2"
               >
                 <span>{subject.subject_name}</span>
-                <span className="text-black/50">({subjectCode(subject)})</span>
                 <button
                   type="button"
                   onClick={() => removeSubject(String(subject.subject_id))}
@@ -111,7 +112,7 @@ export function TemplateSubjectPicker({
                 >
                   <X className="size-3.5" />
                 </button>
-              </span>
+              </Badge>
             ))}
           </div>
         </div>
@@ -149,7 +150,7 @@ export function TemplateSubjectPicker({
         </Select>
       </div>
 
-      <div className="max-h-60 overflow-y-auto rounded-md border-2 border-black bg-background shadow-[2px_2px_0_#000]">
+      <div className="max-h-80 overflow-y-auto rounded border-2 border-black bg-background">
         {filteredSubjects.length === 0 ? (
           <p className="p-3 text-sm text-black/70">
             {subjects.length ? "No subjects match your search." : "No subjects are available for this scope."}
@@ -162,16 +163,14 @@ export function TemplateSubjectPicker({
               <button
                 key={subject.subject_id}
                 type="button"
-                className={`grid w-full grid-cols-1 items-center gap-2 border-b border-black/20 p-3 text-left text-sm last:border-b-0 hover:bg-[#fff7d6] md:grid-cols-[24px_1.5fr_120px_140px] ${
-                  isSelected ? "bg-[#bbf7d0]" : "bg-background"
-                }`}
+                className={`grid w-full grid-cols-1 items-center gap-2 border-b border-border p-3 text-left text-sm last:border-b-0 hover:bg-accent md:grid-cols-[24px_1.5fr_120px_140px] ${isSelected ? "bg-primary" : "bg-background"
+                  }`}
                 onClick={() => toggleSubject(subjectId)}
                 disabled={disabled}
               >
                 <div
-                  className={`flex size-5 items-center justify-center rounded border border-black ${
-                    isSelected ? "bg-black text-white" : "bg-white"
-                  }`}
+                  className={`flex size-5 items-center justify-center rounded border border-black ${isSelected ? "bg-black text-white" : "bg-white"
+                    }`}
                 >
                   {isSelected ? <Check className="size-3.5" /> : null}
                 </div>

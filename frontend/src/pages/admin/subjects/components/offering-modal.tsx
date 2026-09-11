@@ -772,7 +772,7 @@ export function OfferingModal({
         <Dialog.Footer>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={isSaving || !options || readOnly} title={readOnly ? readOnlyReason : undefined}>
-            {isSaving ? "Saving..." : offering ? "Save Offering" : "Add Offerings"}
+            {offering ? "Save Offering" : "Add Offerings"}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>

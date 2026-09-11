@@ -11,7 +11,7 @@ class AcademicYear(Base):
     __tablename__ = "academic_year"
 
     academic_year_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    year_label: Mapped[str] = mapped_column(String(20), nullable=False)
+    year_label: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
