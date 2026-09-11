@@ -18,6 +18,7 @@ from app.services.prediction.PredictionExplanationService import (
     build_recommended_actions,
 )
 from app.services.prediction.TeacherAssignmentResolver import resolve_teacher_for_load
+from app.services.prediction.TeacherEvidenceService import teacher_evidence_from_snapshot
 
 
 def _to_float(value: Any) -> float | None:
@@ -184,7 +185,10 @@ def get_prediction_detail(
     subject_codename = subject_obj.subject_codename if subject_obj else None
 
     feature_rows = _features(db, prediction_id)
-    causes = build_prediction_causes(prediction, feature_rows)
+    teacher_evidence = teacher_evidence_from_snapshot(prediction.evidence_snapshot)
+    # Audited rows have a saved teacher projection; do not feed legacy feature
+    # aliases back into an explanation for an immutable historical prediction.
+    causes = [] if prediction.evidence_snapshot is not None else build_prediction_causes(prediction, feature_rows)
     review_rows = _reviews(db, prediction_id)
     current_user_review = None
     if staff_id is not None:
@@ -218,7 +222,12 @@ def get_prediction_detail(
         "data_status": prediction.data_status,
         "generated_at": prediction.generated_at,
         "model_version": _model_version(prediction.model_version),
-        "features": [_feature(row) for row in feature_rows],
+        "features": [] if prediction.evidence_snapshot is not None else [_feature(row) for row in feature_rows],
+        "prediction_status": teacher_evidence["prediction_status"],
+        "model_execution": teacher_evidence["model_execution"],
+        "evidence": teacher_evidence["evidence"],
+        "interpretations": teacher_evidence["interpretations"],
+        "limitations": teacher_evidence["limitations"],
         "causes": causes,
         "recommended_actions": build_recommended_actions(prediction, causes),
         "outcome": _outcome(_latest_outcome(db, prediction_id)),

@@ -337,6 +337,7 @@ def get_risk_adjusted_attendance_rate(
             "late_count": 0,
             "excused_count": 0,
             "risk_adjusted_rate": None,
+            "records": [],
         }
 
     present_count = sum(1 for r in records if r.status == "present")
@@ -354,6 +355,10 @@ def get_risk_adjusted_attendance_rate(
         "late_count": late_count,
         "excused_count": excused_count,
         "risk_adjusted_rate": risk_adjusted_rate,
+        "records": [
+            {"attendance_id": record.attendance_id, "date": record.date.isoformat(), "status": record.status}
+            for record in records
+        ],
     }
 
 

@@ -322,6 +322,8 @@ def create_prediction_from_records(
                 model_name=payload.model_name or DEFAULT_MODEL_NAME,
                 replace_existing=payload.replace_existing,
                 commit=False,
+                evidence_context=built,
+                generation_request_id=payload.generation_request_id,
             )
             return _with_readiness(result, built)
 
@@ -345,6 +347,7 @@ def create_prediction(
         request_data = payload.model_dump()
         model_name = request_data.pop("model_name") or DEFAULT_MODEL_NAME
         replace_existing = bool(request_data.pop("replace_existing", False))
+        generation_request_id = request_data.pop("generation_request_id", None)
         return run_prediction_generation_transaction(
             request_data,
             model_name,
@@ -354,6 +357,7 @@ def create_prediction(
                 model_name=model_name,
                 replace_existing=replace_existing,
                 commit=False,
+                generation_request_id=generation_request_id,
             ),
             bind=db.get_bind(),
         )

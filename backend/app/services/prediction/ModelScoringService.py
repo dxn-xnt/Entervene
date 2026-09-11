@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from hashlib import sha256
 from typing import Any
 
 import joblib
@@ -96,6 +97,18 @@ def load_model_artifact(artifact_path: str, base_dir: Path | None = None) -> Any
     if isinstance(artifact, dict) and "model" in artifact:
         return artifact["model"]
     return artifact
+
+
+def artifact_digest(artifact_path: str) -> str | None:
+    """Return a stable digest for the exact artifact executed, when readable."""
+    path = resolve_artifact_path(artifact_path)
+    if not path.exists() or not path.is_file():
+        return None
+    digest = sha256()
+    with path.open("rb") as artifact_file:
+        for chunk in iter(lambda: artifact_file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def load_feature_schema_from_model_version(model_version: AIModelVersion) -> dict[str, Any]:
@@ -230,6 +243,22 @@ def score_student_prediction(
     model = load_model_artifact(model_version.artifact_path)
     prepared_row, warnings = prepare_feature_row(input_data, feature_schema)
     predicted_grade = predict_next_period_grade(model, prepared_row)
+    transformations = []
+    for feature_name in prepared_row.columns:
+        if feature_name not in input_data:
+            transformations.append({
+                "feature": feature_name,
+                "model_value": float(prepared_row.iloc[0][feature_name]),
+                "transformation": "SCHEMA_DEFAULT",
+            })
+    for source, target in dict(feature_schema.get("column_mappings") or {}).items():
+        if source in input_data and target not in input_data:
+            transformations.append({
+                "feature": target,
+                "model_value": float(prepared_row.iloc[0][target]),
+                "transformation": "COLUMN_MAPPING",
+                "source_feature": source,
+            })
 
     risk_result = evaluate_risk(
         RiskEngineInput(
@@ -266,4 +295,19 @@ def score_student_prediction(
         "triggered_rules": risk_result.triggered_rules,
         "feature_columns_used": list(feature_schema["feature_columns"]),
         "warnings": warnings,
+        "execution_trace": {
+            "grade_model": {
+                "status": "EXECUTED",
+                "model_version_id": model_version.model_version_id,
+                "model_name": model_version.model_name,
+                "model_type": model_version.model_type,
+                "algorithm": model_version.algorithm,
+                "artifact_path": model_version.artifact_path,
+                "artifact_sha256": artifact_digest(model_version.artifact_path),
+                "ordered_feature_names": list(prepared_row.columns),
+                "ordered_model_values": [float(prepared_row.iloc[0][name]) for name in prepared_row.columns],
+            },
+            "model_transformations": transformations,
+            "risk_engine": risk_result.execution_trace,
+        },
     }

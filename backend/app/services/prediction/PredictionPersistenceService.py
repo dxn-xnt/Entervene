@@ -110,6 +110,10 @@ def find_existing_prediction(
     )
 
 
+def find_prediction_by_generation_request_id(db: Session, generation_request_id: str) -> AIPrediction | None:
+    return db.query(AIPrediction).filter(AIPrediction.generation_request_id == generation_request_id).one_or_none()
+
+
 def _is_private_or_identity_feature(feature_name: str) -> bool:
     lower = feature_name.lower()
     return any(term in lower for term in IDENTITY_OR_PRIVATE_TERMS)
@@ -206,11 +210,23 @@ def score_and_persist_prediction(
     model_name: str = DEFAULT_MODEL_NAME,
     commit: bool = True,
     replace_existing: bool = False,
+    evidence_context: dict[str, Any] | None = None,
+    generation_request_id: str | None = None,
 ) -> dict[str, Any]:
     try:
         validate_required_identifiers(prediction_request)
         identifiers = validate_references(db, prediction_request)
         features = prediction_request["features"]
+        if generation_request_id:
+            prior_request = find_prediction_by_generation_request_id(db, generation_request_id)
+            if prior_request is not None:
+                if evidence_context is not None:
+                    from app.services.prediction.PredictionEvidenceSnapshotService import generation_request_fingerprint
+                    expected = generation_request_fingerprint(identifiers, model_name)
+                    actual = ((prior_request.evidence_snapshot or {}).get("scope") or {}).get("request_fingerprint")
+                    if actual != expected:
+                        raise ValueError("generation_request_id was already used with a different request fingerprint.")
+                return _prediction_result(prior_request, {}, len(prior_request.features), duplicate=True)
         scoring_result = score_student_prediction(db, features, model_name=model_name)
         model_version_id = int(scoring_result["model_version_id"])
         existing = find_existing_prediction(db, identifiers, model_version_id)
@@ -218,12 +234,17 @@ def score_and_persist_prediction(
         if existing is not None and not replace_existing:
             return _prediction_result(existing, scoring_result, len(existing.features), duplicate=True)
 
+        if existing is not None and existing.evidence_snapshot is not None and replace_existing:
+            raise ValueError("Audited predictions cannot be replaced in place; Phase 2 successor semantics are required.")
+
         prediction = existing or AIPrediction(**identifiers, model_version_id=model_version_id)
         prediction.predicted_period_grade = _to_decimal_or_none(scoring_result.get("predicted_period_grade"))
         prediction.risk_score = _to_decimal_or_none(scoring_result.get("risk_score"))
         prediction.risk_level = scoring_result["risk_level"]
         prediction.data_status = scoring_result["data_status"]
         prediction.model_version_id = model_version_id
+        if generation_request_id:
+            prediction.generation_request_id = generation_request_id
 
         if existing is None:
             db.add(prediction)
@@ -237,6 +258,18 @@ def score_and_persist_prediction(
         feature_rows = build_prediction_feature_rows(prediction, features, scoring_result)
         db.add_all(feature_rows)
         db.flush()
+
+        if evidence_context is not None:
+            from app.services.prediction.PredictionEvidenceSnapshotService import build_evidence_snapshot
+            prediction.evidence_snapshot = build_evidence_snapshot(
+                db,
+                scope=identifiers,
+                model_name=model_name,
+                built=evidence_context,
+                scoring_result=scoring_result,
+                generation_request_id=generation_request_id,
+            )
+            db.flush()
 
         if commit:
             db.commit()

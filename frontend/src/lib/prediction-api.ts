@@ -113,6 +113,39 @@ export interface PredictionFeature {
   explanation_method: string;
 }
 
+export type PredictionEvidenceState =
+  | "AVAILABLE"
+  | "NO_EXPECTED_ITEMS"
+  | "NO_RECORDED_DATA"
+  | "INSUFFICIENT_DATA"
+  | "UNRESOLVED"
+  | "NOT_APPLICABLE";
+
+export type PredictionEvidenceCategory =
+  | "GRADE"
+  | "ACTIVITY_PROGRESS"
+  | "ATTENDANCE"
+  | "PARTICIPATION";
+
+export type PredictionStatus = "GENERATED" | "INSUFFICIENT_DATA" | "LEGACY";
+export type ModelExecutionStatus = "EXECUTED" | "SKIPPED" | "UNKNOWN";
+
+export interface TeacherPredictionEvidence {
+  feature_name: string;
+  display_name: string;
+  description: string;
+  category: PredictionEvidenceCategory;
+  value: number | string | null;
+  unit: "PERCENTAGE" | "SCORE" | "NUMERIC" | "INDICATOR" | "TEXT" | null;
+  value_scale: "ZERO_TO_ONE" | "ZERO_TO_100" | "MODEL_NATIVE" | "N/A" | null;
+  evidence_state: PredictionEvidenceState;
+  numerator: number | null;
+  denominator: number | null;
+  formatted_value: string;
+  source_description: string;
+  usage_description: string;
+}
+
 export interface PredictionCause {
   code: string;
   label: string;
@@ -174,6 +207,11 @@ export interface PredictionDetail {
     is_active: boolean;
   } | null;
   features: PredictionFeature[];
+  prediction_status: PredictionStatus;
+  model_execution: ModelExecutionStatus;
+  evidence: TeacherPredictionEvidence[];
+  interpretations: string[];
+  limitations: string[];
   causes: PredictionCause[];
   recommended_actions: PredictionAction[];
   outcome: {

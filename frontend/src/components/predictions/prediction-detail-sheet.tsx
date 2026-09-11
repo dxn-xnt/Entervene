@@ -26,6 +26,7 @@ import type {
   PredictionSuggestionItem,
   TeacherReview,
 } from "@/lib/prediction-api";
+import { EVIDENCE_GROUPS, evidenceRowsForGroup } from "./teacher-evidence";
 import { useAuth } from "@/context/AuthContext";
 import {
   assignPredictionIntervention,
@@ -57,18 +58,12 @@ const RISK_LABELS: Record<string, string> = {
   INSUFFICIENT_DATA: "Insufficient Data",
 };
 
-const SEVERITY_COLORS: Record<string, string> = {
-  HIGH: "text-red-600",
-  ATTENTION: "text-amber-600",
-  MODERATE: "text-amber-600",
-  LOW: "text-gray-500",
-};
-
 const DIRECTION_ICONS: Record<string, typeof ArrowUp> = {
   INCREASES_RISK: ArrowUp,
   DECREASES_RISK: ArrowDown,
   NEUTRAL: Minus,
 };
+const showDeprecatedRawFeaturePanel: boolean = false;
 
 const DECISION_OPTIONS = [
   { value: "CONFIRMED_RISK", label: "Confirm Risk" },
@@ -97,6 +92,7 @@ export default function PredictionDetailSheet({
   const [detail, setDetail] = useState<PredictionDetail | null>(null);
   const [suggestions, setSuggestions] = useState<PredictionSuggestionItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [reviewDecision, setReviewDecision] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -112,6 +108,7 @@ export default function PredictionDetailSheet({
   useEffect(() => {
     if (!predictionId || !open) return;
     setLoading(true);
+    setLoadError(null);
     setReviewSuccess(false);
     setInterventionSuccess(false);
     setInterventionError(null);
@@ -124,7 +121,11 @@ export default function PredictionDetailSheet({
         setDetail(detailRes);
         setSuggestions(suggestionsRes);
       })
-      .catch(console.error)
+      .catch((error: unknown) => {
+        console.error(error);
+        setDetail(null);
+        setLoadError("Unable to load this prediction detail. Please try again.");
+      })
       .finally(() => setLoading(false));
   }, [predictionId, open]);
 
@@ -192,6 +193,10 @@ export default function PredictionDetailSheet({
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="animate-spin text-gray-400" size={28} />
+          </div>
+        ) : loadError ? (
+          <div className="px-4 py-20 text-center text-sm text-destructive" role="alert">
+            {loadError}
           </div>
         ) : detail ? (
           <div className="flex flex-col gap-5 p-4">
@@ -306,7 +311,7 @@ export default function PredictionDetailSheet({
               </div>
               {detail.risk_level === "INSUFFICIENT_DATA" && (
                 <p className="text-xs text-amber-600 font-semibold mt-2">
-                  Evaluation deferred until more grades are recorded
+                  Prediction unavailable: there was not enough verified evidence to generate a grade prediction.
                 </p>
               )}
               {detail.generated_at && (
@@ -324,6 +329,22 @@ export default function PredictionDetailSheet({
             </Card>
 
             {/* ── Causes ── */}
+            {detail.interpretations.length > 0 && (
+              <section aria-labelledby="risk-indicators-title">
+                <h3 id="risk-indicators-title" className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                  <AlertTriangle size={16} className="text-amber-500" aria-hidden="true" />
+                  Why this prediction needs attention
+                </h3>
+                <div className="flex flex-col gap-2">
+                  {detail.interpretations.map((interpretation) => (
+                    <p key={interpretation} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-gray-700">
+                      {interpretation}
+                    </p>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {detail.causes.length > 0 && (
               <div>
                 <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
@@ -340,9 +361,7 @@ export default function PredictionDetailSheet({
                         <span className="text-sm font-medium text-gray-800">
                           {cause.label}
                         </span>
-                        <span
-                          className={`text-xs font-semibold ${SEVERITY_COLORS[cause.severity] ?? "text-gray-500"}`}
-                        >
+                        <span className="text-xs font-semibold text-gray-500">
                           {cause.severity}
                         </span>
                       </div>
@@ -386,7 +405,7 @@ export default function PredictionDetailSheet({
             )}
 
             {/* ── Feature Evidence ── */}
-            {detail.features.length > 0 && (
+            {detail.features.length > 0 && showDeprecatedRawFeaturePanel && (
               <div>
                 <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
                   <Sparkles size={16} className="text-purple-500" />
@@ -438,6 +457,54 @@ export default function PredictionDetailSheet({
             )}
 
             {/* ── Section: Assigned Interventions ── */}
+            <section aria-labelledby="prediction-evidence-title" className="space-y-3">
+              <h3 id="prediction-evidence-title" className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <Sparkles size={16} className="text-purple-500" aria-hidden="true" />
+                Evidence used for this prediction
+              </h3>
+              {detail.evidence.length > 0 ? EVIDENCE_GROUPS.map((group) => {
+                const rows = evidenceRowsForGroup(detail.evidence, group);
+                if (!rows.length) return null;
+                return (
+                  <div key={group.title} className="space-y-2">
+                    <h4 className="text-[11px] font-extrabold uppercase tracking-wide text-gray-500">{group.title}</h4>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {rows.map((item) => (
+                        <article key={item.feature_name} className="min-w-0 rounded-lg border border-gray-200 bg-white p-3">
+                          <p className="text-sm font-semibold text-gray-900 break-words">{item.display_name}</p>
+                          <p className="mt-1 text-base font-bold text-gray-900 break-words">{item.formatted_value}</p>
+                          <p className="mt-1 text-xs text-gray-600 break-words">{item.source_description}</p>
+                          <p className="mt-1 text-xs text-gray-500 break-words">{item.usage_description}</p>
+                          {item.evidence_state !== "AVAILABLE" && (
+                            <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                              Evidence status: {item.evidence_state.replaceAll("_", " ")}
+                            </p>
+                          )}
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }) : (
+                <p className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                  {detail.prediction_status === "LEGACY"
+                    ? "Source details unavailable for this saved prediction."
+                    : "No teacher-visible evidence is available for this prediction."}
+                </p>
+              )}
+            </section>
+
+            {detail.limitations.length > 0 && (
+              <section aria-labelledby="evidence-limitations-title">
+                <h3 id="evidence-limitations-title" className="text-sm font-semibold text-gray-700 mb-2">Evidence limitations</h3>
+                <div className="flex flex-col gap-2">
+                  {detail.limitations.map((limitation) => (
+                    <p key={limitation} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-gray-700">{limitation}</p>
+                  ))}
+                </div>
+              </section>
+            )}
+
             <div className="space-y-3 border-t-2 border-black pt-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-extrabold uppercase tracking-wide text-black flex items-center gap-1.5">
