@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.Dependencies import get_staff_id, require_role
@@ -18,6 +19,7 @@ from app.schemas.StudentRecord import (
     StudentRecordRosterResponse,
     TermGradeSummaryResponse,
 )
+from app.services.export.ClassRecordExportService import export_class_record_single_term
 from app.services.student_record.StudentRecordService import (
     bulk_send_grades_to_adviser,
     finalize_student_period_grade,
@@ -119,6 +121,34 @@ def get_teacher_student_gradebook(
         class_id=class_id,
         subject_id=subject_id,
         academic_period_id=academic_period_id,
+    )
+
+
+@router.get(
+    "/teacher/classes/{class_id}/subjects/{subject_id}/export-class-record",
+)
+def export_teacher_class_record(
+    class_id: int,
+    subject_id: int,
+    academic_period_id: int = Query(...),
+    _teacher: dict = Depends(require_role("teacher", "admin")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    stream, filename = export_class_record_single_term(
+        db=db,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=academic_period_id,
+        staff_id=staff_id,
+    )
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
     )
 
 
