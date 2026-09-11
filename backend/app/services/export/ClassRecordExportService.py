@@ -11,6 +11,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 from sqlalchemy.orm import Session
 
+from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.Class_ import Class
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
@@ -18,6 +19,7 @@ from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.settings.Setting import Setting
+from app.services.academic.SubstitutionService import _staff_full_name
 from app.services.classes.ClassQueryService import _student_gender_group
 from app.services.student_record.StudentRecordService import (
     _deped_transmuted,
@@ -117,7 +119,12 @@ def _style_range(
                 cell.alignment = alignment
 
 
-def _get_school_metadata(db: Session, scope: Any) -> dict[str, str]:
+def _get_school_metadata(
+    db: Session,
+    scope: Any,
+    staff_id: str | None = None,
+    class_obj: Class | None = None,
+) -> dict[str, str]:
     """
     Retrieve real school settings if present.
     If not configured in Setting table, return empty strings ("") rather than
@@ -125,8 +132,8 @@ def _get_school_metadata(db: Session, scope: Any) -> dict[str, str]:
     """
     settings_rows = {s.key: (s.value or "").strip() for s in db.query(Setting).all()}
 
-    # School Name: setting school_name -> app_name -> fallback empty
-    school_name = settings_rows.get("school_name") or settings_rows.get("app_name") or ""
+    # School Name: setting school_name -> fallback empty (never app_name)
+    school_name = settings_rows.get("school_name") or ""
 
     # Region & Division: Only use if actually configured in settings
     region = settings_rows.get("school_region") or settings_rows.get("region") or settings_rows.get("deped_region") or ""
@@ -141,14 +148,32 @@ def _get_school_metadata(db: Session, scope: Any) -> dict[str, str]:
     subject_name = (getattr(scope, "subject_name", None) or "").strip()
     period_name = (getattr(scope, "period_name", None) or "").strip()
 
+    # Grade & Section (DepEd format: "Grade {level} - {section_name}")
+    grade_and_section = section_name
+    if class_obj and class_obj.academic_level_id:
+        level = db.get(AcademicLevel, class_obj.academic_level_id)
+        if level:
+            grade_label = f"Grade {level.grade_level}" if level.grade_level else level.level_name
+            if section_name:
+                if section_name.lower().startswith("grade"):
+                    grade_and_section = section_name
+                else:
+                    grade_and_section = f"{grade_label} - {section_name}"
+            else:
+                grade_and_section = grade_label
+
     # Teacher Name
     teacher_name = ""
     if hasattr(scope, "original_teacher_name") and scope.original_teacher_name:
         teacher_name = scope.original_teacher_name
+    elif staff_id:
+        staff = db.get(AcademicStaff, staff_id)
+        if staff:
+            teacher_name = _staff_full_name(staff)
     elif hasattr(scope, "acting_staff_id") and scope.acting_staff_id:
         staff = db.get(AcademicStaff, scope.acting_staff_id)
         if staff:
-            teacher_name = f"{staff.first_name} {staff.last_name}".strip()
+            teacher_name = _staff_full_name(staff)
 
     return {
         "school_name": school_name,
@@ -157,6 +182,7 @@ def _get_school_metadata(db: Session, scope: Any) -> dict[str, str]:
         "school_id": school_id,
         "school_year": school_year,
         "section_name": section_name,
+        "grade_and_section": grade_and_section,
         "subject_name": subject_name,
         "period_name": period_name,
         "teacher_name": teacher_name,
@@ -204,7 +230,8 @@ def generate_class_record_sheet(
     )
 
     scope = gradebook.scope
-    meta = _get_school_metadata(db, scope)
+    class_obj = db.get(Class, class_id)
+    meta = _get_school_metadata(db, scope, staff_id=effective_staff_id, class_obj=class_obj)
 
     # 3. Create or reuse worksheet
     term_title = sheet_title or meta["period_name"] or "Term"
@@ -343,7 +370,7 @@ def generate_class_record_sheet(
 
     ws.cell(6, mid_label_col).value = "GRADE & SECTION:"
     ws.cell(6, mid_label_col).font = FONT_META_LABEL
-    ws.cell(6, mid_val_col).value = meta["section_name"]
+    ws.cell(6, mid_val_col).value = meta["grade_and_section"]
     ws.cell(6, mid_val_col).font = FONT_META_VAL
 
     ws.cell(7, mid_label_col).value = "TEACHER:"

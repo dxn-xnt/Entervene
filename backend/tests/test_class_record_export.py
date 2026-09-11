@@ -63,8 +63,10 @@ def export_context():
     # Settings
     db.add_all([
         Setting(key="app_name", value="ENTERVENE", type=SettingType.STRING, group="general", is_public=True),
-        Setting(key="school_name", value="Entervene Integrated High School", type=SettingType.STRING, group="general", is_public=True),
-        Setting(key="school_id", value="301234", type=SettingType.STRING, group="general", is_public=True),
+        Setting(key="school_name", value="Medellin National Science and Technology School (MNSTS)", type=SettingType.STRING, group="school", is_public=True),
+        Setting(key="school_id", value="303012", type=SettingType.STRING, group="school", is_public=True),
+        Setting(key="school_region", value="IV", type=SettingType.STRING, group="school", is_public=True),
+        Setting(key="school_division", value="Fourth District", type=SettingType.STRING, group="school", is_public=True),
         Setting(key="current_school_year", value="AY2025-2026", type=SettingType.STRING, group="calendar", is_public=True),
     ])
 
@@ -257,10 +259,16 @@ def test_generate_class_record_sheet(export_context):
     assert ws["A1"].value == "Republic of the Philippines"
     assert ws["A2"].value == "Department of Education"
     assert ws["A3"].value == "ELECTRONIC CLASS RECORD"
-    assert ws["B7"].value == "Entervene Integrated High School"  # School Name from Setting
-    assert ws["B8"].value == "301234"  # School ID from Setting
-    assert ws["B5"].value == ""  # Region (unconfigured in Setting -> blank)
-    assert ws["B6"].value == ""  # Division (unconfigured in Setting -> blank)
+    assert ws["B5"].value == "IV"  # Region from Setting
+    assert ws["B6"].value == "Fourth District"  # Division from Setting
+    assert ws["B7"].value == "Medellin National Science and Technology School (MNSTS)"  # School Name from Setting
+    assert ws["B8"].value == "303012"  # School ID from Setting
+
+    # Right column metadata (col 9)
+    assert ws.cell(5, 9).value == "AY2025-2026"
+    assert ws.cell(6, 9).value == "Grade 8 – Rizal"
+    assert ws.cell(7, 9).value == "Maria Santos"
+    assert ws.cell(8, 9).value == "Mathematics - First Quarter"
 
     # 3. Verify Dynamic Component Headers in Row 10
     # WW has 2 items -> start_col=3, total_col=5, ps_col=6, ws_col=7, end_col=7
