@@ -31,6 +31,7 @@ import {
   type ConflictItem,
   type TeacherWorkloadItem,
 } from "@/lib/api";
+import { canonicalizePathway, isOfferingCompatibleWithClass } from "@/lib/pathways";
 import BreakConfigDrawer, { type PeriodTemplateSlotItem } from "@/pages/admin/forms/break-config-drawer";
 import {
   AlertTriangle,
@@ -92,18 +93,11 @@ function isSubjectOfferedForClass(
   if (sub.academic_level_id !== cls.academic_level_id) return false;
   if (!offerings || offerings.length === 0) return true;
 
-  const clsPathway = (cls.pathway || "general").toLowerCase();
-
   return offerings.some((so) => {
     if (so.subject_id !== sub.subject_id || so.academic_level_id !== cls.academic_level_id) {
       return false;
     }
-    const soPathway = (so.pathway || "general").toLowerCase();
-    return (
-      soPathway === "both" ||
-      soPathway === clsPathway ||
-      (soPathway === "general" && clsPathway === "general")
-    );
+    return isOfferingCompatibleWithClass(so.pathway, cls.pathway);
   });
 }
 
@@ -205,6 +199,11 @@ export default function AdminSubjectLoadStudio() {
         title = "Teacher workload capacity exceeded";
         explanation = "Assigned daily or weekly teaching hours exceed max capacity policy limits.";
         severity = "error";
+      } else if (key === "UNCONFIGURED_BELL_SCHEDULE") {
+        key = "UNCONFIGURED_BELL_SCHEDULE";
+        title = "Bell schedule unconfigured or mismatched";
+        explanation = "Section has no bell-schedule template configured or a Senior High section is assigned to the Junior High bell schedule.";
+        severity = "warning";
       }
 
       if (!map[key]) {
@@ -1750,11 +1749,29 @@ export default function AdminSubjectLoadStudio() {
                                                 <Badge variant="default" size="sm">
                                                   {sub.subject_codename || `SUB-${sub.subject_id}`}
                                                 </Badge>
-                                                {sub.is_math_or_science && sub.academic_level_id > 4 && (
-                                                  <Badge variant="solid" size="sm">
-                                                    Core
-                                                  </Badge>
-                                                )}
+                                                {(() => {
+                                                  const matchingOffering = (studioData?.subject_offerings || []).find(
+                                                    (so) => so.subject_id === sub.subject_id && so.academic_level_id === cls.academic_level_id
+                                                  );
+                                                  const canonPathway = matchingOffering?.pathway ? canonicalizePathway(matchingOffering.pathway) : null;
+                                                  const isSharedOffering = canonPathway === "both" || (matchingOffering?.pathway_ids && matchingOffering.pathway_ids.length > 1);
+                                                  const isGradeWithPathway = Boolean(
+                                                    (studioData?.academic_levels || []).find(
+                                                      (l) => l.academic_level_id === cls.academic_level_id && l.grade_level >= 11
+                                                    )
+                                                  );
+
+                                                  if (!isGradeWithPathway) return null;
+                                                  return isSharedOffering ? (
+                                                    <Badge variant="outline" size="sm" className="bg-blue-50 text-blue-900 border-blue-300 font-semibold">
+                                                      Shared
+                                                    </Badge>
+                                                  ) : (
+                                                    <Badge variant="outline" size="sm" className="bg-emerald-50 text-emerald-900 border-emerald-300 font-semibold">
+                                                      Specialized
+                                                    </Badge>
+                                                  );
+                                                })()}
                                               </div>
                                             </div>
                                           </Table.Cell>
@@ -2199,6 +2216,7 @@ export default function AdminSubjectLoadStudio() {
         open={isBreakDrawerOpen}
         onClose={() => setIsBreakDrawerOpen(false)}
         initialSlots={periodTemplateSlots}
+        initialGroup={activeGroupKey}
         onSaved={() => void loadStudio(selectedPeriodId || undefined)}
         studioData={studioData}
       />

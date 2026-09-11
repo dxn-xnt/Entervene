@@ -1,0 +1,52 @@
+{
+  "fixture_version": "stage3a-corrected-v1",
+  "source_baseline": "prediction_evidence_stage1_baseline.json",
+  "purpose": "Expected corrected evidence states for the frozen Stage 1 characterization cases. Null means unavailable, never zero-filled.",
+  "cases": {
+    "genuine_zero_of_n_completion": {
+      "completion": {"value": null, "state": "NO_EXPECTED_ITEMS"},
+      "coverage": {"value": null, "state": "NO_EXPECTED_ITEMS"},
+      "model": "SKIPPED"
+    },
+    "no_activities_or_other_evidence": {
+      "completion": {"value": null, "state": "NO_EXPECTED_ITEMS"},
+      "coverage": {"value": null, "state": "NO_EXPECTED_ITEMS"},
+      "readiness": "INSUFFICIENT",
+      "model": "SKIPPED"
+    },
+    "completed_but_ungraded_classwork": {
+      "completion": {"value": 1.0, "state": "AVAILABLE"},
+      "coverage": {"value": null, "state": "NO_RECORDED_DATA"},
+      "component_percent": null,
+      "model": "SKIPPED"
+    },
+    "multiple_submission_rows_for_one_assignment": {
+      "expected_activity_count": 1,
+      "selected_submission": "unique latest submitted_at; equal timestamp is UNRESOLVED",
+      "model": "SKIPPED_IF_UNRESOLVED"
+    },
+    "legitimate_zero_final_grade": {
+      "source_grade": {"value": 0.0, "provenance": "OFFICIAL", "field": "final_period_grade"}
+    },
+    "other_period_records": {
+      "classwork": "EXCLUDED",
+      "attendance": {"value": null, "state": "NO_RECORDED_DATA"}
+    },
+    "estimated_grade_without_period_grade": {
+      "source_grade": {"provenance": "ESTIMATED"},
+      "readiness": "INSUFFICIENT_IF_REGISTERED_VECTOR_MISSING_REQUIRED_INPUT",
+      "model": "SKIPPED"
+    },
+    "potential_assessment_classwork_overlap": {
+      "activity_population": "CLASSWORK_ONLY",
+      "assessment_observation": "SEPARATE",
+      "combined_metric": "NOT_PRODUCED"
+    },
+    "ambiguous_source_relationship_with_ungraded_classwork": {
+      "completion": {"value": 1.0, "state": "AVAILABLE"},
+      "coverage": {"value": null, "state": "NO_RECORDED_DATA"},
+      "combined_metric": "NOT_PRODUCED",
+      "model": "SKIPPED"
+    }
+  }
+}

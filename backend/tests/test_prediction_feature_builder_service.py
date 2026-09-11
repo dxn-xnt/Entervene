@@ -18,6 +18,8 @@ from app.models.academic.Class_ import Class
 from app.models.academic.StudentAssessmentScore import StudentAssessmentScore
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
+from app.models.attendance.Attendance import AttendanceRecord
+from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
@@ -172,6 +174,51 @@ def build(context, period=None, target=None):
     )
 
 
+def add_classwork_submission(
+    context,
+    *,
+    period=None,
+    status="graded",
+    grade=80,
+    due_date=None,
+    submitted_at=None,
+):
+    """Create one explicitly period-attributed classwork activity for evidence tests."""
+    period = period or context["periods"][1]
+    db = context["db"]
+    classwork = Classwork(
+        title="Scoped evidence activity",
+        classwork_type="QUIZ",
+        classwork_category="WRITTEN_WORK",
+        total_points=100,
+        is_published=True,
+        subject_id=context["subject"].subject_id,
+        created_by_staff_id=context["staff"].staff_id,
+    )
+    db.add(classwork)
+    db.flush()
+    assignment = ClassworkAssignment(
+        classwork_id=classwork.classwork_id,
+        class_id=context["class"].class_id,
+        academic_period_id=period.academic_period_id,
+        assigned_by_staff_id=context["staff"].staff_id,
+        due_date=due_date,
+        is_published=True,
+    )
+    db.add(assignment)
+    db.flush()
+    if status is not None:
+        db.add(StudentSubmission(
+            student_id=context["student"].student_id,
+            classwork_assignment_id=assignment.classwork_assignment_id,
+            status=status,
+            grade=grade,
+            submitted_at=submitted_at,
+        ))
+    db.commit()
+    return assignment
+
+
 def test_builds_source_period_grade_from_student_period_grade(feature_context):
     add_period_grade(feature_context, feature_context["periods"][1], grade=86)
 
@@ -203,7 +250,7 @@ def test_handles_missing_quarterly_assessment_during_early_projection(feature_co
     assert "QUARTERLY_ASSESSMENT" in result["evidence_summary"]["components_missing"]
 
 
-def test_computes_completion_missing_and_coverage(feature_context):
+def test_assessment_scores_do_not_claim_classwork_completion_or_coverage(feature_context):
     add_period_grade(feature_context, feature_context["periods"][1], grade=86)
     add_assessment(feature_context, "WRITTEN_WORK", 1, raw_score=80)
     add_assessment(feature_context, "WRITTEN_WORK", 2, raw_score=None, status="MISSING_NOT_ENCODED")
@@ -212,11 +259,12 @@ def test_computes_completion_missing_and_coverage(feature_context):
 
     result = build(feature_context)
 
-    assert result["features"]["assessment_completion_rate"] == pytest.approx(0.75)
-    assert result["features"]["data_coverage_ratio"] == pytest.approx(0.75)
-    assert result["features"]["missing_activity_count"] == 1
-    assert result["evidence_summary"]["expected_assessment_count"] == 4
-    assert result["evidence_summary"]["recorded_assessment_count"] == 3
+    assert result["features"]["assessment_completion_rate"] is None
+    assert result["features"]["data_coverage_ratio"] is None
+    assert result["features"]["missing_activity_count"] == 0
+    assert result["evidence_summary"]["assessment_item_count"] == 4
+    assert result["evidence_summary"]["assessment_observation_count"] == 3
+    assert result["evidence_summary"]["component_source"] == "ASSESSMENT"
 
 
 def test_computes_late_submission_count_when_due_dates_exist(feature_context):
@@ -234,6 +282,7 @@ def test_computes_late_submission_count_when_due_dates_exist(feature_context):
     assignment = ClassworkAssignment(
         classwork_id=classwork.classwork_id,
         class_id=feature_context["class"].class_id,
+        academic_period_id=feature_context["periods"][1].academic_period_id,
         assigned_by_staff_id=feature_context["staff"].staff_id,
         due_date=datetime.now(timezone.utc) - timedelta(days=1),
         is_published=True,
@@ -297,6 +346,7 @@ def test_includes_live_classwork_submissions_in_component_features(feature_conte
     assign = ClassworkAssignment(
         classwork_id=cw.classwork_id,
         class_id=feature_context["class"].class_id,
+        academic_period_id=feature_context["periods"][1].academic_period_id,
         assigned_by_staff_id=feature_context["staff"].staff_id,
     )
     db.add(assign)
@@ -314,6 +364,141 @@ def test_includes_live_classwork_submissions_in_component_features(feature_conte
     result = build(feature_context)
 
     assert result["features"]["written_work_percent"] == 90.0
+
+
+def test_stage3a_keeps_a_legitimate_final_zero_and_exposes_official_provenance(feature_context):
+    add_period_grade(
+        feature_context,
+        feature_context["periods"][1],
+        grade=0,
+        transmuted_grade=82,
+        is_finalized=True,
+    )
+
+    result = build(feature_context)
+
+    assert result["features"]["source_period_grade"] == 0.0
+    assert result["evidence_summary"]["source_grade_provenance"] == "OFFICIAL"
+    assert result["evidence_summary"]["source_grade_field"] == "final_period_grade"
+
+
+def test_stage3a_no_activities_are_unavailable_not_zero(feature_context):
+    add_period_grade(feature_context, feature_context["periods"][1], grade=86)
+
+    result = build(feature_context)
+
+    assert result["features"]["assessment_completion_rate"] is None
+    assert result["features"]["data_coverage_ratio"] is None
+    assert result["evidence_summary"]["completion_state"] == "NO_EXPECTED_ITEMS"
+    assert result["evidence_summary"]["coverage_state"] == "NO_EXPECTED_ITEMS"
+
+
+def test_stage3a_confirmed_zero_of_expected_classwork_is_a_real_zero(feature_context):
+    add_period_grade(feature_context, feature_context["periods"][1], grade=86)
+    for _ in range(10):
+        add_classwork_submission(feature_context, status=None)
+
+    result = build(feature_context)
+
+    assert result["evidence_summary"]["expected_count"] == 10
+    assert result["features"]["assessment_completion_rate"] == 0.0
+    assert result["evidence_summary"]["completion_state"] == "AVAILABLE"
+    assert result["features"]["data_coverage_ratio"] is None
+
+
+def test_stage3a_submitted_ungraded_is_completed_but_not_grade_coverage(feature_context):
+    add_period_grade(feature_context, feature_context["periods"][1], grade=86)
+    add_classwork_submission(feature_context, status="submitted", grade=None)
+
+    result = build(feature_context)
+
+    assert result["features"]["assessment_completion_rate"] == 1.0
+    assert result["features"]["data_coverage_ratio"] is None
+    assert result["evidence_summary"]["coverage_state"] == "NO_RECORDED_DATA"
+    assert result["features"]["written_work_percent"] is None
+
+
+def test_stage3a_duplicate_ungraded_submissions_are_unresolved(feature_context):
+    add_period_grade(feature_context, feature_context["periods"][1], grade=86)
+    assignment = add_classwork_submission(feature_context, status="submitted", grade=None)
+    feature_context["db"].add(StudentSubmission(
+        student_id=feature_context["student"].student_id,
+        classwork_assignment_id=assignment.classwork_assignment_id,
+        status="submitted",
+        grade=None,
+    ))
+    feature_context["db"].commit()
+
+    result = build(feature_context)
+
+    assert result["evidence_summary"]["expected_count"] == 1
+    assert result["evidence_summary"]["completion_state"] == "UNRESOLVED"
+    assert result["ready"] is False
+
+
+def test_stage3a_other_period_classwork_and_attendance_do_not_contribute(feature_context):
+    add_period_grade(feature_context, feature_context["periods"][1], grade=86)
+    add_classwork_submission(feature_context, period=feature_context["periods"][0])
+    feature_context["db"].add(AttendanceRecord(
+        student_id=feature_context["student"].student_id,
+        class_id=feature_context["class"].class_id,
+        subject_id=feature_context["subject"].subject_id,
+        date=feature_context["periods"][0].start_date,
+        status="absent",
+    ))
+    feature_context["db"].commit()
+
+    result = build(feature_context)
+
+    assert result["evidence_summary"]["expected_count"] == 0
+    assert result["features"]["risk_adjusted_attendance_rate"] is None
+    assert result["evidence_summary"]["attendance_total_days"] == 0
+
+
+def test_stage3a_assessment_and_classwork_stay_separate_when_relationship_is_unknown(feature_context):
+    add_period_grade(feature_context, feature_context["periods"][1], grade=86)
+    add_assessment(feature_context, "WRITTEN_WORK", 1, raw_score=80)
+    add_classwork_submission(feature_context, grade=90)
+
+    result = build(feature_context)
+
+    assert result["evidence_summary"]["component_source"] == "CLASSWORK"
+    assert result["features"]["written_work_percent"] == 90.0
+    assert result["evidence_summary"]["assessment_observation_count"] == 1
+    assert result["evidence_summary"]["expected_count"] == 1
+
+
+def test_stage3a_estimated_grade_missing_registered_input_is_not_ready(feature_context):
+    add_classwork_submission(feature_context, grade=80)
+    feature_context["db"].add(AIModelVersion(
+        model_name="entervene_next_period_grade_rf",
+        model_type="REGRESSOR",
+        algorithm="test",
+        training_row_count=1,
+        test_row_count=1,
+        mae=1,
+        rmse=1,
+        r2_score=0,
+        artifact_path="unused.joblib",
+        is_active=True,
+        feature_schema_json={
+            "feature_columns": [
+                "grade_level", "source_period_grade", "assessment_completion_rate",
+                "cumulative_period_grade_avg",
+            ],
+            "target_column": "target_next_period_grade",
+            "excluded_columns": [],
+            "column_mappings": {},
+            "required_runtime_columns": [],
+        },
+    ))
+    feature_context["db"].commit()
+
+    result = build(feature_context)
+
+    assert result["evidence_summary"]["source_grade_provenance"] == "ESTIMATED"
+    assert result["ready"] is False
+    assert any("cumulative_period_grade_avg" in reason for reason in result["readiness_reasons"])
 
 
 @pytest.mark.parametrize(
