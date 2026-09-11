@@ -23,6 +23,7 @@ interface BreakConfigDrawerProps {
   open: boolean;
   onClose: () => void;
   initialSlots?: PeriodTemplateSlotItem[];
+  initialGroup?: string;
   onSaved: () => void;
   studioData?: SubjectLoadStudioData | null;
 }
@@ -56,7 +57,7 @@ function formatGroupName(grp: string): string {
     case "JHS_45MIN":
       return "Junior High (Grades 7–10)";
     case "SHS_CAMPOS_ZARA":
-      return "SHS STEM / Medical (Campos & Zara)";
+      return "SHS Engineering / Medical (Campos & Zara)";
     case "SHS_DELMUNDO_REYES":
       return "SHS General (Del Mundo & Reyes)";
     default:
@@ -68,19 +69,28 @@ export default function BreakConfigDrawer({
   open,
   onClose,
   initialSlots = [],
+  initialGroup,
   onSaved,
-  studioData: _studioData,
+  studioData,
 }: BreakConfigDrawerProps) {
   const { getSetting } = useSettings();
-  const [activeGroup, setActiveGroup] = useState<string>("JHS_45MIN");
+  const [activeGroup, setActiveGroup] = useState<string>(initialGroup || "JHS_45MIN");
   const [slots, setSlots] = useState<PeriodTemplateSlotItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isReassigning, setIsReassigning] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showNewGroupModal, setShowNewGroupModal] = useState(false);
   const [newGroupNameInput, setNewGroupNameInput] = useState("");
   const [newGroupError, setNewGroupError] = useState<string | null>(null);
+
+  // Sync activeGroup whenever initialGroup changes or drawer opens
+  useEffect(() => {
+    if (open && initialGroup) {
+      setActiveGroup(initialGroup);
+    }
+  }, [open, initialGroup]);
 
   // Fetch period templates directly from DB on open
   useEffect(() => {
@@ -256,6 +266,42 @@ export default function BreakConfigDrawer({
     }
   };
 
+  const assignedClasses = useMemo(() => {
+    return (studioData?.classes || []).filter((c) => c.period_template_group === activeGroup);
+  }, [studioData, activeGroup]);
+
+  const otherClasses = useMemo(() => {
+    return (studioData?.classes || []).filter((c) => c.period_template_group !== activeGroup);
+  }, [studioData, activeGroup]);
+
+  const handleReassignClass = async (classId: number, targetGroup: string) => {
+    setIsReassigning(true);
+    setNotice(null);
+    try {
+      const res = await apiFetch(`/api/v1/subject-loads/classes/${classId}/template-group`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template_group: targetGroup }),
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "Failed to reassign section.");
+      }
+      const data = await res.json();
+      if (data.conflicts && data.conflicts.length > 0) {
+        const errorConflicts = data.conflicts.filter((c: any) => c.severity === "error");
+        if (errorConflicts.length > 0) {
+          setNotice(`Warning: Reassigned section, but detected ${errorConflicts.length} schedule conflict(s) with new break walls.`);
+        }
+      }
+      onSaved();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Failed to reassign section.");
+    } finally {
+      setIsReassigning(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={(val) => { if (!val && !isSaving) onClose(); }}>
       <Dialog.Content size="3xl" className="border-2 border-black p-0 max-h-[92vh] overflow-y-auto">
@@ -306,6 +352,47 @@ export default function BreakConfigDrawer({
               <FolderPlus className="size-3.5 text-purple-900" />
               <span>+ New Group</span>
             </button>
+          </div>
+
+          {/* Section Assignment Strip */}
+          <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-neutral-50 border-2 border-black rounded text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-bold text-neutral-800">Currently applied to:</span>
+              {assignedClasses.length === 0 ? (
+                <span className="italic text-neutral-500 font-medium">No sections currently assigned to this template</span>
+              ) : (
+                assignedClasses.map((c) => (
+                  <span
+                    key={c.class_id}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 font-bold bg-white border border-black shadow-[1px_1px_0_#000] rounded text-[11px]"
+                  >
+                    {c.section_name}
+                  </span>
+                ))
+              )}
+            </div>
+
+            {/* Quick Reassign Dropdown */}
+            {otherClasses.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const cid = Number(e.target.value);
+                    if (cid) void handleReassignClass(cid, activeGroup);
+                  }}
+                  className="text-xs border border-black bg-white px-2 py-1 font-semibold rounded cursor-pointer"
+                  disabled={isReassigning}
+                >
+                  <option value="" disabled>+ Assign Section to this Template...</option>
+                  {otherClasses.map((c) => (
+                    <option key={c.class_id} value={c.class_id}>
+                      {c.section_name} ({c.period_template_group ? formatGroupName(c.period_template_group) : "Unassigned"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {isLoading ? (

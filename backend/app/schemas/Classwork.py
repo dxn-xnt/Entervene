@@ -110,6 +110,7 @@ class ClassworkResponse(BaseModel):
 
 class ClassworkAssignRequest(BaseModel):
     class_ids: list[int]
+    academic_period_id: int
     publish_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
     lock_date: Optional[datetime] = None

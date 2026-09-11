@@ -4,11 +4,13 @@ from datetime import datetime
 from sqlalchemy.orm import Session, joinedload
 from app.models.academic.Subject import Subject
 from app.models.academic.Class_ import Class
+from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.PeriodTemplateSlot import PeriodTemplateSlot
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.academic.SubjectOffering import SubjectOffering
 from app.models.academic.SubjectOfferingPathway import SubjectOfferingPathway
 from app.services.classes.ClassQueryService import class_pathway_code
+from app.core.pathways import are_pathways_compatible, canonicalize_pathway
 from app.schemas.SubjectLoad import (
     ConflictItem,
     SubjectLoadItem,
@@ -256,16 +258,11 @@ class ConflictDetectorService:
                 def _get_offering_pathway_code(so: SubjectOffering) -> str:
                     pathway_links = getattr(so, "offering_pathways", None) or []
                     if not pathway_links:
-                        return (getattr(so, "pathway", None) or "general").casefold()
+                        return canonicalize_pathway(getattr(so, "pathway", None))
                     if len(pathway_links) == 1:
                         pw = getattr(pathway_links[0], "pathway", None)
                         if pw and getattr(pw, "code", None):
-                            code = str(pw.code).casefold()
-                            if "medical" in code or "health" in code:
-                                return "stem_medical"
-                            if "engineering" in code or "math" in code:
-                                return "stem_engineering"
-                            return code
+                            return canonicalize_pathway(pw.code)
                         return "general"
                     return "both"
 
@@ -286,13 +283,7 @@ class ConflictDetectorService:
                             so for so in period_offerings
                             if so.subject_id == load.subject_id
                             and so.academic_level_id == cls_level_id
-                            and (
-                                _get_offering_pathway_code(so) == "both"
-                                or _get_offering_pathway_code(so) == cls_pathway
-                                or (_get_offering_pathway_code(so) == "general" and cls_pathway == "general")
-                                or (_get_offering_pathway_code(so) in ("medical-courses", "stem_medical") and cls_pathway in ("medical-courses", "stem_medical"))
-                                or (_get_offering_pathway_code(so) in ("engineering-math", "stem_engineering") and cls_pathway in ("engineering-math", "stem_engineering"))
-                            )
+                            and are_pathways_compatible(_get_offering_pathway_code(so), cls_pathway)
                         ]
 
                         if not matching_offerings:
@@ -387,11 +378,7 @@ class ConflictDetectorService:
                 continue
 
             c_name = class_obj.section_name or ""
-            grp = "JHS_45MIN"
-            if "campos" in c_name.lower() or "zara" in c_name.lower():
-                grp = "SHS_CAMPOS_ZARA"
-            elif "del mundo" in c_name.lower() or "reyes" in c_name.lower():
-                grp = "SHS_DELMUNDO_REYES"
+            grp = getattr(class_obj, "period_template_group", None) or "JHS_45MIN"
 
             group_breaks = break_map.get(grp, [])
             for bslot in group_breaks:
@@ -408,6 +395,47 @@ class ConflictDetectorService:
                             affected_key=f"{load.class_id}_{load.subject_id}",
                         )
                     )
+
+        # ---------------------------------------------------------
+        # 7. Pre-flight Diagnostic: Bell Schedule Configuration Check
+        # ---------------------------------------------------------
+        checked_class_ids = set()
+        levels_map = {lvl.academic_level_id: lvl for lvl in db.query(AcademicLevel).all()}
+        for load in loads:
+            if load.class_id in checked_class_ids:
+                continue
+            checked_class_ids.add(load.class_id)
+            class_obj = classes_map.get(load.class_id)
+            if not class_obj:
+                continue
+
+            c_name = class_obj.section_name or f"Class #{class_obj.class_id}"
+            lvl = levels_map.get(class_obj.academic_level_id)
+            grade = lvl.grade_level if lvl else class_obj.academic_level_id
+            grp = getattr(class_obj, "period_template_group", None)
+
+            if grp is None:
+                conflicts.append(
+                    ConflictItem(
+                        rule="UNCONFIGURED_BELL_SCHEDULE",
+                        severity="warning",
+                        message=f"Section '{c_name}' has no timetable template assigned. Please assign a bell schedule in Break Settings.",
+                        class_id=class_obj.class_id,
+                        subject_id=load.subject_id,
+                        affected_key=f"{class_obj.class_id}_{load.subject_id}",
+                    )
+                )
+            elif grade >= 11 and grp == "JHS_45MIN":
+                conflicts.append(
+                    ConflictItem(
+                        rule="UNCONFIGURED_BELL_SCHEDULE",
+                        severity="warning",
+                        message=f"Senior High section '{c_name}' is currently assigned to the Junior High bell schedule ('JHS_45MIN'). Please assign an SHS timetable template in Break Settings to avoid break overlaps.",
+                        class_id=class_obj.class_id,
+                        subject_id=load.subject_id,
+                        affected_key=f"{class_obj.class_id}_{load.subject_id}",
+                    )
+                )
 
         has_errors = any(c.severity == "error" for c in conflicts)
         failing_rules = {c.rule for c in conflicts if c.severity == "error"}

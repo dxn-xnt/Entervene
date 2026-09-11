@@ -12,6 +12,7 @@ class ActivityCreateRequest(BaseModel):
     total_points: float = Field(default=100.0, gt=0)
     class_id: int
     subject_id: int
+    academic_period_id: int
     activity_mode: str = Field(default="MANUAL")  # MANUAL, ONLINE
     description: Optional[str] = None
     due_date: Optional[datetime] = None

@@ -185,6 +185,7 @@ async def create_classwork_wizard_record(
     is_published: bool,
     show_scores: bool = True,
     class_ids: str,
+    academic_period_id: int,
     lesson_ids: Optional[str],
     due_date: Optional[datetime],
     lock_date: Optional[datetime],
@@ -205,7 +206,7 @@ async def create_classwork_wizard_record(
     validate_schedule(None, due_date, lock_date)
     ensure_subject_owner(db, staff_id, subject_id)
     ensure_lessons_owned(db, staff_id, subject_id, selected_lesson_ids)
-    ensure_class_targets(db, staff_id, subject_id, selected_class_ids)
+    ensure_class_targets(db, staff_id, subject_id, selected_class_ids, academic_period_id)
     quiz_builder = _parse_quiz_payload(quiz_payload, normalized_type)
 
     saved_paths: list[str] = []
@@ -236,6 +237,7 @@ async def create_classwork_wizard_record(
             assignment = ClassworkAssignment(
                 classwork_id=classwork.classwork_id,
                 class_id=class_id,
+                academic_period_id=academic_period_id,
                 assigned_by_staff_id=staff_id,
                 publish_date=None,
                 due_date=due_date,
@@ -627,7 +629,7 @@ def assign_classwork_to_classes(
     max_attempts = body.max_attempts if is_quiz_type(classwork.classwork_type) else None
     validate_classwork_values(max_attempts=max_attempts)
     validate_schedule(None, body.due_date, body.lock_date)
-    ensure_class_targets(db, staff_id, classwork.subject_id, class_ids)
+    ensure_class_targets(db, staff_id, classwork.subject_id, class_ids, body.academic_period_id)
     created = []
     updated = []
     new_assignments = []
@@ -638,6 +640,7 @@ def assign_classwork_to_classes(
                 ClassworkAssignment.class_id == class_id,
             ).first()
             if existing:
+                existing.academic_period_id = body.academic_period_id
                 existing.publish_date = None
                 existing.due_date = body.due_date
                 existing.lock_date = body.lock_date
@@ -650,6 +653,7 @@ def assign_classwork_to_classes(
             assignment = ClassworkAssignment(
                 classwork_id=classwork_id,
                 class_id=class_id,
+                academic_period_id=body.academic_period_id,
                 assigned_by_staff_id=staff_id,
                 publish_date=None,
                 due_date=body.due_date,

@@ -186,6 +186,15 @@ def test_missing_subject_one_hot_columns_default_to_zero():
     assert any("subject_SCIENCE" in warning for warning in warnings)
 
 
+@pytest.mark.parametrize("prohibited", ["predicted_period_grade", "at_risk", "target_next_period_grade"])
+def test_prohibited_or_non_grade_features_cannot_enter_model_schema(prohibited):
+    schema = feature_schema()
+    schema["feature_columns"] = [*schema["feature_columns"], prohibited]
+
+    with pytest.raises(ValueError, match="not permitted|Unknown"):
+        prepare_feature_row(sample_input(), schema)
+
+
 def test_non_numeric_model_features_fail_clearly():
     with pytest.raises(ValueError, match="grade_level"):
         prepare_feature_row(sample_input(grade_level="eight"), feature_schema())

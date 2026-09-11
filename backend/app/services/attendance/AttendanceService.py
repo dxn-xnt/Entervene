@@ -306,6 +306,9 @@ def get_risk_adjusted_attendance_rate(
     student_id: UUID,
     class_id: Optional[int] = None,
     subject_id: Optional[int] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    cutoff_date: Optional[date] = None,
 ) -> dict[str, Any]:
     """Calculate risk-adjusted attendance statistics and weighted rate for early risk detection.
 
@@ -317,6 +320,12 @@ def get_risk_adjusted_attendance_rate(
         query = query.filter(AttendanceRecord.class_id == class_id)
     if subject_id:
         query = query.filter(AttendanceRecord.subject_id == subject_id)
+    if start_date is not None:
+        query = query.filter(AttendanceRecord.date >= start_date)
+    if end_date is not None:
+        query = query.filter(AttendanceRecord.date <= end_date)
+    if cutoff_date is not None:
+        query = query.filter(AttendanceRecord.date <= cutoff_date)
 
     records = query.all()
     total_days = len(records)

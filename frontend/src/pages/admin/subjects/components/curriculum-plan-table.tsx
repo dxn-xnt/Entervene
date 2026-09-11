@@ -1,3 +1,4 @@
+import React, { useMemo } from "react";
 import { Archive, Check, Ellipsis, Pencil, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
@@ -10,6 +11,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatPeriodLabel } from "@/lib/academic-periods";
+import {
+  CANONICAL_PATHWAYS,
+  canonicalizePathway,
+  getPathwayDisplayName,
+} from "@/lib/pathways";
 import type {
   SubjectListItem,
   SubjectOfferingAcademicPeriod,
@@ -53,6 +59,8 @@ export type CurriculumPlanRow = {
   status: SubjectStatus;
   primaryOffering: SubjectOfferingListItem;
   termOfferings: Map<number, SubjectOfferingListItem>;
+  canonicalPathway: string;
+  isShared: boolean;
 };
 
 type CurriculumPlanTableProps = {
@@ -129,6 +137,15 @@ export function groupOfferingsForCurriculumPlan(
         termOfferings.set(offering.academic_period.academic_period_id, offering);
       }
 
+      const canonPathway = canonicalizePathway(primaryOffering.pathway);
+      const groupName = typeof primaryOffering.subject.subject_group === "object"
+        ? (primaryOffering.subject.subject_group as any)?.name
+        : primaryOffering.subject.subject_group;
+      const isShared =
+        canonPathway === CANONICAL_PATHWAYS.BOTH ||
+        Boolean((catalogSubject as any)?.is_core) ||
+        groupName === "Core";
+
       return {
         key,
         subjectId: primaryOffering.subject.subject_id,
@@ -140,6 +157,8 @@ export function groupOfferingsForCurriculumPlan(
         status: rowStatus,
         primaryOffering,
         termOfferings,
+        canonicalPathway: canonPathway,
+        isShared,
       };
     })
     .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
@@ -160,6 +179,59 @@ export function CurriculumPlanTable({
 }: CurriculumPlanTableProps) {
   const terms = displayPeriods(periods);
   const rows = groupOfferingsForCurriculumPlan(offerings, terms, catalogSubjects);
+  const totalColumns = 7 + terms.length;
+
+  const gradeLevel = offerings[0]?.academic_level?.grade_level;
+  const isShsGrade = gradeLevel != null ? gradeLevel >= 11 : (gradeLabel.includes("11") || gradeLabel.includes("12"));
+
+  // Build dynamic pathway groups for SHS
+  const sections = useMemo(() => {
+    if (!isShsGrade) {
+      return [{ key: "all", title: "", rows, isSectioned: false }];
+    }
+
+    const sharedRows: CurriculumPlanRow[] = [];
+    const pathwayGroupsMap = new Map<string, CurriculumPlanRow[]>();
+
+    for (const row of rows) {
+      if (row.isShared) {
+        sharedRows.push(row);
+      } else {
+        const pKey = row.canonicalPathway;
+        if (!pathwayGroupsMap.has(pKey)) {
+          pathwayGroupsMap.set(pKey, []);
+        }
+        pathwayGroupsMap.get(pKey)!.push(row);
+      }
+    }
+
+    const result: Array<{ key: string; title: string; rows: CurriculumPlanRow[]; isSectioned: boolean }> = [];
+
+    if (sharedRows.length > 0) {
+      result.push({
+        key: "shared",
+        title: "Shared / Common Curriculum",
+        rows: sharedRows,
+        isSectioned: true,
+      });
+    }
+
+    // Sort pathways consistently
+    const sortedPathwayKeys = [...pathwayGroupsMap.keys()].sort();
+    for (const pKey of sortedPathwayKeys) {
+      const pRows = pathwayGroupsMap.get(pKey) || [];
+      if (pRows.length > 0) {
+        result.push({
+          key: pKey,
+          title: getPathwayDisplayName(pKey),
+          rows: pRows,
+          isSectioned: true,
+        });
+      }
+    }
+
+    return result.length > 0 ? result : [{ key: "all", title: "", rows, isSectioned: false }];
+  }, [isShsGrade, rows]);
 
   return (
     <Card className="w-full overflow-hidden p-0 shadow-md">
@@ -207,80 +279,97 @@ export function CurriculumPlanTable({
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {rows.map((row) => (
-            <Table.Row key={row.key} className="border-b border-border last:border-b-0">
-              <Table.Cell className="font-semibold">{row.subjectName}</Table.Cell>
-              <Table.Cell>{subjectCode(row.subjectCode)}</Table.Cell>
-              <Table.Cell>{row.subjectGroup || "Ungrouped"}</Table.Cell>
-              {terms.map((term) => {
-                const termOffering = row.termOfferings.get(term.academic_period_id);
-                return (
-                  <Table.Cell key={term.academic_period_id} className="text-center">
-                    {termOffering ? (
-                      <span
-                        className="inline-grid size-7 place-items-center rounded-full border-2 border-black bg-primary"
-                        title={`${row.subjectName} is offered in ${formatPeriodLabel(term)}`}
-                      >
-                        <Check className="size-4" />
+          {sections.map((sec) => (
+            <React.Fragment key={sec.key}>
+              {sec.isSectioned && (
+                <Table.Row className="bg-muted/40 border-y-2 border-black hover:bg-muted/40">
+                  <Table.Cell colSpan={totalColumns} className="py-2.5 px-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-black tracking-wide uppercase">
+                        {sec.title}
                       </span>
-                    ) : (
-                      <span className="text-black/50">-</span>
-                    )}
+                      <Badge size="sm" variant="surface">
+                        {sec.rows.length} subject{sec.rows.length === 1 ? "" : "s"}
+                      </Badge>
+                    </div>
                   </Table.Cell>
-                );
-              })}
-              <Table.Cell>{row.minutes ? `${row.minutes} mins` : "—"}</Table.Cell>
-              <Table.Cell>{row.gradingTemplate || "No template"}</Table.Cell>
-              <Table.Cell className="w-10 text-center">{statusBadge(row.status)}</Table.Cell>
-              <Table.Cell>
-                <div className="flex w- justify-end">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 w-8 p-0"
-                        disabled={readOnly}
-                        title={readOnly ? readOnlyReason : "Actions"}
-                        aria-label="Actions"
-                      >
-                        <Ellipsis className="size-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="border-2 min-w-[140px]">
-                      <DropdownMenuItem
-                        onClick={() => onEdit(row.primaryOffering)}
-                        disabled={readOnly}
-                        className="gap-2 cursor-pointer"
-                      >
-                        <Pencil className="size-4" /> Edit
-                      </DropdownMenuItem>
-                      {row.primaryOffering.status === "active" ? (
-                        <DropdownMenuItem
-                          onClick={() => onArchive(row.primaryOffering)}
-                          disabled={readOnly}
-                          className="gap-2 cursor-pointer"
-                        >
-                          <Archive className="size-4" /> Archive
-                        </DropdownMenuItem>
-                      ) : (
-                        <DropdownMenuItem
-                          onClick={() => onRestore(row.primaryOffering)}
-                          disabled={readOnly}
-                          className="gap-2 cursor-pointer"
-                        >
-                          <RotateCcw className="size-4" /> Restore
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </Table.Cell>
-            </Table.Row>
+                </Table.Row>
+              )}
+              {sec.rows.map((row) => (
+                <Table.Row key={row.key} className="border-b border-border last:border-b-0">
+                  <Table.Cell className="font-semibold">{row.subjectName}</Table.Cell>
+                  <Table.Cell>{subjectCode(row.subjectCode)}</Table.Cell>
+                  <Table.Cell>{row.subjectGroup || "Ungrouped"}</Table.Cell>
+                  {terms.map((term) => {
+                    const termOffering = row.termOfferings.get(term.academic_period_id);
+                    return (
+                      <Table.Cell key={term.academic_period_id} className="text-center">
+                        {termOffering ? (
+                          <span
+                            className="inline-grid size-7 place-items-center rounded-full border-2 border-black bg-primary"
+                            title={`${row.subjectName} is offered in ${formatPeriodLabel(term)}`}
+                          >
+                            <Check className="size-4" />
+                          </span>
+                        ) : (
+                          <span className="text-black/50">-</span>
+                        )}
+                      </Table.Cell>
+                    );
+                  })}
+                  <Table.Cell>{row.minutes ? `${row.minutes} mins` : "—"}</Table.Cell>
+                  <Table.Cell>{row.gradingTemplate || "No template"}</Table.Cell>
+                  <Table.Cell className="w-10 text-center">{statusBadge(row.status)}</Table.Cell>
+                  <Table.Cell>
+                    <div className="flex w- justify-end">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 w-8 p-0"
+                            disabled={readOnly}
+                            title={readOnly ? readOnlyReason : "Actions"}
+                            aria-label="Actions"
+                          >
+                            <Ellipsis className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="border-2 min-w-[140px]">
+                          <DropdownMenuItem
+                            onClick={() => onEdit(row.primaryOffering)}
+                            disabled={readOnly}
+                            className="gap-2 cursor-pointer"
+                          >
+                            <Pencil className="size-4" /> Edit
+                          </DropdownMenuItem>
+                          {row.primaryOffering.status === "active" ? (
+                            <DropdownMenuItem
+                              onClick={() => onArchive(row.primaryOffering)}
+                              disabled={readOnly}
+                              className="gap-2 cursor-pointer"
+                            >
+                              <Archive className="size-4" /> Archive
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={() => onRestore(row.primaryOffering)}
+                              disabled={readOnly}
+                              className="gap-2 cursor-pointer"
+                            >
+                              <RotateCcw className="size-4" /> Restore
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </Table.Cell>
+                </Table.Row>
+              ))}
+            </React.Fragment>
           ))}
         </Table.Body>
       </Table>
     </Card>
   );
 }
-
