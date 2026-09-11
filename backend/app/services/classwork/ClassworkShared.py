@@ -28,8 +28,6 @@ def normalize_classwork_type(value: str) -> str:
 
 def is_reading_type(value: Optional[str]) -> bool:
     return normalize_classwork_type(value or "") == READING_TYPE
-
-
 def is_quiz_type(value: Optional[str]) -> bool:
     return normalize_classwork_type(value or "") == QUIZ_TYPE
 
@@ -85,9 +83,28 @@ def ensure_subject_owner(db: Session, staff_id: str, subject_id: int) -> None:
         SubjectLoad.staff_id == staff_id,
         SubjectLoad.subject_id == subject_id,
         SubjectLoad.status.in_(["active", "published"]),
+        SubjectLoad.is_active_version.is_(True),
     ).first()
     if not load:
-        raise HTTPException(status_code=403, detail="You are not assigned to this subject")
+        from app.models.academic.TeacherSubstitution import TeacherSubstitution
+        from app.services.academic.SubstitutionService import SubstitutionService
+        from sqlalchemy import or_
+        today_date = SubstitutionService.get_academic_date()
+        is_sub = (
+            db.query(TeacherSubstitution.substitution_id)
+            .join(SubjectLoad, SubjectLoad.subject_load_id == TeacherSubstitution.subject_load_id)
+            .filter(
+                SubjectLoad.subject_id == subject_id,
+                SubjectLoad.status.in_(["active", "published"]),
+                SubjectLoad.is_active_version.is_(True),
+                TeacherSubstitution.substitute_staff_id == staff_id,
+                TeacherSubstitution.status == "active",
+                or_(TeacherSubstitution.end_date.is_(None), TeacherSubstitution.end_date >= today_date),
+            )
+            .first()
+        )
+        if not is_sub:
+            raise HTTPException(status_code=403, detail="You are not assigned to this subject")
 
 
 def ensure_lessons_owned(db: Session, staff_id: str, subject_id: int, lesson_ids: list[int]) -> None:
@@ -127,7 +144,30 @@ def ensure_class_targets(
             SubjectLoad.is_active_version.is_(True),
         ).all()
     }
-    if set(class_ids) != valid_class_ids:
+
+    from app.models.academic.TeacherSubstitution import TeacherSubstitution
+    from app.services.academic.SubstitutionService import SubstitutionService
+    from sqlalchemy import or_
+    today_date = SubstitutionService.get_academic_date()
+    sub_class_ids = {
+        row[0]
+        for row in db.query(SubjectLoad.class_id)
+        .join(TeacherSubstitution, TeacherSubstitution.subject_load_id == SubjectLoad.subject_load_id)
+        .filter(
+            SubjectLoad.subject_id == subject_id,
+            SubjectLoad.class_id.in_(class_ids),
+            SubjectLoad.academic_period_id == academic_period_id,
+            SubjectLoad.status.in_(["active", "published"]),
+            SubjectLoad.is_active_version.is_(True),
+            TeacherSubstitution.substitute_staff_id == staff_id,
+            TeacherSubstitution.status == "active",
+            or_(TeacherSubstitution.end_date.is_(None), TeacherSubstitution.end_date >= today_date),
+        )
+        .all()
+    }
+    all_valid = valid_class_ids.union(sub_class_ids)
+
+    if set(class_ids) != all_valid:
         raise HTTPException(
             status_code=403,
             detail="Not assigned to one or more class/subject/period targets",

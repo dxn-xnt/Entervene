@@ -17,6 +17,7 @@ interface PredictionFiltersProps {
   hideClassFilter?: boolean;
   hideGradeFilter?: boolean;
   hideSubjectFilter?: boolean;
+  hidePeriodFilter?: boolean;
   riskSummary?: RiskSummary | null;
   onGradeChange?: (value: number | undefined) => void;
   onClassChange?: (value: number | undefined) => void;
@@ -48,6 +49,7 @@ export default function PredictionFilters({
   hideClassFilter = false,
   hideGradeFilter = false,
   hideSubjectFilter = false,
+  hidePeriodFilter = false,
   riskSummary,
   onGradeChange,
   onClassChange,
@@ -80,7 +82,7 @@ export default function PredictionFilters({
     (!hideGradeFilter && gradeLevel !== undefined) ||
     (!hideClassFilter && classId !== undefined) ||
     (!hideSubjectFilter && subjectId !== undefined) ||
-    activePeriod !== undefined ||
+    (!hidePeriodFilter && activePeriod !== undefined) ||
     riskLevel !== undefined ||
     search.trim().length > 0;
 
@@ -168,7 +170,7 @@ export default function PredictionFilters({
         )}
 
         {/* Term Filter (Binds directly to academic_period_id) */}
-        <Select
+        {!hidePeriodFilter && <Select
           value={activePeriod !== undefined ? String(activePeriod) : "all"}
           onValueChange={(v) => {
             const val = v === "all" ? undefined : Number(v);
@@ -187,7 +189,7 @@ export default function PredictionFilters({
               </Select.Item>
             ))}
           </Select.Content>
-        </Select>
+        </Select>}
 
         {/* Risk Level Filter */}
         <Select

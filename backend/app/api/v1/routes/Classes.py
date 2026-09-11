@@ -143,7 +143,36 @@ def get_class_students(
             raise HTTPException(status_code=403, detail="Staff profile not found")
 
         is_adviser = db.query(Class).filter(Class.class_id == class_id, Class.adviser_staff_id == staff.staff_id).first()
-        is_subject_teacher = db.query(SubjectLoad).filter(SubjectLoad.class_id == class_id, SubjectLoad.staff_id == staff.staff_id).first()
+        is_subject_teacher = (
+            db.query(SubjectLoad)
+            .filter(
+                SubjectLoad.class_id == class_id,
+                SubjectLoad.staff_id == staff.staff_id,
+                SubjectLoad.is_active_version.is_(True),
+                SubjectLoad.status.in_(["active", "published"]),
+            )
+            .first()
+        )
+        if not is_subject_teacher:
+            from app.models.academic.TeacherSubstitution import TeacherSubstitution
+            from app.services.academic.SubstitutionService import SubstitutionService
+            from sqlalchemy import or_
+            today_date = SubstitutionService.get_academic_date()
+            is_sub = (
+                db.query(TeacherSubstitution)
+                .join(SubjectLoad, SubjectLoad.subject_load_id == TeacherSubstitution.subject_load_id)
+                .filter(
+                    SubjectLoad.class_id == class_id,
+                    SubjectLoad.is_active_version.is_(True),
+                    SubjectLoad.status.in_(["active", "published"]),
+                    TeacherSubstitution.substitute_staff_id == staff.staff_id,
+                    TeacherSubstitution.status == "active",
+                    or_(TeacherSubstitution.end_date.is_(None), TeacherSubstitution.end_date >= today_date),
+                )
+                .first()
+            )
+            if is_sub:
+                is_subject_teacher = True
 
         if not is_adviser and not is_subject_teacher:
             raise HTTPException(status_code=403, detail="You are not assigned to this class")

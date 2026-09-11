@@ -49,6 +49,7 @@ from app.services.prediction.PredictionSuggestionService import (
 from app.services.prediction.PredictionOutcomeService import evaluate_prediction_outcome
 from app.services.prediction.PredictionPersistenceService import score_and_persist_prediction
 from app.services.prediction.PredictionGenerationTransaction import run_prediction_generation_transaction
+from app.services.prediction.TeacherAssignmentResolver import get_teacher_assigned_triplets
 from app.services.prediction.PredictionReadService import (
     get_prediction_detail,
     get_teacher_reviews_for_prediction,
@@ -103,6 +104,23 @@ def _records_request_payload(payload: PredictionBuildFeaturesRequest) -> dict[st
     }
 
 
+def _assert_teacher_can_use_prediction_scope(
+    db: Session,
+    current_user: dict[str, Any],
+    staff_id: str | None,
+    scope: dict[str, Any],
+) -> None:
+    """Enforce record-level access before reading or generating prediction evidence."""
+    if current_user.get("role") == "admin":
+        return
+    if not staff_id:
+        raise HTTPException(status_code=403, detail="Access denied. Teacher profile is required for prediction evidence.")
+    assigned = get_teacher_assigned_triplets(db, staff_id, academic_period_id=int(scope["source_period_id"]))
+    triplet = (int(scope["class_id"]), int(scope["subject_id"]), int(scope["source_period_id"]))
+    if triplet not in assigned:
+        raise HTTPException(status_code=403, detail="Access denied. You are not assigned to this class, subject, and source period.")
+
+
 def _with_readiness(scoring_result: dict[str, Any], built: dict[str, Any]) -> dict[str, Any]:
     return {
         **scoring_result,
@@ -129,8 +147,8 @@ def dashboard_at_risk(
     grade_level: int | None = Query(None, ge=1, le=12, description="Grade level filter (7-12)"),
     risk_level: str | None = None,
     search: str | None = None,
-    sort_by: str | None = None,
-    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
+    sort_by: str | None = Query("student_name"),
+    sort_order: str = Query("asc", pattern="^(asc|desc)$"),
     limit: int = Query(25, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: dict = Depends(require_role("admin", "teacher")),
@@ -166,8 +184,8 @@ def dashboard_at_risk_historical(
     grade_level: int | None = Query(None, ge=1, le=12, description="Grade level filter (7-12)"),
     risk_level: str | None = None,
     search: str | None = None,
-    sort_by: str | None = None,
-    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
+    sort_by: str | None = Query("student_name"),
+    sort_order: str = Query("asc", pattern="^(asc|desc)$"),
     limit: int = Query(25, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: dict = Depends(require_role("admin")),
@@ -271,10 +289,13 @@ def preview_prediction(
 def build_prediction_features(
     payload: PredictionBuildFeaturesRequest,
     current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
     try:
-        return build_prediction_features_from_records(db, **_records_request_payload(payload))
+        record_scope = _records_request_payload(payload)
+        _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, record_scope)
+        return build_prediction_features_from_records(db, **record_scope)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -283,11 +304,14 @@ def build_prediction_features(
 def preview_prediction_from_records(
     payload: PredictionFromRecordsPreviewRequest,
     current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
     try:
+        record_scope = _records_request_payload(payload)
+        _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, record_scope)
         built = build_prediction_features_from_records(
-            db, **_records_request_payload(payload), model_name=payload.model_name or DEFAULT_MODEL_NAME
+            db, **record_scope, model_name=payload.model_name or DEFAULT_MODEL_NAME
         )
         if not built["ready"]:
             return insufficient_prediction_response(built)
@@ -305,10 +329,12 @@ def preview_prediction_from_records(
 def create_prediction_from_records(
     payload: PredictionFromRecordsPersistRequest,
     current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
     try:
         record_scope = _records_request_payload(payload)
+        _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, record_scope)
 
         def generate(generation_db: Session):
             built = build_prediction_features_from_records(

@@ -8,6 +8,7 @@ import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
 import { PredictionGradeSection } from "@/components/predictions/prediction-grade-section";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import type {
   DashboardAtRiskResponse,
   DashboardFilters,
@@ -59,6 +60,7 @@ const RISK_CARDS = [
 ];
 
 export default function PredictionsDashboard() {
+  const { selectedPeriodId } = useAcademicPeriod();
   // ── State ──
   const [data, setData] = useState<DashboardAtRiskResponse | null>(null);
   const [filters, setFilters] = useState<DashboardFilters | null>(null);
@@ -69,13 +71,12 @@ export default function PredictionsDashboard() {
   const [gradeLevel, setGradeLevel] = useState<number | undefined>();
   const [classId, setClassId] = useState<number | undefined>();
   const [subjectId, setSubjectId] = useState<number | undefined>();
-  const [academicPeriodId, setAcademicPeriodId] = useState<number | undefined>();
   const [riskLevel, setRiskLevel] = useState<string | undefined>();
   const [search, setSearch] = useState("");
 
   // Sorting & pagination
-  const [sortBy, setSortBy] = useState<string | undefined>("risk_score");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [sortBy, setSortBy] = useState<string | undefined>("student_name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [offset, setOffset] = useState(0);
   const limit = 5;
 
@@ -88,12 +89,14 @@ export default function PredictionsDashboard() {
     fetchDashboardFilters().then(setFilters).catch(console.error);
   }, []);
 
-  // ── Fetch dynamic grade summaries on period change ──
+  // The sidebar's selected term is the single source of truth.  Previously this
+  // page defaulted to all terms while section drill-downs defaulted to the
+  // sidebar term, so a card could describe a different set of predictions.
   useEffect(() => {
-    fetchDashboardGradeSummaries({ academic_period_id: academicPeriodId })
+    fetchDashboardGradeSummaries({ academic_period_id: selectedPeriodId ?? undefined })
       .then(setGradeSummaries)
       .catch(console.error);
-  }, [academicPeriodId]);
+  }, [selectedPeriodId]);
 
   // ── Fetch data on filter/sort/page change ──
   const loadData = useCallback(async () => {
@@ -103,7 +106,7 @@ export default function PredictionsDashboard() {
         grade_level: gradeLevel,
         class_id: classId,
         subject_id: subjectId,
-        academic_period_id: academicPeriodId,
+        academic_period_id: selectedPeriodId ?? undefined,
         risk_level: riskLevel,
         search: search.trim() || undefined,
         sort_by: sortBy,
@@ -118,7 +121,7 @@ export default function PredictionsDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [gradeLevel, classId, subjectId, academicPeriodId, riskLevel, search, sortBy, sortOrder, offset]);
+  }, [gradeLevel, classId, subjectId, selectedPeriodId, riskLevel, search, sortBy, sortOrder, offset]);
 
   useEffect(() => {
     loadData();
@@ -156,7 +159,6 @@ export default function PredictionsDashboard() {
     setGradeLevel(undefined);
     setClassId(undefined);
     setSubjectId(undefined);
-    setAcademicPeriodId(undefined);
     setRiskLevel(undefined);
     setSearch("");
     setOffset(0);
@@ -183,7 +185,6 @@ export default function PredictionsDashboard() {
     gradeLevel !== undefined ||
     classId !== undefined ||
     subjectId !== undefined ||
-    academicPeriodId !== undefined ||
     riskLevel !== undefined ||
     search.trim() !== ""
   );
@@ -249,7 +250,7 @@ export default function PredictionsDashboard() {
                     gradeLevel={gradeLevel}
                     classId={classId}
                     subjectId={subjectId}
-                    academicPeriodId={academicPeriodId}
+                    academicPeriodId={selectedPeriodId ?? undefined}
                     riskLevel={riskLevel}
                     search={search}
                     onGradeChange={(v) => {
@@ -264,10 +265,7 @@ export default function PredictionsDashboard() {
                       setSubjectId(v);
                       setOffset(0);
                     }}
-                    onPeriodChange={(v) => {
-                      setAcademicPeriodId(v);
-                      setOffset(0);
-                    }}
+                    hidePeriodFilter
                     onRiskChange={(v) => {
                       setRiskLevel(v);
                       setOffset(0);
@@ -321,7 +319,7 @@ export default function PredictionsDashboard() {
                         <div>
                           <h2 className="text-xl font-black uppercase tracking-tight text-black">Grade Cohort Summaries</h2>
                           <p className="text-xs text-gray-600 font-semibold">
-                            Showing all {gradeSummaries.length} grade levels ({totalEnrolledStudents} actively enrolled students across 11 sections)
+                            Showing {gradeSummaries.length} grade levels for the selected term ({totalEnrolledStudents} actively enrolled students)
                           </p>
                         </div>
                       </div>

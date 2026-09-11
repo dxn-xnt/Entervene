@@ -186,6 +186,16 @@ def test_missing_subject_one_hot_columns_default_to_zero():
     assert any("subject_SCIENCE" in warning for warning in warnings)
 
 
+def test_no_previous_period_defaults_missing_trend_to_zero():
+    frame, warnings = prepare_feature_row(
+        sample_input(has_previous_period=False, grade_trend_vs_previous_period=None),
+        feature_schema(),
+    )
+
+    assert frame.iloc[0]["grade_trend_vs_previous_period"] == 0
+    assert any("grade_trend_vs_previous_period defaulted to 0" in warning for warning in warnings)
+
+
 @pytest.mark.parametrize("prohibited", ["predicted_period_grade", "at_risk", "target_next_period_grade"])
 def test_prohibited_or_non_grade_features_cannot_enter_model_schema(prohibited):
     schema = feature_schema()

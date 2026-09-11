@@ -63,15 +63,17 @@ def batch_mark_attendance(
     """Upsert daily attendance records for a batch of students in a class."""
     if recorded_by_staff_id and payload.subject_id:
         from app.models.academic.SubjectLoad import SubjectLoad
-        from app.services.academic.SubstitutionService import SubstitutionService
-        loads = db.query(SubjectLoad).filter(
+        from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+        load = db.query(SubjectLoad).filter(
             SubjectLoad.class_id == payload.class_id,
             SubjectLoad.subject_id == payload.subject_id,
+            SubjectLoad.is_active_version.is_(True),
             SubjectLoad.status.in_(["active", "published"]),
-        ).all()
-        for sl in loads:
-            if sl.staff_id == recorded_by_staff_id:
-                SubstitutionService.assert_can_write(db, recorded_by_staff_id, sl.subject_load_id, payload.date)
+        ).first()
+        if load:
+            SubjectLoadAuthorizationService.assert_can_write(
+                db, recorded_by_staff_id, load.class_id, load.subject_id, load.academic_period_id, as_of=payload.date
+            )
 
     results: list[AttendanceRecordResponse] = []
 
@@ -166,15 +168,17 @@ def record_qr_scan_attendance(
     # 3. Check substitution / teacher write permissions
     if recorded_by_staff_id and payload.subject_id:
         from app.models.academic.SubjectLoad import SubjectLoad
-        from app.services.academic.SubstitutionService import SubstitutionService
-        loads = db.query(SubjectLoad).filter(
+        from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+        load = db.query(SubjectLoad).filter(
             SubjectLoad.class_id == payload.class_id,
             SubjectLoad.subject_id == payload.subject_id,
+            SubjectLoad.is_active_version.is_(True),
             SubjectLoad.status.in_(["active", "published"]),
-        ).all()
-        for sl in loads:
-            if sl.staff_id == recorded_by_staff_id:
-                SubstitutionService.assert_can_write(db, recorded_by_staff_id, sl.subject_load_id, today)
+        ).first()
+        if load:
+            SubjectLoadAuthorizationService.assert_can_write(
+                db, recorded_by_staff_id, load.class_id, load.subject_id, load.academic_period_id, as_of=today
+            )
 
     # 4. Check existing attendance record for (student_id, class_id, subject_id, today)
     existing_q = db.query(AttendanceRecord).filter(

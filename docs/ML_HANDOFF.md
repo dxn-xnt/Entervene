@@ -14,7 +14,13 @@
 
 ## 1. What the System Does (Overview)
 
-Entervene uses a **Machine Learning model** to predict a student's **next period grade** and then uses a **rule-based Risk Engine** to classify that student into a risk level. This helps teachers identify students who may be struggling early, so they can provide timely interventions.
+Entervene uses a **Machine Learning model** to project a student's grade from
+current-period evidence, then uses a **rule-based Risk Engine** to classify that
+student into a risk level. A saved prediction is either a
+`CURRENT_PERIOD_PROJECTION` (source and target are the same active period) or a
+`NEXT_PERIOD_PREDICTION` (the target is a later period). This helps teachers
+identify students who may be struggling early, so they can provide timely
+interventions.
 
 ```
 Student academic records (grades, scores, submissions)
@@ -55,6 +61,12 @@ The training dataset contains **zero below-75 grade examples** (all students pas
 2. Uses a **rule-based Risk Engine** to interpret the predicted grade along with other evidence
 
 This approach works because even without failing examples, the model can identify students trending toward lower grades, which the Risk Engine flags.
+
+The current application also permits a same-period `CURRENT_PERIOD_PROJECTION`
+when a period is active. It must use only evidence available at its generation
+cutoff and a non-final/provisional source grade; it is an operational projection
+using the registered next-period model schema, not a separately retrained or
+separately validated same-period model artifact.
 
 ---
 
@@ -132,6 +144,7 @@ Phase 1 evidence rules are:
 - **Completion and coverage**: These are classwork-only measures. Eligible assignments use the existing gradebook's latest-submission timestamp rule; ambiguous attempts, unattributed legacy assignments, and absent activity populations are `UNRESOLVED` or `UNAVAILABLE`, never invented as zero.
 - **Submissions**: Eligible selected submissions provide missing and late counts. A non-authoritative selected attempt makes dependent evidence unresolved.
 - **Grade history**: `StudentPeriodGrade` is selected with provenance: finalized `final_period_grade` is `OFFICIAL`; another stored grade is `RECORDED_PROVISIONAL`; equal-component fallback is `ESTIMATED`. Legitimate zero values are preserved.
+- **No prior comparable period**: `has_previous_period` is false and the otherwise missing grade-trend model value is schema-defaulted to `0`. This represents no observed change, not a missing required model input.
 - **Attendance**: Attendance is restricted to the student, class, subject, source-period dates, and generation cutoff. Present, late, excused, and absent are retained in the saved evidence.
 - **Subject**: One-hot encodes the subject name
 

@@ -32,27 +32,19 @@ export default function SectionPredictions() {
   const [filters, setFilters] = useState<DashboardFilters | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Filter values
-  const [academicPeriodId, setAcademicPeriodId] = useState<number | undefined>(
-    selectedPeriodId ?? undefined
-  );
-  const [termInitialized, setTermInitialized] = useState(false);
+  // The sidebar's selected term is the single source of truth for every
+  // prediction page and its drill-downs.
+  const academicPeriodId = selectedPeriodId ?? undefined;
 
-  // Sync initial term from AcademicPeriodContext once available
-  useEffect(() => {
-    if (!termInitialized && selectedPeriodId) {
-      setAcademicPeriodId(selectedPeriodId);
-      setTermInitialized(true);
-    }
-  }, [selectedPeriodId, termInitialized]);
+  // Filter values
 
   const [subjectId, setSubjectId] = useState<number | undefined>();
   const [riskLevel, setRiskLevel] = useState<string | undefined>();
   const [search, setSearch] = useState("");
 
   // Sorting & pagination
-  const [sortBy, setSortBy] = useState<string | undefined>("risk_score");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [sortBy, setSortBy] = useState<string | undefined>("student_name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [offset, setOffset] = useState(0);
   const limit = 10;
 
@@ -269,13 +261,10 @@ export default function SectionPredictions() {
                   hideClassFilter
                   hideGradeFilter
                   hideSubjectFilter
+                  hidePeriodFilter
                   riskSummary={data?.risk_summary}
                   onSubjectChange={(v) => {
                     setSubjectId(v);
-                    setOffset(0);
-                  }}
-                  onPeriodChange={(v) => {
-                    setAcademicPeriodId(v);
                     setOffset(0);
                   }}
                   onRiskChange={(v) => {

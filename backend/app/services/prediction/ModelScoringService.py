@@ -167,7 +167,14 @@ def prepare_feature_row(input_data: dict[str, Any], feature_schema: dict[str, An
     for feature in feature_columns:
         if _is_identity_or_leakage_field(feature):
             raise ValueError(f"Unsafe identity/leakage field is present in feature schema: {feature}")
-        if feature in mapped:
+        # A no-history learner has no grade trend by definition.  The builder
+        # represents that as None, so apply the established schema default
+        # before accepting a supplied value; otherwise a valid cold-start row
+        # reaches numeric validation with a fabricated missing model input.
+        if feature == "grade_trend_vs_previous_period" and mapped.get(feature) is None and str(has_previous).lower() in {"0", "false", "none"}:
+            row[feature] = 0
+            warnings.append("Missing grade_trend_vs_previous_period defaulted to 0 because has_previous_period is false.")
+        elif feature in mapped:
             row[feature] = mapped[feature]
         elif feature.startswith("subject_"):
             row[feature] = 0

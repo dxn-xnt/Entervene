@@ -33,8 +33,23 @@ def authorize_classwork_access(
         return
     if role == "teacher":
         staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
-        if staff and cw.created_by_staff_id == staff.staff_id:
-            return
+        if staff:
+            if cw.created_by_staff_id == staff.staff_id:
+                return
+            from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+            if class_id is not None:
+                asgn = db.query(ClassworkAssignment).filter(
+                    ClassworkAssignment.classwork_id == cw.classwork_id,
+                    ClassworkAssignment.class_id == class_id,
+                ).first()
+                if asgn and asgn.academic_period_id:
+                    if SubjectLoadAuthorizationService.can_view(db, staff.staff_id, class_id, cw.subject_id, asgn.academic_period_id):
+                        return
+            else:
+                assignments = db.query(ClassworkAssignment).filter(ClassworkAssignment.classwork_id == cw.classwork_id).all()
+                for asgn in assignments:
+                    if asgn.academic_period_id and SubjectLoadAuthorizationService.can_view(db, staff.staff_id, asgn.class_id, cw.subject_id, asgn.academic_period_id):
+                        return
     if cw.is_archived:
         raise HTTPException(status_code=404, detail="Classwork not found")
     if role == "student":
@@ -70,8 +85,14 @@ def authorize_assignment_access(
     user_id = user_id_from_claims(current_user)
     if role == "teacher":
         staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
-        if staff and cw.created_by_staff_id == staff.staff_id:
-            return
+        if staff:
+            if cw.created_by_staff_id == staff.staff_id:
+                return
+            from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+            if assignment.academic_period_id and SubjectLoadAuthorizationService.can_view(
+                db, staff.staff_id, assignment.class_id, cw.subject_id, assignment.academic_period_id
+            ):
+                return
     if cw.is_archived:
         raise HTTPException(status_code=404, detail="Classwork not found")
     if role == "student" and assignment_is_available(assignment):
