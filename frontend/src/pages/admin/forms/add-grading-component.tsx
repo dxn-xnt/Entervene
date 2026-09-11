@@ -16,6 +16,7 @@ import {
   type GradingTemplateListItem,
   type SubjectStatus,
 } from "@/lib/api";
+import { Badge } from "@/components/retroui/Badge";
 
 const NONE_VALUE = "none";
 
@@ -229,21 +230,21 @@ export default function AddGradingComponentModal({
         <Text as="h5" className="font-sans text-xl font-bold flex items-center gap-2">
           <span>{template ? "Edit Grading Template" : "Create Grading Template"}</span>
           {isLocked ? (
-            <span className="inline-flex items-center gap-1 rounded-md border border-amber-600 bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">
+            <Badge size="sm" variant="solid" className=" flex items-center gap-1 whitespace-nowrap">
               <Lock className="size-3" /> Locked
-            </span>
+            </Badge>
           ) : null}
         </Text>
       </Dialog.Header>
-      <section className="flex max-h-[75vh] flex-col gap-4 overflow-y-auto p-4">
+      <section className="flex max-h-[75vh] flex-col gap-5 overflow-y-auto p-4">
         {readOnly ? (
-          <section className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
+          <section className="border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
             <p className="font-bold">Read-only academic year</p>
             <p className="text-black/70">{readOnlyReason}</p>
           </section>
         ) : null}
 
-        {isLocked ? (
+        {/* {isLocked ? (
           <section className="rounded-lg border-2 border-black bg-[#fff1b8] p-3 text-sm shadow-[3px_3px_0_#000]">
             <div className="flex items-start gap-2 text-amber-900">
               <Lock className="size-4 shrink-0 mt-0.5" />
@@ -256,59 +257,62 @@ export default function AddGradingComponentModal({
               </div>
             </div>
           </section>
-        ) : null}
+        ) : null} */}
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="grading-template-name" className="text-sm">Template Name</label>
-            <Input
-              id="grading-template-name"
-              className="w-full"
-              value={form.template_name}
-              onChange={(event) => setField("template_name", event.target.value)}
-              placeholder="Default SHS Grading"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="grading-template-status" className="text-sm">Status</label>
-            <Select value={form.status} onValueChange={(value) => setField("status", value as SubjectStatus)}>
-              <Select.Trigger id="grading-template-status" className="w-full">
-                <Select.Value placeholder="Select status" />
-              </Select.Trigger>
-              <Select.Content position="item-aligned" className="max-h-72 overflow-y-auto">
-                <Select.Group>
-                  {(options?.statuses ?? ["active", "archived"]).map((status) => (
-                    <Select.Item key={status} value={status}>{status}</Select.Item>
-                  ))}
-                </Select.Group>
-              </Select.Content>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="grading-template-level" className="text-sm">Academic Level Scope</label>
-            <Select value={form.academic_level_id} onValueChange={handleLevelChange}>
-              <Select.Trigger id="grading-template-level" className="w-full">
-                <Select.Value placeholder="Any level" />
-              </Select.Trigger>
-              <Select.Content position="item-aligned" className="max-h-72 overflow-y-auto">
-                <Select.Group>
-                  <Select.Item value={NONE_VALUE}>Any level</Select.Item>
-                  {options?.academic_levels.map((level) => (
-                    <Select.Item key={level.academic_level_id} value={String(level.academic_level_id)}>
-                      {level.level_name}
-                    </Select.Item>
-                  ))}
-                </Select.Group>
-              </Select.Content>
-            </Select>
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="grading-template-name" className="text-sm">Template Name</label>
+              <Input
+                id="grading-template-name"
+                className="w-full"
+                value={form.template_name}
+                onChange={(event) => setField("template_name", event.target.value)}
+                placeholder="Default SHS Grading"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="grading-template-status" className="text-sm">Status</label>
+              <Select value={form.status} onValueChange={(value) => setField("status", value as SubjectStatus)}>
+                <Select.Trigger id="grading-template-status" className="w-full">
+                  <Select.Value placeholder="Select status" />
+                </Select.Trigger>
+                <Select.Content position="item-aligned" className="max-h-72 overflow-y-auto">
+                  <Select.Group>
+                    {(options?.statuses ?? ["active", "archived"]).map((status) => (
+                      <Select.Item key={status} value={status}>
+                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                      </Select.Item>
+                    ))}
+                  </Select.Group>
+                </Select.Content>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="grading-template-level" className="text-sm">Academic Level Scope</label>
+              <Select value={form.academic_level_id} onValueChange={handleLevelChange}>
+                <Select.Trigger id="grading-template-level" className="w-full">
+                  <Select.Value placeholder="Any level" />
+                </Select.Trigger>
+                <Select.Content position="item-aligned" className="max-h-72 overflow-y-auto">
+                  <Select.Group>
+                    <Select.Item value={NONE_VALUE}>Any level</Select.Item>
+                    {options?.academic_levels.map((level) => (
+                      <Select.Item key={level.academic_level_id} value={String(level.academic_level_id)}>
+                        {level.level_name}
+                      </Select.Item>
+                    ))}
+                  </Select.Group>
+                </Select.Content>
+              </Select>
+            </div>
           </div>
 
-          <div className="flex flex-col gap-2 md:col-span-2">
+
+          <div className="flex flex-col gap-2">
             <div>
               <label className="text-sm font-semibold">Subject Scope / Assigned Subjects</label>
-              <p className="text-xs text-black/70">
-                Select subjects that will use this grading template. Leave empty for a general default template.
-              </p>
+
             </div>
             <TemplateSubjectPicker
               subjects={subjectOptions}
@@ -318,6 +322,9 @@ export default function AddGradingComponentModal({
               disabled={!options || isSaving}
               placeholder="Search subject name or code to assign"
             />
+            <p className="text-xs text-black/70">
+              Select subjects that will use this grading template. Leave empty for a general default template.
+            </p>
           </div>
 
           <div className="flex flex-col gap-1 md:col-span-2">
@@ -332,7 +339,7 @@ export default function AddGradingComponentModal({
           </div>
         </div>
 
-        <section className={`rounded-lg border-2 border-black p-3 shadow-[3px_3px_0_#000] ${isLocked ? "bg-black/5 opacity-80" : ""}`}>
+        <section className={`rounded border-2 border-black p-3 shadow-[3px_3px_0_#000] ${isLocked ? "bg-black/5 opacity-80" : ""}`}>
           <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
               <h3 className="font-bold flex items-center gap-2">
@@ -342,17 +349,17 @@ export default function AddGradingComponentModal({
               <p className="text-sm text-black/70">
                 {isLocked
                   ? "Weights cannot be edited after term start to protect historical grade records."
-                  : "Weights must total 100 before the backend accepts the template."}
+                  : "Weights must be a total of 100."}
               </p>
             </div>
-            <div className={`w-fit rounded-full border border-black px-3 py-1 text-sm font-bold ${totalWeight === 100 ? "bg-[#bbf7d0]" : "bg-[#fff7d6]"}`}>
-              Total: {totalWeight}%
-            </div>
+            <Badge variant={"outline"} className="flex flex-row gap-2 items-end">
+              <span className="font-medium pb-1">Total:</span> <span className="text-lg font-bold!">{totalWeight}%</span>
+            </Badge>
           </div>
 
           <div className="flex flex-col gap-2">
             {form.components.map((component, index) => (
-              <div key={component.local_id} className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_120px_120px_auto]">
+              <div key={component.local_id} className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_120px_auto]">
                 <Input
                   value={component.component_name}
                   onChange={(event) => updateComponent(component.local_id, { component_name: event.target.value })}
@@ -368,18 +375,19 @@ export default function AddGradingComponentModal({
                   placeholder="Weight"
                   disabled={isLocked}
                 />
-                <Input
+                {/* <Input
                   value={component.display_order}
                   onChange={(event) => updateComponent(component.local_id, { display_order: event.target.value })}
                   type="number"
                   min={1}
                   placeholder={String(index + 1)}
                   disabled={isLocked}
-                />
+                /> */}
                 <Button
                   type="button"
                   size="icon"
                   variant="outline"
+                  className="w-fit"
                   onClick={() => removeComponent(component.local_id)}
                   disabled={isLocked || form.components.length <= 1}
                   title={isLocked ? "Component weights are locked" : "Remove component"}
@@ -404,7 +412,7 @@ export default function AddGradingComponentModal({
       <Dialog.Footer>
         <Button variant="outline" onClick={onClose} disabled={isSaving}>Cancel</Button>
         <Button onClick={handleSubmit} disabled={isSaving || !options || readOnly} title={readOnly ? readOnlyReason : undefined}>
-          {isSaving ? "Saving..." : "Save Template"}
+          Save Template
         </Button>
       </Dialog.Footer>
     </Dialog.Content>
