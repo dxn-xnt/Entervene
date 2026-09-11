@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     cookie_samesite: str = "lax"
     cookie_domain: str | None = None
     groq_api_key: str | None = None
+    groq_model: str = "openai/gpt-oss-120b"
     gemini_api_key: str | None = None
     mail_driver: str = "console"
     smtp_host: str = "smtp.gmail.com"
