@@ -1653,6 +1653,11 @@ export type SubjectLoadItem = {
   last_modified_by?: string | null;
   continued_from_load_id?: number | null;
   is_math_or_science?: boolean;
+  logical_load_id?: string;
+  section_revision?: number;
+  base_revision?: number | null;
+  has_live_data?: boolean;
+  dependencies?: Record<string, number>;
 };
 
 export type ConflictItem = {
@@ -1705,6 +1710,7 @@ export type SubjectLoadStudioData = {
   subject_offerings?: SubjectOfferingStudioItem[];
   teachers: Array<{ staff_id: string; name: string; department: string; specialization: string }>;
   existing_loads: SubjectLoadItem[];
+  has_pending_draft_by_class?: Record<string | number, boolean>;
 };
 
 export async function getSubjectLoadStudioData(periodId?: number): Promise<SubjectLoadStudioData> {
@@ -1759,7 +1765,8 @@ export async function batchSaveSubjectLoads(
   loads: SubjectLoadItem[],
   publishScope: "all" | "level" | "section" = "all",
   targetLevelId?: number | null,
-  targetClassId?: number | null
+  targetClassId?: number | null,
+  baseRevision?: number | null
 ): Promise<{ message: string; saved_count: number; status: string; is_valid: boolean; conflicts: ConflictItem[] }> {
   const response = await apiFetch("/api/v1/subject-loads/batch-save", {
     method: "POST",
@@ -1771,6 +1778,7 @@ export async function batchSaveSubjectLoads(
       publish_scope: publishScope,
       target_level_id: targetLevelId ?? (publishScope === "level" ? levelId : null),
       target_class_id: targetClassId ?? null,
+      base_revision: baseRevision ?? null,
       loads,
     }),
   });
@@ -1782,6 +1790,50 @@ export async function batchSaveSubjectLoads(
     throw new ApiRequestError(msg, response.status, data);
   }
   return (await response.json()) as { message: string; saved_count: number; status: string; is_valid: boolean; conflicts: ConflictItem[] };
+}
+
+export async function unlockSection(
+  periodId: number,
+  classId: number
+): Promise<{ message: string; section_revision: number; base_revision: number | null; cloned_loads_count: number; has_pending_draft: boolean }> {
+  const response = await apiFetch("/api/v1/subject-loads/unlock-section", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      academic_period_id: periodId,
+      class_id: classId,
+    }),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    const msg = data && typeof data === "object" && "detail" in data && typeof data.detail === "string"
+      ? data.detail
+      : "Failed to unlock section";
+    throw new ApiRequestError(msg, response.status, data);
+  }
+  return (await response.json()) as { message: string; section_revision: number; base_revision: number | null; cloned_loads_count: number; has_pending_draft: boolean };
+}
+
+export async function discardDraft(
+  periodId: number,
+  classId: number
+): Promise<{ message: string; discarded_count: number; section_revision: number; has_pending_draft: boolean }> {
+  const response = await apiFetch("/api/v1/subject-loads/discard-draft", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      academic_period_id: periodId,
+      class_id: classId,
+    }),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    const msg = data && typeof data === "object" && "detail" in data && typeof data.detail === "string"
+      ? data.detail
+      : "Failed to discard draft";
+    throw new ApiRequestError(msg, response.status, data);
+  }
+  return (await response.json()) as { message: string; discarded_count: number; section_revision: number; has_pending_draft: boolean };
 }
 
 export interface DynamicScheduleRow {

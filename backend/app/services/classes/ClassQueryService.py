@@ -175,11 +175,37 @@ def _ensure_adviser_access(db: Session, class_: Class, staff_id: str) -> None:
         return
     has_load = (
         db.query(SubjectLoad.subject_load_id)
-        .filter(SubjectLoad.class_id == class_.class_id, SubjectLoad.staff_id == staff_id)
+        .filter(
+            SubjectLoad.class_id == class_.class_id,
+            SubjectLoad.staff_id == staff_id,
+            func.coalesce(SubjectLoad.is_active_version, True).is_(True),
+            func.coalesce(SubjectLoad.status, "active") != "archived",
+        )
         .first()
     )
     if has_load:
         return
+
+    from app.models.academic.TeacherSubstitution import TeacherSubstitution
+    from app.services.academic.SubstitutionService import SubstitutionService
+    from sqlalchemy import or_
+    today_date = SubstitutionService.get_academic_date()
+    is_sub = (
+        db.query(TeacherSubstitution.substitution_id)
+        .join(SubjectLoad, SubjectLoad.subject_load_id == TeacherSubstitution.subject_load_id)
+        .filter(
+            SubjectLoad.class_id == class_.class_id,
+            func.coalesce(SubjectLoad.is_active_version, True).is_(True),
+            func.coalesce(SubjectLoad.status, "active") != "archived",
+            TeacherSubstitution.substitute_staff_id == staff_id,
+            TeacherSubstitution.status == "active",
+            or_(TeacherSubstitution.end_date.is_(None), TeacherSubstitution.end_date >= today_date),
+        )
+        .first()
+    )
+    if is_sub:
+        return
+
     raise HTTPException(status_code=403, detail="You do not have permission to view this class.")
 
 
@@ -365,7 +391,11 @@ def get_teacher_advisory_class_detail_data(db: Session, class_id: int, staff_id:
         .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
         .join(AcademicStaff, AcademicStaff.staff_id == SubjectLoad.staff_id)
         .outerjoin(AcademicPeriod, AcademicPeriod.academic_period_id == SubjectLoad.academic_period_id)
-        .filter(SubjectLoad.class_id == class_.class_id)
+        .filter(
+            SubjectLoad.class_id == class_.class_id,
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(["active", "published"]),
+        )
         .order_by(func.lower(Subject.subject_name), func.lower(AcademicStaff.last_name), func.lower(AcademicStaff.first_name))
         .all()
     )
@@ -454,6 +484,7 @@ def get_teacher_advisory_class_grades_data(
         .join(AcademicStaff, AcademicStaff.staff_id == SubjectLoad.staff_id)
         .filter(
             SubjectLoad.class_id == class_.class_id,
+            SubjectLoad.is_active_version.is_(True),
             func.lower(func.coalesce(SubjectLoad.status, "active")).in_(["active", "published"]),
         )
         .order_by(func.lower(Subject.subject_name))
@@ -718,7 +749,15 @@ def get_class_detail_data(db: Session, class_id: int) -> dict:
 
     class_, academic_level, academic_year, adviser = class_row
     student_count = db.query(func.count(StudentClass.student_class_id)).filter(StudentClass.class_id == class_.class_id).scalar()
-    subject_count = db.query(func.count(SubjectLoad.subject_load_id)).filter(SubjectLoad.class_id == class_.class_id).scalar()
+    subject_count = (
+        db.query(func.count(SubjectLoad.subject_load_id))
+        .filter(
+            SubjectLoad.class_id == class_.class_id,
+            func.coalesce(SubjectLoad.is_active_version, True).is_(True),
+            func.coalesce(SubjectLoad.status, "active") != "archived",
+        )
+        .scalar()
+    )
     return {
         "class_id": class_.class_id,
         "section_name": class_.section_name,

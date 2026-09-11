@@ -137,8 +137,8 @@ def get_dashboard_at_risk_predictions(
     grade_level: int | None = None,
     risk_level: str | None = None,
     search: str | None = None,
-    sort_by: str | None = None,
-    sort_order: str = "desc",
+    sort_by: str | None = "student_name",
+    sort_order: str = "asc",
     limit: int = 25,
     offset: int = 0,
     staff_id: str | None = None,
@@ -230,11 +230,20 @@ def get_dashboard_at_risk_predictions(
     total = base.count()
 
     # Sorting
-    sort_col = SORTABLE_COLUMNS.get(sort_by, AIPrediction.risk_score)
-    if sort_order == "asc":
-        base = base.order_by(sort_col.asc().nullslast(), AIPrediction.prediction_id.asc())
+    if sort_by == "student_name":
+        # Match gradebook-style roster order: surname, then given name.  This
+        # remains deterministic when names collide without using demographics.
+        student_order = (Student.last_name, Student.first_name, Student.student_lrn)
+        if sort_order == "asc":
+            base = base.order_by(*(column.asc().nullslast() for column in student_order), AIPrediction.prediction_id.asc())
+        else:
+            base = base.order_by(*(column.desc().nullslast() for column in student_order), AIPrediction.prediction_id.desc())
     else:
-        base = base.order_by(sort_col.desc().nullslast(), AIPrediction.prediction_id.desc())
+        sort_col = SORTABLE_COLUMNS.get(sort_by, Student.last_name)
+        if sort_order == "asc":
+            base = base.order_by(sort_col.asc().nullslast(), AIPrediction.prediction_id.asc())
+        else:
+            base = base.order_by(sort_col.desc().nullslast(), AIPrediction.prediction_id.desc())
 
     # Pagination
     rows = base.offset(offset).limit(limit).all()

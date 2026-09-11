@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import Landing from "@/pages/landing";
 import { Button } from "./Button";
+
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({ role: null, isLoading: false }),
+}));
 
 describe("Button", () => {
   it("renders the landing page with a styled login link through asChild", () => {

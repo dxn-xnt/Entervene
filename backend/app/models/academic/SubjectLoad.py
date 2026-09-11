@@ -3,6 +3,18 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.Base import Base
 
+import uuid
+
+def _generate_default_logical_load_id(context):
+    params = context.get_current_parameters()
+    cid = params.get("class_id")
+    sid = params.get("subject_id")
+    pid = params.get("academic_period_id")
+    if cid and sid and pid:
+        return f"LL_{cid}_{sid}_{pid}"
+    return f"LL_{uuid.uuid4().hex[:12]}"
+
+
 class SubjectLoad(Base):
     __tablename__ = "subject_load"
 
@@ -16,6 +28,9 @@ class SubjectLoad(Base):
     end_time               = Column(String(10), nullable=True)
     days_of_week           = Column(JSON, nullable=True)
     status                 = Column(String(20), default="draft")
+    logical_load_id        = Column(String(64), default=_generate_default_logical_load_id, nullable=False)
+    section_revision       = Column(Integer, default=1, nullable=False)
+    base_revision          = Column(Integer, nullable=True)
     version                = Column(Integer, default=1, nullable=False)
     is_active_version      = Column(Boolean, default=True, nullable=False)
     is_locked              = Column(Boolean, default=False)

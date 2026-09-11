@@ -2,16 +2,30 @@
 
 > How the prediction and at-risk detection system works, end to end.
 
+> **Phase 1 implementation status (2026-09-11):** The trained model artifact,
+> its 20-column schema, training dataset, readiness thresholds, risk thresholds,
+> and risk formulas were **not retrained or changed** by Prediction Evidence
+> Phase 1. Phase 1 changed how live records are attributed, validated, frozen,
+> and explained before they reach those existing components. This document is the
+> current operational handoff; the registered model-version schema remains the
+> executable authority for model input columns.
+
 ---
 
 ## 1. What the System Does (Overview)
 
-Entervene uses a **Machine Learning model** to predict a student's **next period grade** and then uses a **rule-based Risk Engine** to classify that student into a risk level. This helps teachers identify students who may be struggling early, so they can provide timely interventions.
+Entervene uses a **Machine Learning model** to project a student's grade from
+current-period evidence, then uses a **rule-based Risk Engine** to classify that
+student into a risk level. A saved prediction is either a
+`CURRENT_PERIOD_PROJECTION` (source and target are the same active period) or a
+`NEXT_PERIOD_PREDICTION` (the target is a later period). This helps teachers
+identify students who may be struggling early, so they can provide timely
+interventions.
 
 ```
 Student academic records (grades, scores, submissions)
     ↓
-Feature Builder (computes 16 ML features from records)
+Feature Builder (computes the registered 20 ML features from records)
     ↓
 Random Forest Regressor (predicts next period grade)
     ↓
@@ -47,6 +61,12 @@ The training dataset contains **zero below-75 grade examples** (all students pas
 2. Uses a **rule-based Risk Engine** to interpret the predicted grade along with other evidence
 
 This approach works because even without failing examples, the model can identify students trending toward lower grades, which the Risk Engine flags.
+
+The current application also permits a same-period `CURRENT_PERIOD_PROJECTION`
+when a period is active. It must use only evidence available at its generation
+cutoff and a non-final/provisional source grade; it is an operational projection
+using the registered next-period model schema, not a separately retrained or
+separately validated same-period model artifact.
 
 ---
 
@@ -93,7 +113,7 @@ ML-optimized pack (feature engineering, train/test split by student)
 
 ---
 
-## 4. The 16 Features (Model Inputs)
+## 4. The 20 Features (Model Inputs)
 
 These are the inputs the model uses to predict the next period grade, ranked by importance:
 
@@ -107,17 +127,25 @@ These are the inputs the model uses to predict the next period grade, ranked by 
 | 6 | `grade_trend_vs_previous_period` | 2.5% | Grade change from previous period |
 | 7 | `period_sequence` | 2.4% | Which quarter/term (1st, 2nd, etc.) |
 | 8 | `grade_level` | 1.1% | Student's year level |
-| 9-14 | `subject_*` (6 one-hot flags) | ~2.8% total | Which subject (Creative Tech, ICT, Science, Math, Electronics, Values Ed) |
-| 15 | `has_previous_period` | 0.4% | Whether a previous period grade exists |
-| 16 | `assessment_completion_rate` | 0.05% | Fraction of assessments completed |
+| 9-18 | `subject_*` (10 one-hot flags) | ~2.8% total | Subject flags: Creative Technology, Electronics, ICT, Mathematics, Science, Values Education, Personal Development, MAPEH, Pre-Calculus, and Unknown. |
+| 19 | `has_previous_period` | 0.4% | Whether a previous period grade exists |
+| 20 | `assessment_completion_rate` | 0.05% | Fraction of eligible classwork activities completed. It is not an assertion that assessment rows and classwork are the same activity. |
 
 ### How Features Are Built from Live Records
 
-The `PredictionFeatureBuilderService` computes these features by querying the database:
+`PredictionFeatureBuilderService` computes these features from the database.
+The model-version `feature_schema_json` is authoritative: the current checked-in
+artifact requires 20 columns, with the ordered schema stored in
+`backend/data/models/entervene_next_period_grade_rf_feature_schema.json`.
 
-- **Grade components**: Pulls `AssessmentItem` and `StudentAssessmentScore` records, groups by DepEd component (Written Work, Performance Task, Quarterly Assessment), computes percentages
-- **Submissions**: Pulls `Classwork` and `StudentSubmission` records for missing/late counts
-- **Grade history**: Queries `StudentPeriodGrade` for current and previous period grades, computes trend and cumulative average
+Phase 1 evidence rules are:
+
+- **Grade components**: Eligible period-attributed classwork is the component source when present. Otherwise, recorded `AssessmentItem` / `StudentAssessmentScore` observations supply component percentages. The two populations are never deduplicated or combined by title, time, or similarity.
+- **Completion and coverage**: These are classwork-only measures. Eligible assignments use the existing gradebook's latest-submission timestamp rule; ambiguous attempts, unattributed legacy assignments, and absent activity populations are `UNRESOLVED` or `UNAVAILABLE`, never invented as zero.
+- **Submissions**: Eligible selected submissions provide missing and late counts. A non-authoritative selected attempt makes dependent evidence unresolved.
+- **Grade history**: `StudentPeriodGrade` is selected with provenance: finalized `final_period_grade` is `OFFICIAL`; another stored grade is `RECORDED_PROVISIONAL`; equal-component fallback is `ESTIMATED`. Legitimate zero values are preserved.
+- **No prior comparable period**: `has_previous_period` is false and the otherwise missing grade-trend model value is schema-defaulted to `0`. This represents no observed change, not a missing required model input.
+- **Attendance**: Attendance is restricted to the student, class, subject, source-period dates, and generation cutoff. Present, late, excused, and absent are retained in the saved evidence.
 - **Subject**: One-hot encodes the subject name
 
 ### Readiness Check (Before Running the Model)
@@ -131,11 +159,13 @@ Before the model runs, the system checks if there is enough data:
 | **GOOD** | Coverage 70–84% |
 | **STRONG** | Coverage ≥ 85% |
 
-If readiness is `INSUFFICIENT`, no prediction is made and the response returns `INSUFFICIENT_DATA`.
+If readiness is `INSUFFICIENT`, no prediction is made and the response returns `INSUFFICIENT_DATA`. Phase 1 additionally validates the exact registered model vector before declaring a record ready; a missing or invalid required model value blocks scoring instead of failing later.
 
 > **Note on Behavioral Evidence:** The ML Regressor uses the 16 academic/contextual features above. Live behavioral evidence (`behavioral_engagement_score`, `risk_adjusted_attendance_rate`, `missing_activity_count`, `late_submission_count`) is computed alongside them and evaluated exclusively by the rule-based **Risk Engine** (`RUNTIME_RISK_FIELDS`), keeping the regressor clean and unaffected by non-academic artifacts.
 
 ---
+
+> **Schema correction:** References in older prose to “16” model inputs are superseded by the active 20-column registered schema described above.
 
 ## 5. Model Performance (Regression Metrics)
 
@@ -220,6 +250,27 @@ The score is then clamped to stay within the risk level's range.
 
 This section maps the complete journey from raw student classroom records to final outcome evaluation, explaining exactly what data is required, how the dual-pipeline operates, and how accuracy is measured.
 
+### 7.0 Current production generation flow (Phase 1)
+
+```text
+POST /predictions/from-records
+  -> transaction starts at REPEATABLE READ
+  -> PostgreSQL advisory transaction lock for the logical prediction scope
+  -> build period-scoped features and evidence states
+  -> readiness + exact model-schema validation
+  -> if not ready: return INSUFFICIENT_DATA; do not score or persist a false prediction
+  -> if ready: RandomForestRegressor.predict(registered 20-column vector)
+  -> RiskEngine evaluates the unchanged rules using model output + risk-only fields
+  -> persist prediction, feature rows, execution trace, and immutable evidence_snapshot atomically
+  -> GET prediction detail projects the saved snapshot into teacher-facing labels
+```
+
+`generation_request_id` makes a retry idempotent. The advisory lock serializes
+same-scope creation. An audited snapshot cannot be replaced in place; Phase 2
+successor semantics would be required. Legacy predictions without a snapshot
+remain visible but explicitly carry a limitation rather than reconstructed
+evidence.
+
 ```mermaid
 flowchart TD
     subgraph DataReq["1. Required Live Data (From Teachers/LMS)"]
@@ -230,7 +281,7 @@ flowchart TD
     end
 
     subgraph FeatureBuilder["2. Feature Extraction (PredictionFeatureBuilderService)"]
-        F_Academic["Build 16 ML Features<br/>(DepEd component %, grade trends, period sequence)"]
+        F_Academic["Build registered 20 ML features<br/>(DepEd component %, grade trends, period sequence)"]
         F_Behav["Compute Behavioral Score<br/>(40% Att + 35% On-Time + 25% Completion)"]
         F_Readiness{"Data Readiness Check<br/>Coverage & Completion ≥ 50%?"}
     end
@@ -285,7 +336,7 @@ For the system to deliver reliable predictions and avoid cold-start or low-confi
 #### **Step 1: Feature Extraction & Readiness Validation**
 * **Endpoint:** `POST /api/v1/predictions/build-features`
 * **Service:** `PredictionFeatureBuilderService.py`
-* Queries student records, normalizes period sequence for 3-term or 4-quarter calendars, computes the 16 ML inputs, and calculates the composite Behavioral Engagement Score.
+* Queries student records, normalizes period sequence for 3-term or 4-quarter calendars, computes the registered 20 ML inputs, and calculates the composite Behavioral Engagement Score.
 * **Readiness Gate:** If data coverage $<50\%$ or assessment completion $<50\%$, readiness is `INSUFFICIENT` and the model is blocked from running.
 
 #### **Step 2: Model Scoring & Behavioral Synthesis**
@@ -307,8 +358,9 @@ For the system to deliver reliable predictions and avoid cold-start or low-confi
 #### **Step 4: Persistence & Database Auditing**
 * **Service:** `PredictionPersistenceService.py`
 * Persists records atomically to PostgreSQL:
-  * `ai_prediction`: Stores `predicted_period_grade`, `risk_level`, `risk_score`, `data_status`.
-  * `ai_prediction_feature`: Stores all 16 ML features and behavioral evidence rows with `explanation_method = "RULE"`.
+* `ai_prediction`: Stores `predicted_period_grade`, `risk_level`, `risk_score`, `data_status`.
+  * `ai_prediction_feature`: Stores model-input and risk-evidence rows with `explanation_method = "RULE"` where applicable.
+  * `ai_prediction.evidence_snapshot`: Stores the immutable Phase 1 evidence contract, readiness decision, model execution trace, risk trace, source IDs, and captured source values for audited predictions.
   * `prediction_outcome`: Initializes a tracking row (`status = PENDING`) waiting for actual final grades.
 
 #### **Step 5: Teacher Dashboard & Intervention Loop**
@@ -343,10 +395,13 @@ For the system to deliver reliable predictions and avoid cold-start or low-confi
 | File | Purpose |
 |---|---|
 | `backend/app/services/attendance/AttendanceService.py` | Attendance logs, nominal rate, and risk-adjusted attendance rate |
-| `backend/app/services/prediction/PredictionFeatureBuilderService.py` | Builds 16 features from live DB records & computes behavioral score |
+| `backend/app/services/prediction/PredictionFeatureBuilderService.py` | Builds the registered model features from live DB records, preserves evidence state/provenance, and computes behavioral score |
 | `backend/app/services/prediction/ModelScoringService.py` | Loads model, scores prediction, calls Risk Engine |
 | `backend/app/services/prediction/RiskEngine.py` | Rule-based risk classification & weight threshold loading |
 | `backend/app/services/prediction/PredictionPersistenceService.py` | Saves predictions & behavioral evidence to database |
+| `backend/app/services/prediction/PredictionEvidenceSnapshotService.py` | Creates immutable audited evidence snapshots for new record-driven predictions |
+| `backend/app/services/prediction/TeacherEvidenceService.py` | Projects saved evidence into teacher-safe labels, values, sources, states, and limitations |
+| `backend/app/services/prediction/FeatureCatalog.py` | Canonical permission catalog separating grade-model, risk-only, display-only, and training-only fields |
 | `backend/app/services/prediction/PredictionExplanationService.py` | Generates causes and recommended actions |
 | `backend/app/services/prediction/PredictionOutcomeService.py` | Evaluates prediction accuracy against actual grades |
 | `backend/app/services/prediction/TeacherRiskReviewService.py` | Teacher review decisions |
@@ -515,7 +570,7 @@ This cheat sheet provides direct, technically sound answers to anticipated quest
 ### Q2: "How does the Behavioral Engagement Score communicate with the Random Forest model?"
 * **Answer:**
   > *"They do not communicate inside the Random Forest algorithm. They are processed in a **dual-pipeline architecture** and synthesize downstream in the **Risk Engine**.
-  > The Random Forest evaluates 16 purely academic features to predict a future numerical grade. Concurrently, the Feature Builder computes a normalized Behavioral Engagement Score ($0-100\%$) from daily attendance logs, task deadlines, and assessment participation.
+  > The Random Forest evaluates the registered 20 academic/contextual features to predict a future numerical grade. Concurrently, the Feature Builder computes a normalized Behavioral Engagement Score ($0-100\%$) from daily attendance logs, task deadlines, and eligible classwork completion.
   > Both signals meet in `RiskEngine.evaluate_risk()`, which evaluates compound rules (e.g., assessment completion $<70\%$ AND predicted grade $<82$) and behavioral threshold tiers ($<60\%$ triggers HIGH_RISK) to assign the final risk level."*
 
 ---
@@ -544,4 +599,3 @@ This cheat sheet provides direct, technically sound answers to anticipated quest
   > - **$R^2$ Score:** $\approx 0.584$ (the model accounts for over 58% of grade variance based on current components and historical performance).
   >
   > We explicitly do **not** report Classification Metrics (Precision, Recall, F1, ROC-AUC) for the ML regressor because there are no ground-truth failing labels in the training set. For operational risk accuracy, our system tracks post-hoc outcomes in the `prediction_outcome` table once real quarterly grades are finalized."*
-

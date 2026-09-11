@@ -160,9 +160,12 @@ def get_subject_hierarchy_tree(
 
     target_staff_id = staff_id
     if target_staff_id is None and class_id is not None:
+        from sqlalchemy import func
         load = db.query(SubjectLoad).filter(
             SubjectLoad.class_id == class_id,
             SubjectLoad.subject_id == subject_id,
+            func.coalesce(SubjectLoad.is_active_version, True).is_(True),
+            func.coalesce(SubjectLoad.status, "active") != "archived",
         ).first()
         if load and load.staff_id:
             target_staff_id = load.staff_id

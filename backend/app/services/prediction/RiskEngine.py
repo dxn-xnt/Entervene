@@ -39,6 +39,17 @@ RECOMMENDED_ACTIONS = {
     NEEDS_MONITORING: "Continue monitoring and review recent learning activities.",
     LOW_RISK: "Continue normal monitoring.",
 }
+DEFAULT_RULE_IDENTIFIERS = (
+    "missing_predicted_period_grade", "missing_assessment_completion_rate", "missing_data_coverage_ratio",
+    "data_coverage_below_50", "assessment_completion_below_50", "predicted_grade_below_75",
+    "source_grade_below_75", "predicted_below_80_with_decline", "low_completion_with_predicted_below_82",
+    "three_missing_activities_with_predicted_below_85", "predicted_grade_75_to_81",
+    "trend_declined_7_or_more", "assessment_completion_below_75", "two_or_more_missing_activities",
+    "three_or_more_late_submissions", "predicted_grade_82_to_87", "trend_declined_3_or_more",
+    "assessment_completion_below_90", "one_missing_activity", "one_or_more_late_submissions",
+    "no_previous_period", "behavioral_engagement_below_60", "behavioral_engagement_60_to_74",
+    "behavioral_engagement_75_to_84", "low_risk_grade_completion_and_coverage",
+)
 
 
 @dataclass(frozen=True)
@@ -63,6 +74,7 @@ class RiskEngineResult:
     reasons: list[str]
     recommended_action: str
     triggered_rules: list[str]
+    execution_trace: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -232,7 +244,7 @@ def compute_risk_score(risk_level: str, risk_input: RiskEngineInput, trigger_cou
 def evaluate_risk(risk_input: RiskEngineInput, db: Session | None = None) -> RiskEngineResult:
     # Thresholds are loaded for future override/configuration use. Default rules
     # remain authoritative in this task and work when no DB rows exist.
-    load_active_thresholds(db)
+    thresholds = load_active_thresholds(db)
     triggers = evaluate_default_rules(risk_input)
     risk_level = choose_risk_level(triggers)
     risk_score = compute_risk_score(risk_level, risk_input, len(triggers))
@@ -251,4 +263,32 @@ def evaluate_risk(risk_input: RiskEngineInput, db: Session | None = None) -> Ris
         reasons=[trigger[2] for trigger in triggers],
         recommended_action=RECOMMENDED_ACTIONS[risk_level],
         triggered_rules=[trigger[1] for trigger in triggers],
+        execution_trace={
+            "status": "EXECUTED",
+            "ruleset_version": "risk-default-rules-v1",
+            "inputs": {
+                "predicted_period_grade": risk_input.predicted_period_grade,
+                "source_period_grade": risk_input.source_period_grade,
+                "grade_trend_vs_previous_period": risk_input.grade_trend_vs_previous_period,
+                "assessment_completion_rate": risk_input.assessment_completion_rate,
+                "missing_activity_count": risk_input.missing_activity_count,
+                "late_submission_count": risk_input.late_submission_count,
+                "data_coverage_ratio": risk_input.data_coverage_ratio,
+                "has_previous_period": risk_input.has_previous_period,
+                "behavioral_engagement_score": risk_input.behavioral_engagement_score,
+            },
+            "active_thresholds": [
+                {"name": item.threshold_name, "condition_type": item.condition_type,
+                 "condition_value": item.condition_value, "risk_level": item.risk_level}
+                for item in thresholds
+            ],
+            "evaluated_rules": [
+                {"rule_identifier": rule, "triggered": rule in {item[1] for item in triggers}}
+                for rule in DEFAULT_RULE_IDENTIFIERS
+            ],
+            "triggered_rules": [
+                {"rule_identifier": rule, "triggered": True, "reason": reason, "risk_level": level}
+                for level, rule, reason in triggers
+            ],
+        },
     )

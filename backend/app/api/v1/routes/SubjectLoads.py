@@ -15,6 +15,9 @@ from app.models.people.AcademicStaff import AcademicStaff
 from app.models.academic.SubjectOffering import SubjectOffering
 from app.models.academic.PeriodTemplateSlot import PeriodTemplateSlot
 from app.models.academic.StudentCLass import StudentClass
+from app.models.academic.SubjectLoadAssignmentLog import SubjectLoadAssignmentLog
+from app.models.academic.TeacherSubstitution import TeacherSubstitution
+from app.services.academic.SubjectLoadDependencyService import SubjectLoadDependencyService, ChangeType
 from app.schemas.SubjectLoad import (
     ValidateSubjectLoadRequest,
     ValidationResultResponse,
@@ -23,6 +26,9 @@ from app.schemas.SubjectLoad import (
     BatchSaveSubjectLoadResponse,
     SubjectLoadItem,
     PeriodTemplateSlotSchema,
+    UnlockSectionRequest,
+    DiscardDraftRequest,
+    SectionDraftResponse,
 )
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -204,6 +210,48 @@ def offering_pathway_code(so: SubjectOffering) -> str:
 
 
 
+def _serialize_load_item(sl: SubjectLoad, period_deps: dict[tuple[int, int], dict[str, int]] | None = None) -> dict[str, Any]:
+    deps = (period_deps or {}).get((sl.class_id, sl.subject_id), {
+        "classwork_assignments": 0,
+        "student_submissions": 0,
+        "assessment_scores": 0,
+        "period_grades": 0,
+        "grade_logs": 0,
+        "attendance_records": 0,
+        "lesson_assignments": 0,
+        "substitutions": 0,
+        "reassignment_logs": 0,
+        "educational_total": 0,
+        "administrative_total": 0,
+        "total": 0,
+    })
+    return {
+        "subject_load_id": sl.subject_load_id,
+        "class_id": sl.class_id,
+        "subject_id": sl.subject_id,
+        "staff_id": sl.staff_id,
+        "academic_period_id": sl.academic_period_id,
+        "slot_id": getattr(sl, "slot_id", None),
+        "start_time": getattr(sl, "start_time", None),
+        "end_time": getattr(sl, "end_time", None),
+        "days_of_week": getattr(sl, "days_of_week", []) or [],
+        "status": sl.status or "draft",
+        "logical_load_id": sl.logical_load_id or f"LL_{sl.class_id}_{sl.subject_id}_{sl.academic_period_id}",
+        "section_revision": getattr(sl, "section_revision", 1) or 1,
+        "base_revision": getattr(sl, "base_revision", None),
+        "version": getattr(sl, "version", 1) or 1,
+        "is_active_version": bool(getattr(sl, "is_active_version", True)),
+        "is_locked": bool(getattr(sl, "is_locked", False)),
+        "published_at": sl.published_at.isoformat() if getattr(sl, "published_at", None) else None,
+        "published_by": getattr(sl, "published_by", None),
+        "last_modified_by": getattr(sl, "last_modified_by", None),
+        "continued_from_load_id": getattr(sl, "continued_from_load_id", None),
+        "dependencies": deps,
+        "has_live_data": bool(deps.get("educational_total", 0) > 0),
+        "has_admin_records": bool(deps.get("administrative_total", 0) > 0),
+    }
+
+
 @router.get("/studio-data")
 def get_subject_load_studio_data(
     academic_period_id: int | None = Query(None),
@@ -246,7 +294,31 @@ def get_subject_load_studio_data(
     except Exception:
         db.rollback()
 
-    existing_loads = db.query(SubjectLoad).filter(SubjectLoad.academic_period_id == selected_period_id).all()
+    period_deps = SubjectLoadDependencyService.get_batched_period_dependencies(db, selected_period_id)
+    all_period_loads = db.query(SubjectLoad).filter(SubjectLoad.academic_period_id == selected_period_id).all()
+    loads_by_class: dict[int, list[SubjectLoad]] = {}
+    for sl in all_period_loads:
+        loads_by_class.setdefault(sl.class_id, []).append(sl)
+
+    existing_loads: list[dict[str, Any]] = []
+    has_pending_draft_by_class: dict[int, bool] = {}
+
+    for c in classes:
+        c_loads = loads_by_class.get(c.class_id, [])
+        draft_loads = [l for l in c_loads if l.status == "draft"]
+        if draft_loads:
+            has_pending_draft_by_class[c.class_id] = True
+            for dl in draft_loads:
+                existing_loads.append(_serialize_load_item(dl, period_deps))
+        else:
+            has_pending_draft_by_class[c.class_id] = False
+            published_active_loads = [
+                l for l in c_loads
+                if l.is_active_version is True and l.status in ("published", "active")
+            ]
+            for pl in published_active_loads:
+                existing_loads.append(_serialize_load_item(pl, period_deps))
+
     try:
         offerings = (
             db.query(SubjectOffering)
@@ -326,28 +398,8 @@ def get_subject_load_studio_data(
             }
             for t in teachers
         ],
-        "existing_loads": [
-            {
-                "subject_load_id": sl.subject_load_id,
-                "class_id": sl.class_id,
-                "subject_id": sl.subject_id,
-                "staff_id": sl.staff_id,
-                "academic_period_id": sl.academic_period_id,
-                "slot_id": getattr(sl, "slot_id", None),
-                "start_time": getattr(sl, "start_time", None),
-                "end_time": getattr(sl, "end_time", None),
-                "days_of_week": getattr(sl, "days_of_week", []) or [],
-                "status": sl.status or "draft",
-                "version": getattr(sl, "version", 1) or 1,
-                "is_active_version": bool(getattr(sl, "is_active_version", True)),
-                "is_locked": bool(getattr(sl, "is_locked", False)),
-                "published_at": sl.published_at.isoformat() if getattr(sl, "published_at", None) else None,
-                "published_by": getattr(sl, "published_by", None),
-                "last_modified_by": getattr(sl, "last_modified_by", None),
-                "continued_from_load_id": getattr(sl, "continued_from_load_id", None),
-            }
-            for sl in existing_loads
-        ],
+        "existing_loads": existing_loads,
+        "has_pending_draft_by_class": has_pending_draft_by_class,
         "period_template_slots": [
             {
                 "slot_id": pts.slot_id,
@@ -560,6 +612,143 @@ def auto_schedule_subject_loads(
     )
 
 
+@router.post("/unlock-section", response_model=SectionDraftResponse)
+def unlock_section(
+    payload: UnlockSectionRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    user_email = current_user.get("email") or current_user.get("sub") or "admin"
+
+    # Concurrency protection: Row-level lock on the Class section
+    cls = db.query(Class).filter(Class.class_id == payload.class_id).with_for_update().first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class section not found.")
+
+    # Idempotent safeguard: check if a working draft already exists
+    existing_drafts = (
+        db.query(SubjectLoad)
+        .filter(
+            SubjectLoad.class_id == payload.class_id,
+            SubjectLoad.academic_period_id == payload.academic_period_id,
+            SubjectLoad.status == "draft",
+        )
+        .all()
+    )
+    if existing_drafts:
+        period_deps = SubjectLoadDependencyService.get_batched_period_dependencies(db, payload.academic_period_id)
+        draft_items = [_serialize_load_item(sl, period_deps) for sl in existing_drafts]
+        base_rev = existing_drafts[0].base_revision
+        sec_rev = existing_drafts[0].section_revision
+        return SectionDraftResponse(
+            message=f"Working draft (Revision {sec_rev}) already exists for {cls.section_name}.",
+            class_id=payload.class_id,
+            section_revision=sec_rev,
+            base_revision=base_rev,
+            has_pending_draft=True,
+            loads=draft_items,
+        )
+
+    # Clone active published loads into draft revision
+    published_loads = (
+        db.query(SubjectLoad)
+        .filter(
+            SubjectLoad.class_id == payload.class_id,
+            SubjectLoad.academic_period_id == payload.academic_period_id,
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(["published", "active"]),
+        )
+        .all()
+    )
+
+    base_rev = max((sl.section_revision or 1 for sl in published_loads), default=1)
+    draft_rev = base_rev + 1
+    cloned_drafts: list[SubjectLoad] = []
+
+    for pub in published_loads:
+        logical_id = pub.logical_load_id or f"LL_{pub.class_id}_{pub.subject_id}_{pub.academic_period_id}"
+        draft_load = SubjectLoad(
+            class_id=pub.class_id,
+            subject_id=pub.subject_id,
+            staff_id=pub.staff_id,
+            academic_period_id=pub.academic_period_id,
+            slot_id=pub.slot_id,
+            start_time=pub.start_time,
+            end_time=pub.end_time,
+            days_of_week=pub.days_of_week,
+            status="draft",
+            logical_load_id=logical_id,
+            section_revision=draft_rev,
+            base_revision=base_rev,
+            version=(pub.version or 1) + 1,
+            is_active_version=False,
+            is_locked=False,
+            continued_from_load_id=pub.subject_load_id,
+            last_modified_by=user_email,
+        )
+        db.add(draft_load)
+        cloned_drafts.append(draft_load)
+
+    db.commit()
+    for d in cloned_drafts:
+        db.refresh(d)
+
+    period_deps = SubjectLoadDependencyService.get_batched_period_dependencies(db, payload.academic_period_id)
+    draft_items = [_serialize_load_item(sl, period_deps) for sl in cloned_drafts]
+
+    return SectionDraftResponse(
+        message=f"Created working draft (Revision {draft_rev}) for {cls.section_name}. Baseline published schedule remains active.",
+        class_id=payload.class_id,
+        section_revision=draft_rev,
+        base_revision=base_rev,
+        has_pending_draft=True,
+        loads=draft_items,
+    )
+
+
+@router.post("/discard-draft", response_model=SectionDraftResponse)
+def discard_draft(
+    payload: DiscardDraftRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    cls = db.query(Class).filter(Class.class_id == payload.class_id).with_for_update().first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class section not found.")
+
+    # Delete all draft rows for this section and period
+    db.query(SubjectLoad).filter(
+        SubjectLoad.class_id == payload.class_id,
+        SubjectLoad.academic_period_id == payload.academic_period_id,
+        SubjectLoad.status == "draft",
+    ).delete(synchronize_session=False)
+    db.commit()
+
+    # Retrieve published baseline
+    published_loads = (
+        db.query(SubjectLoad)
+        .filter(
+            SubjectLoad.class_id == payload.class_id,
+            SubjectLoad.academic_period_id == payload.academic_period_id,
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(["published", "active"]),
+        )
+        .all()
+    )
+    base_rev = max((sl.section_revision or 1 for sl in published_loads), default=1)
+    period_deps = SubjectLoadDependencyService.get_batched_period_dependencies(db, payload.academic_period_id)
+    baseline_items = [_serialize_load_item(sl, period_deps) for sl in published_loads]
+
+    return SectionDraftResponse(
+        message=f"Abandoned working draft for {cls.section_name}. Retained unchanged published baseline (Revision {base_rev}).",
+        class_id=payload.class_id,
+        section_revision=base_rev,
+        base_revision=base_rev,
+        has_pending_draft=False,
+        loads=baseline_items,
+    )
+
+
 @router.post("/batch-save", response_model=BatchSaveSubjectLoadResponse)
 def batch_save_subject_loads(
     payload: BatchSaveSubjectLoadRequest,
@@ -581,17 +770,32 @@ def batch_save_subject_loads(
             if s_mins < min_mins or e_mins > max_mins:
                 raise HTTPException(status_code=400, detail=f"Time falls outside configured school hours ({start_str} - {end_str}).")
 
-    # Identify affected classes in this payload
     affected_class_ids = set(load_item.class_id for load_item in payload.loads)
 
-    # Fetch all existing DB loads for full-school merged validation
+    user_email = current_user.get("email") or current_user.get("username") or "Admin"
+    is_publishing = (payload.action == "publish")
+    status_value = "published" if is_publishing else "draft"
+
+    scope = payload.publish_scope or "all"
+    if scope == "level":
+        target_lvl = payload.target_level_id or payload.academic_level_id
+        matching_classes = db.query(Class.class_id).filter(Class.academic_level_id == target_lvl).all()
+        target_class_ids = {c[0] for c in matching_classes}
+    elif scope == "section" and payload.target_class_id is not None:
+        target_class_ids = {payload.target_class_id}
+    else:
+        target_class_ids = set(affected_class_ids)
+
+    # 1. Validation across loads
+    # Fetch all active version DB loads for full-school merged validation
     db_all_period_loads = (
         db.query(SubjectLoad)
-        .filter(SubjectLoad.academic_period_id == payload.academic_period_id)
+        .filter(
+            SubjectLoad.academic_period_id == payload.academic_period_id,
+            SubjectLoad.is_active_version.is_(True),
+        )
         .all()
     )
-
-    # Merge incoming payload loads with existing DB loads from non-affected classes
     merged_validation_loads: list[SubjectLoadItem] = list(payload.loads)
     for sl in db_all_period_loads:
         if sl.class_id not in affected_class_ids:
@@ -610,25 +814,7 @@ def batch_save_subject_loads(
                 )
             )
 
-    user_email = current_user.get("email") or current_user.get("username") or "Admin"
-    status_value = "published" if payload.action == "publish" else "draft"
-    is_publishing = (payload.action == "publish")
-
-    # Determine target class IDs based on publish scope
-    target_class_ids: set[int] = set()
-    scope = payload.publish_scope or "all"
-    if scope == "level":
-        target_lvl = payload.target_level_id or payload.academic_level_id
-        matching_classes = db.query(Class.class_id).filter(Class.academic_level_id == target_lvl).all()
-        target_class_ids = {c[0] for c in matching_classes}
-    elif scope == "section" and payload.target_class_id is not None:
-        target_class_ids = {payload.target_class_id}
-    else:
-        # "all" scope
-        target_class_ids = set(affected_class_ids)
-
     if is_publishing:
-        # Enforce that all subject loads within target_class_ids have assigned teachers
         unassigned_in_target: list[str] = []
         for load_item in merged_validation_loads:
             if load_item.class_id in target_class_ids and not load_item.staff_id:
@@ -648,8 +834,6 @@ def batch_save_subject_loads(
             )
 
     validation_res = ConflictDetectorService.validate_loads(db=db, loads=merged_validation_loads, academic_period=period)
-    
-    # If action is publish and there are error-level conflicts in the target scope, block publication
     if is_publishing:
         if scope in ("section", "level") and target_class_ids:
             target_staff_ids = {
@@ -674,69 +858,228 @@ def batch_save_subject_loads(
                 detail=f"Cannot publish schedule with unresolved conflicts: {sample_err}",
             )
 
-
-    existing_db_affected = [sl for sl in db_all_period_loads if sl.class_id in affected_class_ids]
-    existing_map = {sl.subject_load_id: sl for sl in existing_db_affected}
-    incoming_ids = {item.subject_load_id for item in payload.loads if item.subject_load_id is not None}
-
-    # Delete loads that were removed in the UI for affected classes
-    for sl_id, sl_obj in existing_map.items():
-        if sl_id not in incoming_ids:
-            db.delete(sl_obj)
-
     saved_count = 0
     now_time = datetime.now()
-    for load_item in payload.loads:
-        db_load = None
-        if load_item.subject_load_id and load_item.subject_load_id in existing_map:
-            db_load = existing_map[load_item.subject_load_id]
-        else:
-            db_load = SubjectLoad(
-                class_id=load_item.class_id,
-                subject_id=load_item.subject_id,
-                academic_period_id=payload.academic_period_id,
+
+    if not is_publishing:
+        # ACTION == DRAFT: Save only working draft loads for target sections
+        for cid in target_class_ids:
+            cls_items = [item for item in payload.loads if item.class_id == cid]
+            # Fetch existing draft rows for this class
+            existing_drafts = (
+                db.query(SubjectLoad)
+                .filter(
+                    SubjectLoad.class_id == cid,
+                    SubjectLoad.academic_period_id == payload.academic_period_id,
+                    SubjectLoad.status == "draft",
+                )
+                .all()
             )
-            db.add(db_load)
+            draft_map = {d.subject_load_id: d for d in existing_drafts}
+            incoming_ids = {item.subject_load_id for item in cls_items if item.subject_load_id is not None}
 
-        db_load.staff_id = load_item.staff_id
-        db_load.start_time = load_item.start_time
-        db_load.end_time = load_item.end_time
-        db_load.days_of_week = load_item.days_of_week
-        db_load.last_modified_by = user_email
-        db_load.continued_from_load_id = load_item.continued_from_load_id
+            # Delete removed draft rows
+            for d_id, d_obj in draft_map.items():
+                if d_id not in incoming_ids:
+                    db.delete(d_obj)
 
-        in_target_scope = (load_item.class_id in target_class_ids)
+            for item in cls_items:
+                logical_id = item.logical_load_id or f"LL_{item.class_id}_{item.subject_id}_{payload.academic_period_id}"
+                if item.subject_load_id and item.subject_load_id in draft_map:
+                    d_load = draft_map[item.subject_load_id]
+                else:
+                    d_load = SubjectLoad(
+                        class_id=item.class_id,
+                        subject_id=item.subject_id,
+                        academic_period_id=payload.academic_period_id,
+                        logical_load_id=logical_id,
+                    )
+                    db.add(d_load)
 
-        if is_publishing and in_target_scope and bool(load_item.staff_id):
-            db_load.status = "published"
-            db_load.is_locked = True
-            db_load.locked_at = now_time
-            db_load.published_at = now_time
-            db_load.published_by = user_email
-        elif payload.action == "draft" and in_target_scope:
-            db_load.status = "draft"
-            db_load.is_locked = False
-            db_load.published_at = None
-            db_load.published_by = None
-        elif not load_item.staff_id:
-            db_load.status = "draft"
-            db_load.is_locked = False
-            db_load.published_at = None
-            db_load.published_by = None
-        else:
-            if not getattr(db_load, "status", None):
-                db_load.status = "draft"
-                db_load.is_locked = False
+                d_load.staff_id = item.staff_id
+                d_load.start_time = item.start_time
+                d_load.end_time = item.end_time
+                d_load.days_of_week = item.days_of_week
+                d_load.slot_id = item.slot_id
+                d_load.status = "draft"
+                d_load.is_active_version = False
+                d_load.is_locked = False
+                d_load.last_modified_by = user_email
+                d_load.section_revision = item.section_revision or 2
+                d_load.base_revision = item.base_revision or 1
+                d_load.continued_from_load_id = item.continued_from_load_id
+                saved_count += 1
 
-        saved_count += 1
+        db.commit()
 
-    # Cleanup any stale published records in DB that have no assigned staff
-    try:
-        db.execute(text("UPDATE subject_load SET status = 'draft', is_locked = FALSE WHERE staff_id IS NULL AND status = 'published';"))
-    except Exception:
-        pass
+    else:
+        # ACTION == PUBLISH: Staged Publishing with concurrency protection, deletion guard, and atomic promotion
+        today_date = SubstitutionService.get_academic_date()
 
-    db.commit()
+        for cid in target_class_ids:
+            # Row lock Class section
+            cls_obj = db.query(Class).filter(Class.class_id == cid).with_for_update().first()
+
+            # 1. Fetch current active published loads
+            current_pub_loads = (
+                db.query(SubjectLoad)
+                .filter(
+                    SubjectLoad.class_id == cid,
+                    SubjectLoad.academic_period_id == payload.academic_period_id,
+                    SubjectLoad.is_active_version.is_(True),
+                    SubjectLoad.status.in_(["published", "active"]),
+                )
+                .all()
+            )
+            current_base = max((sl.section_revision or 1 for sl in current_pub_loads), default=0)
+
+            # Optimistic concurrency check
+            if payload.base_revision is not None and current_pub_loads and payload.base_revision != current_base:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Section revision conflict for '{cls_obj.section_name if cls_obj else cid}': Another administrator published Revision {current_base} while you were editing. Please reload the section before publishing.",
+                )
+
+            cls_items = [item for item in payload.loads if item.class_id == cid]
+
+            # 2. Deletion Guard & Strict Identity Check
+            # Convert incoming items into transient SubjectLoads for classification
+            incoming_transient = [
+                SubjectLoad(
+                    class_id=it.class_id,
+                    subject_id=it.subject_id,
+                    staff_id=it.staff_id,
+                    academic_period_id=payload.academic_period_id,
+                    start_time=it.start_time,
+                    end_time=it.end_time,
+                    days_of_week=it.days_of_week,
+                    slot_id=it.slot_id,
+                    logical_load_id=it.logical_load_id or f"LL_{it.class_id}_{it.subject_id}_{payload.academic_period_id}",
+                )
+                for it in cls_items
+            ]
+
+            classified = SubjectLoadDependencyService.classify_section_changes(current_pub_loads, incoming_transient)
+            for change in classified:
+                if change["change_type"] == ChangeType.REMOVED_SUBJECT:
+                    b_load = change["baseline_load"]
+                    can_del, deps = SubjectLoadDependencyService.can_delete_subject_load(db, b_load)
+                    if not can_del:
+                        s_name = db.query(Subject.subject_name).filter(Subject.subject_id == b_load.subject_id).scalar() or f"Subject #{b_load.subject_id}"
+                        if deps.get("educational_total", 0) > 0:
+                            dep_parts = [
+                                f"{cnt} {k.replace('_', ' ')}"
+                                for k, cnt in deps.items()
+                                if k in ("classwork_assignments", "student_submissions", "assessment_scores", "period_grades", "grade_logs", "attendance_records", "lesson_assignments") and cnt > 0
+                            ]
+                            dep_summary = ", ".join(dep_parts)
+                            raise HTTPException(
+                                status_code=status.HTTP_409_CONFLICT,
+                                detail=f"Cannot remove '{s_name}' from section '{cls_obj.section_name if cls_obj else cid}': student academic records exist ({dep_summary}). De-allocation is blocked to preserve academic integrity.",
+                            )
+                        elif deps.get("active_substitutions", 0) > 0:
+                            raise HTTPException(
+                                status_code=status.HTTP_409_CONFLICT,
+                                detail=f"Cannot remove '{s_name}' from section '{cls_obj.section_name if cls_obj else cid}': an active teacher substitution is currently assigned. Please conclude or cancel the substitution before removing the subject.",
+                            )
+
+            # 3. Archive previous active published loads
+            for pub in current_pub_loads:
+                pub.is_active_version = False
+                pub.status = "archived"
+
+            new_revision = current_base + 1
+
+            # Fetch existing draft loads for this class to promote or reuse
+            existing_drafts = (
+                db.query(SubjectLoad)
+                .filter(
+                    SubjectLoad.class_id == cid,
+                    SubjectLoad.academic_period_id == payload.academic_period_id,
+                    SubjectLoad.status == "draft",
+                )
+                .all()
+            )
+            draft_by_logical = {d.logical_load_id: d for d in existing_drafts if d.logical_load_id}
+
+            promoted_loads: list[SubjectLoad] = []
+            for it in cls_items:
+                logical_id = it.logical_load_id or f"LL_{it.class_id}_{it.subject_id}_{payload.academic_period_id}"
+                prev_pub = next((p for p in current_pub_loads if p.logical_load_id == logical_id), None)
+                cont_id = prev_pub.subject_load_id if prev_pub else None
+
+                if logical_id in draft_by_logical:
+                    p_load = draft_by_logical[logical_id]
+                else:
+                    p_load = SubjectLoad(
+                        class_id=it.class_id,
+                        subject_id=it.subject_id,
+                        academic_period_id=payload.academic_period_id,
+                        logical_load_id=logical_id,
+                    )
+                    db.add(p_load)
+
+                p_load.staff_id = it.staff_id
+                p_load.slot_id = it.slot_id
+                p_load.start_time = it.start_time
+                p_load.end_time = it.end_time
+                p_load.days_of_week = it.days_of_week
+                p_load.status = "published"
+                p_load.is_active_version = True
+                p_load.is_locked = True
+                p_load.section_revision = new_revision
+                p_load.base_revision = current_base
+                p_load.published_at = now_time
+                p_load.published_by = user_email
+                p_load.last_modified_by = user_email
+                p_load.continued_from_load_id = cont_id
+                promoted_loads.append(p_load)
+                saved_count += 1
+
+            db.flush()
+
+            # 4. Atomic substitution repointing & Reassignment audit logs
+            for p_load in promoted_loads:
+                prev_pub = next((p for p in current_pub_loads if p.logical_load_id == p_load.logical_load_id), None)
+                if prev_pub:
+                    # Repoint active non-terminal substitutions
+                    subs = (
+                        db.query(TeacherSubstitution)
+                        .filter(
+                            TeacherSubstitution.subject_load_id == prev_pub.subject_load_id,
+                            TeacherSubstitution.status == "active",
+                            or_(TeacherSubstitution.end_date.is_(None), TeacherSubstitution.end_date >= today_date),
+                        )
+                        .all()
+                    )
+                    for s in subs:
+                        s.subject_load_id = p_load.subject_load_id
+
+                    # Log teacher reassignment
+                    if prev_pub.staff_id != p_load.staff_id:
+                        log_entry = SubjectLoadAssignmentLog(
+                            logical_load_id=p_load.logical_load_id,
+                            subject_load_id=p_load.subject_load_id,
+                            class_id=p_load.class_id,
+                            subject_id=p_load.subject_id,
+                            academic_period_id=p_load.academic_period_id,
+                            old_staff_id=prev_pub.staff_id,
+                            new_staff_id=p_load.staff_id,
+                            changed_by=user_email,
+                            change_reason="Section revision published",
+                        )
+                        db.add(log_entry)
+
+            # 5. Delete any remaining unpromoted draft rows for this section
+            promoted_ids = {p.subject_load_id for p in promoted_loads}
+            db.query(SubjectLoad).filter(
+                SubjectLoad.class_id == cid,
+                SubjectLoad.academic_period_id == payload.academic_period_id,
+                SubjectLoad.status == "draft",
+                ~SubjectLoad.subject_load_id.in_(promoted_ids),
+            ).delete(synchronize_session=False)
+
+        db.commit()
 
     scope_label = "all sections" if payload.publish_scope == "all" else f"{payload.publish_scope} scope"
     return BatchSaveSubjectLoadResponse(
@@ -799,7 +1142,8 @@ def get_class_schedule(
         .filter(
             SubjectLoad.class_id == class_id,
             SubjectLoad.academic_period_id == period_id,
-            SubjectLoad.status == "published",
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(["published", "active"]),
         )
         .all()
     )
@@ -902,7 +1246,11 @@ def get_my_schedule(
     elif role in ("teacher", "admin"):
         staff_id = get_optional_staff_id(current_user=current_user, db=db)
         if not staff_id:
-            pub_load = db.query(SubjectLoad).filter(SubjectLoad.academic_period_id == period_id, SubjectLoad.status == "published").first()
+            pub_load = db.query(SubjectLoad).filter(
+                SubjectLoad.academic_period_id == period_id,
+                SubjectLoad.is_active_version.is_(True),
+                SubjectLoad.status.in_(["published", "active"]),
+            ).first()
             if pub_load:
                 return get_class_schedule(class_id=pub_load.class_id, academic_period_id=period_id, current_user=current_user, db=db)
             return {"is_published": False, "schedule": []}
@@ -912,7 +1260,8 @@ def get_my_schedule(
             .filter(
                 SubjectLoad.staff_id == staff_id,
                 SubjectLoad.academic_period_id == period_id,
-                SubjectLoad.status == "published",
+                SubjectLoad.is_active_version.is_(True),
+                SubjectLoad.status.in_(["published", "active"]),
             )
             .all()
         )

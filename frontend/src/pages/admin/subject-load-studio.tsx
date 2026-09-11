@@ -26,6 +26,8 @@ import {
   validateSubjectLoads,
   autoScheduleSubjectLoads,
   batchSaveSubjectLoads,
+  unlockSection,
+  discardDraft,
   type SubjectLoadItem,
   type SubjectLoadStudioData,
   type ConflictItem,
@@ -46,6 +48,8 @@ import {
   Search,
   Copy,
   Unlock,
+  RotateCcw,
+  ShieldCheck,
   EllipsisIcon,
 } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
@@ -148,11 +152,6 @@ export default function AdminSubjectLoadStudio() {
   const activeGroupBreakSlots = useMemo(() => {
     return periodTemplateSlots.filter((s) => s.template_group === activeGroupKey && s.is_locked_break);
   }, [periodTemplateSlots, activeGroupKey]);
-
-  const levelClassIds = useMemo(() => {
-    if (selectedGradeId === "all") return new Set<number>();
-    return new Set((studioData?.classes || []).filter((c) => String(c.academic_level_id) === selectedGradeId).map((c) => c.class_id));
-  }, [selectedGradeId, studioData]);
 
   const previousPeriods = useMemo(() => {
     if (!studioData?.academic_periods || !selectedPeriodId) return [];
@@ -285,6 +284,11 @@ export default function AdminSubjectLoadStudio() {
                 days_of_week: m.days_of_week || [],
                 status: m.status || "draft",
                 is_locked: Boolean(m.is_locked || m.status === "published"),
+                logical_load_id: m.logical_load_id,
+                section_revision: m.section_revision,
+                base_revision: m.base_revision,
+                has_live_data: m.has_live_data,
+                dependencies: m.dependencies,
               });
             });
           } else {
@@ -1073,6 +1077,12 @@ export default function AdminSubjectLoadStudio() {
 
     try {
       const levelIdToSave = selectedGradeId !== "all" ? Number(selectedGradeId) : 1;
+      let baseRevToPass: number | null = null;
+      if (publishScope === "section" && targetClassId) {
+        const secLoad = loads.find((l) => l.class_id === targetClassId && l.base_revision !== undefined && l.base_revision !== null);
+        baseRevToPass = secLoad?.base_revision ?? null;
+      }
+
       const res = await batchSaveSubjectLoads(
         selectedPeriodId,
         levelIdToSave,
@@ -1080,7 +1090,8 @@ export default function AdminSubjectLoadStudio() {
         loads,
         publishScope,
         publishScope === "level" ? levelIdToSave : null,
-        targetClassId ?? null
+        targetClassId ?? null,
+        baseRevToPass
       );
 
       setConflicts(res.conflicts);
@@ -1090,33 +1101,85 @@ export default function AdminSubjectLoadStudio() {
         type: "success",
       });
 
-      // Optimistic update: immediately flip in-memory load statuses
-      // so section badges update instantly without waiting for DB reload
-      setLoads((prev) =>
-        prev.map((l) => {
-          const isInScope =
-            publishScope === "section"
-              ? l.class_id === targetClassId
-              : publishScope === "level"
-                ? levelClassIds.has(l.class_id)
-                : true; // "all"
-
-          if (action === "publish" && isInScope && Boolean(l.staff_id)) {
-            return { ...l, status: "published", is_locked: true };
-          }
-          if (action === "draft" && isInScope) {
-            return { ...l, status: "draft", is_locked: false };
-          }
-          return l;
-        })
-      );
-
       // Refresh studio data to sync with DB
       void loadStudio(selectedPeriodId);
+    } catch (err: any) {
+      const detail = err?.data?.detail || err?.message || "";
+      if (err?.status === 409) {
+        if (detail.includes("Cannot remove") || detail.includes("SUBJECT_LOAD_HAS_LIVE_DATA")) {
+          setNotice({
+            title: "Cannot Remove Populated Subject",
+            message: detail,
+            type: "error",
+          });
+        } else if (detail.includes("conflict") || detail.includes("revision")) {
+          setNotice({
+            title: "Revision Conflict",
+            message: "Another administrator has published changes to this section. Your draft has been refreshed to prevent overwriting.",
+            type: "error",
+          });
+          void loadStudio(selectedPeriodId);
+        } else {
+          setNotice({
+            title: "Conflict Error",
+            message: detail,
+            type: "error",
+          });
+        }
+      } else {
+        setNotice({
+          title: "Save Failed",
+          message: err instanceof Error ? err.message : `Failed to ${action} subject loads.`,
+          type: "error",
+        });
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleUnlockSection = async (classId: number) => {
+    if (!selectedPeriodId || isSaving) return;
+    setIsSaving(true);
+    setNotice(null);
+    try {
+      const res = await unlockSection(selectedPeriodId, classId);
+      setNotice({
+        title: "Section Unlocked",
+        message: `Section snapshot v${res.section_revision} created for editing. Live published schedule remains active for students and teachers until you publish changes.`,
+        type: "success",
+      });
+      await loadStudio(selectedPeriodId);
     } catch (err) {
       setNotice({
-        title: "Save Failed",
-        message: err instanceof Error ? err.message : `Failed to ${action} subject loads.`,
+        title: "Unlock Failed",
+        message: err instanceof Error ? err.message : "Failed to unlock section.",
+        type: "error",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDiscardDraft = async (classId: number) => {
+    if (!selectedPeriodId || isSaving) return;
+    if (!window.confirm("Are you sure you want to discard this draft? All unpublished changes made since unlocking will be lost.")) {
+      return;
+    }
+    setIsSaving(true);
+    setNotice(null);
+    try {
+      const res = await discardDraft(selectedPeriodId, classId);
+      setNotice({
+        title: "Draft Discarded",
+        message: `Unpublished draft discarded. Section restored to published baseline (v${res.section_revision}).`,
+        type: "success",
+      });
+      await loadStudio(selectedPeriodId);
+    } catch (err) {
+      setNotice({
+        title: "Discard Failed",
+        message: err instanceof Error ? err.message : "Failed to discard draft.",
         type: "error",
       });
     } finally {
@@ -1500,6 +1563,11 @@ export default function AdminSubjectLoadStudio() {
                             void handleSave("publish", "section", cls.class_id);
                           };
 
+                          const hasPendingDraft = Boolean(
+                            studioData?.has_pending_draft_by_class?.[cls.class_id] ||
+                            studioData?.has_pending_draft_by_class?.[String(cls.class_id)]
+                          );
+
                           return (
                             <Card
                               key={cls.class_id}
@@ -1516,6 +1584,15 @@ export default function AdminSubjectLoadStudio() {
                                   >
                                     {isSectionPublished ? "Published" : "Draft"}
                                   </Badge>
+                                  {hasPendingDraft && (
+                                    <Badge
+                                      size="sm"
+                                      variant="default"
+                                      className="bg-amber-100 text-amber-900 border-amber-500 font-bold"
+                                    >
+                                      Draft in Progress
+                                    </Badge>
+                                  )}
                                   <Badge
                                     size="sm"
                                     variant="solid"
@@ -1537,17 +1614,48 @@ export default function AdminSubjectLoadStudio() {
                                   })()}
                                 </div>
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  {isSectionPublished ? (
+                                  {isSectionPublished && !hasPendingDraft ? (
                                     <Button
                                       size="sm"
                                       variant="outline"
                                       disabled={isSaving}
-                                      onClick={() => void handleSave("draft", "section", cls.class_id)}
-                                      title="Revert this section to draft status to allow edits"
+                                      onClick={() => void handleUnlockSection(cls.class_id)}
+                                      title="Unlock this section to create an isolated working draft without disrupting live student/teacher portal access"
                                     >
                                       <Unlock className="size-3.5 mr-1" />
                                       Unlock Section
                                     </Button>
+                                  ) : hasPendingDraft ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={isSaving}
+                                        onClick={() => void handleDiscardDraft(cls.class_id)}
+                                        title="Discard all unpublished draft edits and restore published baseline"
+                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      >
+                                        <RotateCcw className="size-3.5 mr-1" />
+                                        Discard Draft
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant={isPublishSectionDisabled ? "default" : "outline"}
+                                        disabled={isSaving}
+                                        className="gap-2"
+                                        onClick={handlePublishSectionClick}
+                                        title={
+                                          sectionUnassignedCount > 0
+                                            ? `Assign all ${sectionUnassignedCount} unassigned teacher(s) in this section before publishing`
+                                            : sectionHasErrors
+                                              ? `Fix schedule conflicts in this section before publishing: ${sectionErrors[0]?.message || ""}`
+                                              : "Publish draft changes to live schedule"
+                                        }
+                                      >
+                                        <Send className="size-3.5" />
+                                        Publish Draft
+                                      </Button>
+                                    </div>
                                   ) : (
                                     <Button
                                       size="sm"
@@ -1749,6 +1857,57 @@ export default function AdminSubjectLoadStudio() {
                                                 <Badge variant="default" size="sm">
                                                   {sub.subject_codename || `SUB-${sub.subject_id}`}
                                                 </Badge>
+                                                {(() => {
+                                                  const hasLive = subjectSlots.some((s) => s.has_live_data);
+                                                  const deps = subjectSlots.find((s) => s.dependencies)?.dependencies;
+                                                  const eduTotal = deps?.educational_total ?? (hasLive ? (deps?.total ?? 0) : 0);
+                                                  const adminTotal = deps?.administrative_total ?? 0;
+
+                                                  if (eduTotal === 0 && adminTotal === 0) return null;
+
+                                                  const eduParts = deps
+                                                    ? [
+                                                        deps.classwork_assignments ? `${deps.classwork_assignments} classwork` : null,
+                                                        deps.student_submissions ? `${deps.student_submissions} submissions` : null,
+                                                        deps.assessment_scores ? `${deps.assessment_scores} scores` : null,
+                                                        deps.period_grades ? `${deps.period_grades} grades` : null,
+                                                        deps.attendance_records ? `${deps.attendance_records} attendance` : null,
+                                                        deps.lesson_assignments ? `${deps.lesson_assignments} lessons` : null,
+                                                      ]
+                                                        .filter(Boolean)
+                                                        .join(", ")
+                                                    : "";
+
+                                                  const adminParts = deps
+                                                    ? [
+                                                        deps.substitutions ? `${deps.substitutions} substitutions` : null,
+                                                        deps.reassignment_logs ? `${deps.reassignment_logs} reassignment logs` : null,
+                                                      ]
+                                                        .filter(Boolean)
+                                                        .join(", ")
+                                                    : "";
+
+                                                  const tooltip = [
+                                                    eduTotal > 0 ? `Student/academic records: ${eduParts || `${eduTotal} records`}. Subject cannot be deleted.` : null,
+                                                    adminTotal > 0 ? `Historical administrative records: ${adminParts || `${adminTotal} logs`}.` : null,
+                                                  ].filter(Boolean).join(" | ");
+
+                                                  return (
+                                                    <Badge
+                                                      variant="outline"
+                                                      size="sm"
+                                                      className={
+                                                        eduTotal > 0
+                                                          ? "bg-blue-50 text-blue-900 border-blue-300 font-bold inline-flex items-center gap-1"
+                                                          : "bg-slate-50 text-slate-700 border-slate-300 font-medium inline-flex items-center gap-1"
+                                                      }
+                                                      title={tooltip}
+                                                    >
+                                                      <ShieldCheck className={`size-3 ${eduTotal > 0 ? "text-blue-600" : "text-slate-500"}`} />
+                                                      {eduTotal > 0 ? `${eduTotal} student records` : `${adminTotal} admin records`}
+                                                    </Badge>
+                                                  );
+                                                })()}
                                                 {(() => {
                                                   const matchingOffering = (studioData?.subject_offerings || []).find(
                                                     (so) => so.subject_id === sub.subject_id && so.academic_level_id === cls.academic_level_id

@@ -87,6 +87,13 @@ def prediction_api_context():
     level = AcademicLevel(level_name="Grade 8", grade_level=8)
     db.add_all([year, level])
     db.flush()
+    staff_account = UserAccount(user_id=uuid.uuid4(), email="route-teacher@example.test")
+    staff = AcademicStaff(
+        staff_id="T-ROUTE",
+        first_name="Route",
+        last_name="Teacher",
+        user_id=staff_account.user_id,
+    )
     student = Student(
         student_id=uuid.uuid4(),
         student_lrn="100000000001",
@@ -156,6 +163,8 @@ def prediction_api_context():
         },
     )
     db.add_all([
+        staff_account,
+        staff,
         student,
         other_student,
         source_period,
@@ -178,6 +187,7 @@ def prediction_api_context():
             "db": db,
             "identity": identity,
             "student": student,
+            "staff": staff,
             "other_student": other_student,
             "class": class_,
             "subject": subject,
@@ -695,9 +705,9 @@ def test_build_features_endpoint_returns_computed_features_and_evidence(predicti
     assert body["ready"] is True
     assert body["features"]["source_period_grade"] == 86.0
     assert body["features"]["written_work_percent"] == 84.0
-    assert body["features"]["performance_task_percent"] == 88.0
-    assert body["features"]["quarterly_assessment_percent"] == 82.0
-    assert body["evidence_summary"]["expected_assessment_count"] == 3
+    assert body["features"]["performance_task_percent"] is None
+    assert body["features"]["quarterly_assessment_percent"] is None
+    assert body["evidence_summary"]["expected_assessment_count"] == 0
 
 
 def test_from_records_preview_returns_insufficient_without_calling_model(prediction_api_context, monkeypatch):

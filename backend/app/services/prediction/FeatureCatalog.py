@@ -22,6 +22,26 @@ class FeatureDefinition:
     availability_semantics: str
 
 
+@dataclass(frozen=True)
+class TeacherFeaturePresentation:
+    display_name: str
+    description: str
+    category: str
+    teacher_visible: bool = True
+
+
+_TEACHER_PRESENTATION = {
+    "assessment_completion_rate": TeacherFeaturePresentation("Activities completed", "Percentage of applicable activities completed by the student.", "ACTIVITY_PROGRESS"),
+    "data_coverage_ratio": TeacherFeaturePresentation("Activities with recorded grades", "Share of applicable activities with a recorded grade.", "ACTIVITY_PROGRESS"),
+    "missing_activity_count": TeacherFeaturePresentation("Missing activities", "Activities established as missing in the saved evidence.", "ACTIVITY_PROGRESS"),
+    "late_submission_count": TeacherFeaturePresentation("Late submissions", "Submissions established as late in the saved evidence.", "ACTIVITY_PROGRESS"),
+    "risk_adjusted_attendance_rate": TeacherFeaturePresentation("Attendance score", "Attendance score for the saved source period.", "ATTENDANCE"),
+    "behavioral_engagement_score": TeacherFeaturePresentation("Learning participation indicator", "Combined participation indicator from available saved evidence.", "PARTICIPATION"),
+    "source_period_grade": TeacherFeaturePresentation("Source period grade", "Recorded or estimated grade for the source period.", "GRADE"),
+    "grade_trend_vs_previous_period": TeacherFeaturePresentation("Grade change since previous period", "Difference from the prior comparable period.", "GRADE"),
+}
+
+
 _GRADE_INPUTS = {
     "grade_level",
     "period_sequence",
@@ -78,6 +98,11 @@ def feature_definition(identifier: str) -> FeatureDefinition | None:
     if canonical in _TRAINING_TARGETS:
         return FeatureDefinition(canonical, TRAINING_TARGET, "NUMERIC", "MODEL_NATIVE", False, "TRAINING_ONLY")
     return None
+
+
+def teacher_feature_presentation(identifier: str) -> TeacherFeaturePresentation | None:
+    """Presentation metadata is deliberately separate from model permissions."""
+    return _TEACHER_PRESENTATION.get(canonicalize_feature_identifier(identifier))
 
 
 def validate_grade_model_feature_schema(feature_columns: list[str]) -> list[str]:

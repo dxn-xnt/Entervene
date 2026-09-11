@@ -81,11 +81,14 @@ def check_and_generate_grade_submission_notifications(
             continue
 
         # Check if teacher has active subject loads in this period
+        from sqlalchemy import func
         loads = (
             db.query(SubjectLoad)
             .filter(
                 SubjectLoad.staff_id == staff.staff_id,
                 SubjectLoad.academic_period_id == period.academic_period_id,
+                func.coalesce(SubjectLoad.is_active_version, True).is_(True),
+                func.coalesce(SubjectLoad.status, "active") != "archived",
             )
             .all()
         )

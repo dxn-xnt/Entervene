@@ -354,37 +354,33 @@ def test_publish_section_isolated_conflicts(db):
     for sl2 in sl2_loads:
         assert sl2.status == "draft"
         assert sl2.is_locked is False
-
-    # Now test unlocking Section 1
-    unlock_payload = {
-        "academic_period_id": period.academic_period_id,
-        "academic_level_id": level.academic_level_id,
-        "action": "draft",
-        "publish_scope": "section",
-        "target_class_id": cls1.class_id,
-        "loads": [
-            {
-                "subject_load_id": sl1.subject_load_id,
-                "class_id": cls1.class_id,
-                "subject_id": sub1.subject_id,
-                "staff_id": staff1.staff_id,
-                "academic_period_id": period.academic_period_id,
-                "start_time": "08:00",
-                "end_time": "09:00",
-                "days_of_week": ["MON", "TUE", "WED", "THU", "FRI"],
-                "status": "published",
-            }
-        ],
-    }
+    # Now test unlocking Section 1 via staged /unlock-section
     unlock_res = client.post(
-        "/api/v1/subject-loads/batch-save",
-        json=unlock_payload,
+        "/api/v1/subject-loads/unlock-section",
+        json={
+            "academic_period_id": period.academic_period_id,
+            "class_id": cls1.class_id,
+        },
         headers={"Authorization": f"Bearer {token}"},
     )
     assert unlock_res.status_code == 200
+    unlock_body = unlock_res.json()
+    assert unlock_body["has_pending_draft"] is True
+    assert unlock_body["section_revision"] == 2
 
+    # Baseline sl1 remains published to preserve student/teacher portal access
     db.refresh(sl1)
-    assert sl1.status == "draft"
-    assert sl1.is_locked is False
+    assert sl1.status == "published"
+    assert sl1.is_active_version is True
+
+    # Isolated working draft exists for admin editing
+    draft_load = db.query(SubjectLoad).filter(
+        SubjectLoad.class_id == cls1.class_id,
+        SubjectLoad.status == "draft",
+    ).first()
+    assert draft_load is not None
+    assert draft_load.status == "draft"
+    assert draft_load.is_locked is False
+    assert draft_load.section_revision == 2
 
 

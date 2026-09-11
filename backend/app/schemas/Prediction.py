@@ -28,6 +28,7 @@ class PredictionPersistRequest(PredictionFeatureInput):
     target_period_id: int
     model_name: str = DEFAULT_MODEL_NAME
     replace_existing: bool = False
+    generation_request_id: str | None = Field(default=None, max_length=100)
 
 
 class PredictionPreviewResponse(BaseModel):
@@ -220,6 +221,11 @@ class PredictionDetailResponse(BaseModel):
     generated_at: datetime | None = None
     model_version: PredictionModelVersionRead | None = None
     features: list[PredictionFeatureResponse] = Field(default_factory=list)
+    prediction_status: str = "LEGACY"
+    model_execution: str = "UNKNOWN"
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
+    interpretations: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
     causes: list[PredictionCauseRead] = Field(default_factory=list)
     recommended_actions: list[PredictionRecommendedActionRead] = Field(default_factory=list)
     outcome: PredictionOutcomeRead | None = None
@@ -286,6 +292,7 @@ class PredictionFromRecordsPreviewRequest(PredictionBuildFeaturesRequest):
 class PredictionFromRecordsPersistRequest(PredictionFromRecordsPreviewRequest):
     target_period_id: int
     replace_existing: bool = False
+    generation_request_id: str | None = Field(default=None, max_length=100)
 
 
 class PredictionFromRecordsResponse(BaseModel):

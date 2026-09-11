@@ -21,12 +21,14 @@ import {
 } from "@/lib/prediction-api";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 export default function GradePredictions() {
   const { role } = useAuth();
   const baseRole = role === "admin" ? "admin" : "teacher";
   const { grade } = useParams<{ grade: string }>();
   const navigate = useNavigate();
+  const { selectedPeriodId } = useAcademicPeriod();
 
   const numericGrade = grade ? Number(grade) : undefined;
 
@@ -39,13 +41,12 @@ export default function GradePredictions() {
   // Filter values
   const [classId, setClassId] = useState<number | undefined>();
   const [subjectId, setSubjectId] = useState<number | undefined>();
-  const [academicPeriodId, setAcademicPeriodId] = useState<number | undefined>();
   const [riskLevel, setRiskLevel] = useState<string | undefined>();
   const [search, setSearch] = useState("");
 
   // Sorting & pagination
-  const [sortBy, setSortBy] = useState<string | undefined>("risk_score");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [sortBy, setSortBy] = useState<string | undefined>("student_name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [offset, setOffset] = useState(0);
   const limit = 10;
 
@@ -59,10 +60,10 @@ export default function GradePredictions() {
   }, []);
 
   useEffect(() => {
-    fetchDashboardGradeSummaries({ academic_period_id: academicPeriodId })
+    fetchDashboardGradeSummaries({ academic_period_id: selectedPeriodId ?? undefined })
       .then(setGradeSummaries)
       .catch(console.error);
-  }, [academicPeriodId]);
+  }, [selectedPeriodId]);
 
   // ── Fetch data on filter/sort/page change ──
   const loadData = useCallback(async () => {
@@ -72,7 +73,7 @@ export default function GradePredictions() {
         grade_level: numericGrade,
         class_id: classId,
         subject_id: subjectId,
-        academic_period_id: academicPeriodId,
+        academic_period_id: selectedPeriodId ?? undefined,
         risk_level: riskLevel,
         search: search.trim() || undefined,
         sort_by: sortBy,
@@ -87,7 +88,7 @@ export default function GradePredictions() {
     } finally {
       setLoading(false);
     }
-  }, [numericGrade, classId, subjectId, academicPeriodId, riskLevel, search, sortBy, sortOrder, offset]);
+  }, [numericGrade, classId, subjectId, selectedPeriodId, riskLevel, search, sortBy, sortOrder, offset]);
 
   useEffect(() => {
     loadData();
@@ -119,7 +120,6 @@ export default function GradePredictions() {
   const handleClearAll = () => {
     setClassId(undefined);
     setSubjectId(undefined);
-    setAcademicPeriodId(undefined);
     setRiskLevel(undefined);
     setSearch("");
     setOffset(0);
@@ -169,7 +169,7 @@ export default function GradePredictions() {
                     gradeLevel={numericGrade}
                     classId={classId}
                     subjectId={subjectId}
-                    academicPeriodId={academicPeriodId}
+                    academicPeriodId={selectedPeriodId ?? undefined}
                     riskLevel={riskLevel}
                     search={search}
                     hideGradeFilter
@@ -181,10 +181,7 @@ export default function GradePredictions() {
                       setSubjectId(v);
                       setOffset(0);
                     }}
-                    onPeriodChange={(v) => {
-                      setAcademicPeriodId(v);
-                      setOffset(0);
-                    }}
+                    hidePeriodFilter
                     onRiskChange={(v) => {
                       setRiskLevel(v);
                       setOffset(0);

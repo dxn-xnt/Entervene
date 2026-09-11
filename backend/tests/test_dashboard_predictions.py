@@ -279,6 +279,17 @@ class TestDashboardAtRisk:
         assert len(data["items"]) == 4
         assert "risk_summary" in data
 
+    def test_defaults_to_alphabetical_student_roster_order(self, dashboard_context):
+        client = dashboard_context["client"]
+        data = client.get("/api/v1/predictions/dashboard/at-risk").json()
+
+        assert [item["student_name"] for item in data["items"]] == [
+            "Dela Cruz, Juan",
+            "Dela Cruz, Juan",
+            "Penduko, Pedro",
+            "Santos, Maria",
+        ]
+
     def test_risk_summary_counts(self, dashboard_context):
         client = dashboard_context["client"]
         r = client.get("/api/v1/predictions/dashboard/at-risk")

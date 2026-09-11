@@ -758,12 +758,35 @@ def classwork_assignment_detail(assignment_id: int, current_user: dict, db: Sess
 
 
 def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None = None) -> list[dict]:
+    from app.models.academic.TeacherSubstitution import TeacherSubstitution
+    from app.services.academic.SubstitutionService import SubstitutionService
+    from sqlalchemy import or_
+    today_date = SubstitutionService.get_academic_date()
+    active_subs = (
+        db.query(TeacherSubstitution.subject_load_id)
+        .filter(
+            TeacherSubstitution.substitute_staff_id == staff_id,
+            TeacherSubstitution.status == "active",
+            or_(TeacherSubstitution.end_date.is_(None), TeacherSubstitution.end_date >= today_date),
+        )
+        .all()
+    )
+    sub_load_ids = [s[0] for s in active_subs]
+
+    load_filter = SubjectLoad.staff_id == staff_id
+    if sub_load_ids:
+        load_filter = or_(SubjectLoad.staff_id == staff_id, SubjectLoad.subject_load_id.in_(sub_load_ids))
+
     query = (
         db.query(SubjectLoad, Subject, Class, AcademicLevel)
         .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
         .join(Class, Class.class_id == SubjectLoad.class_id)
         .outerjoin(AcademicLevel, AcademicLevel.academic_level_id == Class.academic_level_id)
-        .filter(SubjectLoad.staff_id == staff_id, SubjectLoad.status.in_(["active", "published"]))
+        .filter(
+            load_filter,
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(["active", "published"]),
+        )
     )
     if academic_period_id is not None:
         query = query.filter(SubjectLoad.academic_period_id == academic_period_id)
@@ -789,14 +812,30 @@ def teacher_assignments_for_class_subject(
     staff_id: str,
     db: Session,
 ) -> list[ClassworkAssignmentResponse]:
-    load = db.query(SubjectLoad).filter(
-        SubjectLoad.staff_id == staff_id,
-        SubjectLoad.class_id == class_id,
-        SubjectLoad.subject_id == subject_id,
-        SubjectLoad.status.in_(["active", "published"]),
-    ).first()
-    if not load:
+    active_load = (
+        db.query(SubjectLoad)
+        .filter(
+            SubjectLoad.class_id == class_id,
+            SubjectLoad.subject_id == subject_id,
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(["published", "active"]),
+        )
+        .first()
+    )
+    if not active_load:
+        active_load = db.query(SubjectLoad).filter(
+            SubjectLoad.staff_id == staff_id,
+            SubjectLoad.class_id == class_id,
+            SubjectLoad.subject_id == subject_id,
+            SubjectLoad.status.in_(["active", "published"]),
+        ).first()
+
+    if not active_load:
         raise HTTPException(status_code=403, detail="Not assigned to this class/subject")
+
+    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+    if not SubjectLoadAuthorizationService.can_view(db, staff_id, class_id, subject_id, active_load.academic_period_id):
+        raise HTTPException(status_code=403, detail="Not authorized to view this class/subject")
 
     rows = (
         db.query(ClassworkAssignment, Classwork, Class)
@@ -805,7 +844,6 @@ def teacher_assignments_for_class_subject(
         .filter(
             ClassworkAssignment.class_id == class_id,
             Classwork.subject_id == subject_id,
-            Classwork.created_by_staff_id == staff_id,
             Classwork.is_archived == False,
         )
         .order_by(ClassworkAssignment.created_at.desc())

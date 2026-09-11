@@ -289,6 +289,20 @@ def _classwork_metrics(
         "late_state": "UNRESOLVED" if lateness_unresolved else ("AVAILABLE" if due_total else "NO_DUE_DATES"),
         "on_time_rate": (on_time / due_total) if due_total and not lateness_unresolved else None,
         "components_present": sorted(components_present),
+        "assignment_observations": [
+            {
+                "assignment_id": assignment.classwork_assignment_id,
+                "classwork_id": classwork.classwork_id,
+                "due_date": assignment.due_date.isoformat() if assignment.due_date else None,
+                "total_points": _to_float(classwork.total_points),
+                "selected_submission_id": submission.submission_id if submission else None,
+                "selected_submission_status": submission.status if submission else None,
+                "selected_submission_grade": _to_float(submission.grade) if submission and submission.grade is not None else None,
+                "selected_submission_at": submission.submitted_at.isoformat() if submission and submission.submitted_at else None,
+                "selection_state": "UNRESOLVED" if submission_unresolved else "AVAILABLE",
+            }
+            for assignment, classwork, submission, submission_unresolved in rows
+        ],
     }
 
 
@@ -564,6 +578,17 @@ def _assessment_component_observations(
         {
             "assessment_observation_count": recorded,
             "assessment_item_count": len(rows),
+            "assessment_observations": [
+                {
+                    "assessment_id": assessment.assessment_id,
+                    "score_id": score.score_id if score is not None else None,
+                    "component_type": assessment.component_type,
+                    "max_score": _to_float(assessment.max_score),
+                    "score_status": score.score_status if score is not None else None,
+                    "raw_score": _to_float(score.raw_score) if score is not None and score.raw_score is not None else None,
+                }
+                for assessment, score in rows
+            ],
             "components_present": sorted({
                 assessment.component_type for assessment, _ in rows
                 if assessment.component_type in COMPONENT_FEATURES
@@ -676,8 +701,39 @@ def build_prediction_features_from_records(
     evidence_summary["behavioral_engagement_score"] = behavioral_score
     evidence_summary["behavioral_score_cold_start"] = behavioral_cold_start
     evidence_summary["late_submission_count"] = late_count
+    evidence_summary["source_record_ids"] = {
+        "risk_adjusted_attendance_rate": [item["attendance_id"] for item in att_summary.get("records", [])],
+        "source_period_grade": [],
+        "assessment_completion_rate": [item["assignment_id"] for item in classwork_summary["assignment_observations"]],
+        "data_coverage_ratio": [item["assignment_id"] for item in classwork_summary["assignment_observations"]],
+    }
+    evidence_summary["captured_source_values"] = {
+        "risk_adjusted_attendance_rate": att_summary.get("records", []),
+        "assessment_completion_rate": classwork_summary["assignment_observations"],
+        "data_coverage_ratio": classwork_summary["assignment_observations"],
+    }
+    participation_inputs = {
+        "attendance": risk_adjusted_attendance_rate,
+        "on_time": on_time_submission_rate,
+        "completion": completion_rate,
+    }
+    configured_weights = {"attendance": 0.40, "on_time": 0.35, "completion": 0.25}
+    available_weights = {key: configured_weights[key] for key, value in participation_inputs.items() if value is not None}
+    total_weight = sum(available_weights.values())
+    evidence_summary["learning_participation"] = {
+        "formula_version": "behavioral-engagement-v1",
+        "component_values": participation_inputs,
+        "component_states": {key: "AVAILABLE" if value is not None else "NO_RECORDED_DATA" for key, value in participation_inputs.items()},
+        "configured_weights": configured_weights,
+        "effective_normalized_weights": {key: value / total_weight for key, value in available_weights.items()} if total_weight else {},
+        "resulting_score": behavioral_score,
+    }
+    evidence_summary["source_record_ids"]["assessment_observations"] = [
+        item["assessment_id"] for item in assessment_summary.get("assessment_observations", [])
+    ]
 
     period_grade = _period_grade(db, student_id, class_id, subject_id, source_period_id)
+    evidence_summary["source_record_ids"]["source_period_grade"] = [period_grade.period_grade_id] if period_grade is not None else []
     source_period_grade, grade_provenance, grade_field = _select_grade_with_provenance(period_grade)
     if period_grade is not None:
         for column in ("written_work_percent", "performance_task_percent", "quarterly_assessment_percent"):
