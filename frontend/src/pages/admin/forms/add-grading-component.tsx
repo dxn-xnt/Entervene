@@ -119,7 +119,6 @@ export default function AddGradingComponentModal({
   const [error, setError] = React.useState<string | null>(null);
 
   const isLocked = template?.is_locked ?? false;
-  const lockReason = template?.lock_reason || "Template weights cannot be modified after the term has started. Please create a new template.";
 
   React.useEffect(() => {
     setForm(initialForm(options, template));
@@ -358,7 +357,7 @@ export default function AddGradingComponentModal({
           </div>
 
           <div className="flex flex-col gap-2">
-            {form.components.map((component, index) => (
+            {form.components.map((component) => (
               <div key={component.local_id} className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_120px_auto]">
                 <Input
                   value={component.component_name}

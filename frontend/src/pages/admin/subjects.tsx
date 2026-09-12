@@ -34,7 +34,6 @@ import {
   OfferingRow,
   SubjectGradeSection,
   SubjectCatalogCard,
-  SubjectRow,
   defaultPathwayForGrade,
   downloadBlob,
   friendlyErrorMessage,
