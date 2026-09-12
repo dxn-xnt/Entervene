@@ -4,18 +4,25 @@ import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { useParams } from "react-router-dom";
-import { Ellipsis, Plus, Search, Download, Send, CheckCircle2, AlertTriangle, Loader2, RefreshCw, X } from "lucide-react";
+import { Ellipsis, Plus, Search, Download, Send, CheckCircle2, AlertTriangle, Loader2, RefreshCw, X, ChevronDown, FileSpreadsheet } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Card } from "@/components/retroui/Card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import ViewGradeScoreModal from "./forms/view-grade-scores";
 import AddClassworkScoreModal from "./forms/add-classwork-score";
 import EnterManualScoresModal from "./forms/enter-manual-scores";
 import {
   getTeacherGradebook,
   exportTeacherClassRecord,
+  exportTeacherClassRecordWorkbook,
   getTeacherAvailablePeriods,
   getTeacherTermSummary,
   sendStudentGradeToAdviser,
@@ -335,7 +342,33 @@ const TeacherGradeView = () => {
   const displaySectionName = gradebook?.scope?.section_name ?? termSummary?.scope?.section_name ?? section ?? "Section";
   const displaySubjectName = gradebook?.scope?.subject_name ?? termSummary?.scope?.subject_name ?? subject ?? "Subject";
 
-  const handleExport = async () => {
+  const handleExportWorkbook = async () => {
+    if (!section || !subject) {
+      setToastMessage({ type: "error", text: "Please select a valid section and subject before exporting." });
+      return;
+    }
+
+    try {
+      setIsExporting(true);
+      const { blob, filename } = await exportTeacherClassRecordWorkbook(section, subject);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.setAttribute("download", filename);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setToastMessage({ type: "success", text: "Full Year Class Record Workbook (.xlsx) exported successfully." });
+    } catch (err: any) {
+      console.error("Export workbook error:", err);
+      setToastMessage({ type: "error", text: err?.message || "Failed to export class record workbook. Please try again." });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportCurrent = async () => {
     if (activeTab === "summary") {
       if (!termSummary) return;
       const headers = ["Gender", "Learner's Name", ...periods.map((p) => p.period_name), "Final Grade", "Remarks"];

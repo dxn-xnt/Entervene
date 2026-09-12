@@ -9,22 +9,42 @@ import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.models.academic.AcademicLevel import AcademicLevel
+from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.GradingTemplate import GradingTemplate
 from app.models.academic.GradingTemplateComponent import GradingTemplateComponent
+from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.people.AcademicStaff import AcademicStaff
+from app.models.people.Student import Student
 from app.models.settings.Setting import Setting
+from app.schemas.StudentRecord import (
+    GradebookCategoryHeaderGroup,
+    GradingWeightsInfo,
+    StudentGradebookResponse,
+    StudentGradebookRow,
+    StudentRecordScope,
+    TermGradeSummaryResponse,
+    TermGradeSummaryRow,
+    TermGradeSummaryScope,
+    TermPeriodInfo,
+)
+from app.services.academic.SubstitutionService import _staff_full_name
 from app.services.classes.ClassQueryService import _student_gender_group
 from app.services.student_record.StudentRecordService import (
     _deped_transmuted,
     _match_component_category,
+    _student_name,
     get_performance_descriptor,
     resolve_subject_grading_weights,
     teacher_student_gradebook,
+    teacher_term_grade_summary,
 )
 
 
@@ -117,7 +137,12 @@ def _style_range(
                 cell.alignment = alignment
 
 
-def _get_school_metadata(db: Session, scope: Any) -> dict[str, str]:
+def _get_school_metadata(
+    db: Session,
+    scope: Any,
+    staff_id: str | None = None,
+    class_obj: Class | None = None,
+) -> dict[str, str]:
     """
     Retrieve real school settings if present.
     If not configured in Setting table, return empty strings ("") rather than
@@ -125,8 +150,8 @@ def _get_school_metadata(db: Session, scope: Any) -> dict[str, str]:
     """
     settings_rows = {s.key: (s.value or "").strip() for s in db.query(Setting).all()}
 
-    # School Name: setting school_name -> app_name -> fallback empty
-    school_name = settings_rows.get("school_name") or settings_rows.get("app_name") or ""
+    # School Name: setting school_name -> fallback empty (never app_name)
+    school_name = settings_rows.get("school_name") or ""
 
     # Region & Division: Only use if actually configured in settings
     region = settings_rows.get("school_region") or settings_rows.get("region") or settings_rows.get("deped_region") or ""
@@ -141,14 +166,32 @@ def _get_school_metadata(db: Session, scope: Any) -> dict[str, str]:
     subject_name = (getattr(scope, "subject_name", None) or "").strip()
     period_name = (getattr(scope, "period_name", None) or "").strip()
 
+    # Grade & Section (DepEd format: "Grade {level} - {section_name}")
+    grade_and_section = section_name
+    if class_obj and class_obj.academic_level_id:
+        level = db.get(AcademicLevel, class_obj.academic_level_id)
+        if level:
+            grade_label = f"Grade {level.grade_level}" if level.grade_level else level.level_name
+            if section_name:
+                if section_name.lower().startswith("grade"):
+                    grade_and_section = section_name
+                else:
+                    grade_and_section = f"{grade_label} - {section_name}"
+            else:
+                grade_and_section = grade_label
+
     # Teacher Name
     teacher_name = ""
     if hasattr(scope, "original_teacher_name") and scope.original_teacher_name:
         teacher_name = scope.original_teacher_name
+    elif staff_id:
+        staff = db.get(AcademicStaff, staff_id)
+        if staff:
+            teacher_name = _staff_full_name(staff)
     elif hasattr(scope, "acting_staff_id") and scope.acting_staff_id:
         staff = db.get(AcademicStaff, scope.acting_staff_id)
         if staff:
-            teacher_name = f"{staff.first_name} {staff.last_name}".strip()
+            teacher_name = _staff_full_name(staff)
 
     return {
         "school_name": school_name,
@@ -157,6 +200,7 @@ def _get_school_metadata(db: Session, scope: Any) -> dict[str, str]:
         "school_id": school_id,
         "school_year": school_year,
         "section_name": section_name,
+        "grade_and_section": grade_and_section,
         "subject_name": subject_name,
         "period_name": period_name,
         "teacher_name": teacher_name,
@@ -191,20 +235,101 @@ def generate_class_record_sheet(
             )
             .first()
         )
+        if not load:
+            # Fallback to any active/published load for this class/subject in the academic year
+            load = (
+                db.query(SubjectLoad)
+                .filter(
+                    SubjectLoad.class_id == class_id,
+                    SubjectLoad.subject_id == subject_id,
+                    SubjectLoad.status.in_(["active", "published"]),
+                )
+                .first()
+            )
         if load and load.staff_id:
             effective_staff_id = load.staff_id
 
     # 2. Fetch gradebook data from StudentRecordService
-    gradebook = teacher_student_gradebook(
-        db=db,
-        staff_id=effective_staff_id or "",
-        class_id=class_id,
-        subject_id=subject_id,
-        academic_period_id=academic_period_id,
-    )
+    class_obj = db.get(Class, class_id)
+    subj_obj = db.get(Subject, subject_id)
+    period_obj = db.get(AcademicPeriod, academic_period_id)
+
+    try:
+        gradebook = teacher_student_gradebook(
+            db=db,
+            staff_id=effective_staff_id or "",
+            class_id=class_id,
+            subject_id=subject_id,
+            academic_period_id=academic_period_id,
+        )
+    except HTTPException:
+        # Pre-built unstarted term safeguard:
+        # If SubjectLoad or gradebook is not found for this academic period,
+        # construct an empty gradebook layout using the enrolled class roster.
+        year_id = getattr(class_obj, "academic_year_id", None) or getattr(period_obj, "academic_year_id", None)
+        year_obj = db.get(AcademicYear, year_id) if year_id else None
+
+        enrolled_students = (
+            db.query(Student)
+            .join(StudentClass, StudentClass.student_id == Student.student_id)
+            .filter(
+                StudentClass.class_id == class_id,
+                StudentClass.enrollment_status == "enrolled",
+            )
+            .order_by(Student.last_name.asc(), Student.first_name.asc())
+            .all()
+        )
+
+        student_rows = [
+            StudentGradebookRow(
+                student_id=str(s.student_id),
+                name=_student_name(s),
+                gender=s.gender,
+                writtenWork=[],
+                performanceTask=[],
+                quarterlyAssessment=[],
+                exams=[],
+                total=None,
+                initial_grade=None,
+                transmuted_grade=None,
+                performance_descriptor=None,
+            )
+            for s in enrolled_students
+        ]
+
+        gradebook = StudentGradebookResponse(
+            scope=StudentRecordScope(
+                class_id=class_id,
+                subject_id=subject_id,
+                academic_year_id=year_id or 0,
+                academic_period_id=academic_period_id,
+                section_name=getattr(class_obj, "section_name", "") or "Section",
+                subject_name=getattr(subj_obj, "subject_name", "") or "Subject",
+                period_name=getattr(period_obj, "period_name", "") or (sheet_title or "Term"),
+                year_label=getattr(year_obj, "year_label", "") or "SY",
+            ),
+            grading_weights=GradingWeightsInfo(
+                template_name="Default",
+                ww_weight=0.4,
+                pt_weight=0.4,
+                exams_weight=0.2,
+                ww_percentage=40,
+                pt_percentage=40,
+                exams_percentage=20,
+            ),
+            classwork=[
+                GradebookCategoryHeaderGroup(
+                    writtenWork=[],
+                    performanceTask=[],
+                    quarterlyAssessment=[],
+                    exams=[],
+                )
+            ],
+            studentGrades=student_rows,
+        )
 
     scope = gradebook.scope
-    meta = _get_school_metadata(db, scope)
+    meta = _get_school_metadata(db, scope, staff_id=effective_staff_id, class_obj=class_obj)
 
     # 3. Create or reuse worksheet
     term_title = sheet_title or meta["period_name"] or "Term"
@@ -343,7 +468,7 @@ def generate_class_record_sheet(
 
     ws.cell(6, mid_label_col).value = "GRADE & SECTION:"
     ws.cell(6, mid_label_col).font = FONT_META_LABEL
-    ws.cell(6, mid_val_col).value = meta["section_name"]
+    ws.cell(6, mid_val_col).value = meta["grade_and_section"]
     ws.cell(6, mid_val_col).font = FONT_META_VAL
 
     ws.cell(7, mid_label_col).value = "TEACHER:"
@@ -652,6 +777,371 @@ def export_class_record_single_term(
     term_name = re.sub(r"[^\w\-_.]", "_", ws.title.strip())
 
     filename = f"Class_Record_{sec_name}_{sub_name}_{term_name}.xlsx"
+
+    stream = io.BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+
+    return stream, filename
+
+
+def generate_summary_of_grades_sheet(
+    wb: openpyxl.Workbook,
+    db: Session,
+    class_id: int,
+    subject_id: int,
+    academic_year_id: int | None = None,
+    staff_id: str | None = None,
+    sheet_title: str = "Summary of Grades",
+) -> Worksheet:
+    """
+    Generate an official DepEd Summary of Grades worksheet.
+    Writes static computed values from teacher_term_grade_summary() for each
+    student's term grades, averaged Final Grade, performance descriptor, and remark.
+    """
+    class_obj = db.get(Class, class_id)
+    subj_obj = db.get(Subject, subject_id)
+    ay_id = academic_year_id or getattr(class_obj, "academic_year_id", None)
+
+    # 1. Resolve teacher staff_id
+    effective_staff_id = staff_id
+    if not effective_staff_id:
+        load = (
+            db.query(SubjectLoad)
+            .filter(
+                SubjectLoad.class_id == class_id,
+                SubjectLoad.subject_id == subject_id,
+                SubjectLoad.status.in_(["active", "published"]),
+            )
+            .first()
+        )
+        if load and load.staff_id:
+            effective_staff_id = load.staff_id
+
+    # 2. Fetch summary data from StudentRecordService
+    try:
+        summary = teacher_term_grade_summary(
+            db=db,
+            staff_id=effective_staff_id or "",
+            class_id=class_id,
+            subject_id=subject_id,
+        )
+    except HTTPException:
+        # Fallback if no periods or loads: construct empty summary from periods and roster
+        periods_in_year = (
+            db.query(AcademicPeriod)
+            .filter(AcademicPeriod.academic_year_id == ay_id)
+            .order_by(AcademicPeriod.period_sequence.asc(), AcademicPeriod.start_date.asc())
+            .all()
+        )
+        year_obj = db.get(AcademicYear, ay_id) if ay_id else None
+        enrolled_students = (
+            db.query(Student)
+            .join(StudentClass, StudentClass.student_id == Student.student_id)
+            .filter(
+                StudentClass.class_id == class_id,
+                StudentClass.enrollment_status == "enrolled",
+            )
+            .order_by(Student.last_name.asc(), Student.first_name.asc())
+            .all()
+        )
+        summary = TermGradeSummaryResponse(
+            scope=TermGradeSummaryScope(
+                class_id=class_id,
+                subject_id=subject_id,
+                academic_year_id=ay_id or 0,
+                section_name=getattr(class_obj, "section_name", "") or "Section",
+                subject_name=getattr(subj_obj, "subject_name", "") or "Subject",
+                year_label=getattr(year_obj, "year_label", "") or "SY",
+            ),
+            periods=[
+                TermPeriodInfo(
+                    academic_period_id=p.academic_period_id,
+                    period_name=p.period_name,
+                    period_sequence=p.period_sequence,
+                )
+                for p in periods_in_year
+            ],
+            students=[
+                TermGradeSummaryRow(
+                    student_id=str(s.student_id),
+                    name=_student_name(s),
+                    gender=s.gender,
+                    term_grades={},
+                    final_grade=None,
+                    remark=None,
+                    performance_descriptor=None,
+                )
+                for s in enrolled_students
+            ],
+            passing_threshold=75.0,
+        )
+
+    # Ensure all configured periods for the academic year are included in summary.periods
+    configured_periods = (
+        db.query(AcademicPeriod)
+        .filter(AcademicPeriod.academic_year_id == ay_id)
+        .order_by(AcademicPeriod.period_sequence.asc(), AcademicPeriod.start_date.asc())
+        .all()
+    )
+    if configured_periods:
+        existing_period_ids = {p.academic_period_id for p in summary.periods}
+        for cp in configured_periods:
+            if cp.academic_period_id not in existing_period_ids:
+                summary.periods.append(
+                    TermPeriodInfo(
+                        academic_period_id=cp.academic_period_id,
+                        period_name=cp.period_name,
+                        period_sequence=cp.period_sequence or (len(summary.periods) + 1),
+                    )
+                )
+        summary.periods.sort(key=lambda p: (p.period_sequence or 0))
+
+    # 3. Create worksheet
+    ws = wb.create_sheet(title=sheet_title)
+    ws.views.sheetView[0].showGridLines = True
+
+    # 4. School Metadata
+    meta = _get_school_metadata(db, summary.scope, staff_id=effective_staff_id, class_obj=class_obj)
+
+    # 5. Header Block (Rows 1 to 8)
+    ws.cell(1, 1).value = "Republic of the Philippines"
+    ws.cell(1, 1).font = FONT_HEADER_NOTE
+
+    ws.cell(2, 1).value = "Department of Education"
+    ws.cell(2, 1).font = FONT_SUBTITLE
+
+    ws.cell(3, 1).value = "SUMMARY OF GRADES"
+    ws.cell(3, 1).font = FONT_TITLE
+
+    # Metadata Left Column
+    ws.cell(5, 1).value = "REGION:"
+    ws.cell(5, 1).font = FONT_META_LABEL
+    ws.cell(5, 2).value = meta["region"]
+    ws.cell(5, 2).font = FONT_META_VAL
+
+    ws.cell(6, 1).value = "DIVISION:"
+    ws.cell(6, 1).font = FONT_META_LABEL
+    ws.cell(6, 2).value = meta["division"]
+    ws.cell(6, 2).font = FONT_META_VAL
+
+    ws.cell(7, 1).value = "SCHOOL NAME:"
+    ws.cell(7, 1).font = FONT_META_LABEL
+    ws.cell(7, 2).value = meta["school_name"]
+    ws.cell(7, 2).font = FONT_META_VAL
+
+    ws.cell(8, 1).value = "SCHOOL ID:"
+    ws.cell(8, 1).font = FONT_META_LABEL
+    ws.cell(8, 2).value = meta["school_id"]
+    ws.cell(8, 2).font = FONT_META_VAL
+
+    # Number of period columns
+    num_periods = len(summary.periods)
+    total_cols = 2 + num_periods + 3  # No, Name, [Terms], Final, Descriptor, Remarks
+    mid_label_col = max(5, min(total_cols - 2, 6))
+    mid_val_col = mid_label_col + 1
+
+    ws.cell(5, mid_label_col).value = "SCHOOL YEAR:"
+    ws.cell(5, mid_label_col).font = FONT_META_LABEL
+    ws.cell(5, mid_val_col).value = meta["school_year"]
+    ws.cell(5, mid_val_col).font = FONT_META_VAL
+
+    ws.cell(6, mid_label_col).value = "GRADE & SECTION:"
+    ws.cell(6, mid_label_col).font = FONT_META_LABEL
+    ws.cell(6, mid_val_col).value = meta["grade_and_section"]
+    ws.cell(6, mid_val_col).font = FONT_META_VAL
+
+    ws.cell(7, mid_label_col).value = "TEACHER:"
+    ws.cell(7, mid_label_col).font = FONT_META_LABEL
+    ws.cell(7, mid_val_col).value = meta["teacher_name"]
+    ws.cell(7, mid_val_col).font = FONT_META_VAL
+
+    ws.cell(8, mid_label_col).value = "SUBJECT:"
+    ws.cell(8, mid_label_col).font = FONT_META_LABEL
+    ws.cell(8, mid_val_col).value = meta["subject_name"]
+    ws.cell(8, mid_val_col).font = FONT_META_VAL
+
+    # 6. Table Headers (Rows 10 & 11)
+    # Col 1: NO.
+    ws.merge_cells(start_row=10, start_column=1, end_row=11, end_column=1)
+    ws.cell(10, 1).value = "NO."
+    _style_range(ws, 1, 10, 1, 11, font=FONT_TABLE_HEADER, fill=FILL_BLUE, border=CELL_BORDER, alignment=ALIGN_CENTER)
+
+    # Col 2: LEARNERS' NAMES
+    ws.merge_cells(start_row=10, start_column=2, end_row=11, end_column=2)
+    ws.cell(10, 2).value = "LEARNERS' NAMES"
+    _style_range(ws, 2, 10, 2, 11, font=FONT_TABLE_HEADER, fill=FILL_BLUE, border=CELL_BORDER, alignment=ALIGN_CENTER)
+
+    # Period Columns
+    if num_periods > 0:
+        start_period_col = 3
+        end_period_col = 2 + num_periods
+        ws.merge_cells(start_row=10, start_column=start_period_col, end_row=10, end_column=end_period_col)
+        ws.cell(10, start_period_col).value = "QUARTERLY / TERM GRADES"
+        _style_range(ws, start_period_col, 10, end_period_col, 10, font=FONT_TABLE_HEADER, fill=FILL_GOLD, border=CELL_BORDER, alignment=ALIGN_CENTER)
+
+        for i, period_info in enumerate(summary.periods):
+            col_idx = 3 + i
+            ws.cell(11, col_idx).value = period_info.period_name.upper()
+            ws.cell(11, col_idx).font = FONT_TABLE_HEADER
+            ws.cell(11, col_idx).fill = FILL_GOLD
+            ws.cell(11, col_idx).border = CELL_BORDER
+            ws.cell(11, col_idx).alignment = ALIGN_CENTER
+
+    final_grade_col = 3 + num_periods
+    descriptor_col = final_grade_col + 1
+    remark_col = descriptor_col + 1
+
+    # FINAL GRADE
+    ws.merge_cells(start_row=10, start_column=final_grade_col, end_row=11, end_column=final_grade_col)
+    ws.cell(10, final_grade_col).value = "FINAL GRADE"
+    _style_range(ws, final_grade_col, 10, final_grade_col, 11, font=FONT_TABLE_HEADER, fill=FILL_GOLD, border=CELL_BORDER, alignment=ALIGN_CENTER)
+
+    # DESCRIPTOR
+    ws.merge_cells(start_row=10, start_column=descriptor_col, end_row=11, end_column=descriptor_col)
+    ws.cell(10, descriptor_col).value = "DESCRIPTOR"
+    _style_range(ws, descriptor_col, 10, descriptor_col, 11, font=FONT_TABLE_HEADER, fill=FILL_GOLD, border=CELL_BORDER, alignment=ALIGN_CENTER)
+
+    # REMARKS
+    ws.merge_cells(start_row=10, start_column=remark_col, end_row=11, end_column=remark_col)
+    ws.cell(10, remark_col).value = "REMARKS"
+    _style_range(ws, remark_col, 10, remark_col, 11, font=FONT_TABLE_HEADER, fill=FILL_GOLD, border=CELL_BORDER, alignment=ALIGN_CENTER)
+
+    # 7. Data Rows (starting at Row 12)
+    males = [s for s in summary.students if (s.gender or "").upper() == "MALE"]
+    females = [s for s in summary.students if (s.gender or "").upper() == "FEMALE"]
+    others = [s for s in summary.students if (s.gender or "").upper() not in ("MALE", "FEMALE")]
+    if others:
+        males.extend(others)
+
+    current_row = 12
+
+    def _render_summary_gender_section(label: str, students: list[Any]) -> None:
+        nonlocal current_row
+        ws.cell(current_row, 1).value = ""
+        ws.cell(current_row, 2).value = label
+        _style_range(ws, 1, current_row, total_cols, current_row, font=FONT_GENDER_SECTION, fill=FILL_GENDER, border=CELL_BORDER, alignment=ALIGN_LEFT)
+        current_row += 1
+
+        for idx, student in enumerate(students):
+            row_num = current_row
+            ws.cell(row_num, 1).value = idx + 1
+            ws.cell(row_num, 1).alignment = ALIGN_CENTER
+            ws.cell(row_num, 1).font = FONT_ROW_NUM
+            ws.cell(row_num, 1).border = CELL_BORDER
+
+            ws.cell(row_num, 2).value = student.name
+            ws.cell(row_num, 2).alignment = ALIGN_NAME
+            ws.cell(row_num, 2).font = FONT_ROW_TEXT
+            ws.cell(row_num, 2).border = CELL_BORDER
+
+            # Term grades (write BLANK "" if not entered, NEVER fabricated 0!)
+            for i, period_info in enumerate(summary.periods):
+                col_idx = 3 + i
+                g_val = student.term_grades.get(period_info.academic_period_id)
+                if g_val is not None:
+                    ws.cell(row_num, col_idx).value = float(g_val)
+                    ws.cell(row_num, col_idx).number_format = "0.0"
+                else:
+                    ws.cell(row_num, col_idx).value = ""
+                ws.cell(row_num, col_idx).alignment = ALIGN_CENTER
+                ws.cell(row_num, col_idx).font = FONT_ROW_NUM
+                ws.cell(row_num, col_idx).border = CELL_BORDER
+
+            # Final Grade (write BLANK "" if not entered, NEVER fabricated 0!)
+            if student.final_grade is not None:
+                ws.cell(row_num, final_grade_col).value = float(student.final_grade)
+                ws.cell(row_num, final_grade_col).number_format = "0.0"
+            else:
+                ws.cell(row_num, final_grade_col).value = ""
+            ws.cell(row_num, final_grade_col).alignment = ALIGN_CENTER
+            ws.cell(row_num, final_grade_col).font = FONT_ROW_NUM
+            ws.cell(row_num, final_grade_col).border = CELL_BORDER
+
+            # Descriptor (BLANK "" if None)
+            ws.cell(row_num, descriptor_col).value = student.performance_descriptor or ""
+            ws.cell(row_num, descriptor_col).alignment = ALIGN_CENTER
+            ws.cell(row_num, descriptor_col).font = FONT_ROW_TEXT
+            ws.cell(row_num, descriptor_col).border = CELL_BORDER
+
+            # Remarks (BLANK "" if None)
+            ws.cell(row_num, remark_col).value = student.remark or ""
+            ws.cell(row_num, remark_col).alignment = ALIGN_CENTER
+            ws.cell(row_num, remark_col).font = FONT_ROW_TEXT
+            ws.cell(row_num, remark_col).border = CELL_BORDER
+
+            current_row += 1
+
+    _render_summary_gender_section("MALE", males)
+    _render_summary_gender_section("FEMALE", females)
+
+    # 8. Summary Footer Row
+    ws.cell(current_row, 2).value = (
+        f"TOTAL MALE: {len(males)}   |   TOTAL FEMALE: {len(females)}   |   "
+        f"TOTAL LEARNERS: {len(males) + len(females)}"
+    )
+    _style_range(ws, 1, current_row, total_cols, current_row, font=FONT_SUMMARY, fill=FILL_GRAY, border=CELL_BORDER, alignment=ALIGN_LEFT)
+
+    # 9. Column Width Optimization
+    ws.column_dimensions["A"].width = 6
+    ws.column_dimensions["B"].width = 34
+    for i in range(num_periods):
+        ws.column_dimensions[get_column_letter(3 + i)].width = 12
+    ws.column_dimensions[get_column_letter(final_grade_col)].width = 14
+    ws.column_dimensions[get_column_letter(descriptor_col)].width = 18
+    ws.column_dimensions[get_column_letter(remark_col)].width = 14
+
+    return ws
+
+
+def export_class_record_full_workbook(
+    db: Session,
+    class_id: int,
+    subject_id: int,
+    academic_year_id: int | None = None,
+    staff_id: str | None = None,
+) -> tuple[io.BytesIO, str]:
+    """
+    Generate an in-memory .xlsx multi-tab workbook for all configured terms
+    plus a Summary of Grades sheet.
+    Returns (BytesIO stream, suggested filename).
+    """
+    class_obj = db.get(Class, class_id)
+    subj_obj = db.get(Subject, subject_id)
+    ay_id = academic_year_id or getattr(class_obj, "academic_year_id", None)
+
+    periods = (
+        db.query(AcademicPeriod)
+        .filter(AcademicPeriod.academic_year_id == ay_id)
+        .order_by(AcademicPeriod.period_sequence.asc(), AcademicPeriod.start_date.asc())
+        .all()
+    )
+
+    wb = openpyxl.Workbook()
+
+    for period in periods:
+        generate_class_record_sheet(
+            wb=wb,
+            db=db,
+            class_id=class_id,
+            subject_id=subject_id,
+            academic_period_id=period.academic_period_id,
+            staff_id=staff_id,
+            sheet_title=period.period_name,
+        )
+
+    generate_summary_of_grades_sheet(
+        wb=wb,
+        db=db,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_year_id=ay_id,
+        staff_id=staff_id,
+    )
+
+    sec_name = re.sub(r"[^\w\-_.]", "_", (getattr(class_obj, "section_name", "") or "Section").strip())
+    sub_name = re.sub(r"[^\w\-_.]", "_", (getattr(subj_obj, "subject_name", "") or "Subject").strip())
+    filename = f"Class_Record_{sec_name}_{sub_name}_Full_Year.xlsx"
 
     stream = io.BytesIO()
     wb.save(stream)

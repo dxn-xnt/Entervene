@@ -24,6 +24,7 @@ npx expo start
 #admin
 admin@mnsts.edu.ph
 hash_mnsts_admin_01
+hash_mnsts_admin_01
 
 #teacher
 m.cruz@school.edu.ph

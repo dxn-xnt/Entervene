@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import "./attendance.css";
 
 type StudentInfo = {
   student_id: string;
@@ -654,6 +655,11 @@ export default function TeacherAttendancePage() {
     return { total, present, absent, late, excused, rate };
   }, [studentList]);
 
+  const changeAttendanceTab = (tab: "marking" | "scan" | "summary") => {
+    if (activeTab === "scan" && tab !== "scan") void stopScanner();
+    setActiveTab(tab);
+  };
+
   return (
     <AppLayout>
       <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
@@ -688,13 +694,21 @@ export default function TeacherAttendancePage() {
                   },
                 ]}
                 activeTab={activeTab}
-                onTabChange={(tab) => {
-                  if (activeTab === "scan" && tab !== "scan") {
-                    void stopScanner();
-                  }
-                  setActiveTab(tab as any);
-                }}
+                onTabChange={changeAttendanceTab}
               />
+            </div>
+            <nav aria-label="Attendance views" className="attendance-mobile-tabs md:hidden">
+              {([
+                { id: "marking", label: "Mark", name: "Mark attendance", icon: Users },
+                { id: "scan", label: "Scan QR", name: "QR Scanner", icon: QrCode },
+                { id: "summary", label: "Logs", name: "Attendance summary and logs", icon: BarChart3 },
+              ] as const).map(({ id, label, name, icon: Icon }) => (
+                <button key={id} type="button" aria-label={name} aria-pressed={activeTab === id}
+                  onClick={() => changeAttendanceTab(id)}>
+                  <Icon size={16} aria-hidden="true" />{label}
+                </button>
+              ))}
+            </nav>
             </div>
 
             <div className="border-t-1 border-border -mt-[1px] flex min-w-0 flex-1 flex-col gap-3 px-3 py-4 sm:px-4 md:px-6">
@@ -745,7 +759,7 @@ export default function TeacherAttendancePage() {
                       <Select.Trigger className="w-full min-w-0">
                         <Select.Value placeholder="Select class / subject" />
                       </Select.Trigger>
-                      <Select.Content>
+                      <Select.Content className="attendance-select-options">
                         {advisoryTargets.length > 0 && (
                           <Select.Group>
                             <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
@@ -781,6 +795,7 @@ export default function TeacherAttendancePage() {
                     </Label>
                     <Input
                       type="date"
+                      aria-label="Attendance date"
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
                       className="rounded-none border-black h-10 w-full bg-white text-md font-sans"
@@ -796,6 +811,7 @@ export default function TeacherAttendancePage() {
                       <Search className="w-4 h-4 absolute left-3 top-3 text-gray-500" />
                       <Input
                         type="text"
+                        aria-label="Search students by name or LRN"
                         placeholder="Search name or LRN..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
@@ -945,7 +961,7 @@ export default function TeacherAttendancePage() {
                               </Table.Cell>
 
                               {/* Status Select */}
-                              <Table.Cell className="text-center">
+                              <Table.Cell className="text-center" data-label="Status">
                                 <Select
                                   value={student.status}
                                   onValueChange={(value) =>
@@ -953,6 +969,7 @@ export default function TeacherAttendancePage() {
                                   }
                                 >
                                   <Select.Trigger
+                                    aria-label={`Attendance status for ${student.student_name}`}
                                     className={cn(
                                       "w-36 mx-auto font-semibold border-2 border-black shadow-none",
 
@@ -960,7 +977,7 @@ export default function TeacherAttendancePage() {
                                   >
                                     <Select.Value />
                                   </Select.Trigger>
-                                  <Select.Content className="">
+                                  <Select.Content className="attendance-select-options">
                                     <Select.Group>
                                       <Select.Item value="present">Present</Select.Item>
                                       <Select.Item value="absent">Absent</Select.Item>
@@ -971,9 +988,10 @@ export default function TeacherAttendancePage() {
                                 </Select>
                               </Table.Cell>
 
-                              <Table.Cell className="">
+                              <Table.Cell className="" data-label="Remarks">
                                 <Input
                                   type="text"
+                                  aria-label={`Remarks for ${student.student_name}`}
                                   className="w-full text-sm border-transparent hover:border-gray-300 focus:border-black outline-none bg-transparent transition-colors placeholder:text-gray-400 rounded-none shadow-none focus:shadow-none"
                                   placeholder={
                                     student.status !== "present"
@@ -1024,13 +1042,23 @@ export default function TeacherAttendancePage() {
                     </Table>
                   )}
                 </Card>
-                {/* Quick Bulk Actions & Save Bar */}
+                <div className="attendance-save-bar md:hidden">
+                  <div className="attendance-save-context">
+                    <strong>{selectedTarget?.label || "Select a class"}</strong>
+                    <span>{selectedDate} · {studentList.length} students</span>
+                  </div>
+                  <Button onClick={handleSaveAttendance} disabled={saving || studentList.length === 0}
+                    className="w-full gap-2 shadow-none" aria-live="polite">
+                    {saveSuccess ? <Check size={18} /> : <Save size={18} />}
+                    {saving ? "Saving attendance…" : saveSuccess ? "Attendance saved" : "Save Attendance"}
+                  </Button>
+                </div>
 
               </>
             )}
 
             {/* Scan Mode Tab */}
-            <div className={activeTab === "scan" ? "flex flex-col gap-4" : "hidden"}>
+            <div className={activeTab === "scan" ? "attendance-scanner flex flex-col gap-4" : "hidden"}>
                 {/* Session Context Bar */}
                 <Card className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex flex-col gap-1 min-w-[280px] max-w-md w-full sm:w-auto">
@@ -1041,10 +1069,10 @@ export default function TeacherAttendancePage() {
                       value={selectedTargetKey}
                       onValueChange={(val) => setSelectedTargetKey(val)}
                     >
-                      <Select.Trigger className="w-full">
+                      <Select.Trigger aria-label="Scanner class or subject" className="w-full">
                         <Select.Value placeholder="Select class / subject" />
                       </Select.Trigger>
-                      <Select.Content>
+                      <Select.Content className="attendance-select-options">
                         {advisoryTargets.length > 0 && (
                           <Select.Group>
                             <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
@@ -1100,7 +1128,7 @@ export default function TeacherAttendancePage() {
                   {/* Left Column: Camera Viewport */}
                   <div className="lg:col-span-6 flex flex-col gap-3">
                     <Card className="p-4 border-2 border-border bg-card shadow-retro flex flex-col items-center">
-                      <div className="w-full flex items-center justify-between mb-3">
+                      <div className="attendance-scanner-heading w-full flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <Camera className="w-4 h-4 text-primary" />
                           <span className="text-sm font-bold">Webcam QR Scanner</span>
@@ -1124,7 +1152,7 @@ export default function TeacherAttendancePage() {
                         )}
                       </div>
 
-                      <div className="w-full flex items-center justify-between mt-4 pt-3 border-t border-border">
+                      <div className="attendance-scanner-actions w-full flex items-center justify-between mt-4 pt-3 border-t border-border">
                         <p className="text-xs text-muted-foreground">
                           Hold student QR ID badge steady facing the webcam.
                         </p>
@@ -1147,7 +1175,7 @@ export default function TeacherAttendancePage() {
 
                   {/* Right Column: Live Scanned Stream */}
                   <div className="lg:col-span-6 flex flex-col gap-3">
-                    <Card className="p-4 border-2 border-border bg-card shadow-retro flex-1 flex flex-col min-h-[420px]">
+                    <Card className="attendance-scan-feed p-4 border-2 border-border bg-card shadow-retro flex-1 flex flex-col min-h-[420px]">
                       <div className="flex items-center justify-between pb-3 border-b border-border mb-3">
                         <div className="flex items-center gap-2">
                           <QrCode className="w-4 h-4 text-primary" />
@@ -1253,7 +1281,7 @@ export default function TeacherAttendancePage() {
                       <Select.Trigger className="w-full min-w-0">
                         <Select.Value placeholder="Select class / subject" />
                       </Select.Trigger>
-                      <Select.Content>
+                      <Select.Content className="attendance-select-options">
                         {advisoryTargets.length > 0 && (
                           <Select.Group>
                             <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
@@ -1331,7 +1359,7 @@ export default function TeacherAttendancePage() {
                             <Select.Trigger className="h-9 w-full min-w-0 border-2 border-black bg-white text-xs font-bold shadow-none sm:w-36">
                               <Select.Value />
                             </Select.Trigger>
-                            <Select.Content>
+                            <Select.Content className="attendance-select-options">
                               <Select.Group>
                                 <Select.Item value="all" className="text-xs font-semibold">
                                   All Students
@@ -1441,19 +1469,19 @@ export default function TeacherAttendancePage() {
                                 </div>
 
                               </Table.Cell>
-                              <Table.Cell className="text-center">
+                              <Table.Cell className="text-center" data-label="Present">
                                 {item.present}
                               </Table.Cell>
-                              <Table.Cell className="text-center">
+                              <Table.Cell className="text-center" data-label="Absent">
                                 {item.absent}
                               </Table.Cell>
-                              <Table.Cell className="text-center">
+                              <Table.Cell className="text-center" data-label="Late">
                                 {item.late}
                               </Table.Cell>
-                              <Table.Cell className="text-center">
+                              <Table.Cell className="text-center" data-label="Excused">
                                 {item.excused}
                               </Table.Cell>
-                              <Table.Cell className="text-center">
+                              <Table.Cell className="text-center" data-label="Attendance rate">
                                 <Badge
                                   size="sm"
                                   variant={
@@ -1477,7 +1505,9 @@ export default function TeacherAttendancePage() {
                                   onClick={() => setSelectedStudentLogs(item)}
                                   className="shadow-none p-1 ml-auto"
                                   title="View attendance log"
+                                  aria-label={`View attendance log for ${item.student_name}`}
                                 >
+                                  <span className="md:hidden">View logs</span>
                                   <ArrowUpRight size={16} />
                                 </Button>
                               </Table.Cell>
@@ -1487,8 +1517,11 @@ export default function TeacherAttendancePage() {
                       </Table>
                     ) : (
                       /* Full Date Grid Log Sheet Matrix (Dates as columns, Students as rows) */
+                      <div className="min-w-0">
+                      <p className="mb-2 text-sm md:hidden">Swipe the table to compare dates. P: Present · A: Absent · L: Late · E: Excused · –: No record.</p>
+                      <div className="attendance-date-region" role="region" aria-label="Attendance by date, scroll horizontally to see all dates" tabIndex={0}>
                       <Table
-                        wrapperClassName="overflow-x-auto h-auto shadow-none border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                        wrapperClassName="attendance-date-grid overflow-x-auto h-auto shadow-none border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
                         className="bg-background min-w-[700px] border-collapse shadow-none"
                       >
                         <Table.Header className="bg-gray-100 text-black border-b-2 border-black">
@@ -1579,6 +1612,8 @@ export default function TeacherAttendancePage() {
                           ))}
                         </Table.Body>
                       </Table>
+                      </div>
+                      </div>
                     )}
                   </div>
                 </Card>
