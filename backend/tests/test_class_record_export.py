@@ -34,8 +34,10 @@ from app.models.people.Student import Student
 from app.models.settings.Setting import Setting, SettingType
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.services.export.ClassRecordExportService import (
+    export_class_record_full_workbook,
     export_class_record_single_term,
     generate_class_record_sheet,
+    generate_summary_of_grades_sheet,
 )
 
 
@@ -230,6 +232,7 @@ def export_context():
         "class_id": cls.class_id,
         "subject_id": subj.subject_id,
         "academic_period_id": period.academic_period_id,
+        "academic_year_id": year.academic_year_id,
         "teacher_staff_id": teacher.staff_id,
         "teacher_user": user_teacher,
     }
@@ -431,4 +434,181 @@ def test_dynamic_grading_template_with_zero_assignment_component(export_context)
     assert ws.cell(11, 3).value == 1
     assert ws.cell(11, 7).value == 1
     assert ws.cell(11, 11).value == 1
+
+
+def test_unstarted_term_safeguard_writes_blank_cells(export_context):
+    """
+    CRITICAL CONSTRAINT: Terms with no data yet must write genuinely BLANK
+    cells (empty string "", not 0 or 0.0) for score, PS, WS, Initial Grade,
+    Term Grade, and Descriptor columns across the roster.
+    """
+    db = export_context["db"]
+    class_id = export_context["class_id"]
+    subject_id = export_context["subject_id"]
+    staff_id = export_context["teacher_staff_id"]
+    year_id = export_context["academic_year_id"]
+
+    # Add an unstarted Second Quarter (no subject load, no classwork, no grades)
+    period_q2 = AcademicPeriod(
+        period_name="Second Quarter",
+        period_type="QUARTER",
+        period_sequence=2,
+        academic_year_id=year_id,
+        is_active=False,
+        start_date=date(2025, 9, 1),
+        end_date=date(2025, 11, 30),
+    )
+    db.add(period_q2)
+    db.commit()
+
+    wb = openpyxl.Workbook()
+    ws = generate_class_record_sheet(
+        wb=wb,
+        db=db,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=period_q2.academic_period_id,
+        staff_id=staff_id,
+    )
+
+    assert ws.title == "Second Quarter"
+
+    # Row 13 is Male header ("MALE"), Row 14 is Juan Dela Cruz
+    # Row 15 is Female header ("FEMALE"), Row 16 is Ana Alvarez
+    # Check student rows: 14 and 16
+    student_rows = [14, 16]
+
+    # Components: WW (start=3, sub=1, tot=4, ps=5, ws=6), PT (start=7, sub=1, tot=8, ps=9, ws=10), QA (start=11, sub=1, tot=12, ps=13, ws=14)
+    # Summary cols: Initial Grade (15), Quarterly Grade (16), Descriptor (17)
+    for r in student_rows:
+        student_name = ws.cell(r, 2).value
+        assert student_name in ["Dela Cruz, Juan", "Alvarez, Ana", "DELA CRUZ, Juan", "ALVAREZ, Ana"]
+
+        # 1. WW columns: score (3), total (4), PS (5), WS (6)
+        for col_idx in [3, 4, 5, 6]:
+            val = ws.cell(r, col_idx).value
+            assert val == "", f"Expected blank cell at row {r}, col {col_idx}, but got {val!r}"
+
+        # 2. PT columns: score (7), total (8), PS (9), WS (10)
+        for col_idx in [7, 8, 9, 10]:
+            val = ws.cell(r, col_idx).value
+            assert val == "", f"Expected blank cell at row {r}, col {col_idx}, but got {val!r}"
+
+        # 3. QA columns: score (11), total (12), PS (13), WS (14)
+        for col_idx in [11, 12, 13, 14]:
+            val = ws.cell(r, col_idx).value
+            assert val == "", f"Expected blank cell at row {r}, col {col_idx}, but got {val!r}"
+
+        # 4. Summary columns: Initial Grade (15), Quarterly Grade (16), Descriptor (17)
+        assert ws.cell(r, 15).value == "", f"Initial Grade at row {r} should be blank, got {ws.cell(r, 15).value!r}"
+        assert ws.cell(r, 16).value == "", f"Quarterly Grade at row {r} should be blank, got {ws.cell(r, 16).value!r}"
+        assert ws.cell(r, 17).value == "", f"Descriptor at row {r} should be blank, got {ws.cell(r, 17).value!r}"
+
+
+def test_export_class_record_full_workbook_all_tabs(export_context):
+    """
+    Verifies that export_class_record_full_workbook generates a sheet for every
+    configured academic period plus a Summary of Grades sheet at the end.
+    """
+    db = export_context["db"]
+    class_id = export_context["class_id"]
+    subject_id = export_context["subject_id"]
+    staff_id = export_context["teacher_staff_id"]
+    year_id = export_context["academic_year_id"]
+
+    # Ensure a second and third quarter exist
+    q2 = db.query(AcademicPeriod).filter(AcademicPeriod.period_sequence == 2).first()
+    if not q2:
+        q2 = AcademicPeriod(
+            period_name="Second Quarter",
+            period_type="QUARTER",
+            period_sequence=2,
+            academic_year_id=year_id,
+            is_active=False,
+            start_date=date(2025, 9, 1),
+            end_date=date(2025, 11, 30),
+        )
+        db.add(q2)
+        db.commit()
+
+    stream, filename = export_class_record_full_workbook(
+        db=db,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_year_id=year_id,
+        staff_id=staff_id,
+    )
+
+    assert filename.startswith("Class_Record_")
+    assert filename.endswith("_Full_Year.xlsx")
+
+    wb = openpyxl.load_workbook(stream)
+    assert wb.sheetnames == ["First Quarter", "Second Quarter", "Summary of Grades"]
+
+    # Verify Summary of Grades tab has DepEd header
+    ws_summary = wb["Summary of Grades"]
+    assert ws_summary.cell(3, 1).value == "SUMMARY OF GRADES"
+    assert ws_summary.cell(5, 2).value == "IV"
+    assert ws_summary.cell(6, 2).value == "Fourth District"
+    assert ws_summary.cell(7, 2).value == "Medellin National Science and Technology School (MNSTS)"
+    assert ws_summary.cell(8, 2).value == "303012"
+
+    # Verify column headers on Summary of Grades tab (Row 10)
+    assert ws_summary.cell(10, 1).value == "NO."
+    assert ws_summary.cell(10, 2).value == "LEARNERS' NAMES"
+    assert ws_summary.cell(10, 3).value == "QUARTERLY / TERM GRADES"
+    assert ws_summary.cell(11, 3).value == "FIRST QUARTER"
+    assert ws_summary.cell(11, 4).value == "SECOND QUARTER"
+    assert ws_summary.cell(10, 5).value == "FINAL GRADE"
+    assert ws_summary.cell(10, 6).value == "DESCRIPTOR"
+    assert ws_summary.cell(10, 7).value == "REMARKS"
+
+    # Verify student rows on Summary tab:
+    # Row 13 is Male header, Row 14 is Juan Dela Cruz
+    # Row 15 is Female header, Row 16 is Ana Alvarez
+    # Term 2 (col 4) has no grades -> strictly blank ("" or None, not 0)
+    assert ws_summary.cell(14, 4).value in ("", None)
+    assert ws_summary.cell(14, 4).value not in (0, 0.0)
+    assert ws_summary.cell(16, 4).value in ("", None)
+    assert ws_summary.cell(16, 4).value not in (0, 0.0)
+    # Final grade (col 5) when incomplete -> strictly blank ("" or None, not 0)
+    assert ws_summary.cell(14, 5).value in ("", None)
+    assert ws_summary.cell(14, 5).value not in (0, 0.0)
+    assert ws_summary.cell(16, 5).value in ("", None)
+    assert ws_summary.cell(16, 5).value not in (0, 0.0)
+
+
+def test_export_class_record_workbook_endpoint(export_context):
+    """
+    Tests the GET /api/v1/student-records/teacher/classes/{class_id}/subjects/{subject_id}/export-class-record-workbook
+    endpoint returning the full multi-tab workbook streaming response.
+    """
+    db = export_context["db"]
+    class_id = export_context["class_id"]
+    subject_id = export_context["subject_id"]
+    staff_id = export_context["teacher_staff_id"]
+    teacher_user = export_context["teacher_user"]
+
+    app = FastAPI()
+    app.include_router(student_records_router, prefix="/api/v1/student-records")
+
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: {"sub": str(teacher_user.user_id), "role": "teacher"}
+    from app.core.Dependencies import get_staff_id
+    app.dependency_overrides[get_staff_id] = lambda: staff_id
+
+    client = TestClient(app)
+    response = client.get(
+        f"/api/v1/student-records/teacher/classes/{class_id}/subjects/{subject_id}/export-class-record-workbook"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert "attachment; filename=" in response.headers["content-disposition"]
+    assert "Full_Year.xlsx" in response.headers["content-disposition"]
+
+    # Verify content stream can be parsed as valid openpyxl workbook
+    wb = openpyxl.load_workbook(io.BytesIO(response.content))
+    assert "Summary of Grades" in wb.sheetnames
+
 

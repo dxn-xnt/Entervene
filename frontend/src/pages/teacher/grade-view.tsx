@@ -4,18 +4,25 @@ import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { useParams } from "react-router-dom";
-import { Ellipsis, Plus, Search, Download, Send, CheckCircle2, AlertTriangle, Loader2, RefreshCw, X } from "lucide-react";
+import { Ellipsis, Plus, Search, Download, Send, CheckCircle2, AlertTriangle, Loader2, RefreshCw, X, ChevronDown, FileSpreadsheet } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Card } from "@/components/retroui/Card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import ViewGradeScoreModal from "./forms/view-grade-scores";
 import AddClassworkScoreModal from "./forms/add-classwork-score";
 import EnterManualScoresModal from "./forms/enter-manual-scores";
 import {
   getTeacherGradebook,
   exportTeacherClassRecord,
+  exportTeacherClassRecordWorkbook,
   getTeacherAvailablePeriods,
   getTeacherTermSummary,
   sendStudentGradeToAdviser,
@@ -335,7 +342,33 @@ const TeacherGradeView = () => {
   const displaySectionName = gradebook?.scope?.section_name ?? termSummary?.scope?.section_name ?? section ?? "Section";
   const displaySubjectName = gradebook?.scope?.subject_name ?? termSummary?.scope?.subject_name ?? subject ?? "Subject";
 
-  const handleExport = async () => {
+  const handleExportWorkbook = async () => {
+    if (!section || !subject) {
+      setToastMessage({ type: "error", text: "Please select a valid section and subject before exporting." });
+      return;
+    }
+
+    try {
+      setIsExporting(true);
+      const { blob, filename } = await exportTeacherClassRecordWorkbook(section, subject);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.setAttribute("download", filename);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setToastMessage({ type: "success", text: "Full Year Class Record Workbook (.xlsx) exported successfully." });
+    } catch (err: any) {
+      console.error("Export workbook error:", err);
+      setToastMessage({ type: "error", text: err?.message || "Failed to export class record workbook. Please try again." });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportCurrent = async () => {
     if (activeTab === "summary") {
       if (!termSummary) return;
       const headers = ["Gender", "Learner's Name", ...periods.map((p) => p.period_name), "Final Grade", "Remarks"];
@@ -894,22 +927,52 @@ const TeacherGradeView = () => {
                     <Send className="size-4 mr-2" /> Send All to Adviser
                   </Button>
                 )}
-                <Button
-                  variant={"outline"}
-                  disabled={isExporting}
-                  className="whitespace-nowrap font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100 disabled:opacity-50"
-                  onClick={handleExport}
-                >
-                  {isExporting ? (
-                    <>
-                      <Loader2 className="size-4 mr-2 animate-spin" /> Exporting...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="size-4 mr-2" /> Export Grades
-                    </>
-                  )}
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      disabled={isExporting}
+                      className="whitespace-nowrap font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100 disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {isExporting ? (
+                        <>
+                          <Loader2 className="size-4 mr-1 animate-spin" /> Exporting...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="size-4 mr-1" /> Export Grades
+                          <ChevronDown className="size-3.5 opacity-70" />
+                        </>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] bg-background min-w-[240px]">
+                    <DropdownMenuItem
+                      onClick={handleExportWorkbook}
+                      className="flex items-start gap-2.5 p-2.5 font-bold cursor-pointer hover:bg-yellow-100 focus:bg-yellow-100"
+                    >
+                      <FileSpreadsheet className="size-4 mt-0.5 text-emerald-600 shrink-0" />
+                      <div>
+                        <div className="text-sm font-extrabold text-black">Full Year Workbook (.xlsx)</div>
+                        <div className="text-xs font-normal text-muted-foreground">All quarters + Summary of Grades</div>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={handleExportCurrent}
+                      className="flex items-start gap-2.5 p-2.5 font-bold cursor-pointer hover:bg-yellow-100 focus:bg-yellow-100"
+                    >
+                      <Download className="size-4 mt-0.5 text-primary shrink-0" />
+                      <div>
+                        <div className="text-sm font-extrabold text-black">
+                          {activeTab === "summary" ? "Summary Sheet (.csv)" : "Current Quarter (.xlsx)"}
+                        </div>
+                        <div className="text-xs font-normal text-muted-foreground">
+                          {activeTab === "summary" ? "CSV format with final grades" : "Single term DepEd sheet"}
+                        </div>
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </header>
 
