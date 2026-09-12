@@ -360,7 +360,7 @@ export default function LessonClassworkList({
                         {classwork.title}
                       </p>
                       <p className="text-xs font-medium text-gray-700">
-                        {classwork.classwork_type || "Quarterly Assessment"}
+                        {classwork.classwork_type || "Exam"}
                         {classwork.due_date
                           ? ` | Due ${new Date(classwork.due_date).toLocaleDateString()}`
                           : ""}

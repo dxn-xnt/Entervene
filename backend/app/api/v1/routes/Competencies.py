@@ -37,7 +37,7 @@ def create_competency(
 @router.get("/subject/{subject_id}", response_model=List[CompetencyResponse])
 def get_subject_competencies(
     subject_id: int,
-    period_id: Optional[int] = Query(None, description="Filter by academic period (quarter)"),
+    period_id: Optional[int] = Query(None, description="Filter by academic period (term)"),
     staff_id: Optional[str] = Query(None, description="Filter by specific teacher staff_id (admin only)"),
     include_archived: bool = Query(False, description="Include archived competencies"),
     current_user: dict = Depends(require_role("teacher", "admin", "student")),
@@ -67,7 +67,7 @@ def get_subject_competencies(
 def get_hierarchy_tree(
     subject_id: int,
     class_id: Optional[int] = Query(None, description="Optional class ID filter for assigned lessons"),
-    period_id: Optional[int] = Query(None, description="Filter by academic period (quarter)"),
+    period_id: Optional[int] = Query(None, description="Filter by academic period (term)"),
     staff_id: Optional[str] = Query(None, description="Filter by specific teacher staff_id (admin only)"),
     current_user: dict = Depends(require_role("teacher", "admin", "student")),
     db: Session = Depends(get_db),
