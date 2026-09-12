@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -148,7 +148,7 @@ def _get_school_metadata(
     If not configured in Setting table, return empty strings ("") rather than
     fabricated/false regional placeholders.
     """
-    settings_rows = {s.key: (s.value or "").strip() for s in db.query(Setting).all()}
+    settings_rows: dict[str, str] = {str(s.key): (str(s.value or "")).strip() for s in db.query(Setting).all()}
 
     # School Name: setting school_name -> fallback empty (never app_name)
     school_name = settings_rows.get("school_name") or ""
@@ -335,11 +335,11 @@ def generate_class_record_sheet(
     term_title = sheet_title or meta["period_name"] or "Term"
     clean_sheet_title = re.sub(r"[\\/*?:\[\]]", "", term_title)[:31].strip() or "Class Record"
 
-    if len(wb.sheetnames) == 1 and wb.sheetnames[0] == "Sheet":
-        ws = wb.active
+    if len(wb.sheetnames) == 1 and wb.sheetnames[0] == "Sheet" and wb.active is not None:
+        ws = cast(Worksheet, wb.active)
         ws.title = clean_sheet_title
     else:
-        ws = wb.create_sheet(title=clean_sheet_title)
+        ws = cast(Worksheet, wb.create_sheet(title=clean_sheet_title))
 
     # Ensure Excel gridlines are displayed
     ws.views.sheetView[0].showGridLines = True
@@ -499,7 +499,7 @@ def generate_class_record_sheet(
     for comp in comp_groups:
         # Merged header in Row 10 across all its sub-columns
         ws.merge_cells(start_row=10, start_column=comp.start_col, end_row=10, end_column=comp.end_col)
-        weight_str = f"{int(round(comp.weight_pct))}%" if comp.weight_pct.is_integer() else f"{comp.weight_pct}%"
+        weight_str = f"{round(comp.weight_pct)}%" if comp.weight_pct.is_integer() else f"{comp.weight_pct}%"
         ws.cell(10, comp.start_col).value = f"{comp.name.upper()} ({weight_str})"
         _style_range(
             ws,
@@ -898,7 +898,7 @@ def generate_summary_of_grades_sheet(
         summary.periods.sort(key=lambda p: (p.period_sequence or 0))
 
     # 3. Create worksheet
-    ws = wb.create_sheet(title=sheet_title)
+    ws = cast(Worksheet, wb.create_sheet(title=sheet_title))
     ws.views.sheetView[0].showGridLines = True
 
     # 4. School Metadata

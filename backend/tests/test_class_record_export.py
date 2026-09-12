@@ -2,12 +2,13 @@ import io
 import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from typing import cast
 
 import openpyxl
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import CheckConstraint, create_engine
+from sqlalchemy import CheckConstraint, Table, create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -48,17 +49,18 @@ def export_context():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    student_table = cast(Table, Student.__table__)
     lrn_check = next(
-        (c for c in Student.__table__.constraints if isinstance(c, CheckConstraint) and c.name == "lrn_check"),
+        (c for c in student_table.constraints if isinstance(c, CheckConstraint) and c.name == "lrn_check"),
         None,
     )
-    if lrn_check and lrn_check in Student.__table__.constraints:
-        Student.__table__.constraints.remove(lrn_check)
+    if lrn_check and lrn_check in student_table.constraints:
+        student_table.constraints.remove(lrn_check)
     try:
         Base.metadata.create_all(bind=engine)
     finally:
-        if lrn_check and lrn_check not in Student.__table__.constraints:
-            Student.__table__.append_constraint(lrn_check)
+        if lrn_check and lrn_check not in student_table.constraints:
+            student_table.append_constraint(lrn_check)
 
     db = sessionmaker(bind=engine)()
 
@@ -259,13 +261,13 @@ def test_generate_class_record_sheet(export_context):
     assert ws.title == "Term 1"
 
     # 2. Verify Header Block
-    assert ws["A1"].value == "Republic of the Philippines"
-    assert ws["A2"].value == "Department of Education"
-    assert ws["A3"].value == "ELECTRONIC CLASS RECORD"
-    assert ws["B5"].value == "IV"  # Region from Setting
-    assert ws["B6"].value == "Fourth District"  # Division from Setting
-    assert ws["B7"].value == "Medellin National Science and Technology School (MNSTS)"  # School Name from Setting
-    assert ws["B8"].value == "303012"  # School ID from Setting
+    assert ws.cell(1, 1).value == "Republic of the Philippines"
+    assert ws.cell(2, 1).value == "Department of Education"
+    assert ws.cell(3, 1).value == "ELECTRONIC CLASS RECORD"
+    assert ws.cell(5, 2).value == "IV"  # Region from Setting
+    assert ws.cell(6, 2).value == "Fourth District"  # Division from Setting
+    assert ws.cell(7, 2).value == "Medellin National Science and Technology School (MNSTS)"  # School Name from Setting
+    assert ws.cell(8, 2).value == "303012"  # School ID from Setting
 
     # Right column metadata (col 9)
     assert ws.cell(5, 9).value == "AY2025-2026"
@@ -346,7 +348,7 @@ def test_export_class_record_single_term_stream(export_context):
     wb = openpyxl.load_workbook(stream)
     assert "Term 1" in wb.sheetnames
     ws = wb["Term 1"]
-    assert ws["A3"].value == "ELECTRONIC CLASS RECORD"
+    assert ws.cell(3, 1).value == "ELECTRONIC CLASS RECORD"
 
 
 def test_export_class_record_api_endpoint(export_context):
