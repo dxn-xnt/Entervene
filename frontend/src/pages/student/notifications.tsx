@@ -106,13 +106,13 @@ const Notifications = () => {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                   Notifications
                 </h1>
               </div>
@@ -129,7 +129,7 @@ const Notifications = () => {
                 <span className="sm:hidden">Read All</span>
               </Button>
             </header>
-            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+            <div className="-mt-[1px] bg-background px-3 sm:px-4 md:px-6">
               <Tabs
                 tabs={tabs}
                 activeTab={activeTab}
@@ -137,7 +137,7 @@ const Notifications = () => {
               />
             </div>
 
-            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               <section className="flex w-full flex-col gap-3">
                 {activeTabTitle && (
                   <h3 className="text-xl font-semibold md:text-3xl">

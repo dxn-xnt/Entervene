@@ -78,24 +78,24 @@ const StudentQuizResult = () => {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
-              <SidebarTrigger className="md:hidden" />
-              <Breadcrumb>
-                <Breadcrumb.List>
+            <header className="flex min-w-0 items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <SidebarTrigger className="shrink-0 md:hidden" />
+              <Breadcrumb className="min-w-0">
+                <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 text-lg font-extrabold tracking-tight text-black sm:gap-2 sm:text-2xl md:text-3xl">
                   <Breadcrumb.Item>
                     <Breadcrumb.Link
                       onClick={() => navigate(routes.student.todo)}
-                      className="text-xl md:text-2xl text-black/50 hover:text-black cursor-pointer"
+                      className="cursor-pointer whitespace-nowrap text-lg text-black/50 hover:text-black sm:text-2xl md:text-4xl"
                     >
                       To-Do
                     </Breadcrumb.Link>
                   </Breadcrumb.Item>
                   <Breadcrumb.Separator />
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Page className="text-xl md:text-2xl font-bold">
+                  <Breadcrumb.Item className="min-w-0">
+                    <Breadcrumb.Page className="block truncate text-lg font-bold sm:text-xl md:text-3xl">
                       {quiz.title} Results
                     </Breadcrumb.Page>
                   </Breadcrumb.Item>
@@ -103,7 +103,7 @@ const StudentQuizResult = () => {
               </Breadcrumb>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-1 flex-col gap-6 max-w-4xl w-full mx-auto">
+            <div className="-mt-[1px] mx-auto flex w-full min-w-0 max-w-4xl flex-1 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:gap-6 sm:px-4 sm:py-4 md:px-6">
               {/* Header Actions */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

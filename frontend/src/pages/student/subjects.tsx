@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { LoadingPanel } from "@/components/loading-panel";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { EmptyStateCard } from "@/components/empty-state-card";
+import { Button } from "@/components/retroui/Button";
 
 interface EnrolledSubject {
   subject_load_id: number;
@@ -57,33 +58,38 @@ const Subjects = () => {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
-              <SidebarTrigger className="md:hidden" />
-              <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
+            <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <SidebarTrigger className="shrink-0 md:hidden" />
+              <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                 Subjects
               </h1>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {isLoading ? (
                 <LoadingPanel label="Loading subjects..." />
               ) : error ? (
-                <div className="flex flex-col items-center justify-center w-full py-20 gap-4">
-                  <p className="text-red-500">{error}</p>
-                  <button
+                <div className="flex w-full flex-col items-center justify-center gap-4 px-4 py-12 text-center sm:py-20">
+                  <p className="break-words text-sm text-red-500 sm:text-base">{error}</p>
+                  <Button
+                    type="button"
                     onClick={fetchSubjects}
-                    className="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 transition-colors"
+                    variant="secondary"
+                    size="sm"
                   >
                     Retry
-                  </button>
+                  </Button>
                 </div>
               ) : subjects.length === 0 ? (
-                <EmptyStateCard title="No enrolled subjects found." />
+                <EmptyStateCard
+                  title="No enrolled subjects found."
+                  className="px-4 py-10 sm:px-6 sm:py-12"
+                />
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
                   {subjects.map((subject) => (
                     <SubjectCard
                       key={subject.subject_load_id}

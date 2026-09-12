@@ -1560,9 +1560,9 @@ export default function SubjectLessonTab({
         />
       ) : (
         <>
-          <Card className="flex justify-between border-black bg-primary shadow-md hover:shadow-none">
-            <div>
-              <Card.Title className="text-2xl font-bold">
+          <Card className="flex min-w-0 justify-between gap-3 border-black bg-primary shadow-md hover:shadow-none">
+            <div className="min-w-0">
+              <Card.Title className="break-words text-xl font-bold sm:text-2xl">
                 {displaySubjectName}
               </Card.Title>
               <p className="text-sm">{displayTeacherName}</p>
@@ -1672,17 +1672,17 @@ export default function SubjectLessonTab({
               title="No lessons available for this subject."
             />
           ) : (
-            <div className="flex gap-4 items-start">
+            <div className="flex min-w-0 flex-col items-start gap-4 lg:flex-row">
               {/* ════════════════ LEFT: Lessons list ════════════════ */}
-              <div className="flex-2 min-w-0">
+              <div className="w-full min-w-0 lg:flex-[2]">
                 {/* Lessons header row */}
-                <div className="flex items-center justify-between mb-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <h3 className="text-xl font-bold tracking-tight">Lessons</h3>
                   <Select
                     value={sortAsc ? "oldest" : "newest"}
                     onValueChange={(value) => setSortAsc(value === "oldest")}
                   >
-                    <Select.Trigger className="w-40 border-black bg-white shadow-md hover:shadow-none">
+                    <Select.Trigger className="w-36 border-black bg-white shadow-md hover:shadow-none sm:w-40">
                       <Select.Value placeholder="Sort by" />
                     </Select.Trigger>
                     <Select.Content className="border-2 border-black bg-white shadow-md">
@@ -1806,6 +1806,7 @@ export default function SubjectLessonTab({
               <LessonGoalProgress
                 sortedGoalLessons={sortedGoalLessons}
                 classworksByLesson={classworksByLesson}
+                className="w-full min-w-0 lg:max-w-md lg:flex-1"
               />
             </div>
           )}
