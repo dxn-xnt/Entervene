@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import StatusPage from "./pages/StatusPage";
+import StatusPage from "./pages/status-page";
 import { AuthProvider } from "./context/AuthContext";
 import { SettingsProvider } from "./context/SettingsContext";
 import { AcademicPeriodProvider } from "./context/AcademicPeriodContext";
