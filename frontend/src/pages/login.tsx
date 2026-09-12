@@ -72,9 +72,9 @@ const Login = () => {
   };
 
   return (
-    <div className="retro-squares-bg retro-squares-motion flex flex-col items-center justify-center h-screen">
-      <Card className="w-md p-0">
-        <Card.Header className="flex flex-col justify-center mb-8 pb-6 pt-8 px-8 bg-primary border-b-2 border-border">
+    <main className="retro-squares-bg retro-squares-motion flex min-h-dvh w-full items-center justify-center px-4 py-6 sm:px-6">
+      <Card className="block w-full max-w-md p-0">
+        <Card.Header className="mb-6 flex flex-col justify-center border-b-2 border-border bg-primary px-4 pb-5 pt-6 sm:mb-8 sm:px-8 sm:pb-6 sm:pt-8">
           <Card.Title className="font-sans font-bold mb-1">
             Entervene
           </Card.Title>
@@ -82,7 +82,7 @@ const Login = () => {
             Enter your details to access your account
           </Card.Description>
         </Card.Header>
-        <Card.Content className="pb-10 px-8">
+        <Card.Content className="px-4 pb-6 sm:px-8 sm:pb-10">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -90,24 +90,27 @@ const Login = () => {
             }}
             className="flex flex-col gap-2"
           >
-            <div className="grid w-full max-w-sm items-center gap-2 mb-2">
+            <div className="mb-2 grid w-full min-w-0 items-center gap-2">
               <Label htmlFor="email">Email Address</Label>
               <Input
                 type="email"
                 id="email"
-                className="shadow-none"
+                className="w-full min-w-0 text-base shadow-none"
                 placeholder="Email"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                autoComplete="email"
+                inputMode="email"
               />
             </div>
 
-            <div className="grid w-full max-w-sm items-center gap-2 mb-2">
-              <div className="flex flex-row justify-between items-center">
+            <div className="mb-2 grid w-full min-w-0 items-center gap-2">
+              <div className="flex min-w-0 flex-row items-center justify-between gap-2">
                 <Label htmlFor="password">Password</Label>
                 <Button
+                  type="button"
                   variant="link"
-                  className="font-regular p-0 text-sm font-normal font-underline shadow-none"
+                  className="font-regular shrink-0 p-0 text-sm font-normal font-underline shadow-none"
                   onClick={() => navigate("/forgot-password")}
                 >
                   Forget password?
@@ -120,7 +123,8 @@ const Login = () => {
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-none border-black h-10 pr-10 text-sm shadow-none"
+                  className="h-10 w-full min-w-0 rounded-none border-black pr-10 text-base shadow-none"
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
@@ -178,7 +182,7 @@ const Login = () => {
           </form>
         </Card.Content>
       </Card>
-    </div>
+    </main>
   );
 };
 
