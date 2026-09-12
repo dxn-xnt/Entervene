@@ -407,7 +407,7 @@ export default function ClassworkView({
     <main className="flex flex-1 flex-col overflow-x-hidden">
       <div className="@container/main flex flex-1 flex-col">
         <div className="flex flex-1 flex-col">
-          <header className="flex flex-row gap-3 justify-between items-center bg-background py-4 px-4 md:px-6">
+          <header className="flex min-w-0 flex-row items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
             <div className="flex items-center gap-3 min-w-0">
               <SidebarTrigger className="md:hidden" />
               <Breadcrumb>
@@ -459,7 +459,7 @@ export default function ClassworkView({
             </div>
           </header>
 
-          <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
+          <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
             <Card className="mx-auto w-full space-y-4">
             <Card className="block w-full bg-primary shadow-none">
               <Card.Content>

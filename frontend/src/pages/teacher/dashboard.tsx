@@ -113,26 +113,27 @@ const Dashboard = () => {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
+                <SidebarTrigger className="shrink-0 md:hidden" />
                 <div>
-                  <h1 className="text-2xl md:text-4xl font-bold">
+                  <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
                     Dashboard
                   </h1>
                 </div>
               </div>
               <Button
                 onClick={() => navigate(routes.teacher.profile)}
-                className="gap-2"
+                className="shrink-0 gap-1.5 whitespace-nowrap px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
               >
                 <Calendar className="size-4" />
-                View My Schedule
+                <span className="sm:hidden">Schedule</span>
+                <span className="hidden sm:inline">View My Schedule</span>
               </Button>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+              <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
               {overviewCards.map((card) => (
                 <OverviewCard
                   key={card.title}

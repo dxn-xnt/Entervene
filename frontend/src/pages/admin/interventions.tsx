@@ -149,10 +149,10 @@ export default function AdminInterventions() {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-4xl font-black  flex items-center gap-2 text-black">
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="truncate text-xl font-black text-black sm:text-2xl md:text-4xl">
                   Interventions
                 </h1>
                 {isAdmin && (

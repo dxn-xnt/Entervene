@@ -87,20 +87,20 @@ export default function DraftLessons() {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Draft Lessons</h1>
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">Draft Lessons</h1>
               </div>
               <button
                 onClick={() => openNewLessonModal(0)}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                className="shrink-0 whitespace-nowrap rounded-lg bg-green-600 px-2 py-1.5 text-xs font-medium text-white transition-colors hover:bg-green-700 sm:px-4 sm:py-2 sm:text-base"
               >
                 + New Lesson
               </button>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {error && (
                 <Alert status="error">
                   <Alert.Title>Draft lesson error</Alert.Title>

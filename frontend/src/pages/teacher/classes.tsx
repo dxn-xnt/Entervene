@@ -72,7 +72,7 @@ function SubjectClassCatalogCard({
 }) {
   return (
     <Card
-      className="group relative flex min-w-80 flex-col justify-between shadow-none p-3 hover:-translate-y-1 cursor-pointer"
+      className="group relative flex min-w-0 flex-col justify-between p-3 shadow-none hover:-translate-y-1 cursor-pointer"
       onClick={onClick}
     >
       <div className="flex flex-col items-start justify-between gap-2">
@@ -216,12 +216,12 @@ const TeacherClasses = () => {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
-              <SidebarTrigger className="md:hidden" />
-              <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Classes</h1>
+            <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <SidebarTrigger className="shrink-0 md:hidden" />
+              <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">Classes</h1>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
+            <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {error && (
                 <Alert
                   status="error"
@@ -251,8 +251,8 @@ const TeacherClasses = () => {
                           key={group.subjectId}
                           className="flex flex-col"
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 flex-col items-start gap-1">
                               <h2 className="text-xl font-bold">
                                 {group.subjectName}
                               </h2>
@@ -262,7 +262,7 @@ const TeacherClasses = () => {
                                 </Badge>
                               )}
                             </div>
-                            <div className="flex flex-row items-center gap-3">
+                            <div className="flex shrink-0 flex-row items-center gap-3">
                               <Badge variant="secondary">
                                 {group.loads.length} section{group.loads.length !== 1 ? "s" : ""}
                               </Badge>

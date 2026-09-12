@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import { useEffect, useRef, useState, type ComponentType } from "react";
 
 export type TabItem<T extends string = string> = {
   id: T;
@@ -21,8 +21,38 @@ export function Tabs<T extends string = string>({
   counts = {},
   className = "",
 }: TabsProps<T>) {
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const [isPinned, setIsPinned] = useState(false);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    const mobileQuery = window.matchMedia("(max-width: 639px)");
+    if (!sentinel) return;
+
+    const updatePinnedState = () => {
+      setIsPinned(mobileQuery.matches && sentinel.getBoundingClientRect().top < 0);
+    };
+    const observer = new IntersectionObserver(updatePinnedState, { threshold: 0 });
+
+    observer.observe(sentinel);
+    mobileQuery.addEventListener("change", updatePinnedState);
+    window.addEventListener("scroll", updatePinnedState, { passive: true });
+    updatePinnedState();
+
+    return () => {
+      observer.disconnect();
+      mobileQuery.removeEventListener("change", updatePinnedState);
+      window.removeEventListener("scroll", updatePinnedState);
+    };
+  }, []);
+
   return (
-    <div className={`sticky top-0 z-30 -mx-3 min-w-0 border-b-2 border-border bg-background sm:static sm:-mx-4 md:-mx-6 ${className}`}>
+    <>
+      <div ref={sentinelRef} aria-hidden="true" className="h-px w-full" />
+      {isPinned ? <div aria-hidden="true" className="h-[50px] sm:hidden" /> : null}
+      <div
+        className={`${isPinned ? "fixed inset-x-0 top-0 z-50 mx-0" : "-mx-3"} min-w-0 border-b-2 border-border bg-background sm:static sm:-mx-4 md:-mx-6 ${className}`}
+      >
       <div
         role="tablist"
         aria-label="Page sections"
@@ -50,6 +80,7 @@ export function Tabs<T extends string = string>({
           );
         })}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

@@ -121,6 +121,7 @@ const Notifications = () => {
                 size="md"
                 onClick={handleMarkAll}
                 disabled={markingAll || notifications.every((n) => n.is_read)}
+                className="shrink-0 px-2 text-xs sm:px-4 sm:text-sm"
               >
                 {markingAll ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-1 inline" />
@@ -129,7 +130,7 @@ const Notifications = () => {
                 <span className="sm:hidden">Read All</span>
               </Button>
             </header>
-            <div className="-mt-[1px] bg-background px-3 sm:px-4 md:px-6">
+            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs
                 tabs={tabs}
                 activeTab={activeTab}

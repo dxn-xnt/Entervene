@@ -482,7 +482,7 @@ const TeacherGradeView = () => {
 
     return (
       <Table className="w-full border-collapse text-sm">
-        <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black uppercase">
+        <Table.Header className="border-b-2 border-black bg-yellow-300 font-black uppercase [&_th]:h-auto [&_th]:px-2 [&_th]:py-2 [&_th]:text-[11px] [&_th]:leading-tight sm:[&_th]:px-3 sm:[&_th]:py-2.5 sm:[&_th]:text-xs md:[&_th]:py-3 md:[&_th]:text-sm">
           <Table.Row>
             <Table.Head className="w-[20%] font-black text-black">Learner's Name</Table.Head>
             {periods.map((p) => (
@@ -658,7 +658,7 @@ const TeacherGradeView = () => {
 
     return (
       <Table className="w-full border-collapse text-sm">
-        <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black uppercase">
+        <Table.Header className="border-b-2 border-black bg-yellow-300 font-black uppercase [&_th]:h-auto [&_th]:px-2 [&_th]:py-2 [&_th]:text-[11px] [&_th]:leading-tight sm:[&_th]:px-3 sm:[&_th]:py-2.5 sm:[&_th]:text-xs md:[&_th]:py-3 md:[&_th]:text-sm">
           <Table.Row>
             <Table.Head className="w-[17%] font-black text-black">Learner's Name</Table.Head>
             <Table.Head
@@ -720,7 +720,7 @@ const TeacherGradeView = () => {
         </Table.Header>
         <Table.Body>
           <Table.Row className="border-b-2 border-black bg-yellow-50 hover:bg-yellow-100/70">
-            <Table.Cell className="font-black text-black">Classwork Name</Table.Cell>
+            <Table.Cell className="text-xs font-black text-black sm:text-sm">Classwork Name</Table.Cell>
             <Table.Cell className="py-2 px-2">
               <div className="flex flex-row items-center justify-between gap-1 w-full">
                 <button
@@ -886,12 +886,13 @@ const TeacherGradeView = () => {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
-              <SidebarTrigger className="md:hidden" />
-              <Breadcrumb>
-                <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
+            <header className="flex min-w-0 flex-col items-stretch gap-3 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:gap-3 md:px-6">
+              <div className="flex min-w-0 items-center gap-2">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <Breadcrumb className="min-w-0 overflow-hidden">
+                <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
                   <Breadcrumb.Item>
-                    <Breadcrumb.Link href="/teacher/grades" className="text-2xl md:text-4xl font-bold">
+                    <Breadcrumb.Link href="/teacher/grades">
                       Grades
                     </Breadcrumb.Link>
                   </Breadcrumb.Item>
@@ -904,18 +905,19 @@ const TeacherGradeView = () => {
                     <Breadcrumb.Page>{displaySubjectName}</Breadcrumb.Page>
                   </Breadcrumb.Item>
                 </Breadcrumb.List>
-              </Breadcrumb>
+                </Breadcrumb>
+              </div>
               {gradebook?.grading_weights?.template_name && (
                 <span className="hidden sm:inline-flex items-center gap-1 ml-2 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-950 border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]" title={`Assigned Template: ${gradebook.grading_weights.template_name}`}>
                   {gradebook.grading_weights.template_name}
                 </span>
               )}
 
-              <div className="flex flex-row items-center gap-2 ml-auto">
+              <div className="grid w-full grid-cols-2 items-center gap-2 md:ml-auto md:flex md:w-auto md:flex-row">
                 {!isViewOnly && activeTab.startsWith("term-") && (
                   <Button
                     variant="default"
-                    className="whitespace-nowrap font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] bg-primary hover:bg-primary-hover text-black"
+                    className="min-w-0 whitespace-nowrap border-2 border-black bg-primary px-2 text-xs font-bold text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-primary-hover md:px-4 md:text-sm"
                     onClick={() => setShowBulkConfirm(true)}
                     disabled={sendingAll || filtered.length === 0}
                     title={
@@ -924,59 +926,29 @@ const TeacherGradeView = () => {
                         : "Send finalized grades for all students in this section to adviser"
                     }
                   >
-                    <Send className="size-4 mr-2" /> Send All to Adviser
+                    <Send className="mr-1 size-4 md:mr-2" /> Send All to Adviser
                   </Button>
                 )}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant={"outline"}
-                      disabled={isExporting}
-                      className="whitespace-nowrap font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100 disabled:opacity-50 flex items-center gap-1.5"
-                    >
-                      {isExporting ? (
-                        <>
-                          <Loader2 className="size-4 mr-1 animate-spin" /> Exporting...
-                        </>
-                      ) : (
-                        <>
-                          <Download className="size-4 mr-1" /> Export Grades
-                          <ChevronDown className="size-3.5 opacity-70" />
-                        </>
-                      )}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] bg-background min-w-[240px]">
-                    <DropdownMenuItem
-                      onClick={handleExportWorkbook}
-                      className="flex items-start gap-2.5 p-2.5 font-bold cursor-pointer hover:bg-yellow-100 focus:bg-yellow-100"
-                    >
-                      <FileSpreadsheet className="size-4 mt-0.5 text-emerald-600 shrink-0" />
-                      <div>
-                        <div className="text-sm font-extrabold text-black">Full Year Workbook (.xlsx)</div>
-                        <div className="text-xs font-normal text-muted-foreground">All quarters + Summary of Grades</div>
-                      </div>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={handleExportCurrent}
-                      className="flex items-start gap-2.5 p-2.5 font-bold cursor-pointer hover:bg-yellow-100 focus:bg-yellow-100"
-                    >
-                      <Download className="size-4 mt-0.5 text-primary shrink-0" />
-                      <div>
-                        <div className="text-sm font-extrabold text-black">
-                          {activeTab === "summary" ? "Summary Sheet (.csv)" : "Current Quarter (.xlsx)"}
-                        </div>
-                        <div className="text-xs font-normal text-muted-foreground">
-                          {activeTab === "summary" ? "CSV format with final grades" : "Single term DepEd sheet"}
-                        </div>
-                      </div>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Button
+                  variant={"outline"}
+                  disabled={isExporting}
+                  className="min-w-0 whitespace-nowrap border-2 border-black px-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100 disabled:opacity-50 md:px-4 md:text-sm"
+                  onClick={handleExport}
+                >
+                  {isExporting ? (
+                    <>
+                      <Loader2 className="mr-1 size-4 animate-spin md:mr-2" /> Exporting...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="mr-1 size-4 md:mr-2" /> Export Grades
+                    </>
+                  )}
+                </Button>
               </div>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {toastMessage && (
               <div
                 className={`rounded-md border-2 border-black p-3 flex items-center justify-between text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${toastMessage.type === "success"
