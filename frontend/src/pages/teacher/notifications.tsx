@@ -82,20 +82,26 @@ const Notifications = () => {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl md:text-4xl font-bold">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">
                   Notifications
                 </h1>
               </div>
-              <Button variant="default" size="md" onClick={handleMarkAll} disabled={markingAll || notifications.every((n) => n.is_read)}>
+              <Button
+                variant="default"
+                size="md"
+                onClick={handleMarkAll}
+                disabled={markingAll || notifications.every((n) => n.is_read)}
+                className="shrink-0 px-2 text-xs sm:px-4 sm:text-sm"
+              >
                 {markingAll ? <Loader2 className="h-4 w-4 animate-spin mr-1 inline" /> : null}
                 <span className="hidden sm:inline">Mark All as Read</span>
                 <span className="sm:hidden">Read All</span>
               </Button>
             </header>
-            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs
                 tabs={tabs}
                 activeTab={activeTab}
@@ -103,7 +109,7 @@ const Notifications = () => {
               />
             </div>
 
-            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
 
             {loading ? (
               <LoadingPanel label="Loading notifications..." />

@@ -38,11 +38,11 @@ export default function TeacherLessonDetailScreen({
       {/* ── Breadcrumb Navigation ── */}
       <header className="flex items-center justify-between">
         <Breadcrumb>
-          <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
+          <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
             <Breadcrumb.Item>
               <Breadcrumb.Link
                 onClick={closeLessonDetail}
-                className="cursor-pointer text-2xl md:text-4xl text-black/50 hover:text-black"
+                className="cursor-pointer"
               >
                 Subjects
               </Breadcrumb.Link>
@@ -51,14 +51,14 @@ export default function TeacherLessonDetailScreen({
             <Breadcrumb.Item>
               <Breadcrumb.Link
                 onClick={closeLessonDetail}
-                className="cursor-pointer text-2xl md:text-4xl text-black/50 hover:text-black"
+                className="cursor-pointer"
               >
                 {subjectName}
               </Breadcrumb.Link>
             </Breadcrumb.Item>
             <Breadcrumb.Separator />
             <Breadcrumb.Item>
-              <Breadcrumb.Page className="text-xl md:text-3xl">
+              <Breadcrumb.Page>
                 {lesson.title}
               </Breadcrumb.Page>
             </Breadcrumb.Item>

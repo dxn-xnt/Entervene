@@ -91,7 +91,7 @@ export default function StudentInterventions() {
             <header className="flex flex-col items-start gap-2 bg-background px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
-                <h1 className="whitespace-nowrap text-xl font-black tracking-tight text-black sm:text-2xl md:text-4xl">
+                <h1 className="truncate text-lg font-black tracking-tight text-black sm:text-2xl md:text-4xl">
                   My Study Interventions
                 </h1>
               </div>

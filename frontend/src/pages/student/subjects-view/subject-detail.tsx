@@ -35,7 +35,7 @@ const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
               <ChevronRight size={40} />
               <h1 className="text-3xl font-bold">{subject}</h1>
             </header>
-            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
             </div>
 

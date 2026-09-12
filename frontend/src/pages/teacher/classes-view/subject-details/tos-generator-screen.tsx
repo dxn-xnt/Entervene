@@ -24,6 +24,7 @@ import { Input } from "@/components/retroui/Input";
 import { Badge } from "@/components/retroui/Badge";
 import { Switch } from "@/components/retroui/Switch";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { apiFetch } from "@/lib/api";
 import type { CompetencyItem } from "./types";
 import {
@@ -685,43 +686,47 @@ export function TOSGeneratorScreen({
   }, [savedExams, examFilterQuarter, examSearchQuery]);
 
   return (
-    <div className="flex flex-col">
+    <div className="flex min-w-0 flex-col overflow-x-clip">
       {/* ── Breadcrumb & Action Header ── */}
-      <header className="flex flex-wrap items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
+      <header className="flex min-w-0 flex-wrap items-center justify-between gap-3 bg-background px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+        <SidebarTrigger className="shrink-0 md:hidden" />
         <Breadcrumb className="min-w-0 w-auto flex-1">
-          <Breadcrumb.List className="flex items-center gap-2 text-2xl md:text-4xl font-bold tracking-tight text-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-inherit">
-            <Breadcrumb.Item>
-              <Breadcrumb.Link onClick={onBack} className="cursor-pointer hover:text-foreground">
+          <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
+            <Breadcrumb.Item className="shrink-0">
+              <Breadcrumb.Link onClick={onBack} className="cursor-pointer whitespace-nowrap hover:text-foreground">
                 {parentLabel || (currentSubjectName || "TOS Generator")}
               </Breadcrumb.Link>
             </Breadcrumb.Item>
             <Breadcrumb.Separator />
-            <Breadcrumb.Item>
-              <Breadcrumb.Page>
+            <Breadcrumb.Item className="min-w-0 flex-1">
+              <Breadcrumb.Page
+                className="block truncate"
+                title={step === "saved-list" ? "My TOS Exams" : (title || "New Assessment Blueprint")}
+              >
                 {step === "saved-list" ? "My TOS Exams" : (title || "New Assessment Blueprint")}
               </Breadcrumb.Page>
             </Breadcrumb.Item>
           </Breadcrumb.List>
         </Breadcrumb>
 
-        <div className="ml-auto flex flex-row flex-nowrap items-center gap-2 [&>button]:shrink-0 [&>button]:whitespace-nowrap">
+        <div className="grid w-full grid-cols-2 gap-2 sm:ml-auto sm:flex sm:w-auto sm:flex-row sm:flex-nowrap sm:items-center [&>button]:min-w-0 [&>button]:whitespace-nowrap">
           {step === "saved-list" ? (
             <>
               <Button
                 variant="outline"
                 size="md"
                 onClick={onBack}
-                className="rounded-none gap-2"
+                className="gap-1.5 rounded-none px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
               >
-                <ArrowLeft className="size-4" /> Back to {parentLabel || (currentSubjectName || "TOS Generator")}
+                <ArrowLeft className="size-3.5 sm:size-4" /> Back to {parentLabel || (currentSubjectName || "TOS Generator")}
               </Button>
               <Button
                 variant="default"
                 size="md"
                 onClick={startNewExam}
-                className="rounded-none gap-2"
+                className="gap-1.5 rounded-none px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
               >
-                <Plus className="size-4" /> New TOS
+                <Plus className="size-3.5 sm:size-4" /> New TOS
               </Button>
             </>
           ) : (
@@ -730,18 +735,18 @@ export function TOSGeneratorScreen({
                 variant="outline"
                 size="md"
                 onClick={onBack}
-                className="rounded-none gap-2"
+                className="gap-1.5 rounded-none px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
               >
-                <ArrowLeft className="size-4" /> Back to {parentLabel || "TOS Exams"}
+                <ArrowLeft className="size-3.5 sm:size-4" /> Back to {parentLabel || "TOS Exams"}
               </Button>
               <Button
                 size="md"
                 variant="outline"
                 disabled={isSaving}
                 onClick={handleSaveDraft}
-                className="rounded-none gap-2"
+                className="gap-1.5 rounded-none px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
               >
-                <Save className="size-4" />
+                <Save className="size-3.5 sm:size-4" />
                 {isSaving ? "Saving..." : "Save Draft"}
               </Button>
             </>
@@ -750,10 +755,10 @@ export function TOSGeneratorScreen({
       </header>
 
       {/* ── Main Container (Full-Width, No Sidebar Inside Wizard) ── */}
-      <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
+      <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
       <Card className="block p-0 rounded-none border-2 border-border bg-card shadow-lg overflow-hidden">
         {/* Top Banner */}
-        <div className="flex flex-col gap-2 border-b-2 border-border bg-accent px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 border-b-2 border-border bg-accent px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-none border-2 border-border bg-primary shadow-sm">
               <TableProperties className="h-5 w-5 text-foreground" />
@@ -778,7 +783,7 @@ export function TOSGeneratorScreen({
 
         {/* Stepper Navigation (Only shown when inside wizard steps) */}
         {step !== "saved-list" && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-border bg-accent px-6 py-2.5 text-xs font-bold">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-border bg-accent px-3 py-2.5 text-xs font-bold sm:px-6">
             <div className="flex items-center gap-2 overflow-x-auto">
               <button
                 onClick={() => setStep("test-parts")}
@@ -841,7 +846,7 @@ export function TOSGeneratorScreen({
         )}
 
         {/* Screen Content Body */}
-        <div className="p-6">
+        <div className="min-w-0 p-3 sm:p-6">
           {/* ══════════════════════════════════════════════════════════════════
               LANDING PAGE: MY TOS EXAMS ARCHIVE
              ══════════════════════════════════════════════════════════════════ */}
@@ -1064,7 +1069,7 @@ export function TOSGeneratorScreen({
               </div>
 
               <Card className="block rounded-none border-2 border-border bg-card p-5 shadow-md">
-                <div className="flex items-center justify-between border-b-2 border-border pb-2">
+                <div className="flex flex-col gap-1 border-b-2 border-border pb-2 sm:flex-row sm:items-center sm:justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Question Types & Item Composition</span>
                   <span className="text-xs font-bold text-foreground">
                     Total Items Target: <span className="text-lg font-black text-foreground">{totalItems}</span>
@@ -1094,7 +1099,7 @@ export function TOSGeneratorScreen({
                           <p className="text-[11px] text-muted-foreground font-medium">Tag: {t.type}</p>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
                           {[0, 5, 10, 15, 20, 30].map((preset) => (
                             <button
                               key={preset}
@@ -1134,20 +1139,24 @@ export function TOSGeneratorScreen({
                 </div>
               </Card>
 
-              <div className="flex justify-between gap-2 pt-2">
+              <div className="grid grid-cols-2 gap-2 pt-2 sm:flex sm:justify-between">
                 <Button
                   variant="outline"
                   onClick={onBack}
-                  className="rounded-none border-2 border-border font-bold"
+                  className="min-w-0 justify-center rounded-none border-2 border-border px-2 text-xs font-bold sm:px-4 sm:text-sm"
                 >
-                  <ArrowLeft className="mr-1.5 h-4 w-4" /> Cancel & Back
+                  <ArrowLeft className="mr-1 h-3.5 w-3.5 sm:mr-1.5 sm:h-4 sm:w-4" />
+                  <span className="sm:hidden">Back</span>
+                  <span className="hidden sm:inline">Cancel &amp; Back</span>
                 </Button>
                 <Button
                   disabled={totalItems <= 0 || !currentSubjectId}
                   onClick={() => setStep("competencies")}
-                  className="rounded-none border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover disabled:opacity-50"
+                  className="min-w-0 justify-center rounded-none border-2 border-border bg-primary px-2 text-xs font-bold text-primary-foreground shadow hover:bg-primary-hover disabled:opacity-50 sm:px-4 sm:text-sm"
                 >
-                  Next: Competencies & Days <ArrowRight className="ml-1.5 h-4 w-4" />
+                  <span className="sm:hidden">Next</span>
+                  <span className="hidden sm:inline">Next: Competencies &amp; Days</span>
+                  <ArrowRight className="ml-1 h-3.5 w-3.5 sm:ml-1.5 sm:h-4 sm:w-4" />
                 </Button>
               </div>
             </div>

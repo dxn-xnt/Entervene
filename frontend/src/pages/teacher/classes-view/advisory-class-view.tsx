@@ -101,7 +101,7 @@ export default function AdvisoryClassDetail() {
             <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
               <SidebarTrigger className="md:hidden" />
               <Breadcrumb>
-                <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
+                <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
                   <Breadcrumb.Item>
                     <Breadcrumb.Link
                       onClick={() => navigate("/teacher/classes")}
@@ -112,7 +112,7 @@ export default function AdvisoryClassDetail() {
                   </Breadcrumb.Item>
                   <Breadcrumb.Separator />
                   <Breadcrumb.Item>
-                    <Breadcrumb.Page className="text-2xl">
+                    <Breadcrumb.Page>
                       {detail.section_name}
                     </Breadcrumb.Page>
                   </Breadcrumb.Item>
@@ -152,17 +152,19 @@ export default function AdvisoryClassDetail() {
 
             <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
               <Card.Content>
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <Card.Title className="mb-0">
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Card.Title
+                      className="mb-0 truncate text-2xl font-extrabold sm:text-3xl"
+                      title={detail.section_name}
+                    >
                       {detail.section_name}
                     </Card.Title>
-
                   </div>
                   <Badge
                     variant="outline"
                     size="sm"
-                    className="w-fit font-black"
+                    className="w-fit shrink-0 font-black"
                   >
                     {statusLabel}
                   </Badge>

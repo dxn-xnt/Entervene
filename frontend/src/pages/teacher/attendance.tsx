@@ -662,20 +662,19 @@ export default function TeacherAttendancePage() {
 
   return (
     <AppLayout>
-      <div className="attendance-page flex min-w-0 flex-1 flex-col" data-attendance-tab={activeTab}>
-        <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col">
-            <div className="attendance-navigation">
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
+        <div className="@container/main flex min-w-0 flex-1 flex-col">
+          <div className="flex min-w-0 flex-1 flex-col">
             {/* Header */}
-            <header className="flex items-center justify-between gap-4 bg-background py-4 px-4 md:px-6">
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
+                <SidebarTrigger className="shrink-0 md:hidden" />
                 <div>
-                  <h1 className="text-2xl md:text-4xl font-bold">Attendance</h1>
+                  <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">Attendance</h1>
                 </div>
               </div>
             </header>
-            <div className="hidden md:block px-4 md:px-6 bg-background -mt-[1px]">
+            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs
                 tabs={[
                   {
@@ -712,19 +711,10 @@ export default function TeacherAttendancePage() {
             </nav>
             </div>
 
-            <div className="attendance-content border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-1 flex-col gap-3">
+            <div className="border-t-1 border-border -mt-[1px] flex min-w-0 flex-1 flex-col gap-3 px-3 py-4 sm:px-4 md:px-6">
 
             {/* Stats Overview */}
-            <details className="attendance-mobile-stats md:hidden">
-              <summary><span>Daily overview</span><strong>{stats.rate}% attendance</strong></summary>
-              <dl>
-                {([ ["Present", stats.present], ["Absent", stats.absent], ["Late", stats.late], ["Excused", stats.excused] ] as const).map(([label, count]) => (
-                  <div key={label}><dt>{label}</dt><dd>{count}</dd></div>
-                ))}
-              </dl>
-              <p className="text-sm">{stats.total} students · {selectedDate}</p>
-            </details>
-            <div className="hidden md:grid grid-cols-2 gap-3 sm:grid-cols-5 mb-1">
+            <div className="mb-1 grid min-w-0 grid-cols-2 gap-3 [&_h3]:text-2xl [&_p]:text-xs sm:grid-cols-5 sm:[&_h3]:text-3xl sm:[&_p]:text-sm">
               <OverviewCard
                 title="Present"
                 count={String(stats.present)}
@@ -756,9 +746,9 @@ export default function TeacherAttendancePage() {
             {activeTab === "marking" && (
               <>
                 {/* Filters & Control Bar */}
-                <div className="attendance-filters flex flex-row gap-4 items-center w-full mb-1">
+                <div className="grid w-full min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(260px,1.25fr)_minmax(190px,0.75fr)_minmax(220px,1fr)] lg:gap-4">
                   {/* Class Selector */}
-                  <div className="flex flex-col gap-1">
+                  <div className="flex min-w-0 flex-col gap-1 sm:col-span-2 lg:col-span-1">
                     <Label className="font-sans text-sm font-semibold">
                       Classes
                     </Label>
@@ -766,7 +756,7 @@ export default function TeacherAttendancePage() {
                       value={selectedTargetKey}
                       onValueChange={(val) => setSelectedTargetKey(val)}
                     >
-                      <Select.Trigger aria-label="Class or subject" className="w-full min-w-[350px]">
+                      <Select.Trigger className="w-full min-w-0">
                         <Select.Value placeholder="Select class / subject" />
                       </Select.Trigger>
                       <Select.Content className="attendance-select-options">
@@ -799,7 +789,7 @@ export default function TeacherAttendancePage() {
                   </div>
 
                   {/* Date Selector (Only shown for Marking tab) */}
-                  <div className="min-w-[250px] flex flex-col gap-1">
+                  <div className="flex min-w-0 flex-col gap-1">
                     <Label className="font-sans text-sm font-semibold">
                       Attendance Date
                     </Label>
@@ -813,7 +803,7 @@ export default function TeacherAttendancePage() {
                   </div>
 
                   {/* Search */}
-                  <div className="w-full flex flex-col gap-1">
+                  <div className="flex min-w-0 flex-col gap-1">
                     <Label className="font-sans text-sm font-semibold">
                       Search
                     </Label>
@@ -831,13 +821,13 @@ export default function TeacherAttendancePage() {
                   </div>
                 </div>
 
-                <Card className="attendance-roster-card block w-full border-black bg-white transition-none shadow-md hover:shadow-none">
-                  <div className="flex w-full flex-wrap items-end justify-between gap-3 border-black bg-white py-3 transition-none">
-                    <div className="attendance-bulk flex flex-row gap-3 items-center">
+                <Card className="block min-w-0 w-full overflow-hidden border-black bg-white transition-none shadow-md hover:shadow-none">
+                  <div className="flex w-full flex-col gap-3 border-black bg-white py-3 transition-none sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                       <span className="text-sm font-semibold">
                         Mark All:
                       </span>
-                      <div className="flex flex-row gap-2">
+                      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row">
                         <Button
                           size="sm"
                           onClick={() => markAll("present")}
@@ -861,7 +851,7 @@ export default function TeacherAttendancePage() {
                       size="sm"
                       onClick={handleSaveAttendance}
                       disabled={saving || studentList.length === 0}
-                      className="hidden md:flex items-center gap-2 shadow-none"
+                      className="flex w-full items-center justify-center gap-2 shadow-none sm:w-auto"
                     >
                       {saveSuccess ? (
                         <>
@@ -912,12 +902,12 @@ export default function TeacherAttendancePage() {
                     </Empty>
                   ) : (
                     <Table
-                      wrapperClassName="attendance-records-wrapper overflow-x-auto h-auto shadow-none"
-                      className="attendance-records attendance-roster bg-background shadow-none"
+                      wrapperClassName="h-auto max-w-full overflow-x-auto overscroll-x-contain shadow-none [scrollbar-width:thin]"
+                      className="min-w-[660px] bg-background shadow-none"
                     >
                       <Table.Header>
                         <Table.Row>
-                          <Table.Head>
+                          <Table.Head className="min-w-[260px]">
                             Student Name
                           </Table.Head>
                           <Table.Head className="text-center">
@@ -944,7 +934,7 @@ export default function TeacherAttendancePage() {
                                     : ""
                                 }`}
                             >
-                              <Table.Cell>
+                              <Table.Cell className="min-w-[260px]">
                                 <div className="flex items-center gap-3">
                                   <Avatar variant="student" className="size-8 shrink-0">
                                     <Avatar.Image
@@ -957,8 +947,8 @@ export default function TeacherAttendancePage() {
                                         .toUpperCase()}
                                     </Avatar.Fallback>
                                   </Avatar>
-                                  <div>
-                                    <span className="font-semibold text-base block leading-tight">
+                                  <div className="min-w-0">
+                                    <span className="block text-base font-semibold leading-tight">
                                       {student.student_name}
                                     </span>
                                     {student.student_lrn && (
@@ -1278,9 +1268,9 @@ export default function TeacherAttendancePage() {
             {/* Summary Tab */}
             {activeTab === "summary" && (
               <>
-                <div className="attendance-filters grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-center mb-1">
+                <div className="mb-1 grid min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
                   {/* Class Selector */}
-                  <div className="flex flex-col gap-1">
+                  <div className="flex min-w-0 flex-col gap-1">
                     <Label className="font-sans text-sm font-semibold">
                       Classes
                     </Label>
@@ -1288,7 +1278,7 @@ export default function TeacherAttendancePage() {
                       value={selectedTargetKey}
                       onValueChange={(val) => setSelectedTargetKey(val)}
                     >
-                      <Select.Trigger aria-label="Class or subject" className="w-full min-w-[350px]">
+                      <Select.Trigger className="w-full min-w-0">
                         <Select.Value placeholder="Select class / subject" />
                       </Select.Trigger>
                       <Select.Content className="attendance-select-options">
@@ -1321,7 +1311,7 @@ export default function TeacherAttendancePage() {
                   </div>
 
                   {/* Search */}
-                  <div className="sm:col-span-2 flex flex-col gap-1">
+                  <div className="flex min-w-0 flex-col gap-1 sm:col-span-1 lg:col-span-2">
                     <Label className="font-sans text-sm font-semibold">
                       Search
                     </Label>
@@ -1339,12 +1329,12 @@ export default function TeacherAttendancePage() {
                 </div>
 
                 {/* Filters & Control Bar */}
-                <Card className="block w-full border-black bg-white transition-none">
+                <Card className="block min-w-0 w-full overflow-hidden border-black bg-white transition-none">
 
                   {/* Attendance Summary & Report Matrix */}
                   <div className="flex flex-col gap-4 mt-3">
                     {/* Global Controls & Layout Switcher */}
-                    <div className="attendance-summary-controls flex flex-wrap items-center justify-between gap-3 border-2 border-black bg-gray-50 p-3">
+                    <div className="flex flex-col gap-3 border-2 border-black bg-gray-50 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                       <div>
                         <h2 className="text-lg font-extrabold">
                           Attendance Summary & Log Explorer
@@ -1355,9 +1345,9 @@ export default function TeacherAttendancePage() {
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
                         {/* Status Filter */}
-                        <div className="flex items-center gap-1">
+                        <div className="flex min-w-0 items-center gap-1">
                           <Select
                             value={statusFilter}
                             onValueChange={(val) =>
@@ -1366,7 +1356,7 @@ export default function TeacherAttendancePage() {
                               )
                             }
                           >
-                            <Select.Trigger aria-label="Filter students by attendance" className="w-36 h-9 shadow-none text-xs font-bold border-2 border-black bg-white">
+                            <Select.Trigger className="h-9 w-full min-w-0 border-2 border-black bg-white text-xs font-bold shadow-none sm:w-36">
                               <Select.Value />
                             </Select.Trigger>
                             <Select.Content className="attendance-select-options">
@@ -1389,12 +1379,12 @@ export default function TeacherAttendancePage() {
                         </div>
 
                         {/* View Switcher: Summary Matrix vs Date Grid Sheet */}
-                        <div className="flex items-center">
+                        <div className="grid grid-cols-2 sm:flex sm:items-center">
                           <Button
                             size="sm"
                             variant={summaryLayout === "summary" ? "default" : "outline"}
                             onClick={() => setSummaryLayout("summary")}
-                            className="text-xs font-bold border-black rounded-r-none border-r-0 shadow-none hover:shadow-none"
+                            className="min-w-0 text-xs font-bold border-black rounded-r-none border-r-0 shadow-none hover:shadow-none"
                           >
                             <BarChart3 className="w-3.5 h-3.5 inline mr-1" />{" "}
                             Summary
@@ -1403,7 +1393,7 @@ export default function TeacherAttendancePage() {
                             size="sm"
                             variant={summaryLayout === "date_grid" ? "default" : "outline"}
                             onClick={() => setSummaryLayout("date_grid")}
-                            className="text-xs font-bold border-black rounded-l-none shadow-none hover:shadow-none"
+                            className="min-w-0 text-xs font-bold border-black rounded-l-none shadow-none hover:shadow-none"
                           >
                             <TableIcon className="w-3.5 h-3.5 inline mr-1" /> Full Date Sheet
                           </Button>
@@ -1428,12 +1418,12 @@ export default function TeacherAttendancePage() {
                     ) : summaryLayout === "summary" ? (
                       /* Standard Summary Table with Individual or Global Expand */
                       <Table
-                        wrapperClassName="attendance-records-wrapper overflow-x-auto h-auto shadow-none"
-                        className="attendance-records attendance-summary bg-background shadow-none"
+                        wrapperClassName="h-auto max-w-full overflow-x-auto overscroll-x-contain shadow-none [scrollbar-width:thin]"
+                        className="min-w-[820px] bg-background shadow-none"
                       >
                         <Table.Header>
                           <Table.Row>
-                            <Table.Head>
+                            <Table.Head className="min-w-[260px]">
                               Student Name
                             </Table.Head>
                             <Table.Head className="text-center">
@@ -1459,7 +1449,7 @@ export default function TeacherAttendancePage() {
                         <Table.Body className="divide-y-2 divide-black text-sm">
                           {summaryMatrix.map((item) => (
                             <Table.Row key={item.student_id}>
-                              <Table.Cell>
+                              <Table.Cell className="min-w-[260px]">
                                 <div className="flex items-center gap-3">
                                   <Avatar variant="student" className="size-8 shrink-0">
                                     <Avatar.Image
@@ -1539,7 +1529,7 @@ export default function TeacherAttendancePage() {
                             <Table.Head className="p-3 border-r-2 border-black sticky left-0 bg-gray-100 z-10 text-black font-extrabold text-xs uppercase">
                               #
                             </Table.Head>
-                            <Table.Head className="p-3 border-r-2 border-black sticky left-8 bg-gray-100 z-10 min-w-[160px] text-black font-extrabold text-xs uppercase">
+                            <Table.Head className="min-w-[220px] border-r-2 border-black p-3 text-xs font-extrabold uppercase text-black">
                               Student Name
                             </Table.Head>
                             {uniqueDates.map((date) => (
@@ -1564,7 +1554,7 @@ export default function TeacherAttendancePage() {
                               <Table.Cell className="p-2 font-bold border-r-2 border-black sticky left-0 bg-white z-10">
                                 {idx + 1}
                               </Table.Cell>
-                              <Table.Cell className="p-2 font-bold border-r-2 border-black sticky left-8 bg-white z-10 truncate max-w-[180px]">
+                              <Table.Cell className="min-w-[220px] border-r-2 border-black p-2 font-bold">
                                 {student.student_name}
                               </Table.Cell>
                               {uniqueDates.map((date) => {
