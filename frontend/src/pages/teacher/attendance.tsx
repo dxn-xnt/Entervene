@@ -1622,7 +1622,6 @@ export default function TeacherAttendancePage() {
             </div>
           </div>
         </div>
-      </div>
 
       {/* Attendance Logs Dialog Modal */}
       <Dialog

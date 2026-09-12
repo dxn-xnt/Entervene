@@ -929,11 +929,12 @@ const TeacherGradeView = () => {
                     <Send className="mr-1 size-4 md:mr-2" /> Send All to Adviser
                   </Button>
                 )}
+                <DropdownMenu>
+                <DropdownMenuTrigger asChild>
                 <Button
                   variant={"outline"}
                   disabled={isExporting}
                   className="min-w-0 whitespace-nowrap border-2 border-black px-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100 disabled:opacity-50 md:px-4 md:text-sm"
-                  onClick={handleExport}
                 >
                   {isExporting ? (
                     <>
@@ -942,9 +943,20 @@ const TeacherGradeView = () => {
                   ) : (
                     <>
                       <Download className="mr-1 size-4 md:mr-2" /> Export Grades
+                      <ChevronDown className="ml-1 size-4" />
                     </>
                   )}
                 </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuItem disabled={isExporting} onSelect={() => void handleExportWorkbook()}>
+                    <FileSpreadsheet /> Full Year Workbook (.xlsx)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem disabled={isExporting} onSelect={() => void handleExportCurrent()}>
+                    <Download /> Export Current View
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </header>
 
