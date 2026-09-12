@@ -167,7 +167,7 @@ export function CopyPreviousYearSetupModal({
         <Dialog.Footer>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isCopying}>Cancel</Button>
           <Button onClick={handleCopy} disabled={isCopying || !options || !sourceYears.length || !targetYears.length}>
-            {isCopying ? "Copying..." : "Copy Previous Year Setup"}
+            Copy Previous Year Setup
           </Button>
         </Dialog.Footer>
       </Dialog.Content>

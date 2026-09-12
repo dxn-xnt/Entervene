@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.Dependencies import require_role
 from app.db.Session import get_db
 from app.schemas.Settings import (
+    AcademicPeriodCreateRequest,
     SettingRead,
     SettingUpdate,
     SettingsGroupedResponse,
@@ -46,14 +47,10 @@ def fetch_all_settings(
 def fetch_academic_years(
     db: Session = Depends(get_db),
 ):
-    """Fetch all academic years from the database."""
-    from app.models.academic.AcademicYear import AcademicYear
+    """Fetch all academic years from the database, automatically ensuring up to 2 years ahead exist."""
+    from app.services.academic.AcademicYearService import ensure_future_academic_years
 
-    years = (
-        db.query(AcademicYear)
-        .order_by(AcademicYear.start_date.desc())
-        .all()
-    )
+    years = ensure_future_academic_years(db, years_ahead=2)
     return {
         "years": [
             {
@@ -65,6 +62,39 @@ def fetch_academic_years(
             }
             for y in years
         ]
+    }
+
+
+@router.post("/academic-periods")
+def create_academic_periods_endpoint(
+    payload: AcademicPeriodCreateRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    """Admin only — creates or updates academic periods for a given academic year."""
+    from app.services.AcademicPeriodService import create_or_update_academic_periods
+
+    periods = create_or_update_academic_periods(
+        db=db,
+        academic_year_id=payload.academic_year_id,
+        period_type=payload.period_type,
+        periods_data=[p.model_dump() for p in payload.periods],
+    )
+    return {
+        "message": f"Successfully configured {len(periods)} academic periods.",
+        "periods": [
+            {
+                "academic_period_id": p.academic_period_id,
+                "academic_year_id": p.academic_year_id,
+                "period_type": p.period_type,
+                "period_sequence": p.period_sequence,
+                "period_name": p.period_name,
+                "start_date": p.start_date.isoformat() if p.start_date else None,
+                "end_date": p.end_date.isoformat() if p.end_date else None,
+                "is_active": bool(p.is_active),
+            }
+            for p in periods
+        ],
     }
 
 

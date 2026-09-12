@@ -32,20 +32,20 @@ export function SubjectCard({
 
   return (
     <Card
-      className={`group relative flex min-w-80 flex-col justify-between shadow-none p-3 hover:-translate-y-1 cursor-pointer ${className || ""}`}
+      className={`group relative flex min-w-0 flex-col justify-between p-3 shadow-none hover:-translate-y-1 cursor-pointer ${className || ""}`}
       onClick={onClick}
     >
       <div className="flex flex-col items-start justify-between gap-2">
-        <div className="flex flex-row w-full justify-between items-center">
-          <p className="text-2xl font-bold">
+        <div className="flex w-full min-w-0 flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
+          <p className="min-w-0 break-words text-xl font-bold sm:text-2xl">
             {title}
           </p>
-          <Badge size="sm" variant="surface">
+          <Badge size="sm" variant="surface" className="shrink-0">
             2 Pending Classworks
           </Badge>
         </div>
-        <div className="flex flex-row items-center gap-1.5 w-full -mt-2">
-          <p className="text-sm font-semibold">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5 sm:-mt-2">
+          <p className="min-w-0 break-words text-sm font-semibold">
             {teacher}
           </p>
           {badges?.map((b, idx) => (

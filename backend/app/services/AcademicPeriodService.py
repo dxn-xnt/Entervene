@@ -48,3 +48,86 @@ def normalize_academic_period_values(period: object) -> None:
     period.total_periods_in_year = total_periods
     period.period_progress_ratio = compute_period_progress_ratio(period_sequence, total_periods)
 
+
+def create_or_update_academic_periods(
+    db,
+    academic_year_id: int,
+    period_type: str,
+    periods_data: list[dict],
+) -> list:
+    """
+    Creates or updates academic periods for an academic year and period type.
+    """
+    from datetime import date
+    from fastapi import HTTPException
+    from app.models.academic.AcademicYear import AcademicYear
+    from app.models.academic.AcademicPeriod import AcademicPeriod
+
+    academic_year = db.query(AcademicYear).filter(AcademicYear.academic_year_id == academic_year_id).first()
+    if not academic_year:
+        raise HTTPException(status_code=404, detail="Academic year not found")
+
+    p_type = (period_type or "TERM").upper()
+    if p_type not in PERIOD_TOTALS:
+        raise HTTPException(status_code=400, detail=f"Invalid period type '{period_type}'. Must be TERM, QUARTER, or SEMESTER.")
+
+    expected_total = PERIOD_TOTALS[p_type]
+    results = []
+
+    for item in periods_data:
+        seq = item.get("period_sequence")
+        if not seq or seq < 1 or seq > expected_total:
+            raise HTTPException(status_code=400, detail=f"Invalid period_sequence {seq} for {p_type}")
+
+        start_raw = item.get("start_date")
+        end_raw = item.get("end_date")
+        if not start_raw or not end_raw:
+            raise HTTPException(status_code=400, detail=f"Start and end dates are required for period {seq}")
+
+        start_d = date.fromisoformat(start_raw) if isinstance(start_raw, str) else start_raw
+        end_d = date.fromisoformat(end_raw) if isinstance(end_raw, str) else end_raw
+
+        if start_d > end_d:
+            raise HTTPException(status_code=400, detail=f"Start date cannot be after end date for period {seq}")
+
+        p_name = f"{p_type.capitalize()} {seq}"
+
+        # Check existing
+        existing = (
+            db.query(AcademicPeriod)
+            .filter(
+                AcademicPeriod.academic_year_id == academic_year_id,
+                AcademicPeriod.period_type == p_type,
+                AcademicPeriod.period_sequence == seq,
+            )
+            .first()
+        )
+
+        if existing:
+            existing.period_name = p_name
+            existing.start_date = start_d
+            existing.end_date = end_d
+            existing.total_periods_in_year = expected_total
+            normalize_academic_period_values(existing)
+            results.append(existing)
+        else:
+            new_period = AcademicPeriod(
+                academic_year_id=academic_year_id,
+                period_type=p_type,
+                period_sequence=seq,
+                period_name=p_name,
+                total_periods_in_year=expected_total,
+                start_date=start_d,
+                end_date=end_d,
+                is_active=False,
+            )
+            normalize_academic_period_values(new_period)
+            db.add(new_period)
+            results.append(new_period)
+
+    db.commit()
+    for r in results:
+        db.refresh(r)
+    return results
+
+

@@ -153,7 +153,7 @@ export function LessonGoalProgress({
   return (
     <div className={className}>
       <h3 className="text-xl font-bold mb-1">{title}</h3>
-      <Card className="w-full">
+      <Card className="block w-full min-w-0">
         {!sortedGoalLessons || sortedGoalLessons.length === 0 ? (
           <Card.Content className="flex h-full items-center justify-center p-6 text-center text-sm font-semibold text-black/60">
             No goals available yet.
@@ -171,7 +171,7 @@ export function LessonGoalProgress({
             return (
               <div key={lesson.lesson_id} className="flex flex-col gap-2 mb-3">
                 {/* Lesson header - plain text, no box */}
-                <Card.Description>{lesson.title}</Card.Description>
+                <Card.Description className="break-words text-xl sm:text-2xl">{lesson.title}</Card.Description>
 
                 {/* Timeline */}
                 {isLoadingCws ? (
@@ -187,7 +187,7 @@ export function LessonGoalProgress({
                       isLast={orderedClassworks.length === 0}
                       status="upcoming"
                     >
-                      <div className="text-center border-2 px-3 py-1 bg-muted text-muted-foreground border-muted-foreground">
+                      <div className="border-2 border-muted-foreground bg-muted px-2 py-1 text-center text-muted-foreground sm:px-3">
                         <p className="text-xs">Lesson Completion</p>
                       </div>
                     </TimelineItem>

@@ -54,24 +54,24 @@ const StudentQuizView = () => {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
-              <SidebarTrigger className="md:hidden" />
-              <Breadcrumb>
-                <Breadcrumb.List>
+            <header className="flex min-w-0 items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <SidebarTrigger className="shrink-0 md:hidden" />
+              <Breadcrumb className="min-w-0">
+                <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 text-lg font-extrabold tracking-tight text-black sm:gap-2 sm:text-2xl md:text-3xl">
                   <Breadcrumb.Item>
                     <Breadcrumb.Link
                       onClick={() => navigate(routes.student.todo)}
-                      className="text-xl md:text-2xl text-black/50 hover:text-black cursor-pointer"
+                      className="cursor-pointer whitespace-nowrap text-lg text-black/50 hover:text-black sm:text-2xl md:text-4xl"
                     >
                       To-Do
                     </Breadcrumb.Link>
                   </Breadcrumb.Item>
                   <Breadcrumb.Separator />
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Page className="text-xl md:text-2xl font-bold">
+                  <Breadcrumb.Item className="min-w-0">
+                    <Breadcrumb.Page className="block truncate text-lg font-bold sm:text-xl md:text-3xl">
                       {quiz?.title || "Quiz Overview"}
                     </Breadcrumb.Page>
                   </Breadcrumb.Item>
@@ -79,7 +79,7 @@ const StudentQuizView = () => {
               </Breadcrumb>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-1 flex-col gap-4">
+            <div className="-mt-[1px] flex min-w-0 flex-1 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {loading ? (
                 <LoadingPanel label="Loading quiz..." />
               ) : error || !quiz ? (
@@ -149,7 +149,7 @@ const StudentQuizView = () => {
                     )}
 
                     {/* Stats Overview Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
                       <Card className="bg-[#F6E9B2] flex flex-col items-center justify-center p-6 text-center">
                         <HelpCircle className="w-6 h-6 mb-2 text-black/70" />
                         <span className="text-3xl font-extrabold">{quiz.questions.length}</span>

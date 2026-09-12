@@ -93,37 +93,42 @@ const StoryBoard = () => {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="whitespace-nowrap text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                   Study Board
                 </h1>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <Button
                   type="button"
-                  size="md"
+                  size="sm"
                   onClick={() => navigate(routes.student.profile)}
-                  className="gap-2 whitespace-nowrap"
+                  className="gap-1.5 whitespace-nowrap px-2 sm:px-3"
+                  aria-label="View my schedule"
                 >
                   <Calendar className="size-4" />
-                  View My Schedule
+                  <span className="sm:hidden">Schedule</span>
+                  <span className="hidden sm:inline">View My Schedule</span>
                 </Button>
               </div>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-1 flex-col gap-3">
+            <div className="-mt-[1px] flex flex-1 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex flex-col lg:flex-row lg:items-start gap-4 flex-1">
                 {/* Left side: Subject cards */}
-                <div className="grid grid-cols-2 gap-4 flex-1 content-start">
+                <div className="grid min-w-0 flex-1 grid-cols-1 content-start gap-3 sm:grid-cols-2 sm:gap-4">
                   {isLoading ? (
-                    <LoadingPanel label="Loading subjects..." className="col-span-2" />
+                    <LoadingPanel label="Loading subjects..." className="sm:col-span-2" />
                   ) : subjects.length === 0 ? (
-                    <EmptyStateCard title="No enrolled subjects found." className="col-span-2" />
+                    <EmptyStateCard
+                      title="No enrolled subjects found."
+                      className="px-4 py-10 sm:col-span-2 sm:px-6 sm:py-12"
+                    />
                   ) : (
                     subjects.map((subject) => (
                       <SubjectCard
@@ -143,7 +148,7 @@ const StoryBoard = () => {
                 </div>
 
                 {/* Right side: Top Card + To do Card */}
-                <div className="flex flex-col gap-4 w-full lg:w-[30%] shrink-0">
+                <div className="flex w-full min-w-0 shrink-0 flex-col gap-4 lg:w-[30%]">
                   <Card className="block w-full border-black bg-white shadow-md hover:shadow-none">
                     <Card.Content className="">
                       <div className="flex flex-col gap-1">
@@ -158,31 +163,31 @@ const StoryBoard = () => {
                           1-day streak — keep going, build the habit!
                         </Text>
                       </div>
-                      <div className="flex flex-row mt-2 items-center w-full ">
-                        <div className="flex flex-row gap-2 justify-between w-full">
+                      <div className="mt-2 w-full">
+                        <div className="grid w-full grid-cols-7 gap-1.5 sm:gap-2">
                           <Badge
                             size="md"
                             variant="secondary"
-                            className="items-center justify-center"
+                            className="flex min-w-0 items-center justify-center px-1 sm:px-2.5"
                           >
                             <Check size={17} className="mt-0.5" />
                           </Badge>
-                          <Badge size="md" variant="default">
+                          <Badge size="md" variant="default" className="min-w-0 px-1 text-center sm:px-2.5">
                             Tu
                           </Badge>
-                          <Badge size="md" variant="default">
+                          <Badge size="md" variant="default" className="min-w-0 px-1 text-center sm:px-2.5">
                             We
                           </Badge>
-                          <Badge size="md" variant="secondary">
+                          <Badge size="md" variant="secondary" className="min-w-0 px-1 text-center sm:px-2.5">
                             Th
                           </Badge>
-                          <Badge size="md" variant="outline">
+                          <Badge size="md" variant="outline" className="min-w-0 px-1 text-center sm:px-2.5">
                             Fr
                           </Badge>
-                          <Badge size="md" variant="outline">
+                          <Badge size="md" variant="outline" className="min-w-0 px-1 text-center sm:px-2.5">
                             Sa
                           </Badge>
-                          <Badge size="md" variant="outline">
+                          <Badge size="md" variant="outline" className="min-w-0 px-1 text-center sm:px-2.5">
                             Su
                           </Badge>
                         </div>

@@ -110,6 +110,34 @@ export async function getAcademicPeriodsSettings(academicYearId?: number): Promi
   return data.periods || [];
 }
 
+export interface CreateAcademicPeriodItem {
+  period_sequence: number;
+  start_date: string;
+  end_date: string;
+}
+
+export interface CreateAcademicPeriodsPayload {
+  academic_year_id: number;
+  period_type: string;
+  periods: CreateAcademicPeriodItem[];
+}
+
+/** Create or update academic periods for a year (admin only). */
+export async function createAcademicPeriods(
+  payload: CreateAcademicPeriodsPayload,
+): Promise<{ message: string; periods: AcademicPeriodSettingItem[] }> {
+  const res = await apiFetch("/api/v1/settings/academic-periods", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to configure academic periods");
+  }
+  return res.json();
+}
+
 /** Set active academic period (admin only). */
 export async function setActivePeriod(periodId: number): Promise<void> {
   const res = await apiFetch(`/api/v1/settings/active-period/${periodId}`, {
