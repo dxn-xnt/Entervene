@@ -159,10 +159,10 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-      <Dialog.Header asChild position="static" className="border-b-2 border-border shrink-0">
-        <div className="flex items-center justify-between w-full">
-          <div>
-            <Text as="h5" className="font-sans text-xl font-bold">
+      <Dialog.Header asChild position="static" className="shrink-0 border-b-2 border-border px-3 py-3 sm:px-5 sm:py-4">
+        <div className="flex w-full min-w-0 items-start justify-between gap-3">
+          <div className="min-w-0">
+            <Text as="h5" className="truncate font-sans text-lg font-bold sm:text-xl">
               {TABS[currentIndex]?.headerTitle || "Lesson Plan"}
             </Text>
             {TABS[currentIndex]?.headerDescription && (
@@ -171,13 +171,13 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
               </p>
             )}
           </div>
-          <Text as="h5" className="font-sans text-base font-semibold shrink-0">
+          <Text as="h5" className="shrink-0 whitespace-nowrap font-sans text-sm font-semibold sm:text-base">
             Step {currentIndex + 1} of {TABS.length}
           </Text>
         </div>
       </Dialog.Header>
 
-      <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-6 [scrollbar-gutter:stable]">
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 py-4 [scrollbar-gutter:stable] sm:gap-6 sm:px-6 sm:py-6">
         {/* Global error banner */}
         {apiError && (
           <div className="flex items-center gap-2.5 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 shadow-2xs w-full animate-in fade-in slide-in-from-top-1 duration-200">
@@ -260,14 +260,14 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
       </div>
 
       {/* Dialog Footer using default Dialog structure */}
-      <Dialog.Footer className="flex items-center justify-between border-t-2 border-border bg-background px-6 py-3.5 gap-3 w-full shrink-0 flex-wrap">
-        <div className="flex items-center gap-2">
+      <Dialog.Footer className="flex max-h-[42dvh] w-full shrink-0 flex-col items-stretch gap-2 overflow-y-auto border-t-2 border-border bg-background px-3 py-3 sm:max-h-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:overflow-visible sm:px-6 sm:py-3.5">
+        <div className="grid grid-cols-2 items-center gap-2 sm:flex">
           <Button
             type="button"
             variant="default"
             onClick={goPrev}
             disabled={isFirst}
-            className="gap-2"
+            className="w-full justify-center gap-2 sm:w-auto"
           >
             <ChevronLeft className="size-4" />
             Previous
@@ -278,7 +278,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
               variant="outline"
               onClick={onClose}
               disabled={isSaving || isSubmitting}
-              className="gap-2"
+              className="w-full justify-center gap-2 sm:w-auto"
             >
               <X className="size-4" />
               Cancel
@@ -286,13 +286,13 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+        <div className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap sm:justify-end">
           <Button
             type="button"
             variant="outline"
             onClick={handleSaveDraft}
             disabled={isSaving || isSubmitting}
-            className="gap-2"
+            className="w-full justify-center gap-2 sm:w-auto"
           >
             {isSaving ? (
               <Loader2 className="size-4 animate-spin" />
@@ -308,7 +308,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
                 type="button"
                 onClick={() => handleSubmitWithOption("pdf")}
                 disabled={isSubmitting}
-                className="gap-2 bg-red-600 hover:bg-red-700 text-white"
+                className="w-full justify-center gap-2 bg-red-600 text-white hover:bg-red-700 sm:w-auto"
               >
                 <FileText className="size-4" />
                 Submit &amp; PDF
@@ -318,7 +318,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
                 type="button"
                 onClick={() => handleSubmitWithOption("word")}
                 disabled={isSubmitting}
-                className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                className="w-full justify-center gap-2 bg-blue-600 text-white hover:bg-blue-700 sm:w-auto"
               >
                 <FileDown className="size-4" />
                 Submit &amp; Word (.docx)
@@ -328,7 +328,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
                 type="button"
                 onClick={() => handleSubmitWithOption("none")}
                 disabled={isSubmitting}
-                className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="w-full justify-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 sm:w-auto"
               >
                 {isSubmitting ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -339,7 +339,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
               </Button>
             </>
           ) : (
-            <Button type="button" onClick={goNext} className="gap-2">
+            <Button type="button" onClick={goNext} className="w-full justify-center gap-2 sm:w-auto">
               Next
               <ChevronRight className="size-4" />
             </Button>

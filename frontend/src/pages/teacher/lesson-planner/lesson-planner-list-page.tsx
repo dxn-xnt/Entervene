@@ -114,11 +114,11 @@ export const LessonPlannerListPage: React.FC = () => {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <div>
-                  <h1 className="text-2xl md:text-4xl font-bold">
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <div className="min-w-0">
+                  <h1 className="truncate text-xl font-bold sm:text-2xl md:text-4xl">
                     Lesson Planner
                   </h1>
                 </div>
@@ -128,14 +128,13 @@ export const LessonPlannerListPage: React.FC = () => {
                 variant="default"
                 size="md"
                 onClick={() => navigate(routes.teacher.lessonPlannerCreate)}
-                className="gap-2"
+                className="shrink-0 gap-1.5 px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
               >
                 <Plus className="size-4" />
-                <span className="hidden sm:inline">Create Lesson Plan</span>
-                <span className="sm:hidden">+</span>
+                <span>Create Lesson Plan</span>
               </Button>
             </header>
-            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs
                 tabs={TABS}
                 activeTab={activeTab}

@@ -121,6 +121,7 @@ const Notifications = () => {
                 size="md"
                 onClick={handleMarkAll}
                 disabled={markingAll || notifications.every((n) => n.is_read)}
+                className="shrink-0 px-2 text-xs sm:px-4 sm:text-sm"
               >
                 {markingAll ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-1 inline" />

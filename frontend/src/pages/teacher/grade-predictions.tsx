@@ -141,16 +141,16 @@ export default function GradePredictions() {
             <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
               <SidebarTrigger className="md:hidden" />
               <Breadcrumb>
-                <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
+                <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
                   <Breadcrumb.Item>
-                    <Breadcrumb.Link asChild className="text-2xl md:text-4xl font-bold">
+                    <Breadcrumb.Link asChild>
                       <Link to={`/${baseRole}/predictions`}>AI Predictions</Link>
                     </Breadcrumb.Link>
                   </Breadcrumb.Item>
                   <>
                     <Breadcrumb.Separator />
                     <Breadcrumb.Item>
-                      <Breadcrumb.Page className="text-2xl font-bold font-black">
+                      <Breadcrumb.Page>
                         Grade {grade}
                       </Breadcrumb.Page>
                     </Breadcrumb.Item>

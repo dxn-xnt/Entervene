@@ -906,32 +906,32 @@ export default function SubjectDetails() {
               </main>
             ) : (
               <>
-                <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between bg-background py-4 px-4 md:px-6">
-                  <div className="flex items-center gap-3">
-                    <SidebarTrigger className="md:hidden" />
-                    <Breadcrumb>
-                      <Breadcrumb.List>
+                <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                    <SidebarTrigger className="shrink-0 md:hidden" />
+                    <Breadcrumb className="min-w-0">
+                      <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
                         <Breadcrumb.Item>
-                          <Breadcrumb.Link href="/teacher/classes">
+                          <Breadcrumb.Link href="/teacher/classes" className="whitespace-nowrap">
                             Classes
                           </Breadcrumb.Link>
                         </Breadcrumb.Item>
 
                         <Breadcrumb.Separator />
-                        <Breadcrumb.Item>
-                          <Breadcrumb.Page>{subjectName}</Breadcrumb.Page>
+                        <Breadcrumb.Item className="min-w-0">
+                          <Breadcrumb.Page className="block truncate">{subjectName}</Breadcrumb.Page>
                         </Breadcrumb.Item>
                       </Breadcrumb.List>
                     </Breadcrumb>
                   </div>
 
                   {activeTab === "lessons" && (
-                    <div className="flex items-center gap-2 flex-col lg:flex-row lg:flex-nowrap">
+                    <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-nowrap md:items-center">
                       <Button
                         type="button"
                         variant="outline"
                         onClick={() => openCompetencyForm(null)}
-                        className="whitespace-nowrap gap-2"
+                        className="w-full gap-1.5 whitespace-nowrap px-2 sm:gap-2 sm:px-4 md:w-auto"
                       >
                         <Award size={16} />
                         Add Competency
@@ -943,7 +943,7 @@ export default function SubjectDetails() {
                           setSelectedCompetencyIdForNewLesson(undefined);
                           setIsCreatingLesson(true);
                         }}
-                        className="whitespace-nowrap gap-2"
+                        className="w-full gap-1.5 whitespace-nowrap px-2 sm:gap-2 sm:px-4 md:w-auto"
                       >
                         <Plus size={16} />
                         Add Lesson
@@ -951,7 +951,7 @@ export default function SubjectDetails() {
                     </div>
                   )}
                 </header>
-                <div className="px-4 md:px-6 bg-background -mt-[1px]">
+                <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
                   <Tabs
                     tabs={tabs}
                     activeTab={activeTab}
@@ -959,7 +959,7 @@ export default function SubjectDetails() {
                   />
                 </div>
 
-                <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
+                <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
                   {error && (
                     <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
                       {error}
@@ -969,7 +969,7 @@ export default function SubjectDetails() {
                   <Card className="block bg-primary">
                     <Card.Content className="flex items-start justify-between gap-4">
                       <div>
-                        <Card.Title className="text-3xl font-bold">
+                        <Card.Title className="break-words text-2xl font-bold sm:text-3xl">
                           {subjectName}
                         </Card.Title>
                         <p className="text-xs text-black">

@@ -208,14 +208,14 @@ export default function PredictionsDashboard() {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             {/* ── Header ── */}
-            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
-              <SidebarTrigger className="md:hidden" />
-              <h1 className="text-2xl md:text-4xl font-bold">AI Predictions</h1>
+            <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <SidebarTrigger className="shrink-0 md:hidden" />
+              <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">AI Predictions</h1>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
+            <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {/* ── Risk Summary Cards ── */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-3">
+              <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-4">
                 {RISK_CARDS.map((card) => {
                   const count = summary[card.key];
                   const isActive = riskLevel === card.key;

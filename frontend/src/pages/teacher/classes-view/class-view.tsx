@@ -237,35 +237,35 @@ export default function TeacherClassDetail() {
 
   return (
     <AppLayout>
-      <div className="flex min-w-0 max-w-full flex-1 flex-col overflow-x-hidden">
+      <div className="flex min-w-0 max-w-full flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex min-w-0 max-w-full flex-1 flex-col">
           <div className="flex min-w-0 max-w-full flex-1 flex-col">
-            <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-background py-4 px-4 md:px-6 min-w-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <SidebarTrigger className="md:hidden" />
-                <Breadcrumb>
-                  <Breadcrumb.List>
+            <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <Breadcrumb className="min-w-0">
+                  <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
                     <Breadcrumb.Item>
                       <Breadcrumb.Link
                         onClick={() => navigate("/teacher/classes")}
-                        className="cursor-pointer"
+                        className="cursor-pointer whitespace-nowrap text-muted-foreground hover:text-black"
                       >
                         Classes
                       </Breadcrumb.Link>
                     </Breadcrumb.Item>
                     <Breadcrumb.Separator />
-                    <Breadcrumb.Item>
+                    <Breadcrumb.Item className="min-w-0">
                       <Breadcrumb.Link
                         onClick={() => navigate(`/teacher/classes/${detail.class_id}/subjects/${currentSubject?.subject_id}`)}
-                        className="cursor-pointer text-xl"
+                        className="block max-w-28 cursor-pointer truncate text-muted-foreground hover:text-black sm:max-w-56 md:max-w-none"
                       >
                         {currentSubject?.subject_name || "Subject"}
 
                       </Breadcrumb.Link>
                     </Breadcrumb.Item>
                     <Breadcrumb.Separator />
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Page>
+                    <Breadcrumb.Item className="min-w-0">
+                      <Breadcrumb.Page className="block truncate">
                         {detail.section_name}
                       </Breadcrumb.Page>
                     </Breadcrumb.Item>
@@ -273,15 +273,15 @@ export default function TeacherClassDetail() {
                 </Breadcrumb>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
                 {tab === "lessons" && (
-                  <Button>
+                  <Button className="w-full md:w-auto">
                     <Pencil className="mr-2 size-4" /> Set Lesson Goal
                   </Button>
                 )}
               </div>
             </header>
-            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs<DetailTab>
                 tabs={[
                   {
@@ -305,17 +305,20 @@ export default function TeacherClassDetail() {
               />
             </div>
 
-            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
+            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
 
               <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
                 <Card.Content>
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <Card.Title className="mb-0 text-2xl sm:text-3xl font-extrabold">
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <Card.Title
+                        className="mb-0 truncate text-2xl font-extrabold sm:text-3xl"
+                        title={currentSubject?.subject_name || detail.section_name}
+                      >
                         {currentSubject?.subject_name || detail.section_name}
                       </Card.Title>
                     </div>
-                    <div className="flex flex-row gap-2">
+                    <div className="flex shrink-0 flex-row items-center gap-2">
                       <Badge
                         variant="outline"
                         size="sm"
@@ -1034,27 +1037,28 @@ function OverviewTab({
             <div className="flex flex-col gap-4 min-w-0">
               <div className="flex flex-col gap-3 min-w-0">
                 {/* Header toolbar */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap min-w-0">
+                <div className="flex min-w-0 items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <Text as="h3" className="text-xl font-semibold">
+                    <Text as="h3" className="text-xl font-bold tracking-tight sm:text-2xl">
                       Lessons & Competencies
                     </Text>
                   </div>
                 </div>
 
                 {/* Search & Sort Controls */}
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
-                  <label className="relative flex-1 sm:max-w-sm">
+                <Card className="block w-full min-w-0 border-black bg-white p-3 shadow-sm hover:shadow-sm">
+                <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <label className="relative w-full min-w-0 flex-1 lg:max-w-md">
                     <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                     <Input
                       value={lessonSearch}
                       onChange={(e) => setLessonSearch(e.target.value)}
                       placeholder="Search competencies or lessons..."
-                      className="h-10 w-full border-2 border-black pl-9 pr-3 bg-white"
+                      className="h-10 w-full min-w-0 border-2 border-black bg-white pl-9 pr-3 shadow-none"
                     />
                   </label>
 
-                  <div className="flex items-center flex-wrap items-end">
+                  <div className="grid w-full grid-cols-2 items-stretch gap-2 lg:flex lg:w-auto lg:items-center">
                     {/* {(selectedSubjectId || currentSubjectLoad?.subject_id || detail.subject_loads[0]?.subject_id) && (
                       <Button
                         variant="link"
@@ -1085,7 +1089,7 @@ function OverviewTab({
                         )
                       }
                     >
-                      <Select.Trigger className="h-10 text-sm bg-white">
+                      <Select.Trigger className="h-10 w-full border-2 border-black bg-white text-sm shadow-sm lg:w-40">
                         <Select.Value placeholder="Sort by" />
                       </Select.Trigger>
                       <Select.Content className="border-2 border-black bg-white">
@@ -1111,7 +1115,7 @@ function OverviewTab({
                             );
                           }
                         }}
-                        className="h-10 gap-1.5 border-2 border-black bg-[#F6E9B2] hover:bg-[#fae498] text-black text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] whitespace-nowrap"
+                        className="h-10 w-full gap-1.5 whitespace-nowrap border-2 border-black bg-primary px-2 text-sm font-bold text-black shadow-sm hover:bg-primary-hover lg:w-auto lg:px-4"
                         title="Go to Subject View"
                       >
                         <BookOpen size={16} />
@@ -1120,6 +1124,7 @@ function OverviewTab({
                     )}
                   </div>
                 </div>
+                </Card>
               </div>
 
               {/* Lessons List with Competencies Hierarchy */}
@@ -1150,7 +1155,7 @@ function OverviewTab({
                     return (
                       <Card
                         key={comp.competency_id}
-                        className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden min-w-0"
+                        className="flex min-w-0 flex-col overflow-hidden border-2 border-black bg-white p-0 shadow-md hover:shadow-md"
                       >
                         {/* Competency Header Bar */}
                         <div
@@ -1163,25 +1168,10 @@ function OverviewTab({
                               toggleCompetencyCollapse(comp.competency_id);
                             }
                           }}
-                          className="flex items-center justify-between border-b-2 border-black bg-[#F6E9B2] px-4 py-3.5 gap-3 min-w-0 w-full cursor-pointer group select-none"
+                          className="group flex w-full min-w-0 cursor-pointer select-none items-center justify-between gap-3 border-b-2 border-black bg-primary px-3 py-3 sm:px-4 sm:py-3.5"
                           title={isCollapsed ? "Expand competency" : "Collapse competency"}
                         >
                           <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                            <div
-                              className="rounded border-2 border-black bg-white p-1.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:bg-yellow-100 transition-colors shrink-0"
-                            >
-                              {isCollapsed ? (
-                                <ChevronRight
-                                  size={16}
-                                  className="text-black"
-                                />
-                              ) : (
-                                <ChevronDown
-                                  size={16}
-                                  className="text-black"
-                                />
-                              )}
-                            </div>
                             <div className="min-w-0 flex-1">
                               <div className="mb-1 flex flex-wrap items-center gap-2 min-w-0">
                                 <Award
