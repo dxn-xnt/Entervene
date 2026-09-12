@@ -84,93 +84,61 @@ def validate_semantics(profile_key: str, result: dict[str, Any]) -> list[str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"), required=os.getenv("DATABASE_URL") is None)
-    parser.add_argument("--run-id", default=LABEL_PREFIX)
-    parser.add_argument(
-        "--replace-legacy",
-        action="store_true",
-        help="Replace a conflicting legacy prediction only in the isolated demo database.",
-    )
-    args = parser.parse_args()
-    require_demo_database(args.database_url)
-    manifest_file = MANIFEST_DIR / f"{args.run_id}.json"
-    if not manifest_file.exists():
-        raise ValueError(f"Fixture manifest not found: {manifest_file}")
-    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
-    engine = create_engine(args.database_url)
-    report: dict[str, Any] = {"run_id": args.run_id, "database": make_url(args.database_url).database, "profiles": {}, "failures": []}
-    audited_prediction_ids: list[int] = []
-
-    try:
-        for scope_name, scope in SCOPES.items():
-            with Session(engine) as session:
-                students = {student.student_lrn: student for student in session.query(Student).filter(Student.student_lrn.in_(scope["profiles"])).all()}
-                for lrn, profile in scope["profiles"].items():
-                    student = students[lrn]
-                    request_scope = {
-                        "student_id": student.student_id,
-                        "class_id": scope["class_id"],
-                        "subject_id": scope["subject_id"],
-                        "source_period_id": 1,
-                        "target_period_id": 1,
-                    }
-                    built = build_prediction_features_from_records(session, **request_scope)
-                    observed = compact(built)
-                    semantic_errors = validate_semantics(profile["key"], observed)
-                    profile_report: dict[str, Any] = {"scope": {key: str(value) for key, value in request_scope.items()}, "profile": profile["key"], "preview": observed, "semantic_errors": semantic_errors, "prediction_persisted": False}
-                    if built["ready"]:
-                        existing_ids_before = {
-                            prediction_id
-                            for (prediction_id,) in session.query(AIPrediction.prediction_id)
-                            .filter(
-                                AIPrediction.student_id == student.student_id,
-                                AIPrediction.class_id == scope["class_id"],
-                                AIPrediction.subject_id == scope["subject_id"],
-                                AIPrediction.source_period_id == request_scope["source_period_id"],
-                                AIPrediction.target_period_id == request_scope["target_period_id"],
-                            )
-                            .all()
-                        }
-
-                        def generate(generation_db: Session):
-                            rebuilt = build_prediction_features_from_records(generation_db, **request_scope)
-                            return score_and_persist_prediction(
-                                generation_db,
-                                {**request_scope, "features": rebuilt["features"]},
-                                commit=False,
-                                replace_existing=args.replace_legacy,
-                                evidence_context=rebuilt,
-                                generation_request_id=f"{args.run_id}:{scope_name}:{lrn}",
-                            )
-                        persisted = run_prediction_generation_transaction(request_scope, "entervene_next_period_grade_rf", generate, bind=engine)
-                        if persisted.get("duplicate"):
-                            collision = (
-                                "A pre-existing prediction already occupies this source/target/model scope; "
-                                "the demo will not overwrite it."
-                            )
-                            profile_report.update({
-                                "persistence_collision": collision,
-                                "existing_prediction_id": persisted["prediction_id"],
-                            })
-                            report["failures"].append(f"{scope_name}:{lrn}: {collision}")
-                        else:
+    diff --git a/C:\Users\Roy Adrian Rondina\Desktop\3rd Year\2nd Sem\Entervene\Entervene\backend\scripts\validate_prediction_demo.py b/C:\Users\Roy Adrian Rondina\Desktop\3rd Year\2nd Sem\Entervene\Entervene\backend\scripts\validate_prediction_demo.py
+--- a/C:\Users\Roy Adrian Rondina\Desktop\3rd Year\2nd Sem\Entervene\Entervene\backend\scripts\validate_prediction_demo.py
++++ b/C:\Users\Roy Adrian Rondina\Desktop\3rd Year\2nd Sem\Entervene\Entervene\backend\scripts\validate_prediction_demo.py
+@@ -87,2 +87,7 @@
+     parser.add_argument("--run-id", default=LABEL_PREFIX)
++    parser.add_argument(
++        "--replace-legacy",
++        action="store_true",
++        help="Replace a conflicting legacy prediction only in the isolated demo database.",
++    )
+     args = parser.parse_args()
+@@ -95,2 +100,3 @@
+     report: dict[str, Any] = {"run_id": args.run_id, "database": make_url(args.database_url).database, "profiles": {}, "failures": []}
++    audited_prediction_ids: list[int] = []
+ 
+@@ -114,2 +120,15 @@
+                     if built["ready"]:
++                        existing_ids_before = {
++                            prediction_id
++                            for (prediction_id,) in session.query(AIPrediction.prediction_id)
++                            .filter(
++                                AIPrediction.student_id == student.student_id,
++                                AIPrediction.class_id == scope["class_id"],
++                                AIPrediction.subject_id == scope["subject_id"],
++                                AIPrediction.source_period_id == request_scope["source_period_id"],
++                                AIPrediction.target_period_id == request_scope["target_period_id"],
++                            )
++                            .all()
++                        }
++
+                         def generate(generation_db: Session):
+@@ -120,2 +139,3 @@
+                                 commit=False,
++                                replace_existing=args.replace_legacy,
+                                 evidence_context=rebuilt,
+                         else:
                             replaced_legacy = persisted["prediction_id"] in existing_ids_before
-                            profile_report.update({
-                                "prediction_persisted": True,
-                                "prediction_id": persisted["prediction_id"],
-                            "predicted_period_grade": persisted["predicted_period_grade"],
+                             profile_report.update({
+                                 "prediction_persisted": True,
+                           "prediction_id": persisted["prediction_id"],
+                               "prediction_id": persisted["prediction_id"],
+                             "predicted_period_grade": persisted["predicted_period_grade"],
+                           "risk_level": persisted["risk_level"],
+                            "risk_score": persisted["risk_score"],
                                 "risk_level": persisted["risk_level"],
                                 "risk_score": persisted["risk_score"],
-                                "legacy_prediction_replaced": replaced_legacy,
-                            })
+                               "legacy_prediction_replaced": replaced_legacy,
+                             })
+                            manifest["created_ids"].setdefault("ai_prediction", []).append(persisted["prediction_id"])
                             audited_prediction_ids.append(persisted["prediction_id"])
                             if not replaced_legacy:
-                                manifest["created_ids"].setdefault("ai_prediction", []).append(persisted["prediction_id"])
-                    report["profiles"][f"{scope_name}:{lrn}"] = profile_report
-                    report["failures"].extend(f"{scope_name}:{lrn}: {error}" for error in semantic_errors)
-
-        # Immutability proof: mutate one fixture attendance row, read the old
-        # saved prediction, then restore the source row.  Snapshot equality is
-        # tested as canonical JSON, not as an unstable whole API response.
+                              manifest["created_ids"].setdefault("ai_prediction", []).append(persisted["prediction_id"])
+                     report["profiles"][f"{scope_name}:{lrn}"] = profile_report
+         # tested as canonical JSON, not as an unstable whole API response.
+        persisted_ids = manifest["created_ids"].get("ai_prediction", [])
         persisted_ids = audited_prediction_ids
         attendance_ids = manifest["created_ids"].get("attendance_record", [])
         if persisted_ids and attendance_ids:
