@@ -840,6 +840,34 @@ export async function exportTeacherClassRecord(
   return { blob, filename };
 }
 
+export async function exportTeacherClassRecordWorkbook(
+  classId: number | string,
+  subjectId: number | string,
+  academicYearId?: number
+): Promise<{ blob: Blob; filename: string }> {
+  let url = `/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/export-class-record-workbook`;
+  if (academicYearId) {
+    url += `?academic_year_id=${encodeURIComponent(String(academicYearId))}`;
+  }
+  const response = await apiFetch(url);
+
+  if (!response.ok) {
+    throw new Error("Unable to export class record workbook. Please try again.");
+  }
+
+  const contentDisposition = response.headers.get("content-disposition");
+  let filename = "Class_Record_Full_Year.xlsx";
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename=["']?([^"';]+)["']?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  const blob = await response.blob();
+  return { blob, filename };
+}
+
 export async function getTeacherAvailablePeriods(
   classId: number,
   subjectId: number
