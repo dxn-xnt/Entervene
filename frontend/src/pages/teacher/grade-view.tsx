@@ -954,7 +954,7 @@ const TeacherGradeView = () => {
                       <FileSpreadsheet className="size-4 mt-0.5 text-emerald-600 shrink-0" />
                       <div>
                         <div className="text-sm font-extrabold text-black">Full Year Workbook (.xlsx)</div>
-                        <div className="text-xs font-normal text-muted-foreground">All quarters + Summary of Grades</div>
+                        <div className="text-xs font-normal text-muted-foreground">All terms + Summary of Grades</div>
                       </div>
                     </DropdownMenuItem>
                     <DropdownMenuItem
@@ -964,7 +964,7 @@ const TeacherGradeView = () => {
                       <Download className="size-4 mt-0.5 text-primary shrink-0" />
                       <div>
                         <div className="text-sm font-extrabold text-black">
-                          {activeTab === "summary" ? "Summary Sheet (.csv)" : "Current Quarter (.xlsx)"}
+                          {activeTab === "summary" ? "Summary Sheet (.csv)" : "Current Term (.xlsx)"}
                         </div>
                         <div className="text-xs font-normal text-muted-foreground">
                           {activeTab === "summary" ? "CSV format with final grades" : "Single term DepEd sheet"}

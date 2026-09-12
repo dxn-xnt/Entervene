@@ -902,7 +902,7 @@ export function TOSGeneratorScreen({
                   <p className="mx-auto mt-1 max-w-sm text-sm font-normal text-muted-foreground">
                     {savedExams.length === 0
                       ? "Create your first Table of Specifications blueprint and exam questionnaire."
-                      : "No exam matches the selected quarter or search query."}
+                      : "No exam matches the selected term or search query."}
                   </p>
                   <Button
                     size="sm"
