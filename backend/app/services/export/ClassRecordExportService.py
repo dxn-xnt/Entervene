@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -68,7 +68,7 @@ FONT_SUMMARY = Font(name=FONT_FAMILY, size=10, bold=True, color="333333")
 # DepEd Component Soft Colors
 FILL_BLUE = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")       # Written Works
 FILL_GREEN = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")      # Performance Tasks
-FILL_PEACH = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")      # Quarterly Assessment
+FILL_PEACH = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")      # Exams / Quarterly Assessment
 FILL_GOLD = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")       # Final Grades / Summary
 FILL_GRAY = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")       # HPS / Fallback
 FILL_GENDER = PatternFill(start_color="E9EEF4", end_color="E9EEF4", fill_type="solid")     # Male/Female dividers
@@ -148,7 +148,7 @@ def _get_school_metadata(
     If not configured in Setting table, return empty strings ("") rather than
     fabricated/false regional placeholders.
     """
-    settings_rows = {s.key: (s.value or "").strip() for s in db.query(Setting).all()}
+    settings_rows: dict[str, str] = {str(s.key): (str(s.value or "")).strip() for s in db.query(Setting).all()}
 
     # School Name: setting school_name -> fallback empty (never app_name)
     school_name = settings_rows.get("school_name") or ""
@@ -335,11 +335,11 @@ def generate_class_record_sheet(
     term_title = sheet_title or meta["period_name"] or "Term"
     clean_sheet_title = re.sub(r"[\\/*?:\[\]]", "", term_title)[:31].strip() or "Class Record"
 
-    if len(wb.sheetnames) == 1 and wb.sheetnames[0] == "Sheet":
-        ws = wb.active
+    if len(wb.sheetnames) == 1 and wb.sheetnames[0] == "Sheet" and wb.active is not None:
+        ws = cast(Worksheet, wb.active)
         ws.title = clean_sheet_title
     else:
-        ws = wb.create_sheet(title=clean_sheet_title)
+        ws = cast(Worksheet, wb.create_sheet(title=clean_sheet_title))
 
     # Ensure Excel gridlines are displayed
     ws.views.sheetView[0].showGridLines = True
@@ -363,7 +363,7 @@ def generate_class_record_sheet(
         component_defs = [
             ("Written Works", weights.ww_weight * 100.0, "WW"),
             ("Performance Tasks", weights.pt_weight * 100.0, "PT"),
-            ("Quarterly Assessment", weights.qa_weight * 100.0, "QA"),
+            ("Exams", weights.qa_weight * 100.0, "QA"),
         ]
     else:
         component_defs = [
@@ -457,7 +457,7 @@ def generate_class_record_sheet(
     ws.cell(8, 2).value = meta["school_id"]
     ws.cell(8, 2).font = FONT_META_VAL
 
-    # Right Column: School Year, Grade & Section, Teacher, Subject & Quarter
+    # Right Column: School Year, Grade & Section, Teacher, Subject & Term
     mid_label_col = max(5, min(8, total_cols - 4))
     mid_val_col = mid_label_col + 1
 
@@ -476,7 +476,7 @@ def generate_class_record_sheet(
     ws.cell(7, mid_val_col).value = meta["teacher_name"]
     ws.cell(7, mid_val_col).font = FONT_META_VAL
 
-    ws.cell(8, mid_label_col).value = "SUBJECT & QUARTER:"
+    ws.cell(8, mid_label_col).value = "SUBJECT & TERM:"
     ws.cell(8, mid_label_col).font = FONT_META_LABEL
     ws.cell(8, mid_val_col).value = f"{meta['subject_name']} - {meta['period_name']}".strip(" -")
     ws.cell(8, mid_val_col).font = FONT_META_VAL
@@ -499,7 +499,7 @@ def generate_class_record_sheet(
     for comp in comp_groups:
         # Merged header in Row 10 across all its sub-columns
         ws.merge_cells(start_row=10, start_column=comp.start_col, end_row=10, end_column=comp.end_col)
-        weight_str = f"{int(round(comp.weight_pct))}%" if comp.weight_pct.is_integer() else f"{comp.weight_pct}%"
+        weight_str = f"{round(comp.weight_pct)}%" if comp.weight_pct.is_integer() else f"{comp.weight_pct}%"
         ws.cell(10, comp.start_col).value = f"{comp.name.upper()} ({weight_str})"
         _style_range(
             ws,
@@ -534,7 +534,7 @@ def generate_class_record_sheet(
     _style_range(ws, initial_grade_col, 10, initial_grade_col, 11, font=FONT_TABLE_HEADER, fill=FILL_GOLD, border=CELL_BORDER, alignment=ALIGN_CENTER)
 
     ws.merge_cells(start_row=10, start_column=term_grade_col, end_row=11, end_column=term_grade_col)
-    ws.cell(10, term_grade_col).value = "QUARTERLY\nGRADE"
+    ws.cell(10, term_grade_col).value = "TERM\nGRADE"
     _style_range(ws, term_grade_col, 10, term_grade_col, 11, font=FONT_TABLE_HEADER, fill=FILL_GOLD, border=CELL_BORDER, alignment=ALIGN_CENTER)
 
     ws.merge_cells(start_row=10, start_column=descriptor_col, end_row=11, end_column=descriptor_col)
@@ -698,7 +698,7 @@ def generate_class_record_sheet(
             if ig_val is not None:
                 ws.cell(row_num, initial_grade_col).number_format = "0.00"
 
-            # Quarterly / Term Grade
+            # Term Grade
             tg_val = student.transmuted_grade if student.transmuted_grade is not None else (_deped_transmuted(ig_val) if ig_val is not None else None)
             ws.cell(row_num, term_grade_col).value = tg_val if tg_val is not None else ""
             ws.cell(row_num, term_grade_col).alignment = ALIGN_CENTER
@@ -898,7 +898,7 @@ def generate_summary_of_grades_sheet(
         summary.periods.sort(key=lambda p: (p.period_sequence or 0))
 
     # 3. Create worksheet
-    ws = wb.create_sheet(title=sheet_title)
+    ws = cast(Worksheet, wb.create_sheet(title=sheet_title))
     ws.views.sheetView[0].showGridLines = True
 
     # 4. School Metadata
@@ -977,7 +977,7 @@ def generate_summary_of_grades_sheet(
         start_period_col = 3
         end_period_col = 2 + num_periods
         ws.merge_cells(start_row=10, start_column=start_period_col, end_row=10, end_column=end_period_col)
-        ws.cell(10, start_period_col).value = "QUARTERLY / TERM GRADES"
+        ws.cell(10, start_period_col).value = "TERM GRADES"
         _style_range(ws, start_period_col, 10, end_period_col, 10, font=FONT_TABLE_HEADER, fill=FILL_GOLD, border=CELL_BORDER, alignment=ALIGN_CENTER)
 
         for i, period_info in enumerate(summary.periods):

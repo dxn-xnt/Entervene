@@ -49,8 +49,8 @@ npx expo start --offline (if ever mag bug inig run)
 
 
 Password is either
-or
 12345678
+or
 Sphinxclub012
 
 Sample Accounts:

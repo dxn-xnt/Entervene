@@ -41,7 +41,7 @@ export default function ClassworkFormModal({
     classworkLesson.lesson_id === 0;
   const allowsClassworkMaterials = classworkDraft.classwork_type !== "QUIZ";
   const classworkModalTitle = isQuarterlyAssessment
-    ? "Add Quarterly Assessment"
+    ? "Add Exam"
     : isReadingDraft
       ? "Add Reading"
       : isQuizDraft

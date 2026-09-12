@@ -196,7 +196,7 @@ export default function CompetencyModal({
                 <Input
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Brief quarter or unit note"
+                  placeholder="Brief term or unit note"
                   className="w-full"
                 />
               </label>

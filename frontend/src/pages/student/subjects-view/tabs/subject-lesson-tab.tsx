@@ -1593,7 +1593,7 @@ export default function SubjectLessonTab({
                   </div>
                   <div>
                     <h3 className="text-xl font-bold tracking-tight text-black">
-                      Quarterly Assessments
+                      Exams
                     </h3>
                     <p className="text-xs font-medium text-gray-600">
                       Periodical exams and summative assessments for this subject.
@@ -1606,8 +1606,8 @@ export default function SubjectLessonTab({
                 >
                   {quarterlyAssessments.length}{" "}
                   {quarterlyAssessments.length === 1
-                    ? "Assessment"
-                    : "Assessments"}
+                    ? "Exam"
+                    : "Exams"}
                 </Badge>
               </div>
 
@@ -1637,7 +1637,7 @@ export default function SubjectLessonTab({
                               {cw.title}
                             </h4>
                             <span className="rounded-full border border-black bg-[#7ABA78] px-2.5 py-0.5 text-[10px] font-bold text-white shrink-0">
-                              Quarterly Assessment
+                              Exam
                             </span>
                           </div>
                           <p className="text-xs font-medium text-gray-600 mt-1">

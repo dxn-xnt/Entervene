@@ -2,12 +2,13 @@ import io
 import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from typing import cast
 
 import openpyxl
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import CheckConstraint, create_engine
+from sqlalchemy import CheckConstraint, Table, create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -48,17 +49,18 @@ def export_context():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    student_table = cast(Table, Student.__table__)
     lrn_check = next(
-        (c for c in Student.__table__.constraints if isinstance(c, CheckConstraint) and c.name == "lrn_check"),
+        (c for c in student_table.constraints if isinstance(c, CheckConstraint) and c.name == "lrn_check"),
         None,
     )
-    if lrn_check and lrn_check in Student.__table__.constraints:
-        Student.__table__.constraints.remove(lrn_check)
+    if lrn_check and lrn_check in student_table.constraints:
+        student_table.constraints.remove(lrn_check)
     try:
         Base.metadata.create_all(bind=engine)
     finally:
-        if lrn_check and lrn_check not in Student.__table__.constraints:
-            Student.__table__.append_constraint(lrn_check)
+        if lrn_check and lrn_check not in student_table.constraints:
+            student_table.append_constraint(lrn_check)
 
     db = sessionmaker(bind=engine)()
 
@@ -84,8 +86,8 @@ def export_context():
     db.flush()
 
     period = AcademicPeriod(
-        period_name="First Quarter",
-        period_type="QUARTER",
+        period_name="Term 1",
+        period_type="TERM",
         period_sequence=1,
         academic_year_id=year.academic_year_id,
         is_active=True,
@@ -256,22 +258,22 @@ def test_generate_class_record_sheet(export_context):
     )
 
     # 1. Verify Sheet Title
-    assert ws.title == "First Quarter"
+    assert ws.title == "Term 1"
 
     # 2. Verify Header Block
-    assert ws["A1"].value == "Republic of the Philippines"
-    assert ws["A2"].value == "Department of Education"
-    assert ws["A3"].value == "ELECTRONIC CLASS RECORD"
-    assert ws["B5"].value == "IV"  # Region from Setting
-    assert ws["B6"].value == "Fourth District"  # Division from Setting
-    assert ws["B7"].value == "Medellin National Science and Technology School (MNSTS)"  # School Name from Setting
-    assert ws["B8"].value == "303012"  # School ID from Setting
+    assert ws.cell(1, 1).value == "Republic of the Philippines"
+    assert ws.cell(2, 1).value == "Department of Education"
+    assert ws.cell(3, 1).value == "ELECTRONIC CLASS RECORD"
+    assert ws.cell(5, 2).value == "IV"  # Region from Setting
+    assert ws.cell(6, 2).value == "Fourth District"  # Division from Setting
+    assert ws.cell(7, 2).value == "Medellin National Science and Technology School (MNSTS)"  # School Name from Setting
+    assert ws.cell(8, 2).value == "303012"  # School ID from Setting
 
     # Right column metadata (col 9)
     assert ws.cell(5, 9).value == "AY2025-2026"
     assert ws.cell(6, 9).value == "Grade 8 – Rizal"
-    assert ws.cell(7, 9).value == "Maria Santos"
-    assert ws.cell(8, 9).value == "Mathematics - First Quarter"
+    assert ws.cell(8, 8).value == "SUBJECT & TERM:"
+    assert ws.cell(8, 9).value == "Mathematics - Term 1"
 
     # 3. Verify Dynamic Component Headers in Row 10
     # WW has 2 items -> start_col=3, total_col=5, ps_col=6, ws_col=7, end_col=7
@@ -282,7 +284,7 @@ def test_generate_class_record_sheet(export_context):
     assert "PERFORMANCE TASKS (40%)" in str(ws.cell(10, 8).value)
     assert "QUARTERLY ASSESSMENT (20%)" in str(ws.cell(10, 12).value)
     assert "INITIAL" in str(ws.cell(10, 16).value)
-    assert "QUARTERLY" in str(ws.cell(10, 17).value)
+    assert "TERM" in str(ws.cell(10, 17).value)
     assert "DESCRIPTOR" in str(ws.cell(10, 18).value)
 
     # 4. Verify Highest Possible Score (Row 12)
@@ -344,9 +346,9 @@ def test_export_class_record_single_term_stream(export_context):
 
     # Verify stream can be parsed as a valid openpyxl workbook
     wb = openpyxl.load_workbook(stream)
-    assert "First Quarter" in wb.sheetnames
-    ws = wb["First Quarter"]
-    assert ws["A3"].value == "ELECTRONIC CLASS RECORD"
+    assert "Term 1" in wb.sheetnames
+    ws = wb["Term 1"]
+    assert ws.cell(3, 1).value == "ELECTRONIC CLASS RECORD"
 
 
 def test_export_class_record_api_endpoint(export_context):
@@ -378,7 +380,7 @@ def test_export_class_record_api_endpoint(export_context):
     # Verify response content is a valid xlsx
     content_stream = io.BytesIO(response.content)
     wb = openpyxl.load_workbook(content_stream)
-    assert "First Quarter" in wb.sheetnames
+    assert "Term 1" in wb.sheetnames
 
 
 def test_dynamic_grading_template_with_zero_assignment_component(export_context):
@@ -448,10 +450,10 @@ def test_unstarted_term_safeguard_writes_blank_cells(export_context):
     staff_id = export_context["teacher_staff_id"]
     year_id = export_context["academic_year_id"]
 
-    # Add an unstarted Second Quarter (no subject load, no classwork, no grades)
+    # Add an unstarted Term 2 (no subject load, no classwork, no grades)
     period_q2 = AcademicPeriod(
-        period_name="Second Quarter",
-        period_type="QUARTER",
+        period_name="Term 2",
+        period_type="TERM",
         period_sequence=2,
         academic_year_id=year_id,
         is_active=False,
@@ -471,7 +473,7 @@ def test_unstarted_term_safeguard_writes_blank_cells(export_context):
         staff_id=staff_id,
     )
 
-    assert ws.title == "Second Quarter"
+    assert ws.title == "Term 2"
 
     # Row 13 is Male header ("MALE"), Row 14 is Juan Dela Cruz
     # Row 15 is Female header ("FEMALE"), Row 16 is Ana Alvarez
@@ -499,9 +501,9 @@ def test_unstarted_term_safeguard_writes_blank_cells(export_context):
             val = ws.cell(r, col_idx).value
             assert val == "", f"Expected blank cell at row {r}, col {col_idx}, but got {val!r}"
 
-        # 4. Summary columns: Initial Grade (15), Quarterly Grade (16), Descriptor (17)
+        # 4. Summary columns: Initial Grade (15), Term Grade (16), Descriptor (17)
         assert ws.cell(r, 15).value == "", f"Initial Grade at row {r} should be blank, got {ws.cell(r, 15).value!r}"
-        assert ws.cell(r, 16).value == "", f"Quarterly Grade at row {r} should be blank, got {ws.cell(r, 16).value!r}"
+        assert ws.cell(r, 16).value == "", f"Term Grade at row {r} should be blank, got {ws.cell(r, 16).value!r}"
         assert ws.cell(r, 17).value == "", f"Descriptor at row {r} should be blank, got {ws.cell(r, 17).value!r}"
 
 
@@ -516,12 +518,12 @@ def test_export_class_record_full_workbook_all_tabs(export_context):
     staff_id = export_context["teacher_staff_id"]
     year_id = export_context["academic_year_id"]
 
-    # Ensure a second and third quarter exist
+    # Ensure a second term exists
     q2 = db.query(AcademicPeriod).filter(AcademicPeriod.period_sequence == 2).first()
     if not q2:
         q2 = AcademicPeriod(
-            period_name="Second Quarter",
-            period_type="QUARTER",
+            period_name="Term 2",
+            period_type="TERM",
             period_sequence=2,
             academic_year_id=year_id,
             is_active=False,
@@ -543,7 +545,7 @@ def test_export_class_record_full_workbook_all_tabs(export_context):
     assert filename.endswith("_Full_Year.xlsx")
 
     wb = openpyxl.load_workbook(stream)
-    assert wb.sheetnames == ["First Quarter", "Second Quarter", "Summary of Grades"]
+    assert wb.sheetnames == ["Term 1", "Term 2", "Summary of Grades"]
 
     # Verify Summary of Grades tab has DepEd header
     ws_summary = wb["Summary of Grades"]
@@ -556,9 +558,9 @@ def test_export_class_record_full_workbook_all_tabs(export_context):
     # Verify column headers on Summary of Grades tab (Row 10)
     assert ws_summary.cell(10, 1).value == "NO."
     assert ws_summary.cell(10, 2).value == "LEARNERS' NAMES"
-    assert ws_summary.cell(10, 3).value == "QUARTERLY / TERM GRADES"
-    assert ws_summary.cell(11, 3).value == "FIRST QUARTER"
-    assert ws_summary.cell(11, 4).value == "SECOND QUARTER"
+    assert ws_summary.cell(10, 3).value == "TERM GRADES"
+    assert ws_summary.cell(11, 3).value == "TERM 1"
+    assert ws_summary.cell(11, 4).value == "TERM 2"
     assert ws_summary.cell(10, 5).value == "FINAL GRADE"
     assert ws_summary.cell(10, 6).value == "DESCRIPTOR"
     assert ws_summary.cell(10, 7).value == "REMARKS"
