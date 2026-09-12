@@ -78,28 +78,28 @@ const StudentSubjectDetail = () => {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             {/* ── Page header: breadcrumb ── */}
             {!isLessonDetailScreen ? (
               <>
-                <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
-                  <SidebarTrigger className="md:hidden" />
-                  <Breadcrumb>
-                    <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
+                <header className="flex min-w-0 items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+                  <SidebarTrigger className="shrink-0 md:hidden" />
+                  <Breadcrumb className="min-w-0">
+                    <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 text-lg font-extrabold tracking-tight text-black sm:gap-2 sm:text-2xl md:text-3xl [&_a]:!font-inherit [&_a]:!text-inherit [&_a]:!text-muted-foreground [&_button]:!font-inherit [&_button]:!text-inherit [&_button]:!text-muted-foreground [&_[aria-current=page]]:!font-extrabold [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!text-black">
                       <Breadcrumb.Item>
                         <Breadcrumb.Link
                           onClick={() => navigate(routes.student.subjects)}
-                          className="text-2xl md:text-4xl text-black/50 hover:text-black cursor-pointer"
+                          className="cursor-pointer whitespace-nowrap text-lg text-black/50 hover:text-black sm:text-2xl md:text-4xl"
                         >
                           Subjects
                         </Breadcrumb.Link>
                       </Breadcrumb.Item>
                       <Breadcrumb.Separator />
-                      <Breadcrumb.Item>
+                      <Breadcrumb.Item className="min-w-0">
                         {subjectInfo ? (
-                          <Breadcrumb.Page className="text-xl md:text-3xl">
+                          <Breadcrumb.Page className="block truncate text-lg sm:text-xl md:text-3xl">
                             {subjectInfo.subject_name}
                           </Breadcrumb.Page>
                         ) : (
@@ -111,7 +111,7 @@ const StudentSubjectDetail = () => {
                     </Breadcrumb.List>
                   </Breadcrumb>
                 </header>
-                <div className="px-4 md:px-6 bg-background -mt-[1px]">
+                <div className="-mt-[1px] bg-background px-3 sm:px-4 md:px-6">
                   <Tabs
                     tabs={tabs}
                     activeTab={activeTab}
@@ -119,10 +119,10 @@ const StudentSubjectDetail = () => {
                   />
                 </div>
 
-                <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+                <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
 
                   {/* ── Tab content ── */}
-                  <div className="py-2">
+                  <div className="min-w-0 py-2">
                     {activeTab === "lessons" && (
                       <SubjectLessonTab
                         classId={numericClassId}
@@ -141,7 +141,7 @@ const StudentSubjectDetail = () => {
                 </div>
               </>
             ) : (
-              <div className="py-4 px-4 md:px-6">
+              <div className="min-w-0 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
                 {activeTab === "lessons" && (
                   <SubjectLessonTab
                     classId={numericClassId}

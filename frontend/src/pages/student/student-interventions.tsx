@@ -7,7 +7,6 @@ import { Select } from "@/components/retroui/Select";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import {
-  Shield,
   Sparkles,
   CheckCircle2,
   BookOpen,
@@ -89,20 +88,19 @@ export default function StudentInterventions() {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center justify-between gap-3 bg-background py-4 px-4 md:px-6">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-4xl font-black tracking-tight flex items-center gap-2 text-black">
-                  <Shield className="size-8 text-black fill-yellow-300" />
+            <header className="flex flex-col items-start gap-2 bg-background px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="whitespace-nowrap text-xl font-black tracking-tight text-black sm:text-2xl md:text-4xl">
                   My Study Interventions
                 </h1>
               </div>
-              <Badge className="bg-yellow-300 text-black border-2 border-black font-extrabold text-xs px-2.5 py-1 uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+              <Badge className="self-start border-2 border-black bg-yellow-300 px-2.5 py-1 text-xs font-extrabold uppercase text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                 Personalized Learning Tasks
               </Badge>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-6">
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:gap-6 sm:px-4 sm:py-4 md:px-6">
               {/* KPI Header Cards */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <OverviewCard
@@ -127,7 +125,7 @@ export default function StudentInterventions() {
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-black uppercase text-black">Status Filter:</span>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <Select.Trigger className="w-[160px] h-9 border-2 border-black bg-white font-bold text-xs shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                    <Select.Trigger className="h-9 w-full border-2 border-black bg-white text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] sm:w-40">
                       <Select.Value placeholder="Select Status" />
                     </Select.Trigger>
                     <Select.Content className="border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">

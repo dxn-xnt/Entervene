@@ -223,7 +223,7 @@ const StudentQuizTake = () => {
   }
 
   return (
-    <div className="min-h-screen py-4 md:py-5 px-4 md:px-6">
+    <div className="min-h-dvh min-w-0 px-3 py-3 sm:px-4 sm:py-4 md:px-6 md:py-5">
       {/* Top bar */}
       <div className="flex items-center justify-between mb-6">
         <button
@@ -348,7 +348,7 @@ const StudentQuizTake = () => {
 
       {/* Answer options */}
       {currentQuestion.question_type === "MULTIPLE_CHOICE" ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 px-12 py-6 md:px-24">
+        <div className="grid grid-cols-1 gap-4 px-3 py-4 sm:px-6 sm:py-6 md:grid-cols-2 md:px-24">
           {currentQuestion.options
             .sort((a, b) => a.option_order - b.option_order)
             .map((opt) => {

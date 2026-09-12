@@ -83,16 +83,16 @@ export default function ToDo() {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
-              <SidebarTrigger className="md:hidden" />
-              <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
+            <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <SidebarTrigger className="shrink-0 md:hidden" />
+              <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                 To do
               </h1>
             </header>
-            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+            <div className="-mt-[1px] bg-background px-3 sm:px-4 md:px-6">
               <Tabs
                 tabs={todoTabs}
                 activeTab={activeTab}
@@ -105,7 +105,7 @@ export default function ToDo() {
               />
             </div>
 
-            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
 
               {isLoading ? (
                 <LoadingPanel label="Loading your to-do items..." />

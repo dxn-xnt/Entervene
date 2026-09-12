@@ -53,24 +53,24 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
-              <SidebarTrigger className="md:hidden" />
-              <Breadcrumb>
-                <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
+            <header className="flex min-w-0 items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <SidebarTrigger className="shrink-0 md:hidden" />
+              <Breadcrumb className="min-w-0">
+                <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 text-lg font-extrabold tracking-tight text-black sm:gap-2 sm:text-2xl md:text-3xl [&_a]:!font-inherit [&_a]:!text-inherit [&_a]:!text-muted-foreground [&_button]:!font-inherit [&_button]:!text-inherit [&_button]:!text-muted-foreground [&_[aria-current=page]]:!font-extrabold [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!text-black">
                   <Breadcrumb.Item>
                     <Breadcrumb.Link
                       onClick={onBack}
-                      className="text-2xl md:text-4xl text-black/50 hover:text-black cursor-pointer"
+                      className="cursor-pointer whitespace-nowrap text-lg text-black/50 hover:text-black sm:text-2xl md:text-4xl"
                     >
                       Grades
                     </Breadcrumb.Link>
                   </Breadcrumb.Item>
                   <Breadcrumb.Separator />
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Page className="text-2xl">
+                  <Breadcrumb.Item className="min-w-0">
+                    <Breadcrumb.Page className="block truncate text-lg sm:text-xl md:text-3xl">
                       {subject}
                     </Breadcrumb.Page>
                   </Breadcrumb.Item>
@@ -78,7 +78,7 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
               </Breadcrumb>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-1 flex-col gap-4 md:gap-6">
+            <div className="-mt-[1px] flex min-w-0 flex-1 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:gap-6 md:px-6">
               <h2 className="text-2xl md:text-4xl font-bold tracking-tight">
                 Subject Performance
               </h2>

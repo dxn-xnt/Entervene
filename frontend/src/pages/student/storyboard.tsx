@@ -93,7 +93,7 @@ const StoryBoard = () => {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
