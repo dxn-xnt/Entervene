@@ -3,7 +3,6 @@
 import { useState, useMemo } from "react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
-import { Text } from "@/components/retroui/Text";
 import { Table } from "@/components/retroui/Table";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
@@ -120,18 +119,18 @@ export default function ViewAttendanceLogModal({
   };
 
   return (
-    <Dialog.Content size="xl" className="max-w-4xl">
-      <Dialog.Header position="fixed" asChild>
+    <Dialog.Content size="xl" className="attendance-log-dialog max-w-4xl">
+      <Dialog.Header position="fixed">
         <div className="flex flex-col">
-          <Text as="h4" className="font-sans text-xl font-bold">
+          <Dialog.Title className="font-sans text-xl font-bold">
             Attendance Logs
-          </Text>
+          </Dialog.Title>
         </div>
       </Dialog.Header>
 
-      <section className="flex flex-col gap-4 p-4 max-h-[70vh] overflow-y-auto">
+      <section className="attendance-log-body flex flex-col gap-4 p-4 max-h-[70vh] overflow-y-auto">
         <Card className="shadow-none">
-          <div className="flex items-center justify-between gap-3.5">
+          <div className="attendance-log-identity flex items-center justify-between gap-3.5">
             <div className="flex items-center gap-3.5 min-w-0">
               <Avatar variant="student" className="size-10 shrink-0">
                 <Avatar.Image
@@ -145,7 +144,7 @@ export default function ViewAttendanceLogModal({
                 </Avatar.Fallback>
               </Avatar>
               <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-base font-bold text-black leading-tight truncate">
+                <span className="text-base font-bold text-black leading-tight break-words md:truncate">
                   {studentName}
                 </span>
                 <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -189,6 +188,7 @@ export default function ViewAttendanceLogModal({
             <Input
               className="w-full pl-9 border-2 border-black shadow-none"
               placeholder="Search date (YYYY-MM-DD) or remarks..."
+              aria-label="Search attendance dates or remarks"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -200,10 +200,10 @@ export default function ViewAttendanceLogModal({
               value={statusFilter}
               onValueChange={(val) => setStatusFilter(val)}
             >
-              <Select.Trigger className="bg-white">
+              <Select.Trigger aria-label="Filter attendance logs by status" className="min-w-0 flex-1 bg-white">
                 <Select.Value />
               </Select.Trigger>
-              <Select.Content>
+              <Select.Content className="attendance-select-options">
                 <Select.Group>
                   <Select.Item value="all" className="text-xs font-semibold">
                     All Statuses
@@ -227,7 +227,7 @@ export default function ViewAttendanceLogModal({
         </div>
 
         {/* Table of Attendance Logs */}
-        <Table className="w-full border-collapse">
+        <Table wrapperClassName="attendance-records-wrapper h-auto shrink-0" className="attendance-records attendance-history w-full border-collapse">
           <Table.Header>
             <Table.Row>
               <Table.Head className="min-w-[140px] font-black text-black">
@@ -262,13 +262,13 @@ export default function ViewAttendanceLogModal({
                   key={log.attendance_id}
                   className="hover:bg-gray-50 transition-colors"
                 >
-                  <Table.Cell className="font-bold tabular-nums">
+                  <Table.Cell className="font-bold tabular-nums" data-label="Date">
                     {log.date}
                   </Table.Cell>
-                  <Table.Cell className="text-center">
+                  <Table.Cell className="text-center" data-label="Attendance">
                     {renderStatusBadge(log.status)}
                   </Table.Cell>
-                  <Table.Cell className="text-xs">
+                  <Table.Cell className="text-xs" data-label="Remarks">
                     {log.remarks ? (
                       <span className="font-medium text-gray-800">
                         {log.remarks}
@@ -285,10 +285,8 @@ export default function ViewAttendanceLogModal({
       </section>
 
       <Dialog.Footer className="flex justify-end items-center px-6 py-3 border-t-2 border-black bg-white">
-        <Dialog.Close>
-          <Button variant="outline" className="border-2 border-black shadow-none font-bold text-xs">
-            Close
-          </Button>
+        <Dialog.Close render={<Button variant="outline" className="border-2 border-black shadow-none font-bold text-xs" />}>
+          Close
         </Dialog.Close>
       </Dialog.Footer>
     </Dialog.Content>

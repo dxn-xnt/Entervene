@@ -1,0 +1,292 @@
+/* Attendance-only presentation. Existing state and desktop controls are shared. */
+.attendance-page,
+.attendance-page .attendance-content {
+  min-width: 0;
+}
+
+/* A tablet with an open sidebar has less space than its viewport suggests. */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .attendance-page .attendance-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .attendance-page .attendance-filters > * {
+    grid-column: auto;
+    min-width: 0;
+  }
+  .attendance-page .attendance-filters [role="combobox"] {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  /* App.css makes body a second scroll container. Let sticky elements follow
+     the document on this page; modal scroll locks still take precedence. */
+  body:has(.attendance-page) {
+    overflow: visible;
+  }
+  .attendance-page {
+    overflow-wrap: anywhere;
+  }
+  .attendance-page .attendance-navigation {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    padding-top: env(safe-area-inset-top, 0px);
+    background: var(--background);
+  }
+  .attendance-navigation > header {
+    padding: 6px 12px;
+  }
+  .attendance-navigation h1 {
+    font-size: 1.25rem;
+  }
+  .attendance-mobile-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding: 0 12px;
+    border-bottom: 2px solid var(--border);
+  }
+  .attendance-mobile-tabs button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 4px;
+    border: 2px solid var(--border);
+    border-bottom: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    background: var(--background);
+    color: var(--foreground);
+  }
+  .attendance-mobile-tabs button svg { flex-shrink: 0; }
+  .attendance-mobile-tabs button[aria-pressed="true"] {
+    background: var(--primary);
+    color: var(--primary-foreground);
+    box-shadow: 2px 0 0 var(--border);
+  }
+  .attendance-page .attendance-content {
+    padding: 12px;
+  }
+  .attendance-page button,
+  .attendance-page input,
+  .attendance-log-dialog button,
+  .attendance-log-dialog input {
+    min-height: 44px;
+  }
+  .attendance-page input,
+  .attendance-page [role="combobox"],
+  .attendance-log-dialog input,
+  .attendance-log-dialog [role="combobox"] {
+    min-width: 0;
+    max-width: 100%;
+    font-size: 16px;
+  }
+  .attendance-page input[type="date"] {
+    appearance: none;
+  }
+  .attendance-page button:focus-visible,
+  .attendance-page summary:focus-visible,
+  .attendance-page input:focus-visible,
+  .attendance-date-region:focus-visible,
+  .attendance-log-dialog button:focus-visible,
+  .attendance-log-dialog input:focus-visible {
+    outline: 2px solid var(--foreground);
+    outline-offset: 2px;
+  }
+  .attendance-mobile-stats {
+    padding: 10px 12px;
+    border: 2px solid var(--border);
+    background: var(--card);
+    box-shadow: 3px 3px 0 var(--border);
+  }
+  .attendance-mobile-stats summary {
+    min-height: 28px;
+    cursor: pointer;
+    font-size: 0.875rem;
+  }
+  .attendance-mobile-stats summary strong {
+    margin-left: 8px;
+  }
+  .attendance-mobile-stats dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 10px 0;
+  }
+  .attendance-mobile-stats dl > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+  }
+  .attendance-mobile-stats dd { font-weight: 700; }
+  .attendance-page .attendance-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    align-items: stretch;
+  }
+  .attendance-page .attendance-filters > * {
+    min-width: 0;
+    width: 100%;
+    grid-column: auto;
+  }
+  .attendance-roster-card { padding: 12px; }
+  .attendance-bulk { flex-wrap: wrap; gap: 8px; }
+  .attendance-bulk > div { flex-wrap: wrap; }
+  .attendance-bulk button { padding: 8px; }
+  .attendance-bulk button svg { margin-right: 4px; }
+
+  /* Reflow the same records/inputs into cards, without a second editing state. */
+  .attendance-records-wrapper {
+    overflow: visible;
+    height: auto;
+    min-width: 0;
+  }
+  .attendance-records {
+    display: block;
+    border: 0;
+    box-shadow: none;
+  }
+  .attendance-records > thead { display: none; }
+  .attendance-records > tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .attendance-records > tbody > tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    width: 100%;
+    padding: 12px;
+    border: 2px solid var(--border);
+  }
+  .attendance-records > tbody > tr > td {
+    display: block;
+    padding: 0;
+    width: auto;
+    min-width: 0;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+  .attendance-records td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .attendance-records td [role="combobox"] {
+    width: 100%;
+    margin: 0;
+  }
+  .attendance-roster td input {
+    border: 1px solid var(--border);
+    background: var(--background);
+    padding: 8px 10px;
+  }
+  .attendance-roster tr:has(td[colspan]) {
+    padding: 0;
+    gap: 0;
+    border: 0;
+  }
+  .attendance-roster td[colspan] {
+    text-align: left;
+    padding: 8px 12px !important;
+    border: 2px solid var(--border);
+  }
+  .attendance-summary > tbody > tr {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .attendance-summary td:first-child,
+  .attendance-summary td:last-child {
+    grid-column: 1 / -1;
+  }
+  .attendance-summary td:last-child button {
+    width: 100%;
+    gap: 8px;
+  }
+  .attendance-save-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px max(10px, env(safe-area-inset-bottom, 0px));
+    margin: 0 -12px -12px;
+    border-top: 2px solid var(--border);
+    background: var(--background);
+  }
+  .attendance-save-context {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.75rem;
+  }
+  .attendance-save-context strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .attendance-page[data-attendance-tab="marking"] input {
+    scroll-margin-top: 115px;
+    scroll-margin-bottom: 150px;
+  }
+  .attendance-scanner,
+  .attendance-scanner > *,
+  .attendance-scanner > div > * { min-width: 0; }
+  .attendance-scanner > div:first-child > div:first-child {
+    min-width: 0;
+    width: 100%;
+  }
+  .attendance-scanner-heading,
+  .attendance-scanner-actions { flex-wrap: wrap; gap: 12px; }
+  .attendance-scanner-actions button { width: 100%; }
+  .attendance-scanner .attendance-scan-feed { min-height: 0; }
+  .attendance-scan-feed > div:last-child { max-height: none; overflow: visible; }
+  .attendance-scan-feed > div:last-child > div { flex-wrap: wrap; }
+  .attendance-summary-controls > div,
+  .attendance-summary-controls > div > div { min-width: 0; max-width: 100%; }
+  .attendance-summary-controls > div:last-child { width: 100%; }
+  .attendance-summary-controls > div:last-child > div { width: 100%; }
+  .attendance-summary-controls [role="combobox"] { width: 100%; }
+  .attendance-summary-controls > div:last-child > div:last-child button { flex: 1; padding: 8px 6px; }
+  .attendance-date-region { min-width: 0; max-width: 100%; }
+  /* Multiple pinned columns consume almost the whole phone; let the matrix scroll. */
+  .attendance-date-grid .sticky { position: static; }
+  .attendance-date-grid td { white-space: normal; }
+  .attendance-log-dialog {
+    width: calc(100% - 16px);
+    max-width: calc(100% - 16px);
+    max-height: calc(100dvh - 16px);
+    overflow-wrap: anywhere;
+  }
+  .attendance-log-dialog > div {
+    max-height: calc(100dvh - 20px);
+  }
+  .attendance-log-body {
+    min-height: 0;
+    max-height: none;
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+  }
+  .attendance-log-dialog > div > :first-child,
+  .attendance-log-dialog > div > :last-child { flex-shrink: 0; }
+  .attendance-log-identity { flex-wrap: wrap; }
+  .attendance-select-options [role="option"] > span:first-child {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .attendance-select-options [role="option"] { min-height: 44px; padding-right: 24px; }
+  .attendance-select-options {
+    max-width: calc(100vw - 24px);
+    max-height: var(--radix-select-content-available-height);
+  }
+}
