@@ -1,6 +1,6 @@
 import React from "react"
 import {
-  BarChart2, Bell, Book, BookOpen, BookOpenCheck, CheckSquare,
+  BarChart2, Bell, Book, BookOpen, CheckSquare,
   ClipboardList, LayoutDashboard, School, Settings, Shield, Users, Sparkles, Calendar, UserCheck, TableProperties
 } from "lucide-react"
 import { routes } from "@/../routes"
@@ -37,7 +37,6 @@ export const SidebarConfigs: Record<string, NavItem[]> = {
     { title: "Attendance", url: routes.teacher.attendance, icon: <UserCheck /> },
     { title: "Classworks", url: routes.teacher.classworks, icon: <ClipboardList /> },
     // { title: "Lessons",        url: routes.teacher.lessons,       icon: <Book />            },
-    { title: "Lesson Planner", url: routes.teacher.lessonPlanner, icon: <BookOpenCheck /> },
     { title: "TOS Generator", url: routes.teacher.tos, icon: <TableProperties /> },
     { title: "AI Predictions", url: routes.teacher.predictions, icon: <Sparkles /> },
     { title: "Interventions", url: routes.teacher.interventions, icon: <Shield /> },

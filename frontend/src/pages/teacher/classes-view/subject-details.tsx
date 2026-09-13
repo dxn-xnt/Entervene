@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Archive, Award, BookOpen, ClipboardList, Info, Paperclip, Plus, Trash2, Users, X } from "lucide-react";
+import { Archive, Award, BookOpen, BookOpenCheck, ClipboardList, Info, Paperclip, Plus, Trash2, Users, X } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import AppLayout from "@/layouts/app-layout";
@@ -925,31 +925,46 @@ export default function SubjectDetails() {
                     </Breadcrumb>
                   </div>
 
-                  {activeTab === "lessons" && (
-                    <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-nowrap md:items-center">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => openCompetencyForm(null)}
-                        className="w-full gap-1.5 whitespace-nowrap px-2 sm:gap-2 sm:px-4 md:w-auto"
-                      >
-                        <Award size={16} />
-                        Add Competency
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="default"
-                        onClick={() => {
-                          setSelectedCompetencyIdForNewLesson(undefined);
-                          setIsCreatingLesson(true);
-                        }}
-                        className="w-full gap-1.5 whitespace-nowrap px-2 sm:gap-2 sm:px-4 md:w-auto"
-                      >
-                        <Plus size={16} />
-                        Add Lesson
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex flex-wrap w-full gap-2 md:flex md:w-auto md:flex-nowrap md:items-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        navigate(
+                          `/teacher/classes/${classId}/subjects/${subjectId}/lesson-planner`,
+                        )
+                      }
+                      className="w-full gap-1.5 whitespace-nowrap px-2 sm:gap-2 sm:px-4 md:w-auto"
+                    >
+                      <BookOpenCheck size={16} />
+                      Lesson Planner
+                    </Button>
+                    {activeTab === "lessons" && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => openCompetencyForm(null)}
+                          className="w-full gap-1.5 whitespace-nowrap px-2 sm:gap-2 sm:px-4 md:w-auto"
+                        >
+                          <Award size={16} />
+                          Add Competency
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="default"
+                          onClick={() => {
+                            setSelectedCompetencyIdForNewLesson(undefined);
+                            setIsCreatingLesson(true);
+                          }}
+                          className="w-full gap-1.5 whitespace-nowrap px-2 sm:gap-2 sm:px-4 md:w-auto"
+                        >
+                          <Plus size={16} />
+                          Add Lesson
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </header>
                 <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
                   <Tabs

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import StatusPage from "./pages/status-page";
 import { AuthProvider } from "./context/AuthContext";
 import { SettingsProvider } from "./context/SettingsContext";
@@ -143,6 +143,7 @@ const App = () => {
                 <Route path={routes.teacher.lessonPlanner} element={<LessonPlannerListPage />} />
                 <Route path={routes.teacher.lessonPlannerCreate} element={<LessonPlannerPage />} />
                 <Route path={routes.teacher.lessonPlannerEdit} element={<LessonPlannerPage />} />
+                <Route path="/teacher/lesson-planner" element={<Navigate to={routes.teacher.classes} replace />} />
                 <Route path={routes.teacher.tos} element={<TeacherTOSPage />} />
               </Route>
 
