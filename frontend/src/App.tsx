@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import StatusPage from "./pages/status-page";
 import { AuthProvider } from "./context/AuthContext";
@@ -15,65 +16,65 @@ import { Toaster } from "./components/retroui/Sonner";
 // import TeacherApp from "./pages/teacher/TeacherApp";
 
 // Admin pages
-import AdminDashboard from "./pages/admin/dashboard";
-import AdminSubjects from "./pages/admin/subjects";
-import AdminSubjectLevel from "./pages/admin/subject-level-view";
-import AdminSubjectView from "./pages/admin/subject-view";
-import AdminClasses from "./pages/admin/classes";
-import AdminClassDetail from "./pages/admin/class-view";
-import SubjectLoadStudio from "./pages/admin/subject-load-studio";
-import AdminUsers from "./pages/admin/users";
-import AdminUserDetail from "./pages/admin/user-detail";
-import AdminInterventions from "./pages/admin/interventions";
-import AdminNotifications from "./pages/admin/notifications";
-import AdminSettings from "./pages/admin/system-settings";
-import AcademicPeriods from "./pages/admin/academic-periods";
-import AdminProfile from "./pages/admin/profile-view";
-import AdminSubstitutions from "./pages/admin/substitutions";
+const AdminDashboard = lazy(() => import("./pages/admin/dashboard"));
+const AdminSubjects = lazy(() => import("./pages/admin/subjects"));
+const AdminSubjectLevel = lazy(() => import("./pages/admin/subject-level-view"));
+const AdminSubjectView = lazy(() => import("./pages/admin/subject-view"));
+const AdminClasses = lazy(() => import("./pages/admin/classes"));
+const AdminClassDetail = lazy(() => import("./pages/admin/class-view"));
+const SubjectLoadStudio = lazy(() => import("./pages/admin/subject-load-studio"));
+const AdminUsers = lazy(() => import("./pages/admin/users"));
+const AdminUserDetail = lazy(() => import("./pages/admin/user-detail"));
+const AdminInterventions = lazy(() => import("./pages/admin/interventions"));
+const AdminNotifications = lazy(() => import("./pages/admin/notifications"));
+const AdminSettings = lazy(() => import("./pages/admin/system-settings"));
+const AcademicPeriods = lazy(() => import("./pages/admin/academic-periods"));
+const AdminProfile = lazy(() => import("./pages/admin/profile-view"));
+const AdminSubstitutions = lazy(() => import("./pages/admin/substitutions"));
 
 // import AppLayout from "./layouts/app-layout";
 
 // Teacher pages
-import TeacherDashboard from "./pages/teacher/dashboard";
-import TeacherProfile from "./pages/teacher/profile-view";
+const TeacherDashboard = lazy(() => import("./pages/teacher/dashboard"));
+const TeacherProfile = lazy(() => import("./pages/teacher/profile-view"));
 // import TeacherClasses from "./pages/teacher/Classworks";
-import ClassesPage from "./pages/teacher/classes";
-import TeacherClassDetail from "./pages/teacher/classes-view/class-view";
-import SubjectDetails from "./pages/teacher/classes-view/subject-details";
-import AdvisoryClassDetail from "./pages/teacher/classes-view/advisory-class-view";
-import ClassSections from "./pages/teacher/classes-view/class-section";
-import TeacherClassworks from "./pages/teacher/classworks";
+const ClassesPage = lazy(() => import("./pages/teacher/classes"));
+const TeacherClassDetail = lazy(() => import("./pages/teacher/classes-view/class-view"));
+const SubjectDetails = lazy(() => import("./pages/teacher/classes-view/subject-details"));
+const AdvisoryClassDetail = lazy(() => import("./pages/teacher/classes-view/advisory-class-view"));
+const ClassSections = lazy(() => import("./pages/teacher/classes-view/class-section"));
+const TeacherClassworks = lazy(() => import("./pages/teacher/classworks"));
 // import TeacherLessons from "./pages/teacher/lessons";
 // import TeacherInterventions from "./pages/teacher/interventions";
-import CreateLesson from "./pages/teacher/create-lesson";
-import TeacherGrades from "./pages/teacher/grades";
-import TeacherGradeView from "./pages/teacher/grade-view";
-import TeacherNotifications from "./pages/teacher/notifications";
-import TeacherAttendance from "./pages/teacher/attendance";
-import PredictionsDashboard from "./pages/teacher/predictions";
-import GradesPredictions from "./pages/teacher/grade-predictions";
-import SectionPredictions from "./pages/teacher/section-predictions";
-import LessonPlannerPage from "./pages/teacher/lesson-planner/lesson-planner-page";
-import LessonPlannerListPage from "./pages/teacher/lesson-planner/lesson-planner-list-page";
-import TeacherTOSPage from "./pages/teacher/tos/teacher-tos-page";
+const CreateLesson = lazy(() => import("./pages/teacher/create-lesson"));
+const TeacherGrades = lazy(() => import("./pages/teacher/grades"));
+const TeacherGradeView = lazy(() => import("./pages/teacher/grade-view"));
+const TeacherNotifications = lazy(() => import("./pages/teacher/notifications"));
+const TeacherAttendance = lazy(() => import("./pages/teacher/attendance"));
+const PredictionsDashboard = lazy(() => import("./pages/teacher/predictions"));
+const GradesPredictions = lazy(() => import("./pages/teacher/grade-predictions"));
+const SectionPredictions = lazy(() => import("./pages/teacher/section-predictions"));
+const LessonPlannerPage = lazy(() => import("./pages/teacher/lesson-planner/lesson-planner-page"));
+const LessonPlannerListPage = lazy(() => import("./pages/teacher/lesson-planner/lesson-planner-list-page"));
+const TeacherTOSPage = lazy(() => import("./pages/teacher/tos/teacher-tos-page"));
 
 // // Student pages
-import StudentBoard from "./pages/student/storyboard";
-import StudentProfile from "./pages/student/student-profile";
-import StudentSubjects from "./pages/student/subjects";
-import StudentSubjectDetail from "./pages/student/student-subject-detail";
-import StudentInterventions from "./pages/student/student-interventions";
-import StudentGrades from "./pages/student/grades/grades";
-import StudentTodo from "./pages/student/todo";
-import StudentTodoView from "./pages/student/todo-view";
-import StudentNotifications from "./pages/student/notifications";
-import AdminStudentView from "./pages/admin/student-view";
+const StudentBoard = lazy(() => import("./pages/student/storyboard"));
+const StudentProfile = lazy(() => import("./pages/student/student-profile"));
+const StudentSubjects = lazy(() => import("./pages/student/subjects"));
+const StudentSubjectDetail = lazy(() => import("./pages/student/student-subject-detail"));
+const StudentInterventions = lazy(() => import("./pages/student/student-interventions"));
+const StudentGrades = lazy(() => import("./pages/student/grades/grades"));
+const StudentTodo = lazy(() => import("./pages/student/todo"));
+const StudentTodoView = lazy(() => import("./pages/student/todo-view"));
+const StudentNotifications = lazy(() => import("./pages/student/notifications"));
+const AdminStudentView = lazy(() => import("./pages/admin/student-view"));
 
 // Quiz pages
-import StudentQuizTake from "./pages/quiz/quiz-interface";
-import StudentQuizView from "./pages/quiz/quiz-view";
-import StudentQuizResult from "./pages/quiz/quiz-result";
-import ClassworkView from "./pages/teacher/classwork-view";
+const StudentQuizTake = lazy(() => import("./pages/quiz/quiz-interface"));
+const StudentQuizView = lazy(() => import("./pages/quiz/quiz-view"));
+const StudentQuizResult = lazy(() => import("./pages/quiz/quiz-result"));
+const ClassworkView = lazy(() => import("./pages/teacher/classwork-view"));
 
 
 // // Layouts
@@ -88,7 +89,8 @@ const App = () => {
           <BrowserRouter>
             <NavigationProgress />
             <Toaster />
-            <Routes>
+            <Suspense fallback={<div role="status" className="p-6">Loading page?</div>}>
+              <Routes>
               <Route path="/" element={<Landing />} />
               <Route path="/maintenance" element={<StatusPage variant="maintenance" />} />
               <Route path="/unavailable" element={<StatusPage variant="unavailable" />} />
@@ -170,6 +172,7 @@ const App = () => {
                 element={<StatusPage variant="not-found" />}
               />
             </Routes>
+              </Suspense>
           </BrowserRouter>
         </AcademicPeriodProvider>
       </AuthProvider>

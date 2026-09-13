@@ -6,6 +6,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from app.core.Config import settings
+from app.services.ai.UsageGuard import reserve_email
 from app.db.Session import SessionLocal
 from app.models.auth.UserAccount import UserAccount
 
@@ -124,15 +125,7 @@ def send_invitation_email(email: str, token: str) -> None:
     frontend_url = (getattr(settings, "frontend_url", None) or os.getenv("FRONTEND_URL", "http://localhost:5173")).rstrip("/")
     link = f"{frontend_url}/setup-password?token={token}"
 
-    logger.info(
-        "\n"
-        "+------------------------------------------------------------+\n"
-        "| INVITATION LINK GENERATED                                  |\n"
-        "+------------------------------------------------------------+\n"
-        f"| To   : {email}\n"
-        f"| Link : {link}\n"
-        "+------------------------------------------------------------+"
-    )
+    logger.info("Invitation prepared for delivery")
 
     mail_driver = (os.getenv("MAIL_DRIVER") or getattr(settings, "mail_driver", "console")).lower()
     if mail_driver == "console":
@@ -152,6 +145,7 @@ def send_invitation_email(email: str, token: str) -> None:
     msg = _build_invitation_message(email, token, frontend_url, from_name, smtp_user)
 
     try:
+        reserve_email(email)
         with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
             server.starttls()
             server.login(smtp_user, smtp_pass)
@@ -228,6 +222,7 @@ def send_batch_invitations(items: list[dict], delay_seconds: float = 0.35) -> di
             user_id = item.get("user_id")
 
             try:
+                reserve_email(email)
                 msg = _build_invitation_message(email, token, frontend_url, from_name, smtp_user)
                 server.sendmail(smtp_user, [email], msg.as_string())
                 _update_user_email_status(user_id, "sent")

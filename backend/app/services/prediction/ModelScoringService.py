@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from hashlib import sha256
+from functools import lru_cache
 from typing import Any
 
 import joblib
@@ -93,7 +94,14 @@ def load_model_artifact(artifact_path: str, base_dir: Path | None = None) -> Any
     resolved = resolve_artifact_path(artifact_path, base_dir=base_dir)
     if not resolved.exists() or not resolved.is_file():
         raise FileNotFoundError(f"Model artifact file not found: {resolved}")
-    artifact = joblib.load(resolved)
+    stat = resolved.stat()
+    return _load_cached_model(str(resolved), stat.st_mtime_ns, stat.st_size)
+
+
+@lru_cache(maxsize=2)
+def _load_cached_model(path: str, modified_ns: int, size: int) -> Any:
+    # A new artifact version invalidates the cache. Never train/mutate this model.
+    artifact = joblib.load(Path(path))
     if isinstance(artifact, dict) and "model" in artifact:
         return artifact["model"]
     return artifact

@@ -17,7 +17,7 @@ def ensure_future_academic_years(db: Session, years_ahead: int = 2) -> list[Acad
     """
     Ensures that academic years exist up to ``years_ahead`` from the current/active academic year.
     If missing, creates future AcademicYear records with standard dates and is_active=False.
-    Idempotent and safe against duplicates.
+    Repeated calls target the same active/calendar year range.
     """
     # 1. Determine base start year
     active_year = (
@@ -33,17 +33,6 @@ def ensure_future_academic_years(db: Session, years_ahead: int = 2) -> list[Acad
         base_start_year = _parse_start_year(active_year.year_label)
         if not base_start_year and active_year.start_date:
             base_start_year = active_year.start_date.year
-
-    if not base_start_year:
-        latest_year = (
-            db.query(AcademicYear)
-            .order_by(AcademicYear.start_date.desc())
-            .first()
-        )
-        if latest_year:
-            base_start_year = _parse_start_year(latest_year.year_label)
-            if not base_start_year and latest_year.start_date:
-                base_start_year = latest_year.start_date.year
 
     if not base_start_year:
         now = datetime.now()

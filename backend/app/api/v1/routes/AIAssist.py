@@ -1,10 +1,12 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.Dependencies import get_staff_id
+from app.core.Dependencies import get_staff_id, require_role
+from app.services.ai.UsageGuard import actor, usage_snapshot
+from starlette.concurrency import run_in_threadpool
 from app.db.Session import get_db
 from app.models.academic.Lesson import Lesson
 from app.models.academic.Subject import Subject
@@ -17,21 +19,34 @@ from app.services.academic.LessonPlanAIService import AISuggestField, generate_l
 from app.services.ai.AIQuizGeneratorService import generate_quiz_questions
 from app.services.ai.AITOSGeneratorService import generate_tos_row_questions
 
+async def ai_identity(staff_id: str = Depends(get_staff_id)):
+    token = actor.set(str(staff_id))
+    try:
+        yield
+    finally:
+        actor.reset(token)
+
+
 router = APIRouter()
+
+
+@router.get("/usage")
+async def ai_usage(user: dict = Depends(require_role("admin"))):
+    return await run_in_threadpool(usage_snapshot)
 
 
 class AIAssistRequest(BaseModel):
     field: AISuggestField
-    title: str = ""
-    learning_area: str = ""
-    grade_section: str = ""
+    title: str = Field(default="", max_length=300)
+    learning_area: str = Field(default="", max_length=200)
+    grade_section: str = Field(default="", max_length=100)
 
 
 class AIAssistResponse(BaseModel):
     suggestion: str
 
 
-@router.post("/lesson-plan-assist", response_model=AIAssistResponse)
+@router.post("/lesson-plan-assist", response_model=AIAssistResponse, dependencies=[Depends(ai_identity)])
 async def lesson_plan_ai_assist(
     body: AIAssistRequest,
     staff_id: str = Depends(get_staff_id),
@@ -70,6 +85,7 @@ def get_reading_classworks(
         .join(Lesson, Lesson.lesson_id == ClassworkLesson.lesson_id)
         .filter(
             Lesson.subject_id == subject_id,
+            Lesson.created_by_staff_id == staff_id,
             Classwork.classwork_type == "READING",
             Classwork.is_archived == False,
         )
@@ -88,7 +104,7 @@ def get_reading_classworks(
     ]
 
 
-@router.post("/generate-quiz", response_model=AIQuizGenerateResponse)
+@router.post("/generate-quiz", response_model=AIQuizGenerateResponse, dependencies=[Depends(ai_identity)])
 async def generate_quiz(
     body: AIQuizGenerateRequest,
     staff_id: str = Depends(get_staff_id),
@@ -116,7 +132,11 @@ async def generate_quiz(
         # ── Mode B: specific reading classworks ──────────────────────────────
         classworks = (
             db.query(Classwork)
+            .join(ClassworkLesson, ClassworkLesson.classwork_id == Classwork.classwork_id)
+            .join(Lesson, Lesson.lesson_id == ClassworkLesson.lesson_id)
             .filter(
+                Lesson.subject_id == body.subject_id,
+                Lesson.created_by_staff_id == staff_id,
                 Classwork.classwork_id.in_(body.reading_classwork_ids),
                 Classwork.classwork_type == "READING",
                 Classwork.is_archived == False,
@@ -143,6 +163,7 @@ async def generate_quiz(
             .filter(
                 Lesson.lesson_id.in_(body.lesson_ids),
                 Lesson.subject_id == body.subject_id,
+                Lesson.created_by_staff_id == staff_id,
             )
             .all()
         )
@@ -163,7 +184,8 @@ async def generate_quiz(
             db.query(Classwork)
             .join(ClassworkLesson, ClassworkLesson.classwork_id == Classwork.classwork_id)
             .filter(
-                ClassworkLesson.lesson_id.in_(body.lesson_ids),
+                ClassworkLesson.lesson_id.in_(found_lesson_ids),
+                Classwork.classwork_type == "READING",
                 Classwork.is_archived == False,
             )
             .all()
@@ -208,7 +230,7 @@ async def generate_quiz(
     return AIQuizGenerateResponse(questions=questions, warnings=warnings)
 
 
-@router.post("/generate-tos-questions", response_model=AITOSGenerateResponse)
+@router.post("/generate-tos-questions", response_model=AITOSGenerateResponse, dependencies=[Depends(ai_identity)])
 async def generate_tos_questions(
     body: AITOSGenerateRequest,
     staff_id: str = Depends(get_staff_id),
@@ -242,8 +264,11 @@ async def generate_tos_questions(
                 q_data["display_order"] = running_display_order
                 running_display_order += 1
                 all_questions.append(TOSQuestionIn(**q_data))
-        except Exception as exc:
-            warnings.append(f"Could not generate questions for '{row.label}': {exc}")
+        except HTTPException:
+            # Never continue sending paid requests after a quota/provider failure.
+            raise
+        except (ValueError, TypeError, KeyError):
+            raise HTTPException(502, "AI returned invalid questions. Generation stopped.") from None
 
     if not all_questions and warnings:
         raise HTTPException(status_code=502, detail="Failed to generate any questions for the requested competencies.")

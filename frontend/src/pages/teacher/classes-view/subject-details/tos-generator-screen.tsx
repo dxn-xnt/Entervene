@@ -515,6 +515,11 @@ export function TOSGeneratorScreen({
   };
 
   const handleGenerateQuestions = async () => {
+    if (isGenerating) return;
+    if (rows.length > 3 || totalItems > 40 || rows.some((row) => Object.values(row.type_counts).reduce((sum, count) => sum + count, 0) > 20)) {
+      setGenerationError("AI generation supports up to 3 competency rows, 20 questions per row, and 40 questions total. Reduce this blueprint before generating.");
+      return;
+    }
     setIsGenerating(true);
     setGenerationError("");
     setGenerationProgress("Preparing blueprint payload for AI assessment specialist...");

@@ -22,8 +22,15 @@ class Settings(BaseSettings):
     cookie_samesite: str = "lax"
     cookie_domain: str | None = None
     groq_api_key: str | None = None
-    groq_model: str = "openai/gpt-oss-120b"
+    groq_model: str = "openai/gpt-oss-20b"
     gemini_api_key: str | None = None
+    ai_enabled: bool = True
+    ai_school_per_minute: int = Field(default=12, ge=1, le=60)
+    ai_staff_per_day: int = Field(default=30, ge=1, le=500)
+    ai_school_per_day: int = Field(default=500, ge=1, le=10000)
+    ai_monthly_budget_usd: int = Field(default=20, ge=0, le=1000)
+    api_requests_per_minute: int = Field(default=6000, ge=60)
+    api_ip_requests_per_minute: int = Field(default=3000, ge=30)
     mail_driver: str = "console"
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587

@@ -5,6 +5,8 @@ from sqlalchemy import text
 from fastapi import Depends
 from app.core.Config import settings
 from app.core.Csrf import CSRFMiddleware
+from app.core.RequestLimits import RequestLimitsMiddleware
+from fastapi.responses import JSONResponse
 from app.db.Session import get_db
 from app.api.v1.routes.Predictions import router as predictions_router
 from app.api.v1.routes.Auth import router as auth_router
@@ -44,6 +46,7 @@ app = FastAPI(
 )
 
 app.add_middleware(CSRFMiddleware)
+app.add_middleware(RequestLimitsMiddleware)
 app.add_exception_handler(ClassManagementError, class_management_error_handler)
 
 # Cannot use allow_origins=["*"] with allow_credentials=True (browser rejects).
@@ -108,5 +111,5 @@ def health_check(db: Session = Depends(get_db)):
     try:
         db.execute(text("SELECT 1"))
         return {"status": "ok", "app": settings.app_name, "db": "connected"}
-    except Exception as e:
-        return {"status": "ok", "app": settings.app_name, "db": "failed", "error": str(e)}
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "unavailable", "app": settings.app_name, "db": "failed"})
