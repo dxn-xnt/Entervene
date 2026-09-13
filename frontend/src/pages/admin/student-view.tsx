@@ -13,10 +13,10 @@ export default function AdminStudentView() {
                 <div className="@container/main flex flex-1 flex-col">
                     <div className="flex flex-1 flex-col">
                         {/* Breadcrumb Header */}
-                        <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
-                            <SidebarTrigger className="md:hidden" />
+                        <header className="flex min-w-0 items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+                            <SidebarTrigger className="shrink-0 md:hidden" />
                             <Breadcrumb>
-                                <Breadcrumb.List className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black flex items-center gap-2">
+                                <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
                                     <Breadcrumb.Item>
                                         <Breadcrumb.Link href="/admin/classes" className="text-muted-foreground">Classes</Breadcrumb.Link>
                                     </Breadcrumb.Item>
@@ -26,13 +26,13 @@ export default function AdminStudentView() {
                                     </Breadcrumb.Item>
                                     <Breadcrumb.Separator />
                                     <Breadcrumb.Item>
-                                        <Breadcrumb.Page className="text-black font-extrabold">Daniel Victor Santos</Breadcrumb.Page>
+                                        <Breadcrumb.Page>Daniel Victor Santos</Breadcrumb.Page>
                                     </Breadcrumb.Item>
                                 </Breadcrumb.List>
                             </Breadcrumb>
                         </header>
 
-                        <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+                        <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
                             {/* Student Banner Card */}
                             <Card className="w-full flex flex-col p-6 border-2 border-black rounded-lg shadow-md bg-white">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

@@ -674,7 +674,7 @@ export default function TeacherAttendancePage() {
                 </div>
               </div>
             </header>
-            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+            <div className="hidden -mt-[1px] bg-background px-3 sm:px-4 md:block md:px-6">
               <Tabs
                 tabs={[
                   {
@@ -697,7 +697,7 @@ export default function TeacherAttendancePage() {
                 onTabChange={changeAttendanceTab}
               />
             </div>
-            <nav aria-label="Attendance views" className="attendance-mobile-tabs md:hidden">
+            <nav aria-label="Attendance views" className="attendance-mobile-tabs sticky top-0 z-30 bg-background md:hidden">
               {([
                 { id: "marking", label: "Mark", name: "Mark attendance", icon: Users },
                 { id: "scan", label: "Scan QR", name: "QR Scanner", icon: QrCode },

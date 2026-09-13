@@ -510,20 +510,20 @@ export default function AdminSystemSettings() {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center justify-between bg-background py-4 px-4 md:px-6">
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-4xl font-bold tracking-tight">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                   System Settings
                 </h1>
               </div>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 [&_h3]:text-xl [&_table]:min-w-[680px] sm:px-4 sm:py-4 sm:[&_h3]:text-3xl md:px-6">
               {/* School Operational Hours */}
               <Card className="@container/card w-full">
-                <Card.Header className="flex flex-row justify-between items-start mb-4">
-                  <Card.Title className="flex flex-col w-full gap-1">
+                <Card.Header className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <Card.Title className="flex min-w-0 w-full flex-col gap-1 leading-tight">
                     School Operational Hours
                     <Text as="p" className="text-sm font-normal text-muted-foreground">
                       Set the bounds for valid class schedules. Attempting to schedule classes outside these bounds will be rejected.
@@ -532,7 +532,7 @@ export default function AdminSystemSettings() {
                   </Card.Title >
                   <Button
                     size="sm"
-                    className="whitespace-nowrap"
+                    className="w-full justify-center whitespace-nowrap sm:w-auto"
                     onClick={handleSaveSchoolHours}
                     disabled={isSavingSchoolHours}
                   >
@@ -543,24 +543,24 @@ export default function AdminSystemSettings() {
 
                 <Card.Content className="flex flex-col gap-4">
                   <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-4">
-                      <div className="flex flex-col gap-1 w-1/3">
+                    <div className="grid min-w-0 grid-cols-2 gap-3 sm:flex sm:items-center sm:gap-4">
+                      <div className="flex min-w-0 flex-col gap-1 sm:w-1/3">
                         <Text as="h6" className="font-sans font-medium text-sm">
                           Day Start
                         </Text>
                         <Input
-                          className="shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md transition-all"
+                          className="w-full min-w-0 shadow-none transition-all hover:shadow-md focus:shadow-md focus-visible:shadow-md"
                           type="time"
                           value={schoolDayStart}
                           onChange={(e) => setSchoolDayStart(e.target.value)}
                         />
                       </div>
-                      <div className="flex flex-col gap-1 w-1/3">
+                      <div className="flex min-w-0 flex-col gap-1 sm:w-1/3">
                         <Text as="h6" className="font-sans font-medium text-sm">
                           Day End
                         </Text>
                         <Input
-                          className="shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md transition-all"
+                          className="w-full min-w-0 shadow-none transition-all hover:shadow-md focus:shadow-md focus-visible:shadow-md"
                           type="time"
                           value={schoolDayEnd}
                           onChange={(e) => setSchoolDayEnd(e.target.value)}
@@ -573,38 +573,30 @@ export default function AdminSystemSettings() {
 
               {/* General Average Threshold */}
               <Card className="@container/card w-full">
-                <Card.Header>
-                  <Card.Title className="flex flex-row justify-between w-full items-center">
+                <Card.Header className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <Card.Title className="min-w-0 leading-tight">
                     General Average Passing Grade
-                    <Button
-                      size="sm"
-                      className="whitespace-nowrap"
-                      onClick={handleSaveThresholds}
-                      disabled={isSavingThresholds}
-                    >
-                      <Save className="size-3.5 mr-2" />
-                      Save Threshold
-                    </Button>
+                    <Text as="p" className="mt-1 text-sm font-normal leading-normal text-muted-foreground">
+                      Used for general promotion/completion reports. Adjust only if the client confirms a different rule.
+                    </Text>
                   </Card.Title>
+                  <Button
+                    size="sm"
+                    className="w-full justify-center whitespace-nowrap sm:w-auto"
+                    onClick={handleSaveThresholds}
+                    disabled={isSavingThresholds}
+                  >
+                    <Save className="mr-2 size-3.5" />
+                    Save Threshold
+                  </Button>
                 </Card.Header>
                 <Card.Content className="flex flex-col gap-4">
                   <div className="flex flex-col gap-2">
-                    <div className="flex flex-row justify-between w-full items-center">
-                      <div className="flex flex-col gap-1">
-                        <Text as="h6" className="font-sans font-medium">
-                          General Average Passing Grade
-                        </Text>
-                        <Text
-                          as="p"
-                          className="font-sans text-sm text-muted-foreground"
-                        >
-                          Used for general promotion/completion reports. Adjust only
-                          if the client confirms a different rule.
-                        </Text>
-                      </div>
-
+                    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                      <span className="hidden sm:block" />
                       <Input
-                        className="w-20 shadow-none hover:shadow-md focus:shadow-md focus-visible:shadow-md transition-all"
+                        aria-label="General Average Passing Grade"
+                        className="w-full min-w-0 shadow-none transition-all hover:shadow-md focus:shadow-md focus-visible:shadow-md sm:w-20"
                         type="number"
                         min={0}
                         max={100}
@@ -623,15 +615,15 @@ export default function AdminSystemSettings() {
 
               {/* Subject Groups & Passing Thresholds */}
               <Card className="@container/card w-full">
-                <Card.Header className="flex flex-row justify-between items-start mb-4">
-                  <Card.Title className="flex flex-col w-full gap-1">
+                <Card.Header className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <Card.Title className="flex min-w-0 w-full flex-col gap-1 leading-tight">
                     Subject Groups & Passing Thresholds
                     <Text as="p" className="text-sm font-normal text-muted-foreground">
                       Threshold changes apply to grades finalized from this point forward. Already-finalized period grades are not re-evaluated.
                     </Text>
 
                   </Card.Title >
-                  <Button size="sm" className="whitespace-nowrap" onClick={() => setIsAddGroupOpen(true)}>
+                  <Button size="sm" className="w-full justify-center whitespace-nowrap sm:w-auto" onClick={() => setIsAddGroupOpen(true)}>
                     <Plus className="size-3.5 mr-2" />Add Group
                   </Button>
                 </Card.Header>
@@ -718,8 +710,8 @@ export default function AdminSystemSettings() {
 
               {/* Default Grading Templates */}
               <Card className="@container/card w-full">
-                <Card.Header className="flex flex-row justify-between items-start mb-4">
-                  <Card.Title className="flex flex-col w-full gap-1">
+                <Card.Header className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <Card.Title className="flex min-w-0 w-full flex-col gap-1 leading-tight">
                     Default Grading Templates
                     <Text
                       as="p"
@@ -728,13 +720,13 @@ export default function AdminSystemSettings() {
                       Reusable grade-weight templates stored in database. Assigned to subjects during grading setup.
                     </Text>
                   </Card.Title>
-                  <div className="flex items-center gap-4">
+                  <div className="flex w-full items-center gap-4 sm:w-auto">
                     <Dialog
                       open={templateModalOpen}
                       onOpenChange={setTemplateModalOpen}
                     >
-                      <Dialog.Trigger>
-                        <Button size="sm" className="whitespace-nowrap">
+                      <Dialog.Trigger className="w-full sm:w-auto">
+                        <Button size="sm" className="w-full justify-center whitespace-nowrap sm:w-auto">
                           <Plus className="size-3.5 mr-2" /> Add Template
                         </Button>
                       </Dialog.Trigger>
@@ -821,8 +813,8 @@ export default function AdminSystemSettings() {
 
               {/* Academic Calendar */}
               <Card className="@container/card w-full">
-                <Card.Header className="flex flex-row justify-between items-start mb-4">
-                  <Card.Title className="flex flex-col w-full gap-1">
+                <Card.Header className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <Card.Title className="flex min-w-0 w-full flex-col gap-1 leading-tight">
                     Academic Calendar
                     <Text
                       as="p"
@@ -831,13 +823,13 @@ export default function AdminSystemSettings() {
                       Set the active school year and active term. This determines the current academic period system-wide.
                     </Text>
                   </Card.Title>
-                  <div className="flex items-center gap-4">
+                  <div className="flex w-full items-center gap-4 sm:w-auto">
                     <Dialog
                       open={isPeriodModalOpen}
                       onOpenChange={setIsPeriodModalOpen}
                     >
-                      <Dialog.Trigger>
-                        <Button size="sm" className="whitespace-nowrap">
+                      <Dialog.Trigger className="w-full sm:w-auto">
+                        <Button size="sm" className="w-full justify-center whitespace-nowrap sm:w-auto">
                           <Calendar className="size-3 mr-2" /> New Academic Period
                         </Button>
                       </Dialog.Trigger>
@@ -956,8 +948,8 @@ export default function AdminSystemSettings() {
 
               {/* School Curriculum Scope */}
               <Card className="@container/card w-full">
-                <Card.Header className="flex flex-row justify-between items-start mb-4">
-                  <Card.Title className="flex flex-col w-full gap-1">
+                <Card.Header className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <Card.Title className="flex min-w-0 w-full flex-col gap-1 leading-tight">
                     School Curriculum Scope
                     <Text
                       as="p"
@@ -966,10 +958,10 @@ export default function AdminSystemSettings() {
                       Define school levels and Senior High School pathways.
                     </Text>
                   </Card.Title>
-                  <div className="flex items-center gap-4">
+                  <div className="flex w-full items-center gap-4 sm:w-auto">
                     <Button
                       size="sm"
-                      className="whitespace-nowrap"
+                      className="w-full justify-center whitespace-nowrap sm:w-auto"
                       onClick={handleSaveScope}
                       disabled={isSavingScope}
                     >
@@ -1138,8 +1130,8 @@ export default function AdminSystemSettings() {
 
               {/* Teacher Workload Caps */}
               <Card className="@container/card w-full">
-                <Card.Header className="flex flex-row justify-between items-start mb-4">
-                  <Card.Title className="flex flex-col w-full gap-1">
+                <Card.Header className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <Card.Title className="flex min-w-0 w-full flex-col gap-1 leading-tight">
                     Teacher Workload Caps
                     <Text as="p" className="text-sm font-normal text-muted-foreground">
                       These limits are enforced globally across all subjects during scheduling.
@@ -1147,7 +1139,7 @@ export default function AdminSystemSettings() {
                   </Card.Title >
                   <Button
                     size="sm"
-                    className="whitespace-nowrap"
+                    className="w-full justify-center whitespace-nowrap sm:w-auto"
                     onClick={handleSaveTeacherCaps}
                     disabled={isSavingTeacherCaps || parseInt(minSubjects) > parseInt(maxSubjects)}
                   >
@@ -1157,7 +1149,7 @@ export default function AdminSystemSettings() {
                 </Card.Header>
                 <Card.Content className="flex flex-col gap-6 w-full">
 
-                  <div className="flex w-full flex-row gap-4 items-center">
+                  <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                     <div className="flex flex-col gap-2 w-full">
                       <label className="text-sm font-semibold">Min Subjects/Day</label>
                       <Input

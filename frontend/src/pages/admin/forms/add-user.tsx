@@ -484,7 +484,7 @@ export default function AddUserModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }} >
-      <Dialog.Content size="md" className="w-full overflow-hidden font-sans">
+      <Dialog.Content size="md" className="w-[calc(100vw-1.5rem)] max-w-lg overflow-hidden rounded-none font-sans lg:max-w-[40%]">
         <Dialog.Header asChild className="bg-primary text-primary-foreground font-head flex items-center justify-between">
           <div>
             <span className="font-bold text-lg">
@@ -498,7 +498,7 @@ export default function AddUserModal({
         {/* ── STEP: CHOOSE ─────────────────────────────────── */}
         {step === "choose" && (
           <>
-            <div className="grid grid-cols-2 gap-4 p-5">
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 sm:gap-4 sm:p-5">
               <DialogueSelect
                 icon={FileSpreadsheet}
                 title="Import file"
@@ -673,7 +673,7 @@ export default function AddUserModal({
                 </Select>
               </Field>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="First Name">
                   <Input
                     placeholder="John"
@@ -692,7 +692,7 @@ export default function AddUserModal({
                 </Field>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Middle Name">
                   <Input
                     placeholder="(optional)"
@@ -724,7 +724,7 @@ export default function AddUserModal({
               </Field>
 
               {!isAdmin && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label="Gender">
                     <Select value={form.gender} onValueChange={(val) => handleField("gender", val)}>
                       <Select.Trigger className="w-full">
@@ -806,7 +806,7 @@ export default function AddUserModal({
 
               {isStudent && (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <Field label="Student LRN">
                       <Input
                         placeholder="12-digit LRN"

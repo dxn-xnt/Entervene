@@ -263,11 +263,11 @@ export default function AdminClassDetail() {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
             {/* Header with Breadcrumb & Context Actions */}
-            <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-background py-4 px-4 md:px-6">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <Breadcrumb>
-                  <Breadcrumb.List>
+            <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <Breadcrumb className="min-w-0 overflow-hidden">
+                  <Breadcrumb.List className="flex-nowrap">
                     <Breadcrumb.Item>
                       <Breadcrumb.Link href="/admin/classes">Classes</Breadcrumb.Link>
                     </Breadcrumb.Item>
@@ -288,15 +288,15 @@ export default function AdminClassDetail() {
                 </Breadcrumb>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex w-full items-center gap-2 md:w-auto">
                 {!isArchived && (
-                  <Button onClick={() => setShowEditClass(true)}>
-                    <Pencil className="mr-2 size-4" /> Edit Class
+                  <Button onClick={() => setShowEditClass(true)} className="w-full justify-center gap-1.5 px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm md:w-auto">
+                    <Pencil className="size-4" /> Edit Class
                   </Button>
                 )}
               </div>
             </header>
-            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs<DetailTab>
                 tabs={[
                   { id: "classes", label: "Overview", icon: BookOpen },
@@ -308,7 +308,7 @@ export default function AdminClassDetail() {
               />
             </div>
 
-            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 [&_table]:min-w-[560px] sm:px-4 sm:py-4 md:px-6">
 
               {/* Tab content */}
               <div className="flex flex-col gap-3">
