@@ -190,10 +190,10 @@ export default function AddAcademicPeriodModal({ onClose, onSaved }: AddAcademic
     // Parse the academic year limits
     const { ayStart, ayEnd } = React.useMemo(() => {
         const selectedAyObj = academicYears.find((y) => y.year_label === academicYear);
-        if (selectedAyObj?.startDate && selectedAyObj?.endDate) {
+        if (selectedAyObj?.start_date && selectedAyObj?.end_date) {
             return {
-                ayStart: new Date(selectedAyObj.startDate),
-                ayEnd: new Date(selectedAyObj.endDate),
+                ayStart: new Date(selectedAyObj.start_date),
+                ayEnd: new Date(selectedAyObj.end_date),
             };
         }
         const [startYearStr, endYearStr] = academicYear.split("-");
