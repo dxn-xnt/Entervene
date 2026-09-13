@@ -1275,20 +1275,21 @@ export default function AdminSubjectLoadStudio() {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col">
-            <header className="flex items-center justify-between bg-background py-4 px-4 md:px-6">
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
+        <div className="@container/main flex min-w-0 flex-1 flex-col">
+          <div className="flex min-w-0 flex-1 flex-col">
+            <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-4xl font-bold tracking-tight">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                   Subject Load
                 </h1>
               </div>
 
               {/* Sticky Action Controls */}
-              <div className="flex flex-wrap items-center gap-3 self-end md:self-auto">
+              <div className="grid w-full grid-cols-2 gap-2 [&_button]:w-full [&_button]:justify-center [&_button]:px-2 [&_button]:text-xs md:flex md:w-auto md:flex-wrap md:gap-3 md:self-auto md:[&_button]:w-auto md:[&_button]:px-4 md:[&_button]:text-sm">
                 <Button
+                  className="hidden md:inline-flex"
                   variant="outline"
                   disabled={isSaving}
                   onClick={() => void handleSave("draft")}
@@ -1300,7 +1301,7 @@ export default function AdminSubjectLoadStudio() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
-                      className="gap-2"
+                      className="hidden gap-2 md:inline-flex"
                       variant="outline"
                       disabled={isLoading || isSaving}
                     >
@@ -1337,9 +1338,33 @@ export default function AdminSubjectLoadStudio() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button className="col-span-2 gap-2 md:hidden" variant="outline" disabled={isLoading || isSaving}>
+                      <EllipsisIcon className="size-4" /> Schedule Actions
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-[calc(100vw-1.5rem)] min-w-[220px] border-2 sm:w-72">
+                    <DropdownMenuItem className="gap-2" disabled={isSaving} onClick={() => void handleSave("draft")}>
+                      <ShieldCheck className="size-4" /> Save Draft
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="gap-2" onClick={() => setIsBreakDrawerOpen(true)}>
+                      <Settings className="size-4" /> Edit Break Timelines
+                    </DropdownMenuItem>
+                    {previousPeriods.length > 0 && (
+                      <DropdownMenuItem className="gap-2" onClick={() => setIsCopyModalOpen(true)}>
+                        <Copy className="size-4" /> Copy from Previous Term
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem className="gap-2" onClick={() => void handleAutoSchedule()}>
+                      <Sparkles className="size-4" /> Auto-Generate All
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
                 {/* Publish Action */}
                 <Button
-                  className="gap-2"
+                  className="col-span-2 gap-2 md:col-auto"
                   variant={isMasterPublishDisabled ? "default" : "outline"}
                   disabled={isSaving}
                   onClick={() => {
@@ -1375,7 +1400,7 @@ export default function AdminSubjectLoadStudio() {
               </div>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {/* Notice Alert Overlay */}
               {notice && (
               <Alert
@@ -1404,9 +1429,9 @@ export default function AdminSubjectLoadStudio() {
               </Alert>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+            <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-12">
               {/* LEFT PANE: Section Schedule List */}
-              <main className="lg:col-span-9 flex flex-col gap-3">
+              <main className="flex min-w-0 flex-col gap-3 lg:col-span-9">
                 {/* Filters & Status Bar */}
                 <section className="flex flex-col gap-3 w-full">
                   <div className="flex flex-row gap-2 w-full">
@@ -1492,7 +1517,7 @@ export default function AdminSubjectLoadStudio() {
                   groupedClassesByGrade.map((group) => (
                     <Card
                       key={group.levelId}
-                      className="@container/card w-full flex flex-col gap-4 bg-primary"
+                      className="@container/card flex min-w-0 w-full flex-col gap-4 overflow-hidden bg-primary"
                     >
                       <div className="flex items-center justify-between">
                         <Text as="h4" className="text-xl font-bold font-sans">
@@ -1571,7 +1596,7 @@ export default function AdminSubjectLoadStudio() {
                           return (
                             <Card
                               key={cls.class_id}
-                              className="block overflow-visible shadow-none hover:-translate-y-1"
+                              className="block min-w-0 overflow-hidden shadow-none hover:-translate-y-1"
                             >
                               <div className="flex items-center justify-between pb-4 flex-wrap gap-2">
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -1796,7 +1821,10 @@ export default function AdminSubjectLoadStudio() {
                                   </Text>
                                 </div>
                               ) : (
-                                <Table className="overflow-none shadow-none" wrapperClassName="overflow-visible h-auto">
+                                <Table
+                                  className="min-w-[760px] shadow-none"
+                                  wrapperClassName="h-auto max-w-full overflow-x-auto overscroll-x-contain shadow-none [scrollbar-width:thin]"
+                                >
                                   <Table.Header className="">
                                     <Table.Row>
                                       <Table.Head className="font-bold text-black">Subject</Table.Head>

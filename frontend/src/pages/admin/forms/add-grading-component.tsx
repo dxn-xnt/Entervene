@@ -259,7 +259,7 @@ export default function AddGradingComponentModal({
         ) : null} */}
 
         <div className="flex flex-col gap-2">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="flex flex-col gap-1">
               <label htmlFor="grading-template-name" className="text-sm">Template Name</label>
               <Input

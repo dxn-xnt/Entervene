@@ -212,11 +212,11 @@ export default function AdminUserDetail() {
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
 
-            <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-background py-4 px-4 md:px-6">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <Breadcrumb>
-                  <Breadcrumb.List>
+            <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <Breadcrumb className="min-w-0 overflow-hidden">
+                  <Breadcrumb.List className="flex-nowrap">
                     <Breadcrumb.Item>
                       <Breadcrumb.Link
                         href="/admin/users"
@@ -256,7 +256,7 @@ export default function AdminUserDetail() {
               </div>
 
               {user && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex w-full flex-wrap items-center gap-2 md:w-auto [&_button]:px-2 [&_button]:text-xs md:[&_button]:px-4 md:[&_button]:text-sm">
                   {isPending && (
                     <Button
                       type="button"

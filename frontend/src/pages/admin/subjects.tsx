@@ -8,6 +8,12 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import AppLayout from "@/layouts/app-layout";
 import {
   Archive,
@@ -16,6 +22,7 @@ import {
   Calendar,
   Copy,
   DownloadIcon,
+  MoreHorizontal,
   Plus,
   Search,
   Upload,
@@ -531,12 +538,12 @@ export default function AdminSubjects() {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-background py-4 px-4 md:px-6">
+            <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl md:text-4xl font-bold tracking-tight">Subjects</h1>
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">Subjects</h1>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-wrap [&_button]:min-w-0 [&_button]:w-full [&_button]:justify-center [&_button]:px-2 [&_button]:text-xs md:[&_button]:w-auto md:[&_button]:px-4 md:[&_button]:text-sm">
                 {activeSection === "catalog" ? (
                   <>
                     <input
@@ -546,10 +553,26 @@ export default function AdminSubjects() {
                       className="hidden"
                       onChange={(event) => void handleCatalogImport(event.target.files?.[0])}
                     />
-                    <Button onClick={openCreateSubject}>
+                    <Button className="col-span-2 md:col-auto" onClick={openCreateSubject}>
                       <Plus className="size-4 mr-2" /> New Subject
                     </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button className="col-span-2 md:hidden" variant="outline">
+                          <MoreHorizontal className="mr-2 size-4" /> Catalog Actions
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-[calc(100vw-1.5rem)] border-2 sm:w-72">
+                        <DropdownMenuItem disabled={isImportingCatalog} onClick={() => catalogImportInputRef.current?.click()}>
+                          <Upload className="mr-2 size-4" /> Import Catalog CSV
+                        </DropdownMenuItem>
+                        <DropdownMenuItem disabled={isDownloadingCatalogTemplate} onClick={handleDownloadCatalogTemplate}>
+                          <DownloadIcon className="mr-2 size-4" /> Download Catalog Template
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <Button
+                      className="hidden md:inline-flex"
                       variant="outline"
                       onClick={() => catalogImportInputRef.current?.click()}
                       disabled={isImportingCatalog}
@@ -557,6 +580,7 @@ export default function AdminSubjects() {
                       <Upload className="size-4 mr-2" /> Import Catalog CSV
                     </Button>
                     <Button
+                      className="hidden md:inline-flex"
                       variant="outline"
                       onClick={handleDownloadCatalogTemplate}
                       disabled={isDownloadingCatalogTemplate}
@@ -577,6 +601,7 @@ export default function AdminSubjects() {
                     />
                     <Button
                       variant="outline"
+                      className="hidden md:inline-flex"
                       onClick={() => {
                         setError(null);
                         setCopyResult(null);
@@ -587,13 +612,43 @@ export default function AdminSubjects() {
                       <Copy className="size-4 mr-2" /> Copy Previous Year Setup
                     </Button>
                     <Button
+                      className="col-span-2 md:col-auto"
                       onClick={openCreateOffering}
                       disabled={isLoadingOptions || isViewingInactiveAcademicYear}
                       title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
                     >
                       <Plus className="size-4 mr-2" /> Add Offerings
                     </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button className="col-span-2 md:hidden" variant="outline">
+                          <MoreHorizontal className="mr-2 size-4" /> Offering Actions
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-[calc(100vw-1.5rem)] border-2 sm:w-72">
+                        <DropdownMenuItem
+                          disabled={isLoadingOptions || !activeAcademicYear}
+                          onClick={() => {
+                            setError(null);
+                            setCopyResult(null);
+                            setIsCopySetupModalOpen(true);
+                          }}
+                        >
+                          <Copy className="mr-2 size-4" /> Copy Previous Year Setup
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={isImportingOfferings || isViewingInactiveAcademicYear}
+                          onClick={() => offeringImportInputRef.current?.click()}
+                        >
+                          <Upload className="mr-2 size-4" /> Import Offering CSV
+                        </DropdownMenuItem>
+                        <DropdownMenuItem disabled={isDownloadingTemplate} onClick={handleDownloadOfferingTemplate}>
+                          <DownloadIcon className="mr-2 size-4" /> Download Offering Template
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <Button
+                      className="hidden md:inline-flex"
                       variant="outline"
                       onClick={() => offeringImportInputRef.current?.click()}
                       disabled={isImportingOfferings || isViewingInactiveAcademicYear}
@@ -602,6 +657,7 @@ export default function AdminSubjects() {
                       <Upload className="size-4 mr-2" /> Import Offering CSV
                     </Button>
                     <Button
+                      className="hidden md:inline-flex"
                       variant="outline"
                       onClick={handleDownloadOfferingTemplate}
                       disabled={isDownloadingTemplate}
@@ -622,7 +678,7 @@ export default function AdminSubjects() {
                 ) : null}
               </div>
             </header>
-            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs
                 tabs={MODULE_TABS}
                 activeTab={activeSection}
@@ -630,7 +686,7 @@ export default function AdminSubjects() {
               />
             </div>
 
-            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">
+            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 [&_table]:min-w-[720px] sm:px-4 sm:py-4 md:px-6">
               {isViewingInactiveAcademicYear ? (
                 <div className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
                   <p className="font-bold">{readOnlyReason}</p>

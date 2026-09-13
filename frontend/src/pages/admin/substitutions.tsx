@@ -169,14 +169,14 @@ export default function AdminSubstitutions() {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
+        <div className="@container/main flex min-w-0 flex-1 flex-col">
+          <div className="flex min-w-0 flex-1 flex-col">
             {/* Header */}
-            <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-background py-4 px-4 md:px-6">
+            <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl font-bold tracking-tight md:text-4xl">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                   Teacher Substitution Management
                 </h1>
               </div>
@@ -185,13 +185,13 @@ export default function AdminSubstitutions() {
                 variant="default"
                 size="md"
                 onClick={() => setIsAssignModalOpen(true)}
-                className="gap-2 self-start whitespace-nowrap sm:self-auto"
+                className="w-full justify-center gap-1.5 whitespace-nowrap px-2 text-xs sm:w-auto sm:gap-2 sm:px-4 sm:text-sm"
               >
                 <Plus className="size-4" />
                 <span>Assign Substitute</span>
               </Button>
             </header>
-            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs
                 tabs={substitutionTabs}
                 activeTab={activeTab}
@@ -205,7 +205,7 @@ export default function AdminSubstitutions() {
               />
             </div>
 
-            <div className="border-t-1 border-border -mt-[1px] px-4 md:px-6 flex flex-col gap-3">
+            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 sm:px-4 md:px-6">
               {/* Summary Metric Cards */}
               <div className="grid grid-cols-1 gap-4 py-2 sm:grid-cols-3 md:py-4">
                 <OverviewCard title="Active Substitutions" count={String(activeCount)} />
@@ -213,14 +213,14 @@ export default function AdminSubstitutions() {
                 <OverviewCard title="Total Tracked" count={String(substitutions.length)} />
               </div>
 
-              <div className="flex justify-start -mt-3!">
-                <div className="relative w-full sm:w-72">
+              <div className="-mt-3! flex min-w-0 justify-start">
+                <div className="relative min-w-0 w-full sm:w-72">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     placeholder="Search teacher, class, subject..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 min-w-100 text-sm"
+                    className="w-full min-w-0 pl-9 text-sm"
                   />
                 </div>
               </div>

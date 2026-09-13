@@ -305,20 +305,20 @@ export default function AdminUsers() {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center justify-between bg-background py-4 px-4 md:px-6">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl md:text-4xl font-bold tracking-tight">User Management</h1>
+            <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
+              <div className="flex min-w-0 items-center gap-3">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">User Management</h1>
               </div>
               <Button
-                className="gap-2"
+                className="w-full justify-center gap-1.5 px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm md:w-auto"
                 onClick={() => setModalOpen(true)}
               >
                 <Plus className="size-4" />
                 New User
               </Button>
             </header>
-            <div className="px-4 md:px-6 bg-background -mt-[1px]">
+            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs
                 tabs={tabs}
                 activeTab={activeTab}
@@ -326,7 +326,7 @@ export default function AdminUsers() {
               />
             </div>
 
-            <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">
+            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 [&_table]:min-w-[680px] sm:px-4 sm:py-4 md:px-6">
 
             <div className="flex flex-col gap-3">
               <div className="grid gap-3 md:grid-cols-[1fr_160px_160px] py-2">

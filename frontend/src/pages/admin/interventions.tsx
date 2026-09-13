@@ -163,7 +163,7 @@ export default function AdminInterventions() {
               </div>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4 md:gap-6">
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 [&_table]:min-w-[760px] sm:px-4 sm:py-4 md:gap-6 md:px-6">
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
                 {/* Left column — Main Dashboard Content */}
                 <div className="lg:col-span-3 flex flex-col gap-6">
