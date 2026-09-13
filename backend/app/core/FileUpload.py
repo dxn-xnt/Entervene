@@ -41,7 +41,7 @@ async def validate_file(file: UploadFile) -> None:
         )
 
     # Read file content to check size
-    content = await file.read()
+    content = await file.read(MAX_FILE_SIZE + 1)
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=400,

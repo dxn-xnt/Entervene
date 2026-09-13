@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from openai import APIError
 
 from app.api.v1.routes.AIAssist import router as ai_assist_router
 from app.api.v1.routes.Auth import get_current_user
@@ -12,7 +11,6 @@ from app.core.Dependencies import get_staff_id
 from app.services.academic.LessonPlanAIService import (
     clean_ai_output,
     generate_lesson_plan_suggestion,
-    _generate_with_groq,
 )
 
 
@@ -68,42 +66,14 @@ def test_lesson_plan_assist_endpoint_success(test_client):
         )
 
 
-def test_groq_fallback_when_model_decommissioned():
-    """Verify that a decommissioned model error triggers fallback to next model."""
+def test_lesson_suggestion_uses_bounded_shared_gateway():
     import asyncio
-
-    async def _run():
-        mock_client = MagicMock()
-        mock_models_res = MagicMock()
-        mock_m1 = MagicMock(id="old-decommissioned-model")
-        mock_m2 = MagicMock(id="openai/gpt-oss-120b")
-        mock_models_res.data = [mock_m1, mock_m2]
-        mock_client.models.list = AsyncMock(return_value=mock_models_res)
-
-        decommissioned_error = APIError(
-            message="The model has been decommissioned and is no longer supported.",
-            request=MagicMock(),
-            body={"error": {"code": "model_decommissioned"}},
-        )
-
-        success_resp = MagicMock()
-        mock_choice = MagicMock()
-        mock_choice.message.content = "Understand cell membrane structures."
-        success_resp.choices = [mock_choice]
-
-        mock_client.chat.completions.create = AsyncMock(
-            side_effect=[decommissioned_error, success_resp]
-        )
-
-        with patch(
-            "app.services.academic.LessonPlanAIService.AsyncOpenAI",
-            return_value=mock_client,
-        ):
-            result = await _generate_with_groq("dummy-key", "Generate objectives")
-            assert "Understand cell membrane structures." in result
-            assert mock_client.chat.completions.create.await_count == 2
-
-    asyncio.run(_run())
+    with patch("app.services.academic.LessonPlanAIService.generate_text", new_callable=AsyncMock) as gateway:
+        gateway.return_value = "Explain force."
+        result = asyncio.run(generate_lesson_plan_suggestion("objectives", "Force", "Science", "7"))
+        assert result == "Explain force."
+        assert gateway.await_count == 1
+        assert gateway.call_args.kwargs["max_tokens"] == 768
 
 
 def test_settings_has_groq_model():

@@ -1,4 +1,6 @@
 import secrets
+import hashlib
+from app.core.RequestLimits import login_limiter
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -117,6 +119,9 @@ def _role_name_to_client_role(role_name: str | None) -> str:
 
 @router.post("/login", response_model=LoginResponse)
 def login(body: LoginRequest, response: Response, db: Session = Depends(get_db)):
+    account_key = hashlib.sha256(str(body.email).strip().lower().encode()).hexdigest()
+    if not login_limiter.allow(account_key, 10):
+        raise HTTPException(429, "Too many login attempts. Please wait.", headers={"Retry-After": "60"})
     result = _user_identity_query(db).filter(UserAccount.email == body.email).first()
     if not result:
         raise HTTPException(status_code=401, detail="Invalid email or password")

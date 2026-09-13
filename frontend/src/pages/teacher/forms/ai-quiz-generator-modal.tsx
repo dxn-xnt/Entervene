@@ -384,6 +384,10 @@ export default function AIQuizGeneratorModal({
       setError("Configure at least one test part with 1 or more items.");
       return;
     }
+    if (testParts.reduce((sum, part) => sum + Number(part.count || 0), 0) > 20) {
+      setError("Generate up to 20 questions at a time. Reduce the item counts before continuing.");
+      return;
+    }
     if (hasAnyBreakdownError) {
       setError("Difficulty breakdown totals must equal the item count for each part.");
       return;

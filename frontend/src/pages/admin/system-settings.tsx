@@ -1,4 +1,5 @@
 import * as React from "react";
+import { AIUsageCard } from "@/components/admin/ai-usage-card";
 import { Card } from "@/components/retroui/Card";
 import { Text } from "@/components/retroui/Text";
 import AppLayout from "@/layouts/app-layout";
@@ -520,6 +521,7 @@ export default function AdminSystemSettings() {
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 [&_h3]:text-xl [&_table]:min-w-[680px] sm:px-4 sm:py-4 sm:[&_h3]:text-3xl md:px-6">
+              <AIUsageCard />
               {/* School Operational Hours */}
               <Card className="@container/card w-full">
                 <Card.Header className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">

@@ -13,8 +13,7 @@ from typing import Any, List
 
 from fastapi import HTTPException
 
-from app.core.Config import settings
-from app.services.ai.AIQuizGeneratorService import _generate_with_gemini, _generate_with_groq
+from app.services.ai.Provider import generate_text
 
 logger = logging.getLogger(__name__)
 
@@ -148,8 +147,10 @@ def _extract_and_validate_tos_json(raw_text: str) -> list[dict[str, Any]]:
 
         if q_type == "IDENTIFICATION" and validated_options:
             validated_options[0]["is_correct"] = True
-        elif q_type in {"MULTIPLE_CHOICE", "TRUE_FALSE", "MATCHING"} and not any(o["is_correct"] for o in validated_options) and validated_options:
-            validated_options[0]["is_correct"] = True
+        elif q_type in {"MULTIPLE_CHOICE", "TRUE_FALSE", "MATCHING"}:
+            expected_sizes = {"MULTIPLE_CHOICE": {4}, "TRUE_FALSE": {2}, "MATCHING": {4, 5}}
+            if len(validated_options) not in expected_sizes[q_type] or sum(o["is_correct"] for o in validated_options) != 1:
+                raise HTTPException(502, "AI returned an invalid answer key.")
 
         valid_questions.append({
             "question_text": str(item.get("question_text", f"Question {idx}")).strip(),
@@ -172,9 +173,6 @@ async def generate_tos_row_questions(
     bloom_targets: dict[str, int],
     language: str = "English",
 ) -> list[dict[str, Any]]:
-    groq_key = settings.groq_api_key
-    gemini_key = settings.gemini_api_key
-
     prompt = _build_tos_row_prompt(
         competency_label=competency_label,
         code=code,
@@ -183,26 +181,14 @@ async def generate_tos_row_questions(
         bloom_targets=bloom_targets,
         language=language,
     )
-    raw = None
+    raw = await generate_text(prompt, _TOS_SYSTEM_PROMPT, json_output=True)
 
-    if groq_key:
-        try:
-            raw = await _generate_with_groq(groq_key, prompt, system_prompt=_TOS_SYSTEM_PROMPT)
-        except Exception as exc:
-            logger.warning(f"Groq TOS generation failed: {exc}. Trying Gemini fallback...")
-            if gemini_key:
-                raw = await _generate_with_gemini(gemini_key, prompt, system_prompt=_TOS_SYSTEM_PROMPT)
-            else:
-                raise exc
-    elif gemini_key:
-        raw = await _generate_with_gemini(gemini_key, prompt, system_prompt=_TOS_SYSTEM_PROMPT)
-    else:
-        raise HTTPException(
-            status_code=503,
-            detail="AI service is not configured. Please set GROQ_API_KEY or GEMINI_API_KEY in backend/.env.",
-        )
-
-    if not raw:
-        raise HTTPException(status_code=502, detail="Empty response from AI providers for TOS.")
-
-    return _extract_and_validate_tos_json(raw)
+    try:
+        questions = _extract_and_validate_tos_json(raw)
+        from collections import Counter
+        counts = Counter(question["question_type"] for question in questions)
+        if dict(counts) != {kind: count for kind, count in type_counts.items() if count}:
+            raise HTTPException(502, "AI returned an incomplete question set. Try a smaller set.")
+        return questions
+    except (ValueError, TypeError, KeyError, OverflowError):
+        raise HTTPException(502, "AI returned invalid question data.") from None

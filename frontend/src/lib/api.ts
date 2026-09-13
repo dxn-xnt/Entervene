@@ -397,6 +397,8 @@ function getCookie(name: string): string | null {
 }
 
 let refreshRequest: Promise<boolean> | null = null;
+let lastRefreshResult = false;
+let refreshReuseUntil = 0;
 
 function request(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
@@ -425,9 +427,19 @@ function request(path: string, init: RequestInit = {}) {
 }
 
 async function refreshAccessToken(): Promise<boolean> {
+  if (Date.now() < refreshReuseUntil) return lastRefreshResult;
   if (!refreshRequest) {
     refreshRequest = request("/api/v1/auth/refresh", { method: "POST" })
-      .then((response) => response.ok)
+      .then((response) => {
+        lastRefreshResult = response.ok;
+        refreshReuseUntil = Date.now() + (response.ok ? 5000 : 30000);
+        return response.ok;
+      })
+      .catch(() => {
+        lastRefreshResult = false;
+        refreshReuseUntil = Date.now() + 30000;
+        return false;
+      })
       .finally(() => {
         refreshRequest = null;
       });
@@ -2278,7 +2290,6 @@ export async function cancelBatchSubstitutions(batchId: string): Promise<Teacher
   }
   return (await res.json()) as TeacherSubstitution[];
 }
-
 
 
 

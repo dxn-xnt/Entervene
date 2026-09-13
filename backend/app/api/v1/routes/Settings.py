@@ -47,10 +47,9 @@ def fetch_all_settings(
 def fetch_academic_years(
     db: Session = Depends(get_db),
 ):
-    """Fetch all academic years from the database, automatically ensuring up to 2 years ahead exist."""
-    from app.services.academic.AcademicYearService import ensure_future_academic_years
-
-    years = ensure_future_academic_years(db, years_ahead=2)
+    """Public read only; preparing future years is an explicit admin operation."""
+    from app.models.academic.AcademicYear import AcademicYear
+    years = db.query(AcademicYear).order_by(AcademicYear.start_date.desc()).all()
     return {
         "years": [
             {
@@ -63,6 +62,16 @@ def fetch_academic_years(
             for y in years
         ]
     }
+
+
+@router.post("/academic-years/prepare")
+def prepare_academic_years(
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    from app.services.academic.AcademicYearService import ensure_future_academic_years
+    ensure_future_academic_years(db, years_ahead=2)
+    return fetch_academic_years(db)
 
 
 @router.post("/academic-periods")
