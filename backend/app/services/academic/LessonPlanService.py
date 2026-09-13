@@ -19,14 +19,26 @@ def create_lesson_plan(db: Session, staff_id: str, payload: LessonPlanCreate) ->
         assessment=payload.assessment,
         ways_forward=payload.ways_forward,
         teacher_id=staff_id,
+        subject_id=payload.subject_id,
+        class_id=payload.class_id,
     )
     db.add(plan)
     db.commit()
     db.refresh(plan)
     return plan
 
-def get_teacher_lesson_plans(db: Session, staff_id: str) -> List[LessonPlanModel]:
-    return db.query(LessonPlanModel).filter(LessonPlanModel.teacher_id == staff_id).order_by(LessonPlanModel.updated_at.desc()).all()
+def get_teacher_lesson_plans(
+    db: Session,
+    staff_id: str,
+    subject_id: Optional[int] = None,
+    class_id: Optional[int] = None,
+) -> List[LessonPlanModel]:
+    query = db.query(LessonPlanModel).filter(LessonPlanModel.teacher_id == staff_id)
+    if subject_id is not None:
+        query = query.filter(LessonPlanModel.subject_id == subject_id)
+    if class_id is not None:
+        query = query.filter(LessonPlanModel.class_id == class_id)
+    return query.order_by(LessonPlanModel.updated_at.desc()).all()
 
 def get_lesson_plan_by_id(db: Session, staff_id: str, plan_id: int) -> LessonPlanModel:
     plan = db.query(LessonPlanModel).filter(
