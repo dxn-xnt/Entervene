@@ -96,10 +96,10 @@ def get_hierarchy_tree(
 @router.get("/{competency_id}", response_model=CompetencyResponse)
 def get_competency(
     competency_id: int,
-    current_user: dict = Depends(require_role("teacher", "admin", "student")),
+    current_user: dict = Depends(require_role("teacher", "admin")),
     db: Session = Depends(get_db),
 ):
-    return get_competency_detail(competency_id, db)
+    return get_competency_detail(competency_id, current_user, db)
 
 
 @router.put("/{competency_id}", response_model=CompetencyResponse)

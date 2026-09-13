@@ -69,11 +69,67 @@ def create_competency_record(body: CompetencyCreate, staff_id: Optional[str], db
     return build_competency_response(competency, db)
 
 
-def get_competency_detail(competency_id: int, db: Session) -> CompetencyResponse:
+def get_competency_detail(competency_id: int, current_user: dict, db: Session) -> CompetencyResponse:
     competency = db.query(Competency).filter(Competency.competency_id == competency_id).first()
     if not competency:
         raise HTTPException(status_code=404, detail="Competency not found")
-    return build_competency_response(competency, db)
+
+    role = current_user.get("role")
+    user_id = current_user.get("sub")
+    try:
+        from uuid import UUID
+        user_uuid = UUID(user_id) if isinstance(user_id, str) else user_id
+    except ValueError:
+        user_uuid = user_id
+
+    if role == "admin":
+        return build_competency_response(competency, db)
+
+    if role == "teacher":
+        staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_uuid).first()
+        if staff:
+            # 1. Owning creator teacher
+            if competency.created_by_staff_id == staff.staff_id:
+                return build_competency_response(competency, db)
+
+            # 2. Legacy competency without created_by_staff_id: allow if teacher has active load for subject
+            if competency.created_by_staff_id is None:
+                has_load = db.query(SubjectLoad.subject_load_id).filter(
+                    SubjectLoad.staff_id == staff.staff_id,
+                    SubjectLoad.subject_id == competency.subject_id,
+                    SubjectLoad.status.in_(["active", "published"]),
+                    SubjectLoad.is_active_version.is_(True),
+                ).first()
+                if has_load:
+                    return build_competency_response(competency, db)
+
+            # 3. Authorized substitute covering the creator teacher's load for this subject
+            from app.models.academic.TeacherSubstitution import TeacherSubstitution
+            from app.services.academic.SubstitutionService import SubstitutionService
+            from sqlalchemy import or_
+            today_date = SubstitutionService.get_academic_date()
+            is_sub = (
+                db.query(TeacherSubstitution.substitution_id)
+                .join(SubjectLoad, SubjectLoad.subject_load_id == TeacherSubstitution.subject_load_id)
+                .filter(
+                    SubjectLoad.staff_id == competency.created_by_staff_id,
+                    SubjectLoad.subject_id == competency.subject_id,
+                    SubjectLoad.status.in_(["active", "published"]),
+                    SubjectLoad.is_active_version.is_(True),
+                    TeacherSubstitution.substitute_staff_id == staff.staff_id,
+                    TeacherSubstitution.status == "active",
+                    or_(TeacherSubstitution.end_date.is_(None), TeacherSubstitution.end_date >= today_date),
+                )
+                .first()
+            )
+            if is_sub:
+                return build_competency_response(competency, db)
+
+            # TODO (Future Clone Grant): Hook in here when approved clone grants exist for competencies
+
+    # Note: Student access is not permitted directly via this endpoint as students consume
+    # competencies via published lessons (LessonResponse.competency_* fields).
+    raise HTTPException(status_code=403, detail="You do not have permission to view this competency")
 
 
 def list_subject_competencies(
