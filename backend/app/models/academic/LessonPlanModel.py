@@ -26,8 +26,12 @@ class LessonPlanModel(Base):
     ways_forward: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     teacher_id: Mapped[str] = mapped_column(String(20), ForeignKey("academic_staff.staff_id", ondelete="CASCADE"), nullable=False)
+    subject_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("subject.subject_id", ondelete="SET NULL"), nullable=True)
+    class_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("class.class_id", ondelete="SET NULL"), nullable=True)
     
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     teacher: Mapped[object] = relationship("AcademicStaff", backref="lesson_plans")
+    subject: Mapped[object] = relationship("Subject", backref="lesson_plans")
+    class_: Mapped[object] = relationship("Class", backref="lesson_plans")

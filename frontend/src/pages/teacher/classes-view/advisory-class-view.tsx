@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode, useEffect, useMemo, useState } from "react";
 import { Award, BookOpen, ChevronDown, Users } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Tabs } from "@/components/retroui/Tabs";
 import AppLayout from "@/layouts/app-layout";
@@ -13,7 +13,14 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Table } from "@/components/retroui/Table";
 import { OverviewCard } from "@/components/overview-cards";
 import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
-import { getTeacherAdvisoryClassDetail, getTeacherAdvisoryClassGrades } from "@/lib/api";
+import {
+  getClassSchedule,
+  getTeacherAdvisoryClassDetail,
+  getTeacherAdvisoryClassGrades,
+  type DynamicScheduleResponse,
+} from "@/lib/api";
+import { DynamicScheduleTable } from "@/components/dynamic-schedule-table";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import type {
   TeacherAdvisoryClassDetailResponse,
   TeacherAdvisoryClassGradesResponse,
@@ -223,26 +230,21 @@ function OverviewTab({
           <div className="grid gap-2 min-w-0">
             {detail.subject_loads.length ? (
               detail.subject_loads.map((load) => (
-                <Link
-                  key={load.subject_load_id}
-                  to={`/teacher/classes/${detail.class_id}/subjects/${load.subject_id}`}
-                >
-                  <Card className="block w-full">
-                    <Card.Content className="flex min-h-16 items-center justify-between gap-4">
-                      <span>
-                        <span className="block text-xl font-black">
-                          {load.subject_name}
-                        </span>
-                        <span className="block text-[10px] font-semibold text-black/65">
-                          {load.teacher_name}
-                        </span>
+                <Card key={load.subject_load_id} className="block w-full">
+                  <Card.Content className="flex min-h-16 items-center justify-between gap-4">
+                    <span>
+                      <span className="block text-xl font-black">
+                        {load.subject_name}
                       </span>
-                      <span className="text-right text-xs font-semibold">
-                        {load.schedule || "No schedule"}
+                      <span className="block text-[10px] font-semibold text-black/65">
+                        {load.teacher_name}
                       </span>
-                    </Card.Content>
-                  </Card>
-                </Link>
+                    </span>
+                    <span className="text-right text-xs font-semibold">
+                      {load.schedule || "No schedule"}
+                    </span>
+                  </Card.Content>
+                </Card>
               ))
             ) : (
               <EmptyInline message="No subject load assigned yet." />
@@ -351,54 +353,42 @@ function SubjectLoadTab({
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
 }) {
-  if (!detail.subject_loads.length) {
-    return <EmptyInline message="No subject load assigned yet." />;
-  }
+  const { selectedPeriodId } = useAcademicPeriod();
+  const [scheduleData, setScheduleData] = useState<DynamicScheduleResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadSchedule() {
+      if (!detail.class_id) return;
+      setIsLoading(true);
+      try {
+        const data = await getClassSchedule(detail.class_id, selectedPeriodId ?? undefined);
+        if (isMounted) setScheduleData(data);
+      } catch (err) {
+        console.error("Failed to load advisory class schedule:", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    void loadSchedule();
+    return () => {
+      isMounted = false;
+    };
+  }, [detail.class_id, selectedPeriodId]);
 
   return (
-    <section>
-      <h3 className="mb-2 text-lg font-bold">Subject Load</h3>
-      <Table
-        wrapperClassName="overflow-x-auto"
-        className="border-black min-w-[720px]"
-      >
-        <Table.Header>
-          <Table.Row>
-            <Table.Head>Subject</Table.Head>
-            <Table.Head>Teacher</Table.Head>
-            <Table.Head>Schedule</Table.Head>
-            <Table.Head>Status</Table.Head>
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
-          {detail.subject_loads.map((load) => (
-            <Table.Row
-              key={load.subject_load_id}
-              className="border-black/40 text-xs"
-            >
-              <Table.Cell>
-                <b className="hover:underline">{load.subject_name}</b>
-              </Table.Cell>
-              <Table.Cell>
-                <span className="flex items-center gap-2 font-semibold">
-                  <Avatar text={load.teacher_name} />
-                  {load.teacher_name}
-                </span>
-              </Table.Cell>
-              <Table.Cell>{load.schedule || "No schedule"}</Table.Cell>
-              <Table.Cell>
-                <Badge
-                  variant="outline"
-                  size="sm"
-                  className="w-fit rounded-none font-bold"
-                >
-                  {load.status || "N/A"}
-                </Badge>
-              </Table.Cell>
-            </Table.Row>
-          ))}
-        </Table.Body>
-      </Table>
+    <section className="flex flex-col gap-2">
+      <h3 className="text-lg font-bold">Subject Load Schedule</h3>
+      <DynamicScheduleTable
+        schedule={scheduleData?.schedule || []}
+        isPublished={scheduleData?.is_published}
+        isLoading={isLoading}
+        showTeacher={true}
+        emptyMessage="No published schedule assigned yet for this section."
+      />
     </section>
   );
 }

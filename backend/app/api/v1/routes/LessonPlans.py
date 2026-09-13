@@ -1,5 +1,5 @@
-from typing import List
-from fastapi import APIRouter, Depends, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.Dependencies import get_staff_id
@@ -27,10 +27,12 @@ def create_plan(
 @router.get("", response_model=List[LessonPlanResponse])
 @router.get("/", response_model=List[LessonPlanResponse])
 def get_plans(
+    subject_id: Optional[int] = Query(None),
+    class_id: Optional[int] = Query(None),
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
-    return get_teacher_lesson_plans(db, staff_id)
+    return get_teacher_lesson_plans(db, staff_id, subject_id=subject_id, class_id=class_id)
 
 @router.get("/{plan_id}", response_model=LessonPlanResponse)
 def get_plan(

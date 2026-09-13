@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Tabs } from "@/components/retroui/Tabs";
@@ -7,7 +7,9 @@ import { Input } from "@/components/retroui/Input";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Alert } from "@/components/retroui/Alert";
+import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import {
+  ArrowLeft,
   BookOpen,
   Plus,
   Trash2,
@@ -19,7 +21,6 @@ import {
 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { apiFetch } from "@/lib/api";
-import { routes } from "@/../routes";
 import { toast } from "sonner";
 
 interface LessonPlanItem {
@@ -42,18 +43,51 @@ const TABS = [
 
 export const LessonPlannerListPage: React.FC = () => {
   const navigate = useNavigate();
+  const { classId, subjectId } = useParams<{ classId?: string; subjectId?: string }>();
   const [plans, setPlans] = useState<LessonPlanItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>("");
   const [activeTab, setActiveTab] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [subjectInfo, setSubjectInfo] = useState<{ subjectName?: string; sectionName?: string }>({});
+
+  const backUrl = classId && subjectId ? `/teacher/classes/${classId}/subjects/${subjectId}` : "/teacher/classes";
+  const createUrl = classId && subjectId ? `/teacher/classes/${classId}/subjects/${subjectId}/lesson-planner/new` : "/teacher/classes";
+
+  useEffect(() => {
+    if (!classId || !subjectId) return;
+    const loadSubjectInfo = async () => {
+      try {
+        const res = await apiFetch("/api/v1/classwork-assignments/teacher/classes");
+        if (res.ok) {
+          const loads = await res.json();
+          const match = loads.find(
+            (l: any) => l.class_id === Number(classId) && l.subject_id === Number(subjectId)
+          );
+          if (match) {
+            setSubjectInfo({
+              subjectName: match.subject_name,
+              sectionName: match.section_name,
+            });
+          }
+        }
+      } catch {
+        // Non-fatal
+      }
+    };
+    loadSubjectInfo();
+  }, [classId, subjectId]);
 
   const fetchPlans = async () => {
     setIsLoading(true);
     setError("");
     try {
-      const res = await apiFetch("/api/v1/lesson-plans/");
+      const url =
+        classId && subjectId
+          ? `/api/v1/lesson-plans/?subject_id=${subjectId}&class_id=${classId}`
+          : "/api/v1/lesson-plans/";
+      const res = await apiFetch(url);
       if (!res.ok) throw new Error("Failed to fetch lesson plans.");
       const data = await res.json();
       setPlans(data);
@@ -68,7 +102,7 @@ export const LessonPlannerListPage: React.FC = () => {
 
   useEffect(() => {
     fetchPlans();
-  }, []);
+  }, [classId, subjectId]);
 
   const handleDelete = async (e: React.MouseEvent, planId: number) => {
     e.stopPropagation();
@@ -114,25 +148,59 @@ export const LessonPlannerListPage: React.FC = () => {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+            <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
-                <div className="min-w-0">
-                  <h1 className="truncate text-xl font-bold sm:text-2xl md:text-4xl">
-                    Lesson Planner
-                  </h1>
-                </div>
+                <Breadcrumb className="min-w-0">
+                  <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 sm:gap-2">
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Link href="/teacher/classes" className="whitespace-nowrap">
+                        Classes
+                      </Breadcrumb.Link>
+                    </Breadcrumb.Item>
+                    {classId && subjectId && (
+                      <>
+                        <Breadcrumb.Separator />
+                        <Breadcrumb.Item className="min-w-0">
+                          <Breadcrumb.Link
+                            href={backUrl}
+                            className="block truncate max-w-[140px] sm:max-w-[200px]"
+                          >
+                            {subjectInfo.subjectName || "Subject"}
+                          </Breadcrumb.Link>
+                        </Breadcrumb.Item>
+                      </>
+                    )}
+                    <Breadcrumb.Separator />
+                    <Breadcrumb.Item className="min-w-0">
+                      <Breadcrumb.Page className="block truncate">Lesson Planner</Breadcrumb.Page>
+                    </Breadcrumb.Item>
+                  </Breadcrumb.List>
+                </Breadcrumb>
               </div>
 
-              <Button
-                variant="default"
-                size="md"
-                onClick={() => navigate(routes.teacher.lessonPlannerCreate)}
-                className="shrink-0 gap-1.5 px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
-              >
-                <Plus className="size-4" />
-                <span>Create Lesson Plan</span>
-              </Button>
+              <div className="flex items-center gap-2">
+                {classId && subjectId && (
+                  <Button
+                    variant="outline"
+                    size="md"
+                    onClick={() => navigate(backUrl)}
+                    className="gap-1.5 text-xs sm:gap-2 sm:text-sm"
+                  >
+                    <ArrowLeft className="size-4" />
+                    <span>Back to Subject</span>
+                  </Button>
+                )}
+                <Button
+                  variant="default"
+                  size="md"
+                  onClick={() => navigate(createUrl)}
+                  className="shrink-0 gap-1.5 px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+                >
+                  <Plus className="size-4" />
+                  <span>Create Lesson Plan</span>
+                </Button>
+              </div>
             </header>
             <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs
@@ -190,7 +258,7 @@ export const LessonPlannerListPage: React.FC = () => {
                   <Button
                     variant="default"
                     size="md"
-                    onClick={() => navigate(routes.teacher.lessonPlannerCreate)}
+                    onClick={() => navigate(createUrl)}
                     className="gap-2"
                   >
                     <Plus size={16} />
@@ -207,7 +275,11 @@ export const LessonPlannerListPage: React.FC = () => {
                   <div
                     key={plan.plan_id}
                     onClick={() =>
-                      navigate(`/teacher/lesson-planner/${plan.plan_id}`)
+                      navigate(
+                        classId && subjectId
+                          ? `/teacher/classes/${classId}/subjects/${subjectId}/lesson-planner/${plan.plan_id}`
+                          : `/teacher/lesson-planner/${plan.plan_id}`,
+                      )
                     }
                     className="group flex items-center justify-between gap-4 p-4 rounded-lg border border-black bg-white shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000] cursor-pointer"
                   >

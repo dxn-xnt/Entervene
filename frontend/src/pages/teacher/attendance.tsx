@@ -709,7 +709,6 @@ export default function TeacherAttendancePage() {
                 </button>
               ))}
             </nav>
-            </div>
 
             <div className="border-t-1 border-border -mt-[1px] flex min-w-0 flex-1 flex-col gap-3 px-3 py-4 sm:px-4 md:px-6">
 
@@ -1622,6 +1621,7 @@ export default function TeacherAttendancePage() {
             </div>
           </div>
         </div>
+      </div>
 
       {/* Attendance Logs Dialog Modal */}
       <Dialog

@@ -11,6 +11,8 @@ class LessonPlanBase(BaseModel):
     sessions: Optional[str] = Field(None, max_length=255)
     references: Optional[str] = Field(None, max_length=1000)
     ai_declaration: Optional[str] = Field(None, max_length=1000)
+    subject_id: Optional[int] = None
+    class_id: Optional[int] = None
     
     intentions: Optional[Dict[str, Any]] = None
     learning_experience: Optional[Dict[str, Any]] = None
@@ -29,6 +31,8 @@ class LessonPlanUpdate(BaseModel):
     sessions: Optional[str] = Field(None, max_length=255)
     references: Optional[str] = Field(None, max_length=1000)
     ai_declaration: Optional[str] = Field(None, max_length=1000)
+    subject_id: Optional[int] = None
+    class_id: Optional[int] = None
     
     intentions: Optional[Dict[str, Any]] = None
     learning_experience: Optional[Dict[str, Any]] = None

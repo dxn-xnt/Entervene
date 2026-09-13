@@ -92,11 +92,15 @@ type TabValue = (typeof TABS)[number]["value"];
 
 interface LessonPlannerWizardProps {
   planId?: number;
+  classId?: number;
+  subjectId?: number;
   onClose?: () => void;
 }
 
 export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
   planId,
+  classId,
+  subjectId,
   onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<TabValue>("info");
@@ -116,7 +120,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
     errors,
     saveSuccess,
     apiError,
-  } = useLessonPlanner(planId);
+  } = useLessonPlanner(planId, classId, subjectId);
 
   const currentIndex = TABS.findIndex((t) => t.value === activeTab);
   const isFirst = currentIndex === 0;
@@ -145,8 +149,10 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
       }
       if (onClose) {
         onClose();
+      } else if (classId && subjectId) {
+        navigate(`/teacher/classes/${classId}/subjects/${subjectId}/lesson-planner`);
       } else {
-        navigate(routes.teacher.lessonPlanner);
+        navigate(routes.teacher.classes);
       }
     }
   };

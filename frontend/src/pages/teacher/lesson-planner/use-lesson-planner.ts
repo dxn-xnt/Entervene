@@ -27,6 +27,8 @@ export interface AssessmentTask {
 
 export interface LessonPlanDraft {
   status: "DRAFT" | "SUBMITTED";
+  subject_id?: number | null;
+  class_id?: number | null;
 
   // Info
   title: string;
@@ -69,6 +71,8 @@ export interface LessonPlanDraft {
 
 const DEFAULT_DRAFT: LessonPlanDraft = {
   status: "DRAFT",
+  subject_id: null,
+  class_id: null,
   title: "",
   learning_area: "",
   grade_section: "",
@@ -122,7 +126,12 @@ export function validateDraft(draft: LessonPlanDraft): ValidationErrors {
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
-function draftToPayload(draft: LessonPlanDraft, targetStatus: "DRAFT" | "SUBMITTED") {
+function draftToPayload(
+  draft: LessonPlanDraft,
+  targetStatus: "DRAFT" | "SUBMITTED",
+  classId?: number,
+  subjectId?: number
+) {
   return {
     status: targetStatus,
     title: draft.title,
@@ -136,12 +145,18 @@ function draftToPayload(draft: LessonPlanDraft, targetStatus: "DRAFT" | "SUBMITT
     learning_experience: draft.learning_experience,
     assessment: draft.assessment,
     ways_forward: draft.ways_forward,
+    subject_id: draft.subject_id ?? (subjectId ? Number(subjectId) : null),
+    class_id: draft.class_id ?? (classId ? Number(classId) : null),
   };
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useLessonPlanner(planId?: number) {
+export function useLessonPlanner(
+  planId?: number,
+  classId?: number,
+  subjectId?: number
+) {
   const navigate = useNavigate();
   const [draft, setDraft] = useState<LessonPlanDraft>(DEFAULT_DRAFT);
   const [isSaving, setIsSaving] = useState(false);
@@ -150,6 +165,43 @@ export function useLessonPlanner(planId?: number) {
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [apiError, setApiError] = useState<string>("");
+
+  // Initialize subject/class info for new draft
+  useEffect(() => {
+    if (planId) return;
+    if (classId || subjectId) {
+      setDraft((prev) => ({
+        ...prev,
+        subject_id: subjectId ? Number(subjectId) : prev.subject_id,
+        class_id: classId ? Number(classId) : prev.class_id,
+      }));
+    }
+    if (classId && subjectId) {
+      const loadContext = async () => {
+        try {
+          const res = await apiFetch("/api/v1/classwork-assignments/teacher/classes");
+          if (res.ok) {
+            const loads = await res.json();
+            const match = loads.find(
+              (l: any) =>
+                l.class_id === Number(classId) &&
+                l.subject_id === Number(subjectId)
+            );
+            if (match) {
+              setDraft((prev) => ({
+                ...prev,
+                learning_area: prev.learning_area || match.subject_name || "",
+                grade_section: prev.grade_section || match.section_name || "",
+              }));
+            }
+          }
+        } catch {
+          // non-blocking
+        }
+      };
+      loadContext();
+    }
+  }, [planId, classId, subjectId]);
 
   // Load existing plan if editing
   useEffect(() => {
@@ -163,6 +215,8 @@ export function useLessonPlanner(planId?: number) {
         setDraft({
           ...DEFAULT_DRAFT,
           ...data,
+          subject_id: data.subject_id ?? subjectId ?? null,
+          class_id: data.class_id ?? classId ?? null,
           status: data.status || "DRAFT",
           intentions: {
             ...DEFAULT_DRAFT.intentions,
@@ -231,17 +285,26 @@ export function useLessonPlanner(planId?: number) {
         res = await apiFetch(`/api/v1/lesson-plans/${planId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(draftToPayload(draft, "DRAFT")),
+          body: JSON.stringify(draftToPayload(draft, "DRAFT", classId, subjectId)),
         });
       } else {
         res = await apiFetch("/api/v1/lesson-plans/", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(draftToPayload(draft, "DRAFT")),
+          body: JSON.stringify(draftToPayload(draft, "DRAFT", classId, subjectId)),
         });
         if (res.ok) {
           const created = await res.json();
-          navigate(`/teacher/lesson-planner/${created.plan_id}`, { replace: true });
+          const targetClassId = classId ?? created.class_id;
+          const targetSubjectId = subjectId ?? created.subject_id;
+          if (targetClassId && targetSubjectId) {
+            navigate(
+              `/teacher/classes/${targetClassId}/subjects/${targetSubjectId}/lesson-planner/${created.plan_id}`,
+              { replace: true }
+            );
+          } else {
+            navigate(`/teacher/lesson-planner/${created.plan_id}`, { replace: true });
+          }
         }
       }
       if (!res.ok) throw new Error("Unable to save draft.");
@@ -254,7 +317,7 @@ export function useLessonPlanner(planId?: number) {
     } finally {
       setIsSaving(false);
     }
-  }, [draft, planId, navigate]);
+  }, [draft, planId, classId, subjectId, navigate]);
 
   // Submit (enforces validation, marks status as SUBMITTED, navigates to list)
   const submitPlan = useCallback(async () => {
@@ -290,13 +353,13 @@ export function useLessonPlanner(planId?: number) {
         res = await apiFetch(`/api/v1/lesson-plans/${planId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(draftToPayload(draft, "SUBMITTED")),
+          body: JSON.stringify(draftToPayload(draft, "SUBMITTED", classId, subjectId)),
         });
       } else {
         res = await apiFetch("/api/v1/lesson-plans/", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(draftToPayload(draft, "SUBMITTED")),
+          body: JSON.stringify(draftToPayload(draft, "SUBMITTED", classId, subjectId)),
         });
       }
       if (!res.ok) throw new Error("Unable to submit plan.");
@@ -312,7 +375,7 @@ export function useLessonPlanner(planId?: number) {
     } finally {
       setIsSubmitting(false);
     }
-  }, [draft, planId]);
+  }, [draft, planId, classId, subjectId]);
 
   return {
     draft,

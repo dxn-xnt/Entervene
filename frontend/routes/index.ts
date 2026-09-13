@@ -49,9 +49,9 @@ export const routes = {
     sectionPredictions: "/teacher/predictions/:grade/:classId",
     profile: "/teacher/profile",
     attendance: "/teacher/attendance",
-    lessonPlanner: "/teacher/lesson-planner",
-    lessonPlannerCreate: "/teacher/lesson-planner/new",
-    lessonPlannerEdit: "/teacher/lesson-planner/:planId",
+    lessonPlanner: "/teacher/classes/:classId/subjects/:subjectId/lesson-planner",
+    lessonPlannerCreate: "/teacher/classes/:classId/subjects/:subjectId/lesson-planner/new",
+    lessonPlannerEdit: "/teacher/classes/:classId/subjects/:subjectId/lesson-planner/:planId",
     tos: "/teacher/tos",
   },
 
