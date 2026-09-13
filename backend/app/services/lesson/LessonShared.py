@@ -61,28 +61,55 @@ def get_owned_lesson(db: Session, staff_id: str, lesson_id: int) -> Lesson:
 
 
 def authorize_lesson_access(db: Session, lesson: Lesson, current_user: dict) -> None:
-    """Allow admins, owning teachers, or enrolled students with published lessons."""
+    """Allow admins, owning teachers, authorized substitute/co-teachers on assigned classes, or enrolled students with published lessons."""
     role = current_user.get("role")
     user_id = current_user.get("sub")
+    try:
+        from uuid import UUID
+        user_uuid = UUID(user_id) if isinstance(user_id, str) else user_id
+    except ValueError:
+        user_uuid = user_id
+
     if role == "admin":
         return
     if role == "teacher":
-        staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_id).first()
+        staff = db.query(AcademicStaff).filter(AcademicStaff.user_id == user_uuid).first()
         if staff:
+            # 1. Creator teacher
             if lesson.created_by_staff_id == staff.staff_id:
                 return
-            load = db.query(SubjectLoad).filter(
-                SubjectLoad.staff_id == staff.staff_id,
-                SubjectLoad.subject_id == lesson.subject_id,
-                SubjectLoad.is_active_version.is_(True),
-                SubjectLoad.status.in_(["active", "published"]),
-            ).first()
-            if load:
-                return
+
+            # 2. Legacy lesson with no creator: allow if teacher has active load for subject
+            if lesson.created_by_staff_id is None:
+                legacy_load = db.query(SubjectLoad).filter(
+                    SubjectLoad.staff_id == staff.staff_id,
+                    SubjectLoad.subject_id == lesson.subject_id,
+                    SubjectLoad.is_active_version.is_(True),
+                    SubjectLoad.status.in_(["active", "published"]),
+                ).first()
+                if legacy_load:
+                    return
+
+            # 3. Non-creator teacher: allow only if lesson is assigned to a class where teacher has active/substitute viewing rights
+            from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+            assignments = db.query(LessonAssignment).filter(LessonAssignment.lesson_id == lesson.lesson_id).all()
+            for asgn in assignments:
+                load = db.query(SubjectLoad).filter(
+                    SubjectLoad.class_id == asgn.class_id,
+                    SubjectLoad.subject_id == lesson.subject_id,
+                    SubjectLoad.is_active_version.is_(True),
+                    SubjectLoad.status.in_(["active", "published"]),
+                ).first()
+                if load and SubjectLoadAuthorizationService.can_view(
+                    db, staff.staff_id, load.class_id, load.subject_id, load.academic_period_id
+                ):
+                    return
+
+            # TODO (Future Clone Grant): Hook in here when approved clone grants exist for lessons
     if lesson.is_archived:
         raise HTTPException(status_code=404, detail="Lesson not found")
     if role == "student" and lesson.is_published:
-        student = db.query(Student).filter(Student.user_id == user_id).first()
+        student = db.query(Student).filter(Student.user_id == user_uuid).first()
         if student and db.query(LessonAssignment).join(
             StudentClass,
             StudentClass.class_id == LessonAssignment.class_id,

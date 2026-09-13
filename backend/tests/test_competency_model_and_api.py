@@ -18,6 +18,7 @@ from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAssignment import LessonAssignment
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
+from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
 
@@ -34,6 +35,7 @@ TABLES = [
     Competency.__table__,
     Lesson.__table__,
     LessonAssignment.__table__,
+    TeacherSubstitution.__table__,
 ]
 
 
@@ -91,8 +93,8 @@ def setup_test_db():
     class_einstein = Class(class_id=20, section_name="Grade 8 - Einstein", academic_year_id=1, academic_level_id=1)
 
     # Seed SubjectLoads
-    load_newton_a = SubjectLoad(subject_load_id=1, staff_id="STAFF_A", subject_id=5, class_id=10, academic_period_id=1)
-    load_einstein_a = SubjectLoad(subject_load_id=2, staff_id="STAFF_A", subject_id=5, class_id=20, academic_period_id=1)
+    load_newton_a = SubjectLoad(subject_load_id=1, staff_id="STAFF_A", subject_id=5, class_id=10, academic_period_id=1, status="active", is_active_version=True)
+    load_einstein_a = SubjectLoad(subject_load_id=2, staff_id="STAFF_A", subject_id=5, class_id=20, academic_period_id=1, status="active", is_active_version=True)
 
     db.add_all([
         year, level, period, user_a, staff_a, user_b, staff_b, user_admin,
@@ -317,3 +319,59 @@ def test_student_and_fallback_safety():
     resp_unscoped = client_student.get(f"/api/v1/competencies/subject/{ctx['subject_id']}")
     assert resp_unscoped.status_code == 200
     assert len(resp_unscoped.json()) == 0
+
+
+def test_competency_detail_authorization():
+    """Competency detail endpoint restricts to creator teacher, active substitute, and admin, blocking parallel teachers and students."""
+    db, ctx = setup_test_db()
+    client_a = create_client(db, {"sub": str(ctx["user_a_id"]), "user_id": str(ctx["user_a_id"]), "role": "teacher"})
+    client_b = create_client(db, {"sub": str(ctx["user_b_id"]), "user_id": str(ctx["user_b_id"]), "role": "teacher"})
+    client_admin = create_client(db, {"sub": str(ctx["user_admin_id"]), "user_id": str(ctx["user_admin_id"]), "role": "admin"})
+    client_student = create_client(db, {"sub": str(uuid.uuid4()), "user_id": str(uuid.uuid4()), "role": "student"})
+
+    # Teacher A creates competency
+    c_resp = client_a.post("/api/v1/competencies/", json={
+        "competency_code": "M8-TEST-1",
+        "statement": "Private Competency by Teacher A",
+        "subject_id": ctx["subject_id"],
+    })
+    assert c_resp.status_code == 201
+    comp_id = c_resp.json()["competency_id"]
+
+    # 1. Creator Teacher A -> 200 OK
+    resp_owner = client_a.get(f"/api/v1/competencies/{comp_id}")
+    assert resp_owner.status_code == 200
+    assert resp_owner.json()["statement"] == "Private Competency by Teacher A"
+
+    # 2. Teacher B (teaches same subject, but not creator and not substitute) -> 403 Forbidden
+    resp_other_teacher = client_b.get(f"/api/v1/competencies/{comp_id}")
+    assert resp_other_teacher.status_code == 403
+
+    # 3. Student -> 403 Forbidden
+    resp_student = client_student.get(f"/api/v1/competencies/{comp_id}")
+    assert resp_student.status_code == 403
+
+    # 4. Admin -> 200 OK
+    resp_admin = client_admin.get(f"/api/v1/competencies/{comp_id}")
+    assert resp_admin.status_code == 200
+
+    # 5. Teacher C as active substitute for Teacher A on this subject load -> 200 OK
+    user_c_id = uuid.uuid4()
+    user_c = UserAccount(user_id=user_c_id, email="sub@school.edu", password_hash="hash", account_status="ACTIVE")
+    staff_c = AcademicStaff(staff_id="STAFF_SUB", user_id=user_c_id, first_name="Sub", last_name="Teacher")
+    sub_record = TeacherSubstitution(
+        subject_load_id=1,  # Teacher A's load in ctx
+        original_staff_id="STAFF_A",
+        substitute_staff_id="STAFF_SUB",
+        start_date=date(2026, 8, 1),
+        end_date=None,
+        status="active",
+    )
+    db.add_all([user_c, staff_c, sub_record])
+    db.commit()
+
+    client_sub = create_client(db, {"sub": str(user_c_id), "user_id": str(user_c_id), "role": "teacher"})
+    resp_sub = client_sub.get(f"/api/v1/competencies/{comp_id}")
+    assert resp_sub.status_code == 200
+    assert resp_sub.json()["statement"] == "Private Competency by Teacher A"
+

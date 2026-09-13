@@ -3,7 +3,7 @@ from typing import Optional
 
 from fastapi import HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
@@ -88,9 +88,8 @@ def teacher_lessons_for_class_subject(
             Lesson.is_archived == False,
             or_(
                 Lesson.lesson_id.in_(assigned_subquery),
-                ~Lesson.assignments.any(),
-                Lesson.created_by_staff_id == staff_id,
-                Lesson.created_by_staff_id.is_(None),
+                and_(~Lesson.assignments.any(), Lesson.created_by_staff_id == staff_id),
+                and_(~Lesson.assignments.any(), Lesson.created_by_staff_id.is_(None)),
             ),
         )
         .order_by(Lesson.order_index.asc(), Lesson.created_at.desc())

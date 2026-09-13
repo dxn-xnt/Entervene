@@ -27,6 +27,7 @@ from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.auth.UserAccount import UserAccount
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkLesson import ClassworkLesson
+from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 
@@ -47,6 +48,7 @@ TABLES = [
     LessonAssignment.__table__,
     Classwork.__table__,
     ClassworkLesson.__table__,
+    TeacherSubstitution.__table__,
 ]
 
 
@@ -193,8 +195,10 @@ def lesson_context(tmp_path):
             "identity": identity,
             "accounts": accounts,
             "owner": owner,
+            "other_teacher": other_teacher,
             "student": student,
             "subject": subject,
+            "period": period,
             "class": class_,
             "other_class": other_class,
             "lesson": lesson,
@@ -272,4 +276,119 @@ def test_lesson_assignment_validates_teacher_class_targets_before_writing(lesson
     assert response.status_code == 403
     assert response.json()["detail"] == "Not assigned to this class/subject"
     assert c["db"].query(LessonAssignment).count() == before
+
+
+def test_lesson_detail_blocks_same_subject_different_class_teacher(lesson_context):
+    """A teacher teaching the same subject on another class cannot access this lesson if it is not assigned to their class."""
+    c = lesson_context
+    # Give other_teacher an active load on other_class for the same subject
+    other_load = SubjectLoad(
+        staff_id=c["other_teacher"].staff_id,
+        subject_id=c["subject"].subject_id,
+        class_id=c["other_class"].class_id,
+        academic_period_id=c["period"].academic_period_id,
+        status="active",
+        is_active_version=True,
+    )
+    c["db"].add(other_load)
+    c["db"].commit()
+
+    detail_url = f"/api/v1/lessons/{c['lesson'].lesson_id}"
+
+    # Owner accesses successfully
+    _act_as(c, "owner", "teacher")
+    assert c["client"].get(detail_url).status_code == 200
+
+    # other_teacher teaches the same subject, but lesson is assigned to class_, not other_class
+    _act_as(c, "other_teacher", "teacher")
+    assert c["client"].get(detail_url).status_code == 403
+
+
+def test_lesson_detail_allows_substitute_for_assigned_class(lesson_context):
+    """An active substitute teacher covering the class where the lesson is assigned can view the lesson."""
+    c = lesson_context
+    sub_user = UserAccount(
+        user_id=uuid.uuid4(),
+        email="substitute@example.test",
+        password_hash="x",
+        account_status="active",
+    )
+    sub_staff = AcademicStaff(
+        staff_id="SUB_STAFF_1",
+        user_id=sub_user.user_id,
+        first_name="Sub",
+        last_name="Teacher",
+    )
+    # Find owner's load for class_
+    owner_load = c["db"].query(SubjectLoad).filter(
+        SubjectLoad.staff_id == c["owner"].staff_id,
+        SubjectLoad.class_id == c["class"].class_id,
+        SubjectLoad.subject_id == c["subject"].subject_id,
+    ).first()
+
+    sub_record = TeacherSubstitution(
+        subject_load_id=owner_load.subject_load_id,
+        original_staff_id=c["owner"].staff_id,
+        substitute_staff_id=sub_staff.staff_id,
+        start_date=date(2025, 6, 1),
+        end_date=None,
+        status="active",
+    )
+    c["db"].add_all([sub_user, sub_staff, sub_record])
+    c["db"].commit()
+
+    # Act as substitute
+    c["identity"].update(sub=sub_user.user_id, role="teacher")
+    detail_url = f"/api/v1/lessons/{c['lesson'].lesson_id}"
+    resp = c["client"].get(detail_url)
+    assert resp.status_code == 200
+    assert resp.json()["lesson_id"] == c["lesson"].lesson_id
+
+
+def test_teacher_lessons_for_class_subject_excludes_unassigned_lessons_from_other_teachers(lesson_context):
+    """Unassigned/draft lessons created by Teacher A must NOT leak into Teacher B's class subject list."""
+    c = lesson_context
+    # Ensure other_teacher has active load on other_class
+    other_load = c["db"].query(SubjectLoad).filter(
+        SubjectLoad.staff_id == c["other_teacher"].staff_id,
+        SubjectLoad.class_id == c["other_class"].class_id,
+    ).first()
+    if not other_load:
+        other_load = SubjectLoad(
+            staff_id=c["other_teacher"].staff_id,
+            subject_id=c["subject"].subject_id,
+            class_id=c["other_class"].class_id,
+            academic_period_id=c["period"].academic_period_id,
+            status="active",
+            is_active_version=True,
+        )
+        c["db"].add(other_load)
+
+    # Owner creates an UNASSIGNED lesson for the subject
+    unassigned_lesson = Lesson(
+        title="Owner's Private Draft Lesson",
+        subject_id=c["subject"].subject_id,
+        created_by_staff_id=c["owner"].staff_id,
+        is_published=False,
+        is_draft=True,
+    )
+    c["db"].add(unassigned_lesson)
+    c["db"].commit()
+
+    # Teacher B views lessons for other_class & subject
+    _act_as(c, "other_teacher", "teacher")
+    resp_other = c["client"].get(f"/api/v1/lessons/my-class/{c['other_class'].class_id}/subject/{c['subject'].subject_id}")
+    assert resp_other.status_code == 200
+    returned_ids_other = [l["lesson_id"] for l in resp_other.json()]
+    # Teacher B must NOT see Owner's unassigned lesson
+    assert unassigned_lesson.lesson_id not in returned_ids_other
+
+    # Owner views lessons for class_ & subject
+    _act_as(c, "owner", "teacher")
+    resp_owner = c["client"].get(f"/api/v1/lessons/my-class/{c['class'].class_id}/subject/{c['subject'].subject_id}")
+    assert resp_owner.status_code == 200
+    returned_ids_owner = [l["lesson_id"] for l in resp_owner.json()]
+    # Owner DOES see their own unassigned lesson
+    assert unassigned_lesson.lesson_id in returned_ids_owner
+
 
