@@ -1,4 +1,6 @@
 import * as React from "react"
+import { Link } from "react-router-dom"
+import { routes } from "@/../routes"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
@@ -23,6 +25,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const navRole = (role ?? "student") as keyof typeof SidebarConfigs
   const { periods, selectedPeriodId, setSelectedPeriodId, isLoading } = useAcademicPeriod()
 
+  const dashboardUrl =
+    role === "admin"
+      ? routes.admin.dashboard
+      : role === "teacher"
+        ? routes.teacher.dashboard
+        : routes.student.board
+
   return (
     <Sidebar collapsible="offcanvas" className="no-scrollbar" {...props}>
       <SidebarHeader>
@@ -32,17 +41,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               asChild
               className="hover:border-background! data-[slot=sidebar-menu-button]:p-6!"
             >
-              <a href="#" className="gap-2">
+              <Link to={dashboardUrl} className="gap-2">
                 <CommandIcon className="size-6!" />
                 <span className="text-2xl! font-bold ">Entervene</span>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
 
       <SidebarContent>
-        <Select 
+        <Select
           value={selectedPeriodId ? String(selectedPeriodId) : undefined}
           onValueChange={(val) => setSelectedPeriodId(Number(val))}
         >
@@ -53,7 +62,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <Select.Group>
               {periods.map((period) => (
                 <Select.Item key={period.id} value={String(period.id)}>
-                  {period.period} ({period.academicyear})
+                  <span className="font-bold">{period.period}</span> <span>({period.academicyear})</span>
                 </Select.Item>
               ))}
             </Select.Group>

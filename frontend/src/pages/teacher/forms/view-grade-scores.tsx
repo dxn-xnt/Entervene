@@ -66,7 +66,7 @@ export default function ViewGradeScoreModal({
     return (
       <>
         <Table.Row className="border-y-2 border-black bg-yellow-50 hover:bg-yellow-100/70">
-          <Table.Cell colSpan={2 + paginatedItems.length} className="py-1 font-black uppercase text-black">
+          <Table.Cell colSpan={2 + paginatedItems.length} className="py-1 font-black text-black">
             {label}
           </Table.Cell>
         </Table.Row>
@@ -127,7 +127,7 @@ export default function ViewGradeScoreModal({
 
         <Card className="w-full rounded-none border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <Table className="w-full border-collapse text-sm">
-            <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black uppercase">
+            <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black">
               <Table.Row>
                 <Table.Head className="min-w-[180px] font-black text-black">Learner's Name</Table.Head>
                 {paginatedItems.map((item) => (
