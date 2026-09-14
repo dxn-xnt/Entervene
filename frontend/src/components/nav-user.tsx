@@ -30,6 +30,7 @@ import { useState } from "react";
 import { routes } from "@/../routes";
 import { Avatar } from "./retroui/Avatar";
 import { colorThemes, isColorTheme, useColorTheme } from "@/context/ColorThemeContext";
+import { RoleBadge } from "@/components/role-badge";
 
 export function NavUser() {
   const { user, logout } = useAuth();
@@ -82,10 +83,13 @@ export function NavUser() {
                   {initials}
                 </Avatar.Fallback>
               </Avatar>
-              <div className="grid flex-1 text-left leading-tight">
+              <div className="min-w-0 flex-1 text-left leading-tight">
+                <div className="flex min-w-0 items-center gap-1.5">
                 <span className="truncate text-sm font-semibold">
                   {user?.fullName || "Loading…"}
                 </span>
+                  <RoleBadge role={user?.role} />
+                </div>
                 <span className="truncate text-xs text-muted-foreground">
                   {user?.email || ""}
                 </span>
@@ -118,6 +122,7 @@ export function NavUser() {
                   <span className="truncate text-xs">
                     {user?.email || ""}
                   </span>
+                  <RoleBadge role={user?.role} className="mt-1" />
                 </div>
               </div>
             </DropdownMenuLabel>
