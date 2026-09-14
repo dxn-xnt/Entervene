@@ -193,7 +193,7 @@ export function NavUser() {
               </DropdownMenuRadioItem>
               <DropdownMenuRadioItem value="dark" className="gap-2 p-2 pr-8">
                 <MoonIcon />
-                Soft dark
+                Dark
               </DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
 

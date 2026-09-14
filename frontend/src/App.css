@@ -72,14 +72,16 @@
   --destructive-foreground: #fff;
   --border: #000;
   --input: #737373;
-  --ring: #1d4ed8;
+  --theme-accent: var(--primary);
+  --theme-focus-ring: #8a6500;
+  --ring: var(--theme-focus-ring);
 }
 
 :root[data-theme="blue"] {
   --primary: #60a5fa;
   --primary-hover: #3b82f6;
   --accent: #dbeafe;
-  --ring: #1d4ed8;
+  --theme-focus-ring: #1d4ed8;
   --primary-foreground: #000;
 }
 
@@ -87,7 +89,7 @@
   --primary: #4ade80;
   --primary-hover: #22c55e;
   --accent: #dcfce7;
-  --ring: #15803d;
+  --theme-focus-ring: #15803d;
   --primary-foreground: #000;
 }
 
@@ -95,7 +97,7 @@
   --primary: #c084fc;
   --primary-hover: #a855f7;
   --accent: #f3e8ff;
-  --ring: #7e22ce;
+  --theme-focus-ring: #7e22ce;
   --primary-foreground: #000;
 }
 
@@ -103,7 +105,7 @@
   --primary: #fb923c;
   --primary-hover: #f97316;
   --accent: #ffedd5;
-  --ring: #c2410c;
+  --theme-focus-ring: #c2410c;
   --primary-foreground: #000;
 }
 
@@ -126,14 +128,16 @@
   --destructive-foreground: #fff;
   --border: #777b85;
   --input: #8b8f98;
-  --ring: #93c5fd;
+  --theme-accent: var(--primary);
+  --theme-focus-ring: #ffe066;
+  --ring: var(--theme-focus-ring);
 }
 
 .dark[data-theme="blue"] {
   --primary: #60a5fa;
   --primary-hover: #3b82f6;
   --accent: #1e3a5f;
-  --ring: #93c5fd;
+  --theme-focus-ring: #93c5fd;
   --primary-foreground: #08111f;
 }
 
@@ -141,7 +145,7 @@
   --primary: #4ade80;
   --primary-hover: #22c55e;
   --accent: #163d27;
-  --ring: #86efac;
+  --theme-focus-ring: #86efac;
   --primary-foreground: #07150c;
 }
 
@@ -149,7 +153,7 @@
   --primary: #c084fc;
   --primary-hover: #a855f7;
   --accent: #3b2452;
-  --ring: #d8b4fe;
+  --theme-focus-ring: #d8b4fe;
   --primary-foreground: #170824;
 }
 
@@ -157,7 +161,7 @@
   --primary: #fb923c;
   --primary-hover: #f97316;
   --accent: #4a2a16;
-  --ring: #fdba74;
+  --theme-focus-ring: #fdba74;
   --primary-foreground: #1c0b02;
 }
 
@@ -342,4 +346,38 @@ textarea::placeholder,
 .bg-success.text-foreground,
 .bg-success .text-black {
   color: #111827;
+}
+
+/* One theme-aware focus treatment for native and shared form controls. */
+:where(
+  input,
+  textarea,
+  select,
+  [role="combobox"],
+  [role="checkbox"],
+  [role="radio"],
+  [role="switch"],
+  [data-slot="input"],
+  [data-slot="select-trigger"]
+):where(:focus, :focus-visible):not(:disabled):not([aria-disabled="true"]):not([readonly]):not([aria-invalid="true"]):not([data-invalid="true"]) {
+  border-color: var(--theme-focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-focus-ring) 35%, transparent);
+  outline: none;
+}
+
+:where(
+  input,
+  textarea,
+  select,
+  [role="combobox"],
+  [role="checkbox"],
+  [role="radio"],
+  [role="switch"],
+  [data-slot="input"],
+  [data-slot="select-trigger"]
+)[aria-invalid="true"]:where(:focus, :focus-visible),
+:where(input, textarea, select)[data-invalid="true"]:where(:focus, :focus-visible) {
+  border-color: var(--destructive);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--destructive) 35%, transparent);
+  outline: none;
 }

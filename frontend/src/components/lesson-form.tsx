@@ -88,7 +88,7 @@ export default function LessonForm({
               value={formData.title}
               onChange={handleChange}
               placeholder="Enter lesson title"
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border rounded-lg focus:border-ring focus:ring-2 focus:ring-ring/35"
               disabled={isLoading}
             />
           </div>
@@ -107,7 +107,7 @@ export default function LessonForm({
               onChange={handleChange}
               placeholder="Enter lesson description (optional)"
               rows={3}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border rounded-lg focus:border-ring focus:ring-2 focus:ring-ring/35"
               disabled={isLoading}
             />
           </div>
@@ -123,7 +123,7 @@ export default function LessonForm({
               onChange={handleChange}
               placeholder="Enter lesson content"
               rows={6}
-              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border rounded-lg focus:border-ring focus:ring-2 focus:ring-ring/35"
               disabled={isLoading}
             />
           </div>
