@@ -10,7 +10,7 @@ const BreadcrumbRoot = React.forwardRef<
   <nav
     ref={ref}
     aria-label="breadcrumb"
-    className={cn("w-full text-sm", className)}
+    className={cn("w-full", className)}
     {...props}
   />
 ))
@@ -48,7 +48,7 @@ const BreadcrumbLink = React.forwardRef<
     <Comp
       ref={ref}
       className={cn(
-        "min-w-0 rounded-sm text-base font-semibold tracking-tight text-muted-foreground transition-colors hover:text-foreground sm:text-lg md:text-4xl md:font-bold",
+        "min-w-0 rounded-sm text-sm! font-semibold tracking-tight text-muted-foreground transition-colors hover:text-foreground sm:text-lg md:text-4xl md:font-bold",
         className
       )}
       {...props}
@@ -64,7 +64,7 @@ const BreadcrumbPage = React.forwardRef<
   <span
     ref={ref}
     aria-current="page"
-    className={cn("min-w-0 text-base font-bold text-foreground sm:text-lg md:text-xl", className)}
+    className={cn("min-w-0 text-xl! font-bold text-foreground", className)}
     {...props}
   />
 ))

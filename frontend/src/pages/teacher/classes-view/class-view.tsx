@@ -257,10 +257,9 @@ export default function TeacherClassDetail() {
                     <Breadcrumb.Item className="min-w-0">
                       <Breadcrumb.Link
                         onClick={() => navigate(`/teacher/classes/${detail.class_id}/subjects/${currentSubject?.subject_id}`)}
-                        className="block max-w-28 cursor-pointer truncate text-muted-foreground hover:text-black sm:max-w-56 md:max-w-none"
+                        className="cursor-pointer whitespace-nowrap !text-lg text-muted-foreground hover:text-black"
                       >
                         {currentSubject?.subject_name || "Subject"}
-
                       </Breadcrumb.Link>
                     </Breadcrumb.Item>
                     <Breadcrumb.Separator />
@@ -877,39 +876,40 @@ function OverviewTab({
           className="border-2 border-black bg-primary"
         >
           <Accordion.Header className="p-4 items-center">
-            <div className="flex flex-col items-start gap-1 min-w-0 text-left">
-              <div className="flex flex-wrap items-center gap-2 min-w-0">
-                <h4 className="text-base sm:text-lg font-bold text-black break-words line-clamp-2">
+            <div className="flex flex-col w-full items-start gap-1 min-w-0 text-left">
+              <div className="flex flex-wrap items-center w-full justify-between gap-2 min-w-0 pr-3">
+                <h4 className="text-xl sm:text-2xl font-semibold text-black break-words line-clamp-2">
                   {lesson.title}
                 </h4>
-                <Badge
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 border border-black bg-white text-xs font-bold text-black"
-                >
-                  {lesson.is_published ? "Published" : "Draft"}
-                </Badge>
-                {lesson.attachments && lesson.attachments.length > 0 && (
+                <div className="flex flex-row gap-2">
                   <Badge
+                    variant={lesson.is_published ? "solid" : "default"}
                     size="sm"
-                    className="border-2 border-black bg-white text-black font-bold text-xs shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0 gap-1"
+                    className="shrink-0 text-xs font-bold"
                   >
-                    <Paperclip size={10} />
-                    {lesson.attachments.length} material
-                    {lesson.attachments.length === 1 ? "" : "s"}
+                    {lesson.is_published ? "Published" : "Draft"}
                   </Badge>
-                )}
-                <Badge
-                  variant="outline"
-                  size="sm"
-                  className="border-2 border-black bg-white text-black font-bold text-xs shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
-                >
-                  {classworks.length} classwork{classworks.length === 1 ? "" : "s"}
-                </Badge>
+                  {lesson.attachments && lesson.attachments.length > 0 && (
+                    <Badge
+                      size="sm"
+                      className="bg-white text-black font-bold text-xs shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0 gap-1"
+                    >
+                      <Paperclip size={10} />
+                      {lesson.attachments.length} material
+                      {lesson.attachments.length === 1 ? "" : "s"}
+                    </Badge>
+                  )}
+                  <Badge
+                    variant="outline"
+                    size="sm"
+                    className="bg-white text-black font-bold text-xs shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] shrink-0"
+                  >
+                    {classworks.length} classwork{classworks.length === 1 ? "" : "s"}
+                  </Badge>
+                </div>
+
               </div>
-              <p className="text-xs font-medium text-gray-800 break-words line-clamp-2">
-                {lesson.description || lesson.content || "Lesson folder"}
-              </p>
+
             </div>
           </Accordion.Header>
 
@@ -925,7 +925,7 @@ function OverviewTab({
                 <Card
                   key={cw.classwork_assignment_id}
                   onClick={() => openClassworkDetail(cw)}
-                  className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3.5 rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFFDF0] hover:translate-x-0.5 transition-all cursor-pointer min-w-0 group"
+                  className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3 hover:bg-accent shadow-sm hover:translate-x-0.5 transition-all cursor-pointer min-w-0 group"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="shrink-0 text-black">
@@ -939,17 +939,17 @@ function OverviewTab({
                         {cw.due_date
                           ? `Due ${new Date(cw.due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
                           : "No due date"}
-                        {cw.total_points !== null && cw.total_points !== undefined
+                        {/* {cw.total_points !== null && cw.total_points !== undefined
                           ? ` • ${cw.total_points} pts`
-                          : ""}
+                          : ""} */}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {cw.classwork_category && (
-                      <span className="border-2 border-black bg-[#F6E9B2] px-3 py-1 text-[11px] font-black text-black uppercase shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
-                        {cw.classwork_category.replace(/_/g, " ")}
-                      </span>
+                      <Badge variant="surface" size="sm" className="capitalize">
+                        {cw.classwork_category.toLowerCase().replace(/_/g, " ")}
+                      </Badge>
                     )}
                   </div>
                 </Card>
@@ -1046,7 +1046,6 @@ function OverviewTab({
                 </div>
 
                 {/* Search & Sort Controls */}
-                <Card className="block w-full min-w-0 border-black bg-white p-3 shadow-sm hover:shadow-sm">
                 <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <label className="relative w-full min-w-0 flex-1 lg:max-w-md">
                     <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
@@ -1054,7 +1053,7 @@ function OverviewTab({
                       value={lessonSearch}
                       onChange={(e) => setLessonSearch(e.target.value)}
                       placeholder="Search competencies or lessons..."
-                      className="h-10 w-full min-w-0 border-2 border-black bg-white pl-9 pr-3 shadow-none"
+                      className="h-10 w-full min-w-0 border-2 border-black bg-white pl-9 pr-3"
                     />
                   </label>
 
@@ -1089,7 +1088,7 @@ function OverviewTab({
                         )
                       }
                     >
-                      <Select.Trigger className="h-10 w-full border-2 border-black bg-white text-sm shadow-sm lg:w-40">
+                      <Select.Trigger className="h-10 w-full border-2 border-black bg-white text-sm lg:w-40">
                         <Select.Value placeholder="Sort by" />
                       </Select.Trigger>
                       <Select.Content className="border-2 border-black bg-white">
@@ -1102,8 +1101,7 @@ function OverviewTab({
 
                     {(selectedSubjectId || currentSubjectLoad?.subject_id || detail.subject_loads[0]?.subject_id) && (
                       <Button
-                        type="button"
-                        variant="outline"
+                        variant="default"
                         onClick={() => {
                           const targetId =
                             selectedSubjectId ||
@@ -1115,7 +1113,7 @@ function OverviewTab({
                             );
                           }
                         }}
-                        className="h-10 w-full gap-1.5 whitespace-nowrap border-2 border-black bg-primary px-2 text-sm font-bold text-black shadow-sm hover:bg-primary-hover lg:w-auto lg:px-4"
+                        className="h-10 w-full gap-2 whitespace-nowrap text-sm"
                         title="Go to Subject View"
                       >
                         <BookOpen size={16} />
@@ -1124,7 +1122,6 @@ function OverviewTab({
                     )}
                   </div>
                 </div>
-                </Card>
               </div>
 
               {/* Lessons List with Competencies Hierarchy */}
