@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
-import { Checkbox } from "@/components/retroui/Checkbox";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Empty } from "@/components/retroui/Empty";
 import { Input } from "@/components/retroui/Input";
@@ -18,7 +17,7 @@ import type { SubjectLoadStudioData } from "@/lib/api";
 import { useSettings } from "@/context/SettingsContext";
 import { validatePeriodTimeRange } from "@/lib/time-utils";
 import { cn } from "@/lib/utils";
-import { Clock, Save, Coffee, Utensils, Sunrise, Plus, Trash2, FolderPlus, AlertTriangle } from "lucide-react";
+import { Clock, Save, Coffee, Utensils, Sunrise, Plus, Trash2, FolderPlus } from "lucide-react";
 
 export type PeriodTemplateSlotItem = {
   slot_id?: number | null;
@@ -670,3 +669,4 @@ export default function BreakConfigDrawer({
     </>
   );
 }
+

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Table } from "@/components/retroui/Table";
-import { Tabs, type TabItem } from "@/components/retroui/Tabs";
+import { Tabs } from "@/components/retroui/Tabs";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { useParams } from "react-router-dom";
@@ -161,7 +161,6 @@ const TeacherGradeView = () => {
   } | null>(null);
 
   const [sendingAll, setSendingAll] = useState(false);
-  const [sendingStudentId, setSendingStudentId] = useState<string | null>(null);
   const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [forceResendAll, setForceResendAll] = useState(false);
   const [bulkSendSummary, setBulkSendSummary] = useState<BulkSendGradesToAdviserResponse | null>(null);
@@ -195,7 +194,6 @@ const TeacherGradeView = () => {
     }
 
     try {
-      setSendingStudentId(student.student_id);
       setToastMessage(null);
       const res = await sendStudentGradeToAdviser(section, subject, student.student_id, {
         academic_period_id: activePeriodId,
@@ -230,8 +228,6 @@ const TeacherGradeView = () => {
           text: err.message || "Failed to send grade to adviser.",
         });
       }
-    } finally {
-      setSendingStudentId(null);
     }
   };
 
@@ -533,7 +529,7 @@ const TeacherGradeView = () => {
           <Table.Row className="py-1.5! border-y-2 border-black bg-muted hover:bg-muted">
             <Table.Cell colSpan={8} className="py-1.5! font-black text-black">{label}</Table.Cell>
           </Table.Row>
-          {group.map((item, idx) => (
+          {group.map((item) => (
             <Table.Row key={item.student_id} className="border-b border-black/10 hover:bg-yellow-50/50">
               <Table.Cell className="max-w-[200px] truncate text-sm font-extrabold text-black" title={item.name}>
                 {item.name}
@@ -1395,3 +1391,4 @@ const TeacherGradeView = () => {
 };
 
 export default TeacherGradeView;
+
