@@ -74,40 +74,46 @@ const studentActivity = [
   },
 ];
 
-const overviewCards = [
-  {
-    title: "Subjects",
-    count: "16",
-    stat: "+3",
-    statDescription: "increased from last month",
-  },
-  {
-    title: "Classes",
-    count: "12",
-    stat: "+3",
-    statDescription: "increased from last month",
-  },
-  {
-    title: "Students",
-    count: "1",
-    stat: "+1",
-    statDescription: "increased from last month",
-  },
-  {
-    title: "Ungraded Classwork",
-    count: "2",
-    stat: "+3",
-    statDescription: "increased from last month",
-  },
-];
-
 import { Button } from "@/components/retroui/Button";
 import { Calendar } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
+import { useEffect, useState } from "react";
+import { getOverviewStats, type OverviewCardData } from "@/lib/api";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { selectedPeriodId } = useAcademicPeriod();
+  const [cards, setCards] = useState<OverviewCardData[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchStats() {
+      setIsLoading(true);
+      try {
+        const data = await getOverviewStats({
+          scope: "teacher",
+          academic_period_id: selectedPeriodId ?? undefined,
+        });
+        if (!cancelled) {
+          setCards(data.cards);
+        }
+      } catch (err) {
+        console.error("Failed to load teacher overview metrics:", err);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    fetchStats();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPeriodId]);
+
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
@@ -134,16 +140,28 @@ const Dashboard = () => {
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
-              {overviewCards.map((card) => (
-                <OverviewCard
-                  key={card.title}
-                  title={card.title}
-                  count={card.count}
-                  stat={card.stat}
-                  statDescription={card.statDescription}
-                />
-              ))}
-            </div>
+                {isLoading && cards.length === 0
+                  ? Array.from({ length: 4 }).map((_, i) => (
+                      <Card key={i} className="@container/card animate-pulse">
+                        <Card.Header>
+                          <div className="h-4 w-24 bg-muted rounded" />
+                        </Card.Header>
+                        <Card.Content className="space-y-2">
+                          <div className="h-9 w-20 bg-muted rounded" />
+                          <div className="h-3 w-32 bg-muted rounded" />
+                        </Card.Content>
+                      </Card>
+                    ))
+                  : cards.map((card) => (
+                      <OverviewCard
+                        key={card.title}
+                        title={card.title}
+                        count={card.count}
+                        stat={card.stat}
+                        statDescription={card.statDescription}
+                      />
+                    ))}
+              </div>
 
             <div className="flex flex-col lg:flex-row items-stretch gap-4">
               <Card className="block w-full flex-1 border-black transition-none hover:shadow-md">
