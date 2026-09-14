@@ -350,10 +350,11 @@ export function buildILAWHTML(draft: LessonPlanDraft, teacherName: string, showT
  * with a manual "Save as PDF / Print" button, preventing main app freeze.
  */
 export function exportLessonPlanPDF(draft: LessonPlanDraft, teacherName: string) {
-  const html = buildILAWHTML(draft, teacherName, true);
+  // Downloaded file should NEVER contain preview toolbar buttons ("Save as PDF / Print", "Close Window")
+  const downloadHtml = buildILAWHTML(draft, teacherName, false);
 
   // 1. Trigger direct file download so user can save/store the document file locally
-  const blob = new Blob(["\ufeff" + html], { type: "text/html;charset=utf-8" });
+  const blob = new Blob(["\ufeff" + downloadHtml], { type: "text/html;charset=utf-8" });
   const filename = `${(draft.title || "Lesson_Plan").replace(/[^a-z0-9_-]/gi, "_")}_ILAW.html`;
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
@@ -363,10 +364,11 @@ export function exportLessonPlanPDF(draft: LessonPlanDraft, teacherName: string)
   document.body.removeChild(link);
   URL.revokeObjectURL(link.href);
 
-  // 2. Open clean preview tab without calling window.print() on load (prevents browser tab lock)
+  // 2. Open interactive preview tab with manual print/save button
+  const previewHtml = buildILAWHTML(draft, teacherName, true);
   const viewWindow = window.open("", "_blank");
   if (viewWindow) {
-    viewWindow.document.write(html);
+    viewWindow.document.write(previewHtml);
     viewWindow.document.close();
     viewWindow.focus();
   }
