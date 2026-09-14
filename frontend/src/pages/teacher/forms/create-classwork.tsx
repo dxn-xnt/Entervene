@@ -382,7 +382,7 @@ export default function CreateClassworkModal({
           </div>
         </Dialog.Header>
 
-        <section className="flex flex-col gap-4 p-5 max-h-[70vh] overflow-y-auto">
+        <section className="flex flex-col gap-4 p-5">
           {createError && (
             <Alert
               status="error"

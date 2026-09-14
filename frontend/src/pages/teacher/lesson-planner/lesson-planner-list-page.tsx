@@ -241,7 +241,7 @@ export const LessonPlannerListPage: React.FC = () => {
             {!isLoading && filteredPlans.length === 0 && (
               <Card className="block w-full text-center border-black">
                 <Card.Content className="flex flex-col items-center px-6 py-12">
-                  <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-lg border-2 border-black">
+                  <div className="mb-3 flex h-14 w-14 items-center justify-center rounded border-2 border-black">
                     <BookOpen className="size-7" />
                   </div>
 
@@ -281,10 +281,10 @@ export const LessonPlannerListPage: React.FC = () => {
                           : `/teacher/lesson-planner/${plan.plan_id}`,
                       )
                     }
-                    className="group flex items-center justify-between gap-4 p-4 rounded-lg border border-black bg-white shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000] cursor-pointer"
+                    className="group flex items-center justify-between gap-4 p-4 rounded border border-black bg-white shadow-[3px_3px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000] cursor-pointer"
                   >
                     <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                      <div className="flex size-10 items-center justify-center rounded-lg border border-black bg-[#E6F4EA] text-emerald-800 font-bold shrink-0 shadow-[2px_2px_0_#000]">
+                      <div className="flex size-10 items-center justify-center rounded border border-black bg-[#E6F4EA] text-emerald-800 font-bold shrink-0 shadow-[2px_2px_0_#000]">
                         <BookOpen className="size-5" />
                       </div>
 

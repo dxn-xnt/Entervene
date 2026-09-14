@@ -10,6 +10,7 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
+import { RoleBadge } from "@/components/role-badge";
 
 type SetupErrors = {
   academicLevel?: string;
@@ -151,7 +152,7 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
   return (
     <div className="grid gap-5">
       {noAdvisers && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-200 font-semibold">
+        <div className="rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-200 font-semibold">
           All advisers are currently assigned for the active academic year. You can create sections after freeing an adviser slot.
         </div>
       )}
@@ -257,7 +258,10 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
                         .filter((adviser) => adviser.staff_id === section.adviserStaffId || !selectedByOtherRows.has(adviser.staff_id))
                         .map((adviser) => (
                           <Select.Item key={adviser.staff_id} value={adviser.staff_id}>
-                            {adviserName(adviser)}
+                            <span className="flex items-center gap-2">
+                              <span className="truncate">{adviserName(adviser)}</span>
+                              <RoleBadge role="teacher" />
+                            </span>
                           </Select.Item>
                         ))}
                     </Select.Group>
@@ -306,7 +310,7 @@ function InlineError({ message }: { message: string }) {
 
 function StatePanel({ message, detail, children }: { message: string; detail?: string; children?: React.ReactNode }) {
   return (
-    <div className="grid gap-3 rounded-md border-2 border-border bg-card p-5 text-sm">
+    <div className="grid gap-3 rounded border-2 border-border bg-card p-5 text-sm">
       <p className="font-bold">{message}</p>
       {detail && detail !== message && <p className="text-xs text-muted-foreground">{detail}</p>}
       {children && <div className="flex gap-2">{children}</div>}

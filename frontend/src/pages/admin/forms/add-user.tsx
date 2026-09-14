@@ -484,7 +484,7 @@ export default function AddUserModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }} >
-      <Dialog.Content size="md" className="w-[calc(100vw-1.5rem)] max-w-lg overflow-hidden rounded-none font-sans lg:max-w-[40%]">
+      <Dialog.Content size="md" className="w-[calc(100vw-1.5rem)] max-w-lg overflow-hidden rounded font-sans lg:max-w-[40%]">
         <Dialog.Header asChild className="bg-primary text-primary-foreground font-head flex items-center justify-between">
           <div>
             <span className="font-bold text-lg">
@@ -561,7 +561,7 @@ export default function AddUserModal({
                 onDrop={handleFileDrop}
                 onClick={() => fileInputRef.current?.click()}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-center cursor-pointer transition-all min-h-[130px]",
+                  "flex flex-col items-center justify-center gap-2 rounded border-2 border-dashed p-6 text-center cursor-pointer transition-all min-h-[130px]",
                   hasImportErrors
                     ? "border-destructive bg-destructive/10"
                     : dragOver
@@ -659,7 +659,7 @@ export default function AddUserModal({
         {/* ── STEP: MANUAL ─────────────────────────────────── */}
         {step === "manual" && (
           <>
-            <div className="p-5 flex flex-col gap-3.5 max-h-[60vh] overflow-y-auto">
+            <div className="flex flex-col gap-3.5 p-5">
               <Field label="Role">
                 <Select value={form.role} onValueChange={(val) => handleField("role", val)}>
                   <Select.Trigger className="w-full">

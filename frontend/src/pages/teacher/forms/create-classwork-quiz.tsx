@@ -694,7 +694,7 @@ export default function CreateClassworkQuizModal({
                 </div>
             </Dialog.Header>
 
-            <section className="flex flex-col gap-4 p-5 max-h-[70vh] overflow-y-auto">
+            <section className="flex flex-col gap-4 p-5">
                 {createError && (
                     <Alert status="error" className="mb-2">
                         <Alert.Description>{createError}</Alert.Description>
@@ -708,7 +708,7 @@ export default function CreateClassworkQuizModal({
                                 type="button"
                                 onClick={useManualQuizBuilder}
                                 disabled={isCreating || isImportingQuiz}
-                                className="rounded-lg border-2 border-black bg-[#7ABA78] p-5 text-left shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer flex flex-col justify-between"
+                                className="rounded border-2 border-black bg-[#7ABA78] p-5 text-left shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer flex flex-col justify-between"
                             >
                                 <div>
                                     <div className="flex items-center gap-2">
@@ -721,7 +721,7 @@ export default function CreateClassworkQuizModal({
                                         Build multiple-choice and short-answer questions yourself.
                                     </p>
                                 </div>
-                                <div className="mt-4 flex items-center justify-center rounded-lg border-2 border-black bg-white px-3 py-2 text-sm font-bold shadow-md hover:bg-neutral-50 transition">
+                                <div className="mt-4 flex items-center justify-center rounded border-2 border-black bg-white px-3 py-2 text-sm font-bold shadow-md hover:bg-neutral-50 transition">
                                     Start from Scratch
                                 </div>
                             </button>
@@ -733,7 +733,7 @@ export default function CreateClassworkQuizModal({
                                     setIsAIModalOpen(true);
                                 }}
                                 disabled={isCreating || isImportingQuiz}
-                                className="rounded-lg border-2 border-black bg-[#F6E9B2] p-5 text-left shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer flex flex-col justify-between"
+                                className="rounded border-2 border-black bg-[#F6E9B2] p-5 text-left shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer flex flex-col justify-between"
                             >
                                 <div>
                                     <div className="flex items-center gap-2">
@@ -746,12 +746,12 @@ export default function CreateClassworkQuizModal({
                                         Generate structured questions from lessons and reading materials automatically with AI.
                                     </p>
                                 </div>
-                                <div className="mt-4 flex items-center justify-center rounded-lg border-2 border-black bg-white px-3 py-2 text-sm font-bold shadow-md hover:bg-neutral-50 transition gap-1">
+                                <div className="mt-4 flex items-center justify-center rounded border-2 border-black bg-white px-3 py-2 text-sm font-bold shadow-md hover:bg-neutral-50 transition gap-1">
                                     <Sparkles size={14} className="text-amber-600" /> Generate with AI
                                 </div>
                             </button>
 
-                            <div className="rounded-lg border-2 border-black bg-[#7ABA78] p-5 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
+                            <div className="rounded border-2 border-black bg-[#7ABA78] p-5 shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
                                 <div>
                                     <div className="flex items-center gap-2">
                                         <FileText size={19} className="text-black" />
@@ -764,7 +764,7 @@ export default function CreateClassworkQuizModal({
                                         imported questions.
                                     </p>
                                 </div>
-                                <label className="mt-4 flex cursor-pointer items-center justify-center rounded-lg border-2 border-black bg-white px-3 py-2 text-sm font-bold shadow-md hover:bg-[#F6E9B2] transition">
+                                <label className="mt-4 flex cursor-pointer items-center justify-center rounded border-2 border-black bg-white px-3 py-2 text-sm font-bold shadow-md hover:bg-[#F6E9B2] transition">
                                     {isImportingQuiz ? "Importing..." : "Choose quiz file"}
                                     <input
                                         type="file"
@@ -791,7 +791,7 @@ export default function CreateClassworkQuizModal({
                 {createStep === "details" && (
                     <div className="space-y-4">
                         {(aiLinkedSubjectName || (aiLinkedLessonTitles && aiLinkedLessonTitles.length > 0) || aiPromptScope) && (
-                            <div className="rounded-lg border-2 border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] space-y-2">
+                            <div className="rounded border-2 border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] space-y-2">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
                                         <Sparkles className="w-3.5 h-3.5 text-amber-700" />
@@ -1029,7 +1029,7 @@ export default function CreateClassworkQuizModal({
                 {createStep === "quiz" && (
                     <div className="space-y-4">
                         {(aiLinkedSubjectName || (aiLinkedLessonTitles && aiLinkedLessonTitles.length > 0) || aiPromptScope) && (
-                            <div className="rounded-lg border-2 border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] space-y-2">
+                            <div className="rounded border-2 border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] space-y-2">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-black">
                                         <Sparkles className="w-3.5 h-3.5 text-amber-700" />
@@ -1063,7 +1063,7 @@ export default function CreateClassworkQuizModal({
                                 )}
                             </div>
                         )}
-                        <div className="rounded-lg border-2 border-black bg-[#F8F6ED] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                        <div className="rounded border-2 border-black bg-[#F8F6ED] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                             <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div>
                                     <h3 className="text-lg font-bold">Quiz question builder</h3>
@@ -1077,7 +1077,7 @@ export default function CreateClassworkQuizModal({
                             </div>
 
                             {quizImportWarnings.length > 0 && (
-                                <div className="mt-3 rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs font-semibold text-yellow-800">
+                                <div className="mt-3 rounded border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs font-semibold text-yellow-800">
                                     <p className="font-bold">Import notes</p>
                                     <ul className="mt-1 list-disc pl-4">
                                         {quizImportWarnings.map((warning) => (
@@ -1269,7 +1269,7 @@ export default function CreateClassworkQuizModal({
                             {quizQuestions.map((question, questionIndex) => (
                                 <div
                                     key={question.id}
-                                    className="rounded-lg border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                                    className="rounded border-2 border-black bg-white p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                                 >
                                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                                         <h3 className="text-base font-bold">
@@ -1525,7 +1525,7 @@ export default function CreateClassworkQuizModal({
                         </div>
 
                         {/* ── Export Questionnaire Card (Post-Review Snapshot) ── */}
-                        <div className="rounded-lg border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-wrap items-center justify-between gap-3 mt-4">
+                        <div className="rounded border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-wrap items-center justify-between gap-3 mt-4">
                             <div>
                                 <div className="flex items-center gap-1.5 font-black text-sm text-black">
                                     <FileDown className="w-4 h-4 text-black" />
@@ -1792,7 +1792,7 @@ export default function CreateClassworkQuizModal({
                         </div>
 
                         {/* ── Export Questionnaire Card in Step 4 ── */}
-                        <div className="rounded-lg border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-wrap items-center justify-between gap-3 mt-4">
+                        <div className="rounded border-2 border-black bg-white p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex flex-wrap items-center justify-between gap-3 mt-4">
                             <div>
                                 <div className="flex items-center gap-1.5 font-black text-sm text-black">
                                     <FileDown className="w-4 h-4 text-black" />

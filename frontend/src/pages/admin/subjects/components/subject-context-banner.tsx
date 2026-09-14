@@ -54,7 +54,7 @@ export function SubjectContextBanner({
     <RetroCard className="w-full overflow-hidden p-0">
       <div className="flex flex-col gap-3 bg-[#fff1b8] px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-md border-2 border-black bg-background shadow-[2px_2px_0_#000]">
+          <span className="grid size-10 shrink-0 place-items-center rounded border-2 border-black bg-background shadow-[2px_2px_0_#000]">
             <CalendarDays className="size-5" />
           </span>
           <div className="min-w-0">

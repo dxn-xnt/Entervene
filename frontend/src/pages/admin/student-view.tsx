@@ -34,13 +34,13 @@ export default function AdminStudentView() {
 
                         <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
                             {/* Student Banner Card */}
-                            <Card className="w-full flex flex-col p-6 border-2 border-black rounded-lg shadow-md bg-white">
+                            <Card className="w-full flex flex-col p-6 border-2 border-black rounded shadow-md bg-white">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
 
                                 {/* Profile info */}
                                 <div className="flex items-center gap-4">
-                                    <Avatar className="h-16 w-16 border-2 border-black bg-[#fae583]">
-                                        <Avatar.Fallback className="text-black font-bold bg-[#fae583]">
+                                    <Avatar className="h-16 w-16 border-2 border-black bg-accent">
+                                        <Avatar.Fallback className="text-black font-bold bg-accent">
                                             {/* SVG avatar representing a student like in the image */}
                                             <svg viewBox="0 0 100 100" className="w-full h-full p-1">
                                                 <circle cx="50" cy="42" r="22" fill="#e0a96d" stroke="black" strokeWidth="2" />
@@ -74,7 +74,7 @@ export default function AdminStudentView() {
                             <div className="mt-6">
                                 <Progress
                                     value={81}
-                                    className="h-4 w-full bg-white border-2 border-black rounded-none [&>div]:bg-[#e63946] transition-all"
+                                    className="h-4 w-full bg-white border-2 border-black rounded [&>div]:bg-[#e63946] transition-all"
                                 />
                             </div>
                         </Card>
@@ -88,7 +88,7 @@ export default function AdminStudentView() {
                                 {/* Insights */}
                                 <div className="flex flex-col gap-2">
                                     <h3 className="text-2xl font-extrabold text-black">Insights</h3>
-                                    <Card className="w-full bg-[#f2a2a2] border-2 border-black rounded-lg p-5 text-black shadow-md hover:shadow-none transition-all">
+                                    <Card className="w-full bg-[#f2a2a2] border-2 border-black rounded p-5 text-black shadow-md hover:shadow-none transition-all">
                                         <p className="font-semibold text-sm leading-relaxed">
                                             Daniel's data indicates significant disengagement across all LMS behavioral indicators. With only 8 logins and an average session of 6 minutes, meaningful content exposure is critically low. Combined with failing classwork and quiz averages and 11 missed activities, the model predicts failure with high confidence unless urgent intervention is applied.
                                         </p>
@@ -101,7 +101,7 @@ export default function AdminStudentView() {
 
                                     {/* Stats rows */}
                                     <div className="grid grid-cols-3 gap-3">
-                                        <Card className="bg-white border-2 border-black rounded-lg p-3 shadow-md flex flex-col justify-between">
+                                        <Card className="bg-white border-2 border-black rounded p-3 shadow-md flex flex-col justify-between">
                                             <div>
                                                 <p className="text-xs font-bold text-muted-foreground leading-tight">Written Works Average</p>
                                                 <div className="text-3xl sm:text-4xl font-extrabold text-black mt-2">52</div>
@@ -109,7 +109,7 @@ export default function AdminStudentView() {
                                             <p className="text-[10px] font-semibold text-muted-foreground mt-2">out of 100</p>
                                         </Card>
 
-                                        <Card className="bg-white border-2 border-black rounded-lg p-3 shadow-md flex flex-col justify-between">
+                                        <Card className="bg-white border-2 border-black rounded p-3 shadow-md flex flex-col justify-between">
                                             <div>
                                                 <p className="text-xs font-bold text-muted-foreground leading-tight">Performance Average</p>
                                                 <div className="text-3xl sm:text-4xl font-extrabold text-black mt-2">48</div>
@@ -117,7 +117,7 @@ export default function AdminStudentView() {
                                             <p className="text-[10px] font-semibold text-muted-foreground mt-2">out of 100</p>
                                         </Card>
 
-                                        <Card className="bg-white border-2 border-black rounded-lg p-3 shadow-md flex flex-col justify-between">
+                                        <Card className="bg-white border-2 border-black rounded p-3 shadow-md flex flex-col justify-between">
                                             <div>
                                                 <p className="text-xs font-bold text-muted-foreground leading-tight">Completion Rate</p>
                                                 <div className="text-3xl sm:text-4xl font-extrabold text-black mt-2">44%</div>
@@ -129,7 +129,7 @@ export default function AdminStudentView() {
                                     {/* Subgrid: Lesson Mastery & Score Trend */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                                         {/* Lesson Mastery */}
-                                        <Card className="bg-white border-2 border-black rounded-lg p-4 shadow-md flex flex-col gap-4">
+                                        <Card className="bg-white border-2 border-black rounded p-4 shadow-md flex flex-col gap-4">
                                             <h4 className="font-extrabold text-black border-b-2 border-black pb-2 text-sm sm:text-base">Lesson Mastery</h4>
                                             <div className="flex flex-col gap-3">
 
@@ -139,7 +139,7 @@ export default function AdminStudentView() {
                                                         <span className="truncate max-w-[75%]">Functions and Mo...</span>
                                                         <span>96%</span>
                                                     </div>
-                                                    <Progress value={96} className="h-3 w-full bg-white border-2 border-black rounded-none [&>div]:bg-[#387a22]" />
+                                                    <Progress value={96} className="h-3 w-full bg-white border-2 border-black rounded [&>div]:bg-[#387a22]" />
                                                 </div>
 
                                                 {/* Control Structures... */}
@@ -148,7 +148,7 @@ export default function AdminStudentView() {
                                                         <span className="truncate max-w-[75%]">Control Structures...</span>
                                                         <span>80%</span>
                                                     </div>
-                                                    <Progress value={80} className="h-3 w-full bg-white border-2 border-black rounded-none [&>div]:bg-[#f39c12]" />
+                                                    <Progress value={80} className="h-3 w-full bg-white border-2 border-black rounded [&>div]:bg-[#f39c12]" />
                                                 </div>
 
                                                 {/* Data Types and V... */}
@@ -157,14 +157,14 @@ export default function AdminStudentView() {
                                                         <span className="truncate max-w-[75%]">Data Types and V...</span>
                                                         <span>54%</span>
                                                     </div>
-                                                    <Progress value={54} className="h-3 w-full bg-white border-2 border-black rounded-none [&>div]:bg-[#e63946]" />
+                                                    <Progress value={54} className="h-3 w-full bg-white border-2 border-black rounded [&>div]:bg-[#e63946]" />
                                                 </div>
 
                                             </div>
                                         </Card>
 
                                         {/* Score Trend */}
-                                        <Card className="bg-white border-2 border-black rounded-lg p-4 shadow-md flex flex-col gap-2">
+                                        <Card className="bg-white border-2 border-black rounded p-4 shadow-md flex flex-col gap-2">
                                             <h4 className="font-extrabold text-black border-b-2 border-black pb-2 text-sm sm:text-base">Score Trend</h4>
                                             <div className="flex-1 min-h-[100px] flex items-center justify-center relative">
                                                 {/* SVG Line Chart representing the trend */}
@@ -197,7 +197,7 @@ export default function AdminStudentView() {
                             {/* COLUMN 2 (Recommendations) - 4 Cols */}
                             <div className="lg:col-span-4 flex flex-col gap-2 w-full">
                                 <h3 className="text-2xl font-extrabold text-black">Recommendations</h3>
-                                <Card className="w-full bg-white border-2 border-black rounded-lg p-5 shadow-md flex flex-col gap-4">
+                                <Card className="w-full bg-white border-2 border-black rounded p-5 shadow-md flex flex-col gap-4">
 
                                     {/* List of recommendations */}
                                     <ul className="list-disc pl-5 flex flex-col gap-3 text-black text-sm font-semibold leading-relaxed">
@@ -222,7 +222,7 @@ export default function AdminStudentView() {
                                         <div className="flex flex-col gap-3">
 
                                             {/* Card 1 */}
-                                            <div className="border-2 border-black rounded-lg p-3 bg-white flex gap-3 relative shadow hover:shadow-none transition-all">
+                                            <div className="border-2 border-black rounded p-3 bg-white flex gap-3 relative shadow hover:shadow-none transition-all">
                                                 <div className="w-20 h-16 bg-[#e06666] border border-black flex-shrink-0 flex items-center justify-center overflow-hidden rounded relative">
                                                     {/* Video illustration */}
                                                     <div className="absolute inset-0 bg-[#351c75] opacity-80 flex flex-col items-center justify-center p-1 text-[8px] text-white text-center font-bold">
@@ -242,7 +242,7 @@ export default function AdminStudentView() {
                                             </div>
 
                                             {/* Card 2 */}
-                                            <div className="border-2 border-black rounded-lg p-3 bg-white flex gap-3 relative shadow hover:shadow-none transition-all">
+                                            <div className="border-2 border-black rounded p-3 bg-white flex gap-3 relative shadow hover:shadow-none transition-all">
                                                 <div className="w-20 h-16 bg-[#3d85c6] border border-black flex-shrink-0 flex items-center justify-center overflow-hidden rounded relative">
                                                     {/* Video illustration */}
                                                     <div className="absolute inset-0 bg-[#073763] opacity-80 flex flex-col items-center justify-center p-1 text-[8px] text-white text-center font-bold">
@@ -274,19 +274,19 @@ export default function AdminStudentView() {
                                 <div className="flex flex-col gap-3">
 
                                     {/* Total logins */}
-                                    <Card className="bg-white border-2 border-black rounded-lg p-4 shadow-md hover:shadow-none transition-all">
+                                    <Card className="bg-white border-2 border-black rounded p-4 shadow-md hover:shadow-none transition-all">
                                         <span className="text-xs font-bold text-muted-foreground">Total logins <span className="font-medium text-[10px]">(this period)</span></span>
                                         <div className="text-4xl font-extrabold text-black mt-2">8</div>
                                     </Card>
 
                                     {/* Avg session */}
-                                    <Card className="bg-white border-2 border-black rounded-lg p-4 shadow-md hover:shadow-none transition-all">
+                                    <Card className="bg-white border-2 border-black rounded p-4 shadow-md hover:shadow-none transition-all">
                                         <span className="text-xs font-bold text-muted-foreground">Avg session <span className="font-medium text-[10px]">(per login)</span></span>
                                         <div className="text-4xl font-extrabold text-black mt-2">6 <span className="text-xl font-bold">min</span></div>
                                     </Card>
 
                                     {/* Missed activities */}
-                                    <Card className="bg-white border-2 border-black rounded-lg p-4 shadow-md hover:shadow-none transition-all">
+                                    <Card className="bg-white border-2 border-black rounded p-4 shadow-md hover:shadow-none transition-all">
                                         <span className="text-xs font-bold text-muted-foreground">Missed activities</span>
                                         <div className="text-4xl font-extrabold text-black mt-2">11</div>
                                     </Card>

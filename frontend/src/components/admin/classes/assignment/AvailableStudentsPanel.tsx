@@ -50,7 +50,7 @@ export default function AvailableStudentsPanel({
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search student..."
-          className="h-9 min-w-52 flex-1 rounded-none border-black !shadow-none bg-[#fffdf5] text-sm"
+          className="h-9 min-w-52 flex-1 rounded border-black !shadow-none bg-[#fffdf5] text-sm"
         />
         <Button
           size="sm"

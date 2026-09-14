@@ -263,7 +263,7 @@ export const TeacherTOSPage: React.FC = () => {
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {/* Filter Toolbar */}
-              <Card className="flex flex-col gap-4 rounded-none md:flex-row md:flex-wrap md:items-center md:justify-between">
+              <Card className="flex flex-col gap-4 rounded md:flex-row md:flex-wrap md:items-center md:justify-between">
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Subject Filter Dropdown */}
                   <div className="w-full sm:w-auto">
@@ -271,7 +271,7 @@ export const TeacherTOSPage: React.FC = () => {
                       value={selectedSubjectFilter}
                       onValueChange={setSelectedSubjectFilter}
                     >
-                      <Select.Trigger aria-label="Filter by subject" className="h-9 w-full rounded-none text-xs font-bold sm:w-52">
+                      <Select.Trigger aria-label="Filter by subject" className="h-9 w-full rounded text-xs font-bold sm:w-52">
                         <Select.Value placeholder="All Assigned Subjects" />
                       </Select.Trigger>
                       <Select.Content>
@@ -300,7 +300,7 @@ export const TeacherTOSPage: React.FC = () => {
                           autoIcon={false}
                           aria-pressed={selectedQuarterFilter === qTab}
                           onClick={() => setSelectedQuarterFilter(qTab)}
-                          className="h-9 rounded-none px-3 text-xs font-bold"
+                          className="h-9 rounded px-3 text-xs font-bold"
                         >
                           {qTab === "ALL" ? "All Terms" : `${qTab}`}
                         </Button>
@@ -317,7 +317,7 @@ export const TeacherTOSPage: React.FC = () => {
                     placeholder="Search exam or subject..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="h-9 w-full rounded-none pl-8 text-xs font-bold border-2 border-border"
+                    className="h-9 w-full rounded pl-8 text-xs font-bold border-2 border-border"
                   />
                 </div>
               </Card>
@@ -333,7 +333,7 @@ export const TeacherTOSPage: React.FC = () => {
               ) : filteredExams.length === 0 ? (
                 <Card className="block w-full border-black text-center">
                   <Card.Content className="flex flex-col items-center px-6 py-12">
-                    <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-lg border-2 border-black">
+                    <div className="mb-3 flex h-14 w-14 items-center justify-center rounded border-2 border-black">
                       <TableProperties className="size-7" />
                     </div>
 
@@ -366,7 +366,7 @@ export const TeacherTOSPage: React.FC = () => {
                     return (
                       <div
                         key={ex.tos_exam_id}
-                        className="flex flex-col justify-between rounded-lg border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                        className="flex flex-col justify-between rounded border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                       >
                         <div>
                           {/* Top Badges */}

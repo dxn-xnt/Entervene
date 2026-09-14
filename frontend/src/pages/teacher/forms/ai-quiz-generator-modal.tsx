@@ -519,7 +519,7 @@ export default function AIQuizGeneratorModal({
     >
       <Dialog.Content
         size="2xl"
-        className="border-2 border-black bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0"
+        className="p-0"
         overlay={{ className: "bg-black/60 backdrop-blur-xs" }}
       >
         {/* ── Fixed Header ── */}
@@ -555,7 +555,7 @@ export default function AIQuizGeneratorModal({
         </Dialog.Header>
 
         {/* ── Scrollable Body ── */}
-        <section className="flex flex-col gap-4 p-5 max-h-[66vh] overflow-y-auto">
+        <section className="flex flex-col gap-4 p-5">
 
           {error && (
             <Alert status="error" className="border-2 border-red-500">
@@ -688,7 +688,7 @@ export default function AIQuizGeneratorModal({
                                   : [...prev, lesson.lesson_id]
                               )
                             }
-                            className="rounded-none border-2 border-black accent-black w-4 h-4 cursor-pointer"
+                            className="rounded border-2 border-black accent-black w-4 h-4 cursor-pointer"
                           />
                           <span className="flex-1 truncate">{lesson.title}</span>
                         </label>
@@ -767,7 +767,7 @@ export default function AIQuizGeneratorModal({
                                         : [...prev, cw.classwork_id]
                                     )
                                   }
-                                  className="rounded-none border-2 border-black accent-black w-4 h-4 cursor-pointer"
+                                  className="rounded border-2 border-black accent-black w-4 h-4 cursor-pointer"
                                 />
                                 <span className="flex-1 truncate">{cw.title}</span>
                               </label>
@@ -855,7 +855,7 @@ export default function AIQuizGeneratorModal({
                             e.target.value = String(clamped);
                             updateTestPart(part.id, { count: clamped });
                           }}
-                          className="w-14 h-8 text-center text-xs font-bold border-2 border-black rounded-none shadow-none"
+                          className="w-14 h-8 text-center text-xs font-bold border-2 border-black rounded shadow-none"
                           title="Number of questions"
                         />
                         <span className="text-[11px] font-semibold text-muted-foreground">items</span>
@@ -877,7 +877,7 @@ export default function AIQuizGeneratorModal({
                             e.target.value = String(clamped);
                             updateTestPart(part.id, { points_per_item: clamped });
                           }}
-                          className="w-14 h-8 text-center text-xs font-bold border-2 border-black rounded-none shadow-none bg-amber-50"
+                          className="w-14 h-8 text-center text-xs font-bold border-2 border-black rounded shadow-none bg-amber-50"
                           title="Points per question"
                         />
                         <span className="text-[11px] font-semibold text-muted-foreground">pt(s)</span>
@@ -974,7 +974,7 @@ export default function AIQuizGeneratorModal({
                                 e.target.value = String(clamped);
                                 updateBreakdown(part.id, diff, clamped);
                               }}
-                              className="w-12 h-7 text-center text-xs font-bold border-2 border-black rounded-none focus:outline-none focus:ring-1 focus:ring-black"
+                              className="w-12 h-7 text-center text-xs font-bold border-2 border-black rounded focus:outline-none focus:ring-1 focus:ring-black"
                             />
                           </div>
                         ))}

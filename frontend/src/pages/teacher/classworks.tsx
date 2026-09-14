@@ -232,7 +232,7 @@ export default function Classworks() {
 
               <main className="flex flex-col gap-4">
                 {error && (
-                  <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
                     {error}
                   </div>
                 )}

@@ -103,7 +103,7 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
                     <Badge
                       variant="secondary"
                       size="md"
-                      className="rounded-none border border-black bg-white font-bold text-black"
+                      className="rounded border border-black bg-white font-bold text-black"
                     >
                       Mastery level: {masteryLabel}
                     </Badge>
@@ -122,11 +122,11 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
                   Classwork
                 </p>
                 <div className="flex flex-row items-center gap-4 text-sm">
-                  <Button type="button" variant="outline" size="sm" className="gap-1 rounded-none border-black bg-white">
+                  <Button type="button" variant="outline" size="sm" className="gap-1 rounded border-black bg-white">
                     <Filter className="size-4" />
                     Add Filter
                   </Button>
-                  <Button type="button" variant="outline" size="sm" className="gap-1 rounded-none border-black bg-white">
+                  <Button type="button" variant="outline" size="sm" className="gap-1 rounded border-black bg-white">
                     <ArrowUpDown className="size-4" />
                     Sort By
                   </Button>
@@ -185,7 +185,7 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
                                 </span>
                               </>
                             ) : (
-                              <Badge variant="outline" size="sm" className="rounded-none border border-gray-300 bg-gray-100 text-xs font-normal text-gray-500">Score hidden</Badge>
+                              <Badge variant="outline" size="sm" className="rounded border border-gray-300 bg-gray-100 text-xs font-normal text-gray-500">Score hidden</Badge>
                             )}
                           </Table.Cell>
                         </Table.Row>

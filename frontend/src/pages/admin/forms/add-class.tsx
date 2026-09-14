@@ -164,7 +164,7 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
         </div>
       </Dialog.Header>
 
-      <section className="flex flex-col gap-4 p-4 max-h-[80vh] overflow-y-auto">
+      <section className="flex flex-col gap-4 p-4">
         {saveSuccess ? (
           <ManualSaveSuccess
             result={saveSuccess}
@@ -303,7 +303,7 @@ function ManualReview({ setup, assignmentState, onSaved, onBack }: {
       </Text>
 
       {saveError && (
-        <div className="grid gap-2 rounded-md border-2 border-destructive bg-destructive/10 p-3 text-sm text-destructive">
+        <div className="grid gap-2 rounded border-2 border-destructive bg-destructive/10 p-3 text-sm text-destructive">
           <p className="font-bold">{saveError.message}</p>
           {saveError.backendMessage && saveError.backendMessage !== saveError.message && <p>{saveError.backendMessage}</p>}
           {!!saveError.details.length && (

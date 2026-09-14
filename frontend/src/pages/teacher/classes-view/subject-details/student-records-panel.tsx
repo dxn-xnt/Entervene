@@ -202,7 +202,7 @@ export default function StudentRecordsPanel({
         </Button>
 
         {error && (
-          <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
         )}
@@ -257,13 +257,13 @@ export default function StudentRecordsPanel({
       </div>
 
       {!periods.length && !error && (
-        <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+        <div className="rounded border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
           No academic period is assigned to this class and subject yet.
         </div>
       )}
 
       {roster?.scope?.is_view_only && (
-        <div className="rounded-lg border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/30 p-4 text-amber-900 dark:text-amber-200 flex items-center gap-3">
+        <div className="rounded border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/30 p-4 text-amber-900 dark:text-amber-200 flex items-center gap-3">
           <span className="text-xl">🔒</span>
           <div>
             <p className="font-bold text-sm">You are currently on leave for this class and subject.</p>
@@ -275,7 +275,7 @@ export default function StudentRecordsPanel({
       )}
 
       {roster?.scope?.is_substitution && (
-        <div className="rounded-lg border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 p-3 text-emerald-900 dark:text-emerald-200 flex items-center gap-2 text-xs font-medium">
+        <div className="rounded border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 p-3 text-emerald-900 dark:text-emerald-200 flex items-center gap-2 text-xs font-medium">
           <span className="text-base">📋</span>
           <span>
             You are covering this class as a substitute teacher for <span className="font-bold">{roster.scope.original_teacher_name || "the original teacher"}</span>. You have full grading and record access.
@@ -284,7 +284,7 @@ export default function StudentRecordsPanel({
       )}
 
       {error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
@@ -524,7 +524,7 @@ export function StudentRecordDetail({
               detail.classwork_results.map((item) => (
                 <div
                   key={item.assignment_id}
-                  className="rounded-lg border border-gray-300 px-4 py-3"
+                  className="rounded border border-gray-300 px-4 py-3"
                 >
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
@@ -549,7 +549,7 @@ export function StudentRecordDetail({
                 </div>
               ))
             ) : (
-              <p className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-gray-500">
+              <p className="rounded border border-dashed border-gray-300 px-4 py-6 text-center text-gray-500">
                 No classwork records for this period yet.
               </p>
             )}

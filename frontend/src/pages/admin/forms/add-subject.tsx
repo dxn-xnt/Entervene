@@ -454,7 +454,7 @@ export default function AddSubjectModal({
           </Text>
         </div>
       </Dialog.Header>
-      <section className="flex max-h-[72vh] flex-col gap-4 overflow-y-auto p-4">
+      <section className="flex flex-col gap-4 p-4">
         <div>
           <Text as="h6" className="font-sans text-lg font-bold">
             Subject Details
@@ -634,7 +634,7 @@ export default function AddSubjectModal({
             </div>
           </div>
         </div>
-        <section className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 shadow-[3px_3px_0_#000]">
+        <section className="rounded border-2 border-black bg-[#fff7d6] p-3 shadow-[3px_3px_0_#000]">
           <div className="flex items-start gap-3">
             <Checkbox
               id="offer-now"

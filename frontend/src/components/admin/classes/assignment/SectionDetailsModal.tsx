@@ -23,9 +23,15 @@ export default function SectionDetailsModal({
 }) {
   const sorted = sortAssignmentStudents(students);
   return (
+<<<<<<< HEAD
     <div className="fixed inset-0 z-[70] grid place-items-center bg-black/80 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-none border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
         <div className="flex items-start justify-between border-b-2 border-black bg-primary p-4">
+=======
+    <div className="fixed inset-0 z-[70] grid place-items-center bg-black/50 p-4">
+      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-none border-2 border-border bg-background text-foreground shadow-[4px_4px_0_#000]">
+        <div className="flex shrink-0 items-start justify-between border-b-2 border-black bg-primary p-4">
+>>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
           <div>
             <h3 className="text-lg font-bold">{section.sectionName}</h3>
             <p className="text-sm">
@@ -40,7 +46,7 @@ export default function SectionDetailsModal({
             <X className="size-5" />
           </button>
         </div>
-        <div className="grid gap-4 overflow-y-auto p-4">
+        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto overscroll-contain p-4">
           <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
             <Stat label="Total" value={students.length} />
             <Stat label="Recommended" value={recommendedTarget} />

@@ -125,9 +125,9 @@ export default function AddClassworkScoreModal({
       </Dialog.Header>
 
       <form onSubmit={handleSubmit}>
-        <section className="flex flex-col gap-3 p-4 max-h-[60vh] sm:max-h-[65vh] overflow-y-auto">
+        <section className="flex flex-col gap-3 p-4">
           {errorMessage && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-md font-medium">
+            <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded font-medium">
               {errorMessage}
             </div>
           )}
@@ -138,7 +138,7 @@ export default function AddClassworkScoreModal({
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                className={`py-2 px-3 text-sm font-bold border-2 rounded-md transition-colors ${
+                className={`py-2 px-3 text-sm font-bold border-2 rounded transition-colors ${
                   activityMode === "MANUAL"
                     ? "bg-primary text-primary-foreground border-black shadow-sm"
                     : "bg-muted text-muted-foreground border-gray-300 hover:bg-gray-100"
@@ -149,7 +149,7 @@ export default function AddClassworkScoreModal({
               </button>
               <button
                 type="button"
-                className={`py-2 px-3 text-sm font-bold border-2 rounded-md transition-colors ${
+                className={`py-2 px-3 text-sm font-bold border-2 rounded transition-colors ${
                   activityMode === "ONLINE"
                     ? "bg-primary text-primary-foreground border-black shadow-sm"
                     : "bg-muted text-muted-foreground border-gray-300 hover:bg-gray-100"
@@ -216,17 +216,17 @@ export default function AddClassworkScoreModal({
             {loadingLessons ? (
               <div className="text-xs text-muted-foreground py-2">Loading available lessons...</div>
             ) : availableLessons.length === 0 ? (
-              <div className="text-xs text-muted-foreground py-2 bg-muted/30 px-3 rounded-md border border-border">
+              <div className="text-xs text-muted-foreground py-2 bg-muted/30 px-3 rounded border border-border">
                 No lessons found for this class & subject.
               </div>
             ) : (
-              <div className="flex flex-col gap-1 max-h-32 overflow-y-auto border border-border p-2 rounded-md bg-background shadow-inner">
+              <div className="flex flex-col gap-1 max-h-32 overflow-y-auto border border-border p-2 rounded bg-background shadow-inner">
                 {availableLessons.map((l) => {
                   const isChecked = selectedLessonIds.includes(l.lesson_id);
                   return (
                     <label
                       key={l.lesson_id}
-                      className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-md cursor-pointer text-sm font-medium transition-colors ${
+                      className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded cursor-pointer text-sm font-medium transition-colors ${
                         isChecked
                           ? "bg-primary/10 text-foreground font-semibold"
                           : "hover:bg-muted/40 text-muted-foreground"

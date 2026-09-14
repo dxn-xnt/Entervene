@@ -8,8 +8,9 @@ interface ICardProps extends HTMLAttributes<HTMLDivElement> {
 const Card = ({ className, ...props }: ICardProps) => {
   return (
     <div
+      data-slot="card"
       className={cn(
-        "inline-block border-2 gap-2 border-black rounded-none shadow-md transition-all hover:shadow-none bg-card p-4",
+        "inline-block border-2 gap-2 border-black rounded shadow-md transition-all hover:shadow-none bg-card p-4",
         className,
       )}
       {...props}
@@ -20,6 +21,7 @@ const Card = ({ className, ...props }: ICardProps) => {
 const CardHeader = ({ className, ...props }: ICardProps) => {
   return (
     <div
+      data-slot="card-header"
       className={cn("flex flex-col justify-start mb-2", className)}
       {...props}
     />
@@ -27,15 +29,15 @@ const CardHeader = ({ className, ...props }: ICardProps) => {
 };
 
 const CardTitle = ({ className, ...props }: ICardProps) => {
-  return <h3 className={cn("text-3xl font-bold", className)} {...props} />;
+  return <h3 data-slot="card-title" className={cn("text-3xl font-bold", className)} {...props} />;
 };
 
 const CardDescription = ({ className, ...props }: ICardProps) => (
-  <p className={cn("text-2xl font-medium text-foreground", className)} {...props} />
+  <p data-slot="card-description" className={cn("text-2xl font-medium text-foreground", className)} {...props} />
 );
 
 const CardContent = ({ className, ...props }: ICardProps) => {
-  return <div className={cn("", className)} {...props} />;
+  return <div data-slot="card-content" className={cn("", className)} {...props} />;
 };
 
 const CardComponent = Object.assign(Card, {

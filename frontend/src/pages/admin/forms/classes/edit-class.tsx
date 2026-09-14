@@ -9,6 +9,7 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
+import { RoleBadge } from "@/components/role-badge";
 
 export default function EditClass({
   classId,
@@ -128,7 +129,7 @@ export default function EditClass({
           </div>
         ) : (
           <>
-            <section className="flex flex-col gap-4 p-5 max-h-[80vh] overflow-y-auto">
+            <section className="flex flex-col gap-4 p-5">
               <div className="grid gap-4">
                 <Field label="Academic Year">
                   <Input
@@ -161,7 +162,6 @@ export default function EditClass({
 
                 <Field label="Class Adviser">
                   <Select
-                    className="text-base"
                     value={adviserStaffId}
                     onChange={(event) => {
                       setAdviserStaffId(event.target.value);
@@ -177,7 +177,10 @@ export default function EditClass({
                         <Select.Item value="__none__">No adviser assigned</Select.Item>
                         {adviserOptions.map((adviser) => (
                           <Select.Item key={adviser.staff_id} value={adviser.staff_id}>
-                            {adviserName(adviser)}
+                            <span className="flex items-center gap-2">
+                              <span className="truncate">{adviserName(adviser)}</span>
+                              <RoleBadge role="teacher" />
+                            </span>
                           </Select.Item>
                         ))}
                       </Select.Group>
@@ -195,13 +198,13 @@ export default function EditClass({
               </div>
 
               {saveError && (
-                <div className="rounded-md border-2 border-destructive bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+                <div className="rounded border-2 border-destructive bg-destructive/10 p-3 text-sm font-semibold text-destructive">
                   {saveError}
                 </div>
               )}
 
               {saveSuccess && (
-                <div className="rounded-md border-2 border-primary bg-primary/10 p-3 text-sm font-semibold text-primary">
+                <div className="rounded border-2 border-primary bg-primary/10 p-3 text-sm font-semibold text-primary">
                   {saveSuccess}
                 </div>
               )}
@@ -234,7 +237,7 @@ function updateErrorMessage(error: unknown) {
 
 function StatePanel({ message, detail, children }: { message: string; detail?: string; children?: React.ReactNode }) {
   return (
-    <div className="grid gap-3 rounded-md border-2 border-border bg-card p-5 text-sm">
+    <div className="grid gap-3 rounded border-2 border-border bg-card p-5 text-sm">
       <p className="font-bold">{message}</p>
       {detail && detail !== message && <p className="text-xs text-muted-foreground">{detail}</p>}
       {children && <div className="flex gap-2">{children}</div>}

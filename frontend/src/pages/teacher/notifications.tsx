@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Tabs } from "@/components/retroui/Tabs";
 import { Button } from "@/components/retroui/Button";
 import { NotificationCard } from "@/components/notification-card";
@@ -7,6 +8,7 @@ import AppLayout from "@/layouts/app-layout";
 import { Bell, Megaphone, FileCheck, AlertTriangle, Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { EmptyStateCard } from "@/components/empty-state-card";
+import { routes } from "@/../routes";
 import {
   getNotifications,
   markAllNotificationsAsRead,
@@ -22,6 +24,7 @@ const tabs = [
 ];
 
 const Notifications = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("all");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,17 +59,46 @@ const Notifications = () => {
   };
 
   const handleCardClick = async (item: NotificationItem) => {
-    if (item.is_read) return;
-    try {
-      await markNotificationAsRead(item.notification_id);
-      setNotifications((prev) =>
-        prev.map((n) =>
-          n.notification_id === item.notification_id ? { ...n, is_read: true } : n
-        )
-      );
-    } catch (err) {
-      console.error("Failed to mark notification as read:", err);
+    if (!item.is_read) {
+      try {
+        await markNotificationAsRead(item.notification_id);
+        setNotifications((prev) =>
+          prev.map((n) =>
+            n.notification_id === item.notification_id ? { ...n, is_read: true } : n
+          )
+        );
+      } catch (err) {
+        console.error("Failed to mark notification as read:", err);
+      }
     }
+
+    // Tiered deep-link resolver
+    // 1. Announcements: simplest fallback (stay in place)
+    if (item.notification_type === "announcement") {
+      return;
+    }
+
+    // 2. Specific deep link in action_url (e.g. /teacher/classworks/:id or /teacher/grades?academic_period_id=...)
+    if (item.action_url && item.action_url.trim() && item.action_url !== "/teacher/notifications") {
+      navigate(item.action_url);
+      return;
+    }
+
+    // 3. Fallback based on notification role / type
+    if (item.notification_type === "risk_alert") {
+      navigate(routes.teacher.interventions);
+      return;
+    }
+    if (
+      item.notification_type === "grade_submission_window_opened" ||
+      item.notification_type === "grade_submission_closing_soon"
+    ) {
+      navigate(routes.teacher.grades);
+      return;
+    }
+
+    // Default fallback for submissions / classworks
+    navigate(routes.teacher.classworks);
   };
 
   const filteredNotifications = notifications.filter((n) => {

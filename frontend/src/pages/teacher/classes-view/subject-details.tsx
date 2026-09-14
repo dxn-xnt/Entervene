@@ -58,6 +58,7 @@ export default function SubjectDetails() {
   const [editingCompetency, setEditingCompetency] = useState<CompetencyItem | null>(null);
   const [selectedCompetencyIdForNewLesson, setSelectedCompetencyIdForNewLesson] = useState<number | undefined>(undefined);
   const [searchParams, setSearchParams] = useSearchParams();
+  const [currentAcademicPeriodId, setCurrentAcademicPeriodId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"lessons" | "classwork">("lessons");
   const [isCreatingLesson, setIsCreatingLesson] = useState(false);
   const [activeLessonDetail, setActiveLessonDetail] = useState<Lesson | null>(
@@ -258,6 +259,7 @@ export default function SubjectDetails() {
               periods.default_academic_period_id ||
               periods.periods[0]?.academic_period_id;
             if (periodId) {
+              setCurrentAcademicPeriodId(periodId);
               const roster = await getTeacherStudentRoster(
                 classId,
                 subjectId,
@@ -835,7 +837,7 @@ export default function SubjectDetails() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             class_ids: [Number(classId)],
-            academic_period_id: activeLoad?.academic_period_id,
+            academic_period_id: activeLoad?.academic_period_id || currentAcademicPeriodId || undefined,
             due_date: classworkDraft.due_date
               ? new Date(classworkDraft.due_date).toISOString()
               : null,
@@ -896,7 +898,7 @@ export default function SubjectDetails() {
             {activeLessonDetail ? (
               <main className="py-4 px-4 md:px-6">
                 {error && (
-                  <div className="mb-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <div className="mb-4 rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
                     {error}
                   </div>
                 )}
@@ -996,7 +998,7 @@ export default function SubjectDetails() {
 
                 <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
                   {error && (
-                    <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
                       {error}
                     </div>
                   )}
@@ -1061,7 +1063,7 @@ export default function SubjectDetails() {
                 if (!open) closeLessonManager();
               }}
             >
-              <Dialog.Content className="block w-full max-w-4xl border-black bg-white p-0 transition-none max-h-[92vh] overflow-y-auto">
+              <Dialog.Content className="w-full max-w-4xl p-0 transition-none">
                 <Dialog.Header className="sticky top-0 z-10 border-black">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wide">
@@ -1102,7 +1104,7 @@ export default function SubjectDetails() {
                                 )
                               }
                               disabled={isSavingLesson}
-                              className="rounded-none border-black !shadow-none h-10 w-full"
+                              className="rounded border-black !shadow-none h-10 w-full"
                             />
                           </div>
                           <div>
@@ -1129,7 +1131,7 @@ export default function SubjectDetails() {
                                 )
                               }
                               disabled={isSavingLesson}
-                              className="rounded-none border-black !shadow-none h-10 w-full"
+                              className="rounded border-black !shadow-none h-10 w-full"
                             />
                           </div>
                         </div>
@@ -1155,7 +1157,7 @@ export default function SubjectDetails() {
                               )
                             }
                             disabled={isSavingLesson}
-                            className="min-h-20 w-full rounded-none border-2 border-black px-3 py-2 text-sm"
+                            className="min-h-20 w-full rounded border-2 border-black px-3 py-2 text-sm"
                             placeholder="Short lesson summary"
                           />
                         </div>
@@ -1178,7 +1180,7 @@ export default function SubjectDetails() {
                               )
                             }
                             disabled={isSavingLesson}
-                            className="min-h-52 w-full rounded-none border-2 border-black px-3 py-2 text-sm"
+                            className="min-h-52 w-full rounded border-2 border-black px-3 py-2 text-sm"
                             placeholder="Write the lesson notes or learning content students will read."
                           />
                         </div>
@@ -1195,7 +1197,7 @@ export default function SubjectDetails() {
                           <Badge
                             variant="outline"
                             size="sm"
-                            className="ml-auto rounded-none"
+                            className="ml-auto rounded"
                           >
                             {selectedLesson.attachments.length}
                           </Badge>
@@ -1393,7 +1395,7 @@ export default function SubjectDetails() {
 
           {showArchiveConfirm && selectedLesson && (
             <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4">
-              <Card className="block w-full max-w-md">
+              <Card className="block w-full max-w-md border-border bg-background text-foreground shadow-[4px_4px_0_#000] hover:shadow-[4px_4px_0_#000]">
                 <div className="flex items-center justify-between border-b border-black bg-red-100 px-5 py-3">
                   <div className="flex items-center gap-2 text-red-800">
                     <Archive size={18} />
@@ -1427,7 +1429,7 @@ export default function SubjectDetails() {
                     type="button"
                     onClick={() => setShowArchiveConfirm(false)}
                     disabled={isArchivingLesson}
-                    className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
+                    className="rounded border border-gray-700 px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
                   >
                     Cancel
                   </button>
@@ -1435,7 +1437,7 @@ export default function SubjectDetails() {
                     type="button"
                     onClick={archiveLesson}
                     disabled={isArchivingLesson}
-                    className="rounded-lg border border-black bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 disabled:opacity-50"
+                    className="rounded border border-black bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700 disabled:opacity-50"
                   >
                     {isArchivingLesson ? "Archiving..." : "Archive Lesson"}
                   </button>
@@ -1566,7 +1568,7 @@ export default function SubjectDetails() {
                                 : "Draft"}
                             </Badge>
                             {selectedClasswork.is_locked && (
-                              <Badge className="rounded-none border-2 border-red-600 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                              <Badge className="rounded border-2 border-red-600 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
                                 Locked
                               </Badge>
                             )}

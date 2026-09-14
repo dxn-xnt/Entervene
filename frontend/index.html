@@ -16,6 +16,22 @@
     rel="stylesheet">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Entervene</title>
+  <script>
+    // Apply the saved accent before CSS and React render to avoid a theme flash.
+    (function () {
+      var allowedThemes = ["default", "blue", "green", "purple", "orange"];
+      var theme = "default";
+      var appearance = "light";
+      try {
+        var savedTheme = localStorage.getItem("entervene-color-theme");
+        if (allowedThemes.indexOf(savedTheme) !== -1) theme = savedTheme;
+        if (localStorage.getItem("entervene-appearance") === "dark") appearance = "dark";
+      } catch (_) {}
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.classList.toggle("dark", appearance === "dark");
+      document.documentElement.style.colorScheme = appearance;
+    })();
+  </script>
 </head>
 
 <body>

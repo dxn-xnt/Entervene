@@ -86,7 +86,7 @@ export default function AdjustSubstitutionModal({
           </Alert>
         )}
 
-        <div className="p-3 bg-muted/40 rounded-lg border space-y-2 text-sm">
+        <div className="p-3 bg-muted/40 rounded border space-y-2 text-sm">
           {!isBatch && target.substitution && (
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Class & Subject:</span>

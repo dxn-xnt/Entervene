@@ -310,7 +310,7 @@ const StudentQuizTake = () => {
           <Button
             variant="ghost"
             onClick={() => toggleFlag(currentIndex)}
-            className={`border rounded-lg flex items-center gap-2 hover:bg-gray-100 transition-all cursor-pointer ${
+            className={`border rounded flex items-center gap-2 hover:bg-gray-100 transition-all cursor-pointer ${
               flagged.has(currentIndex) ? "bg-red-50" : "bg-white"
             }`}
           >

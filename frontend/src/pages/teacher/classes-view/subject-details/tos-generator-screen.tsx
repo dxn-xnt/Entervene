@@ -721,7 +721,7 @@ export function TOSGeneratorScreen({
                 variant="outline"
                 size="md"
                 onClick={onBack}
-                className="gap-1.5 rounded-none px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+                className="gap-1.5 rounded px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
               >
                 <ArrowLeft className="size-3.5 sm:size-4" /> Back to {parentLabel || (currentSubjectName || "TOS Generator")}
               </Button>
@@ -729,7 +729,7 @@ export function TOSGeneratorScreen({
                 variant="default"
                 size="md"
                 onClick={startNewExam}
-                className="gap-1.5 rounded-none px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+                className="gap-1.5 rounded px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
               >
                 <Plus className="size-3.5 sm:size-4" /> New TOS
               </Button>
@@ -740,7 +740,7 @@ export function TOSGeneratorScreen({
                 variant="outline"
                 size="md"
                 onClick={onBack}
-                className="gap-1.5 rounded-none px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+                className="gap-1.5 rounded px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
               >
                 <ArrowLeft className="size-3.5 sm:size-4" /> Back to {parentLabel || "TOS Exams"}
               </Button>
@@ -749,7 +749,7 @@ export function TOSGeneratorScreen({
                 variant="outline"
                 disabled={isSaving}
                 onClick={handleSaveDraft}
-                className="gap-1.5 rounded-none px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+                className="gap-1.5 rounded px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
               >
                 <Save className="size-3.5 sm:size-4" />
                 {isSaving ? "Saving..." : "Save Draft"}
@@ -761,11 +761,11 @@ export function TOSGeneratorScreen({
 
       {/* ── Main Container (Full-Width, No Sidebar Inside Wizard) ── */}
       <div className="-mt-[1px] min-w-0 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
-      <Card className="block p-0 rounded-none border-2 border-border bg-card shadow-lg overflow-hidden">
+      <Card className="block p-0 rounded border-2 border-border bg-card shadow-lg overflow-hidden">
         {/* Top Banner */}
         <div className="flex flex-col gap-2 border-b-2 border-border bg-accent px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-none border-2 border-border bg-primary shadow-sm">
+            <div className="flex h-10 w-10 items-center justify-center rounded border-2 border-border bg-primary shadow-sm">
               <TableProperties className="h-5 w-5 text-foreground" />
             </div>
             <div>
@@ -780,7 +780,7 @@ export function TOSGeneratorScreen({
             </div>
           </div>
           {saveSuccessMsg && (
-            <span className="text-xs font-bold text-foreground bg-success/10 border border-success rounded-none px-2.5 py-1">
+            <span className="text-xs font-bold text-foreground bg-success/10 border border-success rounded px-2.5 py-1">
               {saveSuccessMsg}
             </span>
           )}
@@ -792,25 +792,25 @@ export function TOSGeneratorScreen({
             <div className="flex items-center gap-2 overflow-x-auto">
               <button
                 onClick={() => setStep("test-parts")}
-                className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 ${step === "test-parts" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${step === "test-parts" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
-                <span className="flex h-4 w-4 items-center justify-center rounded-none bg-secondary text-[10px] text-secondary-foreground">1</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded bg-secondary text-[10px] text-secondary-foreground">1</span>
                 Test Parts
               </button>
               <span className="text-muted-foreground">→</span>
               <button
                 onClick={() => setStep("competencies")}
-                className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 ${step === "competencies" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${step === "competencies" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
-                <span className="flex h-4 w-4 items-center justify-center rounded-none bg-secondary text-[10px] text-secondary-foreground">2</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded bg-secondary text-[10px] text-secondary-foreground">2</span>
                 Competencies
               </button>
               <span className="text-muted-foreground">→</span>
               <button
                 onClick={() => setStep("difficulty")}
-                className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 ${step === "difficulty" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${step === "difficulty" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
-                <span className="flex h-4 w-4 items-center justify-center rounded-none bg-secondary text-[10px] text-secondary-foreground">3</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded bg-secondary text-[10px] text-secondary-foreground">3</span>
                 Difficulty
               </button>
               <span className="text-muted-foreground">→</span>
@@ -819,32 +819,32 @@ export function TOSGeneratorScreen({
                   handleRecalculate();
                   setStep("blueprint");
                 }}
-                className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 ${step === "blueprint" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${step === "blueprint" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
-                <span className="flex h-4 w-4 items-center justify-center rounded-none bg-secondary text-[10px] text-secondary-foreground">4</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded bg-secondary text-[10px] text-secondary-foreground">4</span>
                 Blueprint Table
               </button>
               <span className="text-muted-foreground">→</span>
               <button
                 disabled={rows.length === 0}
                 onClick={() => setStep("ai-review")}
-                className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 ${step === "ai-review" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"} disabled:opacity-40`}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${step === "ai-review" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"} disabled:opacity-40`}
               >
-                <span className="flex h-4 w-4 items-center justify-center rounded-none bg-secondary text-[10px] text-secondary-foreground">5</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded bg-secondary text-[10px] text-secondary-foreground">5</span>
                 Questions ({questions.length})
               </button>
               <span className="text-muted-foreground">→</span>
               <button
                 disabled={questions.length === 0}
                 onClick={() => setStep("export")}
-                className={`flex items-center gap-1.5 rounded-none px-2.5 py-1 ${step === "export" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"} disabled:opacity-40`}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${step === "export" ? "border border-border bg-primary shadow-sm" : "text-muted-foreground hover:text-foreground"} disabled:opacity-40`}
               >
-                <span className="flex h-4 w-4 items-center justify-center rounded-none bg-secondary text-[10px] text-secondary-foreground">6</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded bg-secondary text-[10px] text-secondary-foreground">6</span>
                 Export
               </button>
             </div>
 
-            <Badge variant="outline" className="rounded-none border-border bg-card font-bold">
+            <Badge variant="outline" className="rounded border-border bg-card font-bold">
               Total Target Items: {totalItems}
             </Badge>
           </div>
@@ -866,7 +866,7 @@ export function TOSGeneratorScreen({
                       key={qTab}
                       type="button"
                       onClick={() => setExamFilterQuarter(qTab)}
-                      className={`px-3 py-1 text-xs font-black rounded-none border-2 transition-all ${examFilterQuarter === qTab
+                      className={`px-3 py-1 text-xs font-black rounded border-2 transition-all ${examFilterQuarter === qTab
                           ? "border-border bg-primary text-primary-foreground shadow-sm"
                           : "border-transparent bg-muted/20 text-muted-foreground hover:bg-muted/20"
                         }`}
@@ -884,12 +884,12 @@ export function TOSGeneratorScreen({
                       placeholder="Search exam title..."
                       value={examSearchQuery}
                       onChange={(e) => setExamSearchQuery(e.target.value)}
-                      className="rounded-none h-8 w-48 pl-8 text-xs font-semibold border-2 border-border"
+                      className="rounded h-8 w-48 pl-8 text-xs font-semibold border-2 border-border"
                     />
                   </div>
                   <Button
                     size="sm"
-                    className="rounded-none border-2 border-border bg-primary font-black text-xs text-primary-foreground shadow-sm hover:bg-primary-hover"
+                    className="rounded border-2 border-border bg-primary font-black text-xs text-primary-foreground shadow-sm hover:bg-primary-hover"
                     onClick={startNewExam}
                   >
                     <Plus className="mr-1 h-3.5 w-3.5" /> New TOS
@@ -904,8 +904,8 @@ export function TOSGeneratorScreen({
                   <p className="mt-3 text-xs font-bold text-muted-foreground">Loading your Table of Specifications...</p>
                 </div>
               ) : filteredSavedExams.length === 0 ? (
-                <Card className="block rounded-none border-2 border-dashed border-border/30 bg-muted/20 px-6 py-12 text-center shadow-md">
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-none border-2 border-border bg-primary shadow">
+                <Card className="block rounded border-2 border-dashed border-border/30 bg-muted/20 px-6 py-12 text-center shadow-md">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded border-2 border-border bg-primary shadow">
                     <TableProperties className="h-7 w-7 text-foreground" />
                   </div>
                   <h3 className="mt-4 text-base font-bold text-foreground">No TOS Exams Found</h3>
@@ -917,7 +917,7 @@ export function TOSGeneratorScreen({
                   <Button
                     size="sm"
                     onClick={startNewExam}
-                    className="rounded-none mt-5 border-2 border-border bg-primary font-black text-xs text-primary-foreground shadow hover:bg-primary-hover"
+                    className="rounded mt-5 border-2 border-border bg-primary font-black text-xs text-primary-foreground shadow hover:bg-primary-hover"
                   >
                     <Plus className="mr-1.5 h-4 w-4" /> Create New TOS
                   </Button>
@@ -930,27 +930,27 @@ export function TOSGeneratorScreen({
                     return (
                       <Card
                         key={ex.tos_exam_id}
-                        className="flex flex-col justify-between rounded-none border-2 border-border bg-card p-5 shadow-md transition-transform hover:-translate-y-0.5"
+                        className="flex flex-col justify-between rounded border-2 border-border bg-card p-5 shadow-md transition-transform hover:-translate-y-0.5"
                       >
                         <div>
                           {/* Top Badges */}
                           <div className="flex items-center justify-between gap-2 border-b border-border/10 pb-2.5">
                             <Badge
                               variant="outline"
-                              className="rounded-none border-border bg-accent text-primary-foreground font-black text-[10px]"
+                              className="rounded border-border bg-accent text-primary-foreground font-black text-[10px]"
                             >
                               {ex.quarter || "Term 1"}
                             </Badge>
                             <Badge
                               variant="outline"
-                              className={`rounded-none border-border font-black text-[10px] ${isFinal ? "bg-success/20 text-foreground" : "bg-accent text-primary-foreground"}`}
+                              className={`rounded border-border font-black text-[10px] ${isFinal ? "bg-success/20 text-foreground" : "bg-accent text-primary-foreground"}`}
                             >
                               {isFinal ? "COMPLETED" : "DRAFT"}
                             </Badge>
                           </div>
 
                           {/* Title */}
-                          <h4 className="rounded-none mt-3 text-sm font-black text-foreground line-clamp-2">
+                          <h4 className="rounded mt-3 text-sm font-black text-foreground line-clamp-2">
                             {ex.title}
                           </h4>
                           <p className="text-[11px] font-semibold text-muted-foreground mt-0.5">
@@ -959,10 +959,10 @@ export function TOSGeneratorScreen({
 
                           {/* Metric Badges */}
                           <div className="flex flex-wrap items-center gap-1.5 text-[11px] pt-1">
-                            <span className="rounded-none border border-border/30 bg-muted/20 px-2 py-0.5 font-bold text-muted-foreground">
+                            <span className="rounded border border-border/30 bg-muted/20 px-2 py-0.5 font-bold text-muted-foreground">
                               {ex.total_items || 0} Target Items
                             </span>
-                            <span className="rounded-none border border-border/30 bg-accent px-2 py-0.5 font-bold text-primary-foreground">
+                            <span className="rounded border border-border/30 bg-accent px-2 py-0.5 font-bold text-primary-foreground">
                               {ex.question_count || 0} Questions
                             </span>
                           </div>
@@ -981,7 +981,7 @@ export function TOSGeneratorScreen({
                               variant="outline"
                               onClick={() => handleDeleteExam(ex.tos_exam_id)}
                               disabled={deletingExamId === ex.tos_exam_id}
-                              className="rounded-none h-7 border-2 border-border bg-destructive/10 px-2 text-xs font-bold text-destructive hover:bg-destructive/10 shadow-xs"
+                              className="rounded h-7 border-2 border-border bg-destructive/10 px-2 text-xs font-bold text-destructive hover:bg-destructive/10 shadow-xs"
                               title="Delete Draft"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -989,7 +989,7 @@ export function TOSGeneratorScreen({
                             <Button
                               size="sm"
                               onClick={() => handleLoadExam(ex.tos_exam_id)}
-                              className="rounded-none h-7 border-2 border-border bg-primary px-3 text-xs font-black text-primary-foreground shadow-sm hover:bg-primary-hover"
+                              className="rounded h-7 border-2 border-border bg-primary px-3 text-xs font-black text-primary-foreground shadow-sm hover:bg-primary-hover"
                             >
                               Open Exam <ArrowRight className="ml-1 h-3 w-3" />
                             </Button>
@@ -1020,10 +1020,10 @@ export function TOSGeneratorScreen({
                   <label className="text-xs font-bold text-muted-foreground block">Subject Curriculum</label>
                   <Select value={currentSubjectId ? String(currentSubjectId) : ""}
                     onValueChange={(value) => handleSubjectChange(Number(value))}>
-                    <Select.Trigger aria-label="Subject Curriculum" className="mt-1 w-full min-w-0 rounded-none text-xs font-bold">
+                    <Select.Trigger aria-label="Subject Curriculum" className="mt-1 w-full min-w-0 rounded text-xs font-bold">
                       <Select.Value placeholder="-- Select Subject Curriculum --" />
                     </Select.Trigger>
-                    <Select.Content className="rounded-none border-2">
+                    <Select.Content className="rounded border-2">
                       {availableSubjects.map((s) => (
                         <Select.Item key={s.subject_id} value={String(s.subject_id)}>
                           {s.subject_name} {s.section_name ? `(${s.section_name})` : ""}
@@ -1037,10 +1037,10 @@ export function TOSGeneratorScreen({
                   <label className="text-xs font-bold text-muted-foreground block">Exam Language</label>
                   <Select value={language}
                     onValueChange={(value) => setLanguage(value as "English" | "Filipino")}>
-                    <Select.Trigger aria-label="Exam Language" className="mt-1 w-full min-w-0 rounded-none text-xs font-bold">
+                    <Select.Trigger aria-label="Exam Language" className="mt-1 w-full min-w-0 rounded text-xs font-bold">
                       <Select.Value />
                     </Select.Trigger>
-                    <Select.Content className="rounded-none border-2">
+                    <Select.Content className="rounded border-2">
                       <Select.Item value="English">English</Select.Item>
                       <Select.Item value="Filipino">Filipino</Select.Item>
                     </Select.Content>
@@ -1053,7 +1053,7 @@ export function TOSGeneratorScreen({
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="e.g. Summative Assessment 1"
-                    className="rounded-none mt-1 border-2 border-border font-semibold shadow-sm"
+                    className="rounded mt-1 border-2 border-border font-semibold shadow-sm"
                   />
                 </div>
 
@@ -1061,10 +1061,10 @@ export function TOSGeneratorScreen({
                   <label className="text-xs font-bold text-muted-foreground block">Academic Term (Trimester)</label>
                   <Select value={quarter}
                     onValueChange={(value) => setQuarter(value)}>
-                    <Select.Trigger aria-label="Academic Term" className="mt-1 w-full min-w-0 rounded-none text-xs font-bold">
+                    <Select.Trigger aria-label="Academic Term" className="mt-1 w-full min-w-0 rounded text-xs font-bold">
                       <Select.Value />
                     </Select.Trigger>
-                    <Select.Content className="rounded-none border-2">
+                    <Select.Content className="rounded border-2">
                       <Select.Item value="Term 1">1st Term (Term 1)</Select.Item>
                       <Select.Item value="Term 2">2nd Term (Term 2)</Select.Item>
                       <Select.Item value="Term 3">3rd Term (Term 3)</Select.Item>
@@ -1073,7 +1073,7 @@ export function TOSGeneratorScreen({
                 </div>
               </div>
 
-              <Card className="block rounded-none border-2 border-border bg-card p-5 shadow-md">
+              <Card className="block rounded border-2 border-border bg-card p-5 shadow-md">
                 <div className="flex flex-col gap-1 border-b-2 border-border pb-2 sm:flex-row sm:items-center sm:justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Question Types & Item Composition</span>
                   <span className="text-xs font-bold text-foreground">
@@ -1097,7 +1097,7 @@ export function TOSGeneratorScreen({
                     return (
                       <div
                         key={t.type}
-                        className="flex flex-col gap-2 rounded-none border-2 border-border bg-muted/20 p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+                        className="flex flex-col gap-2 rounded border-2 border-border bg-muted/20 p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div>
                           <p className="text-xs font-black text-foreground">{t.label}</p>
@@ -1117,7 +1117,7 @@ export function TOSGeneratorScreen({
                                   setTestParts(filtered);
                                 }
                               }}
-                              className={`rounded-none border-2 px-2.5 py-1 text-[11px] font-extrabold transition-all ${count === preset ? "border-border bg-primary text-primary-foreground shadow-sm" : "border-border/30 bg-card text-muted-foreground hover:bg-accent"}`}
+                              className={`rounded border-2 px-2.5 py-1 text-[11px] font-extrabold transition-all ${count === preset ? "border-border bg-primary text-primary-foreground shadow-sm" : "border-border/30 bg-card text-muted-foreground hover:bg-accent"}`}
                             >
                               {preset}
                             </button>
@@ -1135,7 +1135,7 @@ export function TOSGeneratorScreen({
                                 setTestParts(filtered);
                               }
                             }}
-                            className="rounded-none h-9 w-20 border-2 border-border text-center font-black text-sm"
+                            className="rounded h-9 w-20 border-2 border-border text-center font-black text-sm"
                           />
                         </div>
                       </div>
@@ -1148,7 +1148,7 @@ export function TOSGeneratorScreen({
                 <Button
                   variant="outline"
                   onClick={onBack}
-                  className="min-w-0 justify-center rounded-none border-2 border-border px-2 text-xs font-bold sm:px-4 sm:text-sm"
+                  className="min-w-0 justify-center rounded border-2 border-border px-2 text-xs font-bold sm:px-4 sm:text-sm"
                 >
                   <ArrowLeft className="mr-1 h-3.5 w-3.5 sm:mr-1.5 sm:h-4 sm:w-4" />
                   <span className="sm:hidden">Back</span>
@@ -1157,7 +1157,7 @@ export function TOSGeneratorScreen({
                 <Button
                   disabled={totalItems <= 0 || !currentSubjectId}
                   onClick={() => setStep("competencies")}
-                  className="min-w-0 justify-center rounded-none border-2 border-border bg-primary px-2 text-xs font-bold text-primary-foreground shadow hover:bg-primary-hover disabled:opacity-50 sm:px-4 sm:text-sm"
+                  className="min-w-0 justify-center rounded border-2 border-border bg-primary px-2 text-xs font-bold text-primary-foreground shadow hover:bg-primary-hover disabled:opacity-50 sm:px-4 sm:text-sm"
                 >
                   <span className="sm:hidden">Next</span>
                   <span className="hidden sm:inline">Next: Competencies &amp; Days</span>
@@ -1179,21 +1179,21 @@ export function TOSGeneratorScreen({
                     Select curriculum competencies from your database or add ad-hoc topics. Enter the number of days taught per competency.
                   </p>
                 </div>
-                <Badge variant="outline" className="rounded-none border-border bg-accent font-bold text-xs py-1 px-2.5 self-start sm:self-auto">
+                <Badge variant="outline" className="rounded border-border bg-accent font-bold text-xs py-1 px-2.5 self-start sm:self-auto">
                   Total Days: {totalDays}
                 </Badge>
               </div>
 
               {/* Competency Picker Bar */}
-              <Card className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-none border-2 border-border bg-accent p-3.5 shadow">
+              <Card className="flex flex-col sm:flex-row sm:items-center gap-3 rounded border-2 border-border bg-accent p-3.5 shadow">
                 <div className="flex-1">
                   <Select value="" onValueChange={handleSelectCompetency} disabled={availableCompetencies.length === 0}>
-                    <Select.Trigger aria-label="Add Curriculum Competency" className="mt-1 w-full min-w-0 rounded-none text-xs font-bold">
+                    <Select.Trigger aria-label="Add Curriculum Competency" className="mt-1 w-full min-w-0 rounded text-xs font-bold">
                       <Select.Value placeholder={availableCompetencies.length > 0
                         ? `+ Select Competency from Curriculum (${availableCompetencies.length} available)...`
                         : "All curriculum competencies added to assessment"} />
                     </Select.Trigger>
-                    <Select.Content className="rounded-none border-2">
+                    <Select.Content className="rounded border-2">
                       {availableCompetencies.map((c) => (
                         <Select.Item key={c.competency_id} value={String(c.competency_id)}>
                           {c.competency_code ? `[${c.competency_code}] ` : ""}
@@ -1214,7 +1214,7 @@ export function TOSGeneratorScreen({
                       { label: `Ad-hoc Topic #${compInputs.length + 1}`, days: 2, is_adhoc: true },
                     ]);
                   }}
-                  className="rounded-none border-2 border-border bg-card font-bold shadow-sm hover:bg-muted/20 h-9 text-xs shrink-0"
+                  className="rounded border-2 border-border bg-card font-bold shadow-sm hover:bg-muted/20 h-9 text-xs shrink-0"
                 >
                   <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Ad-hoc Topic
                 </Button>
@@ -1223,7 +1223,7 @@ export function TOSGeneratorScreen({
               {/* Competency Items List */}
               <div className="space-y-3">
                 {compInputs.length === 0 ? (
-                  <Card className="block rounded-none border-2 border-dashed border-border bg-muted/20 px-6 py-12 text-center">
+                  <Card className="block rounded border-2 border-dashed border-border bg-muted/20 px-6 py-12 text-center">
                     <p className="text-xs font-bold text-muted-foreground">No competencies selected yet.</p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
                       Use the dropdown above to add competencies from your curriculum bank or add an ad-hoc topic.
@@ -1236,7 +1236,7 @@ export function TOSGeneratorScreen({
                     return (
                       <Card
                         key={idx}
-                        className="flex flex-col gap-2.5 rounded-none border-2 border-border bg-card p-4 shadow"
+                        className="flex flex-col gap-2.5 rounded border-2 border-border bg-card p-4 shadow"
                       >
                         {/* 1. Top row: Competency name/code (Bold, larger font) + Weight % badge aligned top-right (small/muted) */}
                         <div className="flex items-center justify-between gap-2 border-b border-border/10 pb-2">
@@ -1246,14 +1246,14 @@ export function TOSGeneratorScreen({
                             </span>
                             <Badge
                               variant="outline"
-                              className={`rounded-none border-border text-[10px] font-black ${isCurriculum ? "bg-accent text-primary-foreground" : "bg-accent text-primary-foreground"
+                              className={`rounded border-border text-[10px] font-black ${isCurriculum ? "bg-accent text-primary-foreground" : "bg-accent text-primary-foreground"
                                 }`}
                             >
                               {isCurriculum ? "CURRICULUM" : "AD-HOC TOPIC"}
                             </Badge>
                           </div>
 
-                          <span className="rounded-none border border-border/30 bg-muted/20 px-2 py-0.5 text-[11px] font-bold text-muted-foreground shrink-0">
+                          <span className="rounded border border-border/30 bg-muted/20 px-2 py-0.5 text-[11px] font-bold text-muted-foreground shrink-0">
                             {totalDays > 0 ? `${((comp.days / totalDays) * 100).toFixed(1)}% Weight` : "0% Weight"}
                           </span>
                         </div>
@@ -1276,7 +1276,7 @@ export function TOSGeneratorScreen({
                                   setCompInputs(updated);
                                 }}
                                 placeholder="Enter ad-hoc topic description..."
-                                className="w-full rounded-none border-2 border-border/60 bg-card p-2 text-xs sm:text-sm font-medium text-foreground leading-relaxed outline-none focus:border-border"
+                                className="w-full rounded border-2 border-border/60 bg-card p-2 text-xs sm:text-sm font-medium text-foreground leading-relaxed outline-none focus:border-border"
                               />
                             </div>
                           )}
@@ -1295,7 +1295,7 @@ export function TOSGeneratorScreen({
                                 updated[idx].days = Math.max(1, parseInt(e.target.value) || 1);
                                 setCompInputs(updated);
                               }}
-                              className="rounded-none h-8 w-20 border-2 border-border text-center font-black text-xs shadow-xs bg-card"
+                              className="rounded h-8 w-20 border-2 border-border text-center font-black text-xs shadow-xs bg-card"
                             />
                             <span className="text-[11px] text-muted-foreground font-semibold">day(s)</span>
                           </div>
@@ -1306,7 +1306,7 @@ export function TOSGeneratorScreen({
                             onClick={() => {
                               setCompInputs(compInputs.filter((_, i) => i !== idx));
                             }}
-                            className="rounded-none h-8 border-2 border-border bg-destructive/10 px-2.5 text-xs font-bold text-destructive hover:bg-destructive/10 shadow-xs"
+                            className="rounded h-8 border-2 border-border bg-destructive/10 px-2.5 text-xs font-bold text-destructive hover:bg-destructive/10 shadow-xs"
                             title="Remove Competency"
                           >
                             <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
@@ -1322,14 +1322,14 @@ export function TOSGeneratorScreen({
                 <Button
                   variant="outline"
                   onClick={() => setStep("test-parts")}
-                  className="rounded-none border-2 border-border font-bold"
+                  className="rounded border-2 border-border font-bold"
                 >
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
                 </Button>
                 <Button
                   disabled={compInputs.length === 0 || totalDays <= 0}
                   onClick={() => setStep("difficulty")}
-                  className="rounded-none border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover"
+                  className="rounded border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover"
                 >
                   Next: Difficulty Ratio <ArrowRight className="ml-1.5 h-4 w-4" />
                 </Button>
@@ -1349,9 +1349,9 @@ export function TOSGeneratorScreen({
                 </p>
               </div>
 
-              <Card className="block rounded-none border-2 border-border bg-card p-6 shadow-md">
+              <Card className="block rounded border-2 border-border bg-card p-6 shadow-md">
                 <div className="grid gap-6 sm:grid-cols-3">
-                  <Card className="block space-y-2 rounded-none border-2 border-border bg-success/10 p-4 text-center shadow-sm">
+                  <Card className="block space-y-2 rounded border-2 border-border bg-success/10 p-4 text-center shadow-sm">
                     <p className="text-xs font-black text-foreground uppercase tracking-wider">Easy (60%)</p>
                     <p className="text-[11px] font-semibold text-foreground">Remember & Understand</p>
                     <Input
@@ -1362,14 +1362,14 @@ export function TOSGeneratorScreen({
                       onChange={(e) =>
                         setDifficultyRatio({ ...difficultyRatio, easy: parseInt(e.target.value) || 0 })
                       }
-                      className="rounded-none mx-auto h-12 w-24 border-2 border-border text-center text-xl font-black bg-card"
+                      className="rounded mx-auto h-12 w-24 border-2 border-border text-center text-xl font-black bg-card"
                     />
                     <span className="text-xs font-bold text-muted-foreground block">
                       ≈ {Math.round((totalItems * (difficultyRatio.easy || 0)) / 100)} Items
                     </span>
                   </Card>
 
-                  <Card className="block space-y-2 rounded-none border-2 border-border bg-accent p-4 text-center shadow-sm">
+                  <Card className="block space-y-2 rounded border-2 border-border bg-accent p-4 text-center shadow-sm">
                     <p className="text-xs font-black text-foreground uppercase tracking-wider">Average (30%)</p>
                     <p className="text-[11px] font-semibold text-foreground">Apply & Analyze</p>
                     <Input
@@ -1380,14 +1380,14 @@ export function TOSGeneratorScreen({
                       onChange={(e) =>
                         setDifficultyRatio({ ...difficultyRatio, average: parseInt(e.target.value) || 0 })
                       }
-                      className="rounded-none mx-auto h-12 w-24 border-2 border-border text-center text-xl font-black bg-card"
+                      className="rounded mx-auto h-12 w-24 border-2 border-border text-center text-xl font-black bg-card"
                     />
                     <span className="text-xs font-bold text-muted-foreground block">
                       ≈ {Math.round((totalItems * (difficultyRatio.average || 0)) / 100)} Items
                     </span>
                   </Card>
 
-                  <Card className="block space-y-2 rounded-none border-2 border-border bg-destructive/10 p-4 text-center shadow-sm">
+                  <Card className="block space-y-2 rounded border-2 border-border bg-destructive/10 p-4 text-center shadow-sm">
                     <p className="text-xs font-black text-destructive uppercase tracking-wider">Difficult (10%)</p>
                     <p className="text-[11px] font-semibold text-destructive">Evaluate & Create</p>
                     <Input
@@ -1398,7 +1398,7 @@ export function TOSGeneratorScreen({
                       onChange={(e) =>
                         setDifficultyRatio({ ...difficultyRatio, difficult: parseInt(e.target.value) || 0 })
                       }
-                      className="rounded-none mx-auto h-12 w-24 border-2 border-border text-center text-xl font-black bg-card"
+                      className="rounded mx-auto h-12 w-24 border-2 border-border text-center text-xl font-black bg-card"
                     />
                     <span className="text-xs font-bold text-muted-foreground block">
                       ≈ {Math.round((totalItems * (difficultyRatio.difficult || 0)) / 100)} Items
@@ -1411,7 +1411,7 @@ export function TOSGeneratorScreen({
                     <span className="text-xs font-bold">Sum of Target Ratios:</span>
                     <Badge
                       variant="outline"
-                      className={`rounded-none border-border font-extrabold ${difficultyRatio.easy + difficultyRatio.average + difficultyRatio.difficult === 100 ? "bg-success/10 text-foreground" : "bg-destructive/10 text-destructive"}`}
+                      className={`rounded border-border font-extrabold ${difficultyRatio.easy + difficultyRatio.average + difficultyRatio.difficult === 100 ? "bg-success/10 text-foreground" : "bg-destructive/10 text-destructive"}`}
                     >
                       {difficultyRatio.easy + difficultyRatio.average + difficultyRatio.difficult}%
                     </Badge>
@@ -1420,7 +1420,7 @@ export function TOSGeneratorScreen({
                     size="sm"
                     variant="outline"
                     onClick={() => setDifficultyRatio({ easy: 60, average: 30, difficult: 10 })}
-                    className="rounded-none border-2 border-border text-xs font-bold shadow-sm"
+                    className="rounded border-2 border-border text-xs font-bold shadow-sm"
                   >
                     Reset to 60/30/10 Standard
                   </Button>
@@ -1431,7 +1431,7 @@ export function TOSGeneratorScreen({
                 <Button
                   variant="outline"
                   onClick={() => setStep("competencies")}
-                  className="rounded-none border-2 border-border font-bold"
+                  className="rounded border-2 border-border font-bold"
                 >
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
                 </Button>
@@ -1441,7 +1441,7 @@ export function TOSGeneratorScreen({
                     handleRecalculate();
                     setStep("blueprint");
                   }}
-                  className="rounded-none border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover"
+                  className="rounded border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover"
                 >
                   Calculate Blueprint <ArrowRight className="ml-1.5 h-4 w-4" />
                 </Button>
@@ -1466,7 +1466,7 @@ export function TOSGeneratorScreen({
                     size="sm"
                     variant="outline"
                     onClick={handleRecalculate}
-                    className="rounded-none border-2 border-border bg-card text-xs font-bold shadow-sm"
+                    className="rounded border-2 border-border bg-card text-xs font-bold shadow-sm"
                   >
                     <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Recalculate
                   </Button>
@@ -1480,7 +1480,7 @@ export function TOSGeneratorScreen({
                         setIsExporting(null);
                       }
                     }}
-                    className="rounded-none border-2 border-border bg-accent text-xs font-bold shadow-sm hover:bg-primary"
+                    className="rounded border-2 border-border bg-accent text-xs font-bold shadow-sm hover:bg-primary"
                   >
                     <FileDown className="mr-1.5 h-3.5 w-3.5" /> Blueprint PDF
                   </Button>
@@ -1494,7 +1494,7 @@ export function TOSGeneratorScreen({
                         setIsExporting(null);
                       }
                     }}
-                    className="rounded-none border-2 border-border bg-success/10 text-xs font-bold shadow-sm hover:bg-success/20"
+                    className="rounded border-2 border-border bg-success/10 text-xs font-bold shadow-sm hover:bg-success/20"
                   >
                     <FileText className="mr-1.5 h-3.5 w-3.5" /> Word (.docx)
                   </Button>
@@ -1502,7 +1502,7 @@ export function TOSGeneratorScreen({
               </div>
 
               {/* Informative Hint Banner */}
-              <Card className="flex items-center gap-2 rounded-none border-2 border-border bg-accent px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-sm">
+              <Card className="flex items-center gap-2 rounded border-2 border-border bg-accent px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-sm">
                 <span className="text-base">💡</span>
                 <span>
                   <strong>Interactive Cells:</strong> The number inputs under Bloom's Taxonomy (Rem, Und, App, Ana, Eva, Cre) are fully editable. Changes update the Easy/Average/Difficult subtotals and Grand Totals automatically.
@@ -1510,7 +1510,7 @@ export function TOSGeneratorScreen({
               </Card>
 
               {!draftValidation.valid && (
-                <Card className="block rounded-none border-2 border-destructive bg-destructive/10 p-3 text-xs font-bold text-destructive">
+                <Card className="block rounded border-2 border-destructive bg-destructive/10 p-3 text-xs font-bold text-destructive">
                   <div className="flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 text-destructive" />
                     <span>Blueprint Validation Warnings:</span>
@@ -1524,7 +1524,7 @@ export function TOSGeneratorScreen({
               )}
 
               {/* DepEd Standard 2-Tier Structured Table */}
-              <Card className="block p-0 overflow-x-auto rounded-none border-2 border-border bg-card shadow-md">
+              <Card className="block p-0 overflow-x-auto rounded border-2 border-border bg-card shadow-md">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     {/* Header Row 1 */}
@@ -1597,7 +1597,7 @@ export function TOSGeneratorScreen({
                               min="0"
                               value={r.remember}
                               onChange={(e) => handleCellEdit(idx, "remember", parseInt(e.target.value) || 0)}
-                              className="h-8 w-12 rounded-none border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
+                              className="h-8 w-12 rounded border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
                             />
                           </td>
                           <td className="border-r border-border p-2 text-center bg-success/10">
@@ -1606,7 +1606,7 @@ export function TOSGeneratorScreen({
                               min="0"
                               value={r.understand}
                               onChange={(e) => handleCellEdit(idx, "understand", parseInt(e.target.value) || 0)}
-                              className="h-8 w-12 rounded-none border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
+                              className="h-8 w-12 rounded border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
                             />
                           </td>
                           <td className="border-r border-border p-2 text-center bg-accent">
@@ -1615,7 +1615,7 @@ export function TOSGeneratorScreen({
                               min="0"
                               value={r.apply}
                               onChange={(e) => handleCellEdit(idx, "apply", parseInt(e.target.value) || 0)}
-                              className="h-8 w-12 rounded-none border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
+                              className="h-8 w-12 rounded border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
                             />
                           </td>
                           <td className="border-r border-border p-2 text-center bg-accent">
@@ -1624,7 +1624,7 @@ export function TOSGeneratorScreen({
                               min="0"
                               value={r.analyze}
                               onChange={(e) => handleCellEdit(idx, "analyze", parseInt(e.target.value) || 0)}
-                              className="h-8 w-12 rounded-none border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
+                              className="h-8 w-12 rounded border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
                             />
                           </td>
                           <td className="border-r border-border p-2 text-center bg-destructive/10">
@@ -1633,7 +1633,7 @@ export function TOSGeneratorScreen({
                               min="0"
                               value={r.evaluate}
                               onChange={(e) => handleCellEdit(idx, "evaluate", parseInt(e.target.value) || 0)}
-                              className="h-8 w-12 rounded-none border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
+                              className="h-8 w-12 rounded border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
                             />
                           </td>
                           <td className="border-r-2 border-border p-2 text-center bg-destructive/10">
@@ -1642,23 +1642,23 @@ export function TOSGeneratorScreen({
                               min="0"
                               value={r.create_}
                               onChange={(e) => handleCellEdit(idx, "create_", parseInt(e.target.value) || 0)}
-                              className="h-8 w-12 rounded-none border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
+                              className="h-8 w-12 rounded border-2 border-border bg-card text-center font-black text-xs shadow-sm hover:bg-accent focus:bg-accent focus:outline-none"
                             />
                           </td>
 
                           {/* Difficulty Pill Cells */}
                           <td className="border-r border-border p-2 text-center">
-                            <span className="inline-block px-2.5 py-0.5 rounded-none border border-success bg-success/10 text-foreground font-black text-xs">
+                            <span className="inline-block px-2.5 py-0.5 rounded border border-success bg-success/10 text-foreground font-black text-xs">
                               {r.easy}
                             </span>
                           </td>
                           <td className="border-r border-border p-2 text-center">
-                            <span className="inline-block px-2.5 py-0.5 rounded-none border border-border bg-accent text-primary-foreground font-black text-xs">
+                            <span className="inline-block px-2.5 py-0.5 rounded border border-border bg-accent text-primary-foreground font-black text-xs">
                               {r.average}
                             </span>
                           </td>
                           <td className="border-r-2 border-border p-2 text-center">
-                            <span className="inline-block px-2.5 py-0.5 rounded-none border border-destructive bg-destructive/10 text-destructive font-black text-xs">
+                            <span className="inline-block px-2.5 py-0.5 rounded border border-destructive bg-destructive/10 text-destructive font-black text-xs">
                               {r.difficult}
                             </span>
                           </td>
@@ -1707,14 +1707,14 @@ export function TOSGeneratorScreen({
                 <Button
                   variant="outline"
                   onClick={() => setStep("difficulty")}
-                  className="rounded-none border-2 border-border font-bold"
+                  className="rounded border-2 border-border font-bold"
                 >
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
                 </Button>
                 <Button
                   disabled={isGenerating}
                   onClick={handleGenerateQuestions}
-                  className="rounded-none border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover"
+                  className="rounded border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover"
                 >
                   {isGenerating ? (
                     <>
@@ -1748,14 +1748,14 @@ export function TOSGeneratorScreen({
                     variant="outline"
                     disabled={isGenerating}
                     onClick={handleGenerateQuestions}
-                    className="rounded-none border-2 border-border bg-card text-xs font-bold shadow-sm"
+                    className="rounded border-2 border-border bg-card text-xs font-bold shadow-sm"
                   >
                     <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Regenerate All ({totalItems})
                   </Button>
                   <Button
                     size="sm"
                     onClick={() => setStep("export")}
-                    className="rounded-none border-2 border-border bg-primary text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary-hover"
+                    className="rounded border-2 border-border bg-primary text-xs font-bold text-primary-foreground shadow-sm hover:bg-primary-hover"
                   >
                     Proceed to Export <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                   </Button>
@@ -1763,25 +1763,25 @@ export function TOSGeneratorScreen({
               </div>
 
               {generationProgress && (
-                <Card className="block rounded-none border-2 border-border bg-accent p-4 text-center text-xs font-bold text-primary-foreground animate-pulse">
+                <Card className="block rounded border-2 border-border bg-accent p-4 text-center text-xs font-bold text-primary-foreground animate-pulse">
                   {generationProgress}
                 </Card>
               )}
 
               {generationError && (
-                <Card className="block rounded-none border-2 border-destructive bg-destructive/10 p-3 text-xs font-bold text-destructive">
+                <Card className="block rounded border-2 border-destructive bg-destructive/10 p-3 text-xs font-bold text-destructive">
                   {generationError}
                 </Card>
               )}
 
               {questions.length === 0 ? (
-                <Card className="block rounded-none border-2 border-dashed border-border px-6 py-12 text-center">
+                <Card className="block rounded border-2 border-dashed border-border px-6 py-12 text-center">
                   <Sparkles className="mx-auto h-8 w-8 text-foreground" />
                   <p className="mt-2 text-sm font-bold text-muted-foreground">No questions generated yet.</p>
                   <Button
                     size="sm"
                     onClick={handleGenerateQuestions}
-                    className="rounded-none mt-3 border-2 border-border bg-primary font-bold text-primary-foreground"
+                    className="rounded mt-3 border-2 border-border bg-primary font-bold text-primary-foreground"
                   >
                     Generate {totalItems} Questions Now
                   </Button>
@@ -1795,7 +1795,7 @@ export function TOSGeneratorScreen({
                     return (
                       <Card
                         key={gIdx}
-                        className="block rounded-none border-2 border-border bg-card p-5 shadow-md"
+                        className="block rounded border-2 border-border bg-card p-5 shadow-md"
                       >
                         {/* Competency Group Header */}
                         <div className="flex flex-col justify-between border-b-2 border-border pb-3 sm:flex-row sm:items-center">
@@ -1803,27 +1803,27 @@ export function TOSGeneratorScreen({
                             <h4 className="font-extrabold text-foreground text-sm">{grp.label}</h4>
                             <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs font-bold">
                               <span className="text-muted-foreground font-semibold mr-1">Cognitive Distribution:</span>
-                              <Badge variant="outline" className="rounded-none border-border bg-success/10 text-[10px]">
+                              <Badge variant="outline" className="rounded border-border bg-success/10 text-[10px]">
                                 Rem: {bloomActual.REMEMBER}
                               </Badge>
-                              <Badge variant="outline" className="rounded-none border-border bg-success/10 text-[10px]">
+                              <Badge variant="outline" className="rounded border-border bg-success/10 text-[10px]">
                                 Und: {bloomActual.UNDERSTAND}
                               </Badge>
-                              <Badge variant="outline" className="rounded-none border-border bg-accent text-[10px]">
+                              <Badge variant="outline" className="rounded border-border bg-accent text-[10px]">
                                 App: {bloomActual.APPLY}
                               </Badge>
-                              <Badge variant="outline" className="rounded-none border-border bg-accent text-[10px]">
+                              <Badge variant="outline" className="rounded border-border bg-accent text-[10px]">
                                 Ana: {bloomActual.ANALYZE}
                               </Badge>
-                              <Badge variant="outline" className="rounded-none border-border bg-destructive/10 text-[10px]">
+                              <Badge variant="outline" className="rounded border-border bg-destructive/10 text-[10px]">
                                 Eva: {bloomActual.EVALUATE}
                               </Badge>
-                              <Badge variant="outline" className="rounded-none border-border bg-destructive/10 text-[10px]">
+                              <Badge variant="outline" className="rounded border-border bg-destructive/10 text-[10px]">
                                 Cre: {bloomActual.CREATE}
                               </Badge>
                             </div>
                           </div>
-                          <Badge variant="outline" className="rounded-none mt-2 border-border bg-primary font-black text-xs sm:mt-0 shadow-xs">
+                          <Badge variant="outline" className="rounded mt-2 border-border bg-primary font-black text-xs sm:mt-0 shadow-xs">
                             {grp.questions.length} Item(s)
                           </Badge>
                         </div>
@@ -1836,7 +1836,7 @@ export function TOSGeneratorScreen({
                             return (
                               <Card
                                 key={globalIdx}
-                                className="block rounded-none border-2 border-border bg-muted/20 p-4 shadow"
+                                className="block rounded border-2 border-border bg-muted/20 p-4 shadow"
                               >
                                 {isEditingThis && editQuestionForm ? (
                                   /* Inline Edit Mode */
@@ -1848,7 +1848,7 @@ export function TOSGeneratorScreen({
                                           size="sm"
                                           variant="outline"
                                           onClick={() => setEditingQuestionIdx(null)}
-                                          className="rounded-none h-7 border-2 border-border bg-card text-xs font-bold"
+                                          className="rounded h-7 border-2 border-border bg-card text-xs font-bold"
                                         >
                                           Cancel
                                         </Button>
@@ -1860,7 +1860,7 @@ export function TOSGeneratorScreen({
                                             setQuestions(updated);
                                             setEditingQuestionIdx(null);
                                           }}
-                                          className="rounded-none h-7 border-2 border-border bg-primary text-xs font-bold text-primary-foreground"
+                                          className="rounded h-7 border-2 border-border bg-primary text-xs font-bold text-primary-foreground"
                                         >
                                           Save
                                         </Button>
@@ -1875,7 +1875,7 @@ export function TOSGeneratorScreen({
                                         onChange={(e) =>
                                           setEditQuestionForm({ ...editQuestionForm, question_text: e.target.value })
                                         }
-                                        className="mt-1 w-full rounded-none border-2 border-border bg-card p-2.5 text-xs font-semibold"
+                                        className="mt-1 w-full rounded border-2 border-border bg-card p-2.5 text-xs font-semibold"
                                       />
                                     </div>
 
@@ -1889,10 +1889,10 @@ export function TOSGeneratorScreen({
                                               question_type: value as TestPartType,
                                             })
                                           }>
-                                          <Select.Trigger aria-label="Question Type" className="mt-1 w-full min-w-0 rounded-none text-xs font-bold">
+                                          <Select.Trigger aria-label="Question Type" className="mt-1 w-full min-w-0 rounded text-xs font-bold">
                                             <Select.Value />
                                           </Select.Trigger>
-                                          <Select.Content className="rounded-none border-2">
+                                          <Select.Content className="rounded border-2">
                                             <Select.Item value="MULTIPLE_CHOICE">Multiple Choice</Select.Item>
                                             <Select.Item value="TRUE_FALSE">True / False</Select.Item>
                                             <Select.Item value="IDENTIFICATION">Identification</Select.Item>
@@ -1911,10 +1911,10 @@ export function TOSGeneratorScreen({
                                               difficulty_band: value as DifficultyBand,
                                             })
                                           }>
-                                          <Select.Trigger aria-label="Difficulty" className="mt-1 w-full min-w-0 rounded-none text-xs font-bold">
+                                          <Select.Trigger aria-label="Difficulty" className="mt-1 w-full min-w-0 rounded text-xs font-bold">
                                             <Select.Value />
                                           </Select.Trigger>
-                                          <Select.Content className="rounded-none border-2">
+                                          <Select.Content className="rounded border-2">
                                             <Select.Item value="EASY">Easy</Select.Item>
                                             <Select.Item value="AVERAGE">Average</Select.Item>
                                             <Select.Item value="DIFFICULT">Difficult</Select.Item>
@@ -1931,10 +1931,10 @@ export function TOSGeneratorScreen({
                                               cognitive_level: value as CognitiveLevel,
                                             })
                                           }>
-                                          <Select.Trigger aria-label="Cognitive Level" className="mt-1 w-full min-w-0 rounded-none text-xs font-bold">
+                                          <Select.Trigger aria-label="Cognitive Level" className="mt-1 w-full min-w-0 rounded text-xs font-bold">
                                             <Select.Value />
                                           </Select.Trigger>
-                                          <Select.Content className="rounded-none border-2">
+                                          <Select.Content className="rounded border-2">
                                             <Select.Item value="REMEMBER">Remember</Select.Item>
                                             <Select.Item value="UNDERSTAND">Understand</Select.Item>
                                             <Select.Item value="APPLY">Apply</Select.Item>
@@ -1970,7 +1970,7 @@ export function TOSGeneratorScreen({
                                                 updatedOpts[oIdx].option_text = e.target.value;
                                                 setEditQuestionForm({ ...editQuestionForm, options: updatedOpts });
                                               }}
-                                              className="rounded-none h-8 border-2 border-border bg-card text-xs font-semibold"
+                                              className="rounded h-8 border-2 border-border bg-card text-xs font-semibold"
                                             />
                                           </div>
                                         ))}
@@ -1985,7 +1985,7 @@ export function TOSGeneratorScreen({
                                           setEditQuestionForm({ ...editQuestionForm, explanation: e.target.value })
                                         }
                                         placeholder="Model answer or grading rubric..."
-                                        className="rounded-none mt-1 border-2 border-border bg-card text-xs font-semibold"
+                                        className="rounded mt-1 border-2 border-border bg-card text-xs font-semibold"
                                       />
                                     </div>
                                   </div>
@@ -1997,7 +1997,7 @@ export function TOSGeneratorScreen({
                                         <span className="font-black text-sm text-foreground">#{globalIdx + 1}.</span>
                                         <Badge
                                           variant="outline"
-                                          className="rounded-none border-2 border-border bg-card text-[11px] font-black shadow-xs"
+                                          className="rounded border-2 border-border bg-card text-[11px] font-black shadow-xs"
                                         >
                                           {q.question_type.replace(/_/g, " ")}
                                         </Badge>
@@ -2009,7 +2009,7 @@ export function TOSGeneratorScreen({
                                         </Badge>
                                         <Badge
                                           variant="outline"
-                                          className="rounded-none border-2 border-border bg-accent text-[11px] text-primary-foreground font-black shadow-xs"
+                                          className="rounded border-2 border-border bg-accent text-[11px] text-primary-foreground font-black shadow-xs"
                                         >
                                           {q.cognitive_level || "REMEMBER"}
                                         </Badge>
@@ -2024,7 +2024,7 @@ export function TOSGeneratorScreen({
                                             setEditingQuestionIdx(globalIdx);
                                             setEditQuestionForm({ ...q });
                                           }}
-                                          className="rounded-none h-7 border-2 border-border bg-card px-2.5 text-xs font-bold shadow-sm hover:bg-accent"
+                                          className="rounded h-7 border-2 border-border bg-card px-2.5 text-xs font-bold shadow-sm hover:bg-accent"
                                         >
                                           <Edit3 className="h-3.5 w-3.5 mr-1" /> Edit
                                         </Button>
@@ -2033,7 +2033,7 @@ export function TOSGeneratorScreen({
                                           variant="outline"
                                           disabled={regeneratingIdx === globalIdx}
                                           onClick={() => handleRegenerateQuestion(globalIdx)}
-                                          className="rounded-none h-7 border-2 border-border bg-card px-2.5 text-xs font-bold shadow-sm hover:bg-accent"
+                                          className="rounded h-7 border-2 border-border bg-card px-2.5 text-xs font-bold shadow-sm hover:bg-accent"
                                         >
                                           <RefreshCw className={`h-3.5 w-3.5 ${regeneratingIdx === globalIdx ? "animate-spin" : ""}`} />
                                         </Button>
@@ -2043,7 +2043,7 @@ export function TOSGeneratorScreen({
                                           onClick={() => {
                                             setQuestions(questions.filter((_, i) => i !== globalIdx));
                                           }}
-                                          className="rounded-none h-7 border-2 border-border bg-destructive/10 px-2 text-xs font-bold text-destructive hover:bg-destructive/10 shadow-sm"
+                                          className="rounded h-7 border-2 border-border bg-destructive/10 px-2 text-xs font-bold text-destructive hover:bg-destructive/10 shadow-sm"
                                         >
                                           <Trash2 className="h-3.5 w-3.5" />
                                         </Button>
@@ -2059,9 +2059,9 @@ export function TOSGeneratorScreen({
                                         {q.options.map((opt, oIdx) => (
                                           <div
                                             key={oIdx}
-                                            className={`flex items-center gap-2 rounded-none border-2 p-2 text-xs font-semibold ${opt.is_correct ? "border-success bg-success/10 text-foreground font-bold shadow-sm" : "border-border/20 bg-card text-foreground"}`}
+                                            className={`flex items-center gap-2 rounded border-2 p-2 text-xs font-semibold ${opt.is_correct ? "border-success bg-success/10 text-foreground font-bold shadow-sm" : "border-border/20 bg-card text-foreground"}`}
                                           >
-                                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-none border border-border/40 text-[10px] font-black">
+                                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-border/40 text-[10px] font-black">
                                               {String.fromCharCode(65 + oIdx)}
                                             </span>
                                             <span className="flex-1">{opt.option_text}</span>
@@ -2071,7 +2071,7 @@ export function TOSGeneratorScreen({
                                       </div>
                                     ) : (
                                       q.explanation && (
-                                        <div className="rounded-none border-2 border-dashed border-border/30 bg-accent p-2.5 text-xs text-primary-foreground font-medium">
+                                        <div className="rounded border-2 border-dashed border-border/30 bg-accent p-2.5 text-xs text-primary-foreground font-medium">
                                           <strong>Model Key / Rubric:</strong> {q.explanation}
                                         </div>
                                       )
@@ -2092,14 +2092,14 @@ export function TOSGeneratorScreen({
                 <Button
                   variant="outline"
                   onClick={() => setStep("blueprint")}
-                  className="rounded-none border-2 border-border font-bold"
+                  className="rounded border-2 border-border font-bold"
                 >
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Blueprint
                 </Button>
                 <Button
                   disabled={questions.length === 0}
                   onClick={() => setStep("export")}
-                  className="rounded-none border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover"
+                  className="rounded border-2 border-border bg-primary font-bold text-primary-foreground shadow hover:bg-primary-hover"
                 >
                   Proceed to Final Export <ArrowRight className="ml-1.5 h-4 w-4" />
                 </Button>
@@ -2121,7 +2121,7 @@ export function TOSGeneratorScreen({
 
               <div className="grid gap-6 sm:grid-cols-2">
                 {/* Blueprint Summary Card */}
-                <Card className="block rounded-none border-2 border-border bg-card p-5 shadow-md">
+                <Card className="block rounded border-2 border-border bg-card p-5 shadow-md">
                   <h4 className="font-bold text-foreground flex items-center gap-2">
                     <TableProperties className="h-4 w-4 text-foreground" />
                     Table of Specifications Document
@@ -2140,7 +2140,7 @@ export function TOSGeneratorScreen({
                           setIsExporting(null);
                         }
                       }}
-                      className="rounded-none border-2 border-border bg-accent font-bold text-primary-foreground hover:bg-primary shadow-sm"
+                      className="rounded border-2 border-border bg-accent font-bold text-primary-foreground hover:bg-primary shadow-sm"
                     >
                       <FileDown className="mr-2 h-4 w-4" /> Export Blueprint PDF (Landscape Legal)
                     </Button>
@@ -2153,7 +2153,7 @@ export function TOSGeneratorScreen({
                           setIsExporting(null);
                         }
                       }}
-                      className="rounded-none border-2 border-border bg-card font-bold text-foreground hover:bg-muted/20 shadow-sm"
+                      className="rounded border-2 border-border bg-card font-bold text-foreground hover:bg-muted/20 shadow-sm"
                     >
                       <FileText className="mr-2 h-4 w-4" /> Export Blueprint Word (.docx)
                     </Button>
@@ -2161,7 +2161,7 @@ export function TOSGeneratorScreen({
                 </Card>
 
                 {/* Exam Paper Card */}
-                <Card className="block rounded-none border-2 border-border bg-card p-5 shadow-md">
+                <Card className="block rounded border-2 border-border bg-card p-5 shadow-md">
                   <h4 className="font-bold text-foreground flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-foreground" />
                     Summative Examination Paper
@@ -2170,7 +2170,7 @@ export function TOSGeneratorScreen({
                     Formatted exam questionnaire supporting all 5 question types (MC, T/F, ID, Matching, Essay).
                   </p>
 
-                  <div className="mt-4 flex items-center gap-2 rounded-none border-2 border-border bg-accent p-2.5">
+                  <div className="mt-4 flex items-center gap-2 rounded border-2 border-border bg-accent p-2.5">
                     <Switch checked={includeAnswerKey} onCheckedChange={setIncludeAnswerKey} />
                     <label className="text-xs font-bold text-foreground">Append Answer Key at bottom</label>
                   </div>
@@ -2188,7 +2188,7 @@ export function TOSGeneratorScreen({
                         });
                         setIsExporting(null);
                       }}
-                      className="rounded-none border-2 border-border bg-primary font-bold text-primary-foreground hover:bg-primary-hover shadow-sm"
+                      className="rounded border-2 border-border bg-primary font-bold text-primary-foreground hover:bg-primary-hover shadow-sm"
                     >
                       <FileDown className="mr-2 h-4 w-4" /> Export Exam Paper PDF (Portrait Legal)
                     </Button>
@@ -2204,7 +2204,7 @@ export function TOSGeneratorScreen({
                         });
                         setIsExporting(null);
                       }}
-                      className="rounded-none border-2 border-border bg-card font-bold text-foreground hover:bg-muted/20 shadow-sm"
+                      className="rounded border-2 border-border bg-card font-bold text-foreground hover:bg-muted/20 shadow-sm"
                     >
                       <FileText className="mr-2 h-4 w-4" /> Export Exam Paper Word (.docx)
                     </Button>
@@ -2216,7 +2216,7 @@ export function TOSGeneratorScreen({
                 <Button
                   variant="outline"
                   onClick={() => setStep("ai-review")}
-                  className="rounded-none border-2 border-border font-bold"
+                  className="rounded border-2 border-border font-bold"
                 >
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Review
                 </Button>
@@ -2225,7 +2225,7 @@ export function TOSGeneratorScreen({
                     handleSaveDraft();
                     setStep("saved-list");
                   }}
-                  className="rounded-none border-2 border-border bg-success/20 font-bold text-foreground shadow"
+                  className="rounded border-2 border-border bg-success/20 font-bold text-foreground shadow"
                 >
                   <CheckCircle2 className="mr-1.5 h-4 w-4" /> Save & Return to TOS Archive
                 </Button>

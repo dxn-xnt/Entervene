@@ -997,7 +997,7 @@ const TeacherGradeView = () => {
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {toastMessage && (
                 <div
-                  className={`rounded-md border-2 border-black p-3 flex items-center justify-between text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${toastMessage.type === "success"
+                  className={`rounded border-2 border-black p-3 flex items-center justify-between text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${toastMessage.type === "success"
                     ? "bg-emerald-100 text-emerald-950"
                     : toastMessage.type === "error"
                       ? "bg-rose-100 text-rose-950"
@@ -1025,7 +1025,7 @@ const TeacherGradeView = () => {
 
 
               {isViewOnly && (
-                <div className="rounded-md border-2 border-black bg-amber-100 p-4 text-black flex items-center gap-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-medium">
+                <div className="rounded border-2 border-black bg-amber-100 p-4 text-black flex items-center gap-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-medium">
                   <span className="text-2xl">🔒</span>
                   <div>
                     <h4 className="font-black text-sm">Read-Only Mode (On Leave)</h4>
@@ -1038,7 +1038,7 @@ const TeacherGradeView = () => {
               )}
 
               {isSubstitution && (
-                <div className="rounded-md border-2 border-black bg-yellow-100 p-3 text-black flex items-center gap-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <div className="rounded border-2 border-black bg-yellow-100 p-3 text-black flex items-center gap-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                   <span className="text-base">📋</span>
                   <span>
                     You are covering this class as a substitute teacher for {gradebook?.scope?.original_teacher_name || "the original teacher"}. Full grading and attendance permissions are enabled.
@@ -1071,7 +1071,7 @@ const TeacherGradeView = () => {
                     </Select>
                   </div>
                 </section>
-                <Card className="w-full rounded-none border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <Card className="w-full rounded border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                   {activeTab === "summary" ? renderSummaryTable() : renderTermTable()}
                 </Card>
               </div>
@@ -1146,10 +1146,15 @@ const TeacherGradeView = () => {
           if (!open) setShowBulkConfirm(false);
         }}
       >
-        <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded-lg overflow-hidden">
+<<<<<<< HEAD
+        <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded overflow-hidden">
           <Dialog.Header className="border-black text-black min-h-0">
+=======
+        <Dialog.Content size="md" className="max-w-lg overflow-hidden p-0">
+          <Dialog.Header className="min-h-0 border-border">
+>>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
             <div className="flex items-center gap-2.5">
-              <div className="size-8 rounded-md bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+              <div className="size-8 rounded bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                 {timingGate.isLocked ? (
                   <AlertTriangle className="size-4 text-black" />
                 ) : (
@@ -1172,7 +1177,7 @@ const TeacherGradeView = () => {
             </p>
 
             {timingGate.isLocked ? (
-              <div className="rounded-md border-2 border-black bg-amber-100 p-3.5 flex items-center gap-3 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-amber-950">
+              <div className="rounded border-2 border-black bg-amber-100 p-3.5 flex items-center gap-3 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-amber-950">
                 <AlertTriangle className="size-5 shrink-0 text-amber-900" />
                 <div>
                   <div className="font-black text-sm">
@@ -1194,18 +1199,18 @@ const TeacherGradeView = () => {
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                  <div className="bg-emerald-50 border-2 border-black rounded-md p-2.5 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="bg-emerald-50 border-2 border-black rounded p-2.5 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                     <span className="block text-xl font-black text-emerald-950">{completeComponentsCount}</span>
                     <span className="text-[10px] text-emerald-900 font-bold tracking-wider">All Components Complete</span>
                   </div>
-                  <div className={`border-2 border-black rounded-md p-2.5 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${missingComponentsCount > 0 ? "bg-amber-50" : "bg-gray-50"}`}>
+                  <div className={`border-2 border-black rounded p-2.5 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${missingComponentsCount > 0 ? "bg-amber-50" : "bg-gray-50"}`}>
                     <span className={`block text-xl font-black ${missingComponentsCount > 0 ? "text-amber-950" : "text-gray-600"}`}>{missingComponentsCount}</span>
                     <span className={`text-[10px] font-bold tracking-wider ${missingComponentsCount > 0 ? "text-amber-900" : "text-gray-600"}`}>Missing Components (Sending Anyway)</span>
                   </div>
                 </div>
 
                 {missingComponentsCount > 0 && (
-                  <div className="rounded-md border-2 border-black bg-amber-50 p-3 flex items-center gap-2.5 text-xs text-amber-950 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] font-medium">
+                  <div className="rounded border-2 border-black bg-amber-50 p-3 flex items-center gap-2.5 text-xs text-amber-950 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] font-medium">
                     <AlertTriangle className="size-4 shrink-0 text-amber-900" />
                     <span>
                       <strong>{missingComponentsCount} student(s)</strong> have unassigned or unscored categories. Their grades will be finalized and sent based on available scores.
@@ -1213,7 +1218,7 @@ const TeacherGradeView = () => {
                   </div>
                 )}
 
-                <div className="rounded-md border-2 border-black bg-yellow-50 p-3 flex flex-col gap-1 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <div className="rounded border-2 border-black bg-yellow-50 p-3 flex flex-col gap-1 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                   <div className="font-black text-black flex items-center gap-2">
                     <CheckCircle2 className="size-4 text-black shrink-0" />
                     <span>Audit Trail & Idempotency</span>
@@ -1228,14 +1233,14 @@ const TeacherGradeView = () => {
                     type="checkbox"
                     checked={forceResendAll}
                     onChange={(e) => setForceResendAll(e.target.checked)}
-                    className="size-4 rounded-none border-2 border-black accent-black cursor-pointer"
+                    className="size-4 rounded border-2 border-black accent-black cursor-pointer"
                   />
                   <span>Force resend all students (even if scores are unchanged)</span>
                 </label>
               </>
             )}
           </div>
-          <Dialog.Footer className="border-t-2 border-black bg-white px-5 py-3.5 flex justify-end gap-2.5">
+          <Dialog.Footer className="flex justify-end gap-2.5 border-t-2 border-border px-5 py-3.5">
             <Button
               variant="outline"
               onClick={() => setShowBulkConfirm(false)}
@@ -1273,10 +1278,15 @@ const TeacherGradeView = () => {
           if (!open) setConflictData(null);
         }}
       >
-        <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded-lg overflow-hidden">
+<<<<<<< HEAD
+        <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded overflow-hidden">
           <Dialog.Header className="border-black text-black min-h-0">
+=======
+        <Dialog.Content size="md" className="max-w-lg overflow-hidden p-0">
+          <Dialog.Header className="min-h-0 border-border">
+>>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
             <div className="flex items-center gap-2.5">
-              <div className="size-8 rounded-md bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+              <div className="size-8 rounded bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                 <AlertTriangle className="size-4 text-black" />
               </div>
               <h3 className="font-extrabold text-base text-black leading-none font-head">
@@ -1289,7 +1299,7 @@ const TeacherGradeView = () => {
               Scores have changed since this page was loaded for{" "}
               <strong className="text-black font-bold">{conflictData?.studentName || "one or more students"}</strong>.
             </p>
-            <div className="rounded-md border-2 border-black bg-amber-50 p-3.5 flex flex-col gap-2.5 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+            <div className="rounded border-2 border-black bg-amber-50 p-3.5 flex flex-col gap-2.5 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
               <div className="flex justify-between items-center">
                 <span className="text-gray-700 font-bold">Displayed Grade:</span>
                 <span className="font-black text-black text-sm">{conflictData?.expectedGrade?.toFixed(1) ?? "—"}</span>
@@ -1303,7 +1313,7 @@ const TeacherGradeView = () => {
               Would you like to refresh your gradebook to review the latest scores, or force-send with the recomputed value?
             </p>
           </div>
-          <Dialog.Footer className="border-t-2 border-black bg-white px-5 py-3.5 flex justify-end gap-2.5">
+          <Dialog.Footer className="flex justify-end gap-2.5 border-t-2 border-border px-5 py-3.5">
             <Button
               variant="outline"
               onClick={() => {
@@ -1341,10 +1351,15 @@ const TeacherGradeView = () => {
           if (!open) setBulkSendSummary(null);
         }}
       >
-        <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded-lg overflow-hidden">
+<<<<<<< HEAD
+        <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded overflow-hidden">
           <Dialog.Header className="border-black text-black min-h-0">
+=======
+        <Dialog.Content size="md" className="max-w-lg overflow-hidden p-0">
+          <Dialog.Header className="min-h-0 border-border">
+>>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
             <div className="flex items-center gap-2.5">
-              <div className="size-8 rounded-md bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+              <div className="size-8 rounded bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                 <CheckCircle2 className="size-4 text-black" />
               </div>
               <h3 className="font-extrabold text-base text-black leading-none font-head">
@@ -1358,15 +1373,15 @@ const TeacherGradeView = () => {
           </Dialog.Header>
           <div className="flex flex-col gap-4 p-5 text-sm bg-white text-black">
             <div className="grid grid-cols-3 gap-2.5 text-center">
-              <div className="bg-emerald-100 border-2 border-black rounded-md p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <div className="bg-emerald-100 border-2 border-black rounded p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                 <span className="block text-2xl font-black text-emerald-950">{bulkSendSummary?.newly_sent_count ?? 0}</span>
                 <span className="text-[11px] text-emerald-900 font-black tracking-wider">Sent / Updated</span>
               </div>
-              <div className="bg-yellow-50 border-2 border-black rounded-md p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <div className="bg-yellow-50 border-2 border-black rounded p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                 <span className="block text-2xl font-black text-black">{bulkSendSummary?.unchanged_skipped_count ?? 0}</span>
                 <span className="text-[11px] text-gray-800 font-black tracking-wider">Unchanged</span>
               </div>
-              <div className="bg-amber-100 border-2 border-black rounded-md p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <div className="bg-amber-100 border-2 border-black rounded p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                 <span className="block text-2xl font-black text-amber-950">{(bulkSendSummary?.incomplete_warning_count ?? 0) || (bulkSendSummary?.incomplete_skipped_count ?? 0)}</span>
                 <span className="text-[11px] text-amber-900 font-black tracking-wider">With Warnings</span>
               </div>
@@ -1379,7 +1394,7 @@ const TeacherGradeView = () => {
                   : "All student grades were already transmitted to the adviser with matching scores. No changes were necessary."}
             </p>
           </div>
-          <Dialog.Footer className="border-t-2 border-black bg-white px-5 py-3.5 flex justify-end">
+          <Dialog.Footer className="flex justify-end border-t-2 border-border px-5 py-3.5">
             <Button
               variant="default"
               onClick={() => setBulkSendSummary(null)}

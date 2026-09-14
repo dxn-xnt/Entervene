@@ -57,7 +57,7 @@ function DatePicker({ id, selected, onSelect, placeholder = "Select date", minDa
             </Popover.Trigger>
             <Popover.Portal>
                 <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-50">
-                    <Popover.Popup className="border-2 border-border bg-background text-popover-foreground shadow-md rounded-lg overflow-hidden">
+                    <Popover.Popup className="border-2 border-border bg-background text-popover-foreground shadow-md rounded overflow-hidden">
                         <Calendar
                             mode="single"
                             selected={selected}

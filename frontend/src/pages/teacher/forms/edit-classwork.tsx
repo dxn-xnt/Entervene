@@ -309,7 +309,7 @@ export default function EditClassworkModal({
       }}
     >
       {isOpen && (
-        <Dialog.Content size="2xl" className="max-h-[90vh] flex flex-col bg-white border-2 border-black">
+        <Dialog.Content size="2xl">
           <Dialog.Header position="fixed" asChild>
             <div className="flex w-full items-center justify-between bg-primary font-bold text-black">
               <div className="flex items-center gap-2 text-lg">
@@ -332,7 +332,7 @@ export default function EditClassworkModal({
 
           <div className="p-5 overflow-y-auto space-y-4 flex-1">
             {error && (
-              <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
               </div>
             )}
@@ -349,7 +349,7 @@ export default function EditClassworkModal({
                     }))
                   }
                   disabled={isSavingEdit}
-                  className="mt-1 w-full rounded-none border-black text-sm font-semibold shadow-none"
+                  className="mt-1 w-full rounded border-black text-sm font-semibold shadow-none"
                 />
               </label>
               <label className="block text-xs font-bold">
@@ -450,7 +450,7 @@ export default function EditClassworkModal({
                       }))
                     }
                     disabled={isSavingEdit}
-                    className="mt-1 w-full rounded-none border-black text-sm shadow-none"
+                    className="mt-1 w-full rounded border-black text-sm shadow-none"
                   />
                 </label>
               )}
@@ -467,7 +467,7 @@ export default function EditClassworkModal({
                       }))
                     }
                     disabled={isSavingEdit}
-                    className="h-4 w-4 rounded-none border-black p-0 shadow-none accent-black"
+                    className="h-4 w-4 rounded border-black p-0 shadow-none accent-black"
                   />
                   Published
                 </span>
@@ -485,7 +485,7 @@ export default function EditClassworkModal({
                       }))
                     }
                     disabled={isSavingEdit}
-                    className="h-4 w-4 rounded-none border-black p-0 shadow-none accent-black"
+                    className="h-4 w-4 rounded border-black p-0 shadow-none accent-black"
                   />
                   Show Scores to Students
                 </span>
@@ -509,7 +509,7 @@ export default function EditClassworkModal({
                       }))
                     }
                     disabled={isSavingEdit}
-                    className="mt-1 w-full rounded-none border-black text-sm shadow-none"
+                    className="mt-1 w-full rounded border-black text-sm shadow-none"
                   />
                 </label>
                 <label className="block text-xs font-bold">
@@ -524,7 +524,7 @@ export default function EditClassworkModal({
                       }))
                     }
                     disabled={isSavingEdit || !editDraft.is_published}
-                    className="mt-1 w-full rounded-none border-black text-sm shadow-none disabled:bg-gray-100"
+                    className="mt-1 w-full rounded border-black text-sm shadow-none disabled:bg-gray-100"
                   />
                 </label>
                 {isQuizType(editDraft.classwork_type) && (
@@ -542,7 +542,7 @@ export default function EditClassworkModal({
                         }))
                       }
                       disabled={isSavingEdit}
-                      className="mt-1 w-full rounded-none border-black text-sm shadow-none"
+                      className="mt-1 w-full rounded border-black text-sm shadow-none"
                     />
                   </label>
                 )}
@@ -588,7 +588,7 @@ export default function EditClassworkModal({
                   }))
                 }
                 disabled={isSavingEdit}
-                className="mt-1 w-full rounded-none border-black text-sm shadow-none"
+                className="mt-1 w-full rounded border-black text-sm shadow-none"
               />
             </label>
 

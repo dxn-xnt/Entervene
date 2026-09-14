@@ -333,6 +333,7 @@ export default function AdminUserDetail() {
               <div className="space-y-3">
                 <UserProfileHeader
                   name={user.name}
+                  role={user.role}
                   subtitle={
                     user.role === "student"
                       ? [user.grade_level ? `Grade ${user.grade_level}` : null, sectionName(user.section) ?? "No section assigned"].filter(Boolean).join(" - ")
@@ -450,7 +451,7 @@ function EditUserModal({
         </Dialog.Header>
 
         <form onSubmit={submit}>
-          <section className="grid max-h-[72vh] gap-4 overflow-y-auto p-4">
+          <section className="grid gap-4 p-4">
             <div className="grid gap-3 md:grid-cols-3">
               <EditField label="First Name">
                 <Input
@@ -854,7 +855,7 @@ function ClassworkTable({ rows }: { rows: Array<Record<string, number | string |
   return (
     <section className="space-y-2">
       <h2 className="text-lg font-bold">Classwork</h2>
-      <Table wrapperClassName="overflow-hidden rounded-lg border-2 border-black">
+      <Table wrapperClassName="overflow-hidden rounded border-2 border-black">
         <Table.Header>
           <Table.Row>
             <Table.Head className="text-xs font-semibold">Classwork Name</Table.Head>

@@ -20,6 +20,7 @@ import {
   type TeacherLoadSummaryItem,
 } from "@/lib/api";
 import { AlertCircle, Calendar, CheckSquare, Clock, Info, Square, Users } from "lucide-react";
+import { RoleBadge } from "@/components/role-badge";
 
 
 interface AssignSubstituteModalProps {
@@ -207,7 +208,7 @@ export default function AssignSubstituteModal({
       </Dialog.Header>
 
       <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
-        <section className="flex flex-col gap-4 overflow-y-auto p-5 max-h-[72vh]">
+        <section className="flex flex-col gap-4 p-5">
           {errorMsg && (
             <Alert status="error" className="flex items-start gap-2">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -225,6 +226,7 @@ export default function AssignSubstituteModal({
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-muted-foreground" />
                   <span>{initialStaffName || initialStaffId}</span>
+                  <RoleBadge role="teacher" />
                 </div>
                 <Badge variant="surface">ID: {initialStaffId}</Badge>
               </Card>

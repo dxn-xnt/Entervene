@@ -383,7 +383,7 @@ export default function AdminInterventions() {
 
                 {/* Right column — Metrics & Breakdown Cards */}
                 <div className="lg:col-span-1 flex flex-col gap-6 self-start">
-                  <Card className="w-full p-4 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-3 rounded-none">
+                  <Card className="w-full p-4 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-3 rounded">
                     <h2 className="text-sm font-black uppercase text-black flex items-center gap-1.5">
                       <Sparkles className="size-4 text-yellow-500 fill-yellow-400" />
                       Priority Distribution
@@ -423,7 +423,7 @@ export default function AdminInterventions() {
                     </div>
                   </Card>
 
-                  <Card className="w-full p-4 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-3 rounded-none">
+                  <Card className="w-full p-4 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-3 rounded">
                     <h2 className="text-sm font-black uppercase text-black flex items-center gap-1.5">
                       <Shield className="size-4 text-emerald-500 fill-emerald-300" />
                       Intervention Summary

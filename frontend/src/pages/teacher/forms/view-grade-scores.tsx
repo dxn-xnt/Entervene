@@ -106,7 +106,7 @@ export default function ViewGradeScoreModal({
         </Text>
       </Dialog.Header>
 
-      <section className="flex flex-col gap-4 p-4 max-h-[75vh] overflow-y-auto">
+      <section className="flex flex-col gap-4 p-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -125,7 +125,7 @@ export default function ViewGradeScoreModal({
           </div>
         </div>
 
-        <Card className="w-full rounded-none border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <Card className="w-full rounded border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <Table className="w-full border-collapse text-sm">
             <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black">
               <Table.Row>
@@ -180,7 +180,7 @@ export default function ViewGradeScoreModal({
         </Card>
 
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border border-border rounded-lg text-xs font-semibold text-muted-foreground">
+          <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border border-border rounded text-xs font-semibold text-muted-foreground">
             <span>
               Showing classworks {startIndex + 1}–{Math.min(endIndex, items.length)} of {items.length}
             </span>

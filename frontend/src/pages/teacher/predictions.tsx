@@ -331,7 +331,7 @@ export default function PredictionsDashboard() {
                           ))}
                         </div>
                       ) : (
-                        <div className="p-6 bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] rounded-none text-center text-sm font-semibold text-gray-600">
+                        <div className="p-6 bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] rounded text-center text-sm font-semibold text-gray-600">
                           No grade overview summaries found for this scope.
                         </div>
                       )}

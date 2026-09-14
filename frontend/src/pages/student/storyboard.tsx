@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SubjectCard } from "../../components/subject-card";
 import { Card } from "@/components/retroui/Card";
@@ -16,62 +15,21 @@ import { EmptyStateCard } from "@/components/empty-state-card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
-import {
-  apiFetch,
-  getStudentTodos,
-  type TodoItem,
-} from "@/lib/api";
+import type { StudentSubjectItem, TodoItem } from "@/lib/api";
 import { Badge } from "@/components/retroui/Badge";
-
-interface EnrolledSubject {
-  subject_load_id: number;
-  class_id: number;
-  subject_id: number;
-  subject_name: string;
-  teacher_name: string;
-  section_name: string;
-}
+import { GradeOverviewCards } from "@/components/student/grade-overview-cards";
+import { useStudentOverviewData } from "@/hooks/use-student-overview-data";
 
 const StoryBoard = () => {
   const navigate = useNavigate();
-  const [subjects, setSubjects] = useState<EnrolledSubject[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [todos, setTodos] = useState<TodoItem[]>([]);
-  const [isTodosLoading, setIsTodosLoading] = useState(true);
-
-  useEffect(() => {
-    apiFetch("/api/v1/students/me/subjects")
-      .then((r) => r.json())
-      .then((data) => setSubjects(data))
-      .catch(() => { })
-      .finally(() => setIsLoading(false));
-
-    getStudentTodos()
-      .then((data) => {
-        const urgent = [...data.pastdue, ...data.pending].slice(0, 3);
-        setTodos(urgent);
-      })
-      .catch(() => { })
-      .finally(() => setIsTodosLoading(false));
-  }, []);
+  const { subjects, todos, urgentTodos, isLoading, error } = useStudentOverviewData();
 
   const openTodo = async (item: TodoItem) => {
     let targetClassId = item.class_id;
 
     if (!targetClassId && item.subject_id) {
-      try {
-        const res = await apiFetch("/api/v1/students/me/subjects");
-        if (res.ok) {
-          const subjects = await res.json();
-          const match = subjects.find(
-            (s: { subject_id: number; class_id: number }) =>
-              s.subject_id === item.subject_id,
-          );
-          if (match) targetClassId = match.class_id;
-        }
-      } catch (error) {
-        console.error("Unable to resolve the class for this to-do item:", error);
-      }
+      const subject = subjects.find((candidate) => candidate.subject_id === item.subject_id);
+      if (subject) targetClassId = subject.class_id;
     }
 
     if (targetClassId && item.subject_id) {
@@ -83,7 +41,7 @@ const StoryBoard = () => {
     }
   };
 
-  const handleSubjectClick = (subject: EnrolledSubject) => {
+  const handleSubjectClick = (subject: StudentSubjectItem) => {
     navigate(
       routes.student.subjectDetail
         .replace(":classId", String(subject.class_id))
@@ -119,11 +77,19 @@ const StoryBoard = () => {
             </header>
 
             <div className="-mt-[1px] flex flex-1 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+              <GradeOverviewCards todos={todos} isLoading={isLoading} error={error} />
+
               <div className="flex flex-col lg:flex-row lg:items-start gap-4 flex-1">
                 {/* Left side: Subject cards */}
                 <div className="grid min-w-0 flex-1 grid-cols-1 content-start gap-3 sm:grid-cols-2 sm:gap-4">
                   {isLoading ? (
                     <LoadingPanel label="Loading subjects..." className="sm:col-span-2" />
+                  ) : error ? (
+                    <EmptyStateCard
+                      title="Unable to load subjects"
+                      description={error}
+                      className="px-4 py-10 sm:col-span-2"
+                    />
                   ) : subjects.length === 0 ? (
                     <EmptyStateCard
                       title="No enrolled subjects found."
@@ -153,7 +119,7 @@ const StoryBoard = () => {
                     <Card.Content className="">
                       <div className="flex flex-col gap-1">
                         <div className="flex flex-row gap-2 items-center">
-                          <Zap size={20} fill="#ffdb33" />
+                          <Zap size={20} className="fill-primary text-foreground" />
                           <Text as="p" className="text-md font-semibold">
                             1 week streak
                           </Text>
@@ -207,16 +173,22 @@ const StoryBoard = () => {
                           variant="outline"
                           size="icon"
                           onClick={() => navigate(routes.student.todo)}
-                          className="rounded-none border-black bg-white"
+                          className="rounded border-black bg-white"
                           aria-label="View all to-do items"
                         >
                           <ArrowUpRight size={18} />
                         </Button>
                       </div>
 
-                      {isTodosLoading ? (
+                      {isLoading ? (
                         <LoadingPanel label="Loading to-do items..." />
-                      ) : todos.length === 0 ? (
+                      ) : error ? (
+                        <EmptyStateCard
+                          title="Unable to load to-do items"
+                          description={error}
+                          className="border-none bg-card shadow-none hover:shadow-none"
+                        />
+                      ) : urgentTodos.length === 0 ? (
                         <EmptyStateCard
                           title="All caught up!"
                           description="No pending tasks"
@@ -224,7 +196,7 @@ const StoryBoard = () => {
                         />
                       ) : (
                         <div className="flex flex-col gap-2.5">
-                          {todos.map((item) => (
+                          {urgentTodos.map((item) => (
                             <Card
                               key={item.assignment_id}
                               onClick={() => openTodo(item)}
@@ -254,7 +226,7 @@ const StoryBoard = () => {
                                 <Badge
                                   variant="secondary"
                                   size="sm"
-                                  className="shrink-0 rounded-none border border-red-400 bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700"
+                                  className="shrink-0 rounded border border-red-400 bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700"
                                 >
                                   Past Due
                                 </Badge>

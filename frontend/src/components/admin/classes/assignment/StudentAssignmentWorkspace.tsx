@@ -284,7 +284,7 @@ export default function StudentAssignmentWorkspace({
           </p>
         </div>
         {resetWarning && (
-          <p className="rounded-md border border-black bg-[#fff0a8] px-3 py-2 text-xs font-semibold">
+          <p className="rounded border border-black bg-[#fff0a8] px-3 py-2 text-xs font-semibold">
             {resetWarning}
           </p>
         )}
@@ -416,7 +416,7 @@ function StatePanel({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-3 rounded-md border border-black bg-[#fff8d7] p-5 text-sm">
+    <div className="grid gap-3 rounded border border-black bg-[#fff8d7] p-5 text-sm">
       <p className="font-bold">{message}</p>
       {detail && detail !== message && (
         <p className="text-xs text-black/70">{detail}</p>

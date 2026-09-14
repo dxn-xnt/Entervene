@@ -59,7 +59,7 @@ export default function ClassworkFormModal({
         if (!open) closeClassworkForm();
       }}
     >
-      <Dialog.Content className="block w-full max-w-2xl border-black bg-white p-0 transition-none max-h-[90vh] overflow-y-auto">
+      <Dialog.Content className="w-full max-w-2xl p-0 transition-none">
         <Dialog.Header
           className="sticky top-0 z-10 border-black"
         >
@@ -93,7 +93,7 @@ export default function ClassworkFormModal({
                 }))
               }
               disabled={isCreatingClasswork}
-              className="rounded-none border-black !shadow-none h-10 w-full"
+              className="rounded border-black !shadow-none h-10 w-full"
               placeholder="Activity 1"
             />
           </div>
@@ -121,7 +121,7 @@ export default function ClassworkFormModal({
                   }));
                 }}
                 disabled={isCreatingClasswork}
-                className="h-10 w-full rounded-none border-2 border-black px-3 text-sm font-semibold"
+                className="h-10 w-full rounded border-2 border-black px-3 text-sm font-semibold"
               >
                 <option value="READING">Reading</option>
                 <option value="ACTIVITY">Activity</option>
@@ -147,7 +147,7 @@ export default function ClassworkFormModal({
                   }))
                 }
                 disabled={isCreatingClasswork}
-                className="h-10 w-full rounded-none border-2 border-black px-3 text-sm font-semibold"
+                className="h-10 w-full rounded border-2 border-black px-3 text-sm font-semibold"
               >
                 <option value="WRITTEN_WORK">Written Work</option>
                 <option value="PERFORMANCE_TASK">Performance Task</option>
@@ -179,7 +179,7 @@ export default function ClassworkFormModal({
                     }))
                   }
                   disabled={isCreatingClasswork}
-                  className="rounded-none border-black !shadow-none h-10 w-full"
+                  className="rounded border-black !shadow-none h-10 w-full"
                 />
               </div>
             )}
@@ -202,7 +202,7 @@ export default function ClassworkFormModal({
                   }))
                 }
                 disabled={isCreatingClasswork}
-                className="rounded-none border-black !shadow-none h-10 w-full"
+                className="rounded border-black !shadow-none h-10 w-full"
               />
             </div>
           </div>
@@ -247,7 +247,7 @@ export default function ClassworkFormModal({
                 }))
               }
               disabled={isCreatingClasswork}
-              className="min-h-20 w-full rounded-none border-2 border-black px-3 py-2 text-sm"
+              className="min-h-20 w-full rounded border-2 border-black px-3 py-2 text-sm"
               placeholder="Optional summary"
             />
           </div>
@@ -269,7 +269,7 @@ export default function ClassworkFormModal({
                 }))
               }
               disabled={isCreatingClasswork}
-              className="min-h-24 w-full rounded-none border-2 border-black px-3 py-2 text-sm"
+              className="min-h-24 w-full rounded border-2 border-black px-3 py-2 text-sm"
               placeholder="What students need to do"
             />
           </div>
@@ -331,7 +331,7 @@ export default function ClassworkFormModal({
 
               <label
                 htmlFor="classwork-materials"
-                className={`flex cursor-pointer items-center justify-center gap-2 rounded-none border-2 border-dashed px-4 py-5 text-sm font-semibold transition-colors ${
+                className={`flex cursor-pointer items-center justify-center gap-2 rounded border-2 border-dashed px-4 py-5 text-sm font-semibold transition-colors ${
                   isCreatingClasswork
                     ? "cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400"
                     : "border-black bg-gray-50 hover:bg-primary"

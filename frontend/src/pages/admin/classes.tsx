@@ -305,7 +305,7 @@ export default function AdminClasses() {
                   detail={loadError}
                 >
                   <button
-                    className="rounded-md border border-black bg-[#79bd80] px-3 py-1 text-xs font-bold shadow-[2px_2px_0_#000]"
+                    className="rounded border border-black bg-[#79bd80] px-3 py-1 text-xs font-bold shadow-[2px_2px_0_#000]"
                     onClick={() => void refreshClasses()}
                   >
                     Retry
@@ -416,7 +416,7 @@ function StatePanel({
   children?: ReactNode;
 }) {
   return (
-    <div className="rounded-lg border-2 border-black p-8 text-center text-sm text-black/60 shadow-[3px_3px_0_#000]">
+    <div className="rounded border-2 border-black p-8 text-center text-sm text-black/60 shadow-[3px_3px_0_#000]">
       <p className="font-bold text-black">{message}</p>
       {detail && <p className="mt-1">{detail}</p>}
       {children && <div className="mt-3 flex justify-center">{children}</div>}

@@ -123,7 +123,7 @@ const Login = () => {
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="h-10 w-full min-w-0 rounded-none border-black pr-10 text-base shadow-none"
+                  className="h-10 w-full min-w-0 rounded border-border pr-10 text-base shadow-none"
                   autoComplete="current-password"
                 />
                 <button

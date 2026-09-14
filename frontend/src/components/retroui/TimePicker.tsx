@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Clock } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface TimeValue {
     hour: number;
@@ -51,9 +52,19 @@ interface TimePickerSingleProps {
     onChange: (val: TimeValue) => void;
     /** When set (e.g. "PM"), the period toggle is locked to this value */
     lockedPeriod?: string;
+    className?: string;
+    inputClassName?: string;
+    wrapperClassName?: string;
 }
 
-export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSingleProps) {
+export function TimePickerSingle({
+    value,
+    onChange,
+    lockedPeriod,
+    className = "",
+    inputClassName = "",
+    wrapperClassName = "",
+}: TimePickerSingleProps) {
     const [isOpen, setIsOpen] = React.useState(false);
     const popoverRef = React.useRef<HTMLDivElement>(null);
 
@@ -143,8 +154,8 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
     };
 
     return (
-        <div className={`relative inline-flex items-center text-left ${isOpen ? "z-50" : "z-0"}`} ref={popoverRef}>
-            <div className="flex items-center border-2 border-black bg-white rounded-none overflow-hidden shadow-sm">
+        <div className={cn("relative inline-flex items-center text-left", isOpen ? "z-50" : "z-0", wrapperClassName)} ref={popoverRef}>
+            <div className={cn("flex items-center border-2 border-black bg-white rounded overflow-hidden shadow-sm", className)}>
                 {/* Direct Editable Input */}
                 <input
                     type="text"
@@ -158,7 +169,7 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
                         }
                     }}
                     placeholder="08:00 am"
-                    className="w-20 px-2 py-1 text-xs font-bold font-mono text-center focus:outline-none focus:bg-amber-50"
+                    className={cn("w-20 px-2 py-1 text-xs font-semibold text-center bg-transparent focus:outline-none focus:bg-amber-50", inputClassName)}
                     title="Type any custom time (e.g. 09:12 am, 10:24 am)"
                 />
 
@@ -167,7 +178,7 @@ export function TimePickerSingle({ value, onChange, lockedPeriod }: TimePickerSi
                     type="button"
                     onClick={() => setIsOpen(!isOpen)}
                     title="Open 5-minute interval picker"
-                    className="p-1.5 border-l-2 border-black hover:bg-amber-200 transition-colors cursor-pointer flex items-center justify-center"
+                    className="p-1.5 border-l-2 border-black hover:bg-amber-200 transition-colors cursor-pointer flex items-center justify-center bg-transparent"
                 >
                     <Clock className="size-3.5 text-black" />
                 </button>

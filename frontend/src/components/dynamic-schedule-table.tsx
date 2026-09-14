@@ -93,7 +93,7 @@ export function DynamicScheduleTable({
   // ── 3. Render ─────────────────────────────────────────────────────────────
   // Orientation: days = top-row columns, time slots = left-column rows.
   return (
-    <div className="overflow-x-auto rounded-lg border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+    <div className="overflow-x-auto rounded border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
       <table className="w-full min-w-[640px] border-collapse bg-white text-sm">
         {/* ── Header row: corner + one column per day ── */}
         <thead>
