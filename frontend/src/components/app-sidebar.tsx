@@ -4,6 +4,7 @@ import { routes } from "@/../routes"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
+import { AICreditsWidget } from "@/components/teacher/ai-credits-widget"
 import {
   Sidebar,
   SidebarContent,
@@ -71,6 +72,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
 
       <SidebarFooter>
+        {/* AI credits counter — only visible for teachers when AI is configured */}
+        {role === "teacher" && <AICreditsWidget />}
         {/* NavUser now reads from AuthContext directly — no props needed */}
         <NavUser />
       </SidebarFooter>

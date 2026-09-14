@@ -41,6 +41,10 @@
   --color-success: var(--success);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar-ring: var(--ring);
 }
 
 @utility font-head {
@@ -64,29 +68,101 @@
   --accent: #fae583;
   --accent-foreground: #000;
   --success: #5cb85c;
-  --destructive: #e63946;
+  --destructive: #dc2626;
   --destructive-foreground: #fff;
   --border: #000;
+  --input: #737373;
+  --theme-accent: var(--primary);
+  --theme-focus-ring: #8a6500;
+  --ring: var(--theme-focus-ring);
+}
+
+:root[data-theme="blue"] {
+  --primary: #60a5fa;
+  --primary-hover: #3b82f6;
+  --accent: #dbeafe;
+  --theme-focus-ring: #1d4ed8;
+  --primary-foreground: #000;
+}
+
+:root[data-theme="green"] {
+  --primary: #4ade80;
+  --primary-hover: #22c55e;
+  --accent: #dcfce7;
+  --theme-focus-ring: #15803d;
+  --primary-foreground: #000;
+}
+
+:root[data-theme="purple"] {
+  --primary: #c084fc;
+  --primary-hover: #a855f7;
+  --accent: #f3e8ff;
+  --theme-focus-ring: #7e22ce;
+  --primary-foreground: #000;
+}
+
+:root[data-theme="orange"] {
+  --primary: #fb923c;
+  --primary-hover: #f97316;
+  --accent: #ffedd5;
+  --theme-focus-ring: #c2410c;
+  --primary-foreground: #000;
 }
 
 .dark {
-  --background: #1a1a1a;
-  --foreground: #f5f5f5;
-  --card: #242424;
-  --card-foreground: #f5f5f5;
+  --background: #25272c;
+  --foreground: #f4f4f5;
+  --card: #303238;
+  --card-foreground: #f4f4f5;
   --primary: #ffdb33;
   --primary-hover: #ffcc00;
-  --primary-foreground: #000;
-  --secondary: #3a3a3a;
-  --secondary-foreground: #f5f5f5;
-  --muted: #3f3f46;
-  --muted-foreground: #a0a0a0;
-  --accent: #fae583;
-  --accent-foreground: #000;
+  --primary-foreground: #111827;
+  --secondary: #41444c;
+  --secondary-foreground: #f4f4f5;
+  --muted: #3b3e45;
+  --muted-foreground: #c5c7cd;
+  --accent: #594b14;
+  --accent-foreground: #f4f4f5;
   --success: #5cb85c;
-  --destructive: #e63946;
+  --destructive: #dc2626;
   --destructive-foreground: #fff;
-  --border: #5c5c5c;
+  --border: #777b85;
+  --input: #8b8f98;
+  --theme-accent: var(--primary);
+  --theme-focus-ring: #ffe066;
+  --ring: var(--theme-focus-ring);
+}
+
+.dark[data-theme="blue"] {
+  --primary: #60a5fa;
+  --primary-hover: #3b82f6;
+  --accent: #1e3a5f;
+  --theme-focus-ring: #93c5fd;
+  --primary-foreground: #08111f;
+}
+
+.dark[data-theme="green"] {
+  --primary: #4ade80;
+  --primary-hover: #22c55e;
+  --accent: #163d27;
+  --theme-focus-ring: #86efac;
+  --primary-foreground: #07150c;
+}
+
+.dark[data-theme="purple"] {
+  --primary: #c084fc;
+  --primary-hover: #a855f7;
+  --accent: #3b2452;
+  --theme-focus-ring: #d8b4fe;
+  --primary-foreground: #170824;
+}
+
+.dark[data-theme="orange"] {
+  --primary: #fb923c;
+  --primary-hover: #f97316;
+  --accent: #4a2a16;
+  --theme-focus-ring: #fdba74;
+  --primary-foreground: #1c0b02;
 }
 
 html,
@@ -179,8 +255,129 @@ body:has([role="alertdialog"]) {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Crect x='30' y='20' width='140' height='140' rx='5' fill='none' stroke='%23ffdb33' stroke-width='2' opacity='0.50' transform='rotate(15 100 90)'/%3E%3Crect x='380' y='80' width='120' height='120' rx='5' fill='%23ffdb33' opacity='0.30' transform='rotate(-20 440 140)'/%3E%3Crect x='160' y='320' width='160' height='160' rx='5' fill='none' stroke='%23ffdb33' stroke-width='2' opacity='0.13' transform='rotate(35 240 400)'/%3E%3Crect x='440' y='420' width='110' height='110' rx='5' fill='%23ffdb33' opacity='0.15' transform='rotate(-10 495 475)'/%3E%3Crect x='40' y='460' width='130' height='130' rx='5' fill='none' stroke='%23ffdb33' stroke-width='1.5' opacity='0.25' transform='rotate(25 105 525)'/%3E%3Crect x='320' y='10' width='100' height='100' rx='4' fill='%23ffdb33' opacity='0.10' transform='rotate(-30 370 60)'/%3E%3C/svg%3E");
-  background-size: 600px 600px;
-  background-repeat: repeat;
+  background-color: var(--primary);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Crect x='30' y='20' width='140' height='140' rx='5' fill='none' stroke='white' stroke-width='2' opacity='.5' transform='rotate(15 100 90)'/%3E%3Crect x='380' y='80' width='120' height='120' rx='5' fill='white' opacity='.3' transform='rotate(-20 440 140)'/%3E%3Crect x='160' y='320' width='160' height='160' rx='5' fill='none' stroke='white' stroke-width='2' opacity='.13' transform='rotate(35 240 400)'/%3E%3Crect x='440' y='420' width='110' height='110' rx='5' fill='white' opacity='.15' transform='rotate(-10 495 475)'/%3E%3Crect x='40' y='460' width='130' height='130' rx='5' fill='none' stroke='white' stroke-width='1.5' opacity='.25' transform='rotate(25 105 525)'/%3E%3Crect x='320' y='10' width='100' height='100' rx='4' fill='white' opacity='.1' transform='rotate(-30 370 60)'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Crect x='30' y='20' width='140' height='140' rx='5' fill='none' stroke='white' stroke-width='2' opacity='.5' transform='rotate(15 100 90)'/%3E%3Crect x='380' y='80' width='120' height='120' rx='5' fill='white' opacity='.3' transform='rotate(-20 440 140)'/%3E%3Crect x='160' y='320' width='160' height='160' rx='5' fill='none' stroke='white' stroke-width='2' opacity='.13' transform='rotate(35 240 400)'/%3E%3Crect x='440' y='420' width='110' height='110' rx='5' fill='white' opacity='.15' transform='rotate(-10 495 475)'/%3E%3Crect x='40' y='460' width='130' height='130' rx='5' fill='none' stroke='white' stroke-width='1.5' opacity='.25' transform='rotate(25 105 525)'/%3E%3Crect x='320' y='10' width='100' height='100' rx='4' fill='white' opacity='.1' transform='rotate(-30 370 60)'/%3E%3C/svg%3E");
+  -webkit-mask-size: 600px 600px;
+  mask-size: 600px 600px;
+}
+
+/*
+ * Theme-aware compatibility for legacy neutral utilities.
+ * These rules intentionally live outside Tailwind's layers so old page-level
+ * hardcoded neutrals cannot override the semantic application palette.
+ */
+:where(.text-black, .text-gray-950, .text-gray-900, .text-gray-800,
+  .text-slate-950, .text-slate-900, .text-neutral-950, .text-neutral-900) {
+  color: var(--foreground);
+}
+
+:where(.text-gray-700, .text-gray-600, .text-gray-500, .text-gray-400,
+  .text-slate-700, .text-slate-600, .text-slate-500, .text-slate-400,
+  .text-neutral-700, .text-neutral-600, .text-neutral-500, .text-neutral-400) {
+  color: var(--muted-foreground);
+}
+
+:where(.bg-white, .bg-gray-50, .bg-gray-100, .bg-slate-50, .bg-slate-100,
+  .bg-neutral-50, .bg-neutral-100) {
+  background-color: var(--card);
+}
+
+:where(.bg-gray-200, .bg-slate-200, .bg-neutral-200) {
+  background-color: var(--muted);
+}
+
+.dark :where(.border-gray-100, .border-gray-200, .border-gray-300,
+  .border-slate-100, .border-slate-200, .border-slate-300,
+  .border-neutral-100, .border-neutral-200, .border-neutral-300) {
+  border-color: var(--border);
+}
+
+input::placeholder,
+textarea::placeholder,
+[data-slot="select-value"][data-placeholder] {
+  color: var(--muted-foreground);
+  opacity: 1;
+}
+
+:disabled,
+[aria-disabled="true"] {
+  opacity: 0.65;
+}
+
+/* Fixed semantic/status fills need a stable ink color in either appearance. */
+:where([class*="bg-yellow-"], [class*="bg-amber-"], [class*="bg-orange-"],
+  [class*="bg-lime-"], [class*="bg-green-"], [class*="bg-emerald-"]):where(.text-black, .text-white),
+:where([class*="bg-yellow-"], [class*="bg-amber-"], [class*="bg-orange-"],
+  [class*="bg-lime-"], [class*="bg-green-"], [class*="bg-emerald-"]) :where(.text-black) {
+  color: #111827;
+}
+
+:where([class*="bg-[#"]):where(.text-black),
+:where([class*="bg-[#"]) :where(.text-black) {
+  color: #111827;
+}
+
+.bg-primary.text-black,
+.bg-primary.text-foreground,
+.bg-primary .text-black {
+  color: var(--primary-foreground);
+}
+
+.bg-accent.text-black,
+.bg-accent.text-primary-foreground,
+.bg-accent .text-black {
+  color: var(--accent-foreground);
+}
+
+.bg-destructive.text-black,
+.bg-destructive.text-foreground,
+.bg-destructive .text-black {
+  color: var(--destructive-foreground);
+}
+
+.bg-secondary.text-black,
+.bg-secondary.text-foreground,
+.bg-secondary .text-black {
+  color: var(--secondary-foreground);
+}
+
+.bg-success.text-black,
+.bg-success.text-foreground,
+.bg-success .text-black {
+  color: #111827;
+}
+
+/* One theme-aware focus treatment for native and shared form controls. */
+:where(
+  input,
+  textarea,
+  select,
+  [role="combobox"],
+  [role="checkbox"],
+  [role="radio"],
+  [role="switch"],
+  [data-slot="input"],
+  [data-slot="select-trigger"]
+):where(:focus, :focus-visible):not(:disabled):not([aria-disabled="true"]):not([readonly]):not([aria-invalid="true"]):not([data-invalid="true"]) {
+  border-color: var(--theme-focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-focus-ring) 35%, transparent);
+  outline: none;
+}
+
+:where(
+  input,
+  textarea,
+  select,
+  [role="combobox"],
+  [role="checkbox"],
+  [role="radio"],
+  [role="switch"],
+  [data-slot="input"],
+  [data-slot="select-trigger"]
+)[aria-invalid="true"]:where(:focus, :focus-visible),
+:where(input, textarea, select)[data-invalid="true"]:where(:focus, :focus-visible) {
+  border-color: var(--destructive);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--destructive) 35%, transparent);
+  outline: none;
 }

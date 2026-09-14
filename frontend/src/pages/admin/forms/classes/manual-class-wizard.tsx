@@ -10,6 +10,7 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
+import { RoleBadge } from "@/components/role-badge";
 
 type SetupErrors = {
   academicLevel?: string;
@@ -257,7 +258,10 @@ export default function ManualClassWizard({ initialSetup, onComplete, onBack }: 
                         .filter((adviser) => adviser.staff_id === section.adviserStaffId || !selectedByOtherRows.has(adviser.staff_id))
                         .map((adviser) => (
                           <Select.Item key={adviser.staff_id} value={adviser.staff_id}>
-                            {adviserName(adviser)}
+                            <span className="flex items-center gap-2">
+                              <span className="truncate">{adviserName(adviser)}</span>
+                              <RoleBadge role="teacher" />
+                            </span>
                           </Select.Item>
                         ))}
                     </Select.Group>

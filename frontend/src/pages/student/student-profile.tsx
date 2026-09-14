@@ -15,6 +15,7 @@ import {
 import { DynamicScheduleTable } from "@/components/dynamic-schedule-table";
 import StudentQRBadgeModal from "@/components/StudentQRBadgeModal";
 import { QrCode } from "lucide-react";
+import { RoleBadge } from "@/components/role-badge";
 
 const weekDayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
@@ -155,9 +156,12 @@ const StudentProfile = () => {
                     <Avatar.Fallback>{user?.fullName?.charAt(0) || "U"}</Avatar.Fallback>
                   </Avatar>
                   <div className="flex flex-col">
-                    <p className="text-lg font-bold">
-                      {studentProfile?.student_name || user?.fullName || "Student"}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-lg font-bold">
+                        {studentProfile?.student_name || user?.fullName || "Student"}
+                      </p>
+                      <RoleBadge role="student" />
+                    </div>
                     <p className="text-sm text-muted-foreground">
                       {user?.email ?? "student@example.com"}
                     </p>

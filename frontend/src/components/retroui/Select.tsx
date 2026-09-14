@@ -4,14 +4,12 @@ import { Check, ChevronDown, ChevronUp } from "lucide-react";
 
 interface CustomSelectProps extends SelectPrimitive.SelectProps {
   onChange?: (event: { target: { value: string } }) => void;
-  className?: string;
 }
 
 const Select = ({
   children,
   onValueChange,
   onChange,
-  className,
   ...props
 }: CustomSelectProps) => {
   const handleValueChange = (value: string) => {
@@ -34,7 +32,7 @@ const SelectTrigger = ({
   return (
     <SelectPrimitive.Trigger
       className={cn(
-        "flex h-10 rounded min-w-40 items-center shadow-md bg-background focus:shadow-xs justify-between border-2 border-input border-border px-4 py-2 placeholder:text-muted-foreground outline-none focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 [&>span]:truncate text-left",
+        "flex h-10 rounded min-w-40 items-center shadow-md bg-background focus:shadow-xs justify-between border-2 border-input border-border px-4 py-2 placeholder:text-muted-foreground outline-none focus:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 [&>span]:truncate text-left",
         className,
       )}
       {...props}

@@ -1,5 +1,4 @@
 import * as React from "react";
-import { AIUsageCard } from "@/components/admin/ai-usage-card";
 import { Card } from "@/components/retroui/Card";
 import { Text } from "@/components/retroui/Text";
 import AppLayout from "@/layouts/app-layout";
@@ -14,9 +13,8 @@ import { Switch } from "@/components/retroui/Switch";
 import { Progress } from "@/components/retroui/Progress";
 import { Badge } from "@/components/retroui/Badge";
 import { Alert } from "@/components/retroui/Alert";
-import { ArrowUpRight, Lock, Pencil, Plus, Calendar, Save } from "lucide-react";
+import { ArrowUpRight, Lock, Plus, Calendar, Save } from "lucide-react";
 import AddAcademicPeriodModal from "./forms/add-academic-period";
-import AddGradingTemplateModal from "./forms/add-grading-template";
 import AddPathwayModal from "./forms/add-pathway";
 
 import {
@@ -57,6 +55,8 @@ type Template = {
   pt: number;
   qa: number;
   scope: string;
+  is_locked?: boolean;
+  lock_reason?: string | null;
 };
 
 export default function AdminSystemSettings() {
@@ -98,7 +98,6 @@ export default function AdminSystemSettings() {
 
   // Grading templates
   const [templates, setTemplates] = React.useState<Template[]>([]);
-  const [templateModalOpen, setTemplateModalOpen] = React.useState(false);
   const [isPeriodModalOpen, setIsPeriodModalOpen] = React.useState(false);
 
   // Toast
@@ -219,6 +218,8 @@ export default function AdminSystemSettings() {
           pt: ptComp,
           qa: qaComp,
           scope: gt.description || (gt.academic_level?.level_name ? `Level: ${gt.academic_level.level_name}` : "General Template"),
+          is_locked: gt.is_locked,
+          lock_reason: gt.lock_reason,
         };
       });
       setTemplates(mappedTemplates);
@@ -521,7 +522,6 @@ export default function AdminSystemSettings() {
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 [&_h3]:text-xl [&_table]:min-w-[680px] sm:px-4 sm:py-4 sm:[&_h3]:text-3xl md:px-6">
-              <AIUsageCard />
               {/* School Operational Hours */}
               <Card className="@container/card w-full">
                 <Card.Header className="mb-4 flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -723,41 +723,54 @@ export default function AdminSystemSettings() {
                     </Text>
                   </Card.Title>
                   <div className="flex w-full items-center gap-4 sm:w-auto">
-                    <Dialog
-                      open={templateModalOpen}
-                      onOpenChange={setTemplateModalOpen}
+                    <Button
+                      size="sm"
+                      className="w-full justify-center whitespace-nowrap sm:w-auto gap-1.5"
+                      onClick={() => navigate("/admin/subjects?tab=grading")}
                     >
-                      <Dialog.Trigger className="w-full sm:w-auto">
-                        <Button size="sm" className="w-full justify-center whitespace-nowrap sm:w-auto">
-                          <Plus className="size-3.5 mr-2" /> Add Template
-                        </Button>
-                      </Dialog.Trigger>
-                      <AddGradingTemplateModal
-                        onClose={() => setTemplateModalOpen(false)}
-                        onSaved={async () => {
-                          await fetchGradingTemplatesList();
-                          setTemplateModalOpen(false);
-                          showToast("New grading template saved to database");
-                        }}
-                      />
-                    </Dialog>
+                      Manage in Subjects <ArrowUpRight className="size-3.5" />
+                    </Button>
                   </div>
                 </Card.Header>
 
                 <Card.Content className="flex flex-col gap-4">
                   {templates.length === 0 ? (
                     <div className="border-2 border-dashed border-black/30 rounded-md p-6 text-center text-sm text-muted-foreground bg-muted/10">
-                      No active grading templates found in database. Click &ldquo;New Template&rdquo; to configure one.
+                      No active grading templates found in database.{" "}
+                      <button
+                        type="button"
+                        onClick={() => navigate("/admin/subjects?tab=grading")}
+                        className="underline font-semibold hover:text-black"
+                      >
+                        Create one in Subjects →
+                      </button>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {templates.map((t, i) => (
-                        <Card key={t.id || i} className="shadow-none bg-primary p-3 flex flex-col gap-3 w-full">
+                        <Card
+                          key={t.id || i}
+                          className="shadow-none bg-primary p-3 flex flex-col gap-3 w-full cursor-pointer hover:border-black transition-colors"
+                          onClick={() => {
+                            if (t.id) navigate(`/admin/subjects?tab=grading&editId=${t.id}`);
+                          }}
+                        >
                           <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <Text as="h6" className="font-sans font-bold">
-                                {t.name}
-                              </Text>
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Text as="h6" className="font-sans font-bold truncate">
+                                  {t.name}
+                                </Text>
+                                {t.is_locked && (
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-amber-100 text-amber-950 border-black/40 text-[10px] py-0 px-1.5 flex items-center gap-1 font-semibold shrink-0"
+                                    title={t.lock_reason || "Weights locked because student grades have been recorded."}
+                                  >
+                                    <Lock className="size-2.5" /> Locked
+                                  </Badge>
+                                )}
+                              </div>
                               <Text as="p" className="font-sans text-xs text-foreground">
                                 {t.scope}
                               </Text>
@@ -765,14 +778,14 @@ export default function AdminSystemSettings() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="bg-background"
-                              onClick={() =>
-                                showToast(
-                                  `Template: ${t.name} (WW: ${t.ww}%, PT: ${t.pt}%, QA: ${t.qa}%)`
-                                )
-                              }
+                              className="bg-background shrink-0"
+                              title="Edit in Subjects"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (t.id) navigate(`/admin/subjects?tab=grading&editId=${t.id}`);
+                              }}
                             >
-                              <Pencil className="w-3.5 h-3.5" />
+                              <ArrowUpRight className="w-3.5 h-3.5" />
                             </Button>
                           </div>
                           <div className="grid grid-cols-3 gap-2">

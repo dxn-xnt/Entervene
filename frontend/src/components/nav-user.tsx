@@ -4,6 +4,8 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -18,18 +20,24 @@ import {
   CircleUserRoundIcon,
   BellIcon,
   LogOutIcon,
+  MoonIcon,
+  PaletteIcon,
+  SunIcon,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { routes } from "@/../routes";
 import { Avatar } from "./retroui/Avatar";
+import { colorThemes, isColorTheme, useColorTheme } from "@/context/ColorThemeContext";
+import { RoleBadge } from "@/components/role-badge";
 
 export function NavUser() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { isMobile } = useSidebar();
   const [loggingOut, setLoggingOut] = useState(false);
+  const { theme, setTheme, appearance, setAppearance } = useColorTheme();
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -75,10 +83,13 @@ export function NavUser() {
                   {initials}
                 </Avatar.Fallback>
               </Avatar>
-              <div className="grid flex-1 text-left leading-tight">
+              <div className="min-w-0 flex-1 text-left leading-tight">
+                <div className="flex min-w-0 items-center gap-1.5">
                 <span className="truncate text-sm font-semibold">
                   {user?.fullName || "Loading…"}
                 </span>
+                  <RoleBadge role={user?.role} />
+                </div>
                 <span className="truncate text-xs text-muted-foreground">
                   {user?.email || ""}
                 </span>
@@ -111,6 +122,7 @@ export function NavUser() {
                   <span className="truncate text-xs">
                     {user?.email || ""}
                   </span>
+                  <RoleBadge role={user?.role} className="mt-1" />
                 </div>
               </div>
             </DropdownMenuLabel>
@@ -139,6 +151,53 @@ export function NavUser() {
             </DropdownMenuGroup>
 
             <DropdownMenuSeparator className="bg-black" />
+            <DropdownMenuLabel className="flex items-center gap-1.5 px-2 py-1.5 text-foreground">
+              <PaletteIcon className="size-4" />
+              Color theme
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={theme}
+              onValueChange={(value) => {
+                if (isColorTheme(value)) setTheme(value);
+              }}
+            >
+              {colorThemes.map((option) => (
+                <DropdownMenuRadioItem
+                  key={option.value}
+                  value={option.value}
+                  className="gap-2 p-2 pr-8"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="size-3 border border-black"
+                    style={{ backgroundColor: option.swatch }}
+                  />
+                  {option.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+
+            <DropdownMenuSeparator className="bg-black" />
+            <DropdownMenuLabel className="px-2 py-1.5 text-foreground">
+              Appearance
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={appearance}
+              onValueChange={(value) => {
+                if (value === "light" || value === "dark") setAppearance(value);
+              }}
+            >
+              <DropdownMenuRadioItem value="light" className="gap-2 p-2 pr-8">
+                <SunIcon />
+                Light
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="dark" className="gap-2 p-2 pr-8">
+                <MoonIcon />
+                Dark
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+
+            <DropdownMenuSeparator className="bg-border" />
 
             <DropdownMenuItem
               onClick={handleLogout}

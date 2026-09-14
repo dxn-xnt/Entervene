@@ -39,8 +39,8 @@ export default function AdminStudentView() {
 
                                 {/* Profile info */}
                                 <div className="flex items-center gap-4">
-                                    <Avatar className="h-16 w-16 border-2 border-black bg-[#fae583]">
-                                        <Avatar.Fallback className="text-black font-bold bg-[#fae583]">
+                                    <Avatar className="h-16 w-16 border-2 border-black bg-accent">
+                                        <Avatar.Fallback className="text-black font-bold bg-accent">
                                             {/* SVG avatar representing a student like in the image */}
                                             <svg viewBox="0 0 100 100" className="w-full h-full p-1">
                                                 <circle cx="50" cy="42" r="22" fill="#e0a96d" stroke="black" strokeWidth="2" />

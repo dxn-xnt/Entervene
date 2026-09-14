@@ -20,6 +20,7 @@ import {
   type TeacherLoadSummaryItem,
 } from "@/lib/api";
 import { AlertCircle, Calendar, CheckSquare, Clock, Info, Square, Users } from "lucide-react";
+import { RoleBadge } from "@/components/role-badge";
 
 
 interface AssignSubstituteModalProps {
@@ -225,6 +226,7 @@ export default function AssignSubstituteModal({
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-muted-foreground" />
                   <span>{initialStaffName || initialStaffId}</span>
+                  <RoleBadge role="teacher" />
                 </div>
                 <Badge variant="surface">ID: {initialStaffId}</Badge>
               </Card>

@@ -4,11 +4,14 @@ import './App.css'
 import App from './App.tsx'
 import AppErrorBoundary from './components/app-error-boundary'
 import StatusPage from './pages/status-page'
+import { ColorThemeProvider } from './context/ColorThemeContext'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppErrorBoundary>
-      {import.meta.env.VITE_MAINTENANCE_MODE === 'true' ? <StatusPage variant="maintenance" /> : <App />}
+      <ColorThemeProvider>
+        {import.meta.env.VITE_MAINTENANCE_MODE === 'true' ? <StatusPage variant="maintenance" /> : <App />}
+      </ColorThemeProvider>
     </AppErrorBoundary>
   </StrictMode>,
 )

@@ -88,7 +88,10 @@ def update_subject_record(db: Session, subject_id: int, payload: SubjectUpdate) 
     if "description" in data:
         subject.description = normalize_optional_text(data["description"])
     if "status" in data:
-        subject.status = normalize_subject_status(data["status"])
+        target_status = normalize_subject_status(data["status"])
+        if target_status == "archived" and (subject.status or DEFAULT_SUBJECT_STATUS).casefold() != "archived":
+            validate_subject_can_be_archived(db, subject)
+        subject.status = target_status
 
     try:
         db.commit()
@@ -99,12 +102,61 @@ def update_subject_record(db: Session, subject_id: int, payload: SubjectUpdate) 
     return subject_to_item(subject)
 
 
+def validate_subject_can_be_archived(db: Session, subject: Subject) -> None:
+    from app.models.academic.AcademicPeriod import AcademicPeriod
+    from app.models.academic.AcademicYear import AcademicYear
+    from app.models.academic.Class_ import Class
+    from app.models.academic.SubjectLoad import SubjectLoad
+    from app.models.academic.SubjectOffering import SubjectOffering
+
+    # 1. Check for active offerings in an active academic year
+    active_offering = (
+        db.query(SubjectOffering, AcademicYear)
+        .join(AcademicYear, SubjectOffering.academic_year_id == AcademicYear.academic_year_id)
+        .filter(
+            SubjectOffering.subject_id == subject.subject_id,
+            SubjectOffering.status == "active",
+            AcademicYear.is_active.is_(True),
+        )
+        .first()
+    )
+    if active_offering:
+        _, year = active_offering
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot archive '{subject.subject_name}' because it has active curriculum offerings in School Year {year.year_label}. Please remove or archive those offerings first.",
+        )
+
+    # 2. Check for active or published class schedules in an active academic year
+    active_load = (
+        db.query(SubjectLoad, AcademicYear, Class)
+        .join(AcademicPeriod, SubjectLoad.academic_period_id == AcademicPeriod.academic_period_id)
+        .join(AcademicYear, AcademicPeriod.academic_year_id == AcademicYear.academic_year_id)
+        .outerjoin(Class, SubjectLoad.class_id == Class.class_id)
+        .filter(
+            SubjectLoad.subject_id == subject.subject_id,
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(["active", "published"]),
+            AcademicYear.is_active.is_(True),
+        )
+        .first()
+    )
+    if active_load:
+        _, year, cls = active_load
+        section_detail = f" (section '{cls.section_name}')" if cls else ""
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot archive '{subject.subject_name}' because it is assigned to active class schedules{section_detail} in School Year {year.year_label}. Please reassign or archive those schedules first.",
+        )
+
+
 def archive_subject_record(db: Session, subject_id: int) -> dict:
     subject = db.query(Subject).filter(Subject.subject_id == subject_id).first()
     if subject is None:
         raise HTTPException(status_code=404, detail="Subject not found.")
     if (subject.status or DEFAULT_SUBJECT_STATUS).casefold() == "archived":
         raise HTTPException(status_code=409, detail="Subject is already archived.")
+    validate_subject_can_be_archived(db, subject)
     subject.status = "archived"
     db.commit()
     db.refresh(subject)
