@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -8,6 +8,10 @@ from app.db.Base import Base
 class AIPrediction(Base):
     __tablename__ = "ai_prediction"
     __table_args__ = (
+        CheckConstraint("revision > 0", name="ck_ai_prediction_revision_positive"),
+        Index("uq_prediction_scope_revision", "student_id", "class_id", "subject_id", "source_period_id", "target_period_id", "model_version_id", "revision", unique=True),
+        Index("uq_prediction_legacy_scope_revision", "student_id", "class_id", "subject_id", "source_period_id", "target_period_id", "revision", unique=True,
+              postgresql_where=text("model_version_id IS NULL"), sqlite_where=text("model_version_id IS NULL")),
         CheckConstraint(
             "risk_level IN ('LOW_RISK', 'NEEDS_MONITORING', 'MODERATE_RISK', 'HIGH_RISK', 'INSUFFICIENT_DATA')",
             name="ck_ai_prediction_risk_level",
@@ -25,6 +29,7 @@ class AIPrediction(Base):
     )
 
     prediction_id = Column(Integer, primary_key=True, autoincrement=True)
+    revision = Column(Integer, nullable=False, default=1, server_default="1")
     student_id = Column(UUID(as_uuid=True), ForeignKey("student.student_id", ondelete="CASCADE"), nullable=False)
     class_id = Column(Integer, ForeignKey("class.class_id", ondelete="CASCADE"), nullable=False)
     subject_id = Column(Integer, ForeignKey("subject.subject_id", ondelete="CASCADE"), nullable=False)

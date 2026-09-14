@@ -16,6 +16,12 @@ from sqlalchemy import func, tuple_
 from sqlalchemy.orm import Session
 
 from app.models.ai.AIPrediction import AIPrediction
+from app.services.prediction.PredictionScopeService import (
+    dashboard_preferred_prediction_filter,
+    latest_prediction_filter,
+    prediction_metadata,
+    prediction_read_filter,
+)
 from app.models.people.Student import Student
 from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
@@ -100,7 +106,7 @@ def _base_joined_query(db: Session, enrolled_only: bool = True):
             & (StudentClass.class_id == AIPrediction.class_id)
             & enrolled_student_class_filter(),
         )
-    return q
+    return q.filter(latest_prediction_filter(), dashboard_preferred_prediction_filter())
 
 
 def _risk_summary_query(db: Session, enrolled_only: bool = True):
@@ -123,7 +129,7 @@ def _risk_summary_query(db: Session, enrolled_only: bool = True):
             & (StudentClass.class_id == AIPrediction.class_id)
             & enrolled_student_class_filter(),
         )
-    return q
+    return q.filter(latest_prediction_filter(), dashboard_preferred_prediction_filter())
 
 
 
@@ -182,7 +188,7 @@ def get_dashboard_at_risk_predictions(
                 "limit": limit,
                 "offset": offset,
             }
-        assigned_triplets = get_teacher_assigned_triplets(db, staff_id, academic_period_id=academic_period_id)
+        assigned_triplets = get_teacher_assigned_triplets(db, staff_id)
         if not assigned_triplets:
             return {
                 "items": [],
@@ -202,7 +208,7 @@ def get_dashboard_at_risk_predictions(
     def _apply_filters(q, include_risk_filter: bool = True):
         if not is_admin and assigned_triplets is not None:
             q = q.filter(
-                tuple_(AIPrediction.class_id, AIPrediction.subject_id, AIPrediction.target_period_id).in_(assigned_triplets)
+                prediction_read_filter(db, staff_id)
             )
         if class_id is not None:
             q = q.filter(AIPrediction.class_id == class_id)
@@ -221,7 +227,7 @@ def get_dashboard_at_risk_predictions(
                 | (Student.last_name.ilike(pattern))
                 | (Student.student_lrn.ilike(pattern))
             )
-        return q
+        return q.filter(latest_prediction_filter(), dashboard_preferred_prediction_filter())
 
     # Build filtered query
     base = _base_joined_query(db, enrolled_only=enrolled_only)
@@ -281,6 +287,7 @@ def get_dashboard_at_risk_predictions(
         tinfo = teacher_info_map.get(triplet)
 
         items.append({
+            **prediction_metadata(pred),
             "prediction_id": pred.prediction_id,
             "student_id": pred.student_id,
             "student_name": _build_student_name(student),
@@ -324,7 +331,7 @@ def get_dashboard_grade_summaries(
     if not is_admin:
         if not staff_id:
             return []
-        assigned_triplets = get_teacher_assigned_triplets(db, staff_id, academic_period_id=academic_period_id)
+        assigned_triplets = get_teacher_assigned_triplets(db, staff_id)
         if not assigned_triplets:
             return []
         allowed_class_ids = {t[0] for t in assigned_triplets}
@@ -388,12 +395,12 @@ def get_dashboard_grade_summaries(
 
         if not is_admin and assigned_triplets is not None:
             pred_query = pred_query.filter(
-                tuple_(AIPrediction.class_id, AIPrediction.subject_id, AIPrediction.target_period_id).in_(assigned_triplets)
+                prediction_read_filter(db, staff_id)
             )
-        elif academic_period_id is not None:
+        if academic_period_id is not None:
             pred_query = pred_query.filter(AIPrediction.target_period_id == academic_period_id)
 
-        student_risk_rows = pred_query.all()
+        student_risk_rows = pred_query.filter(latest_prediction_filter(), dashboard_preferred_prediction_filter()).all()
 
         # Map each student to their single highest risk level in each section
         student_highest_risk: dict[tuple[int, Any], str] = {}
