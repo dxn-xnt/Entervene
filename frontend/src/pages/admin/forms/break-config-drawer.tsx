@@ -1,11 +1,23 @@
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/retroui/Button";
+import { Badge } from "@/components/retroui/Badge";
+import { Card } from "@/components/retroui/Card";
+import { Checkbox } from "@/components/retroui/Checkbox";
 import { Dialog } from "@/components/retroui/Dialog";
+import { Empty } from "@/components/retroui/Empty";
+import { Input } from "@/components/retroui/Input";
+import { Label } from "@/components/retroui/Label";
+import { Loader } from "@/components/retroui/Loader";
+import { Select } from "@/components/retroui/Select";
+import { Tabs, type TabItem } from "@/components/retroui/Tabs";
+import { Text } from "@/components/retroui/Text";
+import { Alert } from "@/components/retroui/Alert";
 import { TimePickerSingle, type TimeValue } from "@/components/retroui/TimePicker";
 import { apiFetch } from "@/lib/api";
 import type { SubjectLoadStudioData } from "@/lib/api";
 import { useSettings } from "@/context/SettingsContext";
 import { validatePeriodTimeRange } from "@/lib/time-utils";
+import { cn } from "@/lib/utils";
 import { Clock, Save, Coffee, Utensils, Sunrise, Plus, Trash2, FolderPlus, AlertTriangle } from "lucide-react";
 
 export type PeriodTemplateSlotItem = {
@@ -129,6 +141,21 @@ export default function BreakConfigDrawer({
     return Array.from(set);
   }, [slots]);
 
+  const groupTabs = useMemo<TabItem[]>(() => {
+    return templateGroups.map((grpKey) => ({
+      id: grpKey,
+      label: formatGroupName(grpKey),
+    }));
+  }, [templateGroups]);
+
+  const groupSlotCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const s of slots) {
+      map[s.template_group] = (map[s.template_group] || 0) + 1;
+    }
+    return map;
+  }, [slots]);
+
   useEffect(() => {
     if (!templateGroups.includes(activeGroup)) {
       setActiveGroup(templateGroups[0] || "JHS_45MIN");
@@ -138,8 +165,6 @@ export default function BreakConfigDrawer({
   const activeSlots = slots
     .filter((s) => s.template_group === activeGroup)
     .sort((a, b) => a.display_order - b.display_order);
-
-
 
   const handleSlotFieldChange = (
     slotId: number | undefined,
@@ -163,7 +188,7 @@ export default function BreakConfigDrawer({
           setNotice(errorMsg);
           return;
         } else {
-            setNotice(null);
+          setNotice(null);
         }
       }
     }
@@ -303,355 +328,345 @@ export default function BreakConfigDrawer({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(val) => { if (!val && !isSaving) onClose(); }}>
-      <Dialog.Content size="3xl" className="border-2 border-black p-0 max-h-[92vh] overflow-y-auto">
-        <Dialog.Header className="border-black">
-          <div className="flex items-center gap-2">
-            <Clock className="size-5 text-black" />
-            <div>
-              <h2 className="text-lg font-bold">Configure Timetable Breaks & Period Templates</h2>
-              <p className="text-xs text-black/80">
-                Manage Homeroom, Recess, Lunch, and Period slots dynamically per Section Group
-              </p>
+    <>
+      <Dialog open={open} onOpenChange={(val) => { if (!val && !isSaving) onClose(); }}>
+        <Dialog.Content size="2xl" className="max-h-[90vh]">
+          <Dialog.Header position="static">
+            <div className="flex items-center gap-2">
+              <Clock className="size-5 shrink-0" />
+              <Text as="h5" className="font-sans text-lg font-bold">
+                Configure Timetable Breaks & Period Templates
+              </Text>
             </div>
-          </div>
-        </Dialog.Header>
+          </Dialog.Header>
 
-        <div className="p-5 space-y-4">
-          {notice && (
-            <div className="p-3 border-2 border-black bg-red-100 text-red-900 font-bold text-xs">
-              {notice}
-            </div>
-          )}
-
-          {/* Group Tab Switcher & New Group Button */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-3">
-            <div className="flex flex-wrap gap-1.5">
-              {templateGroups.map((grpKey: string) => (
-                <button
-                  key={grpKey}
-                  type="button"
-                  onClick={() => setActiveGroup(grpKey)}
-                  className={`px-3 py-1.5 text-xs font-bold border-2 border-black transition-all ${
-                    activeGroup === grpKey
-                      ? "bg-black text-white shadow-[2px_2px_0_#000]"
-                      : "bg-white text-black hover:bg-gray-100"
-                  }`}
-                >
-                  {formatGroupName(grpKey)}
-                </button>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={handleAddTemplateGroup}
-              className="text-xs font-bold flex items-center gap-1 bg-purple-100 hover:bg-purple-200 border-2 border-black px-2.5 py-1.5 rounded shadow-[1px_1px_0_#000]"
-              title="Create a new section template group"
-            >
-              <FolderPlus className="size-3.5 text-purple-900" />
-              <span>+ New Group</span>
-            </button>
-          </div>
-
-          {/* Section Assignment Strip */}
-          <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-neutral-50 border-2 border-black rounded text-xs">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-bold text-neutral-800">Currently applied to:</span>
-              {assignedClasses.length === 0 ? (
-                <span className="italic text-neutral-500 font-medium">No sections currently assigned to this template</span>
-              ) : (
-                assignedClasses.map((c) => (
-                  <span
-                    key={c.class_id}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 font-bold bg-white border border-black shadow-[1px_1px_0_#000] rounded text-[11px]"
-                  >
-                    {c.section_name}
-                  </span>
-                ))
-              )}
-            </div>
-
-            {/* Quick Reassign Dropdown */}
-            {otherClasses.length > 0 && (
-              <div className="flex items-center gap-1.5">
-                <select
-                  value=""
-                  onChange={(e) => {
-                    const cid = Number(e.target.value);
-                    if (cid) void handleReassignClass(cid, activeGroup);
-                  }}
-                  className="text-xs border border-black bg-white px-2 py-1 font-semibold rounded cursor-pointer"
-                  disabled={isReassigning}
-                >
-                  <option value="" disabled>+ Assign Section to this Template...</option>
-                  {otherClasses.map((c) => (
-                    <option key={c.class_id} value={c.class_id}>
-                      {c.section_name} ({c.period_template_group ? formatGroupName(c.period_template_group) : "Unassigned"})
-                    </option>
-                  ))}
-                </select>
-              </div>
+          <section className="flex flex-1 flex-col overflow-y-auto px-4 py-1 min-h-0 max-h-[72vh]">
+            {notice && (
+              <Alert status="error">
+                <Alert.Description>{notice}</Alert.Description>
+              </Alert>
             )}
-          </div>
 
-          {isLoading ? (
-            <div className="p-8 text-center border-2 border-black bg-gray-50 font-bold text-sm">
-              Loading period templates from database...
-            </div>
-          ) : activeSlots.length === 0 ? (
-            <div className="p-6 text-center border-2 border-black bg-amber-50 font-bold text-sm">
-              No time slots configured for {formatGroupName(activeGroup)}.
-              <div className="mt-3">
-                <Button size="sm" onClick={handleAddSlot} className="border-2 border-black bg-amber-300 hover:bg-amber-400">
-                  <Plus className="size-4 mr-1" /> Add First Slot
-                </Button>
+            {/* Group Tab Switcher & New Group Button */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <Tabs
+                  tabs={groupTabs}
+                  activeTab={activeGroup}
+                  onTabChange={setActiveGroup}
+                  counts={groupSlotCounts}
+                  className="!mx-0 !border-b-0 text-xs"
+                />
               </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {activeSlots.map((slot) => {
-                return (
-                  <div
-                    key={`${slot.template_group}_${slot.display_order}_${slot.slot_id || slot.slot_name}`}
-                    className={`p-3 border-2 border-black flex flex-wrap items-center justify-between gap-3 ${
-                      slot.slot_type === "LUNCH"
-                        ? "bg-sky-100/90"
-                        : slot.slot_type === "RECESS"
-                        ? "bg-amber-100/90"
-                        : slot.slot_type === "HOMEROOM"
-                        ? "bg-purple-100/90"
-                        : "bg-white"
-                    }`}
-                  >
-                    {/* Editable Slot Label & Type */}
-                    <div className="flex items-center gap-2.5 min-w-[240px] flex-1">
-                      {slot.slot_type === "HOMEROOM" && <Sunrise className="size-4 text-purple-900 shrink-0" />}
-                      {slot.slot_type === "RECESS" && <Coffee className="size-4 text-amber-900 shrink-0" />}
-                      {slot.slot_type === "LUNCH" && <Utensils className="size-4 text-sky-900 shrink-0" />}
-                      {slot.slot_type === "CLASS" && <Clock className="size-4 text-gray-700 shrink-0" />}
 
-                      <div className="flex-1 space-y-1">
-                        <input
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleAddTemplateGroup}
+                className="text-xs gap-2 shrink-0 mb-1 shadow-sm"
+                title="Create a new section template group"
+              >
+                <FolderPlus className="size-3.5" />
+                New Group
+              </Button>
+            </div>
+
+            <Card className="flex flex-col gap-3 px-3 shadow-none">
+              {/* Section Assignment Strip */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Text as="p" className="text-xs font-bold text-foreground">
+                    Currently applied to:
+                  </Text>
+                  {assignedClasses.length === 0 ? (
+                    <Text as="p" className="text-xs italic text-muted-foreground font-medium">
+                      No sections currently assigned to this template
+                    </Text>
+                  ) : (
+                    assignedClasses.map((c) => (
+                      <Badge
+                        key={c.class_id}
+                        variant="outline"
+                        size="sm"
+                        className="font-bold bg-background text-[11px]"
+                      >
+                        {c.section_name}
+                      </Badge>
+                    ))
+                  )}
+                </div>
+
+                {/* Quick Reassign Dropdown */}
+                {otherClasses.length > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <Select
+                      value=""
+                      onValueChange={(val) => {
+                        const cid = Number(val);
+                        if (cid) void handleReassignClass(cid, activeGroup);
+                      }}
+                      disabled={isReassigning}
+                    >
+                      <Select.Trigger className="h-7 text-xs min-w-48 bg-background shadow-none">
+                        <Select.Value placeholder="Assign Section to Template..." />
+                      </Select.Trigger>
+                      <Select.Content>
+                        {otherClasses.map((c) => (
+                          <Select.Item key={c.class_id} value={String(c.class_id)}>
+                            {c.section_name} ({c.period_template_group ? formatGroupName(c.period_template_group) : "Unassigned"})
+                          </Select.Item>
+                        ))}
+                      </Select.Content>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {isLoading ? (
+                <Empty className="p-8">
+                  <Empty.Content>
+                    <Loader size="md" />
+                    <Empty.Title className="text-sm">
+                      Loading period templates from database...
+                    </Empty.Title>
+                  </Empty.Content>
+                </Empty>
+              ) : activeSlots.length === 0 ? (
+                <Empty className="p-6 bg-amber-50/50 border-amber-800">
+                  <Empty.Content>
+                    <Empty.Icon className="size-8 text-amber-800">
+                      <Clock className="size-8" />
+                    </Empty.Icon>
+                    <Empty.Title className="text-base">
+                      No time slots configured for {formatGroupName(activeGroup)}.
+                    </Empty.Title>
+                    <Button size="sm" onClick={handleAddSlot} className="mt-2">
+                      <Plus className="size-4 mr-1" /> Add First Slot
+                    </Button>
+                  </Empty.Content>
+                </Empty>
+              ) : (
+                <div className="space-y-2">
+                  {activeSlots.map((slot) => {
+                    return (
+                      <Card
+                        key={`${slot.template_group}_${slot.display_order}_${slot.slot_id || slot.slot_name}`}
+                        className={cn(
+                          "p-3 flex flex-row items-center justify-between gap-4 w-full shadow-none",
+                          slot.slot_type === "LUNCH"
+                            ? "bg-sky-100/90"
+                            : slot.slot_type === "RECESS"
+                              ? "bg-amber-100/90"
+                              : slot.slot_type === "HOMEROOM"
+                                ? "bg-purple-100/90"
+                                : "bg-card"
+                        )}
+                      >
+                        {/* Editable Slot Label & Type */}
+                        {slot.slot_type === "HOMEROOM" && <Sunrise className="size-4 text-purple-900 shrink-0" />}
+                        {slot.slot_type === "RECESS" && <Coffee className="size-4 text-amber-900 shrink-0" />}
+                        {slot.slot_type === "LUNCH" && <Utensils className="size-4 text-sky-900 shrink-0" />}
+                        {slot.slot_type === "CLASS" && <Clock className="size-4 text-muted-foreground shrink-0" />}
+
+                        <Input
                           type="text"
                           value={slot.slot_name}
                           onChange={(e) =>
                             handleSlotFieldChange(slot.slot_id ?? undefined, slot.display_order, "slot_name", e.target.value)
                           }
-                          className="w-full border-2 border-black bg-white px-2 py-0.5 text-xs font-bold rounded shadow-[1px_1px_0_#000]"
+                          className="h-8 text-xs font-bold w-full bg-background shadow-none "
                           placeholder="Slot Label (e.g. Morning Recess)"
                         />
 
+                        <Select
+                          value={slot.slot_type}
+                          onValueChange={(newType: any) => {
+                            const isLocked = newType !== "CLASS";
+                            handleSlotFieldChange(slot.slot_id ?? undefined, slot.display_order, "slot_type", newType);
+                            handleSlotFieldChange(slot.slot_id ?? undefined, slot.display_order, "is_locked_break", isLocked);
+                          }}
+                        >
+                          <Select.Trigger className="h-7 text-xs min-w-28 py-0 bg-background shadow-none">
+                            <Select.Value />
+                          </Select.Trigger>
+                          <Select.Content>
+                            <Select.Item value="CLASS">Class</Select.Item>
+                            <Select.Item value="RECESS">Recess</Select.Item>
+                            <Select.Item value="LUNCH">Lunch</Select.Item>
+                            <Select.Item value="HOMEROOM">Homeroom</Select.Item>
+                          </Select.Content>
+                        </Select>
+
+                        {/* Start and End Pickers */}
                         <div className="flex items-center gap-2">
-                          <select
-                            value={slot.slot_type}
-                            onChange={(e) => {
-                              const newType = e.target.value as any;
-                              const isLocked = newType !== "CLASS";
-                              handleSlotFieldChange(slot.slot_id ?? undefined, slot.display_order, "slot_type", newType);
-                              handleSlotFieldChange(slot.slot_id ?? undefined, slot.display_order, "is_locked_break", isLocked);
-                            }}
-                            className="text-[11px] font-bold border border-black bg-white px-1.5 py-0.5 rounded"
+                          <TimePickerSingle
+                            className="shadow-none"
+                            value={stringToTimeValue(slot.start_time, 8)}
+                            onChange={(newStart) =>
+                              handleSlotFieldChange(
+                                slot.slot_id ?? undefined,
+                                slot.display_order,
+                                "start_time",
+                                timeValueToString(newStart)
+                              )
+                            }
+                          />
+                          <Text as="p" className="text-xs font-bold">to</Text>
+                          <TimePickerSingle
+                            className="shadow-none"
+                            value={stringToTimeValue(slot.end_time, 9)}
+                            onChange={(newEnd) =>
+                              handleSlotFieldChange(
+                                slot.slot_id ?? undefined,
+                                slot.display_order,
+                                "end_time",
+                                timeValueToString(newEnd)
+                              )
+                            }
+                          />
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            onClick={() => handleRemoveSlot(slot.display_order, slot.slot_id)}
+                            className="h-7 w-7 p-0 text-destructive hover:bg-destructive hover:text-destructive-foreground ml-1 shadow-none"
+                            title="Remove slot"
                           >
-                            <option value="CLASS">CLASS</option>
-                            <option value="RECESS">RECESS</option>
-                            <option value="LUNCH">LUNCH</option>
-                            <option value="HOMEROOM">HOMEROOM</option>
-                          </select>
-
-                          <label className="flex items-center gap-1 text-[11px] font-bold cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={slot.is_locked_break}
-                              onChange={(e) =>
-                                handleSlotFieldChange(
-                                  slot.slot_id ?? undefined,
-                                  slot.display_order,
-                                  "is_locked_break",
-                                  e.target.checked
-                                )
-                              }
-                            />
-                            <span>Lock Break Wall</span>
-                          </label>
+                            <Trash2 className="size-4" />
+                          </Button>
                         </div>
-                      </div>
-                    </div>
+                      </Card>
+                    );
+                  })}
 
-                    {/* Start and End Pickers */}
-                    <div className="flex items-center gap-2">
-                      <TimePickerSingle
-                        value={stringToTimeValue(slot.start_time, 8)}
-                        onChange={(newStart) =>
-                          handleSlotFieldChange(
-                            slot.slot_id ?? undefined,
-                            slot.display_order,
-                            "start_time",
-                            timeValueToString(newStart)
-                          )
-                        }
-                      />
-                      <span className="text-xs font-bold text-black">to</span>
-                      <TimePickerSingle
-                        value={stringToTimeValue(slot.end_time, 9)}
-                        onChange={(newEnd) =>
-                          handleSlotFieldChange(
-                            slot.slot_id ?? undefined,
-                            slot.display_order,
-                            "end_time",
-                            timeValueToString(newEnd)
-                          )
-                        }
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSlot(slot.display_order, slot.slot_id)}
-                        className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 border border-red-300 rounded ml-1"
-                        title="Remove slot"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </div>
+                  <div className="pt-2">
+                    <Button
+                      variant="outline"
+                      type="button"
+                      onClick={handleAddSlot}
+                      className="w-full border-dashed text-xs font-bold shadow-none"
+                    >
+                      <Plus className="size-4 mr-1.5 text-foreground" />
+                      <span>Add Time Slot to {formatGroupName(activeGroup)}</span>
+                    </Button>
                   </div>
-                );
-              })}
+                </div>
+              )}
+            </Card>
 
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={handleAddSlot}
-                  className="w-full border-2 border-dashed border-black bg-white hover:bg-gray-50 py-2 text-xs font-bold flex items-center justify-center gap-1 rounded"
-                >
-                  <Plus className="size-4 text-primary" />
-                  <span>+ Add Time Slot to {formatGroupName(activeGroup)}</span>
-                </button>
-              </div>
+          </section>
 
 
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="border-t-2 border-black bg-gray-50 px-5 py-3 flex items-center justify-end gap-3">
-          <Button variant="outline" disabled={isSaving} onClick={onClose} className="border-2 border-black font-bold">
-            Cancel
-          </Button>
-          <Button
-            variant="default"
-            disabled={isSaving}
-            onClick={handleSaveClick}
-            className="border-2 border-black bg-emerald-400 hover:bg-emerald-500 font-bold shadow-[2px_2px_0_#000] hover:shadow-none transition-all"
-          >
-            <Save className="size-4 mr-2" />
-            {isSaving ? "Saving..." : "Save Break Timelines"}
-          </Button>
-        </div>
-      </Dialog.Content>
+          <Dialog.Footer position="static">
+            <Button variant="outline" disabled={isSaving} onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              disabled={isSaving}
+              onClick={handleSaveClick}
+            >
+              <Save className="size-4 mr-2" />
+              Save Break Timelines
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog >
 
       {/* Themed RetroUI Confirmation Modal */}
-      <Dialog open={showConfirmModal} onOpenChange={(val) => { if (!val && !isSaving) setShowConfirmModal(false); }}>
-        <Dialog.Content size="md" className="border-2 border-black p-0 overflow-hidden shadow-[4px_4px_0_#000] bg-white">
-          <Dialog.Header className="border-black">
+      < Dialog open={showConfirmModal} onOpenChange={(val) => { if (!val && !isSaving) setShowConfirmModal(false); }
+      }>
+        <Dialog.Content size="sm">
+          <Dialog.Header position="static">
             <div className="flex items-center gap-2">
-              <Clock className="size-5 text-black" />
-              <h3 className="text-base font-bold">Confirm Period Template Update</h3>
+              <Text as="h5" className="text-lg font-sans font-bold">
+                Confirm Period Template Update
+              </Text>
             </div>
           </Dialog.Header>
 
-          <div className="p-5 space-y-3 bg-white text-sm">
-            <p className="font-semibold text-black">
+          <section className="flex flex-col gap-3 p-5 text-sm">
+            <Text as="p" className="font-normal text-foreground">
               Saving changes will update the master period template for{" "}
-              <span className="bg-yellow-200 px-1.5 py-0.5 border border-black font-bold rounded">
-                {formatGroupName(activeGroup)}
-              </span>.
-            </p>
-            <div className="p-3 border-2 border-amber-800 bg-amber-50 rounded text-amber-950 text-xs font-semibold flex items-start gap-2">
-              <AlertTriangle className="size-4 shrink-0 text-amber-800 mt-0.5" />
-              <div>
-                <p className="font-bold text-amber-900 mb-0.5">Schedule Cascade Notice</p>
-                <p className="leading-relaxed">
-                  Saving will automatically update the bell schedule and cascade time changes to <strong>all matching subject loads (including locked and published sections)</strong> across classes in this group. Active student and teacher timetables will reflect these new times immediately.
-                </p>
-              </div>
-            </div>
-          </div>
+              <span className="font-bold">{formatGroupName(activeGroup)}</span>.
+            </Text>
+            <Text className="text-xs text-muted-foreground font-medium">
+              This will update the bell schedule and apply new times across all matching subject loads and active timetables in this group.
+            </Text>
 
-          <div className="border-t-2 border-black bg-gray-50 px-5 py-3 flex items-center justify-end gap-2">
+          </section>
+
+          <Dialog.Footer position="static">
             <Button
               variant="outline"
               disabled={isSaving}
               onClick={() => setShowConfirmModal(false)}
-              className="border-2 border-black font-bold shadow-[2px_2px_0_#000] hover:shadow-none transition-all"
             >
               Cancel
             </Button>
             <Button
               disabled={isSaving}
               onClick={() => void executeSave()}
-              className="border-2 border-black bg-emerald-400 hover:bg-emerald-500 text-black font-bold shadow-[2px_2px_0_#000] hover:shadow-none transition-all"
             >
               <Save className="size-4 mr-1.5" />
-              {isSaving ? "Applying Changes..." : "Confirm & Save Timelines"}
+              Confirm
             </Button>
-          </div>
+          </Dialog.Footer>
         </Dialog.Content>
-      </Dialog>
+      </Dialog >
 
       {/* Themed RetroUI New Template Group Modal */}
-      <Dialog open={showNewGroupModal} onOpenChange={(val) => { if (!val) setShowNewGroupModal(false); }}>
-        <Dialog.Content size="md" className="border-2 border-black p-0 overflow-hidden shadow-[4px_4px_0_#000] bg-white">
-          <Dialog.Header className="border-black">
+      < Dialog open={showNewGroupModal} onOpenChange={(val) => { if (!val) setShowNewGroupModal(false); }}>
+        <Dialog.Content size="md">
+          <Dialog.Header position="static">
             <div className="flex items-center gap-2">
-              <FolderPlus className="size-5 text-black" />
-              <h3 className="text-base font-bold">New Section Template Group</h3>
+              <FolderPlus className="size-5 shrink-0" />
+              <Text as="h5" className="font-sans text-base font-bold">
+                New Section Template Group
+              </Text>
             </div>
           </Dialog.Header>
 
-          <div className="p-5 space-y-3 bg-white text-sm">
-            <p className="text-xs text-black/80 font-medium leading-relaxed">
-              Enter a name for the new period template group (e.g. <code className="font-bold bg-gray-100 px-1 border border-black rounded">SHS_TVL</code>, <code className="font-bold bg-gray-100 px-1 border border-black rounded">REMEDIAL_SUMMER</code>). It will clone the base periods from <span className="font-bold">{formatGroupName(activeGroup)}</span>.
-            </p>
+          <section className="flex flex-col gap-3 p-5 text-sm">
+            <Text as="p" className="text-xs text-muted-foreground font-medium leading-relaxed">
+              Enter a name for the new period template group (e.g. <code className="font-bold bg-muted px-1 border border-border rounded">SHS_TVL</code>, <code className="font-bold bg-muted px-1 border border-border rounded">REMEDIAL_SUMMER</code>). It will clone the base periods from <span className="font-bold">{formatGroupName(activeGroup)}</span>.
+            </Text>
             {newGroupError && (
-              <div className="p-2 border-2 border-black bg-red-100 text-red-900 font-bold text-xs">
-                {newGroupError}
-              </div>
+              <Alert status="error">
+                <Alert.Description>{newGroupError}</Alert.Description>
+              </Alert>
             )}
-            <div>
-              <label className="block text-xs font-bold mb-1">Group Name / Identifier:</label>
-              <input
-                type="text"
+            <div className="space-y-1.5">
+              <Label className="block text-xs font-bold">Group Name / Identifier:</Label>
+              <Input
                 value={newGroupNameInput}
                 onChange={(e) => {
                   setNewGroupNameInput(e.target.value);
                   setNewGroupError(null);
                 }}
                 placeholder="e.g. SHS_TVL"
-                className="w-full border-2 border-black px-3 py-2 text-sm font-semibold rounded shadow-[2px_2px_0_#000] focus:outline-none focus:ring-2 focus:ring-black"
+                className="w-full"
                 autoFocus
               />
             </div>
-          </div>
+          </section>
 
-          <div className="border-t-2 border-black bg-gray-50 px-5 py-3 flex items-center justify-end gap-2">
+          <Dialog.Footer position="static">
             <Button
               variant="outline"
               onClick={() => setShowNewGroupModal(false)}
-              className="border-2 border-black font-bold shadow-[2px_2px_0_#000] hover:shadow-none transition-all"
             >
               Cancel
             </Button>
             <Button
               onClick={handleConfirmAddGroup}
-              className="border-2 border-black bg-purple-300 hover:bg-purple-400 text-black font-bold shadow-[2px_2px_0_#000] hover:shadow-none transition-all"
             >
               <Plus className="size-4 mr-1.5" />
               Create Group
             </Button>
-          </div>
+          </Dialog.Footer>
         </Dialog.Content>
-      </Dialog>
-    </Dialog>
+      </Dialog >
+    </>
   );
 }
