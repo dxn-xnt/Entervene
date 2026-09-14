@@ -332,7 +332,7 @@ async def submit_student_work(
                             notification_type="assignment_due",
                             title=f"Late Submission: {subject_name} - {classwork.title}",
                             body=f"{s_name} turned in their work late after the due date.",
-                            action_url="/teacher/classworks",
+                            action_url=f"/teacher/classworks/{classwork.classwork_id}",
                         ),
                     )
             except Exception as err:
@@ -753,6 +753,15 @@ def grade_student_submission(
             notif_title = f"{subject_name}: {cw_title}"
             notif_body = f"Graded by {teacher_name} • Score: {body.grade} points."
 
+            assignment = (
+                db.query(ClassworkAssignment)
+                .filter(ClassworkAssignment.classwork_assignment_id == submission.classwork_assignment_id)
+                .first()
+            )
+            student_action_url = "/student/todo"
+            if assignment and classwork:
+                student_action_url = f"/student/subjects/{assignment.class_id}/{classwork.subject_id}?tab=classwork&classworkAssignmentId={assignment.classwork_assignment_id}"
+
             create_notification(
                 db,
                 NotificationCreate(
@@ -760,7 +769,7 @@ def grade_student_submission(
                     notification_type="grade_released",
                     title=notif_title,
                     body=notif_body,
-                    action_url="/student/todo",
+                    action_url=student_action_url,
                 ),
             )
     except Exception as err:

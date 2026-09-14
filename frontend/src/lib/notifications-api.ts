@@ -2,7 +2,14 @@ import { apiFetch } from "./api";
 
 export type NotificationItem = {
   notification_id: string;
-  notification_type: "assignment_due" | "risk_alert" | "announcement" | "grade_released" | "submission_graded";
+  notification_type:
+    | "assignment_due"
+    | "risk_alert"
+    | "announcement"
+    | "grade_released"
+    | "submission_graded"
+    | "grade_submission_window_opened"
+    | "grade_submission_closing_soon";
   title: string;
   body: string | null;
   action_url: string | null;
