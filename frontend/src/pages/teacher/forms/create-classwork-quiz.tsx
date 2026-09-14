@@ -617,6 +617,15 @@ export default function CreateClassworkQuizModal({
             formData.append("max_attempts", String(Number(draft.max_attempts)));
             formData.append("quiz_payload", JSON.stringify(buildQuizPayload()));
 
+            const selectedLoad = loads.find(
+                (l) =>
+                    l.subject_id === Number(draft.subject_id) &&
+                    selectedClassIds.includes(l.class_id),
+            );
+            if (selectedLoad?.academic_period_id) {
+                formData.append("academic_period_id", String(selectedLoad.academic_period_id));
+            }
+
             const createResponse = await apiFetch(
                 "/api/v1/classwork-assignments/with-assignments",
                 {

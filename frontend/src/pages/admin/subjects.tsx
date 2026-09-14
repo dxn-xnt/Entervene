@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
@@ -91,9 +92,16 @@ const MODULE_TABS: Array<TabItem<AdminSubjectSection>> = [
 ];
 
 export default function AdminSubjects() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab") as AdminSubjectSection | null;
+  const initialSection = tabParam && ["catalog", "offerings", "grading", "archived"].includes(tabParam)
+    ? tabParam
+    : "catalog";
+  const [activeSection, setActiveSection] = useState<AdminSubjectSection>(initialSection);
+  const editIdHandledRef = useRef<string | null>(null);
+
   const catalogImportInputRef = useRef<HTMLInputElement | null>(null);
   const offeringImportInputRef = useRef<HTMLInputElement | null>(null);
-  const [activeSection, setActiveSection] = useState<AdminSubjectSection>("catalog");
   const [subjects, setSubjects] = useState<SubjectListItem[]>([]);
   const [archivedSubjects, setArchivedSubjects] = useState<SubjectListItem[]>([]);
   const [offerings, setOfferings] = useState<SubjectOfferingListItem[]>([]);
@@ -233,6 +241,32 @@ export default function AdminSubjects() {
   useEffect(() => {
     void loadOfferings();
   }, [loadOfferings]);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab") as AdminSubjectSection | null;
+    if (tab && ["catalog", "offerings", "grading", "archived"].includes(tab) && tab !== activeSection) {
+      setActiveSection(tab);
+    }
+  }, [searchParams, activeSection]);
+
+  useEffect(() => {
+    const editId = searchParams.get("editId");
+    if (!editId) {
+      editIdHandledRef.current = null;
+      return;
+    }
+    if (editIdHandledRef.current === editId) return;
+
+    if (gradingTemplates.length > 0) {
+      const match = gradingTemplates.find((t) => String(t.grading_template_id) === editId);
+      if (match) {
+        editIdHandledRef.current = editId;
+        setActiveSection("grading");
+        setEditingGradingTemplate(match);
+        setIsGradingModalOpen(true);
+      }
+    }
+  }, [searchParams, gradingTemplates]);
 
   useEffect(() => {
     if (!offeringOptions) return;
@@ -682,7 +716,15 @@ export default function AdminSubjects() {
               <Tabs
                 tabs={MODULE_TABS}
                 activeTab={activeSection}
-                onTabChange={setActiveSection}
+                onTabChange={(tab) => {
+                  setActiveSection(tab);
+                  const next = new URLSearchParams(searchParams);
+                  next.set("tab", tab);
+                  if (tab !== "grading") {
+                    next.delete("editId");
+                  }
+                  setSearchParams(next, { replace: true });
+                }}
               />
             </div>
 
@@ -1183,15 +1225,37 @@ export default function AdminSubjects() {
         onCopied={handleCopySetupComplete}
       />
 
-      <Dialog open={isGradingModalOpen} onOpenChange={setIsGradingModalOpen}>
+      <Dialog
+        open={isGradingModalOpen}
+        onOpenChange={(open) => {
+          setIsGradingModalOpen(open);
+          if (!open && searchParams.get("editId")) {
+            const next = new URLSearchParams(searchParams);
+            next.delete("editId");
+            setSearchParams(next, { replace: true });
+          }
+        }}
+      >
         <AddGradingComponentModal
           options={gradingOptions}
           template={editingGradingTemplate}
           readOnly={isViewingInactiveAcademicYear}
           readOnlyReason={readOnlyReason}
-          onClose={() => setIsGradingModalOpen(false)}
+          onClose={() => {
+            setIsGradingModalOpen(false);
+            if (searchParams.get("editId")) {
+              const next = new URLSearchParams(searchParams);
+              next.delete("editId");
+              setSearchParams(next, { replace: true });
+            }
+          }}
           onSaved={async () => {
             setNotice(editingGradingTemplate ? "Grading template updated." : "Grading template created.");
+            if (searchParams.get("editId")) {
+              const next = new URLSearchParams(searchParams);
+              next.delete("editId");
+              setSearchParams(next, { replace: true });
+            }
             await Promise.all([loadGradingTemplates(), loadSubjects(), loadOfferings()]);
           }}
         />

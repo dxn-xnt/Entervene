@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.Dependencies import get_staff_id, require_role
-from app.services.ai.UsageGuard import actor, usage_snapshot
+from app.services.ai.UsageGuard import actor, staff_usage_snapshot, usage_snapshot
 from starlette.concurrency import run_in_threadpool
 from app.db.Session import get_db
 from app.models.academic.Lesson import Lesson
@@ -33,6 +33,11 @@ router = APIRouter()
 @router.get("/usage")
 async def ai_usage(user: dict = Depends(require_role("admin"))):
     return await run_in_threadpool(usage_snapshot)
+
+
+@router.get("/my-usage")
+async def my_ai_usage(staff_id: str = Depends(get_staff_id)):
+    return await run_in_threadpool(staff_usage_snapshot, staff_id)
 
 
 class AIAssistRequest(BaseModel):

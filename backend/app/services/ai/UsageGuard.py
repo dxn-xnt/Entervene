@@ -17,6 +17,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.Config import settings
 from app.db.Session import engine
 
+
+def ai_configured() -> bool:
+    """True when at least one AI provider API key is set."""
+    return bool(settings.groq_api_key or settings.gemini_api_key)
+
 logger = logging.getLogger("ai.usage")
 actor: ContextVar[str | None] = ContextVar("ai_actor", default=None)
 metadata = MetaData()
@@ -107,7 +112,8 @@ def usage_snapshot() -> dict:
         raise HTTPException(503, "AI usage protection unavailable.") from None
     values = {row["scope"]: row["used"] for row in rows}
     reserved = values.get("school_budget", 0) / 1000000
-    return {"enabled": settings.ai_enabled, "reserved_usd": reserved,
+    return {"enabled": settings.ai_enabled, "configured": ai_configured(),
+            "reserved_usd": reserved,
             "monthly_budget_usd": settings.ai_monthly_budget_usd,
             "calls_today": values.get("school_day", 0),
             "calls_this_minute": values.get("school_minute", 0),
@@ -115,3 +121,25 @@ def usage_snapshot() -> dict:
             "budget_alert": reserved >= settings.ai_monthly_budget_usd * .8,
             "burst_alert": values.get("school_minute", 0) >= settings.ai_school_per_minute * .8,
             "provider_alert": values.get("provider_failures", 0) >= 5}
+
+
+def staff_usage_snapshot(staff_id: str) -> dict:
+    """Return the authenticated teacher's personal AI usage for today."""
+    configured = ai_configured()
+    if not configured:
+        return {"used_today": 0, "daily_limit": settings.ai_staff_per_day,
+                "enabled": settings.ai_enabled, "configured": False}
+    now = datetime.now(timezone.utc)
+    day = now.strftime("%Y-%m-%d")
+    identity_hash = hashlib.sha256(staff_id.encode()).hexdigest()
+    scope_key = "staff_day:" + identity_hash
+    try:
+        with engine.connect() as conn:
+            used = conn.execute(select(counters.c.used).where(
+                counters.c.scope == scope_key, counters.c.period == day,
+            )).scalar_one_or_none() or 0
+    except SQLAlchemyError:
+        raise HTTPException(503, "AI usage information unavailable.") from None
+    return {"used_today": used, "daily_limit": settings.ai_staff_per_day,
+            "enabled": settings.ai_enabled, "configured": True}
+

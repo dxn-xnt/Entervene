@@ -185,7 +185,7 @@ async def create_classwork_wizard_record(
     is_published: bool,
     show_scores: bool = True,
     class_ids: str,
-    academic_period_id: int,
+    academic_period_id: Optional[int] = None,
     lesson_ids: Optional[str],
     due_date: Optional[datetime],
     lock_date: Optional[datetime],
@@ -206,6 +206,31 @@ async def create_classwork_wizard_record(
     validate_schedule(None, due_date, lock_date)
     ensure_subject_owner(db, staff_id, subject_id)
     ensure_lessons_owned(db, staff_id, subject_id, selected_lesson_ids)
+
+    if academic_period_id is None:
+        from app.models.academic.SubjectLoad import SubjectLoad
+        from app.models.academic.AcademicPeriod import AcademicPeriod
+
+        # Resolve from the teacher's active teaching load for this subject and selected classes
+        active_load = (
+            db.query(SubjectLoad.academic_period_id)
+            .filter(
+                SubjectLoad.subject_id == subject_id,
+                SubjectLoad.class_id.in_(selected_class_ids),
+                SubjectLoad.status.in_(["active", "published"]),
+                SubjectLoad.is_active_version.is_(True),
+            )
+            .first()
+        )
+        if active_load:
+            academic_period_id = active_load[0]
+        else:
+            active_period = db.query(AcademicPeriod).filter(AcademicPeriod.is_active.is_(True)).first()
+            if active_period:
+                academic_period_id = active_period.academic_period_id
+            else:
+                raise HTTPException(400, detail="Academic period was not found")
+
     ensure_class_targets(db, staff_id, subject_id, selected_class_ids, academic_period_id)
     quiz_builder = _parse_quiz_payload(quiz_payload, normalized_type)
 
@@ -629,7 +654,43 @@ def assign_classwork_to_classes(
     max_attempts = body.max_attempts if is_quiz_type(classwork.classwork_type) else None
     validate_classwork_values(max_attempts=max_attempts)
     validate_schedule(None, body.due_date, body.lock_date)
-    ensure_class_targets(db, staff_id, classwork.subject_id, class_ids, body.academic_period_id)
+
+    academic_period_id = body.academic_period_id
+    if academic_period_id is None:
+        from app.models.academic.AcademicPeriod import AcademicPeriod
+        from app.models.academic.SubjectLoad import SubjectLoad
+
+        # 1. Try existing assignments for this classwork
+        existing_assignment = (
+            db.query(ClassworkAssignment.academic_period_id)
+            .filter(ClassworkAssignment.classwork_id == classwork_id)
+            .first()
+        )
+        if existing_assignment and existing_assignment[0]:
+            academic_period_id = existing_assignment[0]
+        else:
+            # 2. Try teacher's active teaching load for this subject and class_ids
+            active_load = (
+                db.query(SubjectLoad.academic_period_id)
+                .filter(
+                    SubjectLoad.subject_id == classwork.subject_id,
+                    SubjectLoad.class_id.in_(class_ids),
+                    SubjectLoad.status.in_(["active", "published"]),
+                    SubjectLoad.is_active_version.is_(True),
+                )
+                .first()
+            )
+            if active_load:
+                academic_period_id = active_load[0]
+            else:
+                # 3. Fallback to current active academic period
+                active_period = db.query(AcademicPeriod).filter(AcademicPeriod.is_active.is_(True)).first()
+                if active_period:
+                    academic_period_id = active_period.academic_period_id
+                else:
+                    raise HTTPException(400, detail="Academic period was not found")
+
+    ensure_class_targets(db, staff_id, classwork.subject_id, class_ids, academic_period_id)
     created = []
     updated = []
     new_assignments = []
@@ -640,7 +701,7 @@ def assign_classwork_to_classes(
                 ClassworkAssignment.class_id == class_id,
             ).first()
             if existing:
-                existing.academic_period_id = body.academic_period_id
+                existing.academic_period_id = academic_period_id
                 existing.publish_date = None
                 existing.due_date = body.due_date
                 existing.lock_date = body.lock_date
@@ -653,7 +714,7 @@ def assign_classwork_to_classes(
             assignment = ClassworkAssignment(
                 classwork_id=classwork_id,
                 class_id=class_id,
-                academic_period_id=body.academic_period_id,
+                academic_period_id=academic_period_id,
                 assigned_by_staff_id=staff_id,
                 publish_date=None,
                 due_date=body.due_date,
@@ -801,6 +862,7 @@ def teacher_classes(staff_id: str, db: Session, academic_period_id: int | None =
             "class_id": class_.class_id,
             "section_name": _class_section_name(class_),
             "grade_level": level.level_name if (level and level.level_name) else (f"Grade {level.grade_level}" if (level and level.grade_level) else "Grade 7"),
+            "academic_period_id": subject_load.academic_period_id,
         }
         for subject_load, subject, class_, level in rows
     ]
