@@ -1146,13 +1146,8 @@ const TeacherGradeView = () => {
           if (!open) setShowBulkConfirm(false);
         }}
       >
-<<<<<<< HEAD
-        <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded overflow-hidden">
-          <Dialog.Header className="border-black text-black min-h-0">
-=======
         <Dialog.Content size="md" className="max-w-lg overflow-hidden p-0">
           <Dialog.Header className="min-h-0 border-border">
->>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
             <div className="flex items-center gap-2.5">
               <div className="size-8 rounded bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                 {timingGate.isLocked ? (
@@ -1278,13 +1273,8 @@ const TeacherGradeView = () => {
           if (!open) setConflictData(null);
         }}
       >
-<<<<<<< HEAD
-        <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded overflow-hidden">
-          <Dialog.Header className="border-black text-black min-h-0">
-=======
         <Dialog.Content size="md" className="max-w-lg overflow-hidden p-0">
           <Dialog.Header className="min-h-0 border-border">
->>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
             <div className="flex items-center gap-2.5">
               <div className="size-8 rounded bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                 <AlertTriangle className="size-4 text-black" />
@@ -1351,13 +1341,8 @@ const TeacherGradeView = () => {
           if (!open) setBulkSendSummary(null);
         }}
       >
-<<<<<<< HEAD
-        <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded overflow-hidden">
-          <Dialog.Header className="border-black text-black min-h-0">
-=======
         <Dialog.Content size="md" className="max-w-lg overflow-hidden p-0">
           <Dialog.Header className="min-h-0 border-border">
->>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
             <div className="flex items-center gap-2.5">
               <div className="size-8 rounded bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                 <CheckCircle2 className="size-4 text-black" />
