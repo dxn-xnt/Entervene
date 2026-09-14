@@ -9,10 +9,15 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db.Base import Base
-from app.models.ai.AIModelVersion import AIModelVersion
+from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
 from app.models.ai.RiskThreshold import RiskThreshold
+from app.services.prediction.ModelRegistryExceptions import (
+    ActiveModelNotFound,
+    UnsupportedModelPurpose,
+)
 from app.services.prediction.ModelScoringService import (
     get_active_model_version,
+    get_active_model_version_by_purpose,
     load_model_artifact,
     prepare_feature_row,
     predict_next_period_grade,
@@ -91,10 +96,17 @@ def sample_input(**overrides):
     return data
 
 
-def add_model_version(db, artifact_path: str, is_active: bool = True):
+def add_model_version(
+    db,
+    artifact_path: str,
+    is_active: bool = True,
+    model_name: str = "entervene_next_period_grade_rf",
+    model_purpose: str = ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value,
+):
     version = AIModelVersion(
-        model_name="entervene_next_period_grade_rf",
+        model_name=model_name,
         model_type="REGRESSOR",
+        model_purpose=model_purpose,
         algorithm="RandomForestRegressor",
         training_row_count=10,
         test_row_count=2,
@@ -122,6 +134,35 @@ def test_active_model_lookup_succeeds_when_one_active_model_exists(db, tmp_path:
 def test_active_model_lookup_fails_clearly_when_none_exists(db):
     with pytest.raises(LookupError, match="No active"):
         get_active_model_version(db)
+
+
+def test_active_model_by_purpose_lookup_succeeds(db, tmp_path: Path):
+    version = add_model_version(
+        db,
+        str(tmp_path / "model.joblib"),
+        model_purpose=ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value,
+    )
+    found = get_active_model_version_by_purpose(db, ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST)
+    assert found.model_version_id == version.model_version_id
+
+    # Also works with string
+    found_str = get_active_model_version_by_purpose(db, "NEXT_PERIOD_BASELINE_FORECAST")
+    assert found_str.model_version_id == version.model_version_id
+
+
+def test_active_model_by_purpose_requires_purpose_explicitly(db):
+    with pytest.raises(UnsupportedModelPurpose):
+        get_active_model_version_by_purpose(db, None)  # type: ignore
+
+
+def test_active_model_by_purpose_fails_for_unknown_purpose(db):
+    with pytest.raises(UnsupportedModelPurpose, match="Unsupported model purpose"):
+        get_active_model_version_by_purpose(db, "INVALID_PURPOSE")
+
+
+def test_active_model_by_purpose_fails_when_none_found(db):
+    with pytest.raises(ActiveModelNotFound, match="No active model version found"):
+        get_active_model_version_by_purpose(db, ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION)
 
 
 def test_artifact_path_resolution_works_with_relative_paths(tmp_path: Path):

@@ -4,11 +4,14 @@ import argparse
 from pathlib import Path
 
 from app.db.Session import SessionLocal
+from app.models.ai.AIModelVersion import ModelPurpose
 from app.services.prediction.ModelVersionService import (
-    count_active_versions,
+    count_active_versions_by_purpose,
     load_feature_schema,
     load_training_report,
     normalize_artifact_path,
+    normalize_feature_schema,
+    normalize_training_report,
     register_model_version,
     validate_artifact_path,
     validate_feature_schema,
@@ -22,14 +25,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--feature-schema", required=True, type=Path)
     parser.add_argument("--artifact-path", required=True, type=Path)
     parser.add_argument("--model-name", required=True)
+    parser.add_argument(
+        "--model-purpose",
+        choices=[p.value for p in ModelPurpose],
+        default=None,
+        help="Explicit purpose. If omitted, resolved from report metadata.",
+    )
+    parser.add_argument("--manifest", default=None, type=Path, help="Optional path to artifact manifest with hashes.")
     parser.add_argument("--activate", action="store_true")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    report = load_training_report(args.training_report)
     schema = load_feature_schema(args.feature_schema)
+    report = load_training_report(args.training_report)
+    schema = normalize_feature_schema(schema)
+    report = normalize_training_report(report, schema=schema)
     validate_training_report(report)
     validate_feature_schema(schema)
     validate_artifact_path(args.artifact_path)
@@ -48,12 +60,15 @@ def main() -> None:
             schema=schema,
             artifact_path=stored_artifact_path,
             activate=args.activate,
+            model_purpose=args.model_purpose,
+            manifest_path=args.manifest,
         )
-        active_count = count_active_versions(db, version.model_name, version.model_type)
+        active_count = count_active_versions_by_purpose(db, version.model_purpose)
         print("AI model version registration summary")
         print(f"model_version_id: {version.model_version_id}")
         print(f"model_name: {version.model_name}")
         print(f"model_type: {version.model_type}")
+        print(f"model_purpose: {version.model_purpose}")
         print(f"algorithm: {version.algorithm}")
         print(f"artifact_path: {version.artifact_path}")
         print(f"training_row_count: {version.training_row_count}")
@@ -64,7 +79,7 @@ def main() -> None:
         print(f"is_active: {version.is_active}")
         print(f"created_new_row: {created}")
         print(f"deactivated_previous_active_versions: {deactivated_count}")
-        print(f"active_versions_for_model: {active_count}")
+        print(f"active_versions_for_purpose: {active_count}")
     finally:
         db.close()
 

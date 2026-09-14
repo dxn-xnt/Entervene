@@ -152,7 +152,7 @@ def prediction_api_context():
         model_name="entervene_next_period_grade_rf",
         model_type="REGRESSOR",
         algorithm="RandomForestRegressor",
-        artifact_path="data/models/model.joblib",
+        artifact_path="data/models/entervene_next_period_grade_rf.joblib",
         is_active=True,
         feature_schema_json={
             "feature_columns": [
@@ -260,6 +260,11 @@ def prediction_payload(context, **overrides):
 
 
 def patch_scoring(monkeypatch, result=None):
+    monkeypatch.setattr(
+        generation_service,
+        "score_student_prediction",
+        lambda db, features, model_name="entervene_next_period_grade_rf", model_version=None: result or fake_scoring_result(),
+    )
     monkeypatch.setattr(
         predictions_route,
         "score_student_prediction",
@@ -432,7 +437,7 @@ def test_latest_endpoint_returns_most_recent_matching_prediction(prediction_api_
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     assert response.json()["prediction_id"] == newer.prediction_id
     assert response.json()["prediction_id"] != older.prediction_id
 
@@ -466,7 +471,7 @@ def test_class_risk_list_endpoint_returns_paginated_items(prediction_api_context
         params={"limit": 1, "offset": 0},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     body = response.json()
     assert body["total"] == 2
     assert body["limit"] == 1
@@ -489,7 +494,7 @@ def test_class_risk_list_endpoint_supports_risk_level_filter(prediction_api_cont
         params={"risk_level": "HIGH_RISK"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     body = response.json()
     assert body["total"] == 1
     assert body["items"][0]["prediction_id"] == high.prediction_id
@@ -520,7 +525,7 @@ def test_feature_endpoint_returns_saved_feature_rows(prediction_api_context):
 
     response = prediction_api_context["client"].get(f"/api/v1/predictions/{prediction.prediction_id}/features")
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     body = response.json()
     assert body["prediction_id"] == prediction.prediction_id
     assert [feature["feature_name"] for feature in body["features"]] == [
@@ -538,7 +543,7 @@ def test_outcome_evaluate_endpoint_creates_outcome(prediction_api_context):
         json={"actual_period_grade": 86.5, "passing_grade": 75},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     body = response.json()
     assert body["prediction_id"] == prediction.prediction_id
     assert body["outcome_id"] is not None
@@ -590,7 +595,7 @@ def test_outcome_evaluate_endpoint_returns_error_values(prediction_api_context):
         json={"actual_period_grade": 78.0, "passing_grade": 75},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     body = response.json()
     assert body["prediction_error"] == -4.5
     assert body["absolute_error"] == 4.5
@@ -763,7 +768,7 @@ def test_from_records_save_persists_prediction_when_ready(prediction_api_context
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     body = response.json()
     assert body["ready"] is True
     assert body["prediction_id"] is not None
@@ -786,7 +791,7 @@ def test_from_records_response_does_not_return_classifier_fields(prediction_api_
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     body = response.json()
     assert "at_risk_probability" not in body
     assert "is_at_risk" not in body

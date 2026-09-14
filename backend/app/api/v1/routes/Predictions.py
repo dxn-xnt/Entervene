@@ -24,6 +24,7 @@ from app.schemas.Prediction import (
     PredictionFromRecordsPersistRequest,
     PredictionFromRecordsPreviewRequest,
     PredictionFromRecordsResponse,
+    PredictionHistoryResponse,
     PredictionOutcomeEvaluateRequest,
     PredictionOutcomeResponse,
     PredictionPersistRequest,
@@ -31,6 +32,8 @@ from app.schemas.Prediction import (
     PredictionListResponse,
     PredictionPreviewRequest,
     PredictionPreviewResponse,
+    PredictionRefreshRequest,
+    PredictionRosterStatusResponse,
     PredictionSummaryResponse,
     PredictionTeacherReviewListResponse,
     TeacherRiskReviewRequest,
@@ -65,6 +68,10 @@ from app.services.prediction.DashboardPredictionService import (
     get_dashboard_grade_summaries,
 )
 from app.services.prediction.DashboardFilterService import get_dashboard_filter_options
+from app.services.prediction.PredictionStatusService import (
+    get_prediction_history,
+    get_roster_prediction_status,
+)
 
 router = APIRouter()
 
@@ -266,6 +273,30 @@ def dashboard_filters(
     )
 
 
+@router.get("/status/roster", response_model=PredictionRosterStatusResponse)
+def roster_prediction_status(
+    class_id: int,
+    subject_id: int,
+    source_period_id: int,
+    target_period_id: int | None = None,
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
+    db: Session = Depends(get_db),
+):
+    try:
+        return get_roster_prediction_status(
+            db,
+            class_id=class_id,
+            subject_id=subject_id,
+            source_period_id=source_period_id,
+            target_period_id=target_period_id,
+            staff_id=staff_id,
+            is_admin=current_user.get("role") == "admin",
+        )
+    except (ValueError, PermissionError) as exc:
+        raise _service_error(exc) from exc
+
+
 # ---------------------------------------------------------------------------
 # Scoring / Feature / Persistence endpoints
 # ---------------------------------------------------------------------------
@@ -440,6 +471,54 @@ def get_model_performance(
         subject_id=subject_id,
         academic_period_id=academic_period_id,
     )
+
+
+@router.post("/{prediction_id}/refresh", response_model=PredictionFromRecordsResponse)
+def refresh_prediction(
+    prediction_id: int,
+    payload: PredictionRefreshRequest | None = None,
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
+    db: Session = Depends(get_db),
+):
+    prediction = _authorized_prediction(db, prediction_id, current_user, staff_id, write=False)
+    scope = {
+        "student_id": prediction.student_id,
+        "class_id": prediction.class_id,
+        "subject_id": prediction.subject_id,
+        "source_period_id": prediction.source_period_id,
+        "target_period_id": prediction.target_period_id,
+    }
+    try:
+        _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, scope)
+        key = payload.generation_request_id if payload else None
+        return run_prediction_generation_transaction(
+            scope,
+            prediction.model_version.model_name if prediction.model_version else DEFAULT_MODEL_NAME,
+            lambda generation_db: generate_from_records(
+                generation_db,
+                scope,
+                model_name=prediction.model_version.model_name if prediction.model_version else DEFAULT_MODEL_NAME,
+                is_admin=current_user.get("role") == "admin",
+                staff_id=staff_id,
+                generation_request_id=key,
+            ),
+            bind=db.get_bind(),
+            generation_request_id=key,
+        )
+    except (ValueError, LookupError, FileNotFoundError, PermissionError, PredictionConflict) as exc:
+        raise _service_error(exc) from exc
+
+
+@router.get("/{prediction_id}/history", response_model=PredictionHistoryResponse)
+def read_prediction_history(
+    prediction_id: int,
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
+    db: Session = Depends(get_db),
+):
+    prediction = _authorized_prediction(db, prediction_id, current_user, staff_id, write=False)
+    return get_prediction_history(db, prediction)
 
 
 @router.post("/{prediction_id}/outcome/evaluate", response_model=PredictionOutcomeResponse)

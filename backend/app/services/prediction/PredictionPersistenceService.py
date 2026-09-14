@@ -106,7 +106,8 @@ def find_existing_prediction(
             AIPrediction.target_period_id == identifiers["target_period_id"],
             AIPrediction.model_version_id == model_version_id,
         )
-        .one_or_none()
+        .order_by(AIPrediction.revision.desc(), AIPrediction.prediction_id.desc())
+        .first()
     )
 
 
