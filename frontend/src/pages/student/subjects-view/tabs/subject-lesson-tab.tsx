@@ -1847,7 +1847,7 @@ export default function SubjectLessonTab({
                   {detailError}
                 </Card>
               ) : selectedClasswork ? (
-                <div className="flex max-h-[calc(90vh-88px)] min-w-0 flex-col gap-5 overflow-y-auto overflow-x-hidden p-5">
+                <div className="flex min-w-0 flex-col gap-5 overflow-x-hidden p-5">
                   {/* Left: details */}
                   <div className="min-w-0 space-y-4">
                     {/* Status + title card */}

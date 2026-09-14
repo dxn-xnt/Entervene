@@ -223,8 +223,8 @@ export default function AdminProfile() {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md border-2 border-black bg-[#fffdf5] rounded-lg shadow-[8px_8px_0_0_#000] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between border-b-2 border-black bg-[#79bd80] px-4 py-3 text-black">
+          <div className="flex w-full max-w-md flex-col overflow-hidden rounded-none border-2 border-border bg-background text-foreground shadow-[4px_4px_0_#000]">
+            <div className="flex items-center justify-between border-b-2 border-border bg-primary px-4 py-3 text-primary-foreground">
               <h2 className="font-bold text-lg">Edit Profile Avatar</h2>
               <button
                 aria-label="Close modal"

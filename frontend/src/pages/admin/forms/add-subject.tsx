@@ -454,7 +454,7 @@ export default function AddSubjectModal({
           </Text>
         </div>
       </Dialog.Header>
-      <section className="flex max-h-[72vh] flex-col gap-4 overflow-y-auto p-4">
+      <section className="flex flex-col gap-4 p-4">
         <div>
           <Text as="h6" className="font-sans text-lg font-bold">
             Subject Details

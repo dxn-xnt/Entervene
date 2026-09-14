@@ -520,7 +520,7 @@ export function OfferingModal({
             </Text>
           </div>
         </Dialog.Header>
-        <section className="max-h-[calc(90vh-7rem)] overflow-y-auto p-4">
+        <section className="p-4">
           <div className="flex flex-col gap-4">
             <div className="rounded-lg border-2 border-black bg-[#fff1b8] p-3 shadow-[3px_3px_0_#000]">
               <p className="text-sm font-semibold text-black/70">Current setup context</p>

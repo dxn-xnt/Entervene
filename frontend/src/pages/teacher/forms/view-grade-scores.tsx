@@ -106,7 +106,7 @@ export default function ViewGradeScoreModal({
         </Text>
       </Dialog.Header>
 
-      <section className="flex flex-col gap-4 p-4 max-h-[75vh] overflow-y-auto">
+      <section className="flex flex-col gap-4 p-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

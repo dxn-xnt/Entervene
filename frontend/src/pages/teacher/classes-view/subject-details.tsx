@@ -1063,7 +1063,7 @@ export default function SubjectDetails() {
                 if (!open) closeLessonManager();
               }}
             >
-              <Dialog.Content className="block w-full max-w-4xl border-black bg-white p-0 transition-none max-h-[92vh] overflow-y-auto">
+              <Dialog.Content className="w-full max-w-4xl p-0 transition-none">
                 <Dialog.Header className="sticky top-0 z-10 border-black">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wide">
@@ -1395,7 +1395,7 @@ export default function SubjectDetails() {
 
           {showArchiveConfirm && selectedLesson && (
             <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4">
-              <Card className="block w-full max-w-md">
+              <Card className="block w-full max-w-md border-border bg-background text-foreground shadow-[4px_4px_0_#000] hover:shadow-[4px_4px_0_#000]">
                 <div className="flex items-center justify-between border-b border-black bg-red-100 px-5 py-3">
                   <div className="flex items-center gap-2 text-red-800">
                     <Archive size={18} />

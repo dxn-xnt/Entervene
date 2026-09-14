@@ -235,7 +235,7 @@ export default function AddGradingComponentModal({
           ) : null}
         </Text>
       </Dialog.Header>
-      <section className="flex max-h-[75vh] flex-col gap-5 overflow-y-auto p-4">
+      <section className="flex flex-col gap-5 p-4">
         {readOnly ? (
           <section className="border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
             <p className="font-bold">Read-only academic year</p>

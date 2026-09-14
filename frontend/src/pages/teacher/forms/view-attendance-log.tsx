@@ -128,7 +128,7 @@ export default function ViewAttendanceLogModal({
         </div>
       </Dialog.Header>
 
-      <section className="attendance-log-body flex flex-col gap-4 p-4 max-h-[70vh] overflow-y-auto">
+      <section className="attendance-log-body flex flex-col gap-4 p-4">
         <Card className="shadow-none">
           <div className="attendance-log-identity flex items-center justify-between gap-3.5">
             <div className="flex items-center gap-3.5 min-w-0">
@@ -284,7 +284,7 @@ export default function ViewAttendanceLogModal({
         </Table>
       </section>
 
-      <Dialog.Footer className="flex justify-end items-center px-6 py-3 border-t-2 border-black bg-white">
+      <Dialog.Footer className="flex items-center justify-end border-t-2 border-border px-6 py-3">
         <Dialog.Close render={<Button variant="outline" className="border-2 border-black shadow-none font-bold text-xs" />}>
           Close
         </Dialog.Close>

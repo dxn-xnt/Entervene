@@ -279,7 +279,7 @@ export default function CreateLessonModal({
           </div>
         </Dialog.Header>
 
-        <section className="flex max-h-[72vh] flex-col gap-4 overflow-y-auto p-4">
+        <section className="flex flex-col gap-4 p-4">
           {error && (
             <Alert status="error">
               <Alert.Description>{error}</Alert.Description>
