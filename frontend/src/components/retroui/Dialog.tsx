@@ -10,7 +10,7 @@ const Dialog = BaseDialog.Root;
 const DialogTrigger = BaseDialog.Trigger;
 
 const overlayVariants = cva(
-  ` fixed bg-black/80 font-head backdrop-blur-sm
+  ` fixed bg-black/50 font-head
     data-[open]:fade-in-0
     data-[open]:animate-in
     data-[closed]:animate-out
@@ -19,7 +19,7 @@ const overlayVariants = cva(
   {
     variants: {
       variant: {
-        default: "inset-0 z-[998] bg-black/80 backdrop-blur-sm",
+        default: "inset-0 z-[998] bg-black/50",
         none: "fixed bg-transparent",
       },
     },
@@ -38,6 +38,7 @@ const DialogBackdrop = (inputProps: IDialogBackgroupProps & { ref?: React.Ref<HT
 
   return (
     <BaseDialog.Backdrop
+      data-slot="dialog-overlay"
       className={cn(overlayVariants({ variant }), className)}
       ref={ref}
       {...props}
@@ -46,7 +47,7 @@ const DialogBackdrop = (inputProps: IDialogBackgroupProps & { ref?: React.Ref<HT
 };
 
 const dialogVariants = cva(
-  `fixed left-[50%] top-[50%] z-[999] grid rounded overflow-hidden w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border-2 bg-background shadow-lg duration-200
+  `fixed left-[50%] top-[50%] z-[999] flex max-h-[calc(100dvh-2rem)] flex-col rounded-none overflow-hidden w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] border-2 bg-background shadow-[4px_4px_0_#000] duration-200
   data-[open]:animate-in
   data-[open]:fade-in-0
   data-[open]:zoom-in-95
@@ -93,12 +94,13 @@ const DialogContent = (inputProps: IDialogContentProps & { ref?: React.Ref<HTMLD
     <BaseDialog.Portal>
       <DialogBackdrop {...overlay} />
       <BaseDialog.Popup
+        data-slot="dialog-content"
         className={cn(dialogVariants({ size }), className)}
         ref={ref}
         {...props}
       >
         <BaseDialog.Title className="sr-only" />
-        <div className="flex flex-col relative max-h-full min-h-0 flex-1 h-full overflow-hidden">
+        <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
           {children}
         </div>
       </BaseDialog.Popup>
@@ -120,14 +122,14 @@ const DialogDescription = ({
 };
 
 const dialogFooterVariants = cva(
-  "flex items-center justify-end border-t-2 min-h-12 gap-4 px-4 py-2",
+  "z-10 mt-4 flex shrink-0 flex-col-reverse items-stretch justify-end gap-2 border-t-2 bg-background px-5 py-4 sm:flex-row sm:items-center",
   {
     variants: {
       variant: {
         default: "bg-background text-foreground",
       },
       position: {
-        fixed: "sticky bottom-0",
+        fixed: "static",
         static: "static",
       },
     },
@@ -150,6 +152,7 @@ const DialogFooter = ({
 }: IDialogFooterProps) => {
   return (
     <div
+      data-slot="dialog-footer"
       className={cn(dialogFooterVariants({ position, variant }), className)}
       {...props}
     >
@@ -159,7 +162,7 @@ const DialogFooter = ({
 };
 
 const dialogHeaderVariants = cva(
-  "flex items-center justify-between border-b-2 px-5 py-4 min-h-12",
+  "z-10 flex shrink-0 items-center justify-between border-b-2 px-5 py-4 min-h-12",
   {
     variants: {
       variant: {
@@ -168,7 +171,7 @@ const dialogHeaderVariants = cva(
         neutral: "bg-card text-card-foreground border-b border-border",
       },
       position: {
-        fixed: "sticky top-0",
+        fixed: "static",
         static: "static",
       },
     },
@@ -183,7 +186,7 @@ const DialogHeaderDefaultLayout = ({ children }: { children: ReactNode }) => {
   return (
     <>
       {children}
-      <BaseDialog.Close title="Close pop-up" className="cursor-pointer text-black hover:bg-black/10 transition-colors p-1 rounded-sm">
+      <BaseDialog.Close title="Close pop-up" className="cursor-pointer rounded-none p-1 text-current transition-colors hover:bg-foreground/10">
         <X className="size-4" />
       </BaseDialog.Close>
     </>
@@ -206,6 +209,7 @@ const DialogHeader = ({
 }: IDialogHeaderProps) => {
   return (
     <div
+      data-slot="dialog-header"
       className={cn(dialogHeaderVariants({ position, variant }), className)}
       {...props}
     >

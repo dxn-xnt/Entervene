@@ -185,7 +185,7 @@ export default function PredictionDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-lg">
         <SheetHeader className="pb-0">
           <SheetTitle className="text-lg">Prediction Detail</SheetTitle>
         </SheetHeader>

@@ -519,7 +519,7 @@ export default function AIQuizGeneratorModal({
     >
       <Dialog.Content
         size="2xl"
-        className="border-2 border-black bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0"
+        className="p-0"
         overlay={{ className: "bg-black/60 backdrop-blur-xs" }}
       >
         {/* ── Fixed Header ── */}
@@ -555,7 +555,7 @@ export default function AIQuizGeneratorModal({
         </Dialog.Header>
 
         {/* ── Scrollable Body ── */}
-        <section className="flex flex-col gap-4 p-5 max-h-[66vh] overflow-y-auto">
+        <section className="flex flex-col gap-4 p-5">
 
           {error && (
             <Alert status="error" className="border-2 border-red-500">

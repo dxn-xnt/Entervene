@@ -381,3 +381,92 @@ textarea::placeholder,
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--destructive) 35%, transparent);
   outline: none;
 }
+
+/* Form surfaces use one square geometry across legacy and shared controls. */
+:where(form, [data-slot="dialog-content"], [data-slot="sheet-content"]) :where(*) {
+  border-radius: 0;
+}
+
+:where(form, [data-slot="dialog-content"], [data-slot="sheet-content"])
+  :where(
+    input:not([type="radio"]),
+    textarea,
+    select,
+    button,
+    [role="combobox"],
+    [role="checkbox"],
+    [role="switch"],
+    [data-slot="input"],
+    [data-slot="select-trigger"],
+    [data-slot="select-content"],
+    [data-slot="select-item"],
+    [data-slot="button"],
+    [data-slot="card"],
+    [data-slot="card-header"],
+    [data-slot="card-footer"]
+  ),
+:where([data-slot="dialog-content"], [data-slot="dialog-header"], [data-slot="dialog-footer"], [data-slot="sheet-content"]) {
+  border-radius: 0;
+}
+
+/* Radios, avatars, and status indicators intentionally retain their shape. */
+:where(form, [data-slot="dialog-content"], [data-slot="sheet-content"])
+  :where(input[type="radio"], [role="radio"], [data-slot="avatar"], [data-shape="circle"]) {
+  border-radius: 9999px;
+}
+
+/* Dialogs own exactly one content scroller. The header and footer remain
+   visible while the middle region absorbs viewport and keyboard changes. */
+[data-slot="dialog-content"],
+[data-slot="sheet-content"] {
+  background-color: var(--background);
+  border-color: var(--border);
+  color: var(--foreground);
+  box-shadow: 4px 4px 0 #000;
+}
+
+[data-slot="dialog-overlay"],
+[data-slot="sheet-overlay"] {
+  background-color: rgb(0 0 0 / 0.5);
+  backdrop-filter: none;
+}
+
+[data-slot="dialog-content"] > div {
+  min-height: 0;
+  overflow: hidden;
+}
+
+[data-slot="dialog-header"],
+[data-slot="dialog-footer"] {
+  flex-shrink: 0;
+}
+
+[data-slot="dialog-content"] > div > form {
+  display: contents;
+}
+
+[data-slot="dialog-content"] > div > :not([data-slot="dialog-header"]):not([data-slot="dialog-footer"]):not(form),
+[data-slot="dialog-content"] > div > form > :not([data-slot="dialog-header"]):not([data-slot="dialog-footer"]) {
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+[data-slot="sheet-content"] {
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+[data-slot="sheet-content"] > :not([data-slot="sheet-header"]):not([data-slot="sheet-footer"]):not([data-slot="sheet-close"]) {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Nested cards inside a form are field groups, not another framed surface. */
+:where(form, [data-slot="dialog-content"], [data-slot="sheet-content"])
+  [data-slot="card"] [data-slot="card"] {
+  border: 0;
+  box-shadow: none;
+}

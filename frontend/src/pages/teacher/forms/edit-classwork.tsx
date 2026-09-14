@@ -309,7 +309,7 @@ export default function EditClassworkModal({
       }}
     >
       {isOpen && (
-        <Dialog.Content size="2xl" className="max-h-[90vh] flex flex-col bg-white border-2 border-black">
+        <Dialog.Content size="2xl">
           <Dialog.Header position="fixed" asChild>
             <div className="flex w-full items-center justify-between bg-primary font-bold text-black">
               <div className="flex items-center gap-2 text-lg">

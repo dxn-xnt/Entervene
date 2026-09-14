@@ -552,7 +552,7 @@ export default function BreakConfigDrawer({
 
       {/* Themed RetroUI Confirmation Modal */}
       <Dialog open={showConfirmModal} onOpenChange={(val) => { if (!val && !isSaving) setShowConfirmModal(false); }}>
-        <Dialog.Content size="md" className="border-2 border-black p-0 overflow-hidden shadow-[4px_4px_0_#000] bg-white">
+        <Dialog.Content size="md" className="p-0 overflow-hidden">
           <Dialog.Header className="border-black">
             <div className="flex items-center gap-2">
               <Clock className="size-5 text-black" />
@@ -601,7 +601,7 @@ export default function BreakConfigDrawer({
 
       {/* Themed RetroUI New Template Group Modal */}
       <Dialog open={showNewGroupModal} onOpenChange={(val) => { if (!val) setShowNewGroupModal(false); }}>
-        <Dialog.Content size="md" className="border-2 border-black p-0 overflow-hidden shadow-[4px_4px_0_#000] bg-white">
+        <Dialog.Content size="md" className="p-0 overflow-hidden">
           <Dialog.Header className="border-black">
             <div className="flex items-center gap-2">
               <FolderPlus className="size-5 text-black" />

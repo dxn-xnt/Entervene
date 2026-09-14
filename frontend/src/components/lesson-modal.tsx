@@ -75,7 +75,7 @@ export default function LessonModal({
         </Dialog.Header>
 
         {/* Body */}
-        <div className="max-h-[calc(90vh-88px)] overflow-y-auto p-5">
+        <div className="p-5">
           <Card className="block shadow-none">
             <LessonForm
               classId={classId}

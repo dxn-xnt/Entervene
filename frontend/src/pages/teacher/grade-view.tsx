@@ -1146,8 +1146,8 @@ const TeacherGradeView = () => {
           if (!open) setShowBulkConfirm(false);
         }}
       >
-        <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded-lg overflow-hidden">
-          <Dialog.Header className="border-black text-black min-h-0">
+        <Dialog.Content size="md" className="max-w-lg overflow-hidden p-0">
+          <Dialog.Header className="min-h-0 border-border">
             <div className="flex items-center gap-2.5">
               <div className="size-8 rounded-md bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                 {timingGate.isLocked ? (
@@ -1235,7 +1235,7 @@ const TeacherGradeView = () => {
               </>
             )}
           </div>
-          <Dialog.Footer className="border-t-2 border-black bg-white px-5 py-3.5 flex justify-end gap-2.5">
+          <Dialog.Footer className="flex justify-end gap-2.5 border-t-2 border-border px-5 py-3.5">
             <Button
               variant="outline"
               onClick={() => setShowBulkConfirm(false)}
@@ -1273,8 +1273,8 @@ const TeacherGradeView = () => {
           if (!open) setConflictData(null);
         }}
       >
-        <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded-lg overflow-hidden">
-          <Dialog.Header className="border-black text-black min-h-0">
+        <Dialog.Content size="md" className="max-w-lg overflow-hidden p-0">
+          <Dialog.Header className="min-h-0 border-border">
             <div className="flex items-center gap-2.5">
               <div className="size-8 rounded-md bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                 <AlertTriangle className="size-4 text-black" />
@@ -1303,7 +1303,7 @@ const TeacherGradeView = () => {
               Would you like to refresh your gradebook to review the latest scores, or force-send with the recomputed value?
             </p>
           </div>
-          <Dialog.Footer className="border-t-2 border-black bg-white px-5 py-3.5 flex justify-end gap-2.5">
+          <Dialog.Footer className="flex justify-end gap-2.5 border-t-2 border-border px-5 py-3.5">
             <Button
               variant="outline"
               onClick={() => {
@@ -1341,8 +1341,8 @@ const TeacherGradeView = () => {
           if (!open) setBulkSendSummary(null);
         }}
       >
-        <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded-lg overflow-hidden">
-          <Dialog.Header className="border-black text-black min-h-0">
+        <Dialog.Content size="md" className="max-w-lg overflow-hidden p-0">
+          <Dialog.Header className="min-h-0 border-border">
             <div className="flex items-center gap-2.5">
               <div className="size-8 rounded-md bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                 <CheckCircle2 className="size-4 text-black" />
@@ -1379,7 +1379,7 @@ const TeacherGradeView = () => {
                   : "All student grades were already transmitted to the adviser with matching scores. No changes were necessary."}
             </p>
           </div>
-          <Dialog.Footer className="border-t-2 border-black bg-white px-5 py-3.5 flex justify-end">
+          <Dialog.Footer className="flex justify-end border-t-2 border-border px-5 py-3.5">
             <Button
               variant="default"
               onClick={() => setBulkSendSummary(null)}

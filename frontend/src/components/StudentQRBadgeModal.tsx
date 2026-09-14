@@ -81,8 +81,8 @@ export default function StudentQRBadgeModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content className="max-w-md rounded-none border-2 border-black bg-white p-0 text-black shadow-md">
-        <Dialog.Header className="border-black bg-primary text-black">
+      <Dialog.Content className="max-w-md p-0">
+        <Dialog.Header className="border-border bg-primary text-primary-foreground">
           <div className="flex min-w-0 flex-col items-start">
             <Dialog.Title className="text-lg font-bold">
               Student Attendance QR Card
@@ -138,7 +138,7 @@ export default function StudentQRBadgeModal({
           </Card>
         </div>
 
-        <Dialog.Footer className="border-black bg-white">
+        <Dialog.Footer className="border-border">
           <Button
             size="sm"
             onClick={handleDownload}
