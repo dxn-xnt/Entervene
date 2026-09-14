@@ -130,8 +130,13 @@ export default function EnterManualScoresModal({
         </Text>
       </Dialog.Header>
 
+<<<<<<< HEAD
       <section className="flex flex-col gap-4 p-4 max-h-[70vh] overflow-y-auto">
         <div className="flex items-center justify-between bg-muted/40 p-3 rounded border border-border">
+=======
+      <section className="flex flex-col gap-4 p-4">
+        <div className="flex items-center justify-between bg-muted/40 p-3 rounded-lg border border-border">
+>>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
           <span className="text-sm font-semibold text-foreground">
             Activity: <span className="font-bold">{activityTitle}</span>
           </span>

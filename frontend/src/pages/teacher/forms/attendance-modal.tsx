@@ -59,7 +59,7 @@ export default function AttendanceModal({
   };
 
   return (
-    <Dialog.Content size="xl" className="max-w-4xl bg-card border-2 border-black">
+    <Dialog.Content size="xl" className="max-w-4xl">
       <Dialog.Header position="fixed" asChild>
         <div className="flex items-center gap-2">
           <Text as="h4" className="font-sans text-2xl font-bold">

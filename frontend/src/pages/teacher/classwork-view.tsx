@@ -650,7 +650,7 @@ export default function ClassworkView({
 
             {showArchiveConfirm && (
               <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4">
-                <Card className="block w-full max-w-md border-black p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-none hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <Card className="block w-full max-w-md border-border bg-background p-0 text-foreground shadow-[4px_4px_0_#000] transition-none hover:shadow-[4px_4px_0_#000]">
                   <div className="flex items-center justify-between border-b-2 border-black bg-red-100 px-5 py-3">
                     <div className="flex items-center gap-2 text-red-800">
                       <Archive size={18} />

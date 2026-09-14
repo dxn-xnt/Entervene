@@ -260,7 +260,7 @@ export function SuggestionPanel({
           </div>
         </Dialog.Header>
 
-        <div className="max-h-[80vh] overflow-y-auto p-6 space-y-4">
+        <div className="space-y-4 p-6">
           {formError && (
             <Alert status="error" className="text-xs">
               {formError}

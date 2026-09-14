@@ -59,7 +59,7 @@ export default function ClassworkFormModal({
         if (!open) closeClassworkForm();
       }}
     >
-      <Dialog.Content className="block w-full max-w-2xl border-black bg-white p-0 transition-none max-h-[90vh] overflow-y-auto">
+      <Dialog.Content className="w-full max-w-2xl p-0 transition-none">
         <Dialog.Header
           className="sticky top-0 z-10 border-black"
         >

@@ -659,7 +659,7 @@ export default function AddUserModal({
         {/* ── STEP: MANUAL ─────────────────────────────────── */}
         {step === "manual" && (
           <>
-            <div className="p-5 flex flex-col gap-3.5 max-h-[60vh] overflow-y-auto">
+            <div className="flex flex-col gap-3.5 p-5">
               <Field label="Role">
                 <Select value={form.role} onValueChange={(val) => handleField("role", val)}>
                   <Select.Trigger className="w-full">

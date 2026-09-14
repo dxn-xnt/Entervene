@@ -451,7 +451,7 @@ function EditUserModal({
         </Dialog.Header>
 
         <form onSubmit={submit}>
-          <section className="grid max-h-[72vh] gap-4 overflow-y-auto p-4">
+          <section className="grid gap-4 p-4">
             <div className="grid gap-3 md:grid-cols-3">
               <EditField label="First Name">
                 <Input

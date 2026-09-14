@@ -164,7 +164,7 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
         </div>
       </Dialog.Header>
 
-      <section className="flex flex-col gap-4 p-4 max-h-[80vh] overflow-y-auto">
+      <section className="flex flex-col gap-4 p-4">
         {saveSuccess ? (
           <ManualSaveSuccess
             result={saveSuccess}

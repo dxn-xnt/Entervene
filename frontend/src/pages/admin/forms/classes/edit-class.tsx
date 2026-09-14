@@ -129,7 +129,7 @@ export default function EditClass({
           </div>
         ) : (
           <>
-            <section className="flex flex-col gap-4 p-5 max-h-[80vh] overflow-y-auto">
+            <section className="flex flex-col gap-4 p-5">
               <div className="grid gap-4">
                 <Field label="Academic Year">
                   <Input
@@ -162,7 +162,6 @@ export default function EditClass({
 
                 <Field label="Class Adviser">
                   <Select
-                    className="text-base"
                     value={adviserStaffId}
                     onChange={(event) => {
                       setAdviserStaffId(event.target.value);
