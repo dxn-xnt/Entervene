@@ -337,7 +337,7 @@ export default function PredictionDetailSheet({
                 </h3>
                 <div className="flex flex-col gap-2">
                   {detail.interpretations.map((interpretation) => (
-                    <p key={interpretation} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-gray-700">
+                    <p key={interpretation} className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-gray-700">
                       {interpretation}
                     </p>
                   ))}
@@ -355,7 +355,7 @@ export default function PredictionDetailSheet({
                   {detail.causes.map((cause) => (
                     <div
                       key={cause.code}
-                      className="rounded-md border border-gray-100 bg-white px-3 py-2"
+                      className="rounded border border-gray-100 bg-white px-3 py-2"
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-gray-800">
@@ -390,7 +390,7 @@ export default function PredictionDetailSheet({
                   {detail.recommended_actions.map((action) => (
                     <div
                       key={action.action_code}
-                      className="rounded-md border border-blue-100 bg-blue-50/40 px-3 py-2"
+                      className="rounded border border-blue-100 bg-blue-50/40 px-3 py-2"
                     >
                       <p className="text-sm font-medium text-gray-800">
                         {action.title}
@@ -411,7 +411,7 @@ export default function PredictionDetailSheet({
                   <Sparkles size={16} className="text-purple-500" />
                   Feature Evidence
                 </h3>
-                <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="rounded border border-gray-200 overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-gray-50 text-left text-xs text-gray-500">
@@ -470,7 +470,7 @@ export default function PredictionDetailSheet({
                     <h4 className="text-[11px] font-extrabold uppercase tracking-wide text-gray-500">{group.title}</h4>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {rows.map((item) => (
-                        <article key={item.feature_name} className="min-w-0 rounded-lg border border-gray-200 bg-white p-3">
+                        <article key={item.feature_name} className="min-w-0 rounded border border-gray-200 bg-white p-3">
                           <p className="text-sm font-semibold text-gray-900 break-words">{item.display_name}</p>
                           <p className="mt-1 text-base font-bold text-gray-900 break-words">{item.formatted_value}</p>
                           <p className="mt-1 text-xs text-gray-600 break-words">{item.source_description}</p>
@@ -486,7 +486,7 @@ export default function PredictionDetailSheet({
                   </div>
                 );
               }) : (
-                <p className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                <p className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
                   {detail.prediction_status === "LEGACY"
                     ? "Source details unavailable for this saved prediction."
                     : "No teacher-visible evidence is available for this prediction."}
@@ -499,7 +499,7 @@ export default function PredictionDetailSheet({
                 <h3 id="evidence-limitations-title" className="text-sm font-semibold text-gray-700 mb-2">Evidence limitations</h3>
                 <div className="flex flex-col gap-2">
                   {detail.limitations.map((limitation) => (
-                    <p key={limitation} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-gray-700">{limitation}</p>
+                    <p key={limitation} className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-gray-700">{limitation}</p>
                   ))}
                 </div>
               </section>
@@ -518,7 +518,7 @@ export default function PredictionDetailSheet({
                   {suggestions.map((s) => (
                     <div
                       key={s.student_suggestion_id}
-                      className="rounded-none border-2 border-black bg-yellow-50/50 p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      className="rounded border-2 border-black bg-yellow-50/50 p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-extrabold text-xs text-black uppercase">
@@ -618,7 +618,7 @@ export default function PredictionDetailSheet({
                   {detail.teacher_reviews.map((review: TeacherReview) => (
                     <div
                       key={review.review_id}
-                      className="rounded-md border border-gray-100 bg-white px-3 py-2 text-sm"
+                      className="rounded border border-gray-100 bg-white px-3 py-2 text-sm"
                     >
                       <div className="flex items-center justify-between">
                         <Badge size="sm" className="bg-indigo-100 text-indigo-700 text-xs rounded-full">
@@ -654,7 +654,7 @@ export default function PredictionDetailSheet({
 
               {/* Review form */}
               {isTeacher ? (
-                <div className="flex flex-col gap-4 rounded-lg border-2 border-black p-4 bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <div className="flex flex-col gap-4 rounded border-2 border-black p-4 bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                   {/* Decision dropdown */}
                   <div className="space-y-1">
                     <label className="text-xs font-extrabold uppercase text-gray-800">
@@ -681,7 +681,7 @@ export default function PredictionDetailSheet({
                     placeholder="Add notes (optional)..."
                     value={reviewNotes}
                     onChange={(e) => setReviewNotes(e.target.value)}
-                    className="w-full rounded-md border-2 border-black bg-white px-3 py-2 text-sm resize-none focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    className="w-full rounded border-2 border-black bg-white px-3 py-2 text-sm resize-none focus:outline-none shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                     rows={3}
                   />
 

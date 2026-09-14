@@ -145,7 +145,7 @@ export default function StudentTodoView() {
                           {topic.description}
                         </p>
                       </div>
-                      <div className="flex flex-col items-center border-2 border-black rounded-md px-3 py-1 shrink-0">
+                      <div className="flex flex-col items-center border-2 border-black rounded px-3 py-1 shrink-0">
                         <span className="text-xs text-black/60">
                           Mastery level
                         </span>

@@ -165,7 +165,7 @@ export function ChartAreaInteractive() {
   })
 
   return (
-    <Card className="@container/card rounded-none shadow-md hover:shadow-none transition-all ">
+    <Card className="@container/card rounded shadow-md hover:shadow-none transition-all ">
       <CardHeader>
         <CardTitle>Total Visitors</CardTitle>
         <CardDescription>
@@ -194,14 +194,14 @@ export function ChartAreaInteractive() {
             >
               <SelectValue placeholder="Last 3 months" />
             </SelectTrigger>
-            <SelectContent className="rounded-xl">
-              <SelectItem value="90d" className="rounded-lg">
+            <SelectContent className="rounded">
+              <SelectItem value="90d" className="rounded">
                 Last 3 months
               </SelectItem>
-              <SelectItem value="30d" className="rounded-lg">
+              <SelectItem value="30d" className="rounded">
                 Last 30 days
               </SelectItem>
-              <SelectItem value="7d" className="rounded-lg">
+              <SelectItem value="7d" className="rounded">
                 Last 7 days
               </SelectItem>
             </SelectContent>

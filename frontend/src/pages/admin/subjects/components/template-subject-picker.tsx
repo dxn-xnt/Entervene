@@ -117,7 +117,7 @@ export function TemplateSubjectPicker({
           </div>
         </div>
       ) : (
-        <div className="rounded-md border-2 border-black bg-background p-3 text-sm font-medium shadow-[2px_2px_0_#000]">
+        <div className="rounded border-2 border-black bg-background p-3 text-sm font-medium shadow-[2px_2px_0_#000]">
           No subjects selected. This template will serve as a general template.
         </div>
       )}

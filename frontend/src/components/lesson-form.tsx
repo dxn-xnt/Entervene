@@ -88,7 +88,11 @@ export default function LessonForm({
               value={formData.title}
               onChange={handleChange}
               placeholder="Enter lesson title"
+<<<<<<< HEAD
+              className="w-full px-4 py-2 border rounded focus:border-ring focus:ring-2 focus:ring-ring/35"
+=======
               className="w-full rounded-none border px-4 py-2 focus:border-ring focus:ring-2 focus:ring-ring/35"
+>>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
               disabled={isLoading}
             />
           </div>
@@ -107,7 +111,11 @@ export default function LessonForm({
               onChange={handleChange}
               placeholder="Enter lesson description (optional)"
               rows={3}
+<<<<<<< HEAD
+              className="w-full px-4 py-2 border rounded focus:border-ring focus:ring-2 focus:ring-ring/35"
+=======
               className="w-full rounded-none border px-4 py-2 focus:border-ring focus:ring-2 focus:ring-ring/35"
+>>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
               disabled={isLoading}
             />
           </div>
@@ -123,12 +131,20 @@ export default function LessonForm({
               onChange={handleChange}
               placeholder="Enter lesson content"
               rows={6}
+<<<<<<< HEAD
+              className="w-full px-4 py-2 border rounded focus:border-ring focus:ring-2 focus:ring-ring/35"
+=======
               className="w-full rounded-none border px-4 py-2 focus:border-ring focus:ring-2 focus:ring-ring/35"
+>>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
               disabled={isLoading}
             />
           </div>
 
+<<<<<<< HEAD
+          <div className="flex items-center gap-3 p-4 bg-gray-50 rounded">
+=======
           <div className="flex items-center gap-3 rounded-none bg-gray-50 p-4">
+>>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
             <input
               type="checkbox"
               id="publishImmediately"
@@ -151,7 +167,11 @@ export default function LessonForm({
           <div className="flex gap-3 justify-end">
             <button
               type="button"
+<<<<<<< HEAD
+              className="px-6 py-2 border rounded hover:bg-gray-50"
+=======
               className="rounded-none border px-6 py-2 hover:bg-gray-50"
+>>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
               disabled={isLoading}
               onClick={() => window.history.back()}
             >
@@ -160,7 +180,11 @@ export default function LessonForm({
             <button
               type="submit"
               disabled={isLoading}
+<<<<<<< HEAD
+              className={`px-6 py-2 text-black border rounded font-medium transition-colors bg-[#7ABA78] disabled:opacity-50 disabled:cursor-not-allowed`}
+=======
               className="rounded-none border bg-primary px-6 py-2 font-medium text-primary-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+>>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
             >
               {isLoading ? "Saving..." : buttonLabel}
             </button>

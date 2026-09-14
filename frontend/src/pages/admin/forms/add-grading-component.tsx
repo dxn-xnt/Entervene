@@ -244,7 +244,7 @@ export default function AddGradingComponentModal({
         ) : null}
 
         {/* {isLocked ? (
-          <section className="rounded-lg border-2 border-black bg-[#fff1b8] p-3 text-sm shadow-[3px_3px_0_#000]">
+          <section className="rounded border-2 border-black bg-[#fff1b8] p-3 text-sm shadow-[3px_3px_0_#000]">
             <div className="flex items-start gap-2 text-amber-900">
               <Lock className="size-4 shrink-0 mt-0.5" />
               <div>

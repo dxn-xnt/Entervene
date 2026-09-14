@@ -144,7 +144,7 @@ export default function QuizGradingModal({
       <div
         key={ans.quiz_question_id}
         id={`quiz-question-card-${idx}`}
-        className={`rounded-lg border-2 border-black p-5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all ${isUngraded && currentScoreStr === "" ? "bg-[#FFD08A]/10 border-[#FFD08A]" : "bg-white"
+        className={`rounded border-2 border-black p-5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all ${isUngraded && currentScoreStr === "" ? "bg-[#FFD08A]/10 border-[#FFD08A]" : "bg-white"
           }`}
       >
         {/* Question Header */}
@@ -190,7 +190,7 @@ export default function QuizGradingModal({
                   return (
                     <div
                       key={opt.option_id}
-                      className={`rounded-lg border-2 p-3 text-sm font-semibold transition-all ${isCorrect
+                      className={`rounded border-2 p-3 text-sm font-semibold transition-all ${isCorrect
                         ? "border-[#3A6D38] bg-[#8BCB88]/25 text-black"
                         : isSelected && !isCorrect
                           ? "border-red-500 bg-red-50 text-black"
@@ -226,7 +226,7 @@ export default function QuizGradingModal({
               <p className="text-xs font-bold uppercase text-gray-600">Student Response:</p>
               <div className="flex flex-wrap items-center gap-3">
                 <div
-                  className={`rounded-lg border-2 px-4 py-2 text-sm font-bold ${studentAnswerText.toLowerCase() === "true"
+                  className={`rounded border-2 px-4 py-2 text-sm font-bold ${studentAnswerText.toLowerCase() === "true"
                     ? "border-black bg-[#F6E9B2] text-black"
                     : "border-gray-200 bg-gray-50 text-gray-400"
                     }`}
@@ -234,7 +234,7 @@ export default function QuizGradingModal({
                   True {studentAnswerText.toLowerCase() === "true" && "(Student Selected)"}
                 </div>
                 <div
-                  className={`rounded-lg border-2 px-4 py-2 text-sm font-bold ${studentAnswerText.toLowerCase() === "false"
+                  className={`rounded border-2 px-4 py-2 text-sm font-bold ${studentAnswerText.toLowerCase() === "false"
                     ? "border-black bg-[#F6E9B2] text-black"
                     : "border-gray-200 bg-gray-50 text-gray-400"
                     }`}
@@ -252,14 +252,14 @@ export default function QuizGradingModal({
 
           {(qType === "identification" || qType === "fill_in_the_blank") && (
             <div className="space-y-2">
-              <div className="rounded-lg border-2 border-black bg-gray-50 p-3">
+              <div className="rounded border-2 border-black bg-gray-50 p-3">
                 <p className="text-xs font-bold uppercase text-gray-600">Student Written Answer:</p>
                 <p className="mt-1 text-sm font-bold text-black">
                   {studentAnswerText || <span className="italic text-gray-400 font-normal">No answer submitted</span>}
                 </p>
               </div>
               {correctAnswerText && (
-                <div className="rounded-lg border-2 border-dashed border-[#8BCB88] bg-[#8BCB88]/10 p-3">
+                <div className="rounded border-2 border-dashed border-[#8BCB88] bg-[#8BCB88]/10 p-3">
                   <p className="text-xs font-bold uppercase text-[#3A6D38]">Expected Key Answer:</p>
                   <p className="mt-1 text-sm font-bold text-black">{correctAnswerText}</p>
                 </div>
@@ -269,14 +269,14 @@ export default function QuizGradingModal({
 
           {(qType === "essay" || qType === "short_answer" || qType === "shortanswer") && (
             <div className="space-y-2">
-              <div className="rounded-lg border-2 border-black bg-gray-50 p-4">
+              <div className="rounded border-2 border-black bg-gray-50 p-4">
                 <p className="text-xs font-bold uppercase text-gray-600">Student Response:</p>
                 <p className="mt-2 whitespace-pre-wrap text-sm font-medium text-black">
                   {studentAnswerText || <span className="italic text-gray-400">No response written</span>}
                 </p>
               </div>
               {correctAnswerText && (
-                <div className="rounded-lg border-2 border-dashed border-[#8BCB88] bg-[#8BCB88]/10 p-3">
+                <div className="rounded border-2 border-dashed border-[#8BCB88] bg-[#8BCB88]/10 p-3">
                   <p className="text-xs font-bold uppercase text-[#3A6D38]">Expected Key / Reference Answer:</p>
                   <p className="mt-1 text-sm font-bold text-black">{correctAnswerText}</p>
                 </div>
@@ -381,7 +381,7 @@ export default function QuizGradingModal({
           </div>
         ) : error ? (
           <div className="p-6 flex-1">
-            <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm font-semibold text-red-700">
+            <div className="rounded border border-red-300 bg-red-50 p-4 text-sm font-semibold text-red-700">
               {error}
             </div>
             <div className="mt-4 flex justify-end">
@@ -534,7 +534,7 @@ export default function QuizGradingModal({
               )}
 
               {/* Overall Feedback Box */}
-              <div className="rounded-lg border-2 border-black bg-white p-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <div className="rounded border-2 border-black bg-white p-4 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                 <label className="text-xs font-bold uppercase text-gray-700 block mb-1">
                   Teacher Feedback / Notes for Student (Optional)
                 </label>

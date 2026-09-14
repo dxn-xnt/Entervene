@@ -797,7 +797,7 @@ export default function TeacherAttendancePage() {
                       aria-label="Attendance date"
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
-                      className="rounded-none border-black h-10 w-full bg-white text-md font-sans"
+                      className="rounded border-black h-10 w-full bg-white text-md font-sans"
                     />
                   </div>
 
@@ -814,7 +814,7 @@ export default function TeacherAttendancePage() {
                         placeholder="Search name or LRN..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="rounded-none border-black h-10 w-full bg-white pl-9"
+                        className="rounded border-black h-10 w-full bg-white pl-9"
                       />
                     </div>
                   </div>
@@ -991,7 +991,7 @@ export default function TeacherAttendancePage() {
                                 <Input
                                   type="text"
                                   aria-label={`Remarks for ${student.student_name}`}
-                                  className="w-full text-sm border-transparent hover:border-gray-300 focus:border-black outline-none bg-transparent transition-colors placeholder:text-gray-400 rounded-none shadow-none focus:shadow-none"
+                                  className="w-full text-sm border-transparent hover:border-gray-300 focus:border-black outline-none bg-transparent transition-colors placeholder:text-gray-400 rounded shadow-none focus:shadow-none"
                                   placeholder={
                                     student.status !== "present"
                                       ? "Add remarks..."
@@ -1138,7 +1138,7 @@ export default function TeacherAttendancePage() {
                       </div>
 
                       {/* Video Container */}
-                      <div className="w-full max-w-[380px] aspect-square rounded-lg border-2 border-border bg-black relative overflow-hidden flex items-center justify-center shadow-inner">
+                      <div className="w-full max-w-[380px] aspect-square rounded border-2 border-border bg-black relative overflow-hidden flex items-center justify-center shadow-inner">
                         <div id="attendance-qr-reader" className="w-full h-full" />
                         {scannerError && (
                           <div className="absolute inset-0 bg-background/95 p-4 flex flex-col items-center justify-center text-center gap-2 z-10">
@@ -1207,7 +1207,7 @@ export default function TeacherAttendancePage() {
                             <div
                               key={scan.id}
                               className={cn(
-                                "p-3 rounded-md border-2 transition-all flex items-start justify-between gap-3 text-sm",
+                                "p-3 rounded border-2 transition-all flex items-start justify-between gap-3 text-sm",
                                 scan.type === "success"
                                   ? "border-emerald-500/60 bg-emerald-500/10 text-foreground"
                                   : scan.type === "duplicate" || scan.type === "excused"
@@ -1321,7 +1321,7 @@ export default function TeacherAttendancePage() {
                         placeholder="Search name or LRN..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="rounded-none border-black h-10 w-full bg-white pl-9"
+                        className="rounded border-black h-10 w-full bg-white pl-9"
                       />
                     </div>
                   </div>
@@ -1383,7 +1383,7 @@ export default function TeacherAttendancePage() {
                             size="sm"
                             variant={summaryLayout === "summary" ? "default" : "outline"}
                             onClick={() => setSummaryLayout("summary")}
-                            className="min-w-0 text-xs font-bold border-black rounded-r-none border-r-0 shadow-none hover:shadow-none"
+                            className="min-w-0 text-xs font-bold border-black rounded-r border-r-0 shadow-none hover:shadow-none"
                           >
                             <BarChart3 className="w-3.5 h-3.5 inline mr-1" />{" "}
                             Summary
@@ -1392,7 +1392,7 @@ export default function TeacherAttendancePage() {
                             size="sm"
                             variant={summaryLayout === "date_grid" ? "default" : "outline"}
                             onClick={() => setSummaryLayout("date_grid")}
-                            className="min-w-0 text-xs font-bold border-black rounded-l-none shadow-none hover:shadow-none"
+                            className="min-w-0 text-xs font-bold border-black rounded-l shadow-none hover:shadow-none"
                           >
                             <TableIcon className="w-3.5 h-3.5 inline mr-1" /> Full Date Sheet
                           </Button>
@@ -1568,7 +1568,7 @@ export default function TeacherAttendancePage() {
                                       <Badge
                                         variant="default"
                                         size="sm"
-                                        className="rounded-none bg-emerald-600 border-black text-white px-1.5 py-0.5 text-[11px] font-bold"
+                                        className="rounded bg-emerald-600 border-black text-white px-1.5 py-0.5 text-[11px] font-bold"
                                       >
                                         P
                                       </Badge>
@@ -1576,7 +1576,7 @@ export default function TeacherAttendancePage() {
                                       <Badge
                                         variant="outline"
                                         size="sm"
-                                        className="rounded-none bg-red-600 border-black text-white px-1.5 py-0.5 text-[11px] font-bold"
+                                        className="rounded bg-red-600 border-black text-white px-1.5 py-0.5 text-[11px] font-bold"
                                       >
                                         A
                                       </Badge>
@@ -1584,7 +1584,7 @@ export default function TeacherAttendancePage() {
                                       <Badge
                                         variant="surface"
                                         size="sm"
-                                        className="rounded-none bg-amber-400 border-black text-black px-1.5 py-0.5 text-[11px] font-bold"
+                                        className="rounded bg-amber-400 border-black text-black px-1.5 py-0.5 text-[11px] font-bold"
                                       >
                                         L
                                       </Badge>
@@ -1592,7 +1592,7 @@ export default function TeacherAttendancePage() {
                                       <Badge
                                         variant="default"
                                         size="sm"
-                                        className="rounded-none bg-blue-600 border-black text-white px-1.5 py-0.5 text-[11px] font-bold"
+                                        className="rounded bg-blue-600 border-black text-white px-1.5 py-0.5 text-[11px] font-bold"
                                       >
                                         E
                                       </Badge>

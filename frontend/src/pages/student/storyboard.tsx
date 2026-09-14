@@ -173,7 +173,7 @@ const StoryBoard = () => {
                           variant="outline"
                           size="icon"
                           onClick={() => navigate(routes.student.todo)}
-                          className="rounded-none border-black bg-white"
+                          className="rounded border-black bg-white"
                           aria-label="View all to-do items"
                         >
                           <ArrowUpRight size={18} />
@@ -226,7 +226,7 @@ const StoryBoard = () => {
                                 <Badge
                                   variant="secondary"
                                   size="sm"
-                                  className="shrink-0 rounded-none border border-red-400 bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700"
+                                  className="shrink-0 rounded border border-red-400 bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700"
                                 >
                                   Past Due
                                 </Badge>

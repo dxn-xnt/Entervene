@@ -566,7 +566,7 @@ function importCodeMessage(code: string, fallback?: string) {
 
 function StatePanel({ message, detail, children }: { message: string; detail?: string; children?: ReactNode }) {
   return (
-    <div className="grid gap-3 rounded-md border-2 border-border bg-card p-5 text-sm">
+    <div className="grid gap-3 rounded border-2 border-border bg-card p-5 text-sm">
       <p className="font-bold">{message}</p>
       {detail && detail !== message && <p className="text-xs text-muted-foreground">{detail}</p>}
       {children && <div className="flex gap-2">{children}</div>}

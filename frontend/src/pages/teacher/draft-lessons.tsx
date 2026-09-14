@@ -94,7 +94,7 @@ export default function DraftLessons() {
               </div>
               <button
                 onClick={() => openNewLessonModal(0)}
-                className="shrink-0 whitespace-nowrap rounded-lg bg-green-600 px-2 py-1.5 text-xs font-medium text-white transition-colors hover:bg-green-700 sm:px-4 sm:py-2 sm:text-base"
+                className="shrink-0 whitespace-nowrap rounded bg-green-600 px-2 py-1.5 text-xs font-medium text-white transition-colors hover:bg-green-700 sm:px-4 sm:py-2 sm:text-base"
               >
                 + New Lesson
               </button>
@@ -117,7 +117,7 @@ export default function DraftLessons() {
                   {draftLessons.map((lesson) => (
                     <div
                       key={lesson.lesson_id}
-                      className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
+                      className="bg-white rounded shadow p-6 hover:shadow-lg transition-shadow"
                     >
                       <div className="flex justify-between items-start mb-3">
                         <div className="flex-1">
@@ -154,18 +154,18 @@ export default function DraftLessons() {
                       </div>
 
                       <div className="flex gap-3 flex-wrap">
-                        <button className="px-4 py-2 text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 text-sm font-medium transition-colors">
+                        <button className="px-4 py-2 text-blue-600 border border-blue-600 rounded hover:bg-blue-50 text-sm font-medium transition-colors">
                           Edit
                         </button>
                         <button
                           onClick={() => publishLesson(lesson.lesson_id)}
-                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium transition-colors"
+                          className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-medium transition-colors"
                         >
                           Publish Now
                         </button>
                         <button
                           onClick={() => setLessonPendingDelete(lesson)}
-                          className="px-4 py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-50 text-sm font-medium transition-colors"
+                          className="px-4 py-2 text-red-600 border border-red-600 rounded hover:bg-red-50 text-sm font-medium transition-colors"
                         >
                           Delete
                         </button>
@@ -174,7 +174,7 @@ export default function DraftLessons() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12 bg-white rounded-lg">
+                <div className="text-center py-12 bg-white rounded">
                   <p className="text-gray-500 mb-2">No draft lessons yet</p>
                   <p className="text-sm text-gray-400 mb-6">
                     Create a new lesson and save it as a draft to continue working on

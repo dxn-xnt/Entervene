@@ -198,7 +198,7 @@
 //                 {filteredLessons.map((lesson) => (
 //                   <div
 //                     key={lesson.lesson_id}
-//                     className="rounded-lg border border-black bg-white px-5 py-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+//                     className="rounded border border-black bg-white px-5 py-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
 //                   >
 //                     <div className="flex justify-between items-start mb-3 gap-3">
 //                       <div className="flex-1">
@@ -232,20 +232,20 @@
 //                     </div>
 
 //                     <div className="flex flex-wrap gap-2">
-//                       <button className="px-4 py-1.5 text-sm font-semibold border border-black rounded-lg shadow-[2px_2px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-none">
+//                       <button className="px-4 py-1.5 text-sm font-semibold border border-black rounded shadow-[2px_2px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-none">
 //                         Edit
 //                       </button>
 //                       {lesson.is_draft && (
 //                         <button
 //                           onClick={() => handlePublishLesson(lesson.lesson_id)}
-//                           className="px-4 py-1.5 text-sm font-semibold border border-black bg-[#79bd80] rounded-lg shadow-[2px_2px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-none"
+//                           className="px-4 py-1.5 text-sm font-semibold border border-black bg-[#79bd80] rounded shadow-[2px_2px_0_#000] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-none"
 //                         >
 //                           Publish
 //                         </button>
 //                       )}
 //                       <button
 //                         onClick={() => setLessonPendingDelete(lesson)}
-//                         className="px-4 py-1.5 text-sm font-semibold border border-red-400 text-red-600 rounded-lg shadow-[2px_2px_0_rgba(239,68,68,1)] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-none"
+//                         className="px-4 py-1.5 text-sm font-semibold border border-red-400 text-red-600 rounded shadow-[2px_2px_0_rgba(239,68,68,1)] transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-none"
 //                       >
 //                         Delete
 //                       </button>
@@ -254,7 +254,7 @@
 //                 ))}
 //               </div>
 //             ) : (
-//               <div className="rounded-lg border border-black bg-white py-12 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+//               <div className="rounded border border-black bg-white py-12 text-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
 //                 <p className="text-gray-500 text-sm">
 //                   {lessons.length > 0
 //                     ? "No matching lessons found"

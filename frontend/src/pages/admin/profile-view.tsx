@@ -178,7 +178,7 @@ export default function AdminProfile() {
                   <Card className="flex flex-col gap-3 p-4">
                     <div className="flex flex-row items-center justify-between">
                       <p className="font-semibold">{monthLabel}</p>
-                      <button className="text-xs text-muted-foreground border rounded-md px-2 py-1">
+                      <button className="text-xs text-muted-foreground border rounded px-2 py-1">
                         Today
                       </button>
                     </div>
@@ -198,7 +198,7 @@ export default function AdminProfile() {
                           {week.map((day) => (
                             <span
                               key={day.key}
-                              className={`flex items-center justify-center rounded-md py-1 ${weekIdx === currentWeekIndex
+                              className={`flex items-center justify-center rounded py-1 ${weekIdx === currentWeekIndex
                                 ? "bg-green-400 font-semibold"
                                 : ""
                                 } ${!day.isCurrentMonth &&
@@ -223,8 +223,8 @@ export default function AdminProfile() {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
-          <div className="flex w-full max-w-md flex-col overflow-hidden rounded-none border-2 border-border bg-background text-foreground shadow-[4px_4px_0_#000]">
-            <div className="flex items-center justify-between border-b-2 border-border bg-primary px-4 py-3 text-primary-foreground">
+          <div className="w-full max-w-md border-2 border-black bg-[#fffdf5] rounded shadow-[8px_8px_0_0_#000] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between border-b-2 border-black bg-[#79bd80] px-4 py-3 text-black">
               <h2 className="font-bold text-lg">Edit Profile Avatar</h2>
               <button
                 aria-label="Close modal"
@@ -245,7 +245,7 @@ export default function AdminProfile() {
                       <button
                         key={avatarPath}
                         onClick={() => setTempSelectedAvatar(avatarPath)}
-                        className={`aspect-square p-2 border-2 rounded-lg transition-all duration-200 hover:scale-105 hover:bg-amber-50/50 cursor-pointer ${isSelected
+                        className={`aspect-square p-2 border-2 rounded transition-all duration-200 hover:scale-105 hover:bg-amber-50/50 cursor-pointer ${isSelected
                           ? "border-[#79bd80] bg-amber-100 ring-2 ring-[#79bd80] ring-offset-2"
                           : "border-black bg-white"
                           }`}

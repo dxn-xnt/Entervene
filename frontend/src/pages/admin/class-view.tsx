@@ -434,7 +434,7 @@ function OverviewTab({
             </div>
             <svg
               viewBox="0 0 620 170"
-              className="h-40 w-full rounded-md border border-border bg-background"
+              className="h-40 w-full rounded border border-border bg-background"
               role="img"
               aria-label="Period class performance graph"
             >
@@ -569,7 +569,7 @@ function OverviewTab({
         <RetroCard className="p-3">
           <div className="grid gap-2">
             {recentActivity.map((item) => (
-              <div key={item} className="rounded-md border border-border bg-background p-2 text-xs">
+              <div key={item} className="rounded border border-border bg-background p-2 text-xs">
                 <p className="font-semibold">New lessons added for Sci10</p>
                 <p className="text-black/65">Added by {selectedClass.adviser} - 2 hours ago</p>
               </div>

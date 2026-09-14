@@ -144,7 +144,7 @@ export default function StudentSubmissionView({
                   <Badge
                     variant="outline"
                     size="sm"
-                    className="w-fit font-bold rounded-none bg-white border-black"
+                    className="w-fit font-bold rounded bg-white border-black"
                   >
                     {submissionStatusLabel(selectedStudent.status)}
                   </Badge>
@@ -176,7 +176,7 @@ export default function StudentSubmissionView({
                   </Alert>
                 ) : selectedSubmissionDetail ? (
                   isQuizType(selected.classwork_type) ? (
-                    <div className="flex flex-col items-start gap-3 rounded-lg border-2 border-black bg-[#F6E9B2]/50 p-4">
+                    <div className="flex flex-col items-start gap-3 rounded border-2 border-black bg-[#F6E9B2]/50 p-4">
                       <div>
                         <p className="text-sm font-bold text-black">
                           Quiz Attempt Responses

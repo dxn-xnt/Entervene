@@ -25,7 +25,7 @@ export default function AssignmentToolbar({
         value=""
         onValueChange={(value) => value && onMove(value)}
       >
-        <Select.Trigger className="h-10 w-auto rounded-none border-black !shadow-none">
+        <Select.Trigger className="h-10 w-auto rounded border-black !shadow-none">
           <Select.Value placeholder="Move Selected To..." />
         </Select.Trigger>
         <Select.Content

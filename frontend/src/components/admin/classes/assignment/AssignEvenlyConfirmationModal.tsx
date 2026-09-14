@@ -12,8 +12,13 @@ export default function AssignEvenlyConfirmationModal({
   const [mode, setMode] = useState<DistributionMode>("alphabetical");
 
   return (
+<<<<<<< HEAD
+    <div className="fixed inset-0 z-[70] grid place-items-center bg-black/30 p-4">
+      <div className="grid w-full max-w-md gap-4 rounded border-2 border-black bg-[#fffdf5] p-5 shadow-[4px_4px_0_#000]">
+=======
     <div className="fixed inset-0 z-[70] grid place-items-center bg-black/50 p-4">
       <div className="grid w-full max-w-md gap-4 rounded-none border-2 border-border bg-background p-5 text-foreground shadow-[4px_4px_0_#000]">
+>>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
         <div>
           <h3 className="font-bold text-base">Assign Students Evenly</h3>
           <p className="mt-1.5 text-xs text-black/80">

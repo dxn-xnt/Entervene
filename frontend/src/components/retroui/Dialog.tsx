@@ -186,7 +186,11 @@ const DialogHeaderDefaultLayout = ({ children }: { children: ReactNode }) => {
   return (
     <>
       {children}
+<<<<<<< HEAD
+      <BaseDialog.Close title="Close pop-up" className="cursor-pointer text-black hover:bg-black/10 transition-colors p-1 rounded">
+=======
       <BaseDialog.Close title="Close pop-up" className="cursor-pointer rounded-none p-1 text-current transition-colors hover:bg-foreground/10">
+>>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
         <X className="size-4" />
       </BaseDialog.Close>
     </>

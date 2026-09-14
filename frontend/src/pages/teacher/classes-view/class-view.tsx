@@ -223,7 +223,7 @@ export default function TeacherClassDetail() {
           <button
             type="button"
             onClick={() => navigate("/teacher/classes")}
-            className="rounded-md border-2 border-black bg-[#79bd80] px-3 py-1 text-xs font-bold"
+            className="rounded border-2 border-black bg-[#79bd80] px-3 py-1 text-xs font-bold"
           >
             Back to Classes
           </button>
@@ -1425,7 +1425,7 @@ function OverviewTab({
                             : "Draft"}
                         </Badge>
                         {selectedClasswork.is_locked && (
-                          <Badge className="rounded-none border border-red-600 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                          <Badge className="rounded border border-red-600 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
                             Locked
                           </Badge>
                         )}
@@ -1641,7 +1641,7 @@ function OverviewTab({
                             )
                           }
                           disabled={isSavingLesson}
-                          className="rounded-none border-2 border-black !shadow-none h-10 w-full"
+                          className="rounded border-2 border-black !shadow-none h-10 w-full"
                         />
                       </div>
                       <div>
@@ -1668,7 +1668,7 @@ function OverviewTab({
                             )
                           }
                           disabled={isSavingLesson}
-                          className="rounded-none border-2 border-black !shadow-none h-10 w-full"
+                          className="rounded border-2 border-black !shadow-none h-10 w-full"
                         />
                       </div>
                     </div>
@@ -1694,7 +1694,7 @@ function OverviewTab({
                           )
                         }
                         disabled={isSavingLesson}
-                        className="min-h-20 w-full rounded-none border-2 border-black px-3 py-2 text-sm"
+                        className="min-h-20 w-full rounded border-2 border-black px-3 py-2 text-sm"
                         placeholder="Short lesson summary"
                       />
                     </div>
@@ -1717,7 +1717,7 @@ function OverviewTab({
                           )
                         }
                         disabled={isSavingLesson}
-                        className="min-h-40 w-full rounded-none border-2 border-black px-3 py-2 text-sm"
+                        className="min-h-40 w-full rounded border-2 border-black px-3 py-2 text-sm"
                         placeholder="Write the lesson notes or learning content."
                       />
                     </div>

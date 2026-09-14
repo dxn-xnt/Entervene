@@ -53,7 +53,7 @@
 }
 
 :root {
-  --radius: 0;
+  --radius: 0px;
   --background: #fff;
   --foreground: #000;
   --card: #fff;
@@ -349,8 +349,7 @@ textarea::placeholder,
 }
 
 /* One theme-aware focus treatment for native and shared form controls. */
-:where(
-  input,
+:where(input,
   textarea,
   select,
   [role="combobox"],
@@ -358,15 +357,13 @@ textarea::placeholder,
   [role="radio"],
   [role="switch"],
   [data-slot="input"],
-  [data-slot="select-trigger"]
-):where(:focus, :focus-visible):not(:disabled):not([aria-disabled="true"]):not([readonly]):not([aria-invalid="true"]):not([data-invalid="true"]) {
+  [data-slot="select-trigger"]):where(:focus, :focus-visible):not(:disabled):not([aria-disabled="true"]):not([readonly]):not([aria-invalid="true"]):not([data-invalid="true"]) {
   border-color: var(--theme-focus-ring);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-focus-ring) 35%, transparent);
   outline: none;
 }
 
-:where(
-  input,
+:where(input,
   textarea,
   select,
   [role="combobox"],
@@ -374,12 +371,14 @@ textarea::placeholder,
   [role="radio"],
   [role="switch"],
   [data-slot="input"],
-  [data-slot="select-trigger"]
-)[aria-invalid="true"]:where(:focus, :focus-visible),
+  [data-slot="select-trigger"])[aria-invalid="true"]:where(:focus, :focus-visible),
 :where(input, textarea, select)[data-invalid="true"]:where(:focus, :focus-visible) {
   border-color: var(--destructive);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--destructive) 35%, transparent);
   outline: none;
+<<<<<<< HEAD
+}
+=======
 }
 
 /* Form surfaces use one square geometry across legacy and shared controls. */
@@ -470,3 +469,4 @@ textarea::placeholder,
   border: 0;
   box-shadow: none;
 }
+>>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d

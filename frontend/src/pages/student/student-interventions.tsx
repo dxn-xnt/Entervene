@@ -152,7 +152,7 @@ export default function StudentInterventions() {
                   {items.map((item) => (
                     <Card
                       key={item.suggestion_id}
-                      className="p-5 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between gap-4 rounded-none hover:translate-y-[-2px] transition-transform"
+                      className="p-5 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between gap-4 rounded hover:translate-y-[-2px] transition-transform"
                     >
                       <div className="flex flex-col gap-2.5">
                         <div className="flex items-start justify-between gap-2">

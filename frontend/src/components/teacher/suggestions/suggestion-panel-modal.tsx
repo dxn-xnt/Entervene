@@ -285,7 +285,7 @@ export function SuggestionPanel({
                   onChange={(event) =>
                     setRecommendationThreshold(Number(event.target.value))
                   }
-                  className="mt-1 w-full rounded-none border-black bg-white px-2 h-10 text-xs shadow-none"
+                  className="mt-1 w-full rounded border-black bg-white px-2 h-10 text-xs shadow-none"
                 />
               </label>
               <Button
@@ -369,7 +369,7 @@ export function SuggestionPanel({
               <Input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                className="mt-1 w-full rounded-none border-2 border-black bg-[#fffdf5] px-2 py-2 text-xs font-medium shadow-none"
+                className="mt-1 w-full rounded border-2 border-black bg-[#fffdf5] px-2 py-2 text-xs font-medium shadow-none"
                 placeholder="e.g. Review this material"
                 required
               />

@@ -81,8 +81,13 @@ export default function StudentQRBadgeModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+<<<<<<< HEAD
+      <Dialog.Content className="max-w-md rounded border-2 border-black bg-white p-0 text-black shadow-md">
+        <Dialog.Header className="border-black bg-primary text-black">
+=======
       <Dialog.Content className="max-w-md p-0">
         <Dialog.Header className="border-border bg-primary text-primary-foreground">
+>>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
           <div className="flex min-w-0 flex-col items-start">
             <Dialog.Title className="text-lg font-bold">
               Student Attendance QR Card
@@ -105,7 +110,7 @@ export default function StudentQRBadgeModal({
                   <div className="text-[10px] text-gray-600">Student Pass & Attendance</div>
                 </div>
               </div>
-              <Badge variant="secondary" size="sm" className="rounded-none border border-black bg-primary text-[10px] font-bold uppercase text-black">
+              <Badge variant="secondary" size="sm" className="rounded border border-black bg-primary text-[10px] font-bold uppercase text-black">
                 Permanent
               </Badge>
             </div>
@@ -143,7 +148,7 @@ export default function StudentQRBadgeModal({
             size="sm"
             onClick={handleDownload}
             disabled={downloading}
-            className="gap-1.5 rounded-none border-black bg-success hover:bg-success text-black"
+            className="gap-1.5 rounded border-black bg-success hover:bg-success text-black"
           >
             <Download className="size-4" />
             {downloading ? "Downloading..." : "Download Badge"}

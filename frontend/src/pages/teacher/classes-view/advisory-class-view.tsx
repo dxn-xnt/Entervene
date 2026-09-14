@@ -88,7 +88,7 @@ export default function AdvisoryClassDetail() {
           <button
             type="button"
             onClick={() => navigate("/teacher/classes")}
-            className="rounded-md border-2 border-black bg-[#79bd80] px-3 py-1 text-xs font-bold"
+            className="rounded border-2 border-black bg-[#79bd80] px-3 py-1 text-xs font-bold"
           >
             Back to Classes
           </button>
@@ -319,7 +319,7 @@ function StudentsTab({
                         <Badge
                           variant="outline"
                           size="sm"
-                          className="rounded-none"
+                          className="rounded"
                         >
                           {students.length} student
                           {students.length !== 1 ? "s" : ""}

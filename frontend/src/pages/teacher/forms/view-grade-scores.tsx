@@ -125,7 +125,7 @@ export default function ViewGradeScoreModal({
           </div>
         </div>
 
-        <Card className="w-full rounded-none border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <Card className="w-full rounded border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <Table className="w-full border-collapse text-sm">
             <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black">
               <Table.Row>
@@ -180,7 +180,7 @@ export default function ViewGradeScoreModal({
         </Card>
 
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border border-border rounded-lg text-xs font-semibold text-muted-foreground">
+          <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border border-border rounded text-xs font-semibold text-muted-foreground">
             <span>
               Showing classworks {startIndex + 1}–{Math.min(endIndex, items.length)} of {items.length}
             </span>

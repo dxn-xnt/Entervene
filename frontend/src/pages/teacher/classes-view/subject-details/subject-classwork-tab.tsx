@@ -248,7 +248,7 @@ export default function SubjectClassworkTab({
 
       <main className="flex flex-col gap-4 pt-1">
         {error && (
-          <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
         )}
@@ -303,7 +303,7 @@ export default function SubjectClassworkTab({
         </div>
 
         {showFilters && (
-          <section className="grid gap-3 rounded-lg border border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:grid-cols-2">
+          <section className="grid gap-3 rounded border border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:grid-cols-2">
             <label className="text-xs font-bold">
               Publication status
               <select
