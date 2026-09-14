@@ -9,6 +9,7 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
+import { RoleBadge } from "@/components/role-badge";
 
 export default function EditClass({
   classId,
@@ -177,7 +178,10 @@ export default function EditClass({
                         <Select.Item value="__none__">No adviser assigned</Select.Item>
                         {adviserOptions.map((adviser) => (
                           <Select.Item key={adviser.staff_id} value={adviser.staff_id}>
-                            {adviserName(adviser)}
+                            <span className="flex items-center gap-2">
+                              <span className="truncate">{adviserName(adviser)}</span>
+                              <RoleBadge role="teacher" />
+                            </span>
                           </Select.Item>
                         ))}
                       </Select.Group>

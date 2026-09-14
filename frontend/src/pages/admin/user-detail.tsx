@@ -333,6 +333,7 @@ export default function AdminUserDetail() {
               <div className="space-y-3">
                 <UserProfileHeader
                   name={user.name}
+                  role={user.role}
                   subtitle={
                     user.role === "student"
                       ? [user.grade_level ? `Grade ${user.grade_level}` : null, sectionName(user.section) ?? "No section assigned"].filter(Boolean).join(" - ")

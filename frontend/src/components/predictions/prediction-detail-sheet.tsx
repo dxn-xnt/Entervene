@@ -44,9 +44,9 @@ interface PredictionDetailSheetProps {
 
 const RISK_BADGE_STYLES: Record<string, string> = {
   HIGH_RISK: "bg-destructive text-foreground border-border",
-  MODERATE_RISK: "bg-foreground text-white border-border",
+  MODERATE_RISK: "bg-foreground text-background border-border",
   NEEDS_MONITORING: "bg-primary text-foreground border-border",
-  LOW_RISK: "bg-background text-white border-border",
+  LOW_RISK: "bg-background text-foreground border-border",
   INSUFFICIENT_DATA: "bg-muted text-muted-foreground border-none",
 };
 

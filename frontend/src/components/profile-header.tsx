@@ -5,6 +5,7 @@ import { Card } from "@/components/retroui/Card";
 import { Avatar } from "@/components/retroui/Avatar";
 import { Badge } from "@/components/retroui/Badge";
 import { Pen } from "lucide-react";
+import { RoleBadge } from "@/components/role-badge";
 
 // ─── Simple avatar-only variant (used on profile pages) ─────────────────────
 
@@ -13,6 +14,7 @@ export type ProfileHeaderProps = {
     fullName?: string;
     email?: string;
     avatar?: string;
+    role?: string | null;
   } | null;
   onAvatarClick?: () => void;
   className?: string;
@@ -33,9 +35,10 @@ export function ProfileHeader({ user, onAvatarClick, className }: ProfileHeaderP
         </div>
       </Avatar>
       <div className="flex flex-col">
-        <p className="text-lg font-bold">
-          {user?.fullName ?? "John Doe"}
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-lg font-bold">{user?.fullName ?? "John Doe"}</p>
+          <RoleBadge role={user?.role} />
+        </div>
         <p className="text-sm text-muted-foreground">
           {user?.email ?? "johndoe@example.com"}
         </p>
@@ -62,6 +65,7 @@ export type UserProfileHeaderProps = {
   statusLabel?: string;
   /** Status badge variant. */
   statusVariant?: BadgeVariant;
+  role: string;
   /** When true, shows the "Pending accounts" notice. */
   isPending?: boolean;
   className?: string;
@@ -80,6 +84,7 @@ export function UserProfileHeader({
   avatarVariant = "default",
   statusLabel,
   statusVariant = "default",
+  role,
   isPending,
   className,
 }: UserProfileHeaderProps) {
@@ -95,7 +100,10 @@ export function UserProfileHeader({
           </Avatar.Fallback>
         </Avatar>
         <div className="min-w-0">
-          <div className="truncate text-lg font-bold">{name}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="truncate text-lg font-bold">{name}</div>
+            <RoleBadge role={role} />
+          </div>
           {subtitle && <div className="truncate text-xs text-muted-foreground">{subtitle}</div>}
           {extra && <div className="truncate text-xs text-muted-foreground">{extra}</div>}
         </div>
