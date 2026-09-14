@@ -21,6 +21,7 @@ from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
 from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.AIPrediction import AIPrediction
+from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.ai.TeacherRiskReview import TeacherRiskReview
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
@@ -139,6 +140,7 @@ def teacher_review_context():
         model_version_id=model_version.model_version_id,
     )
     db.add(prediction)
+    db.add(SubjectLoad(class_id=class_.class_id, subject_id=subject.subject_id, academic_period_id=target_period.academic_period_id, staff_id=staff.staff_id, status="active"))
     db.commit()
 
     identity = {"sub": staff_account.user_id, "role": "teacher"}

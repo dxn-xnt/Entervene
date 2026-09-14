@@ -252,15 +252,16 @@ def score_student_prediction(
     db: Session,
     input_data: dict[str, Any],
     model_name: str = DEFAULT_MODEL_NAME,
+    model_version: AIModelVersion | None = None,
 ) -> dict[str, Any]:
-    model_version = get_active_model_version(db, model_name=model_name)
+    model_version = model_version or get_active_model_version(db, model_name=model_name)
     feature_schema = load_feature_schema_from_model_version(model_version)
     model = load_model_artifact(model_version.artifact_path)
     prepared_row, warnings = prepare_feature_row(input_data, feature_schema)
     predicted_grade = predict_next_period_grade(model, prepared_row)
     transformations = []
     for feature_name in prepared_row.columns:
-        if feature_name not in input_data:
+        if feature_name not in input_data or input_data[feature_name] is None:
             transformations.append({
                 "feature": feature_name,
                 "model_value": float(prepared_row.iloc[0][feature_name]),

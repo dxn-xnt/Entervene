@@ -168,6 +168,8 @@ def score_enrolled_cohort(dry_run: bool = False) -> None:
                     .first()
                 )
 
+                if existing is not None and existing.evidence_snapshot is not None:
+                    raise ValueError("Baseline cohort seeding cannot modify an audited prediction.")
                 if existing is not None:
                     pred = existing
                     pred.predicted_period_grade = None

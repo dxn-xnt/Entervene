@@ -49,6 +49,11 @@ from app.services.prediction.PredictionSuggestionService import (
 from app.services.prediction.PredictionOutcomeService import evaluate_prediction_outcome
 from app.services.prediction.PredictionPersistenceService import score_and_persist_prediction
 from app.services.prediction.PredictionGenerationTransaction import run_prediction_generation_transaction
+from app.services.prediction.PredictionGenerationService import generate_from_records
+from app.services.prediction.PredictionScopeService import (
+    PredictionConflict, authorize_generation, authorize_prediction_read,
+    prediction_read_filter, prediction_metadata, latest_prediction_filter, authorize_prediction_write,
+)
 from app.services.prediction.TeacherAssignmentResolver import get_teacher_assigned_triplets
 from app.services.prediction.PredictionReadService import (
     get_prediction_detail,
@@ -72,6 +77,7 @@ def _to_float(value: Any) -> float | None:
 
 def _summary(prediction: AIPrediction) -> dict[str, Any]:
     return {
+        **prediction_metadata(prediction),
         "prediction_id": prediction.prediction_id,
         "student_id": prediction.student_id,
         "class_id": prediction.class_id,
@@ -88,6 +94,8 @@ def _summary(prediction: AIPrediction) -> dict[str, Any]:
 
 
 def _service_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, PredictionConflict):
+        return HTTPException(status_code=409, detail=str(exc))
     if isinstance(exc, PermissionError):
         return HTTPException(status_code=403, detail=str(exc))
     status_code = 404 if isinstance(exc, LookupError) else 400
@@ -110,27 +118,21 @@ def _assert_teacher_can_use_prediction_scope(
     staff_id: str | None,
     scope: dict[str, Any],
 ) -> None:
-    """Enforce record-level access before reading or generating prediction evidence."""
-    if current_user.get("role") == "admin":
-        return
-    if not staff_id:
-        raise HTTPException(status_code=403, detail="Access denied. Teacher profile is required for prediction evidence.")
-    assigned = get_teacher_assigned_triplets(db, staff_id, academic_period_id=int(scope["source_period_id"]))
-    triplet = (int(scope["class_id"]), int(scope["subject_id"]), int(scope["source_period_id"]))
-    if triplet not in assigned:
-        raise HTTPException(status_code=403, detail="Access denied. You are not assigned to this class, subject, and source period.")
+    authorize_generation(db, scope, is_admin=current_user.get("role") == "admin", staff_id=staff_id)
 
 
-def _with_readiness(scoring_result: dict[str, Any], built: dict[str, Any]) -> dict[str, Any]:
-    return {
-        **scoring_result,
-        "ready": built["ready"],
-        "readiness_level": built["readiness_level"],
-        "prediction_mode": built["prediction_mode"],
-        "features": built["features"],
-        "evidence_summary": built["evidence_summary"],
-        "warnings": [*built.get("warnings", []), *scoring_result.get("warnings", [])],
-    }
+def _authorized_prediction(db, prediction_id, current_user, staff_id, *, write=False):
+    prediction = db.get(AIPrediction, prediction_id)
+    if prediction is None:
+        raise HTTPException(status_code=404, detail="Prediction not found")
+    try:
+        if write and current_user.get("role") != "admin":
+            authorize_prediction_write(db, prediction, staff_id)
+        else:
+            authorize_prediction_read(db, prediction, is_admin=current_user.get("role") == "admin", staff_id=staff_id)
+    except PermissionError as exc:
+        raise _service_error(exc) from exc
+    return prediction
 
 
 # ---------------------------------------------------------------------------
@@ -275,14 +277,7 @@ def preview_prediction(
     current_user: dict = Depends(require_role("admin", "teacher")),
     db: Session = Depends(get_db),
 ):
-    try:
-        return score_student_prediction(
-            db,
-            payload.features,
-            model_name=payload.model_name or DEFAULT_MODEL_NAME,
-        )
-    except (ValueError, LookupError, FileNotFoundError) as exc:
-        raise _service_error(exc) from exc
+    raise HTTPException(status_code=410, detail="Raw HTTP preview is retired: use /from-records/preview. Offline ScorePrediction remains an unaudited diagnostic.")
 
 
 @router.post("/build-features", response_model=PredictionBuiltFeaturesResponse)
@@ -296,8 +291,8 @@ def build_prediction_features(
         record_scope = _records_request_payload(payload)
         _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, record_scope)
         return build_prediction_features_from_records(db, **record_scope)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (ValueError, PermissionError) as exc:
+        raise _service_error(exc) from exc
 
 
 @router.post("/from-records/preview", response_model=PredictionFromRecordsResponse)
@@ -308,20 +303,17 @@ def preview_prediction_from_records(
     db: Session = Depends(get_db),
 ):
     try:
-        record_scope = _records_request_payload(payload)
-        _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, record_scope)
-        built = build_prediction_features_from_records(
-            db, **record_scope, model_name=payload.model_name or DEFAULT_MODEL_NAME
+        scope = _records_request_payload(payload)
+        _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, scope)
+        return run_prediction_generation_transaction(
+            scope, payload.model_name or DEFAULT_MODEL_NAME,
+            lambda generation_db: generate_from_records(
+                generation_db, scope, model_name=payload.model_name or DEFAULT_MODEL_NAME,
+                is_admin=current_user.get("role") == "admin", staff_id=staff_id,
+                preview=True),
+            bind=db.get_bind(),
         )
-        if not built["ready"]:
-            return insufficient_prediction_response(built)
-        scoring_result = score_student_prediction(
-            db,
-            built["features"],
-            model_name=payload.model_name or DEFAULT_MODEL_NAME,
-        )
-        return _with_readiness(scoring_result, built)
-    except (ValueError, LookupError, FileNotFoundError) as exc:
+    except (ValueError, LookupError, FileNotFoundError, PermissionError) as exc:
         raise _service_error(exc) from exc
 
 
@@ -333,33 +325,19 @@ def create_prediction_from_records(
     db: Session = Depends(get_db),
 ):
     try:
-        record_scope = _records_request_payload(payload)
-        _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, record_scope)
-
-        def generate(generation_db: Session):
-            built = build_prediction_features_from_records(
-                generation_db, **record_scope, model_name=payload.model_name or DEFAULT_MODEL_NAME
-            )
-            if not built["ready"]:
-                return insufficient_prediction_response(built)
-            result = score_and_persist_prediction(
-                generation_db,
-                {**record_scope, "features": built["features"]},
-                model_name=payload.model_name or DEFAULT_MODEL_NAME,
-                replace_existing=payload.replace_existing,
-                commit=False,
-                evidence_context=built,
-                generation_request_id=payload.generation_request_id,
-            )
-            return _with_readiness(result, built)
-
+        scope = _records_request_payload(payload)
+        _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, scope)
+        if payload.replace_existing:
+            raise ValueError("In-place replacement is disabled; generation creates immutable revisions.")
         return run_prediction_generation_transaction(
-            record_scope,
-            payload.model_name or DEFAULT_MODEL_NAME,
-            generate,
-            bind=db.get_bind(),
+            scope, payload.model_name or DEFAULT_MODEL_NAME,
+            lambda generation_db: generate_from_records(
+                generation_db, scope, model_name=payload.model_name or DEFAULT_MODEL_NAME,
+                is_admin=current_user.get("role") == "admin", staff_id=staff_id,
+                generation_request_id=payload.generation_request_id),
+            bind=db.get_bind(), generation_request_id=payload.generation_request_id,
         )
-    except (ValueError, LookupError, FileNotFoundError) as exc:
+    except (ValueError, LookupError, FileNotFoundError, PermissionError) as exc:
         raise _service_error(exc) from exc
 
 
@@ -369,26 +347,7 @@ def create_prediction(
     current_user: dict = Depends(require_role("admin", "teacher")),
     db: Session = Depends(get_db),
 ):
-    try:
-        request_data = payload.model_dump()
-        model_name = request_data.pop("model_name") or DEFAULT_MODEL_NAME
-        replace_existing = bool(request_data.pop("replace_existing", False))
-        generation_request_id = request_data.pop("generation_request_id", None)
-        return run_prediction_generation_transaction(
-            request_data,
-            model_name,
-            lambda generation_db: score_and_persist_prediction(
-                generation_db,
-                request_data,
-                model_name=model_name,
-                replace_existing=replace_existing,
-                commit=False,
-                generation_request_id=generation_request_id,
-            ),
-            bind=db.get_bind(),
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    raise HTTPException(status_code=410, detail="Raw feature persistence is disabled; use /from-records with official source records.")
 
 
 @router.get("/latest", response_model=PredictionSummaryResponse)
@@ -400,6 +359,7 @@ def get_latest_prediction(
     target_period_id: int | None = None,
     model_version_id: int | None = None,
     current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
     query = db.query(AIPrediction).filter(
@@ -407,6 +367,9 @@ def get_latest_prediction(
         AIPrediction.class_id == class_id,
         AIPrediction.subject_id == subject_id,
     )
+    query = query.filter(latest_prediction_filter())
+    if current_user.get("role") != "admin":
+        query = query.filter(prediction_read_filter(db, staff_id))
     if source_period_id is not None:
         query = query.filter(AIPrediction.source_period_id == source_period_id)
     if target_period_id is not None:
@@ -430,9 +393,13 @@ def list_class_risk_predictions(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
     query = db.query(AIPrediction).filter(AIPrediction.class_id == class_id)
+    query = query.filter(latest_prediction_filter())
+    if current_user.get("role") != "admin":
+        query = query.filter(prediction_read_filter(db, staff_id))
     if subject_id is not None:
         query = query.filter(AIPrediction.subject_id == subject_id)
     if source_period_id is not None:
@@ -480,15 +447,17 @@ def evaluate_outcome(
     prediction_id: int,
     payload: PredictionOutcomeEvaluateRequest,
     current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
+    _authorized_prediction(db, prediction_id, current_user, staff_id, write=True)
     try:
         return evaluate_prediction_outcome(
             db,
             prediction_id=prediction_id,
             actual_period_grade=payload.actual_period_grade,
         )
-    except (LookupError, ValueError) as exc:
+    except (LookupError, ValueError, PermissionError) as exc:
         raise _service_error(exc) from exc
 
 
@@ -527,7 +496,7 @@ def create_teacher_risk_review(
             decision=payload.decision,
             teacher_notes=payload.teacher_notes,
         )
-    except (LookupError, ValueError) as exc:
+    except (LookupError, ValueError, PermissionError) as exc:
         raise _service_error(exc) from exc
 
 
@@ -538,6 +507,7 @@ def read_teacher_risk_reviews(
     staff_id: str = Depends(get_staff_id),
     db: Session = Depends(get_db),
 ):
+    _authorized_prediction(db, prediction_id, current_user, staff_id, write=False)
     try:
         return get_teacher_reviews_for_prediction(
             db,
@@ -553,8 +523,10 @@ def read_teacher_risk_reviews(
 def list_prediction_features(
     prediction_id: int,
     current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
+    _authorized_prediction(db, prediction_id, current_user, staff_id, write=False)
     prediction = db.get(AIPrediction, prediction_id)
     if prediction is None:
         raise HTTPException(status_code=404, detail="Prediction not found")
@@ -610,8 +582,10 @@ def assign_prediction_intervention(
 def list_prediction_suggestions(
     prediction_id: int,
     current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
+    _authorized_prediction(db, prediction_id, current_user, staff_id, write=False)
     suggestions = get_suggestions_for_prediction(db, prediction_id)
     return [
         {

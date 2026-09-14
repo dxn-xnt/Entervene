@@ -164,7 +164,9 @@ def test_assign_intervention_from_prediction_creates_suggestion_and_review(db_se
         risk_level="HIGH_RISK",
         data_status="SUFFICIENT",
     )
+    from app.models.academic.SubjectLoad import SubjectLoad
     db_session.add(prediction)
+    db_session.add(SubjectLoad(class_id=1, subject_id=1, academic_period_id=2, staff_id=staff.staff_id, status="active"))
     db_session.commit()
 
     # Assign intervention

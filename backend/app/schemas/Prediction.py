@@ -10,6 +10,14 @@ from app.services.prediction.ModelScoringService import DEFAULT_MODEL_NAME
 from app.services.prediction.TeacherAssignmentResolver import TeacherStatusLabel
 
 
+class PredictionIntegrityMetadata(BaseModel):
+    revision: int | None = None
+    prediction_purpose: str | None = None
+    validation_status: str | None = None
+    purpose_label: str | None = None
+    revision_origin: str | None = None
+
+
 class PredictionFeatureInput(BaseModel):
     features: dict[str, Any] = Field(default_factory=dict)
 
@@ -48,7 +56,7 @@ class PredictionPreviewResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
-class PredictionPersistResponse(BaseModel):
+class PredictionPersistResponse(PredictionIntegrityMetadata):
     model_config = ConfigDict(protected_namespaces=())
     prediction_id: int
     model_version_id: int | None = None
@@ -68,7 +76,7 @@ class PredictionPersistResponse(BaseModel):
     duplicate: bool = False
 
 
-class PredictionSummaryResponse(BaseModel):
+class PredictionSummaryResponse(PredictionIntegrityMetadata):
     model_config = ConfigDict(protected_namespaces=())
     prediction_id: int
     student_id: UUID
@@ -191,7 +199,7 @@ class PredictionTeacherReviewListResponse(BaseModel):
     current_user_review: TeacherRiskReviewResponse | None = None
 
 
-class PredictionDetailResponse(BaseModel):
+class PredictionDetailResponse(PredictionIntegrityMetadata):
     model_config = ConfigDict(protected_namespaces=())
     prediction_id: int
     student_id: UUID
@@ -264,11 +272,12 @@ class PredictionBuildFeaturesRequest(BaseModel):
 
 
 class PredictionEvidenceSummary(BaseModel):
+    model_config = ConfigDict(extra="allow")
     expected_assessment_count: int = 0
     recorded_assessment_count: int = 0
     submitted_assessment_count: int = 0
     missing_assessment_count: int = 0
-    late_submission_count: int = 0
+    late_submission_count: int | None = 0
     components_present: list[str] = Field(default_factory=list)
     components_missing: list[str] = Field(default_factory=list)
 
@@ -295,7 +304,11 @@ class PredictionFromRecordsPersistRequest(PredictionFromRecordsPreviewRequest):
     generation_request_id: str | None = Field(default=None, max_length=100)
 
 
-class PredictionFromRecordsResponse(BaseModel):
+class PredictionFromRecordsResponse(PredictionIntegrityMetadata):
+    generation_status: str | None = None
+    evidence_snapshot: dict[str, Any] | None = None
+    evidence_cutoff_at: datetime | None = None
+    generated_at: datetime | None = None
     model_config = ConfigDict(protected_namespaces=())
     ready: bool
     readiness_level: str
@@ -330,7 +343,7 @@ class PredictionFromRecordsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class DashboardPredictionItem(BaseModel):
+class DashboardPredictionItem(PredictionIntegrityMetadata):
     prediction_id: int
     student_id: UUID
     student_name: str
