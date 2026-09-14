@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 
 export const buttonVariants = cva(
-  "font-sans transition-all rounded outline-hidden cursor-pointer duration-200 font-medium flex items-center justify-center",
+  "font-sans transition-all rounded outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring cursor-pointer duration-200 font-medium flex items-center justify-center",
   {
     variants: {
       variant: {
@@ -22,7 +22,7 @@ export const buttonVariants = cva(
           "shadow-md hover:shadow active:shadow-none bg-secondary shadow-primary text-secondary-foreground border-2 border-black transition hover:translate-y-1 active:translate-y-2 active:translate-x-1 hover:bg-secondary-hover",
         outline:
           "shadow-md hover:shadow active:shadow-none bg-background border-2 border-border transition hover:translate-y-1 active:translate-y-2 active:translate-x-1",
-        link: "bg-transparent hover:underline",
+        link: "bg-transparent text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         ghost: "bg-transparent hover:bg-accent"
       },
       size: {

@@ -153,7 +153,7 @@ const StoryBoard = () => {
                     <Card.Content className="">
                       <div className="flex flex-col gap-1">
                         <div className="flex flex-row gap-2 items-center">
-                          <Zap size={20} fill="#ffdb33" />
+                          <Zap size={20} className="fill-primary text-foreground" />
                           <Text as="p" className="text-md font-semibold">
                             1 week streak
                           </Text>
