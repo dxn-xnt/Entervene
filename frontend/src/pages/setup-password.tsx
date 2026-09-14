@@ -135,7 +135,7 @@ export default function SetupPassword() {
                 onChange={(e) => setPassword(e.target.value)}
                 onFocus={() => setIsPasswordFocused(true)}
                 onBlur={() => setIsPasswordFocused(false)}
-                className="w-full rounded-none border-black !shadow-none h-10 pr-10 text-sm"
+                className="w-full rounded border-black !shadow-none h-10 pr-10 text-sm"
                 placeholder="Enter new password"
               />
               <button
@@ -223,7 +223,7 @@ export default function SetupPassword() {
                 onChange={(e) => setConfirm(e.target.value)}
                 onFocus={() => setIsConfirmFocused(true)}
                 onBlur={() => setIsConfirmFocused(false)}
-                className="w-full rounded-none border-black !shadow-none h-10 pr-10 text-sm"
+                className="w-full rounded border-black !shadow-none h-10 pr-10 text-sm"
                 placeholder="Re-enter password"
               />
               <button
@@ -283,7 +283,7 @@ export default function SetupPassword() {
           <button
             onClick={handleSubmit}
             disabled={loading || !isAllMet || !isMatched}
-            className="mt-1 w-full rounded-none border-2 border-black bg-primary py-2.5 text-sm font-semibold shadow-md transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[3px_3px_0_#000]"
+            className="mt-1 w-full rounded border-2 border-black bg-primary py-2.5 text-sm font-semibold shadow-md transition hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0_#000] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[3px_3px_0_#000]"
           >
             {loading ? "Activating..." : "Activate Account"}
           </button>

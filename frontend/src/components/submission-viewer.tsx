@@ -74,7 +74,7 @@ export default function SubmissionViewer({
   return (
     <div className="space-y-4">
       {/* Status Section */}
-      <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+      <div className="bg-white border border-gray-200 rounded p-4 space-y-4">
         <div className="flex items-start justify-between">
           <div>
             <h3 className="font-semibold text-gray-900 mb-2">Submission Status</h3>
@@ -132,7 +132,7 @@ export default function SubmissionViewer({
 
       {/* Attachments */}
       {submission.attachments && submission.attachments.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <div className="bg-white border border-gray-200 rounded p-4">
           <h3 className="font-semibold text-gray-900 mb-3">Submitted Files</h3>
           <AttachmentDisplay
             attachments={submission.attachments}
@@ -146,7 +146,7 @@ export default function SubmissionViewer({
 
       {/* Resubmission Actions */}
       {allowResubmit && (
-        <div className="bg-white border border-blue-200 rounded-lg p-4">
+        <div className="bg-white border border-blue-200 rounded p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="font-semibold text-gray-900 mb-1">

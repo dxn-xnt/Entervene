@@ -228,7 +228,7 @@ export default function LessonClassworkList({
               );
               if (loadingClassworkId === lesson.lesson_id) {
                 return (
-                  <div className="rounded-lg border border-black bg-white px-4 py-3 text-sm font-medium shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="rounded border border-black bg-white px-4 py-3 text-sm font-medium shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                     Loading classworks...
                   </div>
                 );
@@ -264,7 +264,7 @@ export default function LessonClassworkList({
                       {classwork.attachment_count ? (
                         <Badge
                           variant="secondary"
-                          className="inline-flex h-8 items-center whitespace-nowrap rounded-none text-xs font-semibold bg-[#F6E9B2] border border-black"
+                          className="inline-flex h-8 items-center whitespace-nowrap rounded text-xs font-semibold bg-[#F6E9B2] border border-black"
                         >
                           File {classwork.attachment_count}
                         </Badge>
@@ -274,7 +274,7 @@ export default function LessonClassworkList({
                     </div>
                     <Badge
                       variant="outline"
-                      className="inline-flex h-8 items-center gap-1 rounded-none text-xs font-semibold border-black"
+                      className="inline-flex h-8 items-center gap-1 rounded text-xs font-semibold border-black"
                     >
                       <Eye size={14} />
                       Details
@@ -380,7 +380,7 @@ export default function LessonClassworkList({
                       <span aria-hidden="true" className="h-7 w-20" />
                     )}
                   </div>
-                  <span className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs font-semibold">
+                  <span className="inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs font-semibold">
                     <Eye size={14} />
                     Details
                   </span>
@@ -598,7 +598,7 @@ export default function LessonClassworkList({
 
         {/* ── Standalone / Unassigned Lessons Section (Bottom, Collapsible) ── */}
         {unassignedLessons.length > 0 && (
-          <div className="flex flex-col rounded-lg border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
+          <div className="flex flex-col rounded border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
             <button
               type="button"
               onClick={() => setIsUnassignedExpanded((prev) => !prev)}

@@ -855,7 +855,7 @@ function ClassworkTable({ rows }: { rows: Array<Record<string, number | string |
   return (
     <section className="space-y-2">
       <h2 className="text-lg font-bold">Classwork</h2>
-      <Table wrapperClassName="overflow-hidden rounded-lg border-2 border-black">
+      <Table wrapperClassName="overflow-hidden rounded border-2 border-black">
         <Table.Header>
           <Table.Row>
             <Table.Head className="text-xs font-semibold">Classwork Name</Table.Head>

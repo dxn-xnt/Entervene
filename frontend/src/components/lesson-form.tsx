@@ -88,7 +88,7 @@ export default function LessonForm({
               value={formData.title}
               onChange={handleChange}
               placeholder="Enter lesson title"
-              className="w-full px-4 py-2 border rounded-lg focus:border-ring focus:ring-2 focus:ring-ring/35"
+              className="w-full px-4 py-2 border rounded focus:border-ring focus:ring-2 focus:ring-ring/35"
               disabled={isLoading}
             />
           </div>
@@ -107,7 +107,7 @@ export default function LessonForm({
               onChange={handleChange}
               placeholder="Enter lesson description (optional)"
               rows={3}
-              className="w-full px-4 py-2 border rounded-lg focus:border-ring focus:ring-2 focus:ring-ring/35"
+              className="w-full px-4 py-2 border rounded focus:border-ring focus:ring-2 focus:ring-ring/35"
               disabled={isLoading}
             />
           </div>
@@ -123,12 +123,12 @@ export default function LessonForm({
               onChange={handleChange}
               placeholder="Enter lesson content"
               rows={6}
-              className="w-full px-4 py-2 border rounded-lg focus:border-ring focus:ring-2 focus:ring-ring/35"
+              className="w-full px-4 py-2 border rounded focus:border-ring focus:ring-2 focus:ring-ring/35"
               disabled={isLoading}
             />
           </div>
 
-          <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
+          <div className="flex items-center gap-3 p-4 bg-gray-50 rounded">
             <input
               type="checkbox"
               id="publishImmediately"
@@ -151,7 +151,7 @@ export default function LessonForm({
           <div className="flex gap-3 justify-end">
             <button
               type="button"
-              className="px-6 py-2 border rounded-lg hover:bg-gray-50"
+              className="px-6 py-2 border rounded hover:bg-gray-50"
               disabled={isLoading}
               onClick={() => window.history.back()}
             >
@@ -160,7 +160,7 @@ export default function LessonForm({
             <button
               type="submit"
               disabled={isLoading}
-              className={`px-6 py-2 text-black border rounded-lg font-medium transition-colors bg-[#7ABA78] disabled:opacity-50 disabled:cursor-not-allowed`}
+              className={`px-6 py-2 text-black border rounded font-medium transition-colors bg-[#7ABA78] disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               {isLoading ? "Saving..." : buttonLabel}
             </button>

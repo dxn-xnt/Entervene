@@ -220,7 +220,7 @@ const StudentProfile = () => {
                     <Badge
                       variant="secondary"
                       size="sm"
-                      className="rounded-none border border-black bg-primary text-xs font-bold text-black"
+                      className="rounded border border-black bg-primary text-xs font-bold text-black"
                     >
                       Today
                     </Badge>

@@ -522,7 +522,7 @@ export function OfferingModal({
         </Dialog.Header>
         <section className="max-h-[calc(90vh-7rem)] overflow-y-auto p-4">
           <div className="flex flex-col gap-4">
-            <div className="rounded-lg border-2 border-black bg-[#fff1b8] p-3 shadow-[3px_3px_0_#000]">
+            <div className="rounded border-2 border-black bg-[#fff1b8] p-3 shadow-[3px_3px_0_#000]">
               <p className="text-sm font-semibold text-black/70">Current setup context</p>
               <p className="text-lg font-bold">{contextLabel}</p>
               <p className="text-xs text-black/70">
@@ -530,13 +530,13 @@ export function OfferingModal({
               </p>
             </div>
             {readOnly ? (
-              <div className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
+              <div className="rounded border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
                 <p className="font-bold">Read-only academic year</p>
                 <p className="text-black/70">{readOnlyReason}</p>
               </div>
             ) : null}
 
-            <div className="rounded-lg border-2 border-black p-3 shadow-[3px_3px_0_#000]">
+            <div className="rounded border-2 border-black p-3 shadow-[3px_3px_0_#000]">
               <h6 className="mb-3 font-bold">Offering Setup</h6>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="flex flex-col gap-1">
@@ -606,7 +606,7 @@ export function OfferingModal({
                   </div>
                 ) : null}
                 <div className="flex flex-col gap-2 md:col-span-2">
-                  <label className="flex cursor-pointer items-start gap-3 rounded-md border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[2px_2px_0_#000]">
+                  <label className="flex cursor-pointer items-start gap-3 rounded border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[2px_2px_0_#000]">
                     <Checkbox
                       checked={showAdvancedYear}
                       onCheckedChange={(checked) => setShowAdvancedYear(checked === true)}
@@ -663,7 +663,7 @@ export function OfferingModal({
                       return (
                         <label
                           key={period.academic_period_id}
-                          className={`flex items-center gap-3 rounded-md border-2 border-black p-3 shadow-[2px_2px_0_#000] ${isFallback ? "cursor-not-allowed bg-black/5 text-black/50" : "cursor-pointer bg-background"
+                          className={`flex items-center gap-3 rounded border-2 border-black p-3 shadow-[2px_2px_0_#000] ${isFallback ? "cursor-not-allowed bg-black/5 text-black/50" : "cursor-pointer bg-background"
                             }`}
                         >
                           <Checkbox
@@ -686,7 +686,7 @@ export function OfferingModal({
 
             {offering ? (
               <>
-                <div className="rounded-lg border-2 border-black bg-[#fff1b8] p-3 shadow-[3px_3px_0_#000]">
+                <div className="rounded border-2 border-black bg-[#fff1b8] p-3 shadow-[3px_3px_0_#000]">
                   <p className="text-xs font-semibold text-black/70">Subject Being Edited</p>
                   <p className="text-xl font-bold">{offering.subject.subject_name}</p>
                   <p className="text-xs text-black/70">
@@ -748,7 +748,7 @@ export function OfferingModal({
                 </div>
               </>
             ) : (
-              <div className="rounded-lg border-2 border-black p-3 shadow-[3px_3px_0_#000]">
+              <div className="rounded border-2 border-black p-3 shadow-[3px_3px_0_#000]">
                 <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div>
                     <h6 className="font-bold">Select Subjects</h6>

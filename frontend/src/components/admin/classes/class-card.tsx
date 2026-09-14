@@ -67,7 +67,7 @@ export default function ClassCard({ item, onEdit, onArchive }: {
       {/* Card body as link */}
       <Link
         to={`/admin/classes/${item.class_id}`}
-        className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-1 rounded-lg"
+        className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-1 rounded"
         tabIndex={-1}
         aria-hidden
       >

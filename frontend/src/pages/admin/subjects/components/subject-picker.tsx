@@ -103,7 +103,7 @@ export function SubjectPicker({
           {selectedSubjects.map((subject) => (
             <span
               key={subject.subject_id}
-              className="inline-flex max-w-full items-center gap-2 rounded-md border-2 border-black bg-[#fff1b8] px-2 py-1 text-xs font-semibold shadow-[2px_2px_0_#000]"
+              className="inline-flex max-w-full items-center gap-2 rounded border-2 border-black bg-[#fff1b8] px-2 py-1 text-xs font-semibold shadow-[2px_2px_0_#000]"
             >
               <span className="truncate">{subject.subject_name}</span>
               <button
@@ -131,7 +131,7 @@ export function SubjectPicker({
         </div>
       ) : null}
 
-      <div className="max-h-72 overflow-y-auto rounded-md border-2 border-black bg-background">
+      <div className="max-h-72 overflow-y-auto rounded border-2 border-black bg-background">
         {filteredSubjects.length === 0 ? (
           <p className="p-3 text-sm text-black/70">
             {subjects.length ? "No subjects match your search." : "No active catalog subjects found for this grade level."}

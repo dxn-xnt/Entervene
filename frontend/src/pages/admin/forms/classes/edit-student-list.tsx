@@ -380,7 +380,7 @@ function EnrolledStudentsPanel({
         </Button>
       </div>
 
-      <div className="min-h-0 overflow-y-auto rounded-none border-2 border-border bg-card">
+      <div className="min-h-0 overflow-y-auto rounded border-2 border-border bg-card">
         {!totalCount ? (
           <Empty className="p-6 border-0 shadow-none bg-transparent">
             <Empty.Content>
@@ -463,7 +463,7 @@ function AvailableStudentsPanel({
         placeholder="Search available students..."
         className="max-w-xs h-9"
       />
-      <div className="min-h-0 overflow-y-auto rounded-none border-2 border-border bg-card">
+      <div className="min-h-0 overflow-y-auto rounded border-2 border-border bg-card">
         {!students.length ? (
           <Empty className="p-6 border-0 shadow-none bg-transparent">
             <Empty.Content>

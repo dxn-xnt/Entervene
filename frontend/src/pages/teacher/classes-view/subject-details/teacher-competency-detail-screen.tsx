@@ -245,7 +245,7 @@ export default function TeacherCompetencyDetailScreen({
         </div>
 
         {lessons.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-black bg-white p-8 text-center shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex flex-col items-center justify-center rounded border-2 border-dashed border-black bg-white p-8 text-center shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
             <BookOpen size={36} className="text-gray-400 mb-2" />
             <h4 className="text-base font-bold text-black mb-1">
               No lessons created for this competency yet
@@ -277,7 +277,7 @@ export default function TeacherCompetencyDetailScreen({
                   className="flex flex-col gap-2 min-w-0 w-full"
                 >
                   {/* Lesson Card with Warm Yellow Theme */}
-                  <div className="w-full min-w-0 rounded-lg border-2 border-black bg-[#F6E9B2] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:border-black transition-all">
+                  <div className="w-full min-w-0 rounded border-2 border-black bg-[#F6E9B2] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:border-black transition-all">
                     <div className="flex items-start justify-between gap-3 min-w-0">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2 mb-1.5 min-w-0">
@@ -404,7 +404,7 @@ export default function TeacherCompetencyDetailScreen({
                           <div
                             key={cw.classwork_assignment_id}
                             onClick={() => onOpenClassworkDetail && onOpenClassworkDetail(cw)}
-                            className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3.5 rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFFDF0] hover:translate-x-0.5 transition-all cursor-pointer min-w-0 group"
+                            className="flex items-center justify-between gap-3 border-2 border-black bg-white p-3.5 rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#FFFDF0] hover:translate-x-0.5 transition-all cursor-pointer min-w-0 group"
                           >
                             <div className="flex items-center gap-3 min-w-0">
                               <span className="shrink-0 text-black">

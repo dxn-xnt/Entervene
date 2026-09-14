@@ -21,7 +21,7 @@ export default function ConfirmAlertDialog({
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
     >
-      <div className="w-full max-w-md rounded-lg border border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+      <div className="w-full max-w-md rounded border border-black bg-white p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
         <Alert status="warning">
           <Alert.Title>{title}</Alert.Title>
           <Alert.Description>{description}</Alert.Description>
@@ -30,14 +30,14 @@ export default function ConfirmAlertDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg border border-black px-4 py-2 text-sm font-semibold"
+            className="rounded border border-black px-4 py-2 text-sm font-semibold"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="rounded-lg border border-red-600 bg-red-100 px-4 py-2 text-sm font-semibold text-red-700"
+            className="rounded border border-red-600 bg-red-100 px-4 py-2 text-sm font-semibold text-red-700"
           >
             {confirmLabel}
           </button>

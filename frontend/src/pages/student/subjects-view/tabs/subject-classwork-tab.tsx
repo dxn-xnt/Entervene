@@ -839,7 +839,7 @@ export default function SubjectClassworkTab({
               }}
               variant="outline"
               size="icon"
-              className="rounded-none border-black bg-white shadow-md hover:bg-white hover:shadow-none"
+              className="rounded border-black bg-white shadow-md hover:bg-white hover:shadow-none"
               aria-label="Exit fullscreen quiz"
             >
               <ChevronLeft size={22} />
@@ -862,7 +862,7 @@ export default function SubjectClassworkTab({
                 onClick={() => setIsQuizFullscreen(false)}
                 variant="outline"
                 size="sm"
-                className="rounded-none border-black bg-white text-sm font-bold shadow-md hover:shadow-none"
+                className="rounded border-black bg-white text-sm font-bold shadow-md hover:shadow-none"
               >
                 Close Summary
               </Button>
@@ -871,7 +871,7 @@ export default function SubjectClassworkTab({
                 type="button"
                 onClick={() => setQuizReviewMode(true)}
                 size="sm"
-                className="rounded-none border-black bg-primary text-sm font-bold text-black"
+                className="rounded border-black bg-primary text-sm font-bold text-black"
               >
                 Finish Quiz
               </Button>
@@ -907,7 +907,7 @@ export default function SubjectClassworkTab({
                         setQuizCurrentIndex(index);
                         setQuizReviewMode(false);
                       }}
-                      className={`relative h-8 min-w-8 rounded-none border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${
+                      className={`relative h-8 min-w-8 rounded border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${
                         index === quizCurrentIndex
                           ? "bg-white"
                           : hasQuizAnswer(question)
@@ -955,7 +955,7 @@ export default function SubjectClassworkTab({
                         <h2 className="min-w-0 flex-1 break-words text-base font-bold">
                           {index + 1}. {question.question_text}
                         </h2>
-                        <Badge variant="outline" size="sm" className="shrink-0 rounded-none border border-gray-300 text-xs font-bold">
+                        <Badge variant="outline" size="sm" className="shrink-0 rounded border border-gray-300 text-xs font-bold">
                           {selectedClasswork.show_scores
                             ? `${question.points_awarded ?? 0}/${question.points} pts`
                             : `${question.points} pts`}
@@ -1059,12 +1059,12 @@ export default function SubjectClassworkTab({
                         setQuizReviewMode(false);
                       }}
                       variant="ghost"
-                      className="flex w-full rounded-none items-center justify-between border-b border-gray-300 px-4 py-2 text-left shadow-none last:border-b-0 hover:bg-primary hover:shadow-none"
+                      className="flex w-full rounded items-center justify-between border-b border-gray-300 px-4 py-2 text-left shadow-none last:border-b-0 hover:bg-primary hover:shadow-none"
                     >
                       <span className="font-semibold">
                         Question {index + 1}
                       </span>
-                      <Badge variant="outline" size="sm" className="rounded-none border border-gray-300 text-[11px] font-semibold">
+                      <Badge variant="outline" size="sm" className="rounded border border-gray-300 text-[11px] font-semibold">
                         {hasQuizAnswer(question)
                           ? "Answer Recorded"
                           : "No Answer"}
@@ -1092,7 +1092,7 @@ export default function SubjectClassworkTab({
                     disabled={quizCurrentIndex === 0}
                     variant="outline"
                     size="icon"
-                    className="rounded-none border-black bg-white shadow-md hover:shadow-none disabled:opacity-40"
+                    className="rounded border-black bg-white shadow-md hover:shadow-none disabled:opacity-40"
                     aria-label="Previous question"
                   >
                     <ChevronLeft size={18} />
@@ -1102,7 +1102,7 @@ export default function SubjectClassworkTab({
                     onClick={() =>
                       toggleQuizFlag(currentQuestion.quiz_question_id)
                     }
-                    className={`rounded-none border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${
+                    className={`rounded border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${
                       flaggedQuizQuestionIds.has(
                         currentQuestion.quiz_question_id,
                       )
@@ -1122,7 +1122,7 @@ export default function SubjectClassworkTab({
                     disabled={quizCurrentIndex === questions.length - 1}
                     variant="outline"
                     size="icon"
-                    className="rounded-none border-black bg-white shadow-md hover:shadow-none disabled:opacity-40"
+                    className="rounded border-black bg-white shadow-md hover:shadow-none disabled:opacity-40"
                     aria-label="Next question"
                   >
                     <ChevronRight size={18} />
@@ -1151,7 +1151,7 @@ export default function SubjectClassworkTab({
                           }))
                         }
                         disabled={isQuizSubmitting}
-                        className={`min-h-24 rounded-none border-black px-4 py-3 text-lg font-bold shadow-md hover:shadow-none ${
+                        className={`min-h-24 rounded border-black px-4 py-3 text-lg font-bold shadow-md hover:shadow-none ${
                           quizAnswers[currentQuestion.quiz_question_id]
                             ?.selected_option_id === option.option_id
                             ? "bg-success hover:bg-success"
@@ -1179,7 +1179,7 @@ export default function SubjectClassworkTab({
                     }
                     disabled={isQuizSubmitting}
                     placeholder="Type your answer here..."
-                    className="min-h-36 w-full rounded-none border border-black bg-white p-3 text-sm outline-none shadow-md transition-shadow hover:shadow-none"
+                    className="min-h-36 w-full rounded border border-black bg-white p-3 text-sm outline-none shadow-md transition-shadow hover:shadow-none"
                   />
                 )}
               </section>
@@ -1200,7 +1200,7 @@ export default function SubjectClassworkTab({
         <p className="mb-4 text-red-500">{error}</p>
         <button
           onClick={fetchClassworks}
-          className="rounded-lg bg-black px-4 py-2 font-semibold text-white transition-colors hover:bg-gray-800"
+          className="rounded bg-black px-4 py-2 font-semibold text-white transition-colors hover:bg-gray-800"
         >
           Retry
         </button>
@@ -1610,11 +1610,11 @@ export default function SubjectClassworkTab({
                     ) : isQuizType(selectedClasswork.classwork_type) ? (
                       <div className="space-y-3">
                         {isQuizLoading ? (
-                          <p className="rounded-lg border border-dashed border-black bg-white px-4 py-6 text-center text-sm font-semibold">
+                          <p className="rounded border border-dashed border-black bg-white px-4 py-6 text-center text-sm font-semibold">
                             Loading quiz...
                           </p>
                         ) : quizError ? (
-                          <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                          <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
                             {quizError}
                           </div>
                         ) : selectedQuizAttempt ? (
@@ -1669,7 +1669,7 @@ export default function SubjectClassworkTab({
                             {selectedQuizAttempt.status !== "pending" ? (
                               <div className="space-y-2">
                                 {selectedQuizAttempt.summary_message ? (
-                                  <div className="rounded-lg border border-black bg-white px-3 py-2 text-xs font-semibold text-gray-700">
+                                  <div className="rounded border border-black bg-white px-3 py-2 text-xs font-semibold text-gray-700">
                                     {selectedQuizAttempt.summary_release_at
                                       ? `Your quiz has been submitted successfully. Your quiz summary will be available on ${formatDateTime(selectedQuizAttempt.summary_release_at)}.`
                                       : selectedQuizAttempt.summary_message}
@@ -1689,7 +1689,7 @@ export default function SubjectClassworkTab({
                                     disabled={
                                       !selectedQuizAttempt.summary_available
                                     }
-                                    className="w-full rounded-none border-black bg-white text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="w-full rounded border-black bg-white text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
                                   >
                                     {selectedQuizAttempt.summary_available
                                       ? "View Summary"
@@ -1737,7 +1737,7 @@ export default function SubjectClassworkTab({
                             )}
                           </>
                         ) : (
-                          <p className="rounded-lg border border-dashed border-black bg-white px-4 py-6 text-center text-sm font-semibold">
+                          <p className="rounded border border-dashed border-black bg-white px-4 py-6 text-center text-sm font-semibold">
                             Quiz details unavailable.
                           </p>
                         )}

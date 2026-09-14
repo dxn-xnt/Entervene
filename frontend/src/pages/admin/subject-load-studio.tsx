@@ -56,6 +56,7 @@ import { Input } from "@/components/retroui/Input";
 import { useSettings } from "@/context/SettingsContext";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { timeStringToMinutes, validatePeriodTimeRange } from "@/lib/time-utils";
+import { cn } from "@/lib/utils";
 
 function stringToTimeValue(str?: string | null, fallbackHour = 8): TimeValue {
   if (!str) return { hour: fallbackHour, minute: 0, period: "AM" };
@@ -113,6 +114,14 @@ const DAYS = [
   { key: "FRI", label: "F" },
 ];
 
+const TIMETABLE_DAYS = [
+  { key: "MON", short: "M", full: "Monday" },
+  { key: "TUE", short: "T", full: "Tuesday" },
+  { key: "WED", short: "W", full: "Wednesday" },
+  { key: "THU", short: "Th", full: "Thursday" },
+  { key: "FRI", short: "F", full: "Friday" },
+];
+
 export default function AdminSubjectLoadStudio() {
   const [selectedGradeId, setSelectedGradeId] = useState<string>("all");
   const [studioData, setStudioData] = useState<SubjectLoadStudioData | null>(null);
@@ -128,8 +137,86 @@ export default function AdminSubjectLoadStudio() {
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [isBreakDrawerOpen, setIsBreakDrawerOpen] = useState<boolean>(false);
   const [periodTemplateSlots, setPeriodTemplateSlots] = useState<PeriodTemplateSlotItem[]>([]);
+  const [sectionViewModes, setSectionViewModes] = useState<Record<number, "grid" | "list">>({});
   const [openRowKey, setOpenRowKey] = useState<string | null>(null);
   const [expandedIssueRule, setExpandedIssueRule] = useState<string | null>(null);
+
+  // Fetch period templates directly on mount
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const res = await apiFetch("/api/v1/subject-loads/period-templates");
+        if (res.ok) {
+          const data = (await res.json()) as PeriodTemplateSlotItem[];
+          if (data && data.length > 0) {
+            setPeriodTemplateSlots(data);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading period templates in studio:", err);
+      }
+    };
+    void fetchTemplates();
+  }, []);
+
+  const getSectionSlots = useCallback(
+    (cls: { class_id: number; period_template_group?: string | null; section_name?: string; academic_level_id: number }) => {
+      let groupKey = cls.period_template_group || "JHS_45MIN";
+      const levelObj = studioData?.academic_levels.find((l) => l.academic_level_id === cls.academic_level_id);
+      const grade = levelObj?.grade_level || 7;
+      if (!cls.period_template_group && grade >= 11) {
+        const name = (cls.section_name || "").toLowerCase();
+        if (name.includes("del mundo") || name.includes("reyes")) {
+          groupKey = "SHS_DELMUNDO_REYES";
+        } else {
+          groupKey = "SHS_CAMPOS_ZARA";
+        }
+      }
+
+      let groupSlots = periodTemplateSlots.filter((s) => s.template_group === groupKey);
+      if (groupSlots.length === 0) {
+        groupSlots = [
+          { template_group: groupKey, slot_name: "HOMEROOM GUIDANCE", slot_type: "HOMEROOM", start_time: "07:30", end_time: "08:00", is_locked_break: true, display_order: 1 },
+          { template_group: groupKey, slot_name: "Period 1", slot_type: "CLASS", start_time: "08:00", end_time: "08:45", is_locked_break: false, display_order: 2 },
+          { template_group: groupKey, slot_name: "Period 2", slot_type: "CLASS", start_time: "08:45", end_time: "09:30", is_locked_break: false, display_order: 3 },
+          { template_group: groupKey, slot_name: "MORNING RECESS", slot_type: "RECESS", start_time: "09:30", end_time: "09:45", is_locked_break: true, display_order: 4 },
+          { template_group: groupKey, slot_name: "Period 3", slot_type: "CLASS", start_time: "09:45", end_time: "10:30", is_locked_break: false, display_order: 5 },
+          { template_group: groupKey, slot_name: "Period 4", slot_type: "CLASS", start_time: "10:30", end_time: "11:15", is_locked_break: false, display_order: 6 },
+          { template_group: groupKey, slot_name: "Period 5", slot_type: "CLASS", start_time: "11:15", end_time: "12:00", is_locked_break: false, display_order: 7 },
+          { template_group: groupKey, slot_name: "LUNCH BREAK", slot_type: "LUNCH", start_time: "12:00", end_time: "13:00", is_locked_break: true, display_order: 8 },
+          { template_group: groupKey, slot_name: "Enhanced Period 1", slot_type: "CLASS", start_time: "13:00", end_time: "14:00", is_locked_break: false, display_order: 9 },
+          { template_group: groupKey, slot_name: "Enhanced Period 2", slot_type: "CLASS", start_time: "14:00", end_time: "15:00", is_locked_break: false, display_order: 10 },
+          { template_group: groupKey, slot_name: "AFTERNOON RECESS", slot_type: "RECESS", start_time: "15:00", end_time: "15:30", is_locked_break: true, display_order: 11 },
+          { template_group: groupKey, slot_name: "Period 6", slot_type: "CLASS", start_time: "15:30", end_time: "16:15", is_locked_break: false, display_order: 12 },
+          { template_group: groupKey, slot_name: "Period 7", slot_type: "CLASS", start_time: "16:15", end_time: "17:00", is_locked_break: false, display_order: 13 },
+        ];
+      }
+
+      const sorted = [...groupSlots].sort((a, b) => a.display_order - b.display_order);
+
+      const sectionLoads = loads.filter((l) => l.class_id === cls.class_id && l.start_time && l.end_time);
+      const knownStarts = new Set(sorted.map((s) => s.start_time));
+
+      for (const l of sectionLoads) {
+        if (l.start_time && !knownStarts.has(l.start_time)) {
+          knownStarts.add(l.start_time);
+          sorted.push({
+            template_group: groupKey,
+            slot_name: `Period (${formatTime12h(l.start_time)})`,
+            slot_type: "CLASS",
+            start_time: l.start_time,
+            end_time: l.end_time || l.start_time,
+            is_locked_break: false,
+            display_order: 99,
+          });
+        }
+      }
+
+      sorted.sort((a, b) => timeStringToMinutes(a.start_time) - timeStringToMinutes(b.start_time));
+      return sorted;
+    },
+    [periodTemplateSlots, studioData, loads]
+  );
 
   // Copy Schedule Modal State
   const [isCopyModalOpen, setIsCopyModalOpen] = useState<boolean>(false);
@@ -1403,266 +1490,285 @@ export default function AdminSubjectLoadStudio() {
             <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {/* Notice Alert Overlay */}
               {notice && (
-              <Alert
-                status={notice.type}
-                position="top-right"
-                duration={5000}
-                onClose={() => setNotice(null)}
-              >
-                <div className="flex gap-2.5 items-start">
-                  {notice.type === "success" ? (
-                    <CheckCircle2 className="size-5 shrink-0 text-emerald-800 mt-0.5" />
-                  ) : (
-                    <AlertTriangle className="size-5 shrink-0 text-rose-800 mt-0.5" />
-                  )}
-                  <div className="flex flex-col gap-0.5 min-w-0">
-                    {notice.title && (
-                      <Alert.Title className="font-bold text-sm text-foreground">
-                        {notice.title}
-                      </Alert.Title>
+                <Alert
+                  status={notice.type}
+                  position="top-right"
+                  duration={5000}
+                  onClose={() => setNotice(null)}
+                >
+                  <div className="flex gap-2.5 items-start">
+                    {notice.type === "success" ? (
+                      <CheckCircle2 className="size-5 shrink-0 text-emerald-800 mt-0.5" />
+                    ) : (
+                      <AlertTriangle className="size-5 shrink-0 text-rose-800 mt-0.5" />
                     )}
-                    <Alert.Description className="text-muted-foreground text-xs leading-normal break-words">
-                      {notice.message}
-                    </Alert.Description>
-                  </div>
-                </div>
-              </Alert>
-            )}
-
-            <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-12">
-              {/* LEFT PANE: Section Schedule List */}
-              <main className="flex min-w-0 flex-col gap-3 lg:col-span-9">
-                {/* Filters & Status Bar */}
-                <section className="flex flex-col gap-3 w-full">
-                  <div className="flex flex-row gap-2 w-full">
-                    <label className="relative shadow-md hover:shadow-none transition-shadow w-full bg-background">
-                      <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
-                      <Input
-                        // value={search}
-                        // onChange={(event) => setSearch(event.target.value)}
-                        placeholder="Search class"
-                        className="h-10 w-full shadow-none border-black pl-9 pr-3"
-                      />
-                    </label>
-
-                    <div>
-                      <Select
-                        value={selectedGradeId}
-                        onValueChange={(val) => setSelectedGradeId(val)}
-                      >
-                        <Select.Trigger className="w-full whitespace-nowrap">
-                          <Select.Value placeholder="All Grade Levels" />
-                        </Select.Trigger>
-                        <Select.Content>
-                          <Select.Group>
-                            <Select.Item value="all" className="whitespace-nowrap">All Grade Levels</Select.Item>
-                            {studioData?.academic_levels.map((lvl) => (
-                              <Select.Item key={lvl.academic_level_id} value={String(lvl.academic_level_id)} className="whitespace-nowrap">
-                                {lvl.level_name}
-                              </Select.Item>
-                            ))}
-                          </Select.Group>
-                        </Select.Content>
-                      </Select>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      {notice.title && (
+                        <Alert.Title className="font-bold text-sm text-foreground">
+                          {notice.title}
+                        </Alert.Title>
+                      )}
+                      <Alert.Description className="text-muted-foreground text-xs leading-normal break-words">
+                        {notice.message}
+                      </Alert.Description>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex flex-wrap items-center gap-2 font-bold">
-                      <Badge
-                        size="sm"
-                        variant={prePublishChecklistCount === 6 ? "surface" : "default"}
-                        className="inline-flex items-center gap-1.5"
-                      >
-                        <CheckCircle2 className="size-3.5" />
-                        Checklist {prePublishChecklistCount}/6 passed
-                      </Badge>
+                </Alert>
+              )}
 
-                      {errorConflictsCount > 0 ? (
-                        <Badge size="sm" variant="solid" className="inline-flex items-center gap-1.5">
-                          <AlertCircle className="size-3.5" />
-                          ✕ {errorConflictsCount} conflicts — must resolve to publish
-                        </Badge>
-                      ) : (
-                        <Badge size="sm" variant="outline">
-                          0 Conflicts
-                        </Badge>
-                      )}
+              <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-12">
+                {/* LEFT PANE: Section Schedule List */}
+                <main className="flex min-w-0 flex-col gap-3 lg:col-span-9">
+                  {/* Filters & Status Bar */}
+                  <section className="flex flex-col gap-3 w-full">
+                    <div className="flex flex-row gap-2 w-full">
+                      <label className="relative shadow-md hover:shadow-none transition-shadow w-full bg-background">
+                        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+                        <Input
+                          // value={search}
+                          // onChange={(event) => setSearch(event.target.value)}
+                          placeholder="Search class"
+                          className="h-10 w-full shadow-none border-black pl-9 pr-3"
+                        />
+                      </label>
 
-                      {warningConflictsCount > 0 && (
-                        <Badge size="sm" variant="solid" className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                          <AlertTriangle className="size-3.5" />
-                          {warningConflictsCount} warnings
-                        </Badge>
-                      )}
-
-                      {unassignedTotal > 0 && (
-                        <Badge size="sm" variant="default">
-                          {unassignedTotal} unassigned
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </section>
-
-                {filteredClasses.length === 0 ? (
-                  <Card className="bg-accent px-6 py-12 text-center">
-                    <Text as="h3" className="font-bold text-lg">
-                      No Class Sections Found
-                    </Text>
-                    <Text as="p" className="text-sm text-muted-foreground mt-1">
-                      Select a different Grade Level or create classes in the admin dashboard.
-                    </Text>
-                  </Card>
-                ) : (
-                  groupedClassesByGrade.map((group) => (
-                    <Card
-                      key={group.levelId}
-                      className="@container/card flex min-w-0 w-full flex-col gap-4 overflow-hidden bg-primary"
-                    >
-                      <div className="flex items-center justify-between">
-                        <Text as="h4" className="text-xl font-bold font-sans">
-                          {group.levelName}
-                        </Text>
-                        <Badge variant="outline" className="border-border">
-                          {group.classes.length} section{group.classes.length !== 1 ? "s" : ""}
-                        </Badge>
+                      <div>
+                        <Select
+                          value={selectedGradeId}
+                          onValueChange={(val) => setSelectedGradeId(val)}
+                        >
+                          <Select.Trigger className="w-full whitespace-nowrap">
+                            <Select.Value placeholder="All Grade Levels" />
+                          </Select.Trigger>
+                          <Select.Content>
+                            <Select.Group>
+                              <Select.Item value="all" className="whitespace-nowrap">All Grade Levels</Select.Item>
+                              {studioData?.academic_levels.map((lvl) => (
+                                <Select.Item key={lvl.academic_level_id} value={String(lvl.academic_level_id)} className="whitespace-nowrap">
+                                  {lvl.level_name}
+                                </Select.Item>
+                              ))}
+                            </Select.Group>
+                          </Select.Content>
+                        </Select>
                       </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2 font-bold">
+                        <Badge
+                          size="sm"
+                          variant={prePublishChecklistCount === 6 ? "surface" : "default"}
+                          className="inline-flex items-center gap-1.5"
+                        >
+                          <CheckCircle2 className="size-3.5" />
+                          Checklist {prePublishChecklistCount}/6 passed
+                        </Badge>
 
-                      <div className="flex flex-col gap-4">
-                        {group.classes.map((cls) => {
-                          const offerings = studioData?.subject_offerings || [];
-                          const classSubjects = (studioData?.subjects || []).filter((sub) =>
-                            isSubjectOfferedForClass(sub, cls, offerings)
-                          );
+                        {errorConflictsCount > 0 ? (
+                          <Badge size="sm" variant="solid" className="inline-flex items-center gap-1.5">
+                            <AlertCircle className="size-3.5" />
+                            ✕ {errorConflictsCount} conflicts — must resolve to publish
+                          </Badge>
+                        ) : (
+                          <Badge size="sm" variant="outline">
+                            0 Conflicts
+                          </Badge>
+                        )}
 
-                          const sectionLoads = loads.filter((l) => l.class_id === cls.class_id);
+                        {warningConflictsCount > 0 && (
+                          <Badge size="sm" variant="solid" className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                            <AlertTriangle className="size-3.5" />
+                            {warningConflictsCount} warnings
+                          </Badge>
+                        )}
 
-                          const timesBySubject = new Map<string, { start: number; end: number }>();
-                          for (const l of sectionLoads) {
-                            if (!l.start_time) continue;
-                            const key = String(l.subject_id);
-                            const start = timeStringToMinutes(l.start_time);
-                            const end = timeStringToMinutes(l.end_time);
-                            const existing = timesBySubject.get(key);
-                            if (!existing || start < existing.start) {
-                              timesBySubject.set(key, { start, end });
+                        {unassignedTotal > 0 && (
+                          <Badge size="sm" variant="default">
+                            {unassignedTotal} unassigned
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+
+                  {filteredClasses.length === 0 ? (
+                    <Card className="bg-accent px-6 py-12 text-center">
+                      <Text as="h3" className="font-bold text-lg">
+                        No Class Sections Found
+                      </Text>
+                      <Text as="p" className="text-sm text-muted-foreground mt-1">
+                        Select a different Grade Level or create classes in the admin dashboard.
+                      </Text>
+                    </Card>
+                  ) : (
+                    groupedClassesByGrade.map((group) => (
+                      <Card
+                        key={group.levelId}
+                        className="@container/card flex min-w-0 w-full flex-col gap-4 overflow-hidden bg-primary"
+                      >
+                        <div className="flex items-center justify-between">
+                          <Text as="h4" className="text-xl font-bold font-sans">
+                            {group.levelName}
+                          </Text>
+                          <Badge variant="outline" className="border-border">
+                            {group.classes.length} section{group.classes.length !== 1 ? "s" : ""}
+                          </Badge>
+                        </div>
+
+                        <div className="flex flex-col gap-4">
+                          {group.classes.map((cls) => {
+                            const offerings = studioData?.subject_offerings || [];
+                            const classSubjects = (studioData?.subjects || []).filter((sub) =>
+                              isSubjectOfferedForClass(sub, cls, offerings)
+                            );
+
+                            const sectionLoads = loads.filter((l) => l.class_id === cls.class_id);
+
+                            const timesBySubject = new Map<string, { start: number; end: number }>();
+                            for (const l of sectionLoads) {
+                              if (!l.start_time) continue;
+                              const key = String(l.subject_id);
+                              const start = timeStringToMinutes(l.start_time);
+                              const end = timeStringToMinutes(l.end_time);
+                              const existing = timesBySubject.get(key);
+                              if (!existing || start < existing.start) {
+                                timesBySubject.set(key, { start, end });
+                              }
                             }
-                          }
 
-                          const sortedClassSubjects = [...classSubjects].sort((a, b) => {
-                            const aTimes = timesBySubject.get(String(a.subject_id)) ?? { start: Number.MAX_SAFE_INTEGER, end: Number.MAX_SAFE_INTEGER };
-                            const bTimes = timesBySubject.get(String(b.subject_id)) ?? { start: Number.MAX_SAFE_INTEGER, end: Number.MAX_SAFE_INTEGER };
-                            if (aTimes.start !== bTimes.start) return aTimes.start - bTimes.start;
-                            if (aTimes.end !== bTimes.end) return aTimes.end - bTimes.end;
-                            return (a.subject_name || "").localeCompare(b.subject_name || "");
-                          });
+                            const sortedClassSubjects = [...classSubjects].sort((a, b) => {
+                              const aTimes = timesBySubject.get(String(a.subject_id)) ?? { start: Number.MAX_SAFE_INTEGER, end: Number.MAX_SAFE_INTEGER };
+                              const bTimes = timesBySubject.get(String(b.subject_id)) ?? { start: Number.MAX_SAFE_INTEGER, end: Number.MAX_SAFE_INTEGER };
+                              if (aTimes.start !== bTimes.start) return aTimes.start - bTimes.start;
+                              if (aTimes.end !== bTimes.end) return aTimes.end - bTimes.end;
+                              return (a.subject_name || "").localeCompare(b.subject_name || "");
+                            });
 
-                          const sectionUnassignedCount = sectionLoads.filter((l) => !l.staff_id).length;
-                          const hasUnassigned = sectionUnassignedCount > 0 || classSubjects.length === 0;
-                          // Section is published when: no unassigned, has loads, every load is status="published"
-                          const isSectionPublished = !hasUnassigned && sectionLoads.length > 0 && sectionLoads.every((l) => l.status === "published");
-                          const sectionErrors = conflicts.filter(
-                            (c) => c.severity === "error" && (c.class_id === cls.class_id || (c.affected_key && c.affected_key.startsWith(`${cls.class_id}_`)))
-                          );
-                          const sectionHasErrors = sectionErrors.length > 0;
-                          const isPublishSectionDisabled = isSaving || sectionHasErrors || sectionUnassignedCount > 0;
+                            const sectionUnassignedCount = sectionLoads.filter((l) => !l.staff_id).length;
+                            const hasUnassigned = sectionUnassignedCount > 0 || classSubjects.length === 0;
+                            // Section is published when: no unassigned, has loads, every load is status="published"
+                            const isSectionPublished = !hasUnassigned && sectionLoads.length > 0 && sectionLoads.every((l) => l.status === "published");
+                            const sectionErrors = conflicts.filter(
+                              (c) => c.severity === "error" && (c.class_id === cls.class_id || (c.affected_key && c.affected_key.startsWith(`${cls.class_id}_`)))
+                            );
+                            const sectionHasErrors = sectionErrors.length > 0;
+                            const isPublishSectionDisabled = isSaving || sectionHasErrors || sectionUnassignedCount > 0;
 
-                          const handlePublishSectionClick = () => {
-                            if (sectionUnassignedCount > 0) {
-                              setNotice({
-                                title: "Cannot Publish Section",
-                                message: `Section "${cls.section_name}" has ${sectionUnassignedCount} subject(s) without an assigned teacher. Please assign all teachers first.`,
-                                type: "error",
-                              });
-                              return;
-                            }
-                            if (sectionHasErrors) {
-                              const errorMsg = sectionErrors[0]?.message || "This section has unresolved schedule conflicts.";
-                              setNotice({
-                                title: "Cannot Publish Section",
-                                message: `Section "${cls.section_name}" cannot be published: ${errorMsg}`,
-                                type: "error",
-                              });
-                              return;
-                            }
-                            void handleSave("publish", "section", cls.class_id);
-                          };
+                            const handlePublishSectionClick = () => {
+                              if (sectionUnassignedCount > 0) {
+                                setNotice({
+                                  title: "Cannot Publish Section",
+                                  message: `Section "${cls.section_name}" has ${sectionUnassignedCount} subject(s) without an assigned teacher. Please assign all teachers first.`,
+                                  type: "error",
+                                });
+                                return;
+                              }
+                              if (sectionHasErrors) {
+                                const errorMsg = sectionErrors[0]?.message || "This section has unresolved schedule conflicts.";
+                                setNotice({
+                                  title: "Cannot Publish Section",
+                                  message: `Section "${cls.section_name}" cannot be published: ${errorMsg}`,
+                                  type: "error",
+                                });
+                                return;
+                              }
+                              void handleSave("publish", "section", cls.class_id);
+                            };
 
-                          const hasPendingDraft = Boolean(
-                            studioData?.has_pending_draft_by_class?.[cls.class_id] ||
-                            studioData?.has_pending_draft_by_class?.[String(cls.class_id)]
-                          );
+                            const hasPendingDraft = Boolean(
+                              studioData?.has_pending_draft_by_class?.[cls.class_id] ||
+                              studioData?.has_pending_draft_by_class?.[String(cls.class_id)]
+                            );
 
-                          return (
-                            <Card
-                              key={cls.class_id}
-                              className="block min-w-0 overflow-hidden shadow-none hover:-translate-y-1"
-                            >
-                              <div className="flex items-center justify-between pb-4 flex-wrap gap-2">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <Text as="h3" className="font-bold text-2xl">
-                                    {cls.section_name}
-                                  </Text>
-                                  <Badge
-                                    size="sm"
-                                    variant={isSectionPublished ? "surface" : "default"}
-                                  >
-                                    {isSectionPublished ? "Published" : "Draft"}
-                                  </Badge>
-                                  {hasPendingDraft && (
+                            return (
+                              <Card
+                                key={cls.class_id}
+                                className="block min-w-0 overflow-hidden shadow-none hover:-translate-y-1"
+                              >
+                                <div className="flex items-center justify-between pb-4 flex-wrap gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Text as="h3" className="font-bold text-2xl">
+                                      {cls.section_name}
+                                    </Text>
                                     <Badge
                                       size="sm"
-                                      variant="default"
-                                      className="bg-amber-100 text-amber-900 border-amber-500 font-bold"
+                                      variant={isSectionPublished ? "surface" : "default"}
                                     >
-                                      Draft in Progress
+                                      {isSectionPublished ? "Published" : "Draft"}
                                     </Badge>
-                                  )}
-                                  <Badge
-                                    size="sm"
-                                    variant="solid"
-                                  >
-                                    {classSubjects.length} Subjects
-                                  </Badge>
-                                  {(() => {
-                                    if (!cls.pathway || cls.pathway === "general") return null;
-                                    const formatted = cls.pathway
-                                      .replace(/_/g, " ")
-                                      .replace(/\b\w/g, (l) => l.toUpperCase())
-                                      .replace(/Stem/i, "STEM");
-
-                                    return (
-                                      <Badge variant="surface" size="sm" className="border-2 border-black font-bold uppercase text-[10px] bg-emerald-100 text-emerald-950 border-emerald-800">
-                                        {formatted}
+                                    {hasPendingDraft && (
+                                      <Badge
+                                        size="sm"
+                                        variant="default"
+                                        className="bg-amber-100 text-amber-900 border-amber-500 font-bold"
+                                      >
+                                        Draft in Progress
                                       </Badge>
-                                    );
-                                  })()}
-                                </div>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  {isSectionPublished && !hasPendingDraft ? (
-                                    <Button
+                                    )}
+                                    <Badge
                                       size="sm"
-                                      variant="outline"
-                                      disabled={isSaving}
-                                      onClick={() => void handleUnlockSection(cls.class_id)}
-                                      title="Unlock this section to create an isolated working draft without disrupting live student/teacher portal access"
+                                      variant="solid"
                                     >
-                                      <Unlock className="size-3.5 mr-1" />
-                                      Unlock Section
-                                    </Button>
-                                  ) : hasPendingDraft ? (
-                                    <div className="flex items-center gap-1.5">
+                                      {classSubjects.length} Subjects
+                                    </Badge>
+                                    {(() => {
+                                      if (!cls.pathway || cls.pathway === "general") return null;
+                                      const formatted = cls.pathway
+                                        .replace(/_/g, " ")
+                                        .replace(/\b\w/g, (l) => l.toUpperCase())
+                                        .replace(/Stem/i, "STEM");
+
+                                      return (
+                                        <Badge variant="surface" size="sm" className="border-2 border-black font-bold uppercase text-[10px] bg-emerald-100 text-emerald-950 border-emerald-800">
+                                          {formatted}
+                                        </Badge>
+                                      );
+                                    })()}
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {isSectionPublished && !hasPendingDraft ? (
                                       <Button
                                         size="sm"
                                         variant="outline"
                                         disabled={isSaving}
-                                        onClick={() => void handleDiscardDraft(cls.class_id)}
-                                        title="Discard all unpublished draft edits and restore published baseline"
-                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                        onClick={() => void handleUnlockSection(cls.class_id)}
+                                        title="Unlock this section to create an isolated working draft without disrupting live student/teacher portal access"
                                       >
-                                        <RotateCcw className="size-3.5 mr-1" />
-                                        Discard Draft
+                                        <Unlock className="size-3.5 mr-1" />
+                                        Unlock Section
                                       </Button>
+                                    ) : hasPendingDraft ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          disabled={isSaving}
+                                          onClick={() => void handleDiscardDraft(cls.class_id)}
+                                          title="Discard all unpublished draft edits and restore published baseline"
+                                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                        >
+                                          <RotateCcw className="size-3.5 mr-1" />
+                                          Discard Draft
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant={isPublishSectionDisabled ? "default" : "outline"}
+                                          disabled={isSaving}
+                                          className="gap-2"
+                                          onClick={handlePublishSectionClick}
+                                          title={
+                                            sectionUnassignedCount > 0
+                                              ? `Assign all ${sectionUnassignedCount} unassigned teacher(s) in this section before publishing`
+                                              : sectionHasErrors
+                                                ? `Fix schedule conflicts in this section before publishing: ${sectionErrors[0]?.message || ""}`
+                                                : "Publish draft changes to live schedule"
+                                          }
+                                        >
+                                          <Send className="size-3.5" />
+                                          Publish Draft
+                                        </Button>
+                                      </div>
+                                    ) : (
                                       <Button
                                         size="sm"
                                         variant={isPublishSectionDisabled ? "default" : "outline"}
@@ -1674,204 +1780,337 @@ export default function AdminSubjectLoadStudio() {
                                             ? `Assign all ${sectionUnassignedCount} unassigned teacher(s) in this section before publishing`
                                             : sectionHasErrors
                                               ? `Fix schedule conflicts in this section before publishing: ${sectionErrors[0]?.message || ""}`
-                                              : "Publish draft changes to live schedule"
+                                              : "Publish only this section's schedule"
                                         }
                                       >
                                         <Send className="size-3.5" />
-                                        Publish Draft
+                                        Publish Section
                                       </Button>
-                                    </div>
-                                  ) : (
-                                    <Button
-                                      size="sm"
-                                      variant={isPublishSectionDisabled ? "default" : "outline"}
-                                      disabled={isSaving}
-                                      className="gap-2"
-                                      onClick={handlePublishSectionClick}
-                                      title={
-                                        sectionUnassignedCount > 0
-                                          ? `Assign all ${sectionUnassignedCount} unassigned teacher(s) in this section before publishing`
-                                          : sectionHasErrors
-                                            ? `Fix schedule conflicts in this section before publishing: ${sectionErrors[0]?.message || ""}`
-                                            : "Publish only this section's schedule"
-                                      }
-                                    >
-                                      <Send className="size-3.5" />
-                                      Publish Section
-                                    </Button>
-                                  )}
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        className="p-[7px] shadow-white"
-                                        aria-label="More options"
-                                        onClick={(e) => e.preventDefault()}
-                                      >
-                                        <EllipsisIcon className="size-3.5" />
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="border-2 min-w-[200px]">
-                                      <DropdownMenuItem
-                                        className="gap-2 cursor-pointer"
-                                        disabled={isSectionPublished || isSaving}
-                                        onClick={() => void handleAutoSchedule(cls.class_id)}
-                                      >
-                                        <Wand2 className="size-4" /> Auto-Fit Section
-                                      </DropdownMenuItem>
-
-                                      {(() => {
-                                        const siblingSections = (studioData?.classes || []).filter(
-                                          (c) => c.class_id !== cls.class_id && c.academic_level_id === cls.academic_level_id
-                                        );
-                                        const configuredSiblings = siblingSections.filter((c) =>
-                                          loads.some((l) => l.class_id === c.class_id && l.start_time && l.end_time)
-                                        );
-
-                                        if (configuredSiblings.length === 1) {
-                                          const sib = configuredSiblings[0];
-                                          return (
-                                            <DropdownMenuSub >
-                                              <DropdownMenuSubTrigger className="gap-2 cursor-pointer whitespace-nowrap">
-                                                <Copy className="size-4" />
-                                                <span>Copy from <span className="font-bold">{sib.section_name}</span></span>
-                                              </DropdownMenuSubTrigger>
-                                              <DropdownMenuPortal>
-                                                <DropdownMenuSubContent className="border-2 min-w-[210px]">
-                                                  <DropdownMenuItem
-                                                    className="font-bold"
-                                                    onClick={() =>
-                                                      void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")
-                                                    }
-                                                  >
-                                                    Conflict-Aware Fill (Recommended)
-                                                  </DropdownMenuItem>
-                                                  <DropdownMenuItem
-                                                    className=""
-                                                    onClick={() =>
-                                                      void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")
-                                                    }
-                                                  >
-                                                    Exact Match
-                                                  </DropdownMenuItem>
-                                                </DropdownMenuSubContent>
-                                              </DropdownMenuPortal>
-                                            </DropdownMenuSub>
-                                          );
-                                        }
-
-                                        if (configuredSiblings.length > 1) {
-                                          return (
-                                            <DropdownMenuSub>
-                                              <DropdownMenuSubTrigger className="gap-2 cursor-pointer">
-                                                <Copy className="size-4" />
-                                                <span>Copy Schedule</span>
-                                              </DropdownMenuSubTrigger>
-                                              <DropdownMenuPortal>
-                                                <DropdownMenuSubContent className="border-2 min-w-[210px]">
-                                                  {configuredSiblings.map((sib) => (
-                                                    <DropdownMenuSub key={sib.class_id}>
-                                                      <DropdownMenuSubTrigger className="cursor-pointer font-bold focus:bg-gray-100">
-                                                        {sib.section_name}
-                                                      </DropdownMenuSubTrigger>
-                                                      <DropdownMenuPortal>
-                                                        <DropdownMenuSubContent className="border-2 min-w-[210px]">
-                                                          <DropdownMenuItem
-                                                            className="cursor-pointer font-bold focus:bg-gray-100"
-                                                            onClick={() =>
-                                                              void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")
-                                                            }
-                                                          >
-                                                            Conflict-Aware Fill (Recommended)
-                                                          </DropdownMenuItem>
-                                                          <DropdownMenuItem
-                                                            className="cursor-pointer focus:bg-gray-100"
-                                                            onClick={() =>
-                                                              void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")
-                                                            }
-                                                          >
-                                                            Exact Match
-                                                          </DropdownMenuItem>
-                                                        </DropdownMenuSubContent>
-                                                      </DropdownMenuPortal>
-                                                    </DropdownMenuSub>
-                                                  ))}
-                                                </DropdownMenuSubContent>
-                                              </DropdownMenuPortal>
-                                            </DropdownMenuSub>
-                                          );
-                                        }
-
-                                        return null;
-                                      })()}
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-
-                                </div>
-                              </div>
-
-                              {classSubjects.length === 0 ? (
-                                <div className="p-6 text-center border-2 border-dashed my-2">
-                                  <Text as="p" className="text-sm font-bold text-muted-foreground">
-                                    No subjects offered in Curriculum Plan for {cls.section_name} in this term.
-                                  </Text>
-                                  <Text as="p" className="text-xs text-muted-foreground mt-1">
-                                    Go to &quot;Subjects &rarr; Curriculum Plan&quot; to enable subject offerings.
-                                  </Text>
-                                </div>
-                              ) : (
-                                <Table
-                                  className="min-w-[760px] shadow-none"
-                                  wrapperClassName="h-auto max-w-full overflow-x-auto overscroll-x-contain shadow-none [scrollbar-width:thin]"
-                                >
-                                  <Table.Header className="">
-                                    <Table.Row>
-                                      <Table.Head className="font-bold text-black">Subject</Table.Head>
-                                      <Table.Head className="font-bold text-black ">Schedule</Table.Head>
-                                      <Table.Head className="font-bold text-black">Assigned Teacher</Table.Head>
-                                    </Table.Row>
-                                  </Table.Header>
-                                  <Table.Body>
-                                    {sortedClassSubjects.map((sub) => {
-                                      const subjectSlots = loads.filter(
-                                        (l) => l.class_id === cls.class_id && l.subject_id === sub.subject_id
-                                      );
-
-                                      let scheduledWeeklyHours = 0;
-                                      subjectSlots.forEach((sl) => {
-                                        const dur = (parseMin(sl.end_time) - parseMin(sl.start_time)) / 60;
-                                        const numDays = (sl.days_of_week || []).length;
-                                        if (dur > 0 && numDays > 0) {
-                                          scheduledWeeklyHours += dur * numDays;
-                                        }
-                                      });
-
-                                      const conflict = getLoadConflict(cls.class_id, sub.subject_id);
-                                      const isHighlighted =
-                                        highlightedKey === `${cls.class_id}_${sub.subject_id}`;
-
-                                      return (
-                                        <Table.Row
-                                          key={sub.subject_id}
-                                          id={`subject-row-${cls.class_id}_${sub.subject_id}`}
-                                          className={`transition-all duration-200 border-b border-border ${isHighlighted
-                                            ? "bg-accent border-black"
-                                            : conflict
-                                              ? conflict.severity === "error"
-                                                ? "bg-accent"
-                                                : "bg-background"
-                                              : "hover:bg-accent"
-                                            }`}
+                                    )}
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button
+                                          size="sm"
+                                          variant="secondary"
+                                          className="p-[7px] shadow-white"
+                                          aria-label="More options"
+                                          onClick={(e) => e.preventDefault()}
                                         >
-                                          {/* Subject Column */}
-                                          <Table.Cell className="py-2.5 px-3 align-middle">
-                                            <div className="flex flex-col gap-1">
-                                              <div className="flex items-center gap-1.5">
-                                                <span className="font-bold text-base text-black">
-                                                  {sub.subject_name}
-                                                </span>
-                                                {/* {conflict && (
+                                          <EllipsisIcon className="size-3.5" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" className="border-2 min-w-[200px]">
+                                        <DropdownMenuItem
+                                          className="gap-2 cursor-pointer"
+                                          disabled={isSectionPublished || isSaving}
+                                          onClick={() => void handleAutoSchedule(cls.class_id)}
+                                        >
+                                          <Wand2 className="size-4" /> Auto-Fit Section
+                                        </DropdownMenuItem>
+
+                                        {(() => {
+                                          const siblingSections = (studioData?.classes || []).filter(
+                                            (c) => c.class_id !== cls.class_id && c.academic_level_id === cls.academic_level_id
+                                          );
+                                          const configuredSiblings = siblingSections.filter((c) =>
+                                            loads.some((l) => l.class_id === c.class_id && l.start_time && l.end_time)
+                                          );
+
+                                          if (configuredSiblings.length === 1) {
+                                            const sib = configuredSiblings[0];
+                                            return (
+                                              <DropdownMenuSub >
+                                                <DropdownMenuSubTrigger className="gap-2 cursor-pointer whitespace-nowrap">
+                                                  <Copy className="size-4" />
+                                                  <span>Copy from <span className="font-bold">{sib.section_name}</span></span>
+                                                </DropdownMenuSubTrigger>
+                                                <DropdownMenuPortal>
+                                                  <DropdownMenuSubContent className="border-2 min-w-[210px]">
+                                                    <DropdownMenuItem
+                                                      className="font-bold"
+                                                      onClick={() =>
+                                                        void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")
+                                                      }
+                                                    >
+                                                      Conflict-Aware Fill (Recommended)
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                      className=""
+                                                      onClick={() =>
+                                                        void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")
+                                                      }
+                                                    >
+                                                      Exact Match
+                                                    </DropdownMenuItem>
+                                                  </DropdownMenuSubContent>
+                                                </DropdownMenuPortal>
+                                              </DropdownMenuSub>
+                                            );
+                                          }
+
+                                          if (configuredSiblings.length > 1) {
+                                            return (
+                                              <DropdownMenuSub>
+                                                <DropdownMenuSubTrigger className="gap-2 cursor-pointer">
+                                                  <Copy className="size-4" />
+                                                  <span>Copy Schedule</span>
+                                                </DropdownMenuSubTrigger>
+                                                <DropdownMenuPortal>
+                                                  <DropdownMenuSubContent className="border-2 min-w-[210px]">
+                                                    {configuredSiblings.map((sib) => (
+                                                      <DropdownMenuSub key={sib.class_id}>
+                                                        <DropdownMenuSubTrigger className="cursor-pointer font-bold focus:bg-gray-100">
+                                                          {sib.section_name}
+                                                        </DropdownMenuSubTrigger>
+                                                        <DropdownMenuPortal>
+                                                          <DropdownMenuSubContent className="border-2 min-w-[210px]">
+                                                            <DropdownMenuItem
+                                                              className="cursor-pointer font-bold focus:bg-gray-100"
+                                                              onClick={() =>
+                                                                void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "stagger")
+                                                              }
+                                                            >
+                                                              Conflict-Aware Fill (Recommended)
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem
+                                                              className="cursor-pointer focus:bg-gray-100"
+                                                              onClick={() =>
+                                                                void handleCopyScheduleFromSection(cls.class_id, sib.class_id, "exact")
+                                                              }
+                                                            >
+                                                              Exact Match
+                                                            </DropdownMenuItem>
+                                                          </DropdownMenuSubContent>
+                                                        </DropdownMenuPortal>
+                                                      </DropdownMenuSub>
+                                                    ))}
+                                                  </DropdownMenuSubContent>
+                                                </DropdownMenuPortal>
+                                              </DropdownMenuSub>
+                                            );
+                                          }
+
+                                          return null;
+                                        })()}
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+
+                                    {/* View Switcher: Timetable Grid vs List */}
+                                    <div className="flex items-center border-2 border-black bg-white rounded overflow-hidden shadow-xs">
+                                      <button
+                                        type="button"
+                                        onClick={() => setSectionViewModes((prev) => ({ ...prev, [cls.class_id]: "grid" }))}
+                                        className={cn(
+                                          "px-2.5 py-1 text-xs font-bold transition-colors",
+                                          (sectionViewModes[cls.class_id] || "grid") === "grid"
+                                            ? "bg-primary text-black"
+                                            : "hover:bg-accent text-black"
+                                        )}
+                                        title="Timetable Grid View"
+                                      >
+                                        Timetable
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setSectionViewModes((prev) => ({ ...prev, [cls.class_id]: "list" }))}
+                                        className={cn(
+                                          "px-2.5 py-1 text-xs font-bold border-l-2 border-black transition-colors",
+                                          (sectionViewModes[cls.class_id] || "grid") === "list"
+                                            ? "bg-primary text-black"
+                                            : "hover:bg-accent text-black"
+                                        )}
+                                        title="Subject List & Schedule Editor"
+                                      >
+                                        List
+                                      </button>
+                                    </div>
+
+                                  </div>
+                                </div>
+
+                                {classSubjects.length === 0 ? (
+                                  <div className="p-6 text-center border-2 border-dashed my-2">
+                                    <Text as="p" className="text-sm font-bold text-muted-foreground">
+                                      No subjects offered in Curriculum Plan for {cls.section_name} in this term.
+                                    </Text>
+                                    <Text as="p" className="text-xs text-muted-foreground mt-1">
+                                      Go to &quot;Subjects &rarr; Curriculum Plan&quot; to enable subject offerings.
+                                    </Text>
+                                  </div>
+                                ) : (sectionViewModes[cls.class_id] || "grid") === "grid" ? (
+                                  <div className="overflow-x-auto rounded border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-white my-2">
+                                    <table className="w-full min-w-[700px] border-collapse bg-white text-sm">
+                                      <thead>
+                                        <tr>
+                                          <th className="w-48 min-w-[170px] border-b-2 border-r-2 border-black bg-[#F6E9B2] px-4 py-3 text-left text-xs font-bold text-black">
+                                            Time
+                                          </th>
+                                          {TIMETABLE_DAYS.map((d, dIdx) => (
+                                            <th
+                                              key={d.key}
+                                              className={cn(
+                                                "min-w-[130px] border-b-2 border-black bg-[#F6E9B2] px-3 py-2 text-center text-xs font-bold text-black",
+                                                dIdx < TIMETABLE_DAYS.length - 1 ? "border-r border-black" : ""
+                                              )}
+                                            >
+                                              <div>{d.full}</div>
+                                              <div className="text-[11px] font-semibold text-gray-700">{d.short}</div>
+                                            </th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {getSectionSlots(cls).map((slot, sIdx) => {
+                                          const isBreak = slot.is_locked_break || slot.slot_type !== "CLASS";
+
+                                          if (isBreak) {
+                                            return (
+                                              <tr key={`break_${slot.display_order}_${sIdx}`} className="border-b-2 border-black bg-[#fbfbfa]">
+                                                <td className="border-r-2 border-black bg-[#fffdf5] px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-gray-700 whitespace-nowrap">
+                                                  {slot.slot_name}
+                                                </td>
+                                                {TIMETABLE_DAYS.map((d, dIdx) => (
+                                                  <td
+                                                    key={d.key}
+                                                    className={cn(
+                                                      "px-2 py-2.5 text-center text-sm font-medium text-gray-400 bg-white/50",
+                                                      dIdx < TIMETABLE_DAYS.length - 1 ? "border-r border-black/20" : ""
+                                                    )}
+                                                  >
+                                                    —
+                                                  </td>
+                                                ))}
+                                              </tr>
+                                            );
+                                          }
+
+                                          const timeLabel = `${formatTime12h(slot.start_time)} - ${formatTime12h(slot.end_time)}`;
+
+                                          return (
+                                            <tr key={`slot_${slot.start_time}_${sIdx}`} className="border-b-2 border-black bg-white">
+                                              <td className="border-r-2 border-black bg-[#F6E9B2] px-4 py-3.5 text-center text-xs font-bold text-black whitespace-nowrap align-middle">
+                                                {timeLabel}
+                                              </td>
+                                              {TIMETABLE_DAYS.map((d, dIdx) => {
+                                                const matchedLoads = sectionLoads.filter((l) => {
+                                                  const hasDay = (l.days_of_week || []).some(
+                                                    (day) =>
+                                                      day === d.key ||
+                                                      day === d.short ||
+                                                      (d.key === "THU" && (day === "THU" || day === "Th"))
+                                                  );
+                                                  if (!hasDay || !l.start_time) return false;
+                                                  return l.start_time === slot.start_time;
+                                                });
+
+                                                return (
+                                                  <td
+                                                    key={d.key}
+                                                    className={cn(
+                                                      "p-2 align-middle",
+                                                      dIdx < TIMETABLE_DAYS.length - 1 ? "border-r border-black/20" : ""
+                                                    )}
+                                                  >
+                                                    {matchedLoads.length === 0 ? (
+                                                      <div className="text-center text-sm text-gray-400 font-medium">—</div>
+                                                    ) : (
+                                                      <div className="flex flex-col gap-1.5">
+                                                        {matchedLoads.map((mLoad, mIdx) => {
+                                                          const subObj = (studioData?.subjects || []).find(
+                                                            (s) => s.subject_id === mLoad.subject_id
+                                                          );
+                                                          const teacherObj = (studioData?.teachers || []).find(
+                                                            (t) => t.staff_id === mLoad.staff_id
+                                                          );
+                                                          const conflict = getLoadConflict(cls.class_id, mLoad.subject_id);
+
+                                                          return (
+                                                            <div
+                                                              key={mLoad.subject_load_id || mLoad._key || mIdx}
+                                                              className="rounded border-2 border-black bg-white p-2.5 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-left flex flex-col gap-0.5 hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] transition-all"
+                                                            >
+                                                              <div className="font-bold text-xs text-black leading-tight">
+                                                                {subObj?.subject_name || `Subject #${mLoad.subject_id}`}
+                                                              </div>
+                                                              <div className="text-[11px] text-muted-foreground">
+                                                                {teacherObj
+                                                                  ? teacherObj.name
+                                                                  : <span className="text-amber-700 italic font-medium">Unassigned</span>}
+                                                              </div>
+                                                              {conflict && (
+                                                                <span
+                                                                  className="mt-0.5 text-[9px] font-bold text-red-800 bg-red-100 px-1 py-0.5 rounded border border-red-300 self-start"
+                                                                  title={conflict.message}
+                                                                >
+                                                                  ⚠️ Conflict
+                                                                </span>
+                                                              )}
+                                                            </div>
+                                                          );
+                                                        })}
+                                                      </div>
+                                                    )}
+                                                  </td>
+                                                );
+                                              })}
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : (
+                                  <Table
+                                    className="min-w-[760px] shadow-none"
+                                    wrapperClassName="h-auto max-w-full overflow-x-auto overscroll-x-contain shadow-none [scrollbar-width:thin]"
+                                  >
+                                    <Table.Header className="">
+                                      <Table.Row>
+                                        <Table.Head className="font-bold text-black">Subject</Table.Head>
+                                        <Table.Head className="font-bold text-black ">Schedule</Table.Head>
+                                        <Table.Head className="font-bold text-black">Assigned Teacher</Table.Head>
+                                      </Table.Row>
+                                    </Table.Header>
+                                    <Table.Body>
+                                      {sortedClassSubjects.map((sub) => {
+                                        const subjectSlots = loads.filter(
+                                          (l) => l.class_id === cls.class_id && l.subject_id === sub.subject_id
+                                        );
+
+                                        let scheduledWeeklyHours = 0;
+                                        subjectSlots.forEach((sl) => {
+                                          const dur = (parseMin(sl.end_time) - parseMin(sl.start_time)) / 60;
+                                          const numDays = (sl.days_of_week || []).length;
+                                          if (dur > 0 && numDays > 0) {
+                                            scheduledWeeklyHours += dur * numDays;
+                                          }
+                                        });
+
+                                        const conflict = getLoadConflict(cls.class_id, sub.subject_id);
+                                        const isHighlighted =
+                                          highlightedKey === `${cls.class_id}_${sub.subject_id}`;
+
+                                        return (
+                                          <Table.Row
+                                            key={sub.subject_id}
+                                            id={`subject-row-${cls.class_id}_${sub.subject_id}`}
+                                            className={`transition-all duration-200 border-b border-border ${isHighlighted
+                                              ? "bg-accent border-black"
+                                              : conflict
+                                                ? conflict.severity === "error"
+                                                  ? "bg-accent"
+                                                  : "bg-background"
+                                                : "hover:bg-accent"
+                                              }`}
+                                          >
+                                            {/* Subject Column */}
+                                            <Table.Cell className="py-2.5 px-3 align-middle">
+                                              <div className="flex flex-col gap-1">
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="font-bold text-base text-black">
+                                                    {sub.subject_name}
+                                                  </span>
+                                                  {/* {conflict && (
                                               <span
                                                 className={`text-[11px] font-bold px-1.5 py-0.5 rounded border border-black ${conflict.severity === "error" ? "bg-red-200 text-red-950" : "bg-amber-200 text-amber-950"
                                                   }`}
@@ -1880,21 +2119,21 @@ export default function AdminSubjectLoadStudio() {
                                                 ⚠️ {conflict.severity === "error" ? "Conflict" : "15 min short"}
                                               </span>
                                             )} */}
-                                              </div>
-                                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                                <Badge variant="default" size="sm">
-                                                  {sub.subject_codename || `SUB-${sub.subject_id}`}
-                                                </Badge>
-                                                {(() => {
-                                                  const hasLive = subjectSlots.some((s) => s.has_live_data);
-                                                  const deps = subjectSlots.find((s) => s.dependencies)?.dependencies;
-                                                  const eduTotal = deps?.educational_total ?? (hasLive ? (deps?.total ?? 0) : 0);
-                                                  const adminTotal = deps?.administrative_total ?? 0;
+                                                </div>
+                                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                                  <Badge variant="default" size="sm">
+                                                    {sub.subject_codename || `SUB-${sub.subject_id}`}
+                                                  </Badge>
+                                                  {(() => {
+                                                    const hasLive = subjectSlots.some((s) => s.has_live_data);
+                                                    const deps = subjectSlots.find((s) => s.dependencies)?.dependencies;
+                                                    const eduTotal = deps?.educational_total ?? (hasLive ? (deps?.total ?? 0) : 0);
+                                                    const adminTotal = deps?.administrative_total ?? 0;
 
-                                                  if (eduTotal === 0 && adminTotal === 0) return null;
+                                                    if (eduTotal === 0 && adminTotal === 0) return null;
 
-                                                  const eduParts = deps
-                                                    ? [
+                                                    const eduParts = deps
+                                                      ? [
                                                         deps.classwork_assignments ? `${deps.classwork_assignments} classwork` : null,
                                                         deps.student_submissions ? `${deps.student_submissions} submissions` : null,
                                                         deps.assessment_scores ? `${deps.assessment_scores} scores` : null,
@@ -1904,495 +2143,495 @@ export default function AdminSubjectLoadStudio() {
                                                       ]
                                                         .filter(Boolean)
                                                         .join(", ")
-                                                    : "";
+                                                      : "";
 
-                                                  const adminParts = deps
-                                                    ? [
+                                                    const adminParts = deps
+                                                      ? [
                                                         deps.substitutions ? `${deps.substitutions} substitutions` : null,
                                                         deps.reassignment_logs ? `${deps.reassignment_logs} reassignment logs` : null,
                                                       ]
                                                         .filter(Boolean)
                                                         .join(", ")
-                                                    : "";
+                                                      : "";
 
-                                                  const tooltip = [
-                                                    eduTotal > 0 ? `Student/academic records: ${eduParts || `${eduTotal} records`}. Subject cannot be deleted.` : null,
-                                                    adminTotal > 0 ? `Historical administrative records: ${adminParts || `${adminTotal} logs`}.` : null,
-                                                  ].filter(Boolean).join(" | ");
+                                                    const tooltip = [
+                                                      eduTotal > 0 ? `Student/academic records: ${eduParts || `${eduTotal} records`}. Subject cannot be deleted.` : null,
+                                                      adminTotal > 0 ? `Historical administrative records: ${adminParts || `${adminTotal} logs`}.` : null,
+                                                    ].filter(Boolean).join(" | ");
 
-                                                  return (
-                                                    <Badge
-                                                      variant="outline"
-                                                      size="sm"
-                                                      className={
-                                                        eduTotal > 0
-                                                          ? "bg-blue-50 text-blue-900 border-blue-300 font-bold inline-flex items-center gap-1"
-                                                          : "bg-slate-50 text-slate-700 border-slate-300 font-medium inline-flex items-center gap-1"
-                                                      }
-                                                      title={tooltip}
-                                                    >
-                                                      <ShieldCheck className={`size-3 ${eduTotal > 0 ? "text-blue-600" : "text-slate-500"}`} />
-                                                      {eduTotal > 0 ? `${eduTotal} student records` : `${adminTotal} admin records`}
-                                                    </Badge>
-                                                  );
-                                                })()}
-                                                {(() => {
-                                                  const matchingOffering = (studioData?.subject_offerings || []).find(
-                                                    (so) => so.subject_id === sub.subject_id && so.academic_level_id === cls.academic_level_id
-                                                  );
-                                                  const canonPathway = matchingOffering?.pathway ? canonicalizePathway(matchingOffering.pathway) : null;
-                                                  const isSharedOffering = canonPathway === "both" || (matchingOffering?.pathway_ids && matchingOffering.pathway_ids.length > 1);
-                                                  const isGradeWithPathway = Boolean(
-                                                    (studioData?.academic_levels || []).find(
-                                                      (l) => l.academic_level_id === cls.academic_level_id && l.grade_level >= 11
-                                                    )
-                                                  );
+                                                    return (
+                                                      <Badge
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className={
+                                                          eduTotal > 0
+                                                            ? "bg-blue-50 text-blue-900 border-blue-300 font-bold inline-flex items-center gap-1"
+                                                            : "bg-slate-50 text-slate-700 border-slate-300 font-medium inline-flex items-center gap-1"
+                                                        }
+                                                        title={tooltip}
+                                                      >
+                                                        <ShieldCheck className={`size-3 ${eduTotal > 0 ? "text-blue-600" : "text-slate-500"}`} />
+                                                        {eduTotal > 0 ? `${eduTotal} student records` : `${adminTotal} admin records`}
+                                                      </Badge>
+                                                    );
+                                                  })()}
+                                                  {(() => {
+                                                    const matchingOffering = (studioData?.subject_offerings || []).find(
+                                                      (so) => so.subject_id === sub.subject_id && so.academic_level_id === cls.academic_level_id
+                                                    );
+                                                    const canonPathway = matchingOffering?.pathway ? canonicalizePathway(matchingOffering.pathway) : null;
+                                                    const isSharedOffering = canonPathway === "both" || (matchingOffering?.pathway_ids && matchingOffering.pathway_ids.length > 1);
+                                                    const isGradeWithPathway = Boolean(
+                                                      (studioData?.academic_levels || []).find(
+                                                        (l) => l.academic_level_id === cls.academic_level_id && l.grade_level >= 11
+                                                      )
+                                                    );
 
-                                                  if (!isGradeWithPathway) return null;
-                                                  return isSharedOffering ? (
-                                                    <Badge variant="outline" size="sm" className="bg-blue-50 text-blue-900 border-blue-300 font-semibold">
-                                                      Shared
-                                                    </Badge>
-                                                  ) : (
-                                                    <Badge variant="outline" size="sm" className="bg-emerald-50 text-emerald-900 border-emerald-300 font-semibold">
-                                                      Specialized
-                                                    </Badge>
-                                                  );
-                                                })()}
+                                                    if (!isGradeWithPathway) return null;
+                                                    return isSharedOffering ? (
+                                                      <Badge variant="outline" size="sm" className="bg-blue-50 text-blue-900 border-blue-300 font-semibold">
+                                                        Shared
+                                                      </Badge>
+                                                    ) : (
+                                                      <Badge variant="outline" size="sm" className="bg-emerald-50 text-emerald-900 border-emerald-300 font-semibold">
+                                                        Specialized
+                                                      </Badge>
+                                                    );
+                                                  })()}
+                                                </div>
                                               </div>
-                                            </div>
-                                          </Table.Cell>
+                                            </Table.Cell>
 
-                                          {/* Days & Time Slot Columns */}
-                                          <Table.Cell className="py-2.5 px-2 align-middle">
-                                            {subjectSlots.length === 0 ? (
-                                              <span className="text-xs italic text-muted-foreground font-semibold py-1 inline-block">
-                                                Unscheduled — click &quot;+ Add Slot&quot; to assign schedule
-                                              </span>
-                                            ) : (
-                                              <div className="flex flex-col gap-2">
-                                                {subjectSlots.map((slot, sIdx) => {
-                                                  const slotKey = slot._key || `slot_${cls.class_id}_${sub.subject_id}_${sIdx}`;
-                                                  return (
-                                                    <div key={slotKey} className="flex flex-wrap items-center gap-2.5">
-                                                      {/* Days Chips */}
-                                                      <div className="flex flex-wrap gap-0.5">
-                                                        {DAYS.map((d) => {
-                                                          const isSelected = (slot.days_of_week || []).includes(d.key);
-                                                          return (
-                                                            <button
-                                                              key={d.key}
-                                                              type="button"
-                                                              onClick={() => handleToggleDay(slotKey, d.key)}
-                                                              className={`size-6 text-[11px] font-bold border-2 border-black transition-all ${isSelected
-                                                                ? "bg-primary text-primary-foreground shadow-[1px_1px_0_#000]"
-                                                                : "bg-background text-foreground opacity-50 hover:opacity-100"
-                                                                }`}
-                                                            >
-                                                              {d.label}
-                                                            </button>
-                                                          );
-                                                        })}
+                                            {/* Days & Time Slot Columns */}
+                                            <Table.Cell className="py-2.5 px-2 align-middle">
+                                              {subjectSlots.length === 0 ? (
+                                                <span className="text-xs italic text-muted-foreground font-semibold py-1 inline-block">
+                                                  Unscheduled — click &quot;+ Add Slot&quot; to assign schedule
+                                                </span>
+                                              ) : (
+                                                <div className="flex flex-col gap-2">
+                                                  {subjectSlots.map((slot, sIdx) => {
+                                                    const slotKey = slot._key || `slot_${cls.class_id}_${sub.subject_id}_${sIdx}`;
+                                                    return (
+                                                      <div key={slotKey} className="flex flex-wrap items-center gap-2.5">
+                                                        {/* Days Chips */}
+                                                        <div className="flex flex-wrap gap-0.5">
+                                                          {DAYS.map((d) => {
+                                                            const isSelected = (slot.days_of_week || []).includes(d.key);
+                                                            return (
+                                                              <button
+                                                                key={d.key}
+                                                                type="button"
+                                                                onClick={() => handleToggleDay(slotKey, d.key)}
+                                                                className={`size-6 text-[11px] font-bold border-2 border-black transition-all ${isSelected
+                                                                  ? "bg-primary text-primary-foreground shadow-[1px_1px_0_#000]"
+                                                                  : "bg-background text-foreground opacity-50 hover:opacity-100"
+                                                                  }`}
+                                                              >
+                                                                {d.label}
+                                                              </button>
+                                                            );
+                                                          })}
+                                                        </div>
+
+                                                        {/* Time Picker */}
+                                                        <div className="flex items-center gap-1">
+                                                          <TimePickerSingle
+                                                            value={stringToTimeValue(slot.start_time, 8)}
+                                                            onChange={(newStart) =>
+                                                              handleTimeChange(slotKey, "start_time", timeValueToString(newStart))
+                                                            }
+                                                          />
+                                                          <span className="text-xs font-bold text-muted-foreground">–</span>
+                                                          <TimePickerSingle
+                                                            value={stringToTimeValue(slot.end_time, 9)}
+                                                            lockedPeriod={stringToTimeValue(slot.start_time, 8).period === "PM" ? "PM" : undefined}
+                                                            onChange={(newEnd) =>
+                                                              handleTimeChange(slotKey, "end_time", timeValueToString(newEnd))
+                                                            }
+                                                          />
+                                                        </div>
+
+                                                        {/* Delete slot button */}
+                                                        {subjectSlots.length > 1 && (
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => handleRemoveSlot(slotKey)}
+                                                            className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 border border-red-300 rounded ml-1"
+                                                            title="Remove this time slot"
+                                                          >
+                                                            <Trash2 className="size-3.5" />
+                                                          </button>
+                                                        )}
                                                       </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                              )}
+                                            </Table.Cell>
 
-                                                      {/* Time Picker */}
-                                                      <div className="flex items-center gap-1">
-                                                        <TimePickerSingle
-                                                          value={stringToTimeValue(slot.start_time, 8)}
-                                                          onChange={(newStart) =>
-                                                            handleTimeChange(slotKey, "start_time", timeValueToString(newStart))
-                                                          }
-                                                        />
-                                                        <span className="text-xs font-bold text-muted-foreground">–</span>
-                                                        <TimePickerSingle
-                                                          value={stringToTimeValue(slot.end_time, 9)}
-                                                          lockedPeriod={stringToTimeValue(slot.start_time, 8).period === "PM" ? "PM" : undefined}
-                                                          onChange={(newEnd) =>
-                                                            handleTimeChange(slotKey, "end_time", timeValueToString(newEnd))
-                                                          }
-                                                        />
-                                                      </div>
+                                            {/* Smart Teacher Dropdown & Workload Bar */}
+                                            <Table.Cell className="py-2.5 px-3 align-middle">
+                                              {(() => {
+                                                const currentStaffId = subjectSlots[0]?.staff_id;
+                                                const teacherObj = (studioData?.teachers || []).find((t) => t.staff_id === currentStaffId);
+                                                const currentStatusText = currentStaffId
+                                                  ? getTeacherAvailabilityStatus(
+                                                    currentStaffId,
+                                                    cls.class_id,
+                                                    sub.subject_id
+                                                  )
+                                                  : "";
+                                                const currentHasConflict = currentStatusText.includes("Conflict");
 
-                                                      {/* Delete slot button */}
-                                                      {subjectSlots.length > 1 && (
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => handleRemoveSlot(slotKey)}
-                                                          className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 border border-red-300 rounded ml-1"
-                                                          title="Remove this time slot"
+                                                // Compute teacher workload hours
+                                                const tWorkload = teacherWorkloads.find((w) => w.staff_id === currentStaffId);
+                                                const weeklyHours = tWorkload?.total_weekly_hours || 0;
+                                                const maxWeeklyHours = 30.0;
+                                                const pct = Math.min(100, Math.round((weeklyHours / maxWeeklyHours) * 100));
+
+                                                const rowKey = `${cls.class_id}_${sub.subject_id}`;
+                                                const isRowMenuOpen = openRowKey === rowKey;
+
+                                                return (
+                                                  <div className="flex items-center gap-2">
+                                                    <div className="flex flex-col gap-1">
+                                                      <Select
+                                                        value={currentStaffId || "none"}
+                                                        onValueChange={(val) =>
+                                                          handleTeacherChange(cls.class_id, sub.subject_id, val)
+                                                        }
+                                                      >
+                                                        <Select.Trigger
+                                                          className={`w-[170px] h-8 border-2 border-black font-bold text-xs shadow-sm transition-colors ${!currentStaffId
+                                                            ? ""
+                                                            : currentHasConflict
+                                                              ? "bg-destructive text-destructive border-destructive font-bold"
+                                                              : "bg-white text-black shadow-[1px_1px_0_#000]"
+                                                            }`}
                                                         >
-                                                          <Trash2 className="size-3.5" />
-                                                        </button>
+                                                          <div className="flex items-center justify-between w-full overflow-hidden min-w-0">
+                                                            <span className="truncate"><Select.Value placeholder="Select Teacher" /></span>
+                                                            {currentHasConflict && (
+                                                              <span className="text-red-600 text-xs font-bold shrink-0 ml-1" title={currentStatusText}>
+                                                                ⚠️
+                                                              </span>
+                                                            )}
+                                                          </div>
+                                                        </Select.Trigger>
+                                                        <Select.Content>
+                                                          <Select.Group className="min-w-54">
+                                                            <Select.Item value="none">
+                                                              <span className="font-bold text-sm">
+                                                                Unassigned
+                                                              </span>
+                                                            </Select.Item>
+                                                            {(studioData?.teachers || [])
+                                                              .filter(
+                                                                (t) =>
+                                                                  !t.staff_id.toUpperCase().startsWith("ADM") &&
+                                                                  !t.name.toLowerCase().includes("admin")
+                                                              )
+                                                              .map((t) => {
+                                                                const statusText = getTeacherAvailabilityStatus(
+                                                                  t.staff_id,
+                                                                  cls.class_id,
+                                                                  sub.subject_id
+                                                                );
+                                                                const hasConflict = statusText.includes("Conflict");
+
+                                                                return (
+                                                                  <Select.Item key={t.staff_id} value={t.staff_id}>
+                                                                    <div className="flex flex-col text-xs py-0.5">
+                                                                      <span className="font-bold text-sm">{t.name}</span>
+                                                                      {hasConflict && (
+                                                                        <span className="text-destructive font-semibold text-sm leading-tight">
+                                                                          {statusText}
+                                                                        </span>
+                                                                      )}
+                                                                    </div>
+                                                                  </Select.Item>
+                                                                );
+                                                              })}
+                                                          </Select.Group>
+                                                        </Select.Content>
+                                                      </Select>
+
+                                                      {/* Inline Teacher Workload Capacity Indicator */}
+                                                      {currentStaffId && teacherObj && (
+                                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
+                                                          <Progress
+                                                            value={pct}
+                                                            className={`w-12 h-2 ${pct > 70 ? "[&>div]:bg-destructive" : "[&>div]:bg-primary"}`}
+                                                          />
+                                                          <span>{weeklyHours.toFixed(1)}h/wk</span>
+                                                        </div>
                                                       )}
                                                     </div>
-                                                  );
-                                                })}
-                                              </div>
-                                            )}
-                                          </Table.Cell>
 
-                                          {/* Smart Teacher Dropdown & Workload Bar */}
-                                          <Table.Cell className="py-2.5 px-3 align-middle">
-                                            {(() => {
-                                              const currentStaffId = subjectSlots[0]?.staff_id;
-                                              const teacherObj = (studioData?.teachers || []).find((t) => t.staff_id === currentStaffId);
-                                              const currentStatusText = currentStaffId
-                                                ? getTeacherAvailabilityStatus(
-                                                  currentStaffId,
-                                                  cls.class_id,
-                                                  sub.subject_id
-                                                )
-                                                : "";
-                                              const currentHasConflict = currentStatusText.includes("Conflict");
-
-                                              // Compute teacher workload hours
-                                              const tWorkload = teacherWorkloads.find((w) => w.staff_id === currentStaffId);
-                                              const weeklyHours = tWorkload?.total_weekly_hours || 0;
-                                              const maxWeeklyHours = 30.0;
-                                              const pct = Math.min(100, Math.round((weeklyHours / maxWeeklyHours) * 100));
-
-                                              const rowKey = `${cls.class_id}_${sub.subject_id}`;
-                                              const isRowMenuOpen = openRowKey === rowKey;
-
-                                              return (
-                                                <div className="flex items-center gap-2">
-                                                  <div className="flex flex-col gap-1">
-                                                    <Select
-                                                      value={currentStaffId || "none"}
-                                                      onValueChange={(val) =>
-                                                        handleTeacherChange(cls.class_id, sub.subject_id, val)
-                                                      }
-                                                    >
-                                                      <Select.Trigger
-                                                        className={`w-[170px] h-8 border-2 border-black font-bold text-xs shadow-sm transition-colors ${!currentStaffId
-                                                          ? ""
-                                                          : currentHasConflict
-                                                            ? "bg-destructive text-destructive border-destructive font-bold"
-                                                            : "bg-white text-black shadow-[1px_1px_0_#000]"
-                                                          }`}
+                                                    {/* Row Action Overflow Menu (⋯) */}
+                                                    <div className="flex">
+                                                      <Button
+                                                        onClick={() => setOpenRowKey(isRowMenuOpen ? null : rowKey)}
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="bg-background w-8"
+                                                        title="Row Presets & Options"
                                                       >
-                                                        <div className="flex items-center justify-between w-full overflow-hidden min-w-0">
-                                                          <span className="truncate"><Select.Value placeholder="Select Teacher" /></span>
-                                                          {currentHasConflict && (
-                                                            <span className="text-red-600 text-xs font-bold shrink-0 ml-1" title={currentStatusText}>
-                                                              ⚠️
-                                                            </span>
-                                                          )}
+                                                        ⋯
+                                                      </Button>
+
+                                                      {isRowMenuOpen && (
+                                                        <div
+                                                          className="absolute right-0 mt-1 w-44 bg-white border-2 border-black shadow-[3px_3px_0_#000] p-1 z-50 flex flex-col gap-1 rounded"
+                                                          onMouseLeave={() => setOpenRowKey(null)}
+                                                        >
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                              setOpenRowKey(null);
+                                                              handleAddSlot(cls.class_id, sub.subject_id);
+                                                            }}
+                                                            className="text-[11px] font-bold text-left px-2 py-1 hover:bg-neutral-100 flex items-center gap-1 rounded"
+                                                          >
+                                                            <Plus className="size-3 text-primary" />
+                                                            <span>+ Add Time Slot</span>
+                                                          </button>
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                              setOpenRowKey(null);
+                                                              handleApplyPreset(cls.class_id, sub.subject_id, "2day");
+                                                            }}
+                                                            className="text-[11px] font-bold text-left px-2 py-1 hover:bg-sky-100 text-sky-950 rounded"
+                                                          >
+                                                            Preset: 2-Day (MW 2h)
+                                                          </button>
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                              setOpenRowKey(null);
+                                                              handleApplyPreset(cls.class_id, sub.subject_id, "3day");
+                                                            }}
+                                                            className="text-[11px] font-bold text-left px-2 py-1 hover:bg-purple-100 text-purple-950 rounded"
+                                                          >
+                                                            Preset: 3-Day (MWF 1.3h)
+                                                          </button>
                                                         </div>
-                                                      </Select.Trigger>
-                                                      <Select.Content>
-                                                        <Select.Group className="min-w-54">
-                                                          <Select.Item value="none">
-                                                            <span className="font-bold text-sm">
-                                                              Unassigned
-                                                            </span>
-                                                          </Select.Item>
-                                                          {(studioData?.teachers || [])
-                                                            .filter(
-                                                              (t) =>
-                                                                !t.staff_id.toUpperCase().startsWith("ADM") &&
-                                                                !t.name.toLowerCase().includes("admin")
-                                                            )
-                                                            .map((t) => {
-                                                              const statusText = getTeacherAvailabilityStatus(
-                                                                t.staff_id,
-                                                                cls.class_id,
-                                                                sub.subject_id
-                                                              );
-                                                              const hasConflict = statusText.includes("Conflict");
-
-                                                              return (
-                                                                <Select.Item key={t.staff_id} value={t.staff_id}>
-                                                                  <div className="flex flex-col text-xs py-0.5">
-                                                                    <span className="font-bold text-sm">{t.name}</span>
-                                                                    {hasConflict && (
-                                                                      <span className="text-destructive font-semibold text-sm leading-tight">
-                                                                        {statusText}
-                                                                      </span>
-                                                                    )}
-                                                                  </div>
-                                                                </Select.Item>
-                                                              );
-                                                            })}
-                                                        </Select.Group>
-                                                      </Select.Content>
-                                                    </Select>
-
-                                                    {/* Inline Teacher Workload Capacity Indicator */}
-                                                    {currentStaffId && teacherObj && (
-                                                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
-                                                        <Progress
-                                                          value={pct}
-                                                          className={`w-12 h-2 ${pct > 70 ? "[&>div]:bg-destructive" : "[&>div]:bg-primary"}`}
-                                                        />
-                                                        <span>{weeklyHours.toFixed(1)}h/wk</span>
-                                                      </div>
-                                                    )}
+                                                      )}
+                                                    </div>
                                                   </div>
+                                                );
+                                              })()}
+                                            </Table.Cell>
+                                          </Table.Row>
+                                        );
+                                      })}
+                                    </Table.Body>
+                                  </Table>
+                                )}
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      </Card>
+                    ))
+                  )}
+                </main>
 
-                                                  {/* Row Action Overflow Menu (⋯) */}
-                                                  <div className="flex">
-                                                    <Button
-                                                      onClick={() => setOpenRowKey(isRowMenuOpen ? null : rowKey)}
-                                                      size="sm"
-                                                      variant="outline"
-                                                      className="bg-background w-8"
-                                                      title="Row Presets & Options"
-                                                    >
-                                                      ⋯
-                                                    </Button>
+                {/* RIGHT PANE: Live Conflict Tracker & Teacher Workload */}
+                <aside className="lg:col-span-3 flex flex-col gap-3">
+                  {/* Section Group Break Schedule */}
+                  <Card className="flex flex-col justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-md font-bold">
+                        Active Break Schedule
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {activeGroupBreakSlots.length === 0 ? (
+                        <span className="text-xs text-muted-foreground font-semibold">Standard Defaults Active</span>
+                      ) : (
+                        activeGroupBreakSlots.map((b) => (
+                          <Badge key={`${b.template_group}_${b.display_order}`} size="md" variant="outline">
+                            <Text as="p" className="text-sm font-normal">
+                              {b.slot_name}:
+                            </Text>
+                            <Text as="p" className="text-base font-semibold">
+                              {formatTime12h(b.start_time)} – {formatTime12h(b.end_time)}
+                            </Text>
+                          </Badge>
+                        ))
+                      )}
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => setIsBreakDrawerOpen(true)}
+                      >
+                        Adjust Breaks
+                      </Button>
+                    </div>
+                  </Card>
 
-                                                    {isRowMenuOpen && (
-                                                      <div
-                                                        className="absolute right-0 mt-1 w-44 bg-white border-2 border-black shadow-[3px_3px_0_#000] p-1 z-50 flex flex-col gap-1 rounded"
-                                                        onMouseLeave={() => setOpenRowKey(null)}
-                                                      >
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => {
-                                                            setOpenRowKey(null);
-                                                            handleAddSlot(cls.class_id, sub.subject_id);
-                                                          }}
-                                                          className="text-[11px] font-bold text-left px-2 py-1 hover:bg-neutral-100 flex items-center gap-1 rounded"
-                                                        >
-                                                          <Plus className="size-3 text-primary" />
-                                                          <span>+ Add Time Slot</span>
-                                                        </button>
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => {
-                                                            setOpenRowKey(null);
-                                                            handleApplyPreset(cls.class_id, sub.subject_id, "2day");
-                                                          }}
-                                                          className="text-[11px] font-bold text-left px-2 py-1 hover:bg-sky-100 text-sky-950 rounded"
-                                                        >
-                                                          Preset: 2-Day (MW 2h)
-                                                        </button>
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => {
-                                                            setOpenRowKey(null);
-                                                            handleApplyPreset(cls.class_id, sub.subject_id, "3day");
-                                                          }}
-                                                          className="text-[11px] font-bold text-left px-2 py-1 hover:bg-purple-100 text-purple-950 rounded"
-                                                        >
-                                                          Preset: 3-Day (MWF 1.3h)
-                                                        </button>
-                                                      </div>
-                                                    )}
-                                                  </div>
-                                                </div>
-                                              );
-                                            })()}
-                                          </Table.Cell>
-                                        </Table.Row>
-                                      );
-                                    })}
-                                  </Table.Body>
-                                </Table>
+                  {/* Grouped Issues Card (Root-Cause Aggregated) */}
+                  <Card className="bg-background">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        {/* <AlertTriangle className="size-5 text-amber-600" /> */}
+                        <Text as="h3" className="font-bold text-lg">
+                          Issues
+                        </Text>
+                      </div>
+                    </div>
+
+                    {conflicts.length === 0 ? (
+                      <div className="p-4 bg-emerald-50 border-2 border-black text-emerald-900 font-bold text-xs flex items-center gap-2 shadow-[2px_2px_0_#000]">
+                        <CheckCircle2 className="size-5 shrink-0 text-emerald-700" />
+                        <span>All schedules and workloads are valid! No conflicts detected.</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        {groupedIssues.map((group) => {
+                          const isExpanded = expandedIssueRule === group.title;
+                          return (
+                            <div
+                              key={group.title}
+                              className={`p-3 border-2 border-black text-xs transition-all ${group.severity === "error"
+                                ? "bg-red-50 text-red-950 border-red-800"
+                                : "bg-amber-50 text-amber-950 border-amber-800"
+                                }`}
+                            >
+                              <div className="flex items-center justify-between font-bold mb-1">
+                                <span className="text-sm">{group.title.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}</span>
+                                <Badge size="sm" variant={group.severity === "error" ? "solid" : "surface"}>
+                                  {group.items.length}
+                                </Badge>
+                              </div>
+                              <p className="font-normal text-xs leading-relaxed text-black/80 mb-2">
+                                {group.explanation}
+                              </p>
+
+                              <button
+                                type="button"
+                                onClick={() => setExpandedIssueRule(isExpanded ? null : group.title)}
+                                className="text-xs font-bold underline hover:text-black transition-colors flex items-center gap-1 mt-1"
+                              >
+                                <span>{isExpanded ? "Hide details ▲" : `Show affected items (${group.items.length}) ▾`}</span>
+                              </button>
+
+                              {isExpanded && (
+                                <div className="mt-2.5 pt-2 border-t border-black/20 flex flex-col gap-1.5">
+                                  {group.items.map((conf, cIdx) => (
+                                    <div
+                                      key={cIdx}
+                                      onClick={() => {
+                                        const targetKey = conf.affected_key || (conf.class_id && conf.subject_id ? `${conf.class_id}_${conf.subject_id}` : undefined);
+                                        handleHighlightKey(targetKey, conf.class_id);
+                                      }}
+                                      className="p-1.5 bg-white border border-black text-[11px] font-semibold cursor-pointer hover:bg-gray-100 flex items-center justify-between rounded"
+                                    >
+                                      <span className="truncate pr-2">{conf.message}</span>
+                                      <span className="text-[10px] font-bold underline shrink-0">View</span>
+                                    </div>
+                                  ))}
+                                </div>
                               )}
-                            </Card>
+                            </div>
                           );
                         })}
                       </div>
-                    </Card>
-                  ))
-                )}
-              </main>
-
-              {/* RIGHT PANE: Live Conflict Tracker & Teacher Workload */}
-              <aside className="lg:col-span-3 flex flex-col gap-3">
-                {/* Section Group Break Schedule */}
-                <Card className="flex flex-col justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-md font-bold">
-                      Active Break Schedule
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    {activeGroupBreakSlots.length === 0 ? (
-                      <span className="text-xs text-muted-foreground font-semibold">Standard Defaults Active</span>
-                    ) : (
-                      activeGroupBreakSlots.map((b) => (
-                        <Badge key={`${b.template_group}_${b.display_order}`} size="md" variant="outline">
-                          <Text as="p" className="text-sm font-normal">
-                            {b.slot_name}:
-                          </Text>
-                          <Text as="p" className="text-base font-semibold">
-                            {formatTime12h(b.start_time)} – {formatTime12h(b.end_time)}
-                          </Text>
-                        </Badge>
-                      ))
                     )}
-                    <Button
-                      size="sm"
-                      variant="default"
-                      onClick={() => setIsBreakDrawerOpen(true)}
-                    >
-                      Adjust Breaks
-                    </Button>
-                  </div>
-                </Card>
+                  </Card>
 
-                {/* Grouped Issues Card (Root-Cause Aggregated) */}
-                <Card className="bg-background">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      {/* <AlertTriangle className="size-5 text-amber-600" /> */}
-                      <Text as="h3" className="font-bold text-lg">
-                        Issues
-                      </Text>
+                  {/* Teacher Workload Capacity Card */}
+                  <Card className="bg-background shadow-[4px_4px_0_#000]">
+                    <div className="flex flex-col gap-1 pb-3 mb-3">
+                      <div className="flex items-center gap-2">
+                        {/* <Clock className="size-5 text-blue-600" /> */}
+                        <Text as="h3" className="font-bold text-lg">
+                          Teacher Capacity Tracker
+                        </Text>
+                      </div>
+                      <span className="text-xs font-normal text-foreground">
+                        Limits: Max {getSetting("max_hours_per_day", "6.0")} hrs/day • Max {getSetting("max_subjects_per_day", "6")} subjects/day
+                      </span>
                     </div>
-                  </div>
 
-                  {conflicts.length === 0 ? (
-                    <div className="p-4 bg-emerald-50 border-2 border-black text-emerald-900 font-bold text-xs flex items-center gap-2 shadow-[2px_2px_0_#000]">
-                      <CheckCircle2 className="size-5 shrink-0 text-emerald-700" />
-                      <span>All schedules and workloads are valid! No conflicts detected.</span>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-3">
-                      {groupedIssues.map((group) => {
-                        const isExpanded = expandedIssueRule === group.title;
-                        return (
-                          <div
-                            key={group.title}
-                            className={`p-3 border-2 border-black text-xs transition-all ${group.severity === "error"
-                              ? "bg-red-50 text-red-950 border-red-800"
-                              : "bg-amber-50 text-amber-950 border-amber-800"
-                              }`}
-                          >
-                            <div className="flex items-center justify-between font-bold mb-1">
-                              <span className="text-sm">{group.title.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}</span>
-                              <Badge size="sm" variant={group.severity === "error" ? "solid" : "surface"}>
-                                {group.items.length}
-                              </Badge>
-                            </div>
-                            <p className="font-normal text-xs leading-relaxed text-black/80 mb-2">
-                              {group.explanation}
-                            </p>
+                    <div className="flex flex-col gap-4">
+                      {teacherWorkloads.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic font-semibold">
+                          Assign teachers to subject loads to monitor workload capacity.
+                        </p>
+                      ) : (
+                        teacherWorkloads.map((tw) => {
+                          const teacherConflicts = conflicts.filter(c => c.staff_id === tw.staff_id);
+                          const hasError = teacherConflicts.some(c => c.severity === "error");
+                          const hasWarning = teacherConflicts.some(c => c.severity === "warning");
 
-                            <button
-                              type="button"
-                              onClick={() => setExpandedIssueRule(isExpanded ? null : group.title)}
-                              className="text-xs font-bold underline hover:text-black transition-colors flex items-center gap-1 mt-1"
+                          const maxHrs = parseFloat(getSetting("max_hours_per_day", "6.0"));
+                          const maxSub = parseInt(getSetting("max_subjects_per_day", "6"));
+                          const minSub = parseInt(getSetting("min_subjects_per_day", "4"));
+                          const cardClass = hasError
+                            ? "bg-red-50 border-red-600"
+                            : hasWarning
+                              ? "bg-amber-50 border-amber-500"
+                              : "bg-muted/20";
+
+                          const handledCount = new Set(
+                            loads.filter((l) => l.staff_id === tw.staff_id).map((l) => l.subject_id)
+                          ).size;
+
+                          return (
+                            <div
+                              key={tw.staff_id}
+                              className={`p-3 border-2 border-black text-xs ${cardClass}`}
                             >
-                              <span>{isExpanded ? "Hide details ▲" : `Show affected items (${group.items.length}) ▾`}</span>
-                            </button>
-
-                            {isExpanded && (
-                              <div className="mt-2.5 pt-2 border-t border-black/20 flex flex-col gap-1.5">
-                                {group.items.map((conf, cIdx) => (
-                                  <div
-                                    key={cIdx}
-                                    onClick={() => {
-                                      const targetKey = conf.affected_key || (conf.class_id && conf.subject_id ? `${conf.class_id}_${conf.subject_id}` : undefined);
-                                      handleHighlightKey(targetKey, conf.class_id);
-                                    }}
-                                    className="p-1.5 bg-white border border-black text-[11px] font-semibold cursor-pointer hover:bg-gray-100 flex items-center justify-between rounded"
-                                  >
-                                    <span className="truncate pr-2">{conf.message}</span>
-                                    <span className="text-[10px] font-bold underline shrink-0">View</span>
-                                  </div>
-                                ))}
+                              <div className="flex flex-col gap-0.5 mb-1.5">
+                                <span className="text-sm font-bold text-foreground leading-snug">{tw.staff_name}</span>
+                                <div className="font-mono text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                                  <span>{handledCount} {handledCount === 1 ? "subject handled" : "subjects handled"}</span>
+                                  <span>•</span>
+                                  <span>{tw.total_weekly_hours.toFixed(1)} hrs/wk</span>
+                                </div>
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </Card>
 
-                {/* Teacher Workload Capacity Card */}
-                <Card className="bg-background shadow-[4px_4px_0_#000]">
-                  <div className="flex flex-col gap-1 pb-3 mb-3">
-                    <div className="flex items-center gap-2">
-                      {/* <Clock className="size-5 text-blue-600" /> */}
-                      <Text as="h3" className="font-bold text-lg">
-                        Teacher Capacity Tracker
-                      </Text>
-                    </div>
-                    <span className="text-xs font-normal text-foreground">
-                      Limits: Max {getSetting("max_hours_per_day", "6.0")} hrs/day • Max {getSetting("max_subjects_per_day", "6")} subjects/day
-                    </span>
-                  </div>
+                              {/* Daily Breakdown */}
+                              <div className="grid grid-cols-5 gap-1 mt-2">
+                                {["MON", "TUE", "WED", "THU", "FRI"].map((dayKey) => {
+                                  const hrs = tw.daily_hours[dayKey] || 0;
+                                  const subCount = tw.daily_subjects_count[dayKey] || 0;
+                                  const isOverLimit = hrs > maxHrs || subCount > maxSub;
+                                  const isUnderLimit = subCount > 0 && subCount < minSub;
 
-                  <div className="flex flex-col gap-4">
-                    {teacherWorkloads.length === 0 ? (
-                      <p className="text-xs text-muted-foreground italic font-semibold">
-                        Assign teachers to subject loads to monitor workload capacity.
-                      </p>
-                    ) : (
-                      teacherWorkloads.map((tw) => {
-                        const teacherConflicts = conflicts.filter(c => c.staff_id === tw.staff_id);
-                        const hasError = teacherConflicts.some(c => c.severity === "error");
-                        const hasWarning = teacherConflicts.some(c => c.severity === "warning");
+                                  const dayClass = isOverLimit
+                                    ? "bg-red-200 border-red-700 text-red-900"
+                                    : isUnderLimit
+                                      ? "bg-amber-200 border-amber-700 text-amber-900"
+                                      : hrs > 0
+                                        ? "bg-emerald-100 border-emerald-700 text-emerald-900"
+                                        : "bg-background border-black/30 text-muted-foreground";
 
-                        const maxHrs = parseFloat(getSetting("max_hours_per_day", "6.0"));
-                        const maxSub = parseInt(getSetting("max_subjects_per_day", "6"));
-                        const minSub = parseInt(getSetting("min_subjects_per_day", "4"));
-                        const cardClass = hasError
-                          ? "bg-red-50 border-red-600"
-                          : hasWarning
-                            ? "bg-amber-50 border-amber-500"
-                            : "bg-muted/20";
-
-                        const handledCount = new Set(
-                          loads.filter((l) => l.staff_id === tw.staff_id).map((l) => l.subject_id)
-                        ).size;
-
-                        return (
-                          <div
-                            key={tw.staff_id}
-                            className={`p-3 border-2 border-black text-xs ${cardClass}`}
-                          >
-                            <div className="flex flex-col gap-0.5 mb-1.5">
-                              <span className="text-sm font-bold text-foreground leading-snug">{tw.staff_name}</span>
-                              <div className="font-mono text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                                <span>{handledCount} {handledCount === 1 ? "subject handled" : "subjects handled"}</span>
-                                <span>•</span>
-                                <span>{tw.total_weekly_hours.toFixed(1)} hrs/wk</span>
+                                  return (
+                                    <div
+                                      key={dayKey}
+                                      className={`flex flex-col items-center p-1 border text-[10px] font-bold ${dayClass}`}
+                                    >
+                                      <span>{dayKey.slice(0, 2)}</span>
+                                      <span className="font-mono text-[11px] mt-0.5">
+                                        {hrs > 0 ? `${hrs.toFixed(1)}h` : "-"}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
-
-                            {/* Daily Breakdown */}
-                            <div className="grid grid-cols-5 gap-1 mt-2">
-                              {["MON", "TUE", "WED", "THU", "FRI"].map((dayKey) => {
-                                const hrs = tw.daily_hours[dayKey] || 0;
-                                const subCount = tw.daily_subjects_count[dayKey] || 0;
-                                const isOverLimit = hrs > maxHrs || subCount > maxSub;
-                                const isUnderLimit = subCount > 0 && subCount < minSub;
-
-                                const dayClass = isOverLimit
-                                  ? "bg-red-200 border-red-700 text-red-900"
-                                  : isUnderLimit
-                                    ? "bg-amber-200 border-amber-700 text-amber-900"
-                                    : hrs > 0
-                                      ? "bg-emerald-100 border-emerald-700 text-emerald-900"
-                                      : "bg-background border-black/30 text-muted-foreground";
-
-                                return (
-                                  <div
-                                    key={dayKey}
-                                    className={`flex flex-col items-center p-1 border text-[10px] font-bold ${dayClass}`}
-                                  >
-                                    <span>{dayKey.slice(0, 2)}</span>
-                                    <span className="font-mono text-[11px] mt-0.5">
-                                      {hrs > 0 ? `${hrs.toFixed(1)}h` : "-"}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </Card>
-              </aside>
-            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </Card>
+                </aside>
+              </div>
 
             </div>
           </div>

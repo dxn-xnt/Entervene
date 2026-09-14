@@ -199,13 +199,13 @@ export default function EditClass({
               </div>
 
               {saveError && (
-                <div className="rounded-md border-2 border-destructive bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+                <div className="rounded border-2 border-destructive bg-destructive/10 p-3 text-sm font-semibold text-destructive">
                   {saveError}
                 </div>
               )}
 
               {saveSuccess && (
-                <div className="rounded-md border-2 border-primary bg-primary/10 p-3 text-sm font-semibold text-primary">
+                <div className="rounded border-2 border-primary bg-primary/10 p-3 text-sm font-semibold text-primary">
                   {saveSuccess}
                 </div>
               )}
@@ -238,7 +238,7 @@ function updateErrorMessage(error: unknown) {
 
 function StatePanel({ message, detail, children }: { message: string; detail?: string; children?: React.ReactNode }) {
   return (
-    <div className="grid gap-3 rounded-md border-2 border-border bg-card p-5 text-sm">
+    <div className="grid gap-3 rounded border-2 border-border bg-card p-5 text-sm">
       <p className="font-bold">{message}</p>
       {detail && detail !== message && <p className="text-xs text-muted-foreground">{detail}</p>}
       {children && <div className="flex gap-2">{children}</div>}

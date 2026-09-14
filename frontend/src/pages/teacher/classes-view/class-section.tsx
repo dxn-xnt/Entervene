@@ -40,7 +40,7 @@ function ClassCard({ item }: { item: ClassSummary }) {
           navigate(`/teacher/classes/${item.class_id}/subjects/${primarySubject.subject_id}`);
         }
       }}
-      className="min-h-32 rounded-lg border border-black bg-[#F6E9B2] p-4 text-left shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5"
+      className="min-h-32 rounded border border-black bg-[#F6E9B2] p-4 text-left shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5"
     >
       <h2 className="text-2xl font-bold leading-tight text-gray-950">{item.section_name}</h2>
       <p className="text-sm font-semibold text-gray-800">
@@ -116,12 +116,12 @@ export default function ClassSections() {
 
             <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-5">
               {error && (
-                <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {error}
                 </div>
               )}
 
-        <section className="rounded-lg border border-black bg-[#F6E9B2] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <section className="rounded border border-black bg-[#F6E9B2] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-3xl font-bold">2024 - 2025</h2>
@@ -131,7 +131,7 @@ export default function ClassSections() {
           </div>
         </section>
 
-        <div className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 md:max-w-sm">
+        <div className="flex items-center gap-2 rounded border border-gray-300 bg-white px-3 py-2 md:max-w-sm">
           <Search size={16} className="text-gray-500" />
           <span className="text-sm text-gray-500">Assigned class sections</span>
         </div>
@@ -151,7 +151,7 @@ export default function ClassSections() {
             <button
               key={year}
               type="button"
-              className="flex items-center justify-between rounded-lg border border-gray-300 bg-white px-4 py-3 text-left font-semibold text-gray-700"
+              className="flex items-center justify-between rounded border border-gray-300 bg-white px-4 py-3 text-left font-semibold text-gray-700"
             >
               {year}
               <ChevronRight size={18} />

@@ -289,7 +289,7 @@ export default function SectionPredictions() {
                             setOffset(0);
                           }}
                           className={cn(
-                            "px-4 py-1.5 text-xs md:text-sm font-bold rounded-md whitespace-nowrap transition-all cursor-pointer border-2",
+                            "px-4 py-1.5 text-xs md:text-sm font-bold rounded whitespace-nowrap transition-all cursor-pointer border-2",
                             isActive
                               ? "bg-yellow-400 border-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                               : "bg-white border-transparent text-gray-700 hover:bg-gray-100 hover:border-black"

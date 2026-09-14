@@ -522,7 +522,7 @@ export default function ClassworkView({
 
 
             {isReadingType(selected.classwork_type) ? (
-              <div className="rounded-lg border border-black bg-[#F6E9B2] p-4 text-sm font-semibold shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
+              <div className="rounded border border-black bg-[#F6E9B2] p-4 text-sm font-semibold shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
                 This is a reading material, so scores, attempts, and
                 student submissions are not required.
               </div>
@@ -617,7 +617,7 @@ export default function ClassworkView({
                                 <Badge
                                   variant="outline"
                                   size="sm"
-                                  className="w-fit rounded-none font-medium"
+                                  className="w-fit rounded font-medium"
                                 >
                                   {submissionStatusLabel(
                                     isGraded

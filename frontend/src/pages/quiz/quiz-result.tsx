@@ -269,7 +269,7 @@ const StudentQuizResult = () => {
                                 return (
                                   <div
                                     key={opt.option_id}
-                                    className={`px-3 py-2 text-xs border rounded-none flex items-center justify-between ${optStyle}`}
+                                    className={`px-3 py-2 text-xs border rounded flex items-center justify-between ${optStyle}`}
                                   >
                                     <span>{opt.option_text}</span>
                                     {isSelected && (

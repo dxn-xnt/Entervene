@@ -9,7 +9,7 @@ const Card = ({ className, ...props }: ICardProps) => {
   return (
     <div
       className={cn(
-        "inline-block border-2 gap-2 border-black rounded-none shadow-md transition-all hover:shadow-none bg-card p-4",
+        "inline-block border-2 gap-2 border-black rounded shadow-md transition-all hover:shadow-none bg-card p-4",
         className,
       )}
       {...props}

@@ -110,7 +110,7 @@ export default function TeacherProfile() {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md border-2 border-black bg-[#fffdf5] rounded-lg shadow-[8px_8px_0_0_#000] overflow-hidden flex flex-col">
+          <div className="w-full max-w-md border-2 border-black bg-[#fffdf5] rounded shadow-[8px_8px_0_0_#000] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between border-b-2 border-black bg-[#79bd80] px-4 py-3 text-black">
               <h2 className="font-bold text-lg">Edit Profile Avatar</h2>
               <button
@@ -134,7 +134,7 @@ export default function TeacherProfile() {
                       <button
                         key={avatarPath}
                         onClick={() => setTempSelectedAvatar(avatarPath)}
-                        className={`aspect-square p-2 border-2 rounded-lg transition-all duration-200 hover:scale-105 hover:bg-amber-50/50 cursor-pointer ${isSelected
+                        className={`aspect-square p-2 border-2 rounded transition-all duration-200 hover:scale-105 hover:bg-amber-50/50 cursor-pointer ${isSelected
                           ? "border-[#79bd80] bg-amber-100 ring-2 ring-[#79bd80] ring-offset-2"
                           : "border-black bg-white"
                           }`}

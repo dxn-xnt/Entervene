@@ -186,7 +186,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 py-4 [scrollbar-gutter:stable] sm:gap-6 sm:px-6 sm:py-6">
         {/* Global error banner */}
         {apiError && (
-          <div className="flex items-center gap-2.5 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 shadow-2xs w-full animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="flex items-center gap-2.5 rounded border border-red-300 bg-red-50 p-4 text-sm text-red-800 shadow-2xs w-full animate-in fade-in slide-in-from-top-1 duration-200">
             <AlertCircle className="size-5 shrink-0 text-red-600" />
             <div className="flex-1">
               <p className="font-semibold text-red-900">Validation Error</p>
@@ -197,7 +197,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
 
         {/* Save success banner */}
         {saveSuccess && (
-          <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 w-full">
+          <div className="flex items-center gap-2 rounded border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 w-full">
             <CheckCircle className="size-4 shrink-0" />
             Draft saved successfully.
           </div>

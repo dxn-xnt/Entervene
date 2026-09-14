@@ -735,7 +735,7 @@ export default function AdminSystemSettings() {
 
                 <Card.Content className="flex flex-col gap-4">
                   {templates.length === 0 ? (
-                    <div className="border-2 border-dashed border-black/30 rounded-md p-6 text-center text-sm text-muted-foreground bg-muted/10">
+                    <div className="border-2 border-dashed border-black/30 rounded p-6 text-center text-sm text-muted-foreground bg-muted/10">
                       No active grading templates found in database.{" "}
                       <button
                         type="button"

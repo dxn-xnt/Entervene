@@ -886,7 +886,7 @@ export default function SubjectLessonTab({
               }}
               variant="outline"
               size="icon"
-              className="rounded-none border-black bg-white shadow-md hover:bg-white hover:shadow-none"
+              className="rounded border-black bg-white shadow-md hover:bg-white hover:shadow-none"
               aria-label="Exit fullscreen quiz"
             >
               <ChevronLeft size={22} />
@@ -909,7 +909,7 @@ export default function SubjectLessonTab({
                 onClick={() => setIsQuizFullscreen(false)}
                 variant="outline"
                 size="sm"
-                className="rounded-none border-black bg-white text-sm font-bold shadow-md hover:shadow-none"
+                className="rounded border-black bg-white text-sm font-bold shadow-md hover:shadow-none"
               >
                 Close Summary
               </Button>
@@ -918,7 +918,7 @@ export default function SubjectLessonTab({
                 type="button"
                 onClick={() => setQuizReviewMode(true)}
                 size="sm"
-                className="rounded-none border-black bg-primary text-sm font-bold text-black"
+                className="rounded border-black bg-primary text-sm font-bold text-black"
               >
                 Finish Quiz
               </Button>
@@ -954,7 +954,7 @@ export default function SubjectLessonTab({
                         setQuizCurrentIndex(index);
                         setQuizReviewMode(false);
                       }}
-                      className={`relative h-8 min-w-8 rounded-none border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${index === quizCurrentIndex
+                      className={`relative h-8 min-w-8 rounded border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${index === quizCurrentIndex
                           ? "bg-white"
                           : hasQuizAnswer(question)
                             ? "bg-[#F6E9B2]"
@@ -1001,7 +1001,7 @@ export default function SubjectLessonTab({
                         <h2 className="min-w-0 flex-1 break-words text-base font-bold">
                           {index + 1}. {question.question_text}
                         </h2>
-                        <Badge variant="outline" size="sm" className="shrink-0 rounded-none border border-gray-300 text-xs font-bold">
+                        <Badge variant="outline" size="sm" className="shrink-0 rounded border border-gray-300 text-xs font-bold">
                           {selectedClasswork.show_scores
                             ? `${question.points_awarded ?? 0}/${question.points} pts`
                             : `${question.points} pts`}
@@ -1104,12 +1104,12 @@ export default function SubjectLessonTab({
                         setQuizReviewMode(false);
                       }}
                       variant="ghost"
-                      className="flex w-full rounded-none items-center justify-between border-b border-gray-300 px-4 py-2 text-left shadow-none last:border-b-0 hover:bg-primary hover:shadow-none"
+                      className="flex w-full rounded items-center justify-between border-b border-gray-300 px-4 py-2 text-left shadow-none last:border-b-0 hover:bg-primary hover:shadow-none"
                     >
                       <span className="font-semibold">
                         Question {index + 1}
                       </span>
-                      <Badge variant="outline" size="sm" className="rounded-none border border-gray-300 text-[11px] font-semibold">
+                      <Badge variant="outline" size="sm" className="rounded border border-gray-300 text-[11px] font-semibold">
                         {hasQuizAnswer(question)
                           ? "Answer Recorded"
                           : "No Answer"}
@@ -1121,7 +1121,7 @@ export default function SubjectLessonTab({
                   type="button"
                   onClick={() => submitQuizAttempt(false)}
                   disabled={!selectedQuizAttempt.can_submit || isQuizSubmitting}
-                  className="mt-4 float-right rounded-none border-black bg-success text-sm font-bold text-black shadow-none hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
+                  className="mt-4 float-right rounded border-black bg-success text-sm font-bold text-black shadow-none hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isQuizSubmitting ? "Submitting..." : "Submit"}
                 </Button>
@@ -1137,7 +1137,7 @@ export default function SubjectLessonTab({
                     disabled={quizCurrentIndex === 0}
                     variant="outline"
                     size="icon"
-                    className="rounded-none border-black bg-white shadow-md hover:shadow-none disabled:opacity-40"
+                    className="rounded border-black bg-white shadow-md hover:shadow-none disabled:opacity-40"
                     aria-label="Previous question"
                   >
                     <ChevronLeft size={18} />
@@ -1147,7 +1147,7 @@ export default function SubjectLessonTab({
                     onClick={() =>
                       toggleQuizFlag(currentQuestion.quiz_question_id)
                     }
-                    className={`rounded-none border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${flaggedQuizQuestionIds.has(
+                    className={`rounded border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${flaggedQuizQuestionIds.has(
                       currentQuestion.quiz_question_id,
                     )
                         ? "bg-[#F6E9B2]"
@@ -1166,7 +1166,7 @@ export default function SubjectLessonTab({
                     disabled={quizCurrentIndex === questions.length - 1}
                     variant="outline"
                     size="icon"
-                    className="rounded-none border-black bg-white shadow-md hover:shadow-none disabled:opacity-40"
+                    className="rounded border-black bg-white shadow-md hover:shadow-none disabled:opacity-40"
                     aria-label="Next question"
                   >
                     <ChevronRight size={18} />
@@ -1195,7 +1195,7 @@ export default function SubjectLessonTab({
                           }))
                         }
                         disabled={isQuizSubmitting}
-                        className={`min-h-24 rounded-none border-black px-4 py-3 text-lg font-bold shadow-md hover:shadow-none ${quizAnswers[currentQuestion.quiz_question_id]
+                        className={`min-h-24 rounded border-black px-4 py-3 text-lg font-bold shadow-md hover:shadow-none ${quizAnswers[currentQuestion.quiz_question_id]
                             ?.selected_option_id === option.option_id
                             ? "bg-success hover:bg-success"
                             : "bg-white hover:bg-white"
@@ -1221,7 +1221,7 @@ export default function SubjectLessonTab({
                       }))
                     }
                     disabled={isQuizSubmitting}
-                    className="min-h-32 w-full rounded-none border border-black bg-white px-4 py-4 text-center text-lg font-bold shadow-md transition-shadow hover:shadow-none"
+                    className="min-h-32 w-full rounded border border-black bg-white px-4 py-4 text-center text-lg font-bold shadow-md transition-shadow hover:shadow-none"
                     placeholder="Type answer"
                   />
                 )}
@@ -1328,7 +1328,7 @@ export default function SubjectLessonTab({
                 {lesson.title}
               </Card.Title>
               {lesson.attachments.length > 0 && (
-                <Badge variant="secondary" size="sm" className="rounded-none border border-black bg-success px-2 py-0.5 text-[10px] font-bold text-black">
+                <Badge variant="secondary" size="sm" className="rounded border border-black bg-success px-2 py-0.5 text-[10px] font-bold text-black">
                   {lesson.attachments.length} material
                   {lesson.attachments.length === 1 ? "" : "s"}
                 </Badge>
@@ -1468,7 +1468,7 @@ export default function SubjectLessonTab({
 
     if (classworks.length === 0) {
       return (
-        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-400">
+        <div className="rounded border border-gray-200 bg-white px-4 py-3 text-sm text-gray-400">
           No classworks linked to this lesson.
         </div>
       );
@@ -1531,7 +1531,7 @@ export default function SubjectLessonTab({
           type="button"
           size="sm"
           onClick={fetchLessons}
-          className="rounded-none border-black bg-primary font-semibold text-black"
+          className="rounded border-black bg-primary font-semibold text-black"
         >
           Retry
         </Button>
@@ -1567,7 +1567,7 @@ export default function SubjectLessonTab({
               </Card.Title>
               <p className="text-sm">{displayTeacherName}</p>
             </div>
-            <Button type="button" variant="ghost" size="icon" className="rounded-none shadow-none hover:bg-transparent hover:shadow-none" aria-label="Subject information">
+            <Button type="button" variant="ghost" size="icon" className="rounded shadow-none hover:bg-transparent hover:shadow-none" aria-label="Subject information">
               <Info size={18} />
             </Button>
           </Card>
@@ -1625,10 +1625,10 @@ export default function SubjectLessonTab({
                       type="button"
                       onClick={() => openClassworkDetail(cw)}
                       disabled={isLoading}
-                      className="w-full rounded-lg border border-black bg-white px-5 py-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between gap-4 hover:bg-gray-50 transition-all text-left"
+                      className="w-full rounded border border-black bg-white px-5 py-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between gap-4 hover:bg-gray-50 transition-all text-left"
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black bg-[#F6E9B2]">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-black bg-[#F6E9B2]">
                           <ClipboardList size={20} />
                         </div>
                         <div className="min-w-0 flex-1">
@@ -1726,7 +1726,7 @@ export default function SubjectLessonTab({
                                 <Badge
                                   variant="secondary"
                                   size="sm"
-                                  className="rounded-none border border-black bg-white text-xs font-bold text-black"
+                                  className="rounded border border-black bg-white text-xs font-bold text-black"
                                 >
                                   {group.lessons.length} lesson
                                   {group.lessons.length === 1 ? "" : "s"}
@@ -1779,7 +1779,7 @@ export default function SubjectLessonTab({
                               <Badge
                                 variant="secondary"
                                 size="sm"
-                                className="rounded-none border border-black bg-white text-xs font-bold text-black"
+                                className="rounded border border-black bg-white text-xs font-bold text-black"
                               >
                                 {unassignedLessons.length}
                               </Badge>
@@ -2046,7 +2046,7 @@ export default function SubjectLessonTab({
                           selectedClasswork.submission_status === "submitted" ||
                           selectedClasswork.submission_status === "graded" ||
                           selectedClasswork.submission_status === "completed" ? (
-                          <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm font-semibold text-green-800 flex items-center gap-2">
+                          <div className="rounded border border-green-300 bg-green-50 p-3 text-sm font-semibold text-green-800 flex items-center gap-2">
                             <CheckCircle className="size-5 text-green-600 shrink-0" />
                             <span>You have completed this reading material.</span>
                           </div>
@@ -2061,7 +2061,7 @@ export default function SubjectLessonTab({
                                 handleCompleteReading(selectedClasswork.classwork_assignment_id)
                               }
                               disabled={isMarkingRead}
-                              className="w-full rounded-lg border border-black bg-[#7ABA78] hover:bg-[#68A866] text-black px-4 py-2 text-sm font-bold transition-colors disabled:opacity-50"
+                              className="w-full rounded border border-black bg-[#7ABA78] hover:bg-[#68A866] text-black px-4 py-2 text-sm font-bold transition-colors disabled:opacity-50"
                             >
                               {isMarkingRead ? "Marking as completed..." : "Mark as Completed"}
                             </button>
@@ -2071,11 +2071,11 @@ export default function SubjectLessonTab({
                     ) : isQuizType(selectedClasswork.classwork_type) ? (
                       <div className="space-y-3">
                         {isQuizLoading ? (
-                          <p className="rounded-lg border border-dashed border-black bg-white px-4 py-6 text-center text-sm font-semibold">
+                          <p className="rounded border border-dashed border-black bg-white px-4 py-6 text-center text-sm font-semibold">
                             Loading quiz...
                           </p>
                         ) : quizError ? (
-                          <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                          <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
                             {quizError}
                           </div>
                         ) : selectedQuizAttempt ? (
@@ -2128,7 +2128,7 @@ export default function SubjectLessonTab({
                             {selectedQuizAttempt.status !== "pending" ? (
                               <div className="space-y-2">
                                 {selectedQuizAttempt.summary_message ? (
-                                  <div className="rounded-lg border border-black bg-white px-3 py-2 text-xs font-semibold text-gray-700">
+                                  <div className="rounded border border-black bg-white px-3 py-2 text-xs font-semibold text-gray-700">
                                     {selectedQuizAttempt.summary_release_at
                                       ? `Your quiz has been submitted successfully. Your quiz summary will be available on ${formatDateTime(selectedQuizAttempt.summary_release_at)}.`
                                       : selectedQuizAttempt.summary_message}
@@ -2147,7 +2147,7 @@ export default function SubjectLessonTab({
                                     disabled={
                                       !selectedQuizAttempt.summary_available
                                     }
-                                    className="w-full rounded-none border-black bg-white text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="w-full rounded border-black bg-white text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
                                   >
                                     {selectedQuizAttempt.summary_available
                                       ? "View Summary"
@@ -2164,7 +2164,7 @@ export default function SubjectLessonTab({
                                     !selectedQuizAttempt.can_submit ||
                                     isQuizSubmitting
                                   }
-                                  className="w-full rounded-none border-black bg-success text-sm font-bold text-black hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="w-full rounded border-black bg-success text-sm font-bold text-black hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   {selectedQuizAttempt.status === "not_started"
                                     ? "Start Quiz"
@@ -2187,7 +2187,7 @@ export default function SubjectLessonTab({
                                     !selectedQuizAttempt.can_submit ||
                                     isQuizSubmitting
                                   }
-                                  className="w-full rounded-none border-black bg-success text-sm font-bold text-black shadow-none hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="w-full rounded border-black bg-success text-sm font-bold text-black shadow-none hover:bg-success/80 hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                   Continue Exam
                                 </Button>
@@ -2195,7 +2195,7 @@ export default function SubjectLessonTab({
                             )}
                           </>
                         ) : (
-                          <p className="rounded-lg border border-dashed border-black bg-white px-4 py-6 text-center text-sm font-semibold">
+                          <p className="rounded border border-dashed border-black bg-white px-4 py-6 text-center text-sm font-semibold">
                             Quiz details unavailable.
                           </p>
                         )}

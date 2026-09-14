@@ -34,7 +34,7 @@ export default function QuizAnalysisView({
 
   if (isQuizAnalysisLoading) {
     return (
-      <p className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-sm font-semibold text-gray-500">
+      <p className="rounded border border-dashed border-gray-300 px-4 py-6 text-center text-sm font-semibold text-gray-500">
         Loading quiz analysis...
       </p>
     );
@@ -42,7 +42,7 @@ export default function QuizAnalysisView({
 
   if (quizAnalysisError) {
     return (
-      <p className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+      <p className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
         {quizAnalysisError}
       </p>
     );
@@ -50,7 +50,7 @@ export default function QuizAnalysisView({
 
   if (!quizAnalysis) {
     return (
-      <p className="rounded-lg border border-dashed border-gray-300 px-4 py-6 text-center text-sm font-semibold text-gray-500">
+      <p className="rounded border border-dashed border-gray-300 px-4 py-6 text-center text-sm font-semibold text-gray-500">
         Quiz analysis is not available yet.
       </p>
     );
@@ -185,7 +185,7 @@ export default function QuizAnalysisView({
                 </div>
                 <div className="space-y-4">
                   {sortedQuestions.map((q, i) => (
-                    <div key={q.quiz_question_id} className="rounded-lg border-2 border-black p-4 bg-white">
+                    <div key={q.quiz_question_id} className="rounded border-2 border-black p-4 bg-white">
                       <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
                         <div className="flex gap-4">
                           <div className="border border-black rounded px-2 py-1 flex flex-col text-xs bg-white">
@@ -250,9 +250,9 @@ export default function QuizAnalysisView({
               <div>
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
                   <div className="flex gap-4 text-xs font-bold">
-                    <div className="flex items-center gap-1"><div className="w-4 h-4 bg-[#8BCB88] border border-black rounded-sm" /> Correct</div>
-                    <div className="flex items-center gap-1"><div className="w-4 h-4 bg-[#FF6B6B] border border-black rounded-sm" /> Incorrect</div>
-                    <div className="flex items-center gap-1"><div className="w-4 h-4 bg-white border border-black rounded-sm" /> Unattempted</div>
+                    <div className="flex items-center gap-1"><div className="w-4 h-4 bg-[#8BCB88] border border-black rounded" /> Correct</div>
+                    <div className="flex items-center gap-1"><div className="w-4 h-4 bg-[#FF6B6B] border border-black rounded" /> Incorrect</div>
+                    <div className="flex items-center gap-1"><div className="w-4 h-4 bg-white border border-black rounded" /> Unattempted</div>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <span className="font-medium text-gray-600">Sort By:</span>
@@ -313,7 +313,7 @@ export default function QuizAnalysisView({
                                     return (
                                       <div
                                         key={q.quiz_question_id}
-                                        className={`w-[14px] h-[18px] border border-black rounded-sm ${ans?.is_correct === true ? 'bg-[#8BCB88]' : ans?.is_correct === false ? 'bg-[#FF6B6B]' : 'bg-gray-100'
+                                        className={`w-[14px] h-[18px] border border-black rounded ${ans?.is_correct === true ? 'bg-[#8BCB88]' : ans?.is_correct === false ? 'bg-[#FF6B6B]' : 'bg-gray-100'
                                           }`}
                                       />
                                     );

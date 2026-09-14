@@ -188,7 +188,7 @@ export default function SubjectSuggestionsTab({
   return (
     <div className="space-y-4">
       {!hideIntro ? (
-        <section className="rounded-lg border border-black bg-[#F6E9B2] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <section className="rounded border border-black bg-[#F6E9B2] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-start gap-3">
             <Sparkles className="mt-1 shrink-0" size={22} />
             <div>

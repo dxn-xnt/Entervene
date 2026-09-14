@@ -730,7 +730,7 @@ export default function AdminSubjects() {
 
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 [&_table]:min-w-[720px] sm:px-4 sm:py-4 md:px-6">
               {isViewingInactiveAcademicYear ? (
-                <div className="rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
+                <div className="rounded border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000]">
                   <p className="font-bold">{readOnlyReason}</p>
                   <p className="text-black/70">
                     {readOnlyHelper} Previous academic years are locked in the UI to protect historical grades and prediction records.
@@ -758,7 +758,7 @@ export default function AdminSubjects() {
                 </p>
               ) : null}
               {error ? (
-                <div className="flex flex-col gap-2 rounded-lg border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000] md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-col gap-2 rounded border-2 border-black bg-[#fff7d6] p-3 text-sm shadow-[3px_3px_0_#000] md:flex-row md:items-center md:justify-between">
                   <div>
                     <p className="font-bold">Unable to load the latest subject data.</p>
                     <p className="text-black/70">{friendlyErrorMessage(error)}</p>

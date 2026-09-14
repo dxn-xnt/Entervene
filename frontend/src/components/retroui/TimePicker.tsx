@@ -155,7 +155,7 @@ export function TimePickerSingle({
 
     return (
         <div className={cn("relative inline-flex items-center text-left", isOpen ? "z-50" : "z-0", wrapperClassName)} ref={popoverRef}>
-            <div className={cn("flex items-center border-2 border-black bg-white rounded-none overflow-hidden shadow-sm", className)}>
+            <div className={cn("flex items-center border-2 border-black bg-white rounded overflow-hidden shadow-sm", className)}>
                 {/* Direct Editable Input */}
                 <input
                     type="text"

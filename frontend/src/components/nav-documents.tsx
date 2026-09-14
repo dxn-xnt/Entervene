@@ -45,7 +45,7 @@ export function NavDocuments({
               <DropdownMenuTrigger asChild>
                 <SidebarMenuAction
                   showOnHover
-                  className="rounded-sm data-[state=open]:bg-accent"
+                  className="rounded data-[state=open]:bg-accent"
                 >
                   <MoreHorizontalIcon
                   />
@@ -53,7 +53,7 @@ export function NavDocuments({
                 </SidebarMenuAction>
               </DropdownMenuTrigger>
               <DropdownMenuContent
-                className="w-24 rounded-lg"
+                className="w-24 rounded"
                 side={isMobile ? "bottom" : "right"}
                 align={isMobile ? "end" : "start"}
               >

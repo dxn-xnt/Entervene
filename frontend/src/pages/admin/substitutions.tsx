@@ -226,7 +226,7 @@ export default function AdminSubstitutions() {
               </div>
 
               {/* Table Content */}
-              <Card className="mt-1 w-full rounded-none border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <Card className="mt-1 w-full rounded border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                 {isLoading ? (
                   <LoadingPanel label="Loading substitution records..." />
                 ) : error ? (

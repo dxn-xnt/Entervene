@@ -484,7 +484,7 @@ export default function AddUserModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }} >
-      <Dialog.Content size="md" className="w-[calc(100vw-1.5rem)] max-w-lg overflow-hidden rounded-none font-sans lg:max-w-[40%]">
+      <Dialog.Content size="md" className="w-[calc(100vw-1.5rem)] max-w-lg overflow-hidden rounded font-sans lg:max-w-[40%]">
         <Dialog.Header asChild className="bg-primary text-primary-foreground font-head flex items-center justify-between">
           <div>
             <span className="font-bold text-lg">
@@ -561,7 +561,7 @@ export default function AddUserModal({
                 onDrop={handleFileDrop}
                 onClick={() => fileInputRef.current?.click()}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-center cursor-pointer transition-all min-h-[130px]",
+                  "flex flex-col items-center justify-center gap-2 rounded border-2 border-dashed p-6 text-center cursor-pointer transition-all min-h-[130px]",
                   hasImportErrors
                     ? "border-destructive bg-destructive/10"
                     : dragOver

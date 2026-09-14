@@ -31,7 +31,7 @@ export function RoleBadge({
       size="sm"
       variant="default"
       className={cn(
-        "inline-flex w-fit self-start shrink-0 items-center whitespace-nowrap rounded-none border border-border bg-primary px-1.5 py-0 text-[9px] font-bold leading-4 text-primary-foreground shadow-none",
+        "inline-flex w-fit self-start shrink-0 items-center whitespace-nowrap rounded border border-border bg-primary px-1.5 py-0 text-[9px] font-bold leading-4 text-primary-foreground shadow-none",
         className,
       )}
     >

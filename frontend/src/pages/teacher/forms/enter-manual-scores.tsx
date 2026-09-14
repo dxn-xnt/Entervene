@@ -131,7 +131,7 @@ export default function EnterManualScoresModal({
       </Dialog.Header>
 
       <section className="flex flex-col gap-4 p-4 max-h-[70vh] overflow-y-auto">
-        <div className="flex items-center justify-between bg-muted/40 p-3 rounded-lg border border-border">
+        <div className="flex items-center justify-between bg-muted/40 p-3 rounded border border-border">
           <span className="text-sm font-semibold text-foreground">
             Activity: <span className="font-bold">{activityTitle}</span>
           </span>
@@ -141,7 +141,7 @@ export default function EnterManualScoresModal({
         </div>
 
         {errorMessage && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-md font-medium">
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded font-medium">
             {errorMessage}
           </div>
         )}
@@ -159,7 +159,7 @@ export default function EnterManualScoresModal({
               return (
                 <div
                   key={student.student_id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-white border border-border rounded-lg shadow-sm hover:border-black/30 transition-colors"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-white border border-border rounded shadow-sm hover:border-black/30 transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <div className="size-8 rounded-full bg-primary/20 text-primary-foreground border border-black flex items-center justify-center font-bold text-xs shrink-0">
