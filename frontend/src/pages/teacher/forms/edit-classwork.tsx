@@ -183,7 +183,17 @@ export default function EditClassworkModal({
       );
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(body.detail || "Unable to update classwork.");
+        const detail = body.detail;
+        if (Array.isArray(detail)) {
+          const msgs = detail
+            .map((e: { loc?: (string | number)[]; msg?: string }) => {
+              const field = (e.loc || []).filter((x) => x !== "body").join(".");
+              return field ? `${field}: ${e.msg}` : (e.msg || "Validation error");
+            })
+            .join("; ");
+          throw new Error(msgs || "Validation error");
+        }
+        throw new Error(typeof detail === "string" ? detail : "Unable to update classwork.");
       }
 
       let updated = (await response.json()) as TeacherClasswork;
@@ -213,8 +223,18 @@ export default function EditClassworkModal({
         );
         if (!assignResponse.ok) {
           const body = await assignResponse.json().catch(() => ({}));
+          const detail = body.detail;
+          if (Array.isArray(detail)) {
+            const msgs = detail
+              .map((e: { loc?: (string | number)[]; msg?: string }) => {
+                const field = (e.loc || []).filter((x) => x !== "body").join(".");
+                return field ? `${field}: ${e.msg}` : (e.msg || "Validation error");
+              })
+              .join("; ");
+            throw new Error(msgs || "Validation error");
+          }
           throw new Error(
-            body.detail || "Unable to update assignment settings.",
+            typeof detail === "string" ? detail : "Unable to update assignment settings.",
           );
         }
       }

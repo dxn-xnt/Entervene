@@ -4,6 +4,7 @@ import { Button } from "@/components/retroui/Button";
 
 type Usage = {
   enabled: boolean;
+  configured: boolean;
   reserved_usd: number;
   monthly_budget_usd: number;
   calls_today: number;
@@ -34,6 +35,9 @@ export function AIUsageCard() {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [revision]);
+
+  // Hide the entire card when AI is not configured (no API keys set)
+  if (usage && !usage.configured) return null;
 
   return (
     <section className="border-2 border-black bg-white p-5 space-y-3" aria-label="AI usage">
