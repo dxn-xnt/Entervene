@@ -376,9 +376,6 @@ textarea::placeholder,
   border-color: var(--destructive);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--destructive) 35%, transparent);
   outline: none;
-<<<<<<< HEAD
-}
-=======
 }
 
 /* Form surfaces use one square geometry across legacy and shared controls. */
@@ -469,4 +466,3 @@ textarea::placeholder,
   border: 0;
   box-shadow: none;
 }
->>>>>>> db4c0c452e2d9c605335b22d05f6935487b30b3d
