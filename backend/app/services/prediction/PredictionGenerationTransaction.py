@@ -70,29 +70,42 @@ def run_prediction_generation_transaction(
     model_name: str,
     operation: Callable[[Session], T],
     bind: Connectable | None = None,
+    generation_request_id: str | None = None,
 ) -> T:
-    """Serialize one scope and run all reads/writes in one repeatable snapshot."""
+    """Acquire session locks before starting the consistent evidence snapshot.
+
+    The request-key lock also serializes reuse of one key across different
+    scopes. Always acquire it first, then the scope lock, to avoid deadlocks.
+    """
     lock_key = advisory_lock_key(canonical_prediction_scope(scope, model_name))
     source_bind = bind or engine
-    if source_bind.dialect.name == "postgresql":
-        transaction_bind = source_bind.execution_options(isolation_level="REPEATABLE READ")
-    else:
-        # Unit tests use an in-memory SQLite session. Production startup is
-        # PostgreSQL-only for this path; SQLite cannot exercise advisory locks.
-        transaction_bind = source_bind
-    db = SessionLocal(bind=transaction_bind)
-    try:
-        with db.begin():
-            if source_bind.dialect.name == "postgresql":
-                # This is deliberately the first SQL statement in the transaction.
-                # pg_advisory_xact_lock is released automatically on commit/rollback.
-                db.execute(
-                    text("SELECT pg_advisory_xact_lock(CAST(:lock_key AS bigint))"),
-                    {"lock_key": lock_key},
-                )
+    if source_bind.dialect.name != "postgresql":
+        with SessionLocal(bind=source_bind) as db, db.begin():
             return operation(db)
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
+    keys = ([advisory_lock_key('prediction-request:' + generation_request_id)] if generation_request_id else []) + [lock_key]
+    with source_bind.connect() as connection:
+        acquired = []
+        try:
+            for key in keys:
+                connection.execute(text('SELECT pg_advisory_lock(CAST(:key AS bigint))'), {'key': key})
+                acquired.append(key)
+            connection.commit()  # discard the pre-lock snapshot; session locks survive
+            connection.execution_options(isolation_level='REPEATABLE READ')
+            with SessionLocal(bind=connection) as db, db.begin():
+                # Establish the snapshot at a named boundary, AFTER all locks.
+                boundary = db.execute(text('SELECT clock_timestamp(), pg_current_snapshot()::text')).one()
+                db.info['prediction_evidence_cutoff_at'] = boundary[0].isoformat()
+                db.info['prediction_database_snapshot'] = boundary[1]
+                return operation(db)
+        finally:
+            try:
+                connection.rollback()
+                for key in reversed(acquired):
+                    unlocked = connection.execute(text('SELECT pg_advisory_unlock(CAST(:key AS bigint))'), {'key': key}).scalar()
+                    if not unlocked:
+                        raise RuntimeError('Prediction advisory lock was not owned during cleanup.')
+                connection.commit()
+            except BaseException:
+                # Discard the physical connection if cleanup cannot be proved.
+                connection.invalidate()
+                raise

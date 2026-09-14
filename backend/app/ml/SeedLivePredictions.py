@@ -157,6 +157,7 @@ def _detect_subject_key(row: dict) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    raise SystemExit("Historical CSV prediction import is retired for normal use. Existing rows remain readable; use audited from-records generation for new forecasts.")
     parser = argparse.ArgumentParser(
         description="Seed live ML predictions into ai_prediction and prediction_outcome tables."
     )

@@ -24,6 +24,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models.ai.AIPrediction import AIPrediction
+from app.services.prediction.PredictionScopeService import prediction_read_filter
 from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
@@ -48,6 +49,9 @@ def get_dashboard_filter_options(
         if not all_assigned_triplets:
             return {"grades": [], "classes": [], "subjects": [], "terms": []}
 
+        # Include only handovers the source teacher can actually read.
+        incoming = set(db.query(AIPrediction.class_id, AIPrediction.subject_id, AIPrediction.target_period_id).filter(prediction_read_filter(db, staff_id)).all())
+        all_assigned_triplets = all_assigned_triplets | incoming
         allowed_class_ids = {t[0] for t in all_assigned_triplets}
         allowed_period_ids = {t[2] for t in all_assigned_triplets}
 
@@ -99,9 +103,7 @@ def get_dashboard_filter_options(
         # Determine allowed subjects
         if class_id is not None:
             if academic_period_id is not None:
-                scoped_triplets = get_teacher_assigned_triplets(
-                    db, staff_id, academic_period_id=academic_period_id
-                )
+                scoped_triplets = {t for t in all_assigned_triplets if t[2] == academic_period_id}
             else:
                 scoped_triplets = all_assigned_triplets
             allowed_subject_ids = {t[1] for t in scoped_triplets if t[0] == class_id}

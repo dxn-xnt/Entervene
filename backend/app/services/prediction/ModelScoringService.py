@@ -9,7 +9,13 @@ import joblib
 import pandas as pd
 from sqlalchemy.orm import Session
 
-from app.models.ai.AIModelVersion import AIModelVersion
+from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
+from app.services.prediction.ModelRegistryExceptions import (
+    ActiveModelNotFound,
+    ArtifactIntegrityError,
+    ModelPurposeMismatch,
+    UnsupportedModelPurpose,
+)
 from app.services.prediction.FeatureCatalog import (
     DISPLAY_ONLY,
     GRADE_MODEL_INPUT,
@@ -62,22 +68,66 @@ def backend_dir() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
-def get_active_model_version(
+def get_active_model_version_by_purpose(
     db: Session,
-    model_name: str = DEFAULT_MODEL_NAME,
-    model_type: str = DEFAULT_MODEL_TYPE,
+    model_purpose: ModelPurpose | str,
 ) -> AIModelVersion:
+    """Strict purpose-aware model version resolver.
+
+    Requires model_purpose explicitly. No default is permitted.
+    Raises UnsupportedModelPurpose if purpose is unknown or None.
+    Raises ActiveModelNotFound if no active version is found.
+    Never falls back to another purpose.
+    """
+    if model_purpose is None:
+        raise UnsupportedModelPurpose("model_purpose must be explicitly provided; no default is permitted.")
+    if isinstance(model_purpose, ModelPurpose):
+        purpose_str = model_purpose.value
+    elif isinstance(model_purpose, str):
+        try:
+            purpose_str = ModelPurpose(model_purpose).value
+        except ValueError:
+            raise UnsupportedModelPurpose(f"Unsupported model purpose: '{model_purpose}'")
+    else:
+        raise UnsupportedModelPurpose(f"model_purpose must be ModelPurpose or str, got {type(model_purpose).__name__}")
+
     version = (
         db.query(AIModelVersion)
         .filter(
-            AIModelVersion.model_name == model_name,
-            AIModelVersion.model_type == model_type,
+            AIModelVersion.model_purpose == purpose_str,
             AIModelVersion.is_active == True,
         )
         .one_or_none()
     )
     if version is None:
-        raise LookupError(f"No active {model_type} model version found for model_name={model_name}.")
+        raise ActiveModelNotFound(f"No active model version found for purpose={purpose_str}.")
+    return version
+
+
+def get_active_model_version(
+    db: Session,
+    model_name: str = DEFAULT_MODEL_NAME,
+    model_type: str = DEFAULT_MODEL_TYPE,
+) -> AIModelVersion:
+    """Clearly isolated compatibility wrapper that explicitly requests NEXT_PERIOD_BASELINE_FORECAST.
+
+    Retained for unchanged legacy/live next-period callers.
+    """
+    version = (
+        db.query(AIModelVersion)
+        .filter(
+            AIModelVersion.model_name == model_name,
+            AIModelVersion.model_type == model_type,
+            AIModelVersion.model_purpose == ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value,
+            AIModelVersion.is_active == True,
+        )
+        .one_or_none()
+    )
+    if version is None:
+        raise ActiveModelNotFound(
+            f"No active {model_type} model version found for model_name={model_name} "
+            f"under purpose={ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value}."
+        )
     return version
 
 
@@ -252,15 +302,16 @@ def score_student_prediction(
     db: Session,
     input_data: dict[str, Any],
     model_name: str = DEFAULT_MODEL_NAME,
+    model_version: AIModelVersion | None = None,
 ) -> dict[str, Any]:
-    model_version = get_active_model_version(db, model_name=model_name)
+    model_version = model_version or get_active_model_version(db, model_name=model_name)
     feature_schema = load_feature_schema_from_model_version(model_version)
     model = load_model_artifact(model_version.artifact_path)
     prepared_row, warnings = prepare_feature_row(input_data, feature_schema)
     predicted_grade = predict_next_period_grade(model, prepared_row)
     transformations = []
     for feature_name in prepared_row.columns:
-        if feature_name not in input_data:
+        if feature_name not in input_data or input_data[feature_name] is None:
             transformations.append({
                 "feature": feature_name,
                 "model_value": float(prepared_row.iloc[0][feature_name]),
