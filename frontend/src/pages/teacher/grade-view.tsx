@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Table } from "@/components/retroui/Table";
+import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { useParams } from "react-router-dom";
-import { Ellipsis, Plus, Search, Download, Send, CheckCircle2, AlertTriangle, Loader2, RefreshCw, X, ChevronDown, FileSpreadsheet } from "lucide-react";
+import { Ellipsis, Plus, Search, Download, Send, CheckCircle2, AlertTriangle, Loader2, RefreshCw, X, ChevronDown, FileSpreadsheet, Calendar, BarChart2 } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
@@ -441,8 +442,8 @@ const TeacherGradeView = () => {
       if (group.length === 0) return null;
       return (
         <>
-          <Table.Row className="border-y-2 border-black bg-yellow-50 hover:bg-yellow-100/70">
-            <Table.Cell colSpan={periods.length + 3} className="py-1 font-black uppercase text-black">{label}</Table.Cell>
+          <Table.Row className="border-y-2 border-black bg-accent">
+            <Table.Cell colSpan={periods.length + 3} className="py-1 font-black text-black">{label}</Table.Cell>
           </Table.Row>
           {group.map((item, idx) => (
             <Table.Row key={item.student_id} className="border-b border-black/10 hover:bg-yellow-50/50">
@@ -482,7 +483,7 @@ const TeacherGradeView = () => {
 
     return (
       <Table className="w-full border-collapse text-sm">
-        <Table.Header className="border-b-2 border-black bg-yellow-300 font-black uppercase [&_th]:h-auto [&_th]:px-2 [&_th]:py-2 [&_th]:text-[11px] [&_th]:leading-tight sm:[&_th]:px-3 sm:[&_th]:py-2.5 sm:[&_th]:text-xs md:[&_th]:py-3 md:[&_th]:text-sm">
+        <Table.Header className="border-b-2 border-black font-black [&_th]:h-auto [&_th]:px-2 [&_th]:py-2 [&_th]:text-base [&_th]:leading-tight sm:[&_th]:px-3 sm:[&_th]:py-2.5 sm:[&_th]:text-xs md:[&_th]:py-3 md:[&_th]:text-base">
           <Table.Row>
             <Table.Head className="w-[20%] font-black text-black">Learner's Name</Table.Head>
             {periods.map((p) => (
@@ -529,13 +530,13 @@ const TeacherGradeView = () => {
       if (group.length === 0) return null;
       return (
         <>
-          <Table.Row className="border-y-2 border-black bg-yellow-50 hover:bg-yellow-100/70">
-            <Table.Cell colSpan={8} className="py-1 font-black uppercase text-black">{label}</Table.Cell>
+          <Table.Row className="py-1.5! border-y-2 border-black bg-muted hover:bg-muted">
+            <Table.Cell colSpan={8} className="py-1.5! font-black text-black">{label}</Table.Cell>
           </Table.Row>
           {group.map((item, idx) => (
             <Table.Row key={item.student_id} className="border-b border-black/10 hover:bg-yellow-50/50">
               <Table.Cell className="max-w-[200px] truncate text-sm font-extrabold text-black" title={item.name}>
-                {idx + 1}. {item.name}
+                {item.name}
               </Table.Cell>
 
               <Table.Cell className="font-medium py-2.5 px-2">
@@ -606,7 +607,7 @@ const TeacherGradeView = () => {
                 )}
               </Table.Cell>
 
-              <Table.Cell className="font-medium text-center py-2 px-2">
+              {/* <Table.Cell className="font-medium text-center py-2 px-2">
                 {item.is_finalized ? (
                   <div
                     className="inline-flex items-center justify-center gap-1.5"
@@ -649,7 +650,7 @@ const TeacherGradeView = () => {
                     Send
                   </Button>
                 )}
-              </Table.Cell>
+              </Table.Cell> */}
             </Table.Row>
           ))}
         </>
@@ -657,8 +658,8 @@ const TeacherGradeView = () => {
     };
 
     return (
-      <Table className="w-full border-collapse text-sm">
-        <Table.Header className="border-b-2 border-black bg-yellow-300 font-black uppercase [&_th]:h-auto [&_th]:px-2 [&_th]:py-2 [&_th]:text-[11px] [&_th]:leading-tight sm:[&_th]:px-3 sm:[&_th]:py-2.5 sm:[&_th]:text-xs md:[&_th]:py-3 md:[&_th]:text-sm">
+      <Table className="w-full border-collapse border-0 text-sm">
+        <Table.Header className="border-b-2 border-black font-black [&_th]:h-auto [&_th]:px-2 [&_th]:py-2 [&_th]:text-[11px] [&_th]:leading-tight sm:[&_th]:px-3 sm:[&_th]:py-2.5 sm:[&_th]:text-xs md:[&_th]:py-3 md:[&_th]:text-sm">
           <Table.Row>
             <Table.Head className="w-[17%] font-black text-black">Learner's Name</Table.Head>
             <Table.Head
@@ -715,11 +716,11 @@ const TeacherGradeView = () => {
             <Table.Head className="w-[8%] text-center font-black text-black">Initial Grade</Table.Head>
             <Table.Head className="w-[8%] text-center font-black text-black">Term Grade</Table.Head>
             <Table.Head className="w-[8%] text-center font-black text-black">Descriptor</Table.Head>
-            <Table.Head className="w-[8%] text-center font-black text-black">Adviser Status</Table.Head>
+            {/* <Table.Head className="w-[8%] text-center font-black text-black">Adviser Status</Table.Head> */}
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          <Table.Row className="border-b-2 border-black bg-yellow-50 hover:bg-yellow-100/70">
+          <Table.Row className="border-b-2 border-black hover:bg-background">
             <Table.Cell className="text-xs font-black text-black sm:text-sm">Classwork Name</Table.Cell>
             <Table.Cell className="py-2 px-2">
               <div className="flex flex-row items-center justify-between gap-1 w-full">
@@ -851,7 +852,7 @@ const TeacherGradeView = () => {
             <Table.Cell className="text-center font-semibold">100</Table.Cell>
             <Table.Cell className="text-center font-bold text-xs text-muted-foreground py-2 px-2">—</Table.Cell>
             <Table.Cell className="text-center font-bold text-xs text-muted-foreground py-2 px-2">—</Table.Cell>
-            <Table.Cell className="text-center font-bold text-xs text-muted-foreground py-2 px-2">—</Table.Cell>
+            {/* <Table.Cell className="text-center font-bold text-xs text-muted-foreground py-2 px-2">—</Table.Cell> */}
           </Table.Row>
 
 
@@ -898,20 +899,16 @@ const TeacherGradeView = () => {
                     </Breadcrumb.Item>
                     <Breadcrumb.Separator />
                     <Breadcrumb.Item>
-                      <Breadcrumb.Page>{displaySectionName}</Breadcrumb.Page>
-                    </Breadcrumb.Item>
-                    <Breadcrumb.Separator />
-                    <Breadcrumb.Item>
-                      <Breadcrumb.Page>{displaySubjectName}</Breadcrumb.Page>
+                      <Breadcrumb.Page className="flex flex-row items-center gap-2"><span>{displaySectionName}</span>  <span className="text-base font-normal">({displaySubjectName})</span></Breadcrumb.Page>
                     </Breadcrumb.Item>
                   </Breadcrumb.List>
                 </Breadcrumb>
               </div>
-              {gradebook?.grading_weights?.template_name && (
+              {/* {gradebook?.grading_weights?.template_name && (
                 <span className="hidden sm:inline-flex items-center gap-1 ml-2 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-950 border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]" title={`Assigned Template: ${gradebook.grading_weights.template_name}`}>
                   {gradebook.grading_weights.template_name}
                 </span>
-              )}
+              )} */}
 
               <div className="grid w-full grid-cols-2 items-center gap-2 md:ml-auto md:flex md:w-auto md:flex-row">
                 {!isViewOnly && activeTab.startsWith("term-") && (
@@ -978,7 +975,26 @@ const TeacherGradeView = () => {
               </div>
             </header>
 
-            <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+            <div className="-mt-[1px] bg-background px-3 sm:px-4 md:px-6">
+              <Tabs
+                tabs={[
+                  ...periods.map((p) => ({
+                    id: `term-${p.academic_period_id}`,
+                    label: `${p.period_name}${p.is_active ? " (Active)" : ""}`,
+                    icon: Calendar,
+                  })),
+                  {
+                    id: "summary",
+                    label: "Summary of Termly Grades",
+                    icon: BarChart2,
+                  },
+                ]}
+                activeTab={activeTab}
+                onTabChange={(tabId) => setActiveTab(tabId)}
+              />
+            </div>
+
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {toastMessage && (
                 <div
                   className={`rounded-md border-2 border-black p-3 flex items-center justify-between text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${toastMessage.type === "success"
@@ -1030,8 +1046,6 @@ const TeacherGradeView = () => {
                 </div>
               )}
 
-              <div className="-mx-4 md:-mx-6 border-b border-gray-500" />
-
               <div className="flex flex-col gap-3">
                 <section className="flex flex-row justify-between gap-4">
                   <div className="relative w-full md:w-80">
@@ -1060,32 +1074,9 @@ const TeacherGradeView = () => {
                 <Card className="w-full rounded-none border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                   {activeTab === "summary" ? renderSummaryTable() : renderTermTable()}
                 </Card>
-                <div className="h-24 w-full"></div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-4 px-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-40 md:pl-[256px]">
-        <div className="flex flex-row gap-2 overflow-x-auto px-4 max-w-7xl mx-auto items-center justify-center pb-2">
-          {periods.map((p) => (
-            <Button
-              key={p.academic_period_id}
-              variant={activeTab === `term-${p.academic_period_id}` ? "default" : "outline"}
-              onClick={() => setActiveTab(`term-${p.academic_period_id}`)}
-              className="rounded-full"
-            >
-              {p.period_name} {p.is_active ? "(Active)" : ""}
-            </Button>
-          ))}
-          <Button
-            variant={activeTab === "summary" ? "default" : "outline"}
-            onClick={() => setActiveTab("summary")}
-            className="rounded-full"
-          >
-            Summary of Termly Grades
-          </Button>
         </div>
       </div>
 
@@ -1205,11 +1196,11 @@ const TeacherGradeView = () => {
                 <div className="grid grid-cols-2 gap-2 text-center text-xs">
                   <div className="bg-emerald-50 border-2 border-black rounded-md p-2.5 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
                     <span className="block text-xl font-black text-emerald-950">{completeComponentsCount}</span>
-                    <span className="text-[10px] text-emerald-900 font-bold uppercase tracking-wider">All Components Complete</span>
+                    <span className="text-[10px] text-emerald-900 font-bold tracking-wider">All Components Complete</span>
                   </div>
                   <div className={`border-2 border-black rounded-md p-2.5 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${missingComponentsCount > 0 ? "bg-amber-50" : "bg-gray-50"}`}>
                     <span className={`block text-xl font-black ${missingComponentsCount > 0 ? "text-amber-950" : "text-gray-600"}`}>{missingComponentsCount}</span>
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${missingComponentsCount > 0 ? "text-amber-900" : "text-gray-600"}`}>Missing Components (Sending Anyway)</span>
+                    <span className={`text-[10px] font-bold tracking-wider ${missingComponentsCount > 0 ? "text-amber-900" : "text-gray-600"}`}>Missing Components (Sending Anyway)</span>
                   </div>
                 </div>
 
@@ -1369,15 +1360,15 @@ const TeacherGradeView = () => {
             <div className="grid grid-cols-3 gap-2.5 text-center">
               <div className="bg-emerald-100 border-2 border-black rounded-md p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                 <span className="block text-2xl font-black text-emerald-950">{bulkSendSummary?.newly_sent_count ?? 0}</span>
-                <span className="text-[11px] text-emerald-900 font-black uppercase tracking-wider">Sent / Updated</span>
+                <span className="text-[11px] text-emerald-900 font-black tracking-wider">Sent / Updated</span>
               </div>
               <div className="bg-yellow-50 border-2 border-black rounded-md p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                 <span className="block text-2xl font-black text-black">{bulkSendSummary?.unchanged_skipped_count ?? 0}</span>
-                <span className="text-[11px] text-gray-800 font-black uppercase tracking-wider">Unchanged</span>
+                <span className="text-[11px] text-gray-800 font-black tracking-wider">Unchanged</span>
               </div>
               <div className="bg-amber-100 border-2 border-black rounded-md p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                 <span className="block text-2xl font-black text-amber-950">{(bulkSendSummary?.incomplete_warning_count ?? 0) || (bulkSendSummary?.incomplete_skipped_count ?? 0)}</span>
-                <span className="text-[11px] text-amber-900 font-black uppercase tracking-wider">With Warnings</span>
+                <span className="text-[11px] text-amber-900 font-black tracking-wider">With Warnings</span>
               </div>
             </div>
             <p className="text-xs text-gray-700 leading-relaxed font-medium">

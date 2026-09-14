@@ -12,6 +12,7 @@ import type { TeacherAdvisoryClassListItem } from "@/types/adminClasses";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { Progress } from "@/components/retroui/Progress";
 import { EmptyStateCard } from "@/components/empty-state-card";
+import { cn } from "@/lib/utils";
 
 type TeacherClassLoad = {
   subject_load_id: number;
@@ -72,7 +73,7 @@ function SubjectClassCatalogCard({
 }) {
   return (
     <Card
-      className="group relative flex min-w-0 flex-col justify-between p-3 shadow-none hover:-translate-y-1 cursor-pointer"
+      className="group relative flex w-full min-w-[240px] flex-1 flex-col justify-between p-3 shadow-none hover:-translate-y-1 cursor-pointer"
       onClick={onClick}
     >
       <div className="flex flex-col items-start justify-between gap-2">
@@ -242,14 +243,19 @@ const TeacherClasses = () => {
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
                   {/* Left: Subject Loads */}
-                  <div className="lg:col-span-8 flex flex-col gap-4">
+                  <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                     {groupedSubjectLoads.length === 0 ? (
-                      <EmptyStateCard title="No subject teaching sections assigned." />
+                      <div className="col-span-full">
+                        <EmptyStateCard title="No subject teaching sections assigned." />
+                      </div>
                     ) : (
                       groupedSubjectLoads.map((group) => (
                         <Card
                           key={group.subjectId}
-                          className="flex flex-col"
+                          className={cn(
+                            "flex flex-col",
+                            group.loads.length === 1 ? "col-span-1" : "col-span-1 md:col-span-2"
+                          )}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex min-w-0 flex-col items-start gap-1">
@@ -284,7 +290,14 @@ const TeacherClasses = () => {
                               </Button>
                             </div>
                           </div>
-                          <div className="pt-3 flex gap-3 overflow-auto pb-2">
+                          <div
+                            className={cn(
+                              "pt-3 pb-2",
+                              group.loads.length === 1
+                                ? "flex flex-col"
+                                : "flex gap-3 overflow-auto"
+                            )}
+                          >
                             {group.loads.map((load) => (
                               <SubjectClassCatalogCard
                                 key={load.subject_load_id}
