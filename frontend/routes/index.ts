@@ -1,4 +1,4 @@
-import SetupPassword from "../src/pages/SetupPassword";
+import SetupPassword from "../src/pages/setup-password";
 
 export const routes = {
   auth: {
@@ -28,18 +28,17 @@ export const routes = {
     substitutions: "/admin/substitutions",
   },
 
-
   teacher: {
     dashboard: "/teacher/dashboard",
     classes: "/teacher/classes",
     classSections: "/teacher/classes/sections",
-    classDetail: "/teacher/classes/:classId",
+    classDetail: "/teacher/classes/:classId/:subjectId",
     advisoryClassDetail: "/teacher/advisory-class/:classId",
-    subjects: "/teacher/classes/subjects",
     classSubjects: "/teacher/classes/:classId/subjects",
     subjectDetail: "/teacher/classes/:classId/subjects/:subjectId",
     createLesson: "/teacher/lessons/create",
     classworks: "/teacher/classworks",
+    classworkDetail: "/teacher/classworks/:classworkId",
     lessons: "/teacher/lessons",
     interventions: "/teacher/interventions",
     grades: "/teacher/grades",
@@ -66,7 +65,6 @@ export const routes = {
     todo: "/student/todo",
     todoView: "/student/todo/:subject/:quizTitle",
     notifications: "/student/notifications",
-    attendance: "/student/attendance",
 
     // Quiz attempt pages — assignmentId is classwork_assignment.assignment_id
     quizView: "/student/quiz/:assignmentId",

@@ -113,6 +113,7 @@ class StudentPeriodGradeFinalizeResponse(BaseModel):
     subject_id: int
     academic_period_id: int
     final_period_grade: float
+    performance_descriptor: Optional[str] = None
     is_finalized: bool
     finalized_at: Optional[datetime] = None
     finalized_by_staff_id: Optional[str] = None
@@ -130,7 +131,8 @@ class ClassworkCategoryHeader(BaseModel):
 class GradebookCategoryHeaderGroup(BaseModel):
     writtenWork: list[ClassworkCategoryHeader]
     performanceTask: list[ClassworkCategoryHeader]
-    quarterlyAssessment: list[ClassworkCategoryHeader]
+    quarterlyAssessment: list[ClassworkCategoryHeader] = []
+    exams: list[ClassworkCategoryHeader] = []
 
 
 class StudentGradebookRow(BaseModel):
@@ -139,21 +141,97 @@ class StudentGradebookRow(BaseModel):
     gender: Optional[str] = None
     writtenWork: list[Optional[float]]
     performanceTask: list[Optional[float]]
-    quarterlyAssessment: list[Optional[float]]
+    quarterlyAssessment: list[Optional[float]] = []
+    exams: list[Optional[float]] = []
     # Per-category Percentage Scores (PS = sum_scores / max_possible * 100)
     ps_written: Optional[float] = None
     ps_performance: Optional[float] = None
     ps_quarterly: Optional[float] = None
+    ps_exams: Optional[float] = None
+    # Exam sub-split Percentage Scores
+    ps_summative_1: Optional[float] = None
+    ps_summative_2: Optional[float] = None
+    ps_term_exam: Optional[float] = None
     # DepEd computed grades
     initial_grade: Optional[float] = None
     transmuted_grade: Optional[float] = None
     total: Optional[str] = None
+    performance_descriptor: Optional[str] = None
+    # Transmission to Adviser Audit State
+    period_grade_id: Optional[int] = None
+    is_finalized: bool = False
+    finalized_at: Optional[datetime] = None
+    finalized_by_staff_id: Optional[str] = None
+    finalized_by_name: Optional[str] = None
+
+
+class GradingWeightsInfo(BaseModel):
+    template_id: Optional[int] = None
+    template_name: Optional[str] = None
+    ww_weight: float
+    pt_weight: float
+    exams_weight: float
+    ww_percentage: int
+    pt_percentage: int
+    exams_percentage: int
 
 
 class StudentGradebookResponse(BaseModel):
     scope: StudentRecordScope
     classwork: list[GradebookCategoryHeaderGroup]
     studentGrades: list[StudentGradebookRow]
+    grading_weights: Optional[GradingWeightsInfo] = None
+
+
+class SendStudentGradeRequest(BaseModel):
+    academic_period_id: int
+    expected_transmuted_grade: Optional[float] = None
+    expected_final_period_grade: Optional[float] = None
+    final_period_grade: Optional[float] = None
+    force_resend: bool = False
+    remarks: Optional[str] = None
+
+
+class SendGradeToAdviserItemResponse(BaseModel):
+    student_id: str
+    name: str
+    period_grade_id: Optional[int] = None
+    log_id: Optional[int] = None
+    written_work_percent: Optional[float] = None
+    performance_task_percent: Optional[float] = None
+    quarterly_assessment_percent: Optional[float] = None
+    initial_grade: Optional[float] = None
+    transmuted_grade: Optional[float] = None
+    final_period_grade: Optional[float] = None
+    performance_descriptor: Optional[str] = None
+    is_finalized: bool
+    finalized_at: Optional[datetime] = None
+    finalized_by_staff_id: Optional[str] = None
+    finalized_by_name: Optional[str] = None
+    status: str  # "newly_sent" | "updated" | "unchanged" | "conflict" | "skipped_incomplete"
+    message: Optional[str] = None
+    incomplete_components: list[str] = []
+
+
+class BulkSendGradesRequest(BaseModel):
+    force_resend_all: bool = False
+    expected_student_grades: Optional[dict[str, float]] = None  # {student_id: expected_transmuted_grade}
+    remarks: Optional[str] = None
+
+
+class BulkSendGradesToAdviserResponse(BaseModel):
+    class_id: int
+    subject_id: int
+    academic_period_id: int
+    total_students: int
+    newly_sent_count: int
+    unchanged_skipped_count: int
+    incomplete_skipped_count: int = 0
+    incomplete_warning_count: int = 0
+    finalized_at: datetime
+    finalized_by_staff_id: str
+    finalized_by_name: str
+    entries: list[SendGradeToAdviserItemResponse]
 
 
 class TermGradeSummaryRow(BaseModel):
@@ -163,6 +241,7 @@ class TermGradeSummaryRow(BaseModel):
     term_grades: dict[int, Optional[float]]  # {academic_period_id: grade}
     final_grade: Optional[float] = None
     remark: Optional[str] = None  # "PASSED" | "FAILED" | "INCOMPLETE"
+    performance_descriptor: Optional[str] = None
 
 
 class TermGradeSummaryScope(BaseModel):

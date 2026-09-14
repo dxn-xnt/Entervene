@@ -78,24 +78,24 @@ const StudentQuizResult = () => {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center gap-3">
-              <SidebarTrigger className="md:hidden" />
-              <Breadcrumb>
-                <Breadcrumb.List>
+          <div className="flex flex-1 flex-col">
+            <header className="flex min-w-0 items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <SidebarTrigger className="shrink-0 md:hidden" />
+              <Breadcrumb className="min-w-0">
+                <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 text-lg font-extrabold tracking-tight text-black sm:gap-2 sm:text-2xl md:text-3xl">
                   <Breadcrumb.Item>
                     <Breadcrumb.Link
                       onClick={() => navigate(routes.student.todo)}
-                      className="text-xl md:text-2xl text-black/50 hover:text-black cursor-pointer"
+                      className="cursor-pointer whitespace-nowrap text-lg text-black/50 hover:text-black sm:text-2xl md:text-4xl"
                     >
                       To-Do
                     </Breadcrumb.Link>
                   </Breadcrumb.Item>
                   <Breadcrumb.Separator />
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Page className="text-xl md:text-2xl font-bold">
+                  <Breadcrumb.Item className="min-w-0">
+                    <Breadcrumb.Page className="block truncate text-lg font-bold sm:text-xl md:text-3xl">
                       {quiz.title} Results
                     </Breadcrumb.Page>
                   </Breadcrumb.Item>
@@ -103,9 +103,7 @@ const StudentQuizResult = () => {
               </Breadcrumb>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b border-gray-300" />
-
-            <main className="flex flex-1 flex-col gap-6 py-3 max-w-4xl w-full mx-auto">
+            <div className="-mt-[1px] mx-auto flex w-full min-w-0 max-w-4xl flex-1 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:gap-6 sm:px-4 sm:py-4 md:px-6">
               {/* Header Actions */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -141,7 +139,7 @@ const StudentQuizResult = () => {
               </div>
 
               {/* Score Hero Card */}
-              <Card className="bg-[#F6E9B2] border-2 border-black p-8 flex flex-col items-center justify-center text-center shadow-md">
+              <Card className="bg-[#F6E9B2] p-8 flex flex-col items-center justify-center text-center">
                 <span className="text-sm font-bold uppercase tracking-wider text-black/70 mb-1">
                   {isPendingGrading ? "Quiz Submitted" : "Score Result"}
                 </span>
@@ -303,7 +301,7 @@ const StudentQuizResult = () => {
                   </div>
                 </div>
               )}
-            </main>
+            </div>
           </div>
         </div>
       </div>

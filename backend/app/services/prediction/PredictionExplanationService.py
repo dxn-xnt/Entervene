@@ -31,7 +31,7 @@ def _add_cause(
     causes: list[dict[str, Any]],
     code: str,
     label: str,
-    value: str,
+    value: str | None,
     severity: str,
     explanation: str,
 ) -> None:
@@ -64,8 +64,8 @@ def build_prediction_causes(
             causes,
             "INSUFFICIENT_DATA",
             "Insufficient data",
-            prediction.data_status or prediction.risk_level,
-            "HIGH",
+            None,
+            "ATTENTION",
             "More assessment or submission data is needed before making a confident risk decision.",
         )
 

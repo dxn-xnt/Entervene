@@ -1,0 +1,324 @@
+{
+  "fixture_version": "stage1-current-behavior-v1",
+  "captured_on": "2026-09-11",
+  "purpose": "Freeze observed pre-Phase-1 prediction behavior. These values are characterization expectations, including known defects; they are not corrected policy.",
+  "scoring_control": {
+    "model": "deterministic test double",
+    "predicted_period_grade_when_executed": 84.0,
+    "note": "The production input contract is still enforced. The constant output isolates evidence/readiness/risk differences from model artifact drift."
+  },
+  "defaults": {
+    "source_period": "Term 1",
+    "previous_period_grade": 82.0,
+    "current_period_grade": 82.0,
+    "class_id": 1,
+    "subject_id": 1
+  },
+  "cases": [
+    {
+      "id": "genuine_zero_of_n_completion",
+      "setup": {
+        "assessment_items": 10,
+        "assessment_scores": {"ABSENT": 10},
+        "classwork_assignments": 0,
+        "attendance_records": [],
+        "period_grade": {"final_period_grade": 82.0, "is_finalized": true}
+      },
+      "current": {
+        "completion": {"value": 0.0, "submitted": 0, "expected": 10},
+        "coverage": {"value": 0.0, "recorded": 0, "expected": 10},
+        "attendance": null,
+        "on_time_submission_rate": null,
+        "participation": 0.0,
+        "source_grade": {"value": 82.0, "selected_field": "final_period_grade"},
+        "readiness": "INSUFFICIENT",
+        "model": "SKIPPED",
+        "predicted_grade": null,
+        "risk": {"level": "INSUFFICIENT_DATA", "score": 0.0}
+      }
+    },
+    {
+      "id": "no_activities_or_other_evidence",
+      "setup": {
+        "assessment_items": 0,
+        "classwork_assignments": 0,
+        "attendance_records": [],
+        "period_grade": null,
+        "previous_period_grade": null
+      },
+      "current": {
+        "completion": {"value": 0.0, "submitted": 0, "expected": 0},
+        "coverage": {"value": 0.0, "recorded": 0, "expected": 0},
+        "attendance": null,
+        "on_time_submission_rate": null,
+        "participation": 0.0,
+        "source_grade": null,
+        "readiness": "INSUFFICIENT",
+        "model": "SKIPPED",
+        "predicted_grade": null,
+        "risk": {"level": "INSUFFICIENT_DATA", "score": 0.0},
+        "known_defect": "No expected activities is represented as numeric zero rather than unavailable."
+      }
+    },
+    {
+      "id": "completed_but_ungraded_classwork",
+      "setup": {
+        "assessment_items": 0,
+        "classwork_assignments": 1,
+        "submissions": [{"status": "submitted", "grade": null}],
+        "due_dates": [],
+        "period_grade": {"final_period_grade": 82.0, "is_finalized": true}
+      },
+      "current": {
+        "completion": {"value": 1.0, "submitted": 1, "expected": 1},
+        "coverage": {"value": 0.0, "recorded": 0, "expected": 1},
+        "attendance": null,
+        "on_time_submission_rate": null,
+        "participation": 100.0,
+        "component_percent": 0.0,
+        "source_grade": {"value": 82.0, "selected_field": "final_period_grade"},
+        "readiness": "INSUFFICIENT",
+        "model": "SKIPPED",
+        "predicted_grade": null,
+        "risk": {"level": "INSUFFICIENT_DATA", "score": 0.0},
+        "known_defect": "Ungraded possible points depress the component percentage to zero instead of leaving the grade observation unavailable."
+      }
+    },
+    {
+      "id": "multiple_submission_rows_for_one_assignment",
+      "setup": {
+        "assessment_items": 0,
+        "classwork_assignments": 1,
+        "submissions": [
+          {"status": "graded", "grade": 80.0, "submitted_before_due": true, "timestamp_order": 1},
+          {"status": "graded", "grade": 90.0, "submitted_before_due": true, "timestamp_order": 2}
+        ],
+        "period_grade": {"final_period_grade": 82.0, "is_finalized": true}
+      },
+      "current": {
+        "gradebook_selected_submission_grade": 90.0,
+        "completion": {"value": 1.0, "submitted": 2, "expected": 2},
+        "coverage": {"value": 1.0, "recorded": 2, "expected": 2},
+        "component_percent": 85.0,
+        "attendance": null,
+        "on_time_submission_rate": 1.0,
+        "participation": 100.0,
+        "source_grade": {"value": 82.0, "selected_field": "final_period_grade"},
+        "readiness": "STRONG",
+        "model": "EXECUTED",
+        "predicted_grade": 84.0,
+        "risk": {"level": "NEEDS_MONITORING", "score": 41.0},
+        "known_defect": "The prediction join counts both rows as two activities, while the gradebook selects one row."
+      }
+    },
+    {
+      "id": "legitimate_zero_final_grade",
+      "setup": {
+        "assessment_items": 10,
+        "assessment_scores": {"RECORDED": 10},
+        "period_grade": {
+          "final_period_grade": 0.0,
+          "transmuted_grade": 82.0,
+          "initial_grade": 70.0,
+          "is_finalized": true
+        },
+        "previous_period_grade": 82.0
+      },
+      "current": {
+        "completion": {"value": 1.0, "submitted": 10, "expected": 10},
+        "coverage": {"value": 1.0, "recorded": 10, "expected": 10},
+        "attendance": null,
+        "participation": 100.0,
+        "source_grade": {"value": 82.0, "selected_field": "transmuted_grade"},
+        "grade_trend": 0.0,
+        "cumulative_period_grade_average": 41.0,
+        "readiness": "STRONG",
+        "model": "EXECUTED",
+        "predicted_grade": 84.0,
+        "risk": {"level": "NEEDS_MONITORING", "score": 41.0},
+        "known_defect": "Boolean-or grade selection treats the legitimate final grade of zero as absent."
+      }
+    },
+    {
+      "id": "finalized_grade",
+      "setup": {
+        "assessment_items": 10,
+        "assessment_scores": {"RECORDED": 10},
+        "period_grade": {"final_period_grade": 83.0, "is_finalized": true},
+        "previous_period_grade": 83.0
+      },
+      "current": {
+        "completion": {"value": 1.0, "submitted": 10, "expected": 10},
+        "coverage": {"value": 1.0, "recorded": 10, "expected": 10},
+        "attendance": null,
+        "participation": 100.0,
+        "source_grade": {"value": 83.0, "selected_field": "final_period_grade", "provenance": "not exposed"},
+        "readiness": "STRONG",
+        "model": "EXECUTED",
+        "predicted_grade": 84.0,
+        "risk": {"level": "NEEDS_MONITORING", "score": 41.0}
+      }
+    },
+    {
+      "id": "provisional_grade_with_final_value",
+      "setup": {
+        "assessment_items": 10,
+        "assessment_scores": {"RECORDED": 10},
+        "period_grade": {"final_period_grade": 83.0, "is_finalized": false},
+        "previous_period_grade": 83.0
+      },
+      "current": {
+        "completion": {"value": 1.0, "submitted": 10, "expected": 10},
+        "coverage": {"value": 1.0, "recorded": 10, "expected": 10},
+        "attendance": null,
+        "participation": 100.0,
+        "source_grade": {"value": 83.0, "selected_field": "final_period_grade", "provenance": "not exposed"},
+        "readiness": "STRONG",
+        "model": "EXECUTED",
+        "predicted_grade": 84.0,
+        "risk": {"level": "NEEDS_MONITORING", "score": 41.0},
+        "known_defect": "The finalized flag does not affect prediction selection or cumulative history."
+      }
+    },
+    {
+      "id": "estimated_grade_without_period_grade",
+      "setup": {
+        "assessment_items": 3,
+        "assessment_scores": [
+          {"component": "WRITTEN_WORK", "percent": 80.0, "status": "RECORDED"},
+          {"component": "PERFORMANCE_TASK", "percent": 90.0, "status": "RECORDED"},
+          {"component": "QUARTERLY_ASSESSMENT", "percent": 85.0, "status": "RECORDED"}
+        ],
+        "period_grade": null,
+        "previous_period_grade": null
+      },
+      "current": {
+        "completion": {"value": 1.0, "submitted": 3, "expected": 3},
+        "coverage": {"value": 1.0, "recorded": 3, "expected": 3},
+        "attendance": null,
+        "participation": 100.0,
+        "source_grade": {"value": 85.0, "selected_field": "equal_component_average", "provenance": "warning only"},
+        "readiness": "STRONG",
+        "model": "ERROR_MISSING_REQUIRED_INPUT",
+        "missing_model_input": "cumulative_period_grade_avg",
+        "predicted_grade": null,
+        "risk": null,
+        "known_defect": "Readiness can approve evidence that cannot satisfy the registered model schema."
+      }
+    },
+    {
+      "id": "other_period_records",
+      "setup": {
+        "source_period_assessments": [{"status": "RECORDED", "percent": 80.0}],
+        "other_period_classwork": [{"status": "graded", "percent": 90.0, "due_date": null}],
+        "other_period_attendance": [{"status": "absent"}],
+        "period_grade": {"final_period_grade": 82.0, "is_finalized": true}
+      },
+      "current": {
+        "completion": {"value": 1.0, "submitted": 2, "expected": 2},
+        "coverage": {"value": 1.0, "recorded": 2, "expected": 2},
+        "attendance": 0.0,
+        "on_time_submission_rate": null,
+        "participation": 38.46,
+        "source_grade": {"value": 82.0, "selected_field": "final_period_grade"},
+        "readiness": "STRONG",
+        "model": "EXECUTED",
+        "predicted_grade": 84.0,
+        "risk": {"level": "HIGH_RISK", "score": 92.5},
+        "known_defect": "Classwork and attendance queries do not filter to the requested academic period."
+      }
+    },
+    {
+      "id": "future_or_unavailable_classwork",
+      "setup": {
+        "assessment_items": 1,
+        "assessment_scores": {"RECORDED": 1},
+        "classwork_assignments": 1,
+        "future_unavailable_assignment": {"is_published": true, "lock_date_after_capture": true, "due_after_capture": true},
+        "submissions": [],
+        "period_grade": {"final_period_grade": 82.0, "is_finalized": true}
+      },
+      "current": {
+        "completion": {"value": 0.5, "submitted": 1, "expected": 2},
+        "coverage": {"value": 0.5, "recorded": 1, "expected": 2},
+        "attendance": null,
+        "on_time_submission_rate": 1.0,
+        "participation": 79.17,
+        "source_grade": {"value": 82.0, "selected_field": "final_period_grade"},
+        "readiness": "MINIMUM",
+        "model": "EXECUTED",
+        "predicted_grade": 84.0,
+        "risk": {"level": "MODERATE_RISK", "score": 74.0},
+        "known_defect": "Availability/cutoff is ignored and an unsubmitted due-dated assignment is counted as on time."
+      }
+    },
+    {
+      "id": "mixed_attendance_statuses",
+      "setup": {
+        "assessment_items": 10,
+        "assessment_scores": {"RECORDED": 10},
+        "attendance_records": ["present", "excused", "late", "absent"],
+        "period_grade": {"final_period_grade": 82.0, "is_finalized": true}
+      },
+      "current": {
+        "completion": {"value": 1.0, "submitted": 10, "expected": 10},
+        "coverage": {"value": 1.0, "recorded": 10, "expected": 10},
+        "attendance": 57.5,
+        "attendance_formula": "(1.0 + 0.8 + 0.5 + 0.0) / 4 * 100",
+        "on_time_submission_rate": null,
+        "participation": 73.85,
+        "source_grade": {"value": 82.0, "selected_field": "final_period_grade"},
+        "readiness": "STRONG",
+        "model": "EXECUTED",
+        "predicted_grade": 84.0,
+        "risk": {"level": "MODERATE_RISK", "score": 67.5}
+      }
+    },
+    {
+      "id": "potential_assessment_classwork_overlap",
+      "setup": {
+        "assessment_items": [{"component": "WRITTEN_WORK", "percent": 80.0, "status": "RECORDED"}],
+        "classwork_assignments": [{"component": "WRITTEN_WORK", "percent": 90.0, "status": "graded"}],
+        "relationship": "same activity claimed by fixture but no database link exists",
+        "period_grade": {"final_period_grade": 82.0, "is_finalized": true}
+      },
+      "current": {
+        "completion": {"value": 1.0, "submitted": 2, "expected": 2},
+        "coverage": {"value": 1.0, "recorded": 2, "expected": 2},
+        "component_percent": 85.0,
+        "attendance": null,
+        "participation": 100.0,
+        "source_grade": {"value": 82.0, "selected_field": "final_period_grade"},
+        "readiness": "STRONG",
+        "model": "EXECUTED",
+        "predicted_grade": 84.0,
+        "risk": {"level": "NEEDS_MONITORING", "score": 41.0},
+        "authority_result": "UNRESOLVED",
+        "known_defect": "Current prediction arithmetic assumes the two records are independent without proof."
+      }
+    },
+    {
+      "id": "ambiguous_source_relationship_with_ungraded_classwork",
+      "setup": {
+        "assessment_items": [{"component": "WRITTEN_WORK", "percent": 80.0, "status": "RECORDED"}],
+        "classwork_assignments": [{"component": "WRITTEN_WORK", "status": "submitted", "grade": null}],
+        "relationship": "possibly the same activity; unverifiable",
+        "period_grade": {"final_period_grade": 82.0, "is_finalized": true}
+      },
+      "current": {
+        "completion": {"value": 1.0, "submitted": 2, "expected": 2},
+        "coverage": {"value": 0.5, "recorded": 1, "expected": 2},
+        "component_percent": 40.0,
+        "attendance": null,
+        "participation": 100.0,
+        "source_grade": {"value": 82.0, "selected_field": "final_period_grade"},
+        "readiness": "MINIMUM",
+        "model": "EXECUTED",
+        "predicted_grade": 84.0,
+        "risk": {"level": "NEEDS_MONITORING", "score": 41.0},
+        "authority_result": "UNRESOLVED",
+        "required_phase1_behavior": "Do not publish a combined completion, coverage, or component percentage; skip dependent scoring."
+      }
+    }
+  ]
+}

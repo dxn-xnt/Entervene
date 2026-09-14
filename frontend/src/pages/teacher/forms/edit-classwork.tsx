@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { FileText, Pencil, Plus, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
@@ -41,8 +42,14 @@ export default function EditClassworkModal({
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editMaterials, setEditMaterials] = useState<File[]>([]);
   const [removingAttachmentId, setRemovingAttachmentId] = useState<number | null>(null);
-  const [isUploadingEditMaterials, setIsUploadingEditMaterials] = useState(false);
   const [error, setError] = useState("");
+
+  const setFormError = (msg: string) => {
+    setError(msg);
+    if (msg) {
+      toast.error(msg);
+    }
+  };
 
   useEffect(() => {
     setCurrentClasswork(classwork);
@@ -59,7 +66,7 @@ export default function EditClassworkModal({
         !allowedClassworkMaterialExtensions.includes(fileExtension(file.name)),
     );
     if (invalid) {
-      setError(
+      setFormError(
         `${invalid.name} is not supported. Use PDF, DOCX, PPTX, JPG, or PNG.`,
       );
       return;
@@ -68,7 +75,7 @@ export default function EditClassworkModal({
       (file) => file.size > maxClassworkMaterialSize,
     );
     if (oversized) {
-      setError(`${oversized.name} is larger than the 4 MB limit.`);
+      setFormError(`${oversized.name} is larger than the 10 MB limit.`);
       return;
     }
     setError("");
@@ -89,45 +96,6 @@ export default function EditClassworkModal({
     setEditMaterials((current) =>
       current.filter((_, itemIndex) => itemIndex !== index),
     );
-  };
-
-  const uploadEditMaterials = async () => {
-    if (!currentClasswork || editMaterials.length === 0) return;
-
-    setIsUploadingEditMaterials(true);
-    setError("");
-    try {
-      const uploaded: ClassworkAttachment[] = [];
-      for (const material of editMaterials) {
-        const formData = new FormData();
-        formData.append("file", material);
-        const response = await apiFetch(
-          `/api/v1/classwork-assignments/classwork/${currentClasswork.classwork_id}/attachments`,
-          { method: "POST", body: formData },
-        );
-        if (!response.ok) {
-          const body = await response.json().catch(() => ({}));
-          throw new Error(body.detail || `Unable to upload ${material.name}.`);
-        }
-        uploaded.push((await response.json()) as ClassworkAttachment);
-      }
-
-      const updated = {
-        ...currentClasswork,
-        attachments: [...currentClasswork.attachments, ...uploaded],
-      };
-      setCurrentClasswork(updated);
-      setEditMaterials([]);
-      onSuccess(updated);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to upload classwork material.",
-      );
-    } finally {
-      setIsUploadingEditMaterials(false);
-    }
   };
 
   const removeSelectedAttachment = async (attachmentId: number) => {
@@ -154,7 +122,7 @@ export default function EditClassworkModal({
       setCurrentClasswork(updated);
       onSuccess(updated);
     } catch (err) {
-      setError(
+      setFormError(
         err instanceof Error
           ? err.message
           : "Unable to remove classwork material.",
@@ -173,14 +141,14 @@ export default function EditClassworkModal({
         ? Number(editDraft.total_points)
         : null;
     if (!editDraft.title.trim()) {
-      setError("Classwork title is required.");
+      setFormError("Classwork title is required.");
       return;
     }
     if (
       totalPoints !== null &&
       (!Number.isFinite(totalPoints) || totalPoints <= 0)
     ) {
-      setError("Total points must be greater than zero.");
+      setFormError("Total points must be greater than zero.");
       return;
     }
     const attempts = Number(editDraft.max_attempts);
@@ -188,7 +156,7 @@ export default function EditClassworkModal({
       isQuizType(editDraft.classwork_type) &&
       (!Number.isInteger(attempts) || attempts <= 0)
     ) {
-      setError("Allowed attempts must be a positive whole number.");
+      setFormError("Allowed attempts must be a positive whole number.");
       return;
     }
 
@@ -206,6 +174,7 @@ export default function EditClassworkModal({
             instructions: editDraft.instructions.trim() || null,
             classwork_type: editDraft.classwork_type,
             classwork_category: editDraft.classwork_category || null,
+            exam_subtype: editDraft.exam_subtype || null,
             total_points: totalPoints,
             is_published: editDraft.is_published,
             show_scores: editDraft.show_scores,
@@ -248,18 +217,61 @@ export default function EditClassworkModal({
             body.detail || "Unable to update assignment settings.",
           );
         }
-        const refreshed = await apiFetch(
-          `/api/v1/classwork-assignments/classwork/${currentClasswork.classwork_id}`,
-        );
-        if (refreshed.ok) {
-          updated = (await refreshed.json()) as TeacherClasswork;
+      }
+
+      // If there are pending materials to upload, upload them as part of the save action
+      if (editMaterials.length > 0) {
+        const uploadedAttachments: ClassworkAttachment[] = [];
+        for (let i = 0; i < editMaterials.length; i++) {
+          const material = editMaterials[i];
+          const formData = new FormData();
+          formData.append("file", material);
+          const uploadResponse = await apiFetch(
+            `/api/v1/classwork-assignments/classwork/${currentClasswork.classwork_id}/attachments`,
+            { method: "POST", body: formData },
+          );
+          if (!uploadResponse.ok) {
+            const body = await uploadResponse.json().catch(() => ({}));
+            const uploadErrMsg =
+              body.detail || `Unable to upload ${material.name}.`;
+
+            // Partial save update: attach successfully uploaded files so far
+            const partialAttachments = [
+              ...(updated.attachments ?? []),
+              ...uploadedAttachments,
+            ];
+            const partiallyUpdated = {
+              ...updated,
+              attachments: partialAttachments,
+            };
+            setCurrentClasswork(partiallyUpdated);
+            onSuccess(partiallyUpdated);
+
+            // Remove already-uploaded files from pending list so user only retries the failed ones
+            setEditMaterials((prev) => prev.slice(uploadedAttachments.length));
+            setFormError(
+              `Classwork details were saved, but failed to upload "${material.name}": ${uploadErrMsg}`,
+            );
+            return;
+          }
+          const uploadedAtt = (await uploadResponse.json()) as ClassworkAttachment;
+          uploadedAttachments.push(uploadedAtt);
         }
+        setEditMaterials([]);
+      }
+
+      const refreshed = await apiFetch(
+        `/api/v1/classwork-assignments/classwork/${currentClasswork.classwork_id}`,
+      );
+      if (refreshed.ok) {
+        updated = (await refreshed.json()) as TeacherClasswork;
       }
       setCurrentClasswork(updated);
       onSuccess(updated);
+      toast.success("Classwork updated successfully.");
       onClose();
     } catch (err) {
-      setError(
+      setFormError(
         err instanceof Error ? err.message : "Unable to update classwork.",
       );
     } finally {
@@ -279,7 +291,7 @@ export default function EditClassworkModal({
       {isOpen && (
         <Dialog.Content size="2xl" className="max-h-[90vh] flex flex-col bg-white border-2 border-black">
           <Dialog.Header position="fixed" asChild>
-            <div className="flex items-center justify-between w-full px-4 py-3 bg-primary text-black font-bold">
+            <div className="flex w-full items-center justify-between bg-primary font-bold text-black">
               <div className="flex items-center gap-2 text-lg">
                 <Pencil size={18} />
                 <span>Edit Classwork</span>
@@ -371,10 +383,37 @@ export default function EditClassworkModal({
                     <Select.Item value="NONE">None</Select.Item>
                     <Select.Item value="WRITTEN_WORK">Written Works</Select.Item>
                     <Select.Item value="PERFORMANCE_TASK">Performance Task</Select.Item>
-                    <Select.Item value="QUARTERLY_ASSESSMENT">Quarterly Assessment</Select.Item>
+                    <Select.Item value="QUARTERLY_ASSESSMENT">Exams</Select.Item>
                   </Select.Content>
                 </Select>
               </label>
+
+              {(editDraft.classwork_category === "QUARTERLY_ASSESSMENT" || editDraft.classwork_category === "EXAMS") && (
+                <label className="block text-xs font-bold">
+                  Exam Sub-type
+                  <Select
+                    value={editDraft.exam_subtype || "SUMMATIVE_1"}
+                    onValueChange={(v) =>
+                      setEditDraft((current) => ({
+                        ...current,
+                        exam_subtype: v,
+                      }))
+                    }
+                  >
+                    <Select.Trigger
+                      disabled={isSavingEdit}
+                      className="mt-1 w-full h-10 border-2 border-black bg-white text-sm shadow-none"
+                    >
+                      <Select.Value placeholder="Select Sub-type" />
+                    </Select.Trigger>
+                    <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                      <Select.Item value="SUMMATIVE_1">Summative 1 (30%)</Select.Item>
+                      <Select.Item value="SUMMATIVE_2">Summative 2 (30%)</Select.Item>
+                      <Select.Item value="TERM_EXAM">Term Exam (40%)</Select.Item>
+                    </Select.Content>
+                  </Select>
+                </label>
+              )}
               {!isReadingType(editDraft.classwork_type) && (
                 <label className="block text-xs font-bold">
                   Total points
@@ -571,7 +610,7 @@ export default function EditClassworkModal({
                       accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
                       className="hidden"
                       disabled={
-                        isUploadingEditMaterials ||
+                        isSavingEdit ||
                         removingAttachmentId !== null
                       }
                       onChange={(event) => {
@@ -606,7 +645,7 @@ export default function EditClassworkModal({
                         disabled={
                           removingAttachmentId ===
                             attachment.classwork_attachment_id ||
-                          isUploadingEditMaterials
+                          isSavingEdit
                         }
                         className="text-red-600 hover:bg-red-50 disabled:opacity-50"
                         aria-label={`Remove ${attachment.file_name}`}
@@ -624,7 +663,14 @@ export default function EditClassworkModal({
 
               {editMaterials.length > 0 && (
                 <div className="mt-3 space-y-2">
-                  <p className="text-xs font-bold">Pending uploads</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold">
+                      Files to attach ({editMaterials.length})
+                    </p>
+                    <span className="text-[11px] text-gray-500">
+                      Will be uploaded when you click Save Changes
+                    </span>
+                  </div>
                   {editMaterials.map((material, index) => (
                     <div
                       key={`${material.name}-${material.size}`}
@@ -642,25 +688,14 @@ export default function EditClassworkModal({
                         variant="ghost"
                         size="icon"
                         onClick={() => removeEditMaterial(index)}
-                        disabled={isUploadingEditMaterials}
+                        disabled={isSavingEdit}
                         className="text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        aria-label={`Remove ${material.name}`}
                       >
                         <Trash2 size={15} />
                       </Button>
                     </div>
                   ))}
-                  <Button
-                    type="button"
-                    variant="default"
-                    size="sm"
-                    onClick={uploadEditMaterials}
-                    disabled={isUploadingEditMaterials}
-                    className="border-black bg-[#7ABA78] font-bold disabled:opacity-50"
-                  >
-                    {isUploadingEditMaterials
-                      ? "Uploading..."
-                      : "Upload selected files"}
-                  </Button>
                 </div>
               )}
             </Card>
@@ -679,10 +714,14 @@ export default function EditClassworkModal({
               type="button"
               variant="default"
               onClick={saveClassworkEdit}
-              disabled={isSavingEdit}
+              disabled={isSavingEdit || removingAttachmentId !== null}
               className="border-black bg-[#7ABA78] hover:bg-[#7ABA78] font-bold"
             >
-              {isSavingEdit ? "Saving..." : "Save Changes"}
+              {isSavingEdit
+                ? editMaterials.length > 0
+                  ? "Uploading & Saving..."
+                  : "Saving..."
+                : "Save Changes"}
             </Button>
           </Dialog.Footer>
         </Dialog.Content>

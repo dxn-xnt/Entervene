@@ -434,3 +434,61 @@ def test_period_template_update_endpoint_cascades_to_unlocked_schedules(db):
     assert existing_load.start_time == "16:15"
     assert existing_load.end_time == "17:01"
 
+
+def test_period_template_update_endpoint_cascades_to_locked_and_published_schedules(db):
+    """
+    Asserts that PUT /period-templates automatically cascades time changes
+    from a period slot (e.g. 08:00-08:45 -> 08:01-08:46) to locked and published
+    subject loads, updating times in place while keeping status='published' and is_locked=True.
+    """
+    from app.schemas.SubjectLoad import PeriodTemplateSlotSchema
+    from app.api.v1.routes.SubjectLoads import update_period_templates
+
+    cls = Class(class_id=2, section_name="Galileo", academic_year_id=1, academic_level_id=9, period_template_group="JHS_45MIN")
+    sub = Subject(subject_id=2, subject_name="English 9", is_core=True)
+    db.add_all([cls, sub])
+    db.commit()
+
+    # Pre-existing published and locked load at Period 1 (08:00 - 08:45)
+    locked_load = SubjectLoad(
+        class_id=2,
+        subject_id=2,
+        academic_period_id=1,
+        start_time="08:00",
+        end_time="08:45",
+        days_of_week=["MON", "TUE", "WED", "THU", "FRI"],
+        status="published",
+        is_locked=True,
+    )
+    db.add(locked_load)
+    db.commit()
+
+    p1 = db.query(PeriodTemplateSlot).filter(
+        PeriodTemplateSlot.template_group == "JHS_45MIN",
+        PeriodTemplateSlot.slot_name == "Period 1",
+    ).first()
+
+    payload = [
+        PeriodTemplateSlotSchema(
+            slot_id=p1.slot_id,
+            template_group=p1.template_group,
+            slot_name=p1.slot_name,
+            slot_type=p1.slot_type,
+            start_time="08:01",
+            end_time="08:46",
+            is_locked_break=False,
+            display_order=p1.display_order,
+        )
+    ]
+
+    res = update_period_templates(payload=payload, current_user={"role": "admin"}, db=db)
+    assert res["message"] == "Period templates updated and cascaded to schedules successfully."
+
+    # Verify that the locked subject load in DB has been cascaded to 08:01 - 08:46
+    db.refresh(locked_load)
+    assert locked_load.start_time == "08:01"
+    assert locked_load.end_time == "08:46"
+    assert locked_load.status == "published"
+    assert locked_load.is_locked is True
+
+

@@ -10,14 +10,13 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 from app.core.FileUpload import delete_file, save_file
 from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAssignment import LessonAssignment
-from app.models.academic.LessonAttachment import LessonAttachment
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.models.submissions.StudentSubmission import StudentSubmission
-from app.schemas.Lesson import LessonAssignRequest, LessonAttachmentResponse, LessonCreate, LessonResponse, LessonUpdate
+from app.schemas.Lesson import LessonAssignRequest, LessonCreate, LessonResponse, LessonUpdate
 from app.services.lesson.LessonFileService import files_from_form, resolve_lesson_file_path
-from app.services.lesson.LessonResponseService import build_lesson_attachment_response, build_lesson_response
+from app.services.lesson.LessonResponseService import build_lesson_response
 from app.services.lesson.LessonShared import (
     authorize_lesson_access,
     ensure_student_enrolled,
@@ -266,55 +265,6 @@ def assign_lesson_to_classes(
     return {"message": f"Lesson assigned to {len(created)} class(es)", "class_ids": created}
 
 
-async def add_lesson_attachment(
-    lesson_id: int,
-    request: Request,
-    file: Optional[UploadFile],
-    staff_id: str,
-    db: Session,
-    save_file_func=save_file,
-    delete_file_func=delete_file,
-) -> LessonAttachmentResponse:
-    get_owned_lesson(db, staff_id, lesson_id)
-    upload: UploadFile | StarletteUploadFile | None = file
-    if upload is None:
-        candidates = await files_from_form(request, {"file", "files", "attachment", "attachments"})
-        upload = candidates[0] if candidates else None
-    if upload is None:
-        raise HTTPException(status_code=400, detail="Attach a file using the 'file' form field.")
-
-    file_info = await save_file_func(upload, "lessons")
-    try:
-        attachment = LessonAttachment(lesson_id=lesson_id, **file_info)
-        db.add(attachment)
-        db.commit()
-        db.refresh(attachment)
-    except Exception:
-        db.rollback()
-        delete_file_func(file_info["file_path"])
-        raise
-    return build_lesson_attachment_response(attachment)
-
-
-def remove_lesson_attachment(
-    lesson_id: int,
-    attachment_id: int,
-    staff_id: str,
-    db: Session,
-    delete_file_func=delete_file,
-) -> dict:
-    get_owned_lesson(db, staff_id, lesson_id)
-    attachment = db.query(LessonAttachment).filter(
-        LessonAttachment.lesson_attachment_id == attachment_id,
-        LessonAttachment.lesson_id == lesson_id,
-    ).first()
-    if not attachment:
-        raise HTTPException(status_code=404, detail="Attachment not found")
-    delete_file_func(attachment.file_path)
-    db.delete(attachment)
-    db.commit()
-    return {"message": "Attachment deleted"}
-
 
 def lesson_classwork_assignments(lesson_id: int, class_id: int, student, db: Session) -> list[dict]:
     ensure_student_enrolled(db, student.student_id, class_id)
@@ -351,32 +301,6 @@ def lesson_classwork_assignments(lesson_id: int, class_id: int, student, db: Ses
         })
     return results
 
-
-def download_lesson_file(
-    lesson_id: int,
-    attachment_id: int,
-    current_user: dict,
-    db: Session,
-) -> FileResponse:
-    attachment = db.query(LessonAttachment).filter(
-        LessonAttachment.lesson_attachment_id == attachment_id,
-        LessonAttachment.lesson_id == lesson_id,
-    ).first()
-    if not attachment:
-        raise HTTPException(status_code=404, detail="Attachment not found")
-    lesson = db.query(Lesson).filter(Lesson.lesson_id == lesson_id).first()
-    if not lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found")
-    authorize_lesson_access(db, lesson, current_user)
-
-    file_path = resolve_lesson_file_path(attachment.file_path)
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found on server")
-    return FileResponse(
-        path=str(file_path),
-        filename=attachment.file_name,
-        media_type=attachment.file_type or "application/octet-stream",
-    )
 
 
 def unarchive_lesson_record(lesson_id: int, staff_id: str, db: Session) -> dict:

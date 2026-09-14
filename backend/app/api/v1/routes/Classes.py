@@ -12,12 +12,15 @@ from app.schemas.Class import (
     ClassFormOptionsResponse,
     ClassStudentListResponse,
     TeacherAdvisoryClassDetailResponse,
+    TeacherAdvisoryClassGradesResponse,
     TeacherAdvisoryClassListItem,
     ClassTransferOptionsResponse,
     ClassUpdateRequest,
     UpdateClassStudentListRequest,
     UnassignedStudentsResponse,
     ValidateClassImportResponse,
+    DistributeStudentsRequest,
+    DistributeStudentsResponse,
 )
 from app.services.classes.ClassService import archive_class_record, batch_create_classes, update_class_record
 from app.services.classes.ClassImportService import validate_class_import_file
@@ -27,11 +30,13 @@ from app.services.classes.ClassQueryService import (
     get_class_students_data,
     get_class_transfer_options_data,
     get_teacher_advisory_class_detail_data,
+    get_teacher_advisory_class_grades_data,
     list_teacher_advisory_classes_data,
     get_unassigned_students_data,
     list_classes_data,
 )
 from app.services.classes.ClassStudentService import update_class_student_assignments
+from app.services.classes.StudentDistributionService import distribute_students_balanced
 
 # CLASS MANAGEMENT FLOW
 # 1. The admin frontend sends a request to one of the endpoints in this file.
@@ -90,6 +95,23 @@ async def validate_class_import(
     )
 
 
+@router.post("/distribute-students", response_model=DistributeStudentsResponse)
+def distribute_students(
+    payload: DistributeStudentsRequest,
+    current_user: dict = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    assignments = distribute_students_balanced(
+        db=db,
+        academic_level_id=payload.academic_level_id,
+        section_ids=[sec.local_id for sec in payload.sections],
+        unassigned_student_ids=payload.unassigned_student_ids,
+        current_assignments=payload.assignments_by_section,
+        mode=payload.mode,
+    )
+    return DistributeStudentsResponse(assignments_by_section=assignments)
+
+
 # These students can be selected during class creation because they do not yet
 # have a class assignment in the active academic year.
 @router.get("/unassigned-students", response_model=UnassignedStudentsResponse)
@@ -121,7 +143,36 @@ def get_class_students(
             raise HTTPException(status_code=403, detail="Staff profile not found")
 
         is_adviser = db.query(Class).filter(Class.class_id == class_id, Class.adviser_staff_id == staff.staff_id).first()
-        is_subject_teacher = db.query(SubjectLoad).filter(SubjectLoad.class_id == class_id, SubjectLoad.staff_id == staff.staff_id).first()
+        is_subject_teacher = (
+            db.query(SubjectLoad)
+            .filter(
+                SubjectLoad.class_id == class_id,
+                SubjectLoad.staff_id == staff.staff_id,
+                SubjectLoad.is_active_version.is_(True),
+                SubjectLoad.status.in_(["active", "published"]),
+            )
+            .first()
+        )
+        if not is_subject_teacher:
+            from app.models.academic.TeacherSubstitution import TeacherSubstitution
+            from app.services.academic.SubstitutionService import SubstitutionService
+            from sqlalchemy import or_
+            today_date = SubstitutionService.get_academic_date()
+            is_sub = (
+                db.query(TeacherSubstitution)
+                .join(SubjectLoad, SubjectLoad.subject_load_id == TeacherSubstitution.subject_load_id)
+                .filter(
+                    SubjectLoad.class_id == class_id,
+                    SubjectLoad.is_active_version.is_(True),
+                    SubjectLoad.status.in_(["active", "published"]),
+                    TeacherSubstitution.substitute_staff_id == staff.staff_id,
+                    TeacherSubstitution.status == "active",
+                    or_(TeacherSubstitution.end_date.is_(None), TeacherSubstitution.end_date >= today_date),
+                )
+                .first()
+            )
+            if is_sub:
+                is_subject_teacher = True
 
         if not is_adviser and not is_subject_teacher:
             raise HTTPException(status_code=403, detail="You are not assigned to this class")
@@ -145,6 +196,21 @@ def get_teacher_advisory_class_detail(
     db: Session = Depends(get_db),
 ):
     return get_teacher_advisory_class_detail_data(db=db, class_id=class_id, staff_id=staff_id)
+
+
+@router.get("/teacher/advisory/{class_id}/grades", response_model=TeacherAdvisoryClassGradesResponse)
+def get_teacher_advisory_class_grades(
+    class_id: int,
+    academic_period_id: int | None = None,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return get_teacher_advisory_class_grades_data(
+        db=db,
+        class_id=class_id,
+        staff_id=staff_id,
+        academic_period_id=academic_period_id,
+    )
 
 
 @router.get("/{class_id}/transfer-options", response_model=ClassTransferOptionsResponse)

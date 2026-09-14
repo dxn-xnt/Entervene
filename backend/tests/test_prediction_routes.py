@@ -87,6 +87,13 @@ def prediction_api_context():
     level = AcademicLevel(level_name="Grade 8", grade_level=8)
     db.add_all([year, level])
     db.flush()
+    staff_account = UserAccount(user_id=uuid.uuid4(), email="route-teacher@example.test")
+    staff = AcademicStaff(
+        staff_id="T-ROUTE",
+        first_name="Route",
+        last_name="Teacher",
+        user_id=staff_account.user_id,
+    )
     student = Student(
         student_id=uuid.uuid4(),
         student_lrn="100000000001",
@@ -144,8 +151,20 @@ def prediction_api_context():
         algorithm="RandomForestRegressor",
         artifact_path="data/models/model.joblib",
         is_active=True,
+        feature_schema_json={
+            "feature_columns": [
+                "grade_level", "source_period_grade", "assessment_completion_rate",
+                "cumulative_period_grade_avg",
+            ],
+            "target_column": "target_next_period_grade",
+            "excluded_columns": [],
+            "column_mappings": {},
+            "required_runtime_columns": [],
+        },
     )
     db.add_all([
+        staff_account,
+        staff,
         student,
         other_student,
         source_period,
@@ -168,6 +187,7 @@ def prediction_api_context():
             "db": db,
             "identity": identity,
             "student": student,
+            "staff": staff,
             "other_student": other_student,
             "class": class_,
             "subject": subject,
@@ -306,9 +326,34 @@ def add_assessment(context, component, item_number, raw_score=None, max_score=10
 
 def seed_ready_record_features(context):
     add_period_grade(context, grade=86)
-    add_assessment(context, "WRITTEN_WORK", 1, raw_score=84)
-    add_assessment(context, "PERFORMANCE_TASK", 1, raw_score=88)
-    add_assessment(context, "QUARTERLY_ASSESSMENT", 1, raw_score=82)
+    classwork = Classwork(
+        title="Scoped route evidence",
+        classwork_type="QUIZ",
+        classwork_category="WRITTEN_WORK",
+        total_points=100,
+        is_published=True,
+        is_graded=True,
+        subject_id=context["subject"].subject_id,
+        created_by_staff_id=context["staff"].staff_id,
+    )
+    context["db"].add(classwork)
+    context["db"].flush()
+    assignment = ClassworkAssignment(
+        classwork_id=classwork.classwork_id,
+        class_id=context["class"].class_id,
+        academic_period_id=context["source_period"].academic_period_id,
+        assigned_by_staff_id=context["staff"].staff_id,
+        is_published=True,
+    )
+    context["db"].add(assignment)
+    context["db"].flush()
+    context["db"].add(StudentSubmission(
+        student_id=context["student"].student_id,
+        classwork_assignment_id=assignment.classwork_assignment_id,
+        status="graded",
+        grade=84,
+    ))
+    context["db"].commit()
 
 
 def test_preview_endpoint_calls_scoring_and_returns_risk_fields(prediction_api_context, monkeypatch):
@@ -660,9 +705,9 @@ def test_build_features_endpoint_returns_computed_features_and_evidence(predicti
     assert body["ready"] is True
     assert body["features"]["source_period_grade"] == 86.0
     assert body["features"]["written_work_percent"] == 84.0
-    assert body["features"]["performance_task_percent"] == 88.0
-    assert body["features"]["quarterly_assessment_percent"] == 82.0
-    assert body["evidence_summary"]["expected_assessment_count"] == 3
+    assert body["features"]["performance_task_percent"] is None
+    assert body["features"]["quarterly_assessment_percent"] is None
+    assert body["evidence_summary"]["expected_assessment_count"] == 0
 
 
 def test_from_records_preview_returns_insufficient_without_calling_model(prediction_api_context, monkeypatch):

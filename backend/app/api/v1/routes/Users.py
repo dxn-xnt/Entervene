@@ -1,18 +1,19 @@
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Response, UploadFile
 from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401
 from app.api.v1.routes.Auth import get_current_user
 from app.db.Session import get_db
 from app.schemas.User import AcceptInvitationRequest, AcceptInvitationResponse, InviteSingleUserRequest, UpdateUserRequest
-from app.services.MailService import send_invitation_email
+from app.services.MailService import send_batch_invitations, send_invitation_email
 from app.services.users.UserAccountService import archive_user as archive_user_account
 from app.services.users.UserAccountService import update_user as update_user_account
 from app.services.users.UserImportService import import_users_file
 from app.services.users.UserInvitationService import accept_invitation as accept_user_invitation
 from app.services.users.UserInvitationService import invite_single_user as invite_user
+from app.services.users.UserInvitationService import resend_user_invitation
 from app.services.users.UserQueryService import ClientRole
 from app.services.users.UserQueryService import display_name as _display_name
 from app.services.users.UserQueryService import get_user_analytics as query_user_analytics
@@ -94,15 +95,22 @@ def get_user_analytics(
 
 
 # Single invite flow: validate details -> create pending account and profile ->
-# commit records -> send the invitation email.
+# commit records -> send the invitation email in background.
 @router.post("/users/invite")
 def invite_single_user(
     payload: InviteSingleUserRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _require_admin(current_user)
-    return invite_user(db, payload, send_invitation_email)
+    return invite_user(
+        db,
+        payload,
+        invitation_sender=send_invitation_email,
+        batch_invitation_sender=send_batch_invitations,
+        background_tasks=background_tasks,
+    )
 
 
 # Bulk invite flow follows the same account lifecycle as a single invite, but
@@ -111,13 +119,38 @@ def invite_single_user(
 @router.post("/admin/users/upload-csv")
 @router.post("/users/upload-csv")
 async def upload_csv(
+    background_tasks: BackgroundTasks,
     role: str = Query(..., description="Teacher or Student"),
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _require_admin(current_user)
-    return await import_users_file(db=db, file=file, role=role, invitation_sender=send_invitation_email)
+    return await import_users_file(
+        db=db,
+        file=file,
+        role=role,
+        invitation_sender=send_invitation_email,
+        batch_invitation_sender=send_batch_invitations,
+        background_tasks=background_tasks,
+    )
+
+
+@router.post("/users/{user_id}/resend-invitation")
+def resend_invitation(
+    user_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_admin(current_user)
+    return resend_user_invitation(
+        db,
+        user_id,
+        invitation_sender=send_invitation_email,
+        batch_invitation_sender=send_batch_invitations,
+        background_tasks=background_tasks,
+    )
 
 
 # Invitation acceptance is intentionally public; possession of the one-time

@@ -23,7 +23,7 @@ const BreadcrumbList = React.forwardRef<
   <ol
     ref={ref}
     className={cn(
-      "flex flex-wrap items-center gap-1.5 sm:gap-2.5 text-muted-foreground",
+      "flex min-w-0 flex-nowrap items-center gap-1.5 text-base font-semibold text-muted-foreground sm:gap-2 sm:text-lg md:text-xl [&_a]:!text-base [&_a]:!font-semibold sm:[&_a]:!text-lg md:[&_a]:!text-4xl [&_[aria-current=page]]:!text-base [&_[aria-current=page]]:!font-bold sm:[&_[aria-current=page]]:!text-lg md:[&_[aria-current=page]]:!text-xl",
       className
     )}
     {...props}
@@ -48,7 +48,7 @@ const BreadcrumbLink = React.forwardRef<
     <Comp
       ref={ref}
       className={cn(
-        "text-4xl font-bold tracking-tight transition-colors hover:text-foreground rounded-sm",
+        "min-w-0 rounded-sm text-base font-semibold tracking-tight text-muted-foreground transition-colors hover:text-foreground sm:text-lg md:text-4xl md:font-bold",
         className
       )}
       {...props}
@@ -64,7 +64,7 @@ const BreadcrumbPage = React.forwardRef<
   <span
     ref={ref}
     aria-current="page"
-    className={cn("text-xl text-foreground font-semibold cursor-pointer", className)}
+    className={cn("min-w-0 text-base font-bold text-foreground sm:text-lg md:text-xl", className)}
     {...props}
   />
 ))

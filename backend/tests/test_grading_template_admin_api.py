@@ -88,7 +88,7 @@ def template_payload(level: AcademicLevel | None = None, subject: Subject | None
         "components": [
             {"component_name": "Written Works", "weight": 25, "display_order": 1},
             {"component_name": "Performance Tasks", "weight": 50, "display_order": 2},
-            {"component_name": "Quarterly/Term Assessment", "weight": 25, "display_order": 3},
+            {"component_name": "Exams", "weight": 25, "display_order": 3},
         ],
     }
     payload.update(overrides)
@@ -105,7 +105,7 @@ def create_template(db, level: AcademicLevel, name: str = "Default SHS Grading")
     template.components = [
         GradingTemplateComponent(component_name="Written Works", weight=25, display_order=1),
         GradingTemplateComponent(component_name="Performance Tasks", weight=50, display_order=2),
-        GradingTemplateComponent(component_name="Quarterly/Term Assessment", weight=25, display_order=3),
+        GradingTemplateComponent(component_name="Exams", weight=25, display_order=3),
     ]
     db.add(template)
     db.flush()
@@ -145,7 +145,7 @@ def test_create_template_with_components(client, db):
     assert [component["component_name"] for component in body["components"]] == [
         "Written Works",
         "Performance Tasks",
-        "Quarterly/Term Assessment",
+        "Exams",
     ]
     assert db.query(GradingTemplate).count() == 1
     assert db.query(GradingTemplateComponent).count() == 3
@@ -159,7 +159,7 @@ def test_reject_weights_not_totaling_100(client, db):
         components=[
             {"component_name": "Written Works", "weight": 30, "display_order": 1},
             {"component_name": "Performance Tasks", "weight": 50, "display_order": 2},
-            {"component_name": "Quarterly/Term Assessment", "weight": 25, "display_order": 3},
+            {"component_name": "Exams", "weight": 25, "display_order": 3},
         ],
     )
 
@@ -177,7 +177,7 @@ def test_reject_duplicate_component_names(client, db):
         components=[
             {"component_name": "Written Works", "weight": 25, "display_order": 1},
             {"component_name": "written works", "weight": 50, "display_order": 2},
-            {"component_name": "Quarterly/Term Assessment", "weight": 25, "display_order": 3},
+            {"component_name": "Exams", "weight": 25, "display_order": 3},
         ],
     )
 

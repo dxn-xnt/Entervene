@@ -6,9 +6,6 @@ import { Button } from "@/components/retroui/Button";
 import { Text } from "@/components/retroui/Text";
 import {
   ArrowUpRight,
-  Search,
-  X,
-  CheckCircle2,
   FileText,
   Calendar,
   Check,
@@ -21,12 +18,7 @@ import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
 import {
   apiFetch,
-  getMyClass,
-  getMyClassmates,
   getStudentTodos,
-  type StudentClassmateItem,
-  type StudentClassmatesResponse,
-  type StudentMyClassSummary,
   type TodoItem,
 } from "@/lib/api";
 import { Badge } from "@/components/retroui/Badge";
@@ -44,13 +36,6 @@ const StoryBoard = () => {
   const navigate = useNavigate();
   const [subjects, setSubjects] = useState<EnrolledSubject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [myClass, setMyClass] = useState<StudentMyClassSummary | null>(null);
-  const [isClassmatesOpen, setIsClassmatesOpen] = useState(false);
-  const [classmates, setClassmates] =
-    useState<StudentClassmatesResponse | null>(null);
-  const [isClassmatesLoading, setIsClassmatesLoading] = useState(false);
-  const [classmatesError, setClassmatesError] = useState("");
-  const [classmatesSearch, setClassmatesSearch] = useState("");
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [isTodosLoading, setIsTodosLoading] = useState(true);
 
@@ -60,10 +45,6 @@ const StoryBoard = () => {
       .then((data) => setSubjects(data))
       .catch(() => { })
       .finally(() => setIsLoading(false));
-
-    getMyClass()
-      .then((data) => setMyClass(data))
-      .catch(() => { });
 
     getStudentTodos()
       .then((data) => {
@@ -88,7 +69,9 @@ const StoryBoard = () => {
           );
           if (match) targetClassId = match.class_id;
         }
-      } catch { }
+      } catch (error) {
+        console.error("Unable to resolve the class for this to-do item:", error);
+      }
     }
 
     if (targetClassId && item.subject_id) {
@@ -108,67 +91,44 @@ const StoryBoard = () => {
     );
   };
 
-  const openClassmates = () => {
-    setIsClassmatesOpen(true);
-    if (classmates || isClassmatesLoading) return;
-    setIsClassmatesLoading(true);
-    setClassmatesError("");
-    getMyClassmates()
-      .then((data) => setClassmates(data))
-      .catch((error) =>
-        setClassmatesError(
-          error instanceof Error ? error.message : "Unable to load classmates.",
-        ),
-      )
-      .finally(() => setIsClassmatesLoading(false));
-  };
-
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="whitespace-nowrap text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                   Study Board
                 </h1>
               </div>
-              <div className="flex items-center gap-2">
-                {myClass && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="md"
-                    onClick={openClassmates}
-                    className="whitespace-nowrap"
-                  >
-                    Classmates ({myClass.classmate_count})
-                  </Button>
-                )}
+              <div className="flex shrink-0 items-center gap-2">
                 <Button
                   type="button"
-                  size="md"
+                  size="sm"
                   onClick={() => navigate(routes.student.profile)}
-                  className="gap-2 whitespace-nowrap"
+                  className="gap-1.5 whitespace-nowrap px-2 sm:px-3"
+                  aria-label="View my schedule"
                 >
                   <Calendar className="size-4" />
-                  View My Schedule
+                  <span className="sm:hidden">Schedule</span>
+                  <span className="hidden sm:inline">View My Schedule</span>
                 </Button>
               </div>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
-
-            <div className="flex flex-1 flex-col gap-3">
+            <div className="-mt-[1px] flex flex-1 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex flex-col lg:flex-row lg:items-start gap-4 flex-1">
                 {/* Left side: Subject cards */}
-                <div className="grid grid-cols-2 gap-4 flex-1 content-start">
+                <div className="grid min-w-0 flex-1 grid-cols-1 content-start gap-3 sm:grid-cols-2 sm:gap-4">
                   {isLoading ? (
-                    <LoadingPanel label="Loading subjects..." className="col-span-2" />
+                    <LoadingPanel label="Loading subjects..." className="sm:col-span-2" />
                   ) : subjects.length === 0 ? (
-                    <EmptyStateCard title="No enrolled subjects found." className="col-span-2" />
+                    <EmptyStateCard
+                      title="No enrolled subjects found."
+                      className="px-4 py-10 sm:col-span-2 sm:px-6 sm:py-12"
+                    />
                   ) : (
                     subjects.map((subject) => (
                       <SubjectCard
@@ -188,8 +148,8 @@ const StoryBoard = () => {
                 </div>
 
                 {/* Right side: Top Card + To do Card */}
-                <div className="flex flex-col gap-4 w-full lg:w-[30%] shrink-0">
-                  <Card className="block w-full">
+                <div className="flex w-full min-w-0 shrink-0 flex-col gap-4 lg:w-[30%]">
+                  <Card className="block w-full border-black bg-white shadow-md hover:shadow-none">
                     <Card.Content className="">
                       <div className="flex flex-col gap-1">
                         <div className="flex flex-row gap-2 items-center">
@@ -203,31 +163,31 @@ const StoryBoard = () => {
                           1-day streak — keep going, build the habit!
                         </Text>
                       </div>
-                      <div className="flex flex-row mt-2 items-center w-full ">
-                        <div className="flex flex-row gap-2 justify-between w-full">
+                      <div className="mt-2 w-full">
+                        <div className="grid w-full grid-cols-7 gap-1.5 sm:gap-2">
                           <Badge
                             size="md"
                             variant="secondary"
-                            className="items-center justify-center"
+                            className="flex min-w-0 items-center justify-center px-1 sm:px-2.5"
                           >
                             <Check size={17} className="mt-0.5" />
                           </Badge>
-                          <Badge size="md" variant="default">
+                          <Badge size="md" variant="default" className="min-w-0 px-1 text-center sm:px-2.5">
                             Tu
                           </Badge>
-                          <Badge size="md" variant="default">
+                          <Badge size="md" variant="default" className="min-w-0 px-1 text-center sm:px-2.5">
                             We
                           </Badge>
-                          <Badge size="md" variant="secondary">
+                          <Badge size="md" variant="secondary" className="min-w-0 px-1 text-center sm:px-2.5">
                             Th
                           </Badge>
-                          <Badge size="md" variant="outline">
+                          <Badge size="md" variant="outline" className="min-w-0 px-1 text-center sm:px-2.5">
                             Fr
                           </Badge>
-                          <Badge size="md" variant="outline">
+                          <Badge size="md" variant="outline" className="min-w-0 px-1 text-center sm:px-2.5">
                             Sa
                           </Badge>
-                          <Badge size="md" variant="outline">
+                          <Badge size="md" variant="outline" className="min-w-0 px-1 text-center sm:px-2.5">
                             Su
                           </Badge>
                         </div>
@@ -235,41 +195,48 @@ const StoryBoard = () => {
                     </Card.Content>
                   </Card>
 
-                  <Card className="block w-full">
+                  <Card className="block w-full border-black bg-white shadow-md hover:shadow-none">
                     <Card.Content>
                       <div className="flex items-center justify-between mb-4">
                         <Card.Title className="mb-0 text-2xl md:text-3xl">
                           To do
                         </Card.Title>
 
-                        <button
+                        <Button
                           type="button"
+                          variant="outline"
+                          size="icon"
                           onClick={() => navigate(routes.student.todo)}
-                          className="rounded-full border-2 border-black cursor-pointer p-1 transition-all hover:shadow-none"
+                          className="rounded-none border-black bg-white"
+                          aria-label="View all to-do items"
                         >
                           <ArrowUpRight size={18} />
-                        </button>
+                        </Button>
                       </div>
 
                       {isTodosLoading ? (
                         <LoadingPanel label="Loading to-do items..." />
                       ) : todos.length === 0 ? (
-                        <div className="flex flex-col items-center gap-2 px-6 py-12 text-center text-gray-500">
-                          <CheckCircle2 size={24} className="text-green-500" />
-                          <p className="text-base font-bold">
-                            All caught up!
-                          </p>
-                          <p className="text-sm font-normal text-gray-500">
-                            No pending tasks
-                          </p>
-                        </div>
+                        <EmptyStateCard
+                          title="All caught up!"
+                          description="No pending tasks"
+                          className="border-none bg-white shadow-none hover:shadow-none"
+                        />
                       ) : (
                         <div className="flex flex-col gap-2.5">
                           {todos.map((item) => (
-                            <div
+                            <Card
                               key={item.assignment_id}
                               onClick={() => openTodo(item)}
-                              className="flex items-center gap-3 border-2 border-black bg-white p-3 rounded shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] cursor-pointer hover:bg-yellow-50 transition-colors"
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  openTodo(item);
+                                }
+                              }}
+                              role="button"
+                              tabIndex={0}
+                              className="flex w-full cursor-pointer items-center gap-3 border-black bg-white p-3 shadow-md hover:shadow-none"
                             >
                               <FileText
                                 size={20}
@@ -284,11 +251,15 @@ const StoryBoard = () => {
                                 </p>
                               </div>
                               {item.status === "pastdue" && (
-                                <span className="shrink-0 text-[10px] uppercase font-bold text-red-700 bg-red-100 border border-red-400 px-1.5 py-0.5 rounded">
+                                <Badge
+                                  variant="secondary"
+                                  size="sm"
+                                  className="shrink-0 rounded-none border border-red-400 bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700"
+                                >
                                   Past Due
-                                </span>
+                                </Badge>
                               )}
-                            </div>
+                            </Card>
                           ))}
                         </div>
                       )}
@@ -300,142 +271,8 @@ const StoryBoard = () => {
           </div>
         </div>
       </div>
-      {isClassmatesOpen && (
-        <ClassmatesModal
-          classmates={classmates?.classmates ?? []}
-          isLoading={isClassmatesLoading}
-          error={classmatesError}
-          search={classmatesSearch}
-          sectionName={
-            classmates?.section_name ?? myClass?.section_name ?? "Classmates"
-          }
-          onSearchChange={setClassmatesSearch}
-          onClose={() => setIsClassmatesOpen(false)}
-        />
-      )}
     </AppLayout>
   );
 };
 
 export default StoryBoard;
-
-function ClassmatesModal({
-  classmates,
-  isLoading,
-  error,
-  search,
-  sectionName,
-  onSearchChange,
-  onClose,
-}: {
-  classmates: StudentClassmateItem[];
-  isLoading: boolean;
-  error: string;
-  search: string;
-  sectionName: string;
-  onSearchChange: (value: string) => void;
-  onClose: () => void;
-}) {
-  const query = search.trim().toLocaleLowerCase();
-  const filtered = classmates
-    .filter(
-      (student) =>
-        !query || student.full_name.toLocaleLowerCase().includes(query),
-    )
-    .sort((a, b) => a.full_name.localeCompare(b.full_name));
-  const groups = groupClassmates(filtered);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
-      <section className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border-2 border-black bg-[#fffdf5] shadow-[5px_5px_0px_0px_rgba(0,0,0,1)]">
-        <header className="flex items-center justify-between border-b-2 border-black bg-[#f7e9aa] px-5 py-4">
-          <div>
-            <h2 className="text-xl font-semibold">{sectionName} Classmates</h2>
-            <p className="text-sm text-black/70">Read-only class roster</p>
-          </div>
-          <button
-            type="button"
-            aria-label="Close classmates"
-            onClick={onClose}
-            className="grid size-9 place-items-center rounded-full border border-black bg-white"
-          >
-            <X size={18} />
-          </button>
-        </header>
-
-        <div className="border-b border-black p-4">
-          <label className="flex h-10 items-center gap-2 border border-black bg-white px-3">
-            <Search size={16} />
-            <input
-              value={search}
-              onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Search classmates..."
-              className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none"
-            />
-          </label>
-        </div>
-
-        <div className="min-h-0 overflow-y-auto p-4">
-          {isLoading ? (
-            <LoadingPanel label="Loading classmates..." />
-          ) : error ? (
-            <p className="py-10 text-center text-sm text-red-600">{error}</p>
-          ) : filtered.length === 0 ? (
-            <EmptyStateCard title="No classmates found." />
-          ) : (
-            <div className="grid gap-3">
-              {groups.map(([label, students]) => (
-                <section
-                  key={label}
-                  className="overflow-hidden rounded-lg border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
-                >
-                  <div className="flex items-center justify-between bg-[#f7e9aa] px-4 py-2 text-sm font-semibold uppercase">
-                    <span>{label}</span>
-                    <span className="rounded-full border border-black bg-white px-2 py-0.5 text-xs normal-case">
-                      {students.length}
-                    </span>
-                  </div>
-                  {students.map((student) => (
-                    <div
-                      key={student.student_id}
-                      className="flex min-h-12 items-center gap-3 border-t border-black/15 px-4 py-2"
-                    >
-                      <div className="grid size-8 shrink-0 place-items-center rounded-full border border-[#c97900] bg-[#ffd27a] text-sm font-semibold">
-                        {(student.avatar_initial || student.full_name || "?")
-                          .charAt(0)
-                          .toUpperCase()}
-                      </div>
-                      <p className="min-w-0 truncate text-sm font-semibold">
-                        {student.full_name}
-                      </p>
-                    </div>
-                  ))}
-                </section>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function groupClassmates(
-  students: StudentClassmateItem[],
-): Array<[string, StudentClassmateItem[]]> {
-  const groups: Array<[string, StudentClassmateItem[]]> = [
-    ["Male", []],
-    ["Female", []],
-    ["Other/Unspecified", []],
-  ];
-
-  students.forEach((student) => {
-    const gender = (student.gender || "").trim().toLocaleLowerCase();
-    if (["male", "m", "boy"].includes(gender)) groups[0][1].push(student);
-    else if (["female", "f", "girl"].includes(gender))
-      groups[1][1].push(student);
-    else groups[2][1].push(student);
-  });
-
-  return groups.filter(([, items]) => items.length > 0);
-}

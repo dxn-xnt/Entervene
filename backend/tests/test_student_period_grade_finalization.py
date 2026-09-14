@@ -20,6 +20,7 @@ from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
+from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.PredictionOutcome import PredictionOutcome
@@ -139,6 +140,17 @@ def finalization_context():
         is_active=True,
     )
     db.add_all([staff, student, source_period, target_period, class_, subject, model_version])
+    db.flush()
+
+    load = SubjectLoad(
+        staff_id=staff.staff_id,
+        class_id=class_.class_id,
+        subject_id=subject.subject_id,
+        academic_period_id=target_period.academic_period_id,
+        status="published",
+        is_active_version=True,
+    )
+    db.add(load)
     db.commit()
 
     identity = {"sub": staff_account.user_id, "role": "teacher"}

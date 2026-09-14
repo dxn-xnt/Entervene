@@ -20,6 +20,7 @@ from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.Lesson import Lesson
 from app.models.academic.Subject import Subject
+from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.ai.AIModelVersion import AIModelVersion
 from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
@@ -40,6 +41,7 @@ TABLES = [
     AcademicPeriod.__table__,
     Class.__table__,
     Subject.__table__,
+    SubjectLoad.__table__,
     AIModelVersion.__table__,
     AIPrediction.__table__,
     AIPredictionFeature.__table__,
@@ -132,6 +134,16 @@ def explanation_context():
     )
     db.add_all([staff, student, source_period, target_period, class_, subject, model_version])
     db.flush()
+    load = SubjectLoad(
+        class_id=class_.class_id,
+        subject_id=subject.subject_id,
+        academic_period_id=target_period.academic_period_id,
+        staff_id=staff.staff_id,
+        status="published",
+        is_active_version=True,
+    )
+    db.add(load)
+    db.flush()
     prediction = AIPrediction(
         student_id=student.student_id,
         class_id=class_.class_id,
@@ -215,7 +227,9 @@ def test_insufficient_data_produces_collect_more_data_action(explanation_context
 
     assert response.status_code == 200
     body = response.json()
-    assert any(cause["code"] == "INSUFFICIENT_DATA" for cause in body["causes"])
+    insufficient_cause = next(cause for cause in body["causes"] if cause["code"] == "INSUFFICIENT_DATA")
+    assert insufficient_cause["value"] is None
+    assert insufficient_cause["severity"] == "ATTENTION"
     assert body["recommended_actions"][0]["action_code"] == "COLLECT_MORE_DATA"
 
 

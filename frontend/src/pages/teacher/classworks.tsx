@@ -1,23 +1,19 @@
 import {
-  ArrowDownAZ,
-  ArrowUpDown,
   BookOpen,
   CheckSquare,
   ClipboardList,
   FileText,
-  Filter,
   Plus,
   Search,
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { apiFetch } from "@/lib/api";
 import ClassworkCard from "./classworks/classwork-card";
-import { Badge } from "@/components/retroui/Badge";
 import { isQuizType } from "@/lib/classwork-utils";
 import type {
   ClassworkKind,
@@ -32,9 +28,9 @@ import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Input } from "@/components/retroui/Input";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
+import { Select } from "@/components/retroui/Select";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
-import ClassworkView from "./classwork-view";
 
 const tabs: Array<TabItem<TabId>> = [
   { id: "all", label: "All", icon: ClipboardList },
@@ -84,8 +80,7 @@ const tabType: Partial<Record<TabId, string>> = {
 };
 
 export default function Classworks() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const suppressAutoOpenRef = useRef(false);
+  const navigate = useNavigate();
   const [items, setItems] = useState<TeacherClasswork[]>([]);
   const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("all");
@@ -93,11 +88,9 @@ export default function Classworks() {
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [classFilter, setClassFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [sortMode, setSortMode] = useState<SortMode>("newest");
-  const [showFilters, setShowFilters] = useState(false);
+  const [sortMode, _setSortMode] = useState<SortMode>("newest");
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [selectedType, setSelectedType] = useState<ClassworkKind | null>(null);
-  const [selected, setSelected] = useState<TeacherClasswork | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -201,230 +194,121 @@ export default function Classworks() {
     setSelectedType(null);
   };
 
-  const openClassworkDetail = useCallback(
-    (item: TeacherClasswork) => {
-      suppressAutoOpenRef.current = false;
-      setSelected(item);
-      setSearchParams({ classworkId: String(item.classwork_id) });
-    },
-    [setSearchParams],
-  );
-
-  useEffect(() => {
-    const classworkId = Number(searchParams.get("classworkId"));
-    if (!classworkId) {
-      suppressAutoOpenRef.current = false;
-      return;
-    }
-    if (suppressAutoOpenRef.current || selected?.classwork_id === classworkId)
-      return;
-    const target = items.find((item) => item.classwork_id === classworkId);
-    if (target) {
-      openClassworkDetail(target);
-    }
-  }, [items, openClassworkDetail, searchParams, selected?.classwork_id]);
-
-  const closeClassworkDetail = () => {
-    suppressAutoOpenRef.current = true;
-    setSelected(null);
-    setSearchParams({}, { replace: true });
-  };
-
-  const cycleSort = () => {
-    setSortMode((current) =>
-      current === "newest"
-        ? "oldest"
-        : current === "oldest"
-          ? "title"
-          : "newest",
-    );
+  const openClassworkDetail = (item: TeacherClasswork) => {
+    navigate(`/teacher/classworks/${item.classwork_id}`);
   };
 
   return (
     <AppLayout>
-      {selected ? (
-        <ClassworkView
-          classwork={selected}
-          onClose={closeClassworkDetail}
-          onUpdated={(updated) => {
-            setItems((current) =>
-              current.map((item) =>
-                item.classwork_id === updated.classwork_id ? updated : item,
-              ),
-            );
-            setSelected(updated);
-          }}
-          onArchived={(classworkId) => {
-            setItems((current) =>
-              current.filter((item) => item.classwork_id !== classworkId),
-            );
-            closeClassworkDetail();
-          }}
-        />
-      ) : (
-        // Main list view
-        <>
+      <div className="flex flex-1 flex-col">
+        <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <div className="@container/main flex flex-1 flex-col">
-              <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-                <header className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <SidebarTrigger className="md:hidden" />
-                    <h1 className="text-2xl md:text-4xl font-bold">Classwork</h1>
-                  </div>
-
-                  <Button
-                    type="button"
-                    onClick={openCreateWizard}
-                    className="gap-2"
-                  >
-                    <Plus className="size-4" />
-                    <span className="hidden sm:inline">New Classwork</span>
-                    <span className="sm:hidden">New</span>
-                  </Button>
-                </header>
-
-                <Tabs
-                  tabs={tabs}
-                  activeTab={activeTab}
-                  onTabChange={setActiveTab}
-                />
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">Classwork</h1>
               </div>
 
-              <main className="flex flex-col gap-4 px-5 py-4 pt-0!">
+              <Button
+                type="button"
+                onClick={openCreateWizard}
+                className="shrink-0 gap-1.5 whitespace-nowrap px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+              >
+                <Plus className="size-4" />
+                <span className="hidden sm:inline">New Classwork</span>
+                <span className="sm:hidden">New</span>
+              </Button>
+            </header>
+            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+              <Tabs
+                tabs={tabs}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+              />
+            </div>
+
+            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+
+
+              <main className="flex flex-col gap-4">
                 {error && (
                   <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
                     {error}
                   </div>
                 )}
 
-                <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
-                  <label className="relative shadow-md transition-shadow hover:shadow-none">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                  <div className="relative min-w-0 flex-1 shadow-md transition-shadow hover:shadow-none sm:min-w-48">
                     <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                     <Input
                       value={search}
                       onChange={(event) => setSearch(event.target.value)}
                       placeholder="Search classwork..."
-                      className="h-10 w-full border-black pl-9 pr-3 shadow-none"
+                      className="h-10 w-full border-black pl-9 pr-3 shadow-none bg-background"
                     />
-                  </label>
+                  </div>
 
-                  <Button
-                    variant="outline"
-                    size="md"
-                    onClick={() => setShowFilters((current) => !current)}
-                    className="gap-1.5"
+                  <Select
+                    value={subjectFilter}
+                    onValueChange={(val) => setSubjectFilter(val)}
                   >
-                    <Filter size={15} />
-                    Add Filter
-                  </Button>
+                    <Select.Trigger className="w-full md:w-44">
+                      <Select.Value placeholder="All subjects" />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Group>
+                        <Select.Item value="all">All subjects</Select.Item>
+                        {subjects.map((subject) => (
+                          <Select.Item
+                            key={subject.id}
+                            value={String(subject.id)}
+                          >
+                            {subject.name}
+                          </Select.Item>
+                        ))}
+                      </Select.Group>
+                    </Select.Content>
+                  </Select>
 
-                  <Button
-                    variant="outline"
-                    size="md"
-                    onClick={cycleSort}
-                    className="gap-1.5"
-                    title={`Current sort: ${sortMode}`}
+                  <Select
+                    value={classFilter}
+                    onValueChange={(val) => setClassFilter(val)}
                   >
-                    {sortMode === "title" ? (
-                      <ArrowDownAZ size={15} />
-                    ) : (
-                      <ArrowUpDown size={15} />
-                    )}
-                    Sort By
-                  </Button>
+                    <Select.Trigger className="w-full md:w-44">
+                      <Select.Value placeholder="All sections" />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Group>
+                        <Select.Item value="all">All sections</Select.Item>
+                        {classSections.map((section) => (
+                          <Select.Item
+                            key={section.id}
+                            value={String(section.id)}
+                          >
+                            {section.name}
+                          </Select.Item>
+                        ))}
+                      </Select.Group>
+                    </Select.Content>
+                  </Select>
 
-                  {subjectFilter !== "all" && (
-                    <Badge
-                      variant="secondary"
-                      size="sm"
-                      className="flex w-fit items-center gap-2"
-                      onClick={() => setSubjectFilter("all")}
-                    >
-                      {
-                        subjects.find(
-                          (subject) => subject.id === Number(subjectFilter),
-                        )?.name
-                      }
-                      <X size={13} />
-                    </Badge>
-                  )}
-
-                  {classFilter !== "all" && (
-                    <Badge
-                      variant="secondary"
-                      size="sm"
-                      className="flex w-fit items-center gap-2"
-                      onClick={() => setClassFilter("all")}
-                    >
-                      {
-                        classSections.find(
-                          (section) => section.id === Number(classFilter),
-                        )?.name
-                      }
-                      <X size={13} />
-                    </Badge>
-                  )}
-
-                  {statusFilter !== "all" && (
-                    <Badge
-                      variant="secondary"
-                      size="sm"
-                      className="flex w-fit items-center gap-2 capitalize"
-                      onClick={() => setStatusFilter("all")}
-                    >
-                      {statusFilter}
-                      <X size={13} />
-                    </Badge>
-                  )}
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(val) => setStatusFilter(val)}
+                  >
+                    <Select.Trigger className="w-full md:w-44">
+                      <Select.Value placeholder="All statuses" />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Group>
+                        <Select.Item value="all">All statuses</Select.Item>
+                        <Select.Item value="published">Published</Select.Item>
+                        <Select.Item value="draft">Draft</Select.Item>
+                      </Select.Group>
+                    </Select.Content>
+                  </Select>
                 </div>
 
-                {showFilters && (
-                  <section className="grid gap-3 rounded-lg border border-black bg-[#F6E9B2] p-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sm:grid-cols-3">
-                    <label className="text-xs font-bold">
-                      Subject
-                      <select
-                        value={subjectFilter}
-                        onChange={(event) => setSubjectFilter(event.target.value)}
-                        className="mt-1 w-full rounded border border-gray-700 bg-white px-3 py-2 text-sm font-medium"
-                      >
-                        <option value="all">All subjects</option>
-                        {subjects.map((subject) => (
-                          <option key={subject.id} value={subject.id}>
-                            {subject.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="text-xs font-bold">
-                      Section / Class
-                      <select
-                        value={classFilter}
-                        onChange={(event) => setClassFilter(event.target.value)}
-                        className="mt-1 w-full rounded border border-gray-700 bg-white px-3 py-2 text-sm font-medium"
-                      >
-                        <option value="all">All sections</option>
-                        {classSections.map((section) => (
-                          <option key={section.id} value={section.id}>
-                            {section.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="text-xs font-bold">
-                      Publication status
-                      <select
-                        value={statusFilter}
-                        onChange={(event) => setStatusFilter(event.target.value)}
-                        className="mt-1 w-full rounded border border-gray-700 bg-white px-3 py-2 text-sm font-medium"
-                      >
-                        <option value="all">All statuses</option>
-                        <option value="published">Published</option>
-                        <option value="draft">Draft</option>
-                      </select>
-                    </label>
-                  </section>
-                )}
 
                 {isLoading ? (
                   <p className="py-12 text-center text-sm font-semibold text-gray-500">
@@ -471,7 +355,7 @@ export default function Classworks() {
                           <button
                             type="button"
                             onClick={closeCreateWizard}
-                            className="cursor-pointer text-white hover:text-gray-200"
+                            className="cursor-pointer text-black hover:text-gray-200"
                           >
                             <X size={18} />
                           </button>
@@ -486,7 +370,7 @@ export default function Classworks() {
                                 key={option.type}
                                 type="button"
                                 onClick={() => setSelectedType(option.type)}
-                                className="h-auto flex-col items-stretch justify-start rounded-none border-2 border-black bg-success p-5 text-left text-black shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-0.5 hover:bg-success/90"
+                                className="flex-col items-start bg-success p-5 text-left text-black hover:bg-success"
                               >
                                 <div className="flex items-center gap-2">
                                   <Icon size={20} className="text-black" />
@@ -542,9 +426,8 @@ export default function Classworks() {
               </Dialog>
             </div>
           </div>
-        </>
-
-      )}
+        </div>
+      </div>
     </AppLayout>
   );
 }

@@ -24,12 +24,10 @@ GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GROQ_PREFERRED_MODELS = [
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-    "llama-3.1-70b-versatile",
+    "qwen/qwen3.8-27b",
+    "qwen/qwen3.6-27b",
     "groq/compound",
     "groq/compound-mini",
-    "qwen/qwen3.6-27b",
     "allam-2-7b",
 ]
 
@@ -196,7 +194,8 @@ async def _generate_with_groq(
     client = AsyncOpenAI(api_key=groq_key, base_url=GROQ_BASE_URL)
 
     # Discover active models dynamically
-    candidate_models = list(GROQ_PREFERRED_MODELS)
+    configured_model = getattr(settings, "groq_model", None) or "openai/gpt-oss-120b"
+    candidate_models = [configured_model] + [m for m in GROQ_PREFERRED_MODELS if m != configured_model]
     try:
         models_res = await client.models.list()
         active_ids = [

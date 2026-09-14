@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, Numeric, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.db.Base import Base
@@ -21,16 +22,16 @@ class GradingTemplateComponent(Base):
         Index("ix_grading_template_component_template_id", "grading_template_id"),
     )
 
-    component_id: Mapped[int] = Column(Integer, primary_key=True, autoincrement=True)
-    grading_template_id: Mapped[int] = Column(
+    component_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    grading_template_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("grading_template.grading_template_id", ondelete="CASCADE"),
         nullable=False,
     )
-    component_name: Mapped[str] = Column(String(100), nullable=False)
-    weight: Mapped[object] = Column(Numeric(6, 2), nullable=False)
-    display_order: Mapped[int] = Column(Integer, nullable=False)
-    created_at: Mapped[datetime | None] = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime | None] = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    component_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    weight: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     grading_template: Mapped[object] = relationship("GradingTemplate", back_populates="components")

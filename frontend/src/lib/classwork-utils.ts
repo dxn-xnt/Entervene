@@ -16,7 +16,7 @@ export const emptyClassworkDraft: CreateDraft = {
 };
 
 export const allowedClassworkMaterialExtensions = [".pdf", ".docx", ".pptx", ".jpg", ".jpeg", ".png"];
-export const maxClassworkMaterialSize = 4 * 1024 * 1024;
+export const maxClassworkMaterialSize = 10 * 1024 * 1024;
 
 export function formatDate(value?: string | null) {
   if (!value) return "Date unavailable";
@@ -85,5 +85,6 @@ export const classworkToEditDraft = (item: TeacherClasswork): EditDraft => ({
   instructions: item.instructions ?? "",
   classwork_type: item.classwork_type,
   classwork_category: item.classwork_category ?? "",
+  exam_subtype: item.exam_subtype ?? "",
   total_points: item.total_points !== null && item.total_points !== undefined ? String(item.total_points) : "",
 });

@@ -1,11 +1,16 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.Dependencies import get_staff_id, require_role
 from app.db.Session import get_db
 from app.schemas.StudentRecord import (
+    BulkSendGradesRequest,
+    BulkSendGradesToAdviserResponse,
+    SendGradeToAdviserItemResponse,
+    SendStudentGradeRequest,
     StudentGradebookResponse,
     StudentPeriodGradeFinalizeRequest,
     StudentPeriodGradeFinalizeResponse,
@@ -14,8 +19,14 @@ from app.schemas.StudentRecord import (
     StudentRecordRosterResponse,
     TermGradeSummaryResponse,
 )
+from app.services.export.ClassRecordExportService import (
+    export_class_record_full_workbook,
+    export_class_record_single_term,
+)
 from app.services.student_record.StudentRecordService import (
+    bulk_send_grades_to_adviser,
     finalize_student_period_grade,
+    send_student_grade_to_adviser,
     teacher_period_options,
     teacher_student_gradebook,
     teacher_student_record_detail,
@@ -117,6 +128,62 @@ def get_teacher_student_gradebook(
 
 
 @router.get(
+    "/teacher/classes/{class_id}/subjects/{subject_id}/export-class-record",
+)
+def export_teacher_class_record(
+    class_id: int,
+    subject_id: int,
+    academic_period_id: int = Query(...),
+    _teacher: dict = Depends(require_role("teacher", "admin")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    stream, filename = export_class_record_single_term(
+        db=db,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=academic_period_id,
+        staff_id=staff_id,
+    )
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
+
+
+@router.get(
+    "/teacher/classes/{class_id}/subjects/{subject_id}/export-class-record-workbook",
+)
+def export_teacher_class_record_workbook(
+    class_id: int,
+    subject_id: int,
+    academic_year_id: int | None = Query(None),
+    _teacher: dict = Depends(require_role("teacher", "admin")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    stream, filename = export_class_record_full_workbook(
+        db=db,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_year_id=academic_year_id,
+        staff_id=staff_id,
+    )
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
+
+
+@router.get(
     "/teacher/classes/{class_id}/subjects/{subject_id}/term-summary",
     response_model=TermGradeSummaryResponse,
 )
@@ -133,4 +200,51 @@ def get_teacher_term_grade_summary(
         class_id=class_id,
         subject_id=subject_id,
     )
+
+
+@router.post(
+    "/teacher/classes/{class_id}/subjects/{subject_id}/students/{student_id}/send-to-adviser",
+    response_model=SendGradeToAdviserItemResponse,
+)
+def send_student_grade(
+    class_id: int,
+    subject_id: int,
+    student_id: UUID,
+    payload: SendStudentGradeRequest,
+    _teacher: dict = Depends(require_role("teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return send_student_grade_to_adviser(
+        db=db,
+        staff_id=staff_id,
+        class_id=class_id,
+        subject_id=subject_id,
+        student_id=student_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/teacher/classes/{class_id}/subjects/{subject_id}/periods/{academic_period_id}/send-to-adviser",
+    response_model=BulkSendGradesToAdviserResponse,
+)
+def bulk_send_grades(
+    class_id: int,
+    subject_id: int,
+    academic_period_id: int,
+    payload: BulkSendGradesRequest,
+    _teacher: dict = Depends(require_role("teacher")),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return bulk_send_grades_to_adviser(
+        db=db,
+        staff_id=staff_id,
+        class_id=class_id,
+        subject_id=subject_id,
+        academic_period_id=academic_period_id,
+        payload=payload,
+    )
+
 

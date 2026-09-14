@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
-import { Card, Card as RetroCard } from "@/components/retroui/Card";
+import { Card } from "@/components/retroui/Card";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
 import { Progress } from "@/components/retroui/Progress";
@@ -26,12 +26,15 @@ import {
   validateSubjectLoads,
   autoScheduleSubjectLoads,
   batchSaveSubjectLoads,
+  unlockSection,
+  discardDraft,
   type SubjectLoadItem,
   type SubjectLoadStudioData,
   type ConflictItem,
   type TeacherWorkloadItem,
 } from "@/lib/api";
-import BreakConfigDrawer, { type PeriodTemplateSlotItem } from "@/pages/admin/forms/BreakConfigDrawer";
+import { canonicalizePathway, isOfferingCompatibleWithClass } from "@/lib/pathways";
+import BreakConfigDrawer, { type PeriodTemplateSlotItem } from "@/pages/admin/forms/break-config-drawer";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -45,6 +48,8 @@ import {
   Search,
   Copy,
   Unlock,
+  RotateCcw,
+  ShieldCheck,
   EllipsisIcon,
 } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
@@ -92,18 +97,11 @@ function isSubjectOfferedForClass(
   if (sub.academic_level_id !== cls.academic_level_id) return false;
   if (!offerings || offerings.length === 0) return true;
 
-  const clsPathway = (cls.pathway || "general").toLowerCase();
-
   return offerings.some((so) => {
     if (so.subject_id !== sub.subject_id || so.academic_level_id !== cls.academic_level_id) {
       return false;
     }
-    const soPathway = (so.pathway || "general").toLowerCase();
-    return (
-      soPathway === "both" ||
-      soPathway === clsPathway ||
-      (soPathway === "general" && clsPathway === "general")
-    );
+    return isOfferingCompatibleWithClass(so.pathway, cls.pathway);
   });
 }
 
@@ -155,11 +153,6 @@ export default function AdminSubjectLoadStudio() {
     return periodTemplateSlots.filter((s) => s.template_group === activeGroupKey && s.is_locked_break);
   }, [periodTemplateSlots, activeGroupKey]);
 
-  const levelClassIds = useMemo(() => {
-    if (selectedGradeId === "all") return new Set<number>();
-    return new Set((studioData?.classes || []).filter((c) => String(c.academic_level_id) === selectedGradeId).map((c) => c.class_id));
-  }, [selectedGradeId, studioData]);
-
   const previousPeriods = useMemo(() => {
     if (!studioData?.academic_periods || !selectedPeriodId) return [];
     return studioData.academic_periods.filter(p => p.academic_period_id < selectedPeriodId);
@@ -205,6 +198,11 @@ export default function AdminSubjectLoadStudio() {
         title = "Teacher workload capacity exceeded";
         explanation = "Assigned daily or weekly teaching hours exceed max capacity policy limits.";
         severity = "error";
+      } else if (key === "UNCONFIGURED_BELL_SCHEDULE") {
+        key = "UNCONFIGURED_BELL_SCHEDULE";
+        title = "Bell schedule unconfigured or mismatched";
+        explanation = "Section has no bell-schedule template configured or a Senior High section is assigned to the Junior High bell schedule.";
+        severity = "warning";
       }
 
       if (!map[key]) {
@@ -286,6 +284,11 @@ export default function AdminSubjectLoadStudio() {
                 days_of_week: m.days_of_week || [],
                 status: m.status || "draft",
                 is_locked: Boolean(m.is_locked || m.status === "published"),
+                logical_load_id: m.logical_load_id,
+                section_revision: m.section_revision,
+                base_revision: m.base_revision,
+                has_live_data: m.has_live_data,
+                dependencies: m.dependencies,
               });
             });
           } else {
@@ -1074,6 +1077,12 @@ export default function AdminSubjectLoadStudio() {
 
     try {
       const levelIdToSave = selectedGradeId !== "all" ? Number(selectedGradeId) : 1;
+      let baseRevToPass: number | null = null;
+      if (publishScope === "section" && targetClassId) {
+        const secLoad = loads.find((l) => l.class_id === targetClassId && l.base_revision !== undefined && l.base_revision !== null);
+        baseRevToPass = secLoad?.base_revision ?? null;
+      }
+
       const res = await batchSaveSubjectLoads(
         selectedPeriodId,
         levelIdToSave,
@@ -1081,7 +1090,8 @@ export default function AdminSubjectLoadStudio() {
         loads,
         publishScope,
         publishScope === "level" ? levelIdToSave : null,
-        targetClassId ?? null
+        targetClassId ?? null,
+        baseRevToPass
       );
 
       setConflicts(res.conflicts);
@@ -1091,33 +1101,85 @@ export default function AdminSubjectLoadStudio() {
         type: "success",
       });
 
-      // Optimistic update: immediately flip in-memory load statuses
-      // so section badges update instantly without waiting for DB reload
-      setLoads((prev) =>
-        prev.map((l) => {
-          const isInScope =
-            publishScope === "section"
-              ? l.class_id === targetClassId
-              : publishScope === "level"
-                ? levelClassIds.has(l.class_id)
-                : true; // "all"
-
-          if (action === "publish" && isInScope && Boolean(l.staff_id)) {
-            return { ...l, status: "published", is_locked: true };
-          }
-          if (action === "draft" && isInScope) {
-            return { ...l, status: "draft", is_locked: false };
-          }
-          return l;
-        })
-      );
-
       // Refresh studio data to sync with DB
       void loadStudio(selectedPeriodId);
+    } catch (err: any) {
+      const detail = err?.data?.detail || err?.message || "";
+      if (err?.status === 409) {
+        if (detail.includes("Cannot remove") || detail.includes("SUBJECT_LOAD_HAS_LIVE_DATA")) {
+          setNotice({
+            title: "Cannot Remove Populated Subject",
+            message: detail,
+            type: "error",
+          });
+        } else if (detail.includes("conflict") || detail.includes("revision")) {
+          setNotice({
+            title: "Revision Conflict",
+            message: "Another administrator has published changes to this section. Your draft has been refreshed to prevent overwriting.",
+            type: "error",
+          });
+          void loadStudio(selectedPeriodId);
+        } else {
+          setNotice({
+            title: "Conflict Error",
+            message: detail,
+            type: "error",
+          });
+        }
+      } else {
+        setNotice({
+          title: "Save Failed",
+          message: err instanceof Error ? err.message : `Failed to ${action} subject loads.`,
+          type: "error",
+        });
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleUnlockSection = async (classId: number) => {
+    if (!selectedPeriodId || isSaving) return;
+    setIsSaving(true);
+    setNotice(null);
+    try {
+      const res = await unlockSection(selectedPeriodId, classId);
+      setNotice({
+        title: "Section Unlocked",
+        message: `Section snapshot v${res.section_revision} created for editing. Live published schedule remains active for students and teachers until you publish changes.`,
+        type: "success",
+      });
+      await loadStudio(selectedPeriodId);
     } catch (err) {
       setNotice({
-        title: "Save Failed",
-        message: err instanceof Error ? err.message : `Failed to ${action} subject loads.`,
+        title: "Unlock Failed",
+        message: err instanceof Error ? err.message : "Failed to unlock section.",
+        type: "error",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDiscardDraft = async (classId: number) => {
+    if (!selectedPeriodId || isSaving) return;
+    if (!window.confirm("Are you sure you want to discard this draft? All unpublished changes made since unlocking will be lost.")) {
+      return;
+    }
+    setIsSaving(true);
+    setNotice(null);
+    try {
+      const res = await discardDraft(selectedPeriodId, classId);
+      setNotice({
+        title: "Draft Discarded",
+        message: `Unpublished draft discarded. Section restored to published baseline (v${res.section_revision}).`,
+        type: "success",
+      });
+      await loadStudio(selectedPeriodId);
+    } catch (err) {
+      setNotice({
+        title: "Discard Failed",
+        message: err instanceof Error ? err.message : "Failed to discard draft.",
         type: "error",
       });
     } finally {
@@ -1213,20 +1275,21 @@ export default function AdminSubjectLoadStudio() {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center justify-between">
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
+        <div className="@container/main flex min-w-0 flex-1 flex-col">
+          <div className="flex min-w-0 flex-1 flex-col">
+            <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-4xl font-bold tracking-tight">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                   Subject Load
                 </h1>
               </div>
 
               {/* Sticky Action Controls */}
-              <div className="flex flex-wrap items-center gap-3 self-end md:self-auto">
+              <div className="grid w-full grid-cols-2 gap-2 [&_button]:w-full [&_button]:justify-center [&_button]:px-2 [&_button]:text-xs md:flex md:w-auto md:flex-wrap md:gap-3 md:self-auto md:[&_button]:w-auto md:[&_button]:px-4 md:[&_button]:text-sm">
                 <Button
+                  className="hidden md:inline-flex"
                   variant="outline"
                   disabled={isSaving}
                   onClick={() => void handleSave("draft")}
@@ -1238,7 +1301,7 @@ export default function AdminSubjectLoadStudio() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
-                      className="gap-2"
+                      className="hidden gap-2 md:inline-flex"
                       variant="outline"
                       disabled={isLoading || isSaving}
                     >
@@ -1275,9 +1338,33 @@ export default function AdminSubjectLoadStudio() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button className="col-span-2 gap-2 md:hidden" variant="outline" disabled={isLoading || isSaving}>
+                      <EllipsisIcon className="size-4" /> Schedule Actions
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-[calc(100vw-1.5rem)] min-w-[220px] border-2 sm:w-72">
+                    <DropdownMenuItem className="gap-2" disabled={isSaving} onClick={() => void handleSave("draft")}>
+                      <ShieldCheck className="size-4" /> Save Draft
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="gap-2" onClick={() => setIsBreakDrawerOpen(true)}>
+                      <Settings className="size-4" /> Edit Break Timelines
+                    </DropdownMenuItem>
+                    {previousPeriods.length > 0 && (
+                      <DropdownMenuItem className="gap-2" onClick={() => setIsCopyModalOpen(true)}>
+                        <Copy className="size-4" /> Copy from Previous Term
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem className="gap-2" onClick={() => void handleAutoSchedule()}>
+                      <Sparkles className="size-4" /> Auto-Generate All
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
                 {/* Publish Action */}
                 <Button
-                  className="gap-2"
+                  className="col-span-2 gap-2 md:col-auto"
                   variant={isMasterPublishDisabled ? "default" : "outline"}
                   disabled={isSaving}
                   onClick={() => {
@@ -1313,10 +1400,9 @@ export default function AdminSubjectLoadStudio() {
               </div>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b border-black/40" />
-
-            {/* Notice Alert Overlay */}
-            {notice && (
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+              {/* Notice Alert Overlay */}
+              {notice && (
               <Alert
                 status={notice.type}
                 position="top-right"
@@ -1343,9 +1429,9 @@ export default function AdminSubjectLoadStudio() {
               </Alert>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+            <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-12">
               {/* LEFT PANE: Section Schedule List */}
-              <main className="lg:col-span-9 flex flex-col gap-3">
+              <main className="flex min-w-0 flex-col gap-3 lg:col-span-9">
                 {/* Filters & Status Bar */}
                 <section className="flex flex-col gap-3 w-full">
                   <div className="flex flex-row gap-2 w-full">
@@ -1419,19 +1505,19 @@ export default function AdminSubjectLoadStudio() {
                 </section>
 
                 {filteredClasses.length === 0 ? (
-                  <RetroCard className="border-2 border-black bg-accent px-6 py-12 text-center">
+                  <Card className="bg-accent px-6 py-12 text-center">
                     <Text as="h3" className="font-bold text-lg">
                       No Class Sections Found
                     </Text>
                     <Text as="p" className="text-sm text-muted-foreground mt-1">
                       Select a different Grade Level or create classes in the admin dashboard.
                     </Text>
-                  </RetroCard>
+                  </Card>
                 ) : (
                   groupedClassesByGrade.map((group) => (
                     <Card
                       key={group.levelId}
-                      className="@container/card w-full flex flex-col gap-4 bg-primary"
+                      className="@container/card flex min-w-0 w-full flex-col gap-4 overflow-hidden bg-primary"
                     >
                       <div className="flex items-center justify-between">
                         <Text as="h4" className="text-xl font-bold font-sans">
@@ -1502,10 +1588,15 @@ export default function AdminSubjectLoadStudio() {
                             void handleSave("publish", "section", cls.class_id);
                           };
 
+                          const hasPendingDraft = Boolean(
+                            studioData?.has_pending_draft_by_class?.[cls.class_id] ||
+                            studioData?.has_pending_draft_by_class?.[String(cls.class_id)]
+                          );
+
                           return (
-                            <RetroCard
+                            <Card
                               key={cls.class_id}
-                              className="block border-2 border-black p-4 overflow-visible shadow-none hover:-translate-y-1"
+                              className="block min-w-0 overflow-hidden shadow-none hover:-translate-y-1"
                             >
                               <div className="flex items-center justify-between pb-4 flex-wrap gap-2">
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -1518,6 +1609,15 @@ export default function AdminSubjectLoadStudio() {
                                   >
                                     {isSectionPublished ? "Published" : "Draft"}
                                   </Badge>
+                                  {hasPendingDraft && (
+                                    <Badge
+                                      size="sm"
+                                      variant="default"
+                                      className="bg-amber-100 text-amber-900 border-amber-500 font-bold"
+                                    >
+                                      Draft in Progress
+                                    </Badge>
+                                  )}
                                   <Badge
                                     size="sm"
                                     variant="solid"
@@ -1539,17 +1639,48 @@ export default function AdminSubjectLoadStudio() {
                                   })()}
                                 </div>
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  {isSectionPublished ? (
+                                  {isSectionPublished && !hasPendingDraft ? (
                                     <Button
                                       size="sm"
                                       variant="outline"
                                       disabled={isSaving}
-                                      onClick={() => void handleSave("draft", "section", cls.class_id)}
-                                      title="Revert this section to draft status to allow edits"
+                                      onClick={() => void handleUnlockSection(cls.class_id)}
+                                      title="Unlock this section to create an isolated working draft without disrupting live student/teacher portal access"
                                     >
                                       <Unlock className="size-3.5 mr-1" />
                                       Unlock Section
                                     </Button>
+                                  ) : hasPendingDraft ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={isSaving}
+                                        onClick={() => void handleDiscardDraft(cls.class_id)}
+                                        title="Discard all unpublished draft edits and restore published baseline"
+                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      >
+                                        <RotateCcw className="size-3.5 mr-1" />
+                                        Discard Draft
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant={isPublishSectionDisabled ? "default" : "outline"}
+                                        disabled={isSaving}
+                                        className="gap-2"
+                                        onClick={handlePublishSectionClick}
+                                        title={
+                                          sectionUnassignedCount > 0
+                                            ? `Assign all ${sectionUnassignedCount} unassigned teacher(s) in this section before publishing`
+                                            : sectionHasErrors
+                                              ? `Fix schedule conflicts in this section before publishing: ${sectionErrors[0]?.message || ""}`
+                                              : "Publish draft changes to live schedule"
+                                        }
+                                      >
+                                        <Send className="size-3.5" />
+                                        Publish Draft
+                                      </Button>
+                                    </div>
                                   ) : (
                                     <Button
                                       size="sm"
@@ -1690,7 +1821,10 @@ export default function AdminSubjectLoadStudio() {
                                   </Text>
                                 </div>
                               ) : (
-                                <Table className="overflow-none shadow-none" wrapperClassName="overflow-visible h-auto">
+                                <Table
+                                  className="min-w-[760px] shadow-none"
+                                  wrapperClassName="h-auto max-w-full overflow-x-auto overscroll-x-contain shadow-none [scrollbar-width:thin]"
+                                >
                                   <Table.Header className="">
                                     <Table.Row>
                                       <Table.Head className="font-bold text-black">Subject</Table.Head>
@@ -1751,11 +1885,80 @@ export default function AdminSubjectLoadStudio() {
                                                 <Badge variant="default" size="sm">
                                                   {sub.subject_codename || `SUB-${sub.subject_id}`}
                                                 </Badge>
-                                                {sub.is_math_or_science && sub.academic_level_id > 4 && (
-                                                  <Badge variant="solid" size="sm">
-                                                    Core
-                                                  </Badge>
-                                                )}
+                                                {(() => {
+                                                  const hasLive = subjectSlots.some((s) => s.has_live_data);
+                                                  const deps = subjectSlots.find((s) => s.dependencies)?.dependencies;
+                                                  const eduTotal = deps?.educational_total ?? (hasLive ? (deps?.total ?? 0) : 0);
+                                                  const adminTotal = deps?.administrative_total ?? 0;
+
+                                                  if (eduTotal === 0 && adminTotal === 0) return null;
+
+                                                  const eduParts = deps
+                                                    ? [
+                                                        deps.classwork_assignments ? `${deps.classwork_assignments} classwork` : null,
+                                                        deps.student_submissions ? `${deps.student_submissions} submissions` : null,
+                                                        deps.assessment_scores ? `${deps.assessment_scores} scores` : null,
+                                                        deps.period_grades ? `${deps.period_grades} grades` : null,
+                                                        deps.attendance_records ? `${deps.attendance_records} attendance` : null,
+                                                        deps.lesson_assignments ? `${deps.lesson_assignments} lessons` : null,
+                                                      ]
+                                                        .filter(Boolean)
+                                                        .join(", ")
+                                                    : "";
+
+                                                  const adminParts = deps
+                                                    ? [
+                                                        deps.substitutions ? `${deps.substitutions} substitutions` : null,
+                                                        deps.reassignment_logs ? `${deps.reassignment_logs} reassignment logs` : null,
+                                                      ]
+                                                        .filter(Boolean)
+                                                        .join(", ")
+                                                    : "";
+
+                                                  const tooltip = [
+                                                    eduTotal > 0 ? `Student/academic records: ${eduParts || `${eduTotal} records`}. Subject cannot be deleted.` : null,
+                                                    adminTotal > 0 ? `Historical administrative records: ${adminParts || `${adminTotal} logs`}.` : null,
+                                                  ].filter(Boolean).join(" | ");
+
+                                                  return (
+                                                    <Badge
+                                                      variant="outline"
+                                                      size="sm"
+                                                      className={
+                                                        eduTotal > 0
+                                                          ? "bg-blue-50 text-blue-900 border-blue-300 font-bold inline-flex items-center gap-1"
+                                                          : "bg-slate-50 text-slate-700 border-slate-300 font-medium inline-flex items-center gap-1"
+                                                      }
+                                                      title={tooltip}
+                                                    >
+                                                      <ShieldCheck className={`size-3 ${eduTotal > 0 ? "text-blue-600" : "text-slate-500"}`} />
+                                                      {eduTotal > 0 ? `${eduTotal} student records` : `${adminTotal} admin records`}
+                                                    </Badge>
+                                                  );
+                                                })()}
+                                                {(() => {
+                                                  const matchingOffering = (studioData?.subject_offerings || []).find(
+                                                    (so) => so.subject_id === sub.subject_id && so.academic_level_id === cls.academic_level_id
+                                                  );
+                                                  const canonPathway = matchingOffering?.pathway ? canonicalizePathway(matchingOffering.pathway) : null;
+                                                  const isSharedOffering = canonPathway === "both" || (matchingOffering?.pathway_ids && matchingOffering.pathway_ids.length > 1);
+                                                  const isGradeWithPathway = Boolean(
+                                                    (studioData?.academic_levels || []).find(
+                                                      (l) => l.academic_level_id === cls.academic_level_id && l.grade_level >= 11
+                                                    )
+                                                  );
+
+                                                  if (!isGradeWithPathway) return null;
+                                                  return isSharedOffering ? (
+                                                    <Badge variant="outline" size="sm" className="bg-blue-50 text-blue-900 border-blue-300 font-semibold">
+                                                      Shared
+                                                    </Badge>
+                                                  ) : (
+                                                    <Badge variant="outline" size="sm" className="bg-emerald-50 text-emerald-900 border-emerald-300 font-semibold">
+                                                      Specialized
+                                                    </Badge>
+                                                  );
+                                                })()}
                                               </div>
                                             </div>
                                           </Table.Cell>
@@ -1988,7 +2191,7 @@ export default function AdminSubjectLoadStudio() {
                                   </Table.Body>
                                 </Table>
                               )}
-                            </RetroCard>
+                            </Card>
                           );
                         })}
                       </div>
@@ -2032,7 +2235,7 @@ export default function AdminSubjectLoadStudio() {
                 </Card>
 
                 {/* Grouped Issues Card (Root-Cause Aggregated) */}
-                <RetroCard className="p-4 bg-background">
+                <Card className="bg-background">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       {/* <AlertTriangle className="size-5 text-amber-600" /> */}
@@ -2099,10 +2302,10 @@ export default function AdminSubjectLoadStudio() {
                       })}
                     </div>
                   )}
-                </RetroCard>
+                </Card>
 
                 {/* Teacher Workload Capacity Card */}
-                <RetroCard className="border-2 border-black shadow-[4px_4px_0_#000] p-4 bg-background">
+                <Card className="bg-background shadow-[4px_4px_0_#000]">
                   <div className="flex flex-col gap-1 pb-3 mb-3">
                     <div className="flex items-center gap-2">
                       {/* <Clock className="size-5 text-blue-600" /> */}
@@ -2187,10 +2390,11 @@ export default function AdminSubjectLoadStudio() {
                       })
                     )}
                   </div>
-                </RetroCard>
+                </Card>
               </aside>
             </div>
 
+            </div>
           </div>
         </div>
       </div>
@@ -2199,6 +2403,7 @@ export default function AdminSubjectLoadStudio() {
         open={isBreakDrawerOpen}
         onClose={() => setIsBreakDrawerOpen(false)}
         initialSlots={periodTemplateSlots}
+        initialGroup={activeGroupKey}
         onSaved={() => void loadStudio(selectedPeriodId || undefined)}
         studioData={studioData}
       />

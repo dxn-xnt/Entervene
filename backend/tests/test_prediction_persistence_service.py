@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.services.prediction.PredictionPersistenceService as persistence_service
+import app.services.prediction.PredictionEvidenceSnapshotService as snapshot_service
 from app.db.Base import Base
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
@@ -187,6 +188,38 @@ def patch_scoring(monkeypatch, result=None):
     )
 
 
+def audited_build(features):
+    return {
+        "ready": True,
+        "readiness_level": "STRONG",
+        "features": features,
+        "readiness_reasons": [],
+        "evidence_summary": {
+            "completion_state": "AVAILABLE", "coverage_state": "AVAILABLE",
+            "late_state": "AVAILABLE", "attendance_state": "AVAILABLE",
+            "completed_count": 1, "graded_count": 1, "expected_count": 1,
+            "attendance_total_days": 1, "generation_cutoff_date": "2025-08-31",
+            "source_grade_provenance": "OFFICIAL",
+            "source_record_ids": {"source_period_grade": [1]},
+            "captured_source_values": {"source_period_grade": {"final_period_grade": 87}},
+            "learning_participation": {"formula_version": "behavioral-engagement-v1", "resulting_score": 90},
+        },
+    }
+
+
+def traced_scoring_result():
+    return fake_scoring_result(execution_trace={
+        "grade_model": {
+            "status": "EXECUTED", "model_version_id": 1,
+            "artifact_sha256": "test-digest",
+            "ordered_feature_names": ["grade_level", "source_period_grade"],
+            "ordered_model_values": [8.0, 87.0],
+        },
+        "model_transformations": [],
+        "risk_engine": {"status": "EXECUTED", "ruleset_version": "risk-default-rules-v1", "triggered_rules": []},
+    })
+
+
 def test_required_identifiers_are_validated():
     with pytest.raises(ValueError, match="student_id"):
         validate_required_identifiers({"features": {}})
@@ -256,6 +289,83 @@ def test_runtime_only_risk_fields_can_be_saved_as_feature_evidence(db, seeded, m
     assert values["missing_activity_count"] == 2
     assert values["late_submission_count"] == 3
     assert "data_coverage_ratio" in values
+
+
+def test_audited_prediction_persists_immutable_execution_snapshot(db, seeded, monkeypatch):
+    patch_scoring(monkeypatch, traced_scoring_result())
+    request = prediction_request(seeded)
+    result = score_and_persist_prediction(
+        db, request, evidence_context=audited_build(request["features"]), generation_request_id="audit-one"
+    )
+
+    prediction = db.get(AIPrediction, result["prediction_id"])
+    snapshot = prediction.evidence_snapshot
+    assert snapshot["snapshot_version"] == "prediction-evidence-v1"
+    assert snapshot["observed_evidence"]["source_period_grade"]["raw_observed_value"] == 87.0
+    assert snapshot["grade_model"]["ordered_model_values"] == [8.0, 87.0]
+    assert snapshot["risk_engine"]["status"] == "EXECUTED"
+
+    frozen = snapshot
+    seeded["source_period"].end_date = date(2025, 8, 30)
+    db.commit()
+    assert db.get(AIPrediction, result["prediction_id"]).evidence_snapshot == frozen
+
+
+def test_generation_request_id_reuses_same_audited_snapshot_without_rescoring(db, seeded, monkeypatch):
+    calls = []
+    result = traced_scoring_result()
+    monkeypatch.setattr(persistence_service, "score_student_prediction", lambda *args, **kwargs: calls.append(1) or result)
+    request = prediction_request(seeded)
+    built = audited_build(request["features"])
+    first = score_and_persist_prediction(db, request, evidence_context=built, generation_request_id="same-request")
+    saved_snapshot = db.get(AIPrediction, first["prediction_id"]).evidence_snapshot
+    request["features"]["source_period_grade"] = 12
+    second = score_and_persist_prediction(db, request, evidence_context=built, generation_request_id="same-request")
+
+    assert first["prediction_id"] == second["prediction_id"]
+    assert len(calls) == 1
+    assert db.get(AIPrediction, first["prediction_id"]).evidence_snapshot == saved_snapshot
+
+
+def test_generation_request_id_rejects_different_scope(db, seeded, monkeypatch):
+    patch_scoring(monkeypatch, traced_scoring_result())
+    request = prediction_request(seeded)
+    score_and_persist_prediction(db, request, evidence_context=audited_build(request["features"]), generation_request_id="conflict")
+    request["target_period_id"] = request["source_period_id"]
+
+    with pytest.raises(ValueError, match="different request fingerprint"):
+        score_and_persist_prediction(db, request, evidence_context=audited_build(request["features"]), generation_request_id="conflict")
+
+
+def test_snapshot_failure_rolls_back_prediction_and_feature_rows(db, seeded, monkeypatch):
+    patch_scoring(monkeypatch, traced_scoring_result())
+    monkeypatch.setattr(snapshot_service, "build_evidence_snapshot", lambda *_, **__: (_ for _ in ()).throw(RuntimeError("snapshot failure")))
+    request = prediction_request(seeded)
+
+    with pytest.raises(RuntimeError, match="snapshot failure"):
+        score_and_persist_prediction(db, request, evidence_context=audited_build(request["features"]))
+
+    assert db.query(AIPrediction).count() == 0
+    assert db.query(AIPredictionFeature).count() == 0
+
+
+def test_snapshot_keeps_zero_observation_and_model_fallback_separate(db, seeded, monkeypatch):
+    trace = traced_scoring_result()
+    trace["execution_trace"]["model_transformations"] = [{
+        "feature": "quarterly_assessment_percent", "model_value": 0.0, "transformation": "NO_DATA_DEFAULT"
+    }]
+    patch_scoring(monkeypatch, trace)
+    request = prediction_request(seeded, source_period_grade=0.0, quarterly_assessment_percent=None)
+    built = audited_build(request["features"])
+    built["evidence_summary"]["source_grade_provenance"] = "OFFICIAL"
+    result = score_and_persist_prediction(db, request, evidence_context=built)
+    snapshot = db.get(AIPrediction, result["prediction_id"]).evidence_snapshot
+
+    assert snapshot["observed_evidence"]["source_period_grade"]["raw_observed_value"] == 0.0
+    assert snapshot["observed_evidence"]["quarterly_assessment_percent"]["raw_observed_value"] is None
+    assert snapshot["model_transformations"] == trace["execution_trace"]["model_transformations"]
+    assert snapshot["observed_evidence"]["assessment_completion_rate"]["unit"] == "PERCENTAGE"
+    assert snapshot["observed_evidence"]["assessment_completion_rate"]["scale"] == "ZERO_TO_ONE"
 
 
 def test_transaction_rolls_back_if_feature_insert_fails(db, seeded, monkeypatch):

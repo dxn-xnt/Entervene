@@ -34,15 +34,16 @@ const Grades = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
-            <header className="flex items-center gap-3">
-              <SidebarTrigger className="md:hidden" />
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <SidebarTrigger className="shrink-0 md:hidden" />
               <div>
-                <h1 className="text-2xl md:text-4xl font-bold">Grades</h1>
+                <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">Grades</h1>
               </div>
             </header>
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
-            {loading ? (
+
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+              {loading ? (
               <LoadingPanel label="Loading grades..." />
             ) : classes.length === 0 ? (
               <EmptyStateCard title="No classes assigned." />
@@ -64,6 +65,7 @@ const Grades = () => {
                 ))}
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 # app/core/FileUpload.py
 """
 File upload utilities for the Entervene LMS.
-- Max 4 MB per file
+- Max 10 MB per file
 - Only PDF, DOCX, PPTX, JPG, PNG allowed
 """
 import os
@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import HTTPException
 from starlette.datastructures import UploadFile
 
-MAX_FILE_SIZE = 4 * 1024 * 1024  # 4 MB
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".jpg", ".jpeg", ".png"}
 
@@ -45,7 +45,7 @@ async def validate_file(file: UploadFile) -> None:
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=400,
-            detail=f"File too large ({len(content)} bytes). Maximum is {MAX_FILE_SIZE} bytes (4 MB).",
+            detail=f"File too large ({len(content)} bytes). Maximum is {MAX_FILE_SIZE} bytes (10 MB).",
         )
 
     # Seek back so the file can be read again later

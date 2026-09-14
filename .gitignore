@@ -25,6 +25,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 backend/test_temp/
+backend/.demo-fixtures/
 
 # Dependencies / Node
 node_modules/

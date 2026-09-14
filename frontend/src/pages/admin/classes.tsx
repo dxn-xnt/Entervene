@@ -177,25 +177,21 @@ export default function AdminClasses() {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center justify-between">
+          <div className="flex flex-1 flex-col">
+            <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
+                <SidebarTrigger className="shrink-0 md:hidden" />
                 <div>
-                  <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
+                  <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                     Classes
                   </h1>
-                  {/* <p className="text-sm text-black/70">
-                    Manage class sections, advisers, students, subject load, and
-                    schedules.
-                  </p> */}
                 </div>
               </div>
-              <div className="flex flex-row gap-2">
+              <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-row [&_button]:min-w-0 [&_button]:px-2 [&_button]:text-xs md:[&_button]:px-4 md:[&_button]:text-sm">
                 <Dialog open={showNewClass} onOpenChange={setShowNewClass}>
-                  <Dialog.Trigger>
-                    <Button>
-                      <Plus className="size-4 mr-2" /> New Class
+                  <Dialog.Trigger className="w-full md:w-auto">
+                    <Button className="w-full justify-center whitespace-nowrap md:w-auto">
+                      <Plus className="mr-1 size-4 md:mr-2" /> New Class
                     </Button>
                   </Dialog.Trigger>
                   <AddClassModal
@@ -203,17 +199,16 @@ export default function AdminClasses() {
                     onClassesCreated={() => void refreshClasses()}
                   />
                 </Dialog>
-                <Link to={routes.admin.subjectLoadStudio}>
-                  <Button variant={"outline"}>
-                    <Plus className="size-4 mr-2" /> Subject Load Studio
+                <Link to={routes.admin.subjectLoadStudio} className="w-full md:w-auto">
+                  <Button variant={"outline"} className="w-full justify-center whitespace-nowrap md:w-auto">
+                    <Plus className="mr-1 size-4 md:mr-2" /> Subject Load Studio
                   </Button>
                 </Link>
               </div>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
-
-            {notice && (
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+              {notice && (
               <p className="border-2 border-black bg-[#bbf7d0] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">
                 {notice}
               </p>
@@ -362,6 +357,7 @@ export default function AdminClasses() {
                 ))
               )}
             </section>
+            </div>
           </div>
         </div>
       </div>

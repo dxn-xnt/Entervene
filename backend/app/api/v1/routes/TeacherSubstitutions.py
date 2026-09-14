@@ -139,7 +139,8 @@ def create_substitution(
         .filter(
             SubjectLoad.staff_id == payload.substitute_staff_id,
             SubjectLoad.academic_period_id == load.academic_period_id,
-            SubjectLoad.status == "published",
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(["published", "active"]),
         )
         .all()
     )
@@ -280,7 +281,8 @@ def create_bulk_substitutions(
             .filter(
                 SubjectLoad.staff_id == payload.substitute_staff_id,
                 SubjectLoad.academic_period_id == period_id,
-                SubjectLoad.status == "published",
+                SubjectLoad.is_active_version.is_(True),
+                SubjectLoad.status.in_(["published", "active"]),
             )
             .all()
         )

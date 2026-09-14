@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import AppLayout from "@/layouts/app-layout";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
+import { Button } from "@/components/retroui/Button";
+import { Badge } from "@/components/retroui/Badge";
 import { useAuth } from "@/context/AuthContext";
 import { Avatar } from "@/components/retroui/Avatar";
-import { getMySchedule, type DynamicScheduleResponse } from "@/lib/api";
+import {
+  getMySchedule,
+  getMyStudentProfile,
+  type DynamicScheduleResponse,
+  type MyStudentProfileResponse,
+} from "@/lib/api";
 import { DynamicScheduleTable } from "@/components/dynamic-schedule-table";
+import StudentQRBadgeModal from "@/components/StudentQRBadgeModal";
+import { QrCode } from "lucide-react";
 
 const weekDayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
@@ -89,6 +99,8 @@ const StudentProfile = () => {
 
   const [scheduleData, setScheduleData] = useState<DynamicScheduleResponse | null>(null);
   const [isScheduleLoading, setIsScheduleLoading] = useState(true);
+  const [studentProfile, setStudentProfile] = useState<MyStudentProfileResponse | null>(null);
+  const [qrOpen, setQrOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -103,7 +115,18 @@ const StudentProfile = () => {
         if (isMounted) setIsScheduleLoading(false);
       }
     }
+
+    async function loadProfile() {
+      try {
+        const profile = await getMyStudentProfile();
+        if (isMounted) setStudentProfile(profile);
+      } catch (err) {
+        console.error("Failed to fetch student profile:", err);
+      }
+    }
+
     void loadSchedule();
+    void loadProfile();
     return () => {
       isMounted = false;
     };
@@ -111,33 +134,62 @@ const StudentProfile = () => {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center gap-3 pb-4 -mx-4 md:-mx-6 px-4 md:px-6 border-b border-gray-500">
-              <p className="text-2xl md:text-4xl font-bold tracking-tight">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <SidebarTrigger className="shrink-0 md:hidden" />
+              <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                 Profile
-              </p>
+              </h1>
             </header>
 
-            <main className="flex flex-col gap-3 py-3">
-              <Card className="flex flex-row items-center gap-4 p-4 md:p-6">
-              <Avatar
-                variant="student"
-                className="h-12 w-12 shrink-0 bg-amber-100"
-              >
-                <Avatar.Image src={user?.avatar || "/avatars/student-avatars/1.svg"} alt={user?.fullName || "User"} />
-                <Avatar.Fallback>{user?.fullName?.charAt(0) || "U"}</Avatar.Fallback>
-              </Avatar>
-              <div className="flex flex-col">
-                <p className="text-lg font-bold">
-                  {user?.fullName ?? "John Doe"}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {user?.email ?? "johndoe@example.com"}
-                </p>
-              </div>
-            </Card>
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+              <Card className="flex flex-col items-start justify-between gap-4 border-black bg-primary p-4 shadow-md hover:shadow-none sm:flex-row sm:items-center md:p-6">
+                <div className="flex flex-row items-center gap-4">
+                  <Avatar
+                    variant="student"
+                    className="h-12 w-12 shrink-0 bg-amber-100"
+                  >
+                    <Avatar.Image src={user?.avatar || "/avatars/student-avatars/1.svg"} alt={user?.fullName || "User"} />
+                    <Avatar.Fallback>{user?.fullName?.charAt(0) || "U"}</Avatar.Fallback>
+                  </Avatar>
+                  <div className="flex flex-col">
+                    <p className="text-lg font-bold">
+                      {studentProfile?.student_name || user?.fullName || "Student"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {user?.email ?? "student@example.com"}
+                    </p>
+                    {(studentProfile?.student_lrn || studentProfile?.grade_level || studentProfile?.section_name) && (
+                      <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+                        {studentProfile?.student_lrn && (
+                          <span className="font-mono bg-muted/60 px-1.5 py-0.5 rounded border border-border">
+                            LRN: {studentProfile.student_lrn}
+                          </span>
+                        )}
+                        {studentProfile?.grade_level && (
+                          <span className="font-semibold">{studentProfile.grade_level}</span>
+                        )}
+                        {studentProfile?.section_name && (
+                          <span className="font-semibold">Section {studentProfile.section_name}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setQrOpen(true)}
+                  disabled={!studentProfile}
+                  className="gap-2 shrink-0"
+                >
+                  <QrCode className="size-4" />
+                  View QR Badge
+                </Button>
+              </Card>
 
               <div className="flex flex-col lg:flex-row gap-4 md:gap-6">
               <div className="flex flex-col gap-3 flex-1">
@@ -158,12 +210,16 @@ const StudentProfile = () => {
                   </p>
                 </div>
 
-                <Card className="flex flex-col gap-3 p-4">
+                <Card className="flex flex-col gap-3 border-black bg-white p-4 shadow-md hover:shadow-none">
                   <div className="flex flex-row items-center justify-between">
                     <p className="font-semibold">{monthLabel}</p>
-                    <button className="text-xs text-muted-foreground border rounded-md px-2 py-1">
+                    <Badge
+                      variant="secondary"
+                      size="sm"
+                      className="rounded-none border border-black bg-primary text-xs font-bold text-black"
+                    >
                       Today
-                    </button>
+                    </Badge>
                   </div>
 
                   <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">
@@ -181,9 +237,9 @@ const StudentProfile = () => {
                         {week.map((day) => (
                           <span
                             key={day.key}
-                            className={`flex items-center justify-center rounded-md py-1 ${
+                            className={`flex items-center justify-center py-1 ${
                               weekIdx === currentWeekIndex
-                                ? "bg-green-400 font-semibold"
+                                ? "bg-black font-semibold text-white"
                                 : ""
                             } ${
                               !day.isCurrentMonth &&
@@ -201,10 +257,16 @@ const StudentProfile = () => {
                 </Card>
               </div>
               </div>
-            </main>
+            </div>
           </div>
         </div>
       </div>
+
+      <StudentQRBadgeModal
+        isOpen={qrOpen}
+        onClose={() => setQrOpen(false)}
+        student={studentProfile}
+      />
     </AppLayout>
   );
 };

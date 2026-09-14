@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { AlertCircle, CheckCircle2, Clock } from "lucide-react";
 import { Tabs } from "../../components/retroui/Tabs";
 import ToDoItem from "../../components/to-do-item";
 import AppLayout from "@/layouts/app-layout";
@@ -10,14 +11,13 @@ import {
   type StudentTodosResponse,
   type TodoItem as ApiTodoItem,
 } from "@/lib/api";
-import { CheckCircle2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { EmptyStateCard } from "@/components/empty-state-card";
 
 const todoTabs = [
-  { id: "pending", label: "Pending" },
-  { id: "pastdue", label: "Past Due" },
-  { id: "completed", label: "Completed" },
+  { id: "pending", label: "Pending", icon: Clock },
+  { id: "pastdue", label: "Past Due", icon: AlertCircle },
+  { id: "completed", label: "Completed", icon: CheckCircle2 },
 ];
 
 export default function ToDo() {
@@ -83,17 +83,16 @@ export default function ToDo() {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center gap-3">
-              <SidebarTrigger className="md:hidden" />
-              <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <SidebarTrigger className="shrink-0 md:hidden" />
+              <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                 To do
               </h1>
             </header>
-
-            <main className="flex flex-col gap-3">
+            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs
                 tabs={todoTabs}
                 activeTab={activeTab}
@@ -104,6 +103,9 @@ export default function ToDo() {
                   completed: completedItems.length,
                 }}
               />
+            </div>
+
+            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
 
               {isLoading ? (
                 <LoadingPanel label="Loading your to-do items..." />
@@ -171,7 +173,6 @@ export default function ToDo() {
                       <h3 className="text-xl md:text-3xl font-semibold">Past Due</h3>
                       {pastDueItems.length === 0 ? (
                         <EmptyStateCard
-                          icon={<CheckCircle2 size={24} className="text-green-500" />}
                           title="No past due items!"
                           description="Great job keeping up with your deadlines."
                         />
@@ -212,7 +213,7 @@ export default function ToDo() {
                   )}
                 </>
               )}
-            </main>
+            </div>
           </div>
         </div>
       </div>

@@ -77,7 +77,7 @@ export async function exportTosBlueprintPdf(draft: TOSDraft): Promise<void> {
 
   doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
-  doc.text(`${draft.subject_name || "Subject"} — ${draft.title || "Summative Assessment"} (${draft.quarter || "Q1"})`, ML, y);
+  doc.text(`${draft.subject_name || "Subject"} — ${draft.title || "Summative Assessment"} (${draft.quarter || "Term 1"})`, ML, y);
   y += 5;
 
   // Test Parts Breakdown Header
@@ -372,7 +372,7 @@ export async function exportTosBlueprintDocx(draft: TOSDraft): Promise<void> {
         },
         children: [
           p("TABLE OF SPECIFICATIONS (TOS)", true, 28),
-          p(`${draft.subject_name || "Subject"} — ${draft.title || "Summative Assessment"} (${draft.quarter || "Q1"})`, true, 22),
+          p(`${draft.subject_name || "Subject"} — ${draft.title || "Summative Assessment"} (${draft.quarter || "Term 1"})`, true, 22),
           p(`Test Composition: ${testPartsStr}  |  Total Items: ${draft.total_items}`, false, 18),
           table,
         ],

@@ -4,8 +4,8 @@ import argparse
 import json
 from pathlib import Path
 
-from app.db.Session import SessionLocal
 from app.services.prediction.ModelScoringService import DEFAULT_MODEL_NAME
+from app.services.prediction.PredictionGenerationTransaction import run_prediction_generation_transaction
 from app.services.prediction.PredictionPersistenceService import score_and_persist_prediction
 
 
@@ -20,16 +20,17 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     prediction_request = json.loads(args.input_json.read_text(encoding="utf-8"))
-    db = SessionLocal()
-    try:
-        result = score_and_persist_prediction(
-            db,
+    result = run_prediction_generation_transaction(
+        prediction_request,
+        args.model_name,
+        lambda generation_db: score_and_persist_prediction(
+            generation_db,
             prediction_request,
             model_name=args.model_name,
             replace_existing=args.replace_existing,
-        )
-    finally:
-        db.close()
+            commit=False,
+        ),
+    )
     print(json.dumps(result, indent=2, sort_keys=True))
 
 

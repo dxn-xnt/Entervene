@@ -62,7 +62,7 @@ def is_turned_in(status: Optional[str]) -> bool:
     return status in ("submitted", "late", "graded")
 
 
-def teacher_owns_assignment(assignment_id: int, staff_id: str, db: Session) -> ClassworkAssignment:
+def teacher_owns_assignment(assignment_id: int, staff_id: str, db: Session, write_required: bool = False) -> ClassworkAssignment:
     assignment = db.query(ClassworkAssignment).filter(
         ClassworkAssignment.classwork_assignment_id == assignment_id
     ).first()
@@ -72,33 +72,29 @@ def teacher_owns_assignment(assignment_id: int, staff_id: str, db: Session) -> C
     if not classwork:
         raise HTTPException(status_code=403, detail="You do not own this assignment")
 
-    if classwork.created_by_staff_id != staff_id:
-        from app.models.academic.SubjectLoad import SubjectLoad
-        from app.services.academic.SubstitutionService import SubstitutionService
-        loads = db.query(SubjectLoad).filter(
+    from app.models.academic.SubjectLoad import SubjectLoad
+    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+    load = (
+        db.query(SubjectLoad)
+        .filter(
             SubjectLoad.class_id == assignment.class_id,
             SubjectLoad.subject_id == classwork.subject_id,
+            SubjectLoad.is_active_version.is_(True),
             SubjectLoad.status.in_(["active", "published"]),
-        ).all()
-        is_sub = False
-        for sl in loads:
-            active_sub = SubstitutionService.get_active_substitution(db, sl.subject_load_id)
-            if active_sub and active_sub.substitute_staff_id == staff_id:
-                is_sub = True
-                break
-        if not is_sub:
-            raise HTTPException(status_code=403, detail="You do not own this assignment")
+        )
+        .first()
+    )
+    if not load:
+        raise HTTPException(status_code=403, detail="No active subject load for this assignment")
+
+    if write_required:
+        SubjectLoadAuthorizationService.assert_can_write(
+            db, staff_id, load.class_id, load.subject_id, load.academic_period_id
+        )
     else:
-        from app.models.academic.SubjectLoad import SubjectLoad
-        from app.services.academic.SubstitutionService import SubstitutionService
-        loads = db.query(SubjectLoad).filter(
-            SubjectLoad.class_id == assignment.class_id,
-            SubjectLoad.subject_id == classwork.subject_id,
-            SubjectLoad.status.in_(["active", "published"]),
-        ).all()
-        for sl in loads:
-            if sl.staff_id == staff_id:
-                SubstitutionService.assert_can_write(db, staff_id, sl.subject_load_id)
+        SubjectLoadAuthorizationService.assert_can_view(
+            db, staff_id, load.class_id, load.subject_id, load.academic_period_id
+        )
 
     return assignment
 
@@ -204,7 +200,7 @@ def assert_student_can_modify_submission(
 
 def student_has_excused_exemption(db: Session, student_id: UUID, class_id: int, check_date: datetime) -> bool:
     try:
-        from app.models.attendance.Attendance import AttendanceRecord, LeaveRequest
+        from app.models.attendance.Attendance import AttendanceRecord
 
         d_val = check_date.date()
         att = db.query(AttendanceRecord).filter(
@@ -214,16 +210,6 @@ def student_has_excused_exemption(db: Session, student_id: UUID, class_id: int, 
             AttendanceRecord.status == "excused",
         ).first()
         if att:
-            return True
-
-        leave = db.query(LeaveRequest).filter(
-            LeaveRequest.student_id == student_id,
-            LeaveRequest.class_id == class_id,
-            LeaveRequest.status == "approved",
-            LeaveRequest.start_date <= d_val,
-            LeaveRequest.end_date >= d_val,
-        ).first()
-        if leave:
             return True
     except Exception as err:
         print(f"[Attendance Exemption Check Error] {err}")
@@ -697,7 +683,8 @@ def download_submission_file(
     submission_id: int,
     attachment_id: int,
     payload: dict,
-    db: Session,
+    inline: bool = False,
+    db: Session = None,
 ) -> FileResponse:
     submission = db.query(StudentSubmission).filter(StudentSubmission.submission_id == submission_id).first()
     if not submission:
@@ -718,6 +705,7 @@ def download_submission_file(
         path=str(path),
         filename=cast(str, attachment.file_name),
         media_type=cast(Optional[str], attachment.file_type) or "application/octet-stream",
+        content_disposition_type="inline" if inline else "attachment",
     )
 
 
@@ -730,7 +718,7 @@ def grade_student_submission(
     submission = db.query(StudentSubmission).filter(StudentSubmission.submission_id == submission_id).first()
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    assignment = teacher_owns_assignment(submission.classwork_assignment_id, staff_id, db)
+    assignment = teacher_owns_assignment(submission.classwork_assignment_id, staff_id, db, write_required=True)
     classwork = db.query(Classwork).filter(Classwork.classwork_id == assignment.classwork_id).first() if assignment else None
     if classwork and (not getattr(classwork, "is_graded", True) or (classwork.classwork_type or "").upper() == "READING"):
         raise HTTPException(status_code=400, detail="Reading classworks cannot be graded")

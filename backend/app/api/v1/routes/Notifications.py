@@ -10,6 +10,10 @@ from app.services.NotificationService import (
     mark_notification_read,
 )
 
+from app.services.student_record.GradeSubmissionNotificationService import (
+    check_and_generate_grade_submission_notifications,
+)
+
 router = APIRouter()
 
 
@@ -27,6 +31,10 @@ def list_notifications(
     - `limit` caps the result set (default 50, max 200).
     """
     user_id = current_user["sub"]
+    
+    # Lazy generation of grade submission timing alerts for teachers
+    check_and_generate_grade_submission_notifications(db=db, user_id=user_id)
+
     return get_notifications_for_user(db=db, user_id=user_id, limit=limit, unread_only=unread_only)
 
 

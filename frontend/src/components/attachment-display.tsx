@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { Download, FileText, File, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Download, Eye, FileText, File, X, Image as ImageIcon } from "lucide-react";
 import PDFViewer from "./pdf-viewer";
-import { apiFetch } from "@/lib/api";
+import { API_URL, apiFetch } from "@/lib/api";
 import { Button } from "@/components/retroui/Button";
+import { Card } from "./retroui/Card";
 
 interface Attachment {
   classwork_attachment_id?: number;
@@ -26,6 +28,10 @@ function formatFileSize(bytes: number): string {
   const sizes = ["Bytes", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+}
+
+function isModifiedClick(e: React.MouseEvent): boolean {
+  return e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.button !== 0;
 }
 
 export default function AttachmentDisplay({
@@ -57,6 +63,28 @@ export default function AttachmentDisplay({
     };
   }, [selectedImage, selectedPdf]);
 
+  useEffect(() => {
+    if (!selectedImage) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        closeImagePreview();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, [selectedImage]);
+
   if (!attachments || attachments.length === 0) {
     return (
       <div className="text-center py-4 text-gray-500">
@@ -86,9 +114,16 @@ export default function AttachmentDisplay({
     return "";
   };
 
-  const getInlineUrl = (attachment: Attachment): string => {
-    const url = getAttachmentUrl(attachment);
+  const resolveAbsoluteUrl = (url: string): string => {
     if (!url) return "";
+    if (/^https?:\/\//i.test(url)) return url;
+    return `${API_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+  };
+
+  const getInlineUrl = (attachment: Attachment): string => {
+    const rawUrl = getAttachmentUrl(attachment);
+    if (!rawUrl) return "";
+    const url = resolveAbsoluteUrl(rawUrl);
     return `${url}${url.includes("?") ? "&" : "?"}inline=true`;
   };
 
@@ -184,126 +219,155 @@ export default function AttachmentDisplay({
   return (
     <div className="space-y-3">
       {selectedPdf && (
-        <div className="mb-4">
-          <PDFViewer
-            pdfUrl={selectedPdf}
-            downloadUrl={selectedPdfDownload}
-            fileName={selectedPdfName}
-            onClose={() => {
-              if (selectedPdf.startsWith("blob:"))
-                URL.revokeObjectURL(selectedPdf);
-              setSelectedPdf(null);
-              setSelectedPdfDownload("");
-            }}
-          />
-        </div>
+        <PDFViewer
+          pdfUrl={selectedPdf}
+          downloadUrl={selectedPdfDownload}
+          fileName={selectedPdfName}
+          onClose={() => {
+            if (selectedPdf.startsWith("blob:"))
+              URL.revokeObjectURL(selectedPdf);
+            setSelectedPdf(null);
+            setSelectedPdfDownload("");
+          }}
+        />
       )}
 
-      {selectedImage && (
-        <div className="mb-4 overflow-hidden rounded-lg border border-gray-300 bg-gray-100">
-          <div className="flex items-center justify-between bg-gray-800 px-4 py-3 text-white">
-            <p className="truncate font-medium">{selectedImage.name}</p>
-            <button
-              type="button"
-              onClick={closeImagePreview}
-              className="rounded p-2 hover:bg-gray-700"
-              title="Close"
-            >
-              <X size={18} />
-            </button>
-          </div>
-          <div className="flex max-h-[70vh] items-center justify-center overflow-auto p-4">
-            <img
-              src={selectedImage.url}
-              alt={selectedImage.name}
-              className="max-h-[65vh] max-w-full object-contain"
-            />
-          </div>
-        </div>
-      )}
-
-      {!selectedPdf && !selectedImage && (
-        <div className="space-y-2">
-          {previewError && (
-            <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {previewError}
-            </div>
-          )}
-          <h3 className="font-semibold text-sm text-gray-700">
-            Attachments ({attachments.length})
-          </h3>
-          <div className="grid gap-2">
-            {attachments.map((attachment, idx) => {
-              const isPdfFile = isPdf(attachment.file_name);
-              const isImageFile = isImage(attachment);
-              const url = getAttachmentUrl(attachment);
-
-              return (
-                <div
-                  key={idx}
-                  className="flex min-w-0 flex-col gap-3 rounded-lg border border-gray-200 p-3 transition-colors hover:bg-gray-50 sm:flex-row sm:items-center sm:justify-between"
+      {selectedImage &&
+        createPortal(
+          <div className="fixed inset-0 z-[10000] flex h-full w-full flex-col bg-neutral-950 text-white m-0 p-0 border-0 overflow-hidden">
+            {/* Top Bar Header */}
+            <div className="flex h-14 shrink-0 items-center justify-between border-b border-neutral-800 bg-neutral-900 px-4">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <ImageIcon className="size-5 shrink-0 text-blue-400" />
+                <p
+                  className="truncate text-sm font-medium text-neutral-200"
+                  title={selectedImage.name}
                 >
-                  <div className="flex min-w-0 flex-1 items-center gap-3">
-                    {isPdfFile ? (
-                      <FileText
-                        className="text-red-500 flex-shrink-0"
-                        size={20}
-                      />
-                    ) : (
-                      <File className="text-blue-500 flex-shrink-0" size={20} />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p
-                        className="truncate text-sm font-medium"
-                        title={attachment.file_name}
-                      >
-                        {attachment.file_name}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {formatFileSize(attachment.file_size)}
-                      </p>
-                    </div>
-                  </div>
+                  {selectedImage.name}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href={selectedImage.url}
+                  download={selectedImage.name}
+                  className="rounded p-2 text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white"
+                  title="Download Image"
+                >
+                  <Download size={18} />
+                </a>
+                <button
+                  type="button"
+                  onClick={closeImagePreview}
+                  className="rounded p-2 text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white"
+                  title="Close viewer (Esc)"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
 
-                  <div className="flex shrink-0 flex-wrap gap-2 sm:ml-2 sm:justify-end">
-                    {(isPdfFile || isImageFile) && url && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          isPdfFile
-                            ? handleOpenPdf(attachment)
-                            : handleOpenImage(attachment)
-                        }
-                        disabled={imageLoadingName === attachment.file_name}
-                      >
-                        {imageLoadingName === attachment.file_name
-                          ? "Loading..."
-                          : "View"}
-                      </Button>
-                    )}
-                    {url && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => handleDownload(attachment)}
-                        disabled={downloadLoadingName === attachment.file_name}
-                        className="gap-1.5"
-                      >
-                        <Download size={14} />
-                        {downloadLoadingName === attachment.file_name
-                          ? "Downloading..."
-                          : "Download"}
-                      </Button>
-                    )}
+            {/* Image Viewport */}
+            <div className="relative flex-1 w-full min-h-0 flex items-center justify-center p-4 overflow-hidden bg-neutral-950">
+              <img
+                src={selectedImage.url}
+                alt={selectedImage.name}
+                className="max-h-full max-w-full object-contain select-none shadow-2xl"
+              />
+            </div>
+          </div>,
+          document.body
+        )}
+
+      <div className="space-y-2">
+        {previewError && (
+          <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {previewError}
+          </div>
+        )}
+        <div className="grid gap-2">
+          {attachments.map((attachment, idx) => {
+            const isPdfFile = isPdf(attachment.file_name);
+            const isImageFile = isImage(attachment);
+            const url = getAttachmentUrl(attachment);
+
+            return (
+              <Card
+                key={idx}
+                className="flex min-w-0 flex-col shadow-none transition-colors hover:bg-accent sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  {isPdfFile ? (
+                    <FileText
+                      className="flex-shrink-0"
+                      size={24}
+                    />
+                  ) : (
+                    <File className="text-blue-500 flex-shrink-0" size={20} />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className="truncate text-sm font-medium"
+                      title={attachment.file_name}
+                    >
+                      {attachment.file_name}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatFileSize(attachment.file_size)}
+                    </p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+
+                <div className="flex shrink-0 flex-wrap gap-2 sm:ml-2 sm:justify-end">
+                  {(isPdfFile || isImageFile) && url && (
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className={`shadow-none ${imageLoadingName === attachment.file_name ? "pointer-events-none opacity-50" : ""}`}
+                    >
+                      <a
+                        href={getInlineUrl(attachment)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-disabled={imageLoadingName === attachment.file_name}
+                        onClick={(e) => {
+                          if (imageLoadingName === attachment.file_name) {
+                            e.preventDefault();
+                            return;
+                          }
+                          if (!isModifiedClick(e)) {
+                            e.preventDefault();
+                            if (isPdfFile) {
+                              handleOpenPdf(attachment);
+                            } else {
+                              handleOpenImage(attachment);
+                            }
+                          }
+                        }}
+                      >
+                        <Eye className="mr-2 size-4 shrink-0" aria-hidden="true" />
+                        View
+                      </a>
+                    </Button>
+                  )}
+                  {url && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleDownload(attachment)}
+                      disabled={downloadLoadingName === attachment.file_name}
+                      className="gap-1.5 shadow-none"
+                    >
+                      <Download size={14} />
+                      Download
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            );
+          })}
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -19,14 +19,19 @@ def _staff_full_name(staff: AcademicStaff | None) -> str:
 class SubstitutionService:
 
     @staticmethod
-    def is_active_on_date(sub: TeacherSubstitution, as_of: date_type | None = None) -> bool:
-        if as_of is None:
-            as_of = date_type.today()
+    def get_academic_date(as_of: date_type | None = None) -> date_type:
+        if as_of is not None:
+            return as_of
+        return date_type.today()
+
+    @classmethod
+    def is_active_on_date(cls, sub: TeacherSubstitution, as_of: date_type | None = None) -> bool:
+        target_date = cls.get_academic_date(as_of)
         if sub.status != "active":
             return False
-        if as_of < sub.start_date:
+        if target_date < sub.start_date:
             return False
-        if sub.end_date is not None and as_of > sub.end_date:
+        if sub.end_date is not None and target_date > sub.end_date:
             return False
         return True
 
@@ -37,20 +42,19 @@ class SubstitutionService:
         subject_load_id: int,
         as_of: date_type | None = None,
     ) -> TeacherSubstitution | None:
-        if as_of is None:
-            as_of = date_type.today()
+        target_date = cls.get_academic_date(as_of)
 
         sub = (
             db.query(TeacherSubstitution)
             .filter(
                 TeacherSubstitution.subject_load_id == subject_load_id,
                 TeacherSubstitution.status == "active",
-                TeacherSubstitution.start_date <= as_of,
+                TeacherSubstitution.start_date <= target_date,
             )
             .all()
         )
         for s in sub:
-            if s.end_date is None or as_of <= s.end_date:
+            if s.end_date is None or target_date <= s.end_date:
                 return s
         return None
 
@@ -153,7 +157,8 @@ class SubstitutionService:
                 TeacherSubstitution.status == "active",
                 TeacherSubstitution.start_date <= as_of,
                 SubjectLoad.academic_period_id == academic_period_id,
-                SubjectLoad.status == "published",
+                SubjectLoad.status.in_(["published", "active"]),
+                SubjectLoad.is_active_version.is_(True),
             )
             .all()
         )
@@ -185,7 +190,8 @@ class SubstitutionService:
                 TeacherSubstitution.status == "active",
                 TeacherSubstitution.start_date <= as_of,
                 SubjectLoad.academic_period_id == academic_period_id,
-                SubjectLoad.status == "published",
+                SubjectLoad.status.in_(["published", "active"]),
+                SubjectLoad.is_active_version.is_(True),
             )
             .all()
         )

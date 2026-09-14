@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
-import { BookOpen, ChevronDown, Pencil, Plus, Users } from "lucide-react";
+import { BookOpen, Pencil, Users } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/retroui/Accordion";
+import { Table } from "@/components/retroui/Table";
+import { Avatar } from "@/components/retroui/Avatar";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
@@ -64,25 +67,9 @@ function formatClassDate(value: string | null) {
   }).format(date);
 }
 
-function CustomAvatar({ text, size = "md" }: { text: string; size?: "sm" | "md" | "lg" }) {
-  const initial = (text || "?").charAt(0).toUpperCase();
-  const sizeClasses =
-    size === "sm"
-      ? "size-7 text-xs"
-      : size === "lg"
-        ? "size-10 text-base"
-        : "size-8 text-sm";
-  return (
-    <span
-      className={`inline-flex shrink-0 items-center justify-center rounded-full border-2 border-border bg-primary font-bold text-primary-foreground ${sizeClasses}`}
-    >
-      {initial}
-    </span>
-  );
-}
 
 function groupClassStudents(students: ClassStudentListItem[]) {
-  const order = ["Male", "Female", "Other", "Unspecified"];
+  const order = ["Male", "Female", "Unspecified"];
   return order
     .map(
       (gender) =>
@@ -95,7 +82,7 @@ function groupClassStudents(students: ClassStudentListItem[]) {
 }
 
 function normalizedStudentGender(gender: string) {
-  if (gender === "Female" || gender === "Male" || gender === "Other") return gender;
+  if (gender === "Female" || gender === "Male") return gender;
   return "Unspecified";
 }
 
@@ -273,14 +260,14 @@ export default function AdminClassDetail() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col">
             {/* Header with Breadcrumb & Context Actions */}
-            <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <Breadcrumb>
-                  <Breadcrumb.List>
+            <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <Breadcrumb className="min-w-0 overflow-hidden">
+                  <Breadcrumb.List className="flex-nowrap">
                     <Breadcrumb.Item>
                       <Breadcrumb.Link href="/admin/classes">Classes</Breadcrumb.Link>
                     </Breadcrumb.Item>
@@ -301,76 +288,74 @@ export default function AdminClassDetail() {
                 </Breadcrumb>
               </div>
 
-              <div className="flex items-center gap-2">
-                {tab === "subjects" && !isArchived && (
-                  <Button variant="outline">
-                    <Plus className="mr-2 size-4" /> Add Subject Load
-                  </Button>
-                )}
+              <div className="flex w-full items-center gap-2 md:w-auto">
                 {!isArchived && (
-                  <Button onClick={() => setShowEditClass(true)}>
-                    <Pencil className="mr-2 size-4" /> Edit Class
+                  <Button onClick={() => setShowEditClass(true)} className="w-full justify-center gap-1.5 px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm md:w-auto">
+                    <Pencil className="size-4" /> Edit Class
                   </Button>
                 )}
               </div>
             </header>
+            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+              <Tabs<DetailTab>
+                tabs={[
+                  { id: "classes", label: "Overview", icon: BookOpen },
+                  { id: "students", label: "Students", icon: Users },
+                  { id: "subjects", label: "Subject Load", icon: BookOpen },
+                ]}
+                activeTab={tab}
+                onTabChange={(id) => setTab(id)}
+              />
+            </div>
 
-            {/* Retro UI Tabs */}
-            <Tabs<DetailTab>
-              tabs={[
-                { id: "classes", label: "Overview", icon: BookOpen },
-                { id: "students", label: "Students", icon: Users },
-                { id: "subjects", label: "Subject Load", icon: BookOpen },
-              ]}
-              activeTab={tab}
-              onTabChange={(id) => setTab(id)}
-            />
+            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 [&_table]:min-w-[560px] sm:px-4 sm:py-4 md:px-6">
 
-            {/* Tab content */}
-            <div className="flex flex-col gap-3 pt-2">
-              {isArchived && (
-                <RetroCard className="bg-[#fff7d6] p-3">
-                  <Text as="p" className="text-sm font-bold">
-                    This class is archived and read-only. Restore it before editing class
-                    information, student assignments, or subject loads.
-                  </Text>
-                </RetroCard>
-              )}
-
-              {/* Class identity banner */}
-              <RetroCard className="bg-accent p-4">
-                <div className="flex flex-col gap-1">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Text as="h2" className="font-sans text-2xl font-bold">
-                      {selectedClass.section}
+              {/* Tab content */}
+              <div className="flex flex-col gap-3">
+                {isArchived && (
+                  <RetroCard className="bg-[#fff7d6] p-3">
+                    <Text as="p" className="text-sm font-bold">
+                      This class is archived and read-only. Restore it before editing class
+                      information, student assignments, or subject loads.
                     </Text>
-                    <Badge variant={isArchived ? "default" : "surface"}>
-                      {selectedClass.status}
-                    </Badge>
-                  </div>
-                  <Text as="p" className="text-sm font-normal">
-                    {selectedClass.grade} - {selectedClass.academicYear} | Active since{" "}
-                    {activeSince}
-                  </Text>
-                </div>
-              </RetroCard>
+                  </RetroCard>
+                )}
 
-              {tab === "classes" && (
-                <OverviewTab selectedClass={selectedClass} activeSince={activeSince} />
-              )}
-              {tab === "students" && (
-                <StudentsTab
-                  studentData={classStudents}
-                  isLoading={studentsLoading}
-                  error={studentsError}
-                  success={studentsSuccess}
-                  editError={transferOptionsError}
-                  isReadOnly={isArchived}
-                  onRetry={() => void refreshStudents()}
-                  onEdit={() => void openEditStudentList()}
-                />
-              )}
-              {tab === "subjects" && <SubjectLoadTab selectedClass={selectedClass} />}
+                {/* Class identity banner */}
+                <RetroCard className="bg-primary p-4">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex flex-row items-start gap-3 justify-between">
+                      <Text as="h2" className="font-sans text-2xl font-bold">
+                        {selectedClass.section}
+                      </Text>
+                      <Badge size="sm" variant={isArchived ? "default" : "outline"}>
+                        {selectedClass.status}
+                      </Badge>
+                    </div>
+                    <Text as="p" className="text-sm font-normal">
+                      {selectedClass.grade} - {selectedClass.academicYear} | Active since{" "}
+                      {activeSince}
+                    </Text>
+                  </div>
+                </RetroCard>
+
+                {tab === "classes" && (
+                  <OverviewTab selectedClass={selectedClass} activeSince={activeSince} />
+                )}
+                {tab === "students" && (
+                  <StudentsTab
+                    studentData={classStudents}
+                    isLoading={studentsLoading}
+                    error={studentsError}
+                    success={studentsSuccess}
+                    editError={transferOptionsError}
+                    isReadOnly={isArchived}
+                    onRetry={() => void refreshStudents()}
+                    onEdit={() => void openEditStudentList()}
+                  />
+                )}
+                {tab === "subjects" && <SubjectLoadTab selectedClass={selectedClass} />}
+              </div>
             </div>
           </div>
         </div>
@@ -519,7 +504,15 @@ function OverviewTab({
           </Text>
           <RetroCard className="p-3">
             <div className="flex items-center gap-3">
-              <CustomAvatar text={selectedClass.adviser} size="lg" />
+              <Avatar variant="teacher" className="size-12 shrink-0">
+                <Avatar.Image
+                  src="/avatars/teacher-avatars/12.svg"
+                  alt={selectedClass.adviser}
+                />
+                <Avatar.Fallback>
+                  {(selectedClass.adviser || "?").charAt(0).toUpperCase()}
+                </Avatar.Fallback>
+              </Avatar>
               <span>
                 <Text as="p" className="text-base font-bold">
                   {selectedClass.adviser}
@@ -594,7 +587,6 @@ function StudentsTab({
   error,
   success,
   editError,
-  isReadOnly,
   onRetry,
   onEdit,
 }: {
@@ -620,29 +612,24 @@ function StudentsTab({
   return (
     <div className="grid gap-4">
       <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-3">
-        <OverviewCard
-          title="Total Students"
-          count={String(studentData?.summary.total_students ?? 0)}
-        />
+        <OverviewCard title="Total Students" count={String(studentData?.summary.total_students ?? 0)} />
         <OverviewCard title="Avg. Class Score" count="88%" stat="12%" />
         <OverviewCard title="At-Risk Students" count="3" stat="12%" />
       </div>
 
       <section className="flex flex-col gap-3">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <Text as="h3" className="font-sans text-xl font-bold">
+        <div className="flex w-full flex-row gap-2 items-end justify-between">
+          <Text as="h3" className="w-full font-sans text-xl font-bold">
             Students
           </Text>
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-row gap-2 w-full">
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search students..."
-              className="h-10 w-full sm:w-64"
+              className="h-10 max-w-100 w-full !bg-white"
             />
-            {!isReadOnly && (
-              <Button onClick={onEdit}>Edit Student List</Button>
-            )}
+            <Button onClick={onEdit} className="whitespace-nowrap">Edit Student List</Button>
           </div>
         </div>
 
@@ -683,54 +670,89 @@ function StudentsTab({
               No students match your search.
             </p>
           ) : (
-            <div className="grid items-start gap-3">
+            <Accordion
+              multiple
+              defaultValue={groupedStudents.map(([gender]) => gender)}
+              className="flex flex-col gap-3"
+            >
               {groupedStudents.map(([gender, group]) => (
-                <details
+                <AccordionItem
                   key={gender}
-                  open
-                  className="group overflow-hidden rounded-xl border-2 border-border bg-background shadow-none"
+                  value={gender}
+                  className="border-2 border-border bg-background shadow-none overflow-hidden"
                 >
-                  <summary className="flex cursor-pointer list-none items-center justify-between bg-accent px-4 py-3 text-base font-bold">
-                    <span>{gender.toUpperCase()}</span>
-                    <span className="flex items-center gap-2">
+                  <AccordionTrigger className="items-center bg-accent px-4 py-3 text-base font-bold">
+                    <div className="flex items-center justify-between w-full mr-2">
+                      <span>{gender}</span>
                       <Badge variant="outline" size="sm">
                         {group.length} student{group.length !== 1 ? "s" : ""}
                       </Badge>
-                      <ChevronDown className="size-4 rotate-180 transition-transform group-open:rotate-180" />
-                    </span>
-                  </summary>
-                  <div>
-                    {group.map((student) => (
-                      <div
-                        key={student.student_id}
-                        className="flex min-h-14 items-center gap-3 border-b border-border bg-background px-4 py-3 text-sm last:border-b-0 cursor-pointer hover:bg-accent/40 transition-colors"
-                        onClick={() =>
-                          navigate(
-                            `/admin/classes/${classId}/students/${student.student_id}`
-                          )
-                        }
-                      >
-                        <CustomAvatar text={student.avatar_initial || student.full_name} size="md" />
-                        <span className="min-w-0 flex-1">
-                          <Text as="p" className="truncate text-base font-bold">
-                            {student.full_name}
-                          </Text>
-                        </span>
-                        {(student.account_status || "").toLowerCase() === "pending" && (
-                          <Badge
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0 border-amber-400 bg-amber-50 text-amber-700"
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="p-0 border-t-2 border-border">
+                    <Table className="border-none shadow-none" wrapperClassName="overflow-x-auto">
+                      <Table.Header className="font-sans">
+                        <Table.Row>
+                          <Table.Head>Name</Table.Head>
+                          <Table.Head className="text-right w-36">Status</Table.Head>
+                        </Table.Row>
+                      </Table.Header>
+                      <Table.Body>
+                        {group.map((student) => (
+                          <Table.Row
+                            key={student.student_id}
+                            className="cursor-pointer hover:bg-accent/40 transition-colors"
+                            onClick={() =>
+                              navigate(
+                                `/admin/classes/${classId}/students/${student.student_id}`
+                              )
+                            }
                           >
-                            Pending
-                          </Badge>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </details>
+                            <Table.Cell>
+                              <div className="flex items-center gap-3">
+                                <Avatar variant="student" className="size-8 shrink-0">
+                                  <Avatar.Image
+                                    src="/avatars/student-avatars/1.svg"
+                                    alt={student.full_name}
+                                  />
+                                  <Avatar.Fallback>
+                                    {(student.avatar_initial || student.full_name || "?")
+                                      .charAt(0)
+                                      .toUpperCase()}
+                                  </Avatar.Fallback>
+                                </Avatar>
+                                <Text as="p" className="text-base font-semibold text-black">
+                                  {student.full_name}
+                                </Text>
+                              </div>
+                            </Table.Cell>
+                            <Table.Cell className="text-right">
+                              {(student.account_status || "").toLowerCase() === "pending" ? (
+                                <Badge
+                                  variant="default"
+                                  size="sm"
+                                  className="shrink-0"
+                                >
+                                  Pending
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="surface"
+                                  size="sm"
+                                  className="shrink-0"
+                                >
+                                  Enrolled
+                                </Badge>
+                              )}
+                            </Table.Cell>
+                          </Table.Row>
+                        ))}
+                      </Table.Body>
+                    </Table>
+                  </AccordionContent>
+                </AccordionItem>
               ))}
-            </div>
+            </Accordion>
           )}
         </RetroCard>
       </section>

@@ -186,6 +186,25 @@ def test_missing_subject_one_hot_columns_default_to_zero():
     assert any("subject_SCIENCE" in warning for warning in warnings)
 
 
+def test_no_previous_period_defaults_missing_trend_to_zero():
+    frame, warnings = prepare_feature_row(
+        sample_input(has_previous_period=False, grade_trend_vs_previous_period=None),
+        feature_schema(),
+    )
+
+    assert frame.iloc[0]["grade_trend_vs_previous_period"] == 0
+    assert any("grade_trend_vs_previous_period defaulted to 0" in warning for warning in warnings)
+
+
+@pytest.mark.parametrize("prohibited", ["predicted_period_grade", "at_risk", "target_next_period_grade"])
+def test_prohibited_or_non_grade_features_cannot_enter_model_schema(prohibited):
+    schema = feature_schema()
+    schema["feature_columns"] = [*schema["feature_columns"], prohibited]
+
+    with pytest.raises(ValueError, match="not permitted|Unknown"):
+        prepare_feature_row(sample_input(), schema)
+
+
 def test_non_numeric_model_features_fail_clearly():
     with pytest.raises(ValueError, match="grade_level"):
         prepare_feature_row(sample_input(grade_level="eight"), feature_schema())
@@ -230,3 +249,20 @@ def test_runtime_only_risk_fields_are_allowed_but_not_model_features(db, tmp_pat
     assert "late_submission_count" not in result["feature_columns_used"]
     assert result["risk_level"] == "MODERATE_RISK"
     assert "two_or_more_missing_activities" in result["triggered_rules"]
+
+
+def test_score_student_prediction_suppresses_grade_on_insufficient_data(db, tmp_path: Path):
+    artifact_path = tmp_path / "model.joblib"
+    joblib.dump(FakeRegressor(86.42), artifact_path)
+    add_model_version(db, str(artifact_path))
+
+    # Coverage < 0.50 triggers INSUFFICIENT_DATA in RiskEngine
+    result = score_student_prediction(
+        db,
+        sample_input(subject_SCIENCE=1, data_coverage_ratio=0.30),
+    )
+
+    assert result["risk_level"] == "INSUFFICIENT_DATA"
+    assert result["data_status"] == "INSUFFICIENT_DATA"
+    assert result["predicted_period_grade"] is None
+    assert result["risk_score"] is None

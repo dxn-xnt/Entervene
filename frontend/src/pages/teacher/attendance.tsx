@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card } from "@/components/retroui/Card";
@@ -18,9 +18,11 @@ import { apiFetch, getTeacherAdvisoryClasses } from "@/lib/api";
 import {
   getClassAttendanceLogs,
   recordBatchAttendance,
+  scanQRAttendance,
   type AttendanceStatus,
   type AttendanceRecordItem,
 } from "@/lib/attendance-api";
+import { Html5Qrcode } from "html5-qrcode";
 import {
   Search,
   Save,
@@ -30,9 +32,16 @@ import {
   Table as TableIcon,
   X,
   ArrowUpRight,
+  QrCode,
+  Camera,
+  CameraOff,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import "./attendance.css";
 
 type StudentInfo = {
   student_id: string;
@@ -97,15 +106,37 @@ type StudentSummaryStats = {
   logByDate: Map<string, AttendanceRecordItem>;
 };
 
+type RecentScanItem = {
+  id: string;
+  student_id: string;
+  student_name: string;
+  student_lrn?: string | null;
+  status: string;
+  is_duplicate: boolean;
+  message: string;
+  timestamp: string;
+  type: "success" | "duplicate" | "excused" | "error";
+};
+
 export default function TeacherAttendancePage() {
   const [targets, setTargets] = useState<AttendanceTarget[]>([]);
   const [selectedTargetKey, setSelectedTargetKey] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0],
   );
-  const [activeTab, setActiveTab] = useState<"marking" | "summary">(
+  const [activeTab, setActiveTab] = useState<"marking" | "summary" | "scan">(
     "marking",
   );
+
+  // Scanner States
+  const [recentScans, setRecentScans] = useState<RecentScanItem[]>([]);
+  const [scannerRunning, setScannerRunning] = useState(false);
+  const [scannerError, setScannerError] = useState<string | null>(null);
+
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const isStartingRef = useRef(false);
+  const isStoppingRef = useRef(false);
+  const lastScanRef = useRef<{ text: string; time: number }>({ text: "", time: 0 });
 
   // Summary View Options
   const [summaryLayout, setSummaryLayout] = useState<"summary" | "date_grid">(
@@ -324,6 +355,205 @@ export default function TeacherAttendancePage() {
     }
   };
 
+  // QR Scan Handler
+  const handleQrScan = async (decodedText: string) => {
+    if (!selectedClassId) return;
+
+    // Cooldown throttle to prevent double-scan within 2.5 seconds
+    const now = Date.now();
+    if (
+      lastScanRef.current.text === decodedText &&
+      now - lastScanRef.current.time < 2500
+    ) {
+      return;
+    }
+    lastScanRef.current = { text: decodedText, time: now };
+
+    const timeStr = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+
+    try {
+      const res = await scanQRAttendance({
+        student_id: decodedText,
+        class_id: selectedClassId,
+        subject_id: selectedSubjectId,
+      });
+
+      const isExcused = res.status === "excused";
+      const isDuplicate = res.is_duplicate;
+      const scanType: "success" | "duplicate" | "excused" = isExcused
+        ? "excused"
+        : isDuplicate
+        ? "duplicate"
+        : "success";
+
+      // Update studentList status in-place if marked present
+      if (!isExcused && res.status === "present") {
+        setStudentList((prev) =>
+          prev.map((item) =>
+            item.student_id === res.student_id
+              ? { ...item, status: "present" }
+              : item,
+          ),
+        );
+      }
+
+      setRecentScans((prev) => [
+        {
+          id: Math.random().toString(36).substring(2, 9),
+          student_id: res.student_id,
+          student_name: res.student_name || "Enrolled Student",
+          student_lrn: res.student_lrn,
+          status: res.status,
+          is_duplicate: isDuplicate,
+          message: res.message,
+          timestamp: timeStr,
+          type: scanType,
+        },
+        ...prev.slice(0, 49),
+      ]);
+    } catch (err: any) {
+      setRecentScans((prev) => [
+        {
+          id: Math.random().toString(36).substring(2, 9),
+          student_id: decodedText,
+          student_name: "Unenrolled / Invalid ID",
+          status: "rejected",
+          is_duplicate: false,
+          message: err.message || "Student is not enrolled in this section.",
+          timestamp: timeStr,
+          type: "error",
+        },
+        ...prev.slice(0, 49),
+      ]);
+    }
+  };
+
+  const releaseMediaTracks = () => {
+    try {
+      const readerElem = document.getElementById("attendance-qr-reader");
+      if (readerElem) {
+        const videoElem = readerElem.querySelector("video");
+        if (videoElem && videoElem.srcObject) {
+          const stream = videoElem.srcObject as MediaStream;
+          stream.getTracks().forEach((track) => {
+            try {
+              track.stop();
+            } catch (_) {}
+          });
+          videoElem.srcObject = null;
+        }
+      }
+    } catch (_) {}
+  };
+
+  const stopScanner = async () => {
+    if (isStoppingRef.current) return;
+    isStoppingRef.current = true;
+
+    try {
+      const instance = scannerRef.current;
+      if (instance) {
+        if (instance.isScanning) {
+          await instance.stop().catch((err: unknown) => {
+            console.warn("Gracefully handled scanner stop error:", err);
+          });
+        }
+        try {
+          instance.clear();
+        } catch (_) {}
+        scannerRef.current = null;
+      }
+    } catch (err) {
+      console.warn("Error stopping QR scanner:", err);
+    } finally {
+      releaseMediaTracks();
+      setScannerRunning(false);
+      isStoppingRef.current = false;
+    }
+  };
+
+  const startScanner = async () => {
+    if (isStartingRef.current || isStoppingRef.current) return;
+    const el = document.getElementById("attendance-qr-reader");
+    if (!el) return;
+
+    if (scannerRef.current?.isScanning) {
+      setScannerRunning(true);
+      return;
+    }
+
+    isStartingRef.current = true;
+    try {
+      if (scannerRef.current) {
+        try {
+          scannerRef.current.clear();
+        } catch (_) {}
+        scannerRef.current = null;
+      }
+
+      releaseMediaTracks();
+
+      const html5QrCode = new Html5Qrcode("attendance-qr-reader");
+      scannerRef.current = html5QrCode;
+
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: { width: 240, height: 240 },
+          aspectRatio: 1.0,
+        },
+        (decodedText: string) => {
+          handleQrScan(decodedText);
+        },
+        () => {}
+      );
+
+      // If a stop was requested while start() was awaiting, stop immediately
+      if (isStoppingRef.current) {
+        await html5QrCode.stop().catch(() => {});
+        releaseMediaTracks();
+        setScannerRunning(false);
+        return;
+      }
+
+      setScannerRunning(true);
+      setScannerError(null);
+    } catch (err: any) {
+      console.warn("Failed to start camera scanner:", err);
+      releaseMediaTracks();
+      setScannerRunning(false);
+      setScannerError("Camera permission denied or camera device not found.");
+    } finally {
+      isStartingRef.current = false;
+    }
+  };
+
+  // Scanner lifecycle management when activeTab changes
+  useEffect(() => {
+    let isMounted = true;
+
+    if (activeTab !== "scan") {
+      void stopScanner();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (!isMounted) return;
+      void startScanner();
+    }, 150);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+      void stopScanner();
+    };
+  }, [activeTab, selectedClassId, selectedSubjectId]);
+
   // Filtered Students
   const filteredStudents = useMemo(() => {
     if (!search.trim()) return studentList;
@@ -425,40 +655,66 @@ export default function TeacherAttendancePage() {
     return { total, present, absent, late, excused, rate };
   }, [studentList]);
 
+  const changeAttendanceTab = (tab: "marking" | "scan" | "summary") => {
+    if (activeTab === "scan" && tab !== "scan") void stopScanner();
+    setActiveTab(tab);
+  };
+
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-3 px-4 py-4 md:px-6 md:py-5">
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
+        <div className="@container/main flex min-w-0 flex-1 flex-col">
+          <div className="flex min-w-0 flex-1 flex-col">
             {/* Header */}
-            <header className="flex items-center justify-between gap-4">
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
+                <SidebarTrigger className="shrink-0 md:hidden" />
                 <div>
-                  <h1 className="text-2xl md:text-4xl font-bold">Attendance</h1>
+                  <h1 className="text-xl font-bold sm:text-2xl md:text-4xl">Attendance</h1>
                 </div>
               </div>
             </header>
+            <div className="hidden -mt-[1px] bg-background px-3 sm:px-4 md:block md:px-6">
+              <Tabs
+                tabs={[
+                  {
+                    id: "marking",
+                    label: "Mark Attendance",
+                    icon: Users,
+                  },
+                  {
+                    id: "scan",
+                    label: "QR Scanner",
+                    icon: QrCode,
+                  },
+                  {
+                    id: "summary",
+                    label: "Attendance Summary & Logs",
+                    icon: BarChart3,
+                  },
+                ]}
+                activeTab={activeTab}
+                onTabChange={changeAttendanceTab}
+              />
+            </div>
+            <nav aria-label="Attendance views" className="attendance-mobile-tabs sticky top-0 z-30 bg-background md:hidden">
+              {([
+                { id: "marking", label: "Mark", name: "Mark attendance", icon: Users },
+                { id: "scan", label: "Scan QR", name: "QR Scanner", icon: QrCode },
+                { id: "summary", label: "Logs", name: "Attendance summary and logs", icon: BarChart3 },
+              ] as const).map(({ id, label, name, icon: Icon }) => (
+                <button key={id} type="button" aria-label={name} aria-pressed={activeTab === id}
+                  onClick={() => changeAttendanceTab(id)}>
+                  <Icon size={16} aria-hidden="true" />{label}
+                </button>
+              ))}
+            </nav>
+            </div>
 
-            <Tabs
-              tabs={[
-                {
-                  id: "marking",
-                  label: "Mark Attendance",
-                  icon: Users,
-                },
-                {
-                  id: "summary",
-                  label: "Attendance Summary & Logs",
-                  icon: BarChart3,
-                },
-              ]}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-            />
+            <div className="border-t-1 border-border -mt-[1px] flex min-w-0 flex-1 flex-col gap-3 px-3 py-4 sm:px-4 md:px-6">
 
             {/* Stats Overview */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 mb-1">
+            <div className="mb-1 grid min-w-0 grid-cols-2 gap-3 [&_h3]:text-2xl [&_p]:text-xs sm:grid-cols-5 sm:[&_h3]:text-3xl sm:[&_p]:text-sm">
               <OverviewCard
                 title="Present"
                 count={String(stats.present)}
@@ -487,12 +743,12 @@ export default function TeacherAttendancePage() {
               />
             </div>
 
-            {activeTab === "marking" ? (
+            {activeTab === "marking" && (
               <>
                 {/* Filters & Control Bar */}
-                <div className="flex flex-row gap-4 items-center w-full mb-1">
+                <div className="grid w-full min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(260px,1.25fr)_minmax(190px,0.75fr)_minmax(220px,1fr)] lg:gap-4">
                   {/* Class Selector */}
-                  <div className="flex flex-col gap-1">
+                  <div className="flex min-w-0 flex-col gap-1 sm:col-span-2 lg:col-span-1">
                     <Label className="font-sans text-sm font-semibold">
                       Classes
                     </Label>
@@ -500,10 +756,10 @@ export default function TeacherAttendancePage() {
                       value={selectedTargetKey}
                       onValueChange={(val) => setSelectedTargetKey(val)}
                     >
-                      <Select.Trigger className="w-full min-w-[350px]">
+                      <Select.Trigger className="w-full min-w-0">
                         <Select.Value placeholder="Select class / subject" />
                       </Select.Trigger>
-                      <Select.Content>
+                      <Select.Content className="attendance-select-options">
                         {advisoryTargets.length > 0 && (
                           <Select.Group>
                             <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
@@ -533,12 +789,13 @@ export default function TeacherAttendancePage() {
                   </div>
 
                   {/* Date Selector (Only shown for Marking tab) */}
-                  <div className="min-w-[250px] flex flex-col gap-1">
+                  <div className="flex min-w-0 flex-col gap-1">
                     <Label className="font-sans text-sm font-semibold">
                       Attendance Date
                     </Label>
                     <Input
                       type="date"
+                      aria-label="Attendance date"
                       value={selectedDate}
                       onChange={(e) => setSelectedDate(e.target.value)}
                       className="rounded-none border-black h-10 w-full bg-white text-md font-sans"
@@ -546,7 +803,7 @@ export default function TeacherAttendancePage() {
                   </div>
 
                   {/* Search */}
-                  <div className="w-full flex flex-col gap-1">
+                  <div className="flex min-w-0 flex-col gap-1">
                     <Label className="font-sans text-sm font-semibold">
                       Search
                     </Label>
@@ -554,6 +811,7 @@ export default function TeacherAttendancePage() {
                       <Search className="w-4 h-4 absolute left-3 top-3 text-gray-500" />
                       <Input
                         type="text"
+                        aria-label="Search students by name or LRN"
                         placeholder="Search name or LRN..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
@@ -563,13 +821,13 @@ export default function TeacherAttendancePage() {
                   </div>
                 </div>
 
-                <Card className="block w-full border-black bg-white transition-none shadow-md hover:shadow-none">
-                  <div className="flex w-full flex-wrap items-end justify-between gap-3 border-black bg-white py-3 transition-none">
-                    <div className="flex flex-row gap-3 items-center">
+                <Card className="block min-w-0 w-full overflow-hidden border-black bg-white transition-none shadow-md hover:shadow-none">
+                  <div className="flex w-full flex-col gap-3 border-black bg-white py-3 transition-none sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                       <span className="text-sm font-semibold">
                         Mark All:
                       </span>
-                      <div className="flex flex-row gap-2">
+                      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row">
                         <Button
                           size="sm"
                           onClick={() => markAll("present")}
@@ -593,7 +851,7 @@ export default function TeacherAttendancePage() {
                       size="sm"
                       onClick={handleSaveAttendance}
                       disabled={saving || studentList.length === 0}
-                      className="flex items-center gap-2 shadow-none"
+                      className="flex w-full items-center justify-center gap-2 shadow-none sm:w-auto"
                     >
                       {saveSuccess ? (
                         <>
@@ -644,12 +902,12 @@ export default function TeacherAttendancePage() {
                     </Empty>
                   ) : (
                     <Table
-                      wrapperClassName="overflow-visible h-auto shadow-none"
-                      className="bg-background shadow-none"
+                      wrapperClassName="h-auto max-w-full overflow-x-auto overscroll-x-contain shadow-none [scrollbar-width:thin]"
+                      className="min-w-[660px] bg-background shadow-none"
                     >
                       <Table.Header>
                         <Table.Row>
-                          <Table.Head>
+                          <Table.Head className="min-w-[260px]">
                             Student Name
                           </Table.Head>
                           <Table.Head className="text-center">
@@ -676,7 +934,7 @@ export default function TeacherAttendancePage() {
                                     : ""
                                 }`}
                             >
-                              <Table.Cell>
+                              <Table.Cell className="min-w-[260px]">
                                 <div className="flex items-center gap-3">
                                   <Avatar variant="student" className="size-8 shrink-0">
                                     <Avatar.Image
@@ -689,14 +947,21 @@ export default function TeacherAttendancePage() {
                                         .toUpperCase()}
                                     </Avatar.Fallback>
                                   </Avatar>
-                                  <span className="font-semibold text-base">
-                                    {student.student_name}
-                                  </span>
+                                  <div className="min-w-0">
+                                    <span className="block text-base font-semibold leading-tight">
+                                      {student.student_name}
+                                    </span>
+                                    {student.student_lrn && (
+                                      <span className="text-[11px] text-muted-foreground font-mono">
+                                        LRN: {student.student_lrn}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </Table.Cell>
 
                               {/* Status Select */}
-                              <Table.Cell className="text-center">
+                              <Table.Cell className="text-center" data-label="Status">
                                 <Select
                                   value={student.status}
                                   onValueChange={(value) =>
@@ -704,6 +969,7 @@ export default function TeacherAttendancePage() {
                                   }
                                 >
                                   <Select.Trigger
+                                    aria-label={`Attendance status for ${student.student_name}`}
                                     className={cn(
                                       "w-36 mx-auto font-semibold border-2 border-black shadow-none",
 
@@ -711,7 +977,7 @@ export default function TeacherAttendancePage() {
                                   >
                                     <Select.Value />
                                   </Select.Trigger>
-                                  <Select.Content className="">
+                                  <Select.Content className="attendance-select-options">
                                     <Select.Group>
                                       <Select.Item value="present">Present</Select.Item>
                                       <Select.Item value="absent">Absent</Select.Item>
@@ -722,9 +988,10 @@ export default function TeacherAttendancePage() {
                                 </Select>
                               </Table.Cell>
 
-                              <Table.Cell className="">
+                              <Table.Cell className="" data-label="Remarks">
                                 <Input
                                   type="text"
+                                  aria-label={`Remarks for ${student.student_name}`}
                                   className="w-full text-sm border-transparent hover:border-gray-300 focus:border-black outline-none bg-transparent transition-colors placeholder:text-gray-400 rounded-none shadow-none focus:shadow-none"
                                   placeholder={
                                     student.status !== "present"
@@ -775,14 +1042,235 @@ export default function TeacherAttendancePage() {
                     </Table>
                   )}
                 </Card>
-                {/* Quick Bulk Actions & Save Bar */}
+                <div className="attendance-save-bar md:hidden">
+                  <div className="attendance-save-context">
+                    <strong>{selectedTarget?.label || "Select a class"}</strong>
+                    <span>{selectedDate} · {studentList.length} students</span>
+                  </div>
+                  <Button onClick={handleSaveAttendance} disabled={saving || studentList.length === 0}
+                    className="w-full gap-2 shadow-none" aria-live="polite">
+                    {saveSuccess ? <Check size={18} /> : <Save size={18} />}
+                    {saving ? "Saving attendance…" : saveSuccess ? "Attendance saved" : "Save Attendance"}
+                  </Button>
+                </div>
 
               </>
-            ) : (
+            )}
+
+            {/* Scan Mode Tab */}
+            <div className={activeTab === "scan" ? "attendance-scanner flex flex-col gap-4" : "hidden"}>
+                {/* Session Context Bar */}
+                <Card className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex flex-col gap-1 min-w-[280px] max-w-md w-full sm:w-auto">
+                    <Label className="font-sans text-xs font-bold uppercase tracking-wider text-black">
+                      Current Class Session
+                    </Label>
+                    <Select
+                      value={selectedTargetKey}
+                      onValueChange={(val) => setSelectedTargetKey(val)}
+                    >
+                      <Select.Trigger aria-label="Scanner class or subject" className="w-full">
+                        <Select.Value placeholder="Select class / subject" />
+                      </Select.Trigger>
+                      <Select.Content className="attendance-select-options">
+                        {advisoryTargets.length > 0 && (
+                          <Select.Group>
+                            <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
+                              Advisory Classes (Homeroom Attendance)
+                            </Select.Label>
+                            {advisoryTargets.map((t) => (
+                              <Select.Item key={t.key} value={t.key} className="text-sm">
+                                {t.label}
+                              </Select.Item>
+                            ))}
+                          </Select.Group>
+                        )}
+                        {subjectTargets.length > 0 && (
+                          <Select.Group>
+                            <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
+                              Subject Teaching Classes
+                            </Select.Label>
+                            {subjectTargets.map((t) => (
+                              <Select.Item key={t.key} value={t.key} className="text-sm">
+                                {t.label}
+                              </Select.Item>
+                            ))}
+                          </Select.Group>
+                        )}
+                      </Select.Content>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <div className="text-xs text-muted-foreground font-semibold">Session Date</div>
+                      <div className="text-sm font-bold text-foreground">
+                        {new Date().toLocaleDateString(undefined, {
+                          weekday: "short",
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </div>
+                    </div>
+                    <div className="h-8 w-[1px] bg-border" />
+                    <div className="text-right">
+                      <div className="text-xs text-muted-foreground font-semibold">Attendance Progress</div>
+                      <div className="text-sm font-bold text-emerald-500">
+                        {stats.present} / {stats.total} Present ({stats.rate}%)
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Scanner & Live Feed Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                  {/* Left Column: Camera Viewport */}
+                  <div className="lg:col-span-6 flex flex-col gap-3">
+                    <Card className="p-4 border-2 border-border bg-card shadow-retro flex flex-col items-center">
+                      <div className="attendance-scanner-heading w-full flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Camera className="w-4 h-4 text-primary" />
+                          <span className="text-sm font-bold">Webcam QR Scanner</span>
+                        </div>
+                        <Badge variant={scannerRunning ? "surface" : "outline"} className="text-xs">
+                          {scannerRunning ? "Camera Active" : "Paused"}
+                        </Badge>
+                      </div>
+
+                      {/* Video Container */}
+                      <div className="w-full max-w-[380px] aspect-square rounded-lg border-2 border-border bg-black relative overflow-hidden flex items-center justify-center shadow-inner">
+                        <div id="attendance-qr-reader" className="w-full h-full" />
+                        {scannerError && (
+                          <div className="absolute inset-0 bg-background/95 p-4 flex flex-col items-center justify-center text-center gap-2 z-10">
+                            <AlertTriangle className="w-8 h-8 text-destructive" />
+                            <p className="text-xs font-semibold text-destructive">{scannerError}</p>
+                            <Button size="sm" variant="outline" onClick={() => startScanner()} className="mt-2 text-xs">
+                              Retry Camera
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="attendance-scanner-actions w-full flex items-center justify-between mt-4 pt-3 border-t border-border">
+                        <p className="text-xs text-muted-foreground">
+                          Hold student QR ID badge steady facing the webcam.
+                        </p>
+                        <Button
+                          type="button"
+                          variant={scannerRunning ? "outline" : "default"}
+                          size="sm"
+                          onClick={() => {
+                            if (scannerRunning) stopScanner();
+                            else startScanner();
+                          }}
+                          className="gap-1.5"
+                        >
+                          {scannerRunning ? <CameraOff className="w-4 h-4" /> : <Camera className="w-4 h-4" />}
+                          {scannerRunning ? "Pause Scanner" : "Start Scanner"}
+                        </Button>
+                      </div>
+                    </Card>
+                  </div>
+
+                  {/* Right Column: Live Scanned Stream */}
+                  <div className="lg:col-span-6 flex flex-col gap-3">
+                    <Card className="attendance-scan-feed p-4 border-2 border-border bg-card shadow-retro flex-1 flex flex-col min-h-[420px]">
+                      <div className="flex items-center justify-between pb-3 border-b border-border mb-3">
+                        <div className="flex items-center gap-2">
+                          <QrCode className="w-4 h-4 text-primary" />
+                          <span className="text-sm font-bold">Live Scan Activity</span>
+                        </div>
+                        {recentScans.length > 0 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setRecentScans([])}
+                            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            Clear Feed
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto max-h-[480px] space-y-2 pr-1">
+                        {recentScans.length === 0 ? (
+                          <div className="h-full flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+                            <QrCode className="w-10 h-10 stroke-[1.5] mb-2 opacity-40" />
+                            <p className="text-sm font-semibold">Waiting for scans...</p>
+                            <p className="text-xs text-muted-foreground mt-1 max-w-[260px]">
+                              Scanned students will show up here with real-time enrollment verification and duplicate prevention.
+                            </p>
+                          </div>
+                        ) : (
+                          recentScans.map((scan) => (
+                            <div
+                              key={scan.id}
+                              className={cn(
+                                "p-3 rounded-md border-2 transition-all flex items-start justify-between gap-3 text-sm",
+                                scan.type === "success"
+                                  ? "border-emerald-500/60 bg-emerald-500/10 text-foreground"
+                                  : scan.type === "duplicate" || scan.type === "excused"
+                                  ? "border-amber-500/60 bg-amber-500/10 text-foreground"
+                                  : "border-destructive/60 bg-destructive/10 text-foreground"
+                              )}
+                            >
+                              <div className="flex items-start gap-2.5">
+                                {scan.type === "success" ? (
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                                ) : scan.type === "duplicate" || scan.type === "excused" ? (
+                                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                                ) : (
+                                  <XCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                                )}
+                                <div>
+                                  <div className="font-bold leading-tight">{scan.student_name}</div>
+                                  <div className="text-xs text-muted-foreground mt-0.5">{scan.message}</div>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="text-[10px] font-mono text-muted-foreground block">
+                                  {scan.timestamp}
+                                </span>
+                                <Badge
+                                  variant={
+                                    scan.type === "success"
+                                      ? "solid"
+                                      : scan.type === "error"
+                                      ? "outline"
+                                      : "surface"
+                                  }
+                                  className={cn(
+                                    "text-[10px] uppercase font-bold mt-1",
+                                    scan.type === "success" && "bg-emerald-600 text-white",
+                                    scan.type === "error" && "border-destructive text-destructive"
+                                  )}
+                                >
+                                  {scan.type === "success"
+                                    ? "Present"
+                                    : scan.type === "excused"
+                                    ? "Excused"
+                                    : scan.type === "duplicate"
+                                    ? "Duplicate"
+                                    : "Rejected"}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </Card>
+                  </div>
+                </div>
+              </div>
+
+            {/* Summary Tab */}
+            {activeTab === "summary" && (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-center mb-1">
+                <div className="mb-1 grid min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
                   {/* Class Selector */}
-                  <div className="flex flex-col gap-1">
+                  <div className="flex min-w-0 flex-col gap-1">
                     <Label className="font-sans text-sm font-semibold">
                       Classes
                     </Label>
@@ -790,10 +1278,10 @@ export default function TeacherAttendancePage() {
                       value={selectedTargetKey}
                       onValueChange={(val) => setSelectedTargetKey(val)}
                     >
-                      <Select.Trigger className="w-full min-w-[350px]">
+                      <Select.Trigger className="w-full min-w-0">
                         <Select.Value placeholder="Select class / subject" />
                       </Select.Trigger>
-                      <Select.Content>
+                      <Select.Content className="attendance-select-options">
                         {advisoryTargets.length > 0 && (
                           <Select.Group>
                             <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
@@ -823,7 +1311,7 @@ export default function TeacherAttendancePage() {
                   </div>
 
                   {/* Search */}
-                  <div className="sm:col-span-2 flex flex-col gap-1">
+                  <div className="flex min-w-0 flex-col gap-1 sm:col-span-1 lg:col-span-2">
                     <Label className="font-sans text-sm font-semibold">
                       Search
                     </Label>
@@ -841,12 +1329,12 @@ export default function TeacherAttendancePage() {
                 </div>
 
                 {/* Filters & Control Bar */}
-                <Card className="block w-full border-black bg-white transition-none">
+                <Card className="block min-w-0 w-full overflow-hidden border-black bg-white transition-none">
 
                   {/* Attendance Summary & Report Matrix */}
                   <div className="flex flex-col gap-4 mt-3">
                     {/* Global Controls & Layout Switcher */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-2 border-black bg-gray-50 p-3">
+                    <div className="flex flex-col gap-3 border-2 border-black bg-gray-50 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                       <div>
                         <h2 className="text-lg font-extrabold">
                           Attendance Summary & Log Explorer
@@ -857,9 +1345,9 @@ export default function TeacherAttendancePage() {
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
                         {/* Status Filter */}
-                        <div className="flex items-center gap-1">
+                        <div className="flex min-w-0 items-center gap-1">
                           <Select
                             value={statusFilter}
                             onValueChange={(val) =>
@@ -868,10 +1356,10 @@ export default function TeacherAttendancePage() {
                               )
                             }
                           >
-                            <Select.Trigger className="w-36 h-9 shadow-none text-xs font-bold border-2 border-black bg-white">
+                            <Select.Trigger className="h-9 w-full min-w-0 border-2 border-black bg-white text-xs font-bold shadow-none sm:w-36">
                               <Select.Value />
                             </Select.Trigger>
-                            <Select.Content>
+                            <Select.Content className="attendance-select-options">
                               <Select.Group>
                                 <Select.Item value="all" className="text-xs font-semibold">
                                   All Students
@@ -891,12 +1379,12 @@ export default function TeacherAttendancePage() {
                         </div>
 
                         {/* View Switcher: Summary Matrix vs Date Grid Sheet */}
-                        <div className="flex items-center">
+                        <div className="grid grid-cols-2 sm:flex sm:items-center">
                           <Button
                             size="sm"
                             variant={summaryLayout === "summary" ? "default" : "outline"}
                             onClick={() => setSummaryLayout("summary")}
-                            className="text-xs font-bold border-black rounded-r-none border-r-0 shadow-none hover:shadow-none"
+                            className="min-w-0 text-xs font-bold border-black rounded-r-none border-r-0 shadow-none hover:shadow-none"
                           >
                             <BarChart3 className="w-3.5 h-3.5 inline mr-1" />{" "}
                             Summary
@@ -905,7 +1393,7 @@ export default function TeacherAttendancePage() {
                             size="sm"
                             variant={summaryLayout === "date_grid" ? "default" : "outline"}
                             onClick={() => setSummaryLayout("date_grid")}
-                            className="text-xs font-bold border-black rounded-l-none shadow-none hover:shadow-none"
+                            className="min-w-0 text-xs font-bold border-black rounded-l-none shadow-none hover:shadow-none"
                           >
                             <TableIcon className="w-3.5 h-3.5 inline mr-1" /> Full Date Sheet
                           </Button>
@@ -930,12 +1418,12 @@ export default function TeacherAttendancePage() {
                     ) : summaryLayout === "summary" ? (
                       /* Standard Summary Table with Individual or Global Expand */
                       <Table
-                        wrapperClassName="overflow-visible h-auto shadow-none"
-                        className="bg-background shadow-none"
+                        wrapperClassName="h-auto max-w-full overflow-x-auto overscroll-x-contain shadow-none [scrollbar-width:thin]"
+                        className="min-w-[820px] bg-background shadow-none"
                       >
                         <Table.Header>
                           <Table.Row>
-                            <Table.Head>
+                            <Table.Head className="min-w-[260px]">
                               Student Name
                             </Table.Head>
                             <Table.Head className="text-center">
@@ -961,7 +1449,7 @@ export default function TeacherAttendancePage() {
                         <Table.Body className="divide-y-2 divide-black text-sm">
                           {summaryMatrix.map((item) => (
                             <Table.Row key={item.student_id}>
-                              <Table.Cell>
+                              <Table.Cell className="min-w-[260px]">
                                 <div className="flex items-center gap-3">
                                   <Avatar variant="student" className="size-8 shrink-0">
                                     <Avatar.Image
@@ -981,19 +1469,19 @@ export default function TeacherAttendancePage() {
                                 </div>
 
                               </Table.Cell>
-                              <Table.Cell className="text-center">
+                              <Table.Cell className="text-center" data-label="Present">
                                 {item.present}
                               </Table.Cell>
-                              <Table.Cell className="text-center">
+                              <Table.Cell className="text-center" data-label="Absent">
                                 {item.absent}
                               </Table.Cell>
-                              <Table.Cell className="text-center">
+                              <Table.Cell className="text-center" data-label="Late">
                                 {item.late}
                               </Table.Cell>
-                              <Table.Cell className="text-center">
+                              <Table.Cell className="text-center" data-label="Excused">
                                 {item.excused}
                               </Table.Cell>
-                              <Table.Cell className="text-center">
+                              <Table.Cell className="text-center" data-label="Attendance rate">
                                 <Badge
                                   size="sm"
                                   variant={
@@ -1017,7 +1505,9 @@ export default function TeacherAttendancePage() {
                                   onClick={() => setSelectedStudentLogs(item)}
                                   className="shadow-none p-1 ml-auto"
                                   title="View attendance log"
+                                  aria-label={`View attendance log for ${item.student_name}`}
                                 >
+                                  <span className="md:hidden">View logs</span>
                                   <ArrowUpRight size={16} />
                                 </Button>
                               </Table.Cell>
@@ -1027,8 +1517,11 @@ export default function TeacherAttendancePage() {
                       </Table>
                     ) : (
                       /* Full Date Grid Log Sheet Matrix (Dates as columns, Students as rows) */
+                      <div className="min-w-0">
+                      <p className="mb-2 text-sm md:hidden">Swipe the table to compare dates. P: Present · A: Absent · L: Late · E: Excused · –: No record.</p>
+                      <div className="attendance-date-region" role="region" aria-label="Attendance by date, scroll horizontally to see all dates" tabIndex={0}>
                       <Table
-                        wrapperClassName="overflow-x-auto h-auto shadow-none border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                        wrapperClassName="attendance-date-grid overflow-x-auto h-auto shadow-none border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
                         className="bg-background min-w-[700px] border-collapse shadow-none"
                       >
                         <Table.Header className="bg-gray-100 text-black border-b-2 border-black">
@@ -1036,7 +1529,7 @@ export default function TeacherAttendancePage() {
                             <Table.Head className="p-3 border-r-2 border-black sticky left-0 bg-gray-100 z-10 text-black font-extrabold text-xs uppercase">
                               #
                             </Table.Head>
-                            <Table.Head className="p-3 border-r-2 border-black sticky left-8 bg-gray-100 z-10 min-w-[160px] text-black font-extrabold text-xs uppercase">
+                            <Table.Head className="min-w-[220px] border-r-2 border-black p-3 text-xs font-extrabold uppercase text-black">
                               Student Name
                             </Table.Head>
                             {uniqueDates.map((date) => (
@@ -1061,7 +1554,7 @@ export default function TeacherAttendancePage() {
                               <Table.Cell className="p-2 font-bold border-r-2 border-black sticky left-0 bg-white z-10">
                                 {idx + 1}
                               </Table.Cell>
-                              <Table.Cell className="p-2 font-bold border-r-2 border-black sticky left-8 bg-white z-10 truncate max-w-[180px]">
+                              <Table.Cell className="min-w-[220px] border-r-2 border-black p-2 font-bold">
                                 {student.student_name}
                               </Table.Cell>
                               {uniqueDates.map((date) => {
@@ -1119,14 +1612,16 @@ export default function TeacherAttendancePage() {
                           ))}
                         </Table.Body>
                       </Table>
+                      </div>
+                      </div>
                     )}
                   </div>
                 </Card>
               </>
             )}
+            </div>
           </div>
         </div>
-      </div>
 
       {/* Attendance Logs Dialog Modal */}
       <Dialog

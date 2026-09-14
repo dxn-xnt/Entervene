@@ -7,17 +7,14 @@ from sqlalchemy.orm import Session
 from app.core.Dependencies import get_staff_id, get_student_record, require_role
 from app.core.FileUpload import delete_file, save_file
 from app.db.Session import get_db
-from app.schemas.Lesson import LessonAssignRequest, LessonAttachmentResponse, LessonCreate, LessonResponse, LessonUpdate
+from app.schemas.Lesson import LessonAssignRequest, LessonCreate, LessonResponse, LessonUpdate
 from app.services.lesson.LessonService import (
-    add_lesson_attachment,
     archive_lesson_record,
     assign_lesson_to_classes,
     create_lesson_record,
-    download_lesson_file,
     lesson_classwork_assignments,
     lesson_detail,
     publish_lesson_record,
-    remove_lesson_attachment,
     student_lessons_for_class_subject,
     teacher_draft_lessons,
     teacher_lesson_linked_classwork,
@@ -134,27 +131,6 @@ def assign_lesson(
     return assign_lesson_to_classes(lesson_id, body, staff_id, db)
 
 
-@router.post("/{lesson_id}/attachments", response_model=LessonAttachmentResponse)
-async def upload_lesson_attachment(
-    lesson_id: int,
-    request: Request,
-    file: Optional[UploadFile] = File(None),
-    staff_id: str = Depends(get_staff_id),
-    db: Session = Depends(get_db),
-):
-    return await add_lesson_attachment(lesson_id, request, file, staff_id, db, save_file, delete_file)
-
-
-@router.delete("/{lesson_id}/attachments/{attachment_id}")
-def delete_lesson_attachment(
-    lesson_id: int,
-    attachment_id: int,
-    staff_id: str = Depends(get_staff_id),
-    db: Session = Depends(get_db),
-):
-    return remove_lesson_attachment(lesson_id, attachment_id, staff_id, db, delete_file)
-
-
 @router.get("/{lesson_id}/classwork-assignments")
 def get_lesson_classwork_assignments(
     lesson_id: int,
@@ -163,16 +139,6 @@ def get_lesson_classwork_assignments(
     db: Session = Depends(get_db),
 ):
     return lesson_classwork_assignments(lesson_id, class_id, student, db)
-
-
-@router.get("/{lesson_id}/attachments/{attachment_id}/download")
-def download_lesson_attachment(
-    lesson_id: int,
-    attachment_id: int,
-    current_user: dict = Depends(require_role("teacher", "admin", "student")),
-    db: Session = Depends(get_db),
-):
-    return download_lesson_file(lesson_id, attachment_id, current_user, db)
 
 
 @router.put("/{lesson_id}/archive")

@@ -19,6 +19,13 @@ class ClassworkAssignment(Base):
     classwork_assignment_id: Mapped[int] = Column(Integer, primary_key=True, autoincrement=True)
     classwork_id: Mapped[int] = Column(Integer, ForeignKey("classwork.classwork_id", ondelete="CASCADE"), nullable=False)
     class_id: Mapped[int] = Column(Integer, ForeignKey("class.class_id", ondelete="CASCADE"), nullable=False)
+    # Nullable for pre-Phase-1 assignments. New assignment writers must provide
+    # an explicitly validated period; legacy rows are intentionally unresolved.
+    academic_period_id: Mapped[int | None] = Column(
+        Integer,
+        ForeignKey("academic_period.academic_period_id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     assigned_by_staff_id: Mapped[str] = Column(String(20), ForeignKey("academic_staff.staff_id"), nullable=False)
     publish_date: Mapped[datetime | None] = Column(DateTime(timezone=True))
     due_date: Mapped[datetime | None] = Column(DateTime(timezone=True))
@@ -33,5 +40,6 @@ class ClassworkAssignment(Base):
 
     classwork: Mapped["Classwork"] = relationship("Classwork", back_populates="assignments")
     class_: Mapped[object] = relationship("Class", backref="classwork_assignments")
+    academic_period: Mapped[object] = relationship("AcademicPeriod", backref="classwork_assignments")
     staff: Mapped[object] = relationship("AcademicStaff", backref="classwork_assignments")
     submissions: Mapped[list[object]] = relationship("StudentSubmission", back_populates="classwork_assignment", cascade="all, delete-orphan")

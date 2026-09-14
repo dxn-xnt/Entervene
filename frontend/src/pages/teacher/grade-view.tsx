@@ -4,24 +4,35 @@ import { Table } from "@/components/retroui/Table";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
 import { useParams } from "react-router-dom";
-import { Ellipsis, Plus, Search, Download, ClipboardCheck } from "lucide-react";
+import { Ellipsis, Plus, Search, Download, Send, CheckCircle2, AlertTriangle, Loader2, RefreshCw, X, ChevronDown, FileSpreadsheet } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Button } from "@/components/retroui/Button";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Card } from "@/components/retroui/Card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import ViewGradeScoreModal from "./forms/view-grade-scores";
 import AddClassworkScoreModal from "./forms/add-classwork-score";
 import EnterManualScoresModal from "./forms/enter-manual-scores";
-import AttendanceModal from "./forms/attendance-modal";
-import { 
-  getTeacherGradebook, 
+import {
+  getTeacherGradebook,
+  exportTeacherClassRecord,
+  exportTeacherClassRecordWorkbook,
   getTeacherAvailablePeriods,
   getTeacherTermSummary,
-  type StudentGradebookResponse, 
+  sendStudentGradeToAdviser,
+  bulkSendGradesToAdviser,
+  type StudentGradebookResponse,
+  type StudentGradebookRow,
   type GradebookCategoryHeader,
   type TermGradeSummaryResponse,
-  type TermPeriodInfo
+  type TermPeriodInfo,
+  type BulkSendGradesToAdviserResponse
 } from "@/lib/api";
 
 function fmt(val: number | null | undefined, d = 1): string {
@@ -53,6 +64,78 @@ function groupStudentsByGender<T extends { gender?: string | null }>(students: T
   return { males, females };
 }
 
+const GRADE_SUBMISSION_WINDOW_DAYS = 7;
+
+function getTimingGateInfo(period?: TermPeriodInfo | null) {
+  if (!period || !period.end_date) {
+    return {
+      isLocked: false,
+      isEarly: false,
+      isClosed: false,
+      unlockDate: null,
+      formattedUnlockDate: null,
+      closeDate: null,
+      formattedCloseDate: null,
+      message: "",
+    };
+  }
+  const endParts = String(period.end_date).split("-").map(Number);
+  if (endParts.length !== 3) {
+    return {
+      isLocked: false,
+      isEarly: false,
+      isClosed: false,
+      unlockDate: null,
+      formattedUnlockDate: null,
+      closeDate: null,
+      formattedCloseDate: null,
+      message: "",
+    };
+  }
+  const [year, month, day] = endParts;
+  const unlockDateObj = new Date(year, month - 1, day - GRADE_SUBMISSION_WINDOW_DAYS);
+  const closeDateObj = new Date(year, month - 1, day + GRADE_SUBMISSION_WINDOW_DAYS);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const isEarly = today < unlockDateObj;
+  const isClosed = today > closeDateObj;
+  const isLocked = isEarly || isClosed;
+
+  const unlockDateStr = `${unlockDateObj.getFullYear()}-${String(unlockDateObj.getMonth() + 1).padStart(2, "0")}-${String(unlockDateObj.getDate()).padStart(2, "0")}`;
+  const formattedUnlockDate = unlockDateObj.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
+  const closeDateStr = `${closeDateObj.getFullYear()}-${String(closeDateObj.getMonth() + 1).padStart(2, "0")}-${String(closeDateObj.getDate()).padStart(2, "0")}`;
+  const formattedCloseDate = closeDateObj.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
+  let message = "";
+  if (isEarly) {
+    message = `Grades can be sent to the adviser starting ${formattedUnlockDate} (${unlockDateStr}).`;
+  } else if (isClosed) {
+    message = `The submission window for this term closed on ${formattedCloseDate} (${closeDateStr}). Contact an administrator if this grade needs correction.`;
+  }
+
+  return {
+    isLocked,
+    isEarly,
+    isClosed,
+    unlockDate: unlockDateStr,
+    formattedUnlockDate,
+    closeDate: closeDateStr,
+    formattedCloseDate,
+    message,
+  };
+}
+
 const TeacherGradeView = () => {
   const { section, subject } = useParams<{ section: string; subject: string }>();
   const [gradebook, setGradebook] = useState<StudentGradebookResponse | null>(null);
@@ -64,7 +147,6 @@ const TeacherGradeView = () => {
   const [sortBy, setSortBy] = useState("name");
   const [refresh, setRefresh] = useState(0);
 
-  const [openAttendance, setOpenAttendance] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<{
     name: string;
     items: GradebookCategoryHeader[];
@@ -77,8 +159,135 @@ const TeacherGradeView = () => {
     maxScore: number;
   } | null>(null);
 
+  const [sendingAll, setSendingAll] = useState(false);
+  const [sendingStudentId, setSendingStudentId] = useState<string | null>(null);
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false);
+  const [forceResendAll, setForceResendAll] = useState(false);
+  const [bulkSendSummary, setBulkSendSummary] = useState<BulkSendGradesToAdviserResponse | null>(null);
+  const [conflictData, setConflictData] = useState<{
+    studentId?: string;
+    studentName?: string;
+    recomputedGrade: number;
+    expectedGrade: number;
+    isBulk?: boolean;
+  } | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
   const fetchGradebook = () => {
     setRefresh((prev) => prev + 1);
+  };
+
+  const activePeriodId = activeTab.startsWith("term-") ? Number(activeTab.split("-")[1]) : null;
+  const currentPeriod = periods.find((p) => p.academic_period_id === activePeriodId);
+  const timingGate = getTimingGateInfo(currentPeriod);
+
+  const handleSendStudentGrade = async (student: StudentGradebookRow, force = false) => {
+    if (!section || !subject || !activePeriodId) return;
+
+    if (timingGate.isLocked) {
+      setToastMessage({
+        type: "error",
+        text: timingGate.message,
+      });
+      return;
+    }
+
+    try {
+      setSendingStudentId(student.student_id);
+      setToastMessage(null);
+      const res = await sendStudentGradeToAdviser(section, subject, student.student_id, {
+        academic_period_id: activePeriodId,
+        expected_transmuted_grade: student.transmuted_grade,
+        force_resend: force,
+      });
+      const gradeDisplay = student.transmuted_grade ?? student.initial_grade ?? res.transmuted_grade ?? res.final_period_grade;
+      if (res.incomplete_components && res.incomplete_components.length > 0) {
+        setToastMessage({
+          type: "info",
+          text: `Official grade (${gradeDisplay}) for ${student.name} sent to adviser (${res.incomplete_components.length} component(s) missing — sent anyway).`,
+        });
+      } else {
+        setToastMessage({
+          type: "success",
+          text: `Official grade (${gradeDisplay}) for ${student.name} sent to adviser.`,
+        });
+      }
+      fetchGradebook();
+    } catch (err: any) {
+      if (err.status === 409 || err.data?.conflict) {
+        setConflictData({
+          studentId: student.student_id,
+          studentName: student.name,
+          recomputedGrade: err.data?.recomputed_transmuted_grade ?? (err.data?.detail?.recomputed_transmuted_grade ?? 0),
+          expectedGrade: err.data?.expected_transmuted_grade ?? (student.transmuted_grade ?? 0),
+          isBulk: false,
+        });
+      } else {
+        setToastMessage({
+          type: "error",
+          text: err.message || "Failed to send grade to adviser.",
+        });
+      }
+    } finally {
+      setSendingStudentId(null);
+    }
+  };
+
+  const handleBulkSend = async (force = false) => {
+    if (!section || !subject || !activePeriodId) return;
+
+    if (timingGate.isLocked) {
+      setShowBulkConfirm(false);
+      setToastMessage({
+        type: "error",
+        text: timingGate.message,
+      });
+      return;
+    }
+
+    if (raw.length === 0) {
+      setShowBulkConfirm(false);
+      setToastMessage({
+        type: "error",
+        text: "Cannot send grades: No students found in this class.",
+      });
+      return;
+    }
+
+    try {
+      setSendingAll(true);
+      setToastMessage(null);
+      const expectedGrades: Record<string, number> = {};
+      raw.forEach((s) => {
+        if (s.transmuted_grade != null) {
+          expectedGrades[s.student_id] = s.transmuted_grade;
+        }
+      });
+      const res = await bulkSendGradesToAdviser(section, subject, activePeriodId, {
+        force_resend_all: force,
+        expected_student_grades: expectedGrades,
+      });
+      setShowBulkConfirm(false);
+      setBulkSendSummary(res);
+      fetchGradebook();
+    } catch (err: any) {
+      setShowBulkConfirm(false);
+      if (err.status === 409 || err.data?.conflict) {
+        setConflictData({
+          recomputedGrade: 0,
+          expectedGrade: 0,
+          isBulk: true,
+        });
+      } else {
+        setToastMessage({
+          type: "error",
+          text: err.message || "Failed to bulk send grades to adviser.",
+        });
+      }
+    } finally {
+      setSendingAll(false);
+    }
   };
 
   useEffect(() => {
@@ -116,8 +325,16 @@ const TeacherGradeView = () => {
     }
   }, [section, subject, activeTab, refresh]);
 
-  const cg = gradebook?.classwork?.[0] ?? { writtenWork: [], performanceTask: [], quarterlyAssessment: [] };
+  const cg = gradebook?.classwork?.[0] ?? { writtenWork: [], performanceTask: [], quarterlyAssessment: [], exams: [] };
+  const examItems = cg.exams && cg.exams.length > 0 ? cg.exams : (cg.quarterlyAssessment ?? []);
   const raw = gradebook?.studentGrades ?? [];
+  const missingComponentsCount = raw.filter((s) => {
+    const hasWW = Array.isArray(s.writtenWork) && s.writtenWork.some((x) => x !== null);
+    const hasPT = Array.isArray(s.performanceTask) && s.performanceTask.some((x) => x !== null);
+    const hasQA = (Array.isArray(s.quarterlyAssessment) && s.quarterlyAssessment.some((x) => x !== null)) || (Array.isArray(s.exams) && s.exams.some((x) => x !== null));
+    return !hasWW || !hasPT || !hasQA;
+  }).length;
+  const completeComponentsCount = raw.length - missingComponentsCount;
   const filtered = raw
     .filter((sg) => sg.name.toLowerCase().includes(searchTerm.toLowerCase()))
     .sort((a, b) => (sortBy === "name" ? a.name.localeCompare(b.name) : 0));
@@ -125,10 +342,33 @@ const TeacherGradeView = () => {
   const displaySectionName = gradebook?.scope?.section_name ?? termSummary?.scope?.section_name ?? section ?? "Section";
   const displaySubjectName = gradebook?.scope?.subject_name ?? termSummary?.scope?.subject_name ?? subject ?? "Subject";
 
-  const handleExportCSV = () => {
-    let csv = "";
-    let filename = "";
+  const handleExportWorkbook = async () => {
+    if (!section || !subject) {
+      setToastMessage({ type: "error", text: "Please select a valid section and subject before exporting." });
+      return;
+    }
 
+    try {
+      setIsExporting(true);
+      const { blob, filename } = await exportTeacherClassRecordWorkbook(section, subject);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.setAttribute("download", filename);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setToastMessage({ type: "success", text: "Full Year Class Record Workbook (.xlsx) exported successfully." });
+    } catch (err: any) {
+      console.error("Export workbook error:", err);
+      setToastMessage({ type: "error", text: err?.message || "Failed to export class record workbook. Please try again." });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportCurrent = async () => {
     if (activeTab === "summary") {
       if (!termSummary) return;
       const headers = ["Gender", "Learner's Name", ...periods.map((p) => p.period_name), "Final Grade", "Remarks"];
@@ -149,50 +389,44 @@ const TeacherGradeView = () => {
           s.remark || "",
         ]),
       ];
-      csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-      filename = `${displaySectionName}_${displaySubjectName}_Summary.csv`;
-    } else {
-      if (!gradebook) return;
-      const headers = [
-        "Gender",
-        "Learner's Name",
-        ...cg.writtenWork.map((w) => `WW: ${w.title} (${w.maxScore})`),
-        ...cg.performanceTask.map((p) => `PT: ${p.title} (${p.maxScore})`),
-        ...cg.quarterlyAssessment.map((q) => `QA: ${q.title} (${q.maxScore})`),
-        "Transmuted Grade",
-      ];
-      const { males, females } = groupStudentsByGender(raw);
-      const rows = [
-        ...males.map((sg) => [
-          "Male",
-          `"${sg.name}"`,
-          ...sg.writtenWork.map((s) => (s !== null && s !== undefined ? s : "")),
-          ...sg.performanceTask.map((s) => (s !== null && s !== undefined ? s : "")),
-          ...sg.quarterlyAssessment.map((s) => (s !== null && s !== undefined ? s : "")),
-          fmt(sg.transmuted_grade ?? sg.initial_grade),
-        ]),
-        ...females.map((sg) => [
-          "Female",
-          `"${sg.name}"`,
-          ...sg.writtenWork.map((s) => (s !== null && s !== undefined ? s : "")),
-          ...sg.performanceTask.map((s) => (s !== null && s !== undefined ? s : "")),
-          ...sg.quarterlyAssessment.map((s) => (s !== null && s !== undefined ? s : "")),
-          fmt(sg.transmuted_grade ?? sg.initial_grade),
-        ]),
-      ];
-      csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-      const activePeriodName = periods.find((p) => `term-${p.academic_period_id}` === activeTab)?.period_name || "Term";
-      filename = `${displaySectionName}_${displaySubjectName}_${activePeriodName}.csv`;
-    }
+      const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+      const filename = `${displaySectionName}_${displaySubjectName}_Summary.csv`;
 
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.setAttribute("download", filename);
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+      // Prepend UTF-8 BOM to ensure proper character rendering in Excel
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.setAttribute("download", filename);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } else {
+      if (!activePeriodId || !section || !subject) {
+        setToastMessage({ type: "error", text: "Please select a valid term and subject before exporting." });
+        return;
+      }
+
+      try {
+        setIsExporting(true);
+        const { blob, filename } = await exportTeacherClassRecord(section, subject, activePeriodId);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.setAttribute("download", filename);
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setToastMessage({ type: "success", text: "DepEd Class Record (.xlsx) exported successfully." });
+      } catch (err: any) {
+        console.error("Export error:", err);
+        setToastMessage({ type: "error", text: err?.message || "Failed to export class record. Please try again." });
+      } finally {
+        setIsExporting(false);
+      }
+    }
   };
 
   const renderSummaryTable = () => {
@@ -202,7 +436,7 @@ const TeacherGradeView = () => {
       .sort((a, b) => (sortBy === "name" ? a.name.localeCompare(b.name) : 0));
 
     const { males, females } = groupStudentsByGender(filteredSummary);
-    
+
     const renderSummaryGroup = (group: typeof males, label: string) => {
       if (group.length === 0) return null;
       return (
@@ -218,13 +452,24 @@ const TeacherGradeView = () => {
               {periods.map((p) => {
                 const grade = item.term_grades[p.academic_period_id];
                 return (
-                  <Table.Cell key={p.academic_period_id} className="text-center tabular-nums">
+                  <Table.Cell key={p.academic_period_id} className="text-center tabular-nums font-medium">
                     {grade !== undefined && grade !== null ? grade.toFixed(1) : "—"}
                   </Table.Cell>
                 );
               })}
-              <Table.Cell className="text-center font-bold tabular-nums">
-                {item.final_grade !== null ? item.final_grade.toFixed(1) : "—"}
+              <Table.Cell className="text-center font-bold tabular-nums whitespace-nowrap">
+                {item.final_grade !== null ? (
+                  <span>
+                    <span>{item.final_grade.toFixed(1)}</span>
+                    {item.performance_descriptor && (
+                      <span className="text-xs text-muted-foreground ml-1.5 font-semibold">
+                        — {item.performance_descriptor}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  "—"
+                )}
               </Table.Cell>
               <Table.Cell className={`text-center font-bold ${item.remark === 'PASSED' ? 'text-green-600' : item.remark === 'FAILED' ? 'text-red-600' : 'text-yellow-600'}`}>
                 {item.remark || "—"}
@@ -237,16 +482,16 @@ const TeacherGradeView = () => {
 
     return (
       <Table className="w-full border-collapse text-sm">
-        <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black uppercase">
+        <Table.Header className="border-b-2 border-black bg-yellow-300 font-black uppercase [&_th]:h-auto [&_th]:px-2 [&_th]:py-2 [&_th]:text-[11px] [&_th]:leading-tight sm:[&_th]:px-3 sm:[&_th]:py-2.5 sm:[&_th]:text-xs md:[&_th]:py-3 md:[&_th]:text-sm">
           <Table.Row>
-            <Table.Head className="min-w-[200px] font-black text-black">Learner's Name</Table.Head>
+            <Table.Head className="w-[20%] font-black text-black">Learner's Name</Table.Head>
             {periods.map((p) => (
               <Table.Head key={p.academic_period_id} className="text-center font-black text-black">
                 {p.period_name}
               </Table.Head>
             ))}
-            <Table.Head className="text-center font-black text-black">Final Grade</Table.Head>
-            <Table.Head className="text-center font-black text-black">Remarks</Table.Head>
+            <Table.Head className="w-[12%] text-center font-black text-black">Final Grade</Table.Head>
+            <Table.Head className="w-[12%] text-center font-black text-black">Remarks</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -259,7 +504,7 @@ const TeacherGradeView = () => {
           ) : filteredSummary.length === 0 ? (
             <Table.Row>
               <Table.Cell colSpan={periods.length + 3} className="py-8 text-center font-bold italic text-gray-500">
-                No student records found.
+                No summary records found.
               </Table.Cell>
             </Table.Row>
           ) : (
@@ -275,13 +520,17 @@ const TeacherGradeView = () => {
 
   const renderTermTable = () => {
     const { males, females } = groupStudentsByGender(filtered);
+    const weights = gradebook?.grading_weights;
+    const wwLabel = weights?.ww_percentage != null ? `Written Works (${weights.ww_percentage}%)` : "Written Works";
+    const ptLabel = weights?.pt_percentage != null ? `Performance Tasks (${weights.pt_percentage}%)` : "Performance Task";
+    const examsLabel = weights?.exams_percentage != null ? `Exams (${weights.exams_percentage}%)` : "Exams";
 
     const renderTermGroup = (group: typeof males, label: string) => {
       if (group.length === 0) return null;
       return (
         <>
           <Table.Row className="border-y-2 border-black bg-yellow-50 hover:bg-yellow-100/70">
-            <Table.Cell colSpan={5} className="py-1 font-black uppercase text-black">{label}</Table.Cell>
+            <Table.Cell colSpan={8} className="py-1 font-black uppercase text-black">{label}</Table.Cell>
           </Table.Row>
           {group.map((item, idx) => (
             <Table.Row key={item.student_id} className="border-b border-black/10 hover:bg-yellow-50/50">
@@ -321,7 +570,7 @@ const TeacherGradeView = () => {
                 <div className="flex flex-row items-center justify-between gap-1 w-full">
                   <div className="size-4 shrink-0" />
                   <div className="flex flex-row justify-around w-full text-xs">
-                    {getLatestTwo(item.quarterlyAssessment).map(({ item: score }, i) => (
+                    {getLatestTwo(item.exams && item.exams.length > 0 ? item.exams : (item.quarterlyAssessment ?? [])).map(({ item: score }, i) => (
                       <span className="w-full text-center tabular-nums" key={i}>
                         {score !== null && score !== undefined ? score : "—"}
                       </span>
@@ -331,12 +580,75 @@ const TeacherGradeView = () => {
                 </div>
               </Table.Cell>
 
-              <Table.Cell className="font-medium text-center tabular-nums">
-                {item.transmuted_grade != null
-                  ? item.transmuted_grade.toFixed(1)
-                  : item.initial_grade != null
-                  ? item.initial_grade.toFixed(1)
-                  : "—"}
+              <Table.Cell className="font-medium text-center tabular-nums whitespace-nowrap">
+                {item.initial_grade != null ? (
+                  <span className="font-bold">{item.initial_grade.toFixed(1)}</span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </Table.Cell>
+
+              <Table.Cell className="font-medium text-center tabular-nums whitespace-nowrap">
+                {item.transmuted_grade != null ? (
+                  <span className="font-bold">{item.transmuted_grade.toFixed(1)}</span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </Table.Cell>
+
+              <Table.Cell className="font-medium text-center tabular-nums whitespace-nowrap">
+                {item.transmuted_grade != null && item.performance_descriptor ? (
+                  <span className="font-semibold text-xs text-foreground">
+                    {item.performance_descriptor}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </Table.Cell>
+
+              <Table.Cell className="font-medium text-center py-2 px-2">
+                {item.is_finalized ? (
+                  <div
+                    className="inline-flex items-center justify-center gap-1.5"
+                    title={`Sent by ${item.finalized_by_name || 'Teacher'} on ${item.finalized_at ? new Date(item.finalized_at).toLocaleDateString() : 'N/A'}`}
+                  >
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-200 text-emerald-950 border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                      <CheckCircle2 className="size-3 text-emerald-950" />
+                      Sent
+                    </span>
+                    {!isViewOnly && (
+                      <button
+                        type="button"
+                        title="Resend updated grade to Adviser"
+                        disabled={sendingStudentId === item.student_id}
+                        onClick={() => handleSendStudentGrade(item, true)}
+                        className="text-xs text-black hover:text-black font-bold underline ml-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        {sendingStudentId === item.student_id ? <Loader2 className="size-3 animate-spin inline" /> : "Resend"}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs px-2.5 font-bold border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100"
+                    disabled={isViewOnly || sendingStudentId === item.student_id}
+                    onClick={() => handleSendStudentGrade(item)}
+                    title={
+                      timingGate.isLocked
+                        ? timingGate.message
+                        : "Send finalized grade to class adviser"
+                    }
+                  >
+                    {sendingStudentId === item.student_id ? (
+                      <Loader2 className="size-3 animate-spin mr-1" />
+                    ) : (
+                      <Send className="size-3 mr-1" />
+                    )}
+                    Send
+                  </Button>
+                )}
               </Table.Cell>
             </Table.Row>
           ))}
@@ -346,11 +658,11 @@ const TeacherGradeView = () => {
 
     return (
       <Table className="w-full border-collapse text-sm">
-        <Table.Header className="border-b-2 border-black bg-yellow-300 text-xs font-black uppercase">
+        <Table.Header className="border-b-2 border-black bg-yellow-300 font-black uppercase [&_th]:h-auto [&_th]:px-2 [&_th]:py-2 [&_th]:text-[11px] [&_th]:leading-tight sm:[&_th]:px-3 sm:[&_th]:py-2.5 sm:[&_th]:text-xs md:[&_th]:py-3 md:[&_th]:text-sm">
           <Table.Row>
-            <Table.Head className="w-[22%] font-black text-black">Learner's Name</Table.Head>
+            <Table.Head className="w-[17%] font-black text-black">Learner's Name</Table.Head>
             <Table.Head
-              className="w-[27%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
+              className="w-[20%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
               title="Click to view full Written Works breakdown"
               onClick={() =>
                 setSelectedCategory({
@@ -364,10 +676,10 @@ const TeacherGradeView = () => {
                 })
               }
             >
-              Written Works
+              {wwLabel}
             </Table.Head>
             <Table.Head
-              className="w-[27%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
+              className="w-[20%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
               title="Click to view full Performance Tasks breakdown"
               onClick={() =>
                 setSelectedCategory({
@@ -381,31 +693,34 @@ const TeacherGradeView = () => {
                 })
               }
             >
-              Performance Task
+              {ptLabel}
             </Table.Head>
             <Table.Head
-              className="w-[15%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
-              title="Click to view full Quarterly Assessment breakdown"
+              className="w-[12%] cursor-pointer text-center font-black text-black transition-colors hover:bg-yellow-200"
+              title="Click to view full Exams breakdown"
               onClick={() =>
                 setSelectedCategory({
-                  name: "Quarterly Assessment",
-                  items: cg.quarterlyAssessment,
+                  name: "Exams",
+                  items: examItems,
                   studentGrades: filtered.map((sg) => ({
                     name: sg.name,
-                    scores: sg.quarterlyAssessment,
+                    scores: sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []),
                     gender: sg.gender,
                   })),
                 })
               }
             >
-              Quarterly Assessment
+              {examsLabel}
             </Table.Head>
-            <Table.Head className="w-[9%] text-center font-black text-black">Grade</Table.Head>
+            <Table.Head className="w-[8%] text-center font-black text-black">Initial Grade</Table.Head>
+            <Table.Head className="w-[8%] text-center font-black text-black">Term Grade</Table.Head>
+            <Table.Head className="w-[8%] text-center font-black text-black">Descriptor</Table.Head>
+            <Table.Head className="w-[8%] text-center font-black text-black">Adviser Status</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
           <Table.Row className="border-b-2 border-black bg-yellow-50 hover:bg-yellow-100/70">
-            <Table.Cell className="font-black text-black">Classwork Name</Table.Cell>
+            <Table.Cell className="text-xs font-black text-black sm:text-sm">Classwork Name</Table.Cell>
             <Table.Cell className="py-2 px-2">
               <div className="flex flex-row items-center justify-between gap-1 w-full">
                 <button
@@ -426,9 +741,8 @@ const TeacherGradeView = () => {
                     <button
                       type="button"
                       key={item.id}
-                      className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${
-                        isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
-                      }`}
+                      className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                        }`}
                       title={isViewOnly ? item.title : `Click to Enter Scores for ${item.title}`}
                       onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                     >
@@ -468,9 +782,8 @@ const TeacherGradeView = () => {
                     <button
                       type="button"
                       key={item.id}
-                      className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${
-                        isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
-                      }`}
+                      className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                        }`}
                       title={isViewOnly ? item.title : `Click to Enter Scores for ${item.title}`}
                       onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                     >
@@ -494,25 +807,28 @@ const TeacherGradeView = () => {
               <div className="flex flex-row items-center justify-between gap-1 w-full">
                 <button
                   type="button"
-                  title="View all Quarterly Assessment scores"
+                  title="View all Exams scores"
                   onClick={() =>
                     setSelectedCategory({
-                      name: "Quarterly Assessment",
-                      items: cg.quarterlyAssessment,
-                      studentGrades: filtered.map((sg) => ({ name: sg.name, scores: sg.quarterlyAssessment, gender: sg.gender })),
+                      name: "Exams",
+                      items: examItems,
+                      studentGrades: filtered.map((sg) => ({
+                        name: sg.name,
+                        scores: sg.exams && sg.exams.length > 0 ? sg.exams : (sg.quarterlyAssessment ?? []),
+                        gender: sg.gender,
+                      })),
                     })
                   }
                 >
                   <Ellipsis className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
                 </button>
                 <div className="flex flex-row items-center justify-center gap-3 overflow-hidden text-xs w-full">
-                  {getLatestTwo(cg.quarterlyAssessment).map(({ item }) => (
+                  {getLatestTwo(examItems).map(({ item }) => (
                     <button
                       type="button"
                       key={item.id}
-                      className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${
-                        isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
-                      }`}
+                      className={`flex flex-row items-center gap-1 whitespace-nowrap truncate transition-colors ${isViewOnly ? "cursor-default" : "hover:text-primary cursor-pointer"
+                        }`}
                       title={isViewOnly ? item.title : `Click to Enter Scores for ${item.title}`}
                       onClick={() => !isViewOnly && setScoringActivity({ activityId: item.id, title: item.title, maxScore: item.maxScore })}
                     >
@@ -524,8 +840,8 @@ const TeacherGradeView = () => {
                 {!isViewOnly && (
                   <button
                     type="button"
-                    title="Add score to Quarterly Assessment"
-                    onClick={() => setAddingCategoryName("Quarterly Assessment")}
+                    title="Add score to Exams"
+                    onClick={() => setAddingCategoryName("Exams")}
                   >
                     <Plus className="size-4 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0" />
                   </button>
@@ -533,18 +849,21 @@ const TeacherGradeView = () => {
               </div>
             </Table.Cell>
             <Table.Cell className="text-center font-semibold">100</Table.Cell>
+            <Table.Cell className="text-center font-bold text-xs text-muted-foreground py-2 px-2">—</Table.Cell>
+            <Table.Cell className="text-center font-bold text-xs text-muted-foreground py-2 px-2">—</Table.Cell>
+            <Table.Cell className="text-center font-bold text-xs text-muted-foreground py-2 px-2">—</Table.Cell>
           </Table.Row>
 
 
           {loading ? (
             <Table.Row>
-              <Table.Cell colSpan={5} className="py-8 text-center font-bold italic text-gray-500">
+              <Table.Cell colSpan={8} className="py-8 text-center font-bold italic text-gray-500">
                 Loading gradebook...
               </Table.Cell>
             </Table.Row>
           ) : filtered.length === 0 ? (
             <Table.Row>
-              <Table.Cell colSpan={5} className="py-8 text-center font-bold italic text-gray-500">
+              <Table.Cell colSpan={8} className="py-8 text-center font-bold italic text-gray-500">
                 No student records found.
               </Table.Cell>
             </Table.Row>
@@ -566,95 +885,183 @@ const TeacherGradeView = () => {
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-4 py-4 md:py-5 px-4 md:px-6 pb-6">
-            <header className="flex items-center gap-3">
-              <SidebarTrigger className="md:hidden" />
-              <Breadcrumb>
-                <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Link href="/teacher/grades" className="text-2xl md:text-4xl font-bold">
-                      Grades
-                    </Breadcrumb.Link>
-                  </Breadcrumb.Item>
-                  <Breadcrumb.Separator />
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Page>{displaySectionName}</Breadcrumb.Page>
-                  </Breadcrumb.Item>
-                  <Breadcrumb.Separator />
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Page>{displaySubjectName}</Breadcrumb.Page>
-                  </Breadcrumb.Item>
-                </Breadcrumb.List>
-              </Breadcrumb>
+          <div className="flex flex-1 flex-col">
+            <header className="flex min-w-0 flex-col items-stretch gap-3 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:gap-3 md:px-6">
+              <div className="flex min-w-0 items-center gap-2">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <Breadcrumb className="min-w-0 overflow-hidden">
+                  <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-2">
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Link href="/teacher/grades">
+                        Grades
+                      </Breadcrumb.Link>
+                    </Breadcrumb.Item>
+                    <Breadcrumb.Separator />
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Page>{displaySectionName}</Breadcrumb.Page>
+                    </Breadcrumb.Item>
+                    <Breadcrumb.Separator />
+                    <Breadcrumb.Item>
+                      <Breadcrumb.Page>{displaySubjectName}</Breadcrumb.Page>
+                    </Breadcrumb.Item>
+                  </Breadcrumb.List>
+                </Breadcrumb>
+              </div>
+              {gradebook?.grading_weights?.template_name && (
+                <span className="hidden sm:inline-flex items-center gap-1 ml-2 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-950 border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]" title={`Assigned Template: ${gradebook.grading_weights.template_name}`}>
+                  {gradebook.grading_weights.template_name}
+                </span>
+              )}
 
-              <div className="flex flex-row gap-2 ml-auto">
-                <Button
-                  variant={"outline"}
-                  className="whitespace-nowrap"
-                  onClick={() => setOpenAttendance(true)}
-                  disabled={isViewOnly}
-                >
-                  <ClipboardCheck className="size-4 mr-2" /> Check Attendance
-                </Button>
-                <Button variant={"outline"} className="whitespace-nowrap" onClick={handleExportCSV}>
-                  <Download className="size-4 mr-2" /> Export Grades
-                </Button>
+              <div className="grid w-full grid-cols-2 items-center gap-2 md:ml-auto md:flex md:w-auto md:flex-row">
+                {!isViewOnly && activeTab.startsWith("term-") && (
+                  <Button
+                    variant="default"
+                    className="min-w-0 whitespace-nowrap border-2 border-black bg-primary px-2 text-xs font-bold text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-primary-hover md:px-4 md:text-sm"
+                    onClick={() => setShowBulkConfirm(true)}
+                    disabled={sendingAll || filtered.length === 0}
+                    title={
+                      timingGate.isLocked
+                        ? timingGate.message
+                        : "Send finalized grades for all students in this section to adviser"
+                    }
+                  >
+                    <Send className="mr-1 size-4 md:mr-2" /> Send All to Adviser
+                  </Button>
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      disabled={isExporting}
+                      className="whitespace-nowrap font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100 disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {isExporting ? (
+                        <>
+                          <Loader2 className="size-4 mr-1 animate-spin" /> Exporting...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="size-4 mr-1" /> Export Grades
+                          <ChevronDown className="size-3.5 opacity-70" />
+                        </>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] bg-background min-w-[240px]">
+                    <DropdownMenuItem
+                      onClick={handleExportWorkbook}
+                      className="flex items-start gap-2.5 p-2.5 font-bold cursor-pointer hover:bg-yellow-100 focus:bg-yellow-100"
+                    >
+                      <FileSpreadsheet className="size-4 mt-0.5 text-emerald-600 shrink-0" />
+                      <div>
+                        <div className="text-sm font-extrabold text-black">Full Year Workbook (.xlsx)</div>
+                        <div className="text-xs font-normal text-muted-foreground">All terms + Summary of Grades</div>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={handleExportCurrent}
+                      className="flex items-start gap-2.5 p-2.5 font-bold cursor-pointer hover:bg-yellow-100 focus:bg-yellow-100"
+                    >
+                      <Download className="size-4 mt-0.5 text-primary shrink-0" />
+                      <div>
+                        <div className="text-sm font-extrabold text-black">
+                          {activeTab === "summary" ? "Summary Sheet (.csv)" : "Current Term (.xlsx)"}
+                        </div>
+                        <div className="text-xs font-normal text-muted-foreground">
+                          {activeTab === "summary" ? "CSV format with final grades" : "Single term DepEd sheet"}
+                        </div>
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </header>
 
-            {isViewOnly && (
-              <div className="rounded-xl border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/30 p-4 text-amber-900 dark:text-amber-200 flex items-center gap-3 shadow-sm">
-                <span className="text-2xl">🔒</span>
-                <div>
-                  <h4 className="font-bold text-sm">Read-Only Mode (On Leave)</h4>
-                  <p className="text-xs text-amber-800 dark:text-amber-300">
-                    You are currently on leave for this class and subject. Records are view-only.
-                    {gradebook?.scope?.substitute_name && ` Currently covered by substitute teacher: ${gradebook.scope.substitute_name}.`}
-                  </p>
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+              {toastMessage && (
+                <div
+                  className={`rounded-md border-2 border-black p-3 flex items-center justify-between text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${toastMessage.type === "success"
+                    ? "bg-emerald-100 text-emerald-950"
+                    : toastMessage.type === "error"
+                      ? "bg-rose-100 text-rose-950"
+                      : "bg-yellow-100 text-black"
+                    }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {toastMessage.type === "success" ? (
+                      <CheckCircle2 className="size-4 text-emerald-950" />
+                    ) : (
+                      <AlertTriangle className="size-4 text-rose-950" />
+                    )}
+                    <span>{toastMessage.text}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setToastMessage(null)}
+                    className="p-1 hover:bg-black/10 rounded cursor-pointer text-black"
+                  >
+                    <X className="size-3.5" />
+                  </button>
                 </div>
+              )}
+
+
+
+              {isViewOnly && (
+                <div className="rounded-md border-2 border-black bg-amber-100 p-4 text-black flex items-center gap-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-medium">
+                  <span className="text-2xl">🔒</span>
+                  <div>
+                    <h4 className="font-black text-sm">Read-Only Mode (On Leave)</h4>
+                    <p className="text-xs text-gray-800">
+                      You are currently on leave for this class and subject. Records are view-only.
+                      {gradebook?.scope?.substitute_name && ` Currently covered by substitute teacher: ${gradebook.scope.substitute_name}.`}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {isSubstitution && (
+                <div className="rounded-md border-2 border-black bg-yellow-100 p-3 text-black flex items-center gap-2 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  <span className="text-base">📋</span>
+                  <span>
+                    You are covering this class as a substitute teacher for {gradebook?.scope?.original_teacher_name || "the original teacher"}. Full grading and attendance permissions are enabled.
+                  </span>
+                </div>
+              )}
+
+              <div className="-mx-4 md:-mx-6 border-b border-gray-500" />
+
+              <div className="flex flex-col gap-3">
+                <section className="flex flex-row justify-between gap-4">
+                  <div className="relative w-full md:w-80">
+                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="w-full pl-9"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Search student's name"
+                    />
+                  </div>
+
+                  <div className="flex flex-row gap-4">
+                    <Select value={sortBy} onValueChange={(v) => setSortBy(v)}>
+                      <Select.Trigger className="w-full">
+                        <Select.Value placeholder="Sort By" />
+                      </Select.Trigger>
+                      <Select.Content>
+                        <Select.Group>
+                          <Select.Item value="name">Name</Select.Item>
+                        </Select.Group>
+                      </Select.Content>
+                    </Select>
+                  </div>
+                </section>
+                <Card className="w-full rounded-none border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  {activeTab === "summary" ? renderSummaryTable() : renderTermTable()}
+                </Card>
+                <div className="h-24 w-full"></div>
               </div>
-            )}
-
-            {isSubstitution && (
-              <div className="rounded-xl border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 p-3 text-emerald-900 dark:text-emerald-200 flex items-center gap-2 text-xs font-semibold shadow-sm">
-                <span className="text-base">📋</span>
-                <span>
-                  You are covering this class as a substitute teacher for {gradebook?.scope?.original_teacher_name || "the original teacher"}. Full grading and attendance permissions are enabled.
-                </span>
-              </div>
-            )}
-
-            <div className="-mx-4 md:-mx-6 border-b border-gray-500" />
-
-            <div className="flex flex-col gap-3">
-              <section className="flex flex-row justify-between gap-4">
-                <div className="relative w-full md:w-80">
-                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    className="w-full pl-9"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search student's name"
-                  />
-                </div>
-
-                <div className="flex flex-row gap-4">
-                  <Select value={sortBy} onValueChange={(v) => setSortBy(v)}>
-                    <Select.Trigger className="w-full">
-                      <Select.Value placeholder="Sort By" />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Group>
-                        <Select.Item value="name">Name</Select.Item>
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>
-                </div>
-              </section>
-              <Card className="w-full rounded-none border-2 border-black bg-white p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                {activeTab === "summary" ? renderSummaryTable() : renderTermTable()}
-              </Card>
-              <div className="h-24 w-full"></div>
             </div>
           </div>
         </div>
@@ -682,12 +1089,6 @@ const TeacherGradeView = () => {
         </div>
       </div>
 
-      <Dialog open={openAttendance} onOpenChange={setOpenAttendance}>
-        <AttendanceModal
-          sectionName={displaySectionName}
-          students={filtered.map((s) => ({ student_id: s.student_id, name: s.name }))}
-        />
-      </Dialog>
 
       <Dialog
         open={selectedCategory !== null}
@@ -745,6 +1146,258 @@ const TeacherGradeView = () => {
             onClose={() => setScoringActivity(null)}
           />
         )}
+      </Dialog>
+
+      {/* Bulk Send to Adviser Confirmation Dialog */}
+      <Dialog
+        open={showBulkConfirm}
+        onOpenChange={(open) => {
+          if (!open) setShowBulkConfirm(false);
+        }}
+      >
+        <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded-lg overflow-hidden">
+          <Dialog.Header className="border-black text-black min-h-0">
+            <div className="flex items-center gap-2.5">
+              <div className="size-8 rounded-md bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                {timingGate.isLocked ? (
+                  <AlertTriangle className="size-4 text-black" />
+                ) : (
+                  <Send className="size-4 text-black" />
+                )}
+              </div>
+              <h3 className="font-extrabold text-base text-black leading-none font-head">
+                {timingGate.isLocked
+                  ? timingGate.isClosed
+                    ? "Submission Window Closed"
+                    : "Submission Window Not Yet Open"
+                  : "Send Finalized Grades to Adviser"}
+              </h3>
+            </div>
+          </Dialog.Header>
+          <div className="flex flex-col gap-4 p-5 text-sm bg-white text-black">
+            <p className="text-gray-800 text-sm leading-relaxed font-medium">
+              This will compute and transmit official term grades for all <strong className="text-black font-bold">{raw.length}</strong> enrolled student(s) in{" "}
+              <strong className="text-black font-bold">{displaySectionName}</strong> to the class adviser's record.
+            </p>
+
+            {timingGate.isLocked ? (
+              <div className="rounded-md border-2 border-black bg-amber-100 p-3.5 flex items-center gap-3 text-xs font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-amber-950">
+                <AlertTriangle className="size-5 shrink-0 text-amber-900" />
+                <div>
+                  <div className="font-black text-sm">
+                    {timingGate.isClosed ? "Submission Window Closed" : "Submission Window Not Yet Open"}
+                  </div>
+                  <div className="font-medium text-xs mt-0.5">
+                    {timingGate.isClosed ? (
+                      <>
+                        The submission window for this term closed on <strong>{timingGate.formattedCloseDate} ({timingGate.closeDate})</strong> (7 days after the term ended on {currentPeriod?.end_date}). Contact an administrator if this grade needs correction.
+                      </>
+                    ) : (
+                      <>
+                        Grades can only be sent to the adviser starting on <strong>{timingGate.formattedUnlockDate} ({timingGate.unlockDate})</strong> (7 days before the term ends on {currentPeriod?.end_date}).
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                  <div className="bg-emerald-50 border-2 border-black rounded-md p-2.5 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                    <span className="block text-xl font-black text-emerald-950">{completeComponentsCount}</span>
+                    <span className="text-[10px] text-emerald-900 font-bold uppercase tracking-wider">All Components Complete</span>
+                  </div>
+                  <div className={`border-2 border-black rounded-md p-2.5 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] ${missingComponentsCount > 0 ? "bg-amber-50" : "bg-gray-50"}`}>
+                    <span className={`block text-xl font-black ${missingComponentsCount > 0 ? "text-amber-950" : "text-gray-600"}`}>{missingComponentsCount}</span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${missingComponentsCount > 0 ? "text-amber-900" : "text-gray-600"}`}>Missing Components (Sending Anyway)</span>
+                  </div>
+                </div>
+
+                {missingComponentsCount > 0 && (
+                  <div className="rounded-md border-2 border-black bg-amber-50 p-3 flex items-center gap-2.5 text-xs text-amber-950 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] font-medium">
+                    <AlertTriangle className="size-4 shrink-0 text-amber-900" />
+                    <span>
+                      <strong>{missingComponentsCount} student(s)</strong> have unassigned or unscored categories. Their grades will be finalized and sent based on available scores.
+                    </span>
+                  </div>
+                )}
+
+                <div className="rounded-md border-2 border-black bg-yellow-50 p-3 flex flex-col gap-1 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="font-black text-black flex items-center gap-2">
+                    <CheckCircle2 className="size-4 text-black shrink-0" />
+                    <span>Audit Trail & Idempotency</span>
+                  </div>
+                  <p className="text-gray-700 leading-relaxed pl-6 text-xs font-medium">
+                    Unchanged student grades will be safely skipped. Any updated scores will update the adviser's record and append a timestamped submission log.
+                  </p>
+                </div>
+
+                <label className="flex items-center gap-2.5 text-xs font-bold text-black cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={forceResendAll}
+                    onChange={(e) => setForceResendAll(e.target.checked)}
+                    className="size-4 rounded-none border-2 border-black accent-black cursor-pointer"
+                  />
+                  <span>Force resend all students (even if scores are unchanged)</span>
+                </label>
+              </>
+            )}
+          </div>
+          <Dialog.Footer className="border-t-2 border-black bg-white px-5 py-3.5 flex justify-end gap-2.5">
+            <Button
+              variant="outline"
+              onClick={() => setShowBulkConfirm(false)}
+              disabled={sendingAll}
+              className="h-9 px-4 text-xs font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100"
+            >
+              {timingGate.isLocked ? "Close" : "Cancel"}
+            </Button>
+            {!timingGate.isLocked && raw.length > 0 && (
+              <Button
+                variant="default"
+                onClick={() => handleBulkSend(forceResendAll)}
+                disabled={sendingAll}
+                className="h-9 px-4 text-xs font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] bg-primary hover:bg-primary-hover text-black"
+              >
+                {sendingAll ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin mr-1.5" /> Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="size-3.5 mr-1.5" /> Confirm & Send ({raw.length})
+                  </>
+                )}
+              </Button>
+            )}
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+
+      {/* Stale Data Conflict Modal */}
+      <Dialog
+        open={conflictData !== null}
+        onOpenChange={(open) => {
+          if (!open) setConflictData(null);
+        }}
+      >
+        <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded-lg overflow-hidden">
+          <Dialog.Header className="border-black text-black min-h-0">
+            <div className="flex items-center gap-2.5">
+              <div className="size-8 rounded-md bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                <AlertTriangle className="size-4 text-black" />
+              </div>
+              <h3 className="font-extrabold text-base text-black leading-none font-head">
+                Grade Discrepancy Detected
+              </h3>
+            </div>
+          </Dialog.Header>
+          <div className="flex flex-col gap-4 p-5 text-sm bg-white text-black">
+            <p className="text-gray-800 text-sm leading-relaxed font-medium">
+              Scores have changed since this page was loaded for{" "}
+              <strong className="text-black font-bold">{conflictData?.studentName || "one or more students"}</strong>.
+            </p>
+            <div className="rounded-md border-2 border-black bg-amber-50 p-3.5 flex flex-col gap-2.5 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-700 font-bold">Displayed Grade:</span>
+                <span className="font-black text-black text-sm">{conflictData?.expectedGrade?.toFixed(1) ?? "—"}</span>
+              </div>
+              <div className="flex justify-between items-center border-t border-black/10 pt-2">
+                <span className="text-gray-700 font-bold">Recomputed Grade:</span>
+                <span className="font-black text-emerald-800 text-sm">{conflictData?.recomputedGrade?.toFixed(1) ?? "—"}</span>
+              </div>
+            </div>
+            <p className="text-xs text-gray-700 leading-relaxed font-medium">
+              Would you like to refresh your gradebook to review the latest scores, or force-send with the recomputed value?
+            </p>
+          </div>
+          <Dialog.Footer className="border-t-2 border-black bg-white px-5 py-3.5 flex justify-end gap-2.5">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setConflictData(null);
+                fetchGradebook();
+              }}
+              className="h-9 px-4 text-xs font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100"
+            >
+              <RefreshCw className="size-3.5 mr-1.5" /> Refresh Gradebook
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => {
+                const c = conflictData;
+                setConflictData(null);
+                if (c?.studentId) {
+                  const studentObj = filtered.find((s) => s.student_id === c.studentId);
+                  if (studentObj) handleSendStudentGrade(studentObj, true);
+                } else {
+                  handleBulkSend(true);
+                }
+              }}
+              className="h-9 px-4 text-xs font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] bg-primary hover:bg-primary-hover text-black"
+            >
+              Send Recomputed Grade
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+
+      {/* Bulk Send Summary Result Modal */}
+      <Dialog
+        open={bulkSendSummary !== null}
+        onOpenChange={(open) => {
+          if (!open) setBulkSendSummary(null);
+        }}
+      >
+        <Dialog.Content size="md" className="border-2 border-black bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] p-0 gap-0 max-w-lg rounded-lg overflow-hidden">
+          <Dialog.Header className="border-black text-black min-h-0">
+            <div className="flex items-center gap-2.5">
+              <div className="size-8 rounded-md bg-white border-2 border-black flex items-center justify-center text-black shrink-0 shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+                <CheckCircle2 className="size-4 text-black" />
+              </div>
+              <h3 className="font-extrabold text-base text-black leading-none font-head">
+                {bulkSendSummary && bulkSendSummary.newly_sent_count > 0
+                  ? "Transmission Completed"
+                  : bulkSendSummary && bulkSendSummary.unchanged_skipped_count > 0
+                    ? "Grades Already Up to Date"
+                    : "Transmission Finished"}
+              </h3>
+            </div>
+          </Dialog.Header>
+          <div className="flex flex-col gap-4 p-5 text-sm bg-white text-black">
+            <div className="grid grid-cols-3 gap-2.5 text-center">
+              <div className="bg-emerald-100 border-2 border-black rounded-md p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <span className="block text-2xl font-black text-emerald-950">{bulkSendSummary?.newly_sent_count ?? 0}</span>
+                <span className="text-[11px] text-emerald-900 font-black uppercase tracking-wider">Sent / Updated</span>
+              </div>
+              <div className="bg-yellow-50 border-2 border-black rounded-md p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <span className="block text-2xl font-black text-black">{bulkSendSummary?.unchanged_skipped_count ?? 0}</span>
+                <span className="text-[11px] text-gray-800 font-black uppercase tracking-wider">Unchanged</span>
+              </div>
+              <div className="bg-amber-100 border-2 border-black rounded-md p-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <span className="block text-2xl font-black text-amber-950">{(bulkSendSummary?.incomplete_warning_count ?? 0) || (bulkSendSummary?.incomplete_skipped_count ?? 0)}</span>
+                <span className="text-[11px] text-amber-900 font-black uppercase tracking-wider">With Warnings</span>
+              </div>
+            </div>
+            <p className="text-xs text-gray-700 leading-relaxed font-medium">
+              {bulkSendSummary && (bulkSendSummary.incomplete_warning_count ?? 0) > 0
+                ? `Official grades and append-only audit logs are now updated in the adviser's record (${bulkSendSummary.incomplete_warning_count} student(s) transmitted with missing classwork components).`
+                : bulkSendSummary && bulkSendSummary.newly_sent_count > 0
+                  ? "Official grades and append-only audit logs are now updated in the adviser's record."
+                  : "All student grades were already transmitted to the adviser with matching scores. No changes were necessary."}
+            </p>
+          </div>
+          <Dialog.Footer className="border-t-2 border-black bg-white px-5 py-3.5 flex justify-end">
+            <Button
+              variant="default"
+              onClick={() => setBulkSendSummary(null)}
+              className="h-9 px-5 text-xs font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] bg-primary hover:bg-primary-hover text-black"
+            >
+              Done
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
       </Dialog>
     </AppLayout>
   );

@@ -37,6 +37,40 @@ DEFAULTS: list[tuple[str, str, SettingType, str, bool, str]] = [
         "Enable maintenance mode across the application",
     ),
 
+    # ── Official School Information ──
+    (
+        "school_name",
+        "Medellin National Science and Technology School (MNSTS)",
+        SettingType.STRING,
+        "school",
+        True,
+        "Official school name",
+    ),
+    (
+        "school_id",
+        "303012",
+        SettingType.STRING,
+        "school",
+        True,
+        "DepEd School ID",
+    ),
+    (
+        "school_region",
+        "IV",
+        SettingType.STRING,
+        "school",
+        True,
+        "DepEd Region designation",
+    ),
+    (
+        "school_division",
+        "Fourth District",
+        SettingType.STRING,
+        "school",
+        True,
+        "DepEd Division designation",
+    ),
+
     # ── Passing Thresholds ──
     # NOTE: subject_passing_grade has been removed — per-group thresholds are
     # now stored on the subject_groups table and resolved at finalization time.

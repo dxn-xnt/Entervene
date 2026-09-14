@@ -4,9 +4,10 @@ import { useNavigate } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { Tabs } from "@/components/retroui/Tabs";
-import SubjectSuggestionsTab from "@/pages/student/Subjects/tabs/subject-suggestions-tab";
+import SubjectSuggestionsTab from "@/pages/student/subjects-view/tabs/subject-suggestions-tab";
 import { routes } from "@/../routes";
 import type { StudentLesson } from "@/types/student-subject";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 interface StudentLessonDetailScreenProps {
   lesson: StudentLesson;
@@ -46,30 +47,31 @@ export function StudentLessonDetailScreen({
   ];
 
   return (
-    <div className="space-y-4">
-      <header className="-mx-4 border-b border-gray-200 px-4 pb-4 md:-mx-6 md:px-6">
-        <Breadcrumb>
-          <Breadcrumb.List className="flex items-center gap-2 text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-black [&_a]:!text-muted-foreground [&_a]:!text-inherit [&_a]:!font-inherit [&_button]:!text-muted-foreground [&_button]:!text-inherit [&_button]:!font-inherit [&_[aria-current=page]]:!text-black [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!font-extrabold">
-            <Breadcrumb.Item>
+    <div className="min-w-0 space-y-3 sm:space-y-4">
+      <header className="-mx-3 -mt-3 flex min-w-0 items-center gap-2 border-b-2 border-black bg-background px-3 py-3 sm:-mx-4 sm:-mt-4 sm:gap-3 sm:px-4 sm:py-4 md:-mx-6 md:h-[78px] md:px-6 md:py-0">
+        <SidebarTrigger className="shrink-0 md:hidden" />
+        <Breadcrumb className="min-w-0 flex-1 overflow-hidden">
+          <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 text-lg font-extrabold tracking-tight text-black sm:gap-2 sm:text-2xl md:text-3xl [&_a]:!font-inherit [&_a]:!text-inherit [&_a]:!text-muted-foreground [&_button]:!font-inherit [&_button]:!text-inherit [&_button]:!text-muted-foreground [&_[aria-current=page]]:!font-extrabold [&_[aria-current=page]]:!text-inherit [&_[aria-current=page]]:!text-black">
+            <Breadcrumb.Item className="shrink-0">
               <Breadcrumb.Link
                 onClick={() => navigate(routes.student.subjects)}
-                className="cursor-pointer text-2xl text-black/50 hover:text-black md:text-4xl"
+                className="cursor-pointer whitespace-nowrap text-lg text-black/50 hover:text-black sm:text-2xl md:text-4xl"
               >
                 Subjects
               </Breadcrumb.Link>
             </Breadcrumb.Item>
             <Breadcrumb.Separator />
-            <Breadcrumb.Item>
+            <Breadcrumb.Item className="min-w-0 shrink-0">
               <Breadcrumb.Link
                 onClick={closeLessonDetail}
-                className="cursor-pointer text-xl text-black/50 hover:text-black md:text-3xl"
+                className="block max-w-24 cursor-pointer truncate text-lg text-black/50 hover:text-black sm:max-w-48 sm:text-xl md:max-w-none md:text-3xl"
               >
                 {displaySubjectName}
               </Breadcrumb.Link>
             </Breadcrumb.Item>
             <Breadcrumb.Separator />
-            <Breadcrumb.Item>
-              <Breadcrumb.Page className="text-xl md:text-3xl">
+            <Breadcrumb.Item className="min-w-0 flex-1">
+              <Breadcrumb.Page className="block truncate text-lg sm:text-xl md:text-3xl" title={lesson.title}>
                 {lesson.title}
               </Breadcrumb.Page>
             </Breadcrumb.Item>
@@ -77,8 +79,8 @@ export function StudentLessonDetailScreen({
         </Breadcrumb>
       </header>
 
-      <Card className="block w-full border-black bg-[#F6E9B2]">
-        <Card.Title className="text-2xl font-bold">{lesson.title}</Card.Title>
+      <Card className="block w-full border-black bg-primary shadow-md hover:shadow-none">
+        <Card.Title className="break-words text-xl font-bold sm:text-2xl">{lesson.title}</Card.Title>
         <p className="mt-1 text-sm font-semibold text-gray-800">
           {lesson.description || "No lesson description provided."}
         </p>
@@ -111,9 +113,6 @@ export function StudentLessonDetailScreen({
           <section className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold">Classwork</h3>
-              <span className="text-xs font-semibold text-gray-500">
-                See all
-              </span>
             </div>
             {renderLessonClassworkCards(lesson)}
           </section>

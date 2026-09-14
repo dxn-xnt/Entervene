@@ -4,7 +4,7 @@ import { Button } from "@/components/retroui/Button";
 import { NotificationCard } from "../../components/notification-card";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Loader2 } from "lucide-react";
+import { Bell, ClipboardList, Loader2, Megaphone } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import {
@@ -15,9 +15,9 @@ import {
 } from "@/lib/notifications-api";
 
 const tabs = [
-  { id: "all", label: "All" },
-  { id: "classworks", label: "Classworks" },
-  { id: "announcements", label: "Announcements" },
+  { id: "all", label: "All", icon: Bell },
+  { id: "classworks", label: "Classworks", icon: ClipboardList },
+  { id: "announcements", label: "Announcements", icon: Megaphone },
 ];
 
 const Notifications = () => {
@@ -83,15 +83,36 @@ const Notifications = () => {
       n.notification_type === "risk_alert",
   );
 
+  const activeTabIsEmpty =
+    activeTab === "classworks"
+      ? classworkItems.length === 0
+      : activeTab === "announcements"
+        ? announcementItems.length === 0
+        : notifications.length === 0;
+
+  const emptyStateTitle =
+    activeTab === "classworks"
+      ? "No classwork notifications yet."
+      : activeTab === "announcements"
+        ? "No announcements yet."
+        : "No notifications yet.";
+
+  const activeTabTitle =
+    activeTab === "classworks"
+      ? "Classworks"
+      : activeTab === "announcements"
+        ? "Announcements"
+        : null;
+
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center justify-between gap-3">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                   Notifications
                 </h1>
               </div>
@@ -100,6 +121,7 @@ const Notifications = () => {
                 size="md"
                 onClick={handleMarkAll}
                 disabled={markingAll || notifications.every((n) => n.is_read)}
+                className="shrink-0 px-2 text-xs sm:px-4 sm:text-sm"
               >
                 {markingAll ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-1 inline" />
@@ -108,26 +130,35 @@ const Notifications = () => {
                 <span className="sm:hidden">Read All</span>
               </Button>
             </header>
-
-            <main className="flex flex-col gap-3">
+            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs
                 tabs={tabs}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
               />
+            </div>
 
-              {loading ? (
-                <LoadingPanel label="Loading notifications..." />
-              ) : notifications.length === 0 ? (
-                <EmptyStateCard title="No announcements yet." />
-              ) : (
-                <div className="flex flex-col gap-5 w-full">
+            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+              <section className="flex w-full flex-col gap-3">
+                {activeTabTitle && (
+                  <h3 className="text-xl font-semibold md:text-3xl">
+                    {activeTabTitle}
+                  </h3>
+                )}
+                {loading ? (
+                  <LoadingPanel label="Loading notifications..." />
+                ) : activeTabIsEmpty ? (
+                  <EmptyStateCard title={emptyStateTitle} />
+                ) : (
+                  <div className="flex flex-col gap-5 w-full">
                   {(activeTab === "all" || activeTab === "classworks") &&
                     classworkItems.length > 0 && (
                       <section className="flex flex-col gap-3 w-full">
-                        <h2 className="text-xl md:text-3xl font-semibold">
-                          Classwork
-                        </h2>
+                        {activeTab === "all" && (
+                          <h2 className="text-xl md:text-3xl font-semibold">
+                            Classwork
+                          </h2>
+                        )}
                         {classworkItems.map((card) => (
                           <div
                             key={card.notification_id}
@@ -162,9 +193,11 @@ const Notifications = () => {
                   {(activeTab === "all" || activeTab === "announcements") &&
                     announcementItems.length > 0 && (
                       <section className="flex flex-col gap-3 w-full">
-                        <h2 className="text-xl md:text-3xl font-semibold">
-                          Announcement
-                        </h2>
+                        {activeTab === "all" && (
+                          <h2 className="text-xl md:text-3xl font-semibold">
+                            Announcements
+                          </h2>
+                        )}
                         {announcementItems.map((card) => (
                           <div
                             key={card.notification_id}
@@ -195,9 +228,10 @@ const Notifications = () => {
                         ))}
                       </section>
                     )}
-                </div>
-              )}
-            </main>
+                  </div>
+                )}
+              </section>
+            </div>
           </div>
         </div>
       </div>

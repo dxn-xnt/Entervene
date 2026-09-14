@@ -15,6 +15,10 @@ class SubjectLoadItem(BaseModel):
     end_time: str | None = None
     days_of_week: list[str] = Field(default_factory=list)
     status: str = "draft"
+    logical_load_id: str | None = None
+    section_revision: int = 1
+    base_revision: int | None = None
+    operation: str | None = None
     version: int = 1
     is_active_version: bool = True
     is_locked: bool = False
@@ -23,6 +27,8 @@ class SubjectLoadItem(BaseModel):
     last_modified_by: str | None = None
     continued_from_load_id: int | None = None
     is_math_or_science: bool | None = False
+    dependencies: dict[str, int] | None = None
+    has_live_data: bool = False
 
 
 class ConflictItem(BaseModel):
@@ -75,6 +81,26 @@ class BatchSaveSubjectLoadRequest(BaseModel):
     publish_scope: str = "all"  # "all" | "level" | "section"
     target_level_id: int | None = None
     target_class_id: int | None = None
+    base_revision: int | None = None
+    loads: list[SubjectLoadItem]
+
+
+class UnlockSectionRequest(BaseModel):
+    academic_period_id: int
+    class_id: int
+
+
+class DiscardDraftRequest(BaseModel):
+    academic_period_id: int
+    class_id: int
+
+
+class SectionDraftResponse(BaseModel):
+    message: str
+    class_id: int
+    section_revision: int
+    base_revision: int | None = None
+    has_pending_draft: bool = False
     loads: list[SubjectLoadItem]
 
 

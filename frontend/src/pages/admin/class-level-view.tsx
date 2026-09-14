@@ -99,13 +99,13 @@ export default function AdminSubjectLevel() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <Breadcrumb>
-                  <Breadcrumb.List>
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col">
+            <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <Breadcrumb className="min-w-0 overflow-hidden">
+                  <Breadcrumb.List className="flex-nowrap">
                     <Breadcrumb.Item>
                       <Breadcrumb.Link href="/admin/subjects" className="">
                         Subjects
@@ -121,8 +121,8 @@ export default function AdminSubjectLevel() {
 
               <Dialog>
                 <Dialog.Trigger>
-                  <Button>
-                    <Plus className="mr-2 size-4" />
+                  <Button className="w-full gap-1.5 px-2 text-xs sm:w-auto sm:gap-2 sm:px-4 sm:text-sm">
+                    <Plus className="size-4" />
                     New Subject
                   </Button>
                 </Dialog.Trigger>
@@ -130,9 +130,8 @@ export default function AdminSubjectLevel() {
               </Dialog>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border -mt-[1px]" />
-
-            <RetroCard className="bg-accent py-3">
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+              <RetroCard className="bg-accent py-3">
               <div className="flex flex-col gap-1">
                 <div className="flex flex-wrap items-end gap-2">
                   <Text as="h2" className="font-sansm font-bold">
@@ -217,6 +216,7 @@ export default function AdminSubjectLevel() {
                 )}
               </div>
             </section>
+            </div>
           </div>
         </div>
       </div>

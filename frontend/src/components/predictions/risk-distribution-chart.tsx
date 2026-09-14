@@ -18,7 +18,7 @@ const LABELS: Record<string, string> = {
   MODERATE_RISK: "Moderate",
   NEEDS_MONITORING: "Monitoring",
   LOW_RISK: "Low Risk",
-  INSUFFICIENT_DATA: "No Data",
+  INSUFFICIENT_DATA: "Insufficient Data",
 };
 
 export default function RiskDistributionChart({

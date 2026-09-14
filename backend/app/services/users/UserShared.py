@@ -3,6 +3,7 @@ import re
 import secrets
 import uuid
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from fastapi import HTTPException
@@ -106,6 +107,7 @@ def create_pending_account(db: Session, email: str, role_name: str) -> tuple[Use
         email=email,
         password_hash=None,
         account_status="pending",
+        email_status="pending",
     )
     db.add(account)
     db.flush()
@@ -176,7 +178,7 @@ def attach_staff_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
         last_name=capitalize_name(data.get("last_name")),
         dob=parse_optional_date(data),
         suffix=data.get("suffix", ""),
-        gender=data.get("gender", ""),
+        gender=data.get("gender", "").strip().capitalize() if data.get("gender") else "",
         contact_number=data.get("contact_number", ""),
         address=data.get("address", ""),
         email=data.get("email", ""),
@@ -185,10 +187,26 @@ def attach_staff_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
     ))
 
 
+def validate_prior_gwa(data: dict[str, Any]) -> Decimal | None:
+    raw = next((data.get(k) for k in ("prior_gwa", "general_average", "gwa") if data.get(k) not in (None, "")), None)
+    if raw is None or str(raw).strip() == "":
+        return None
+    try:
+        val = Decimal(str(raw).strip())
+    except (InvalidOperation, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="General average must be a valid number between 60.00 and 100.00") from exc
+    if val < Decimal("60.00") or val > Decimal("100.00"):
+        raise HTTPException(status_code=400, detail="General average must be between 60.00 and 100.00")
+    return val.quantize(Decimal("0.01"))
+
+
 def attach_student_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
-    gender = data.get("gender", "").strip()
-    if not gender:
+    raw_gender = data.get("gender", "").strip()
+    if not raw_gender:
         raise HTTPException(status_code=400, detail="Gender is required for student profiles")
+    gender = raw_gender.capitalize()
+    if gender not in {"Male", "Female"}:
+        raise HTTPException(status_code=400, detail="Gender must be Male or Female")
         
     db.add(Student(
         student_id=uuid.uuid4(),
@@ -204,4 +222,5 @@ def attach_student_profile(db: Session, user_id: uuid.UUID, data: dict) -> None:
         address=data.get("address", ""),
         email=data.get("email", ""),
         academic_level_id=resolve_academic_level_id(db, data),
+        prior_gwa=validate_prior_gwa(data),
     ))

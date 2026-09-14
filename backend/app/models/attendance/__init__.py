@@ -1,3 +1,4 @@
-from .Attendance import AttendanceRecord, LeaveRequest
+from .Attendance import AttendanceRecord
+ 
+__all__ = ["AttendanceRecord"]
 
-__all__ = ["AttendanceRecord", "LeaveRequest"]

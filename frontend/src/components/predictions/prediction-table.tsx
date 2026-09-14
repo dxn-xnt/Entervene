@@ -12,6 +12,8 @@ interface PredictionTableProps {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   hideClass?: boolean;
+  hideSubject?: boolean;
+  hidePagination?: boolean;
   onSort: (column: string) => void;
   onPageChange: (newOffset: number) => void;
   onRowClick: (predictionId: number) => void;
@@ -22,7 +24,7 @@ const RISK_BADGE_VARIANTS: Record<string, { bg: string; text: string }> = {
   MODERATE_RISK: { bg: "bg-amber-500 text-white border-2 border-black font-extrabold", text: "Moderate" },
   NEEDS_MONITORING: { bg: "bg-yellow-400 text-black border-2 border-black font-extrabold", text: "Monitoring" },
   LOW_RISK: { bg: "bg-emerald-500 text-white border-2 border-black font-extrabold", text: "Low Risk" },
-  INSUFFICIENT_DATA: { bg: "bg-gray-300 text-black border-2 border-black font-extrabold", text: "No Data" },
+  INSUFFICIENT_DATA: { bg: "bg-gray-300 text-black border-2 border-black font-extrabold", text: "Insufficient Data" },
 };
 
 function SortableHeader({
@@ -67,18 +69,21 @@ export default function PredictionTable({
   sortBy,
   sortOrder,
   hideClass = false,
+  hideSubject = false,
+  hidePagination = false,
   onSort,
   onPageChange,
   onRowClick,
 }: PredictionTableProps) {
   const currentPage = Math.floor(offset / limit) + 1;
   const totalPages = Math.ceil(total / limit) || 1;
+  const colSpanCount = 4 + (!hideClass ? 1 : 0) + (!hideSubject ? 1 : 0);
 
   return (
     <div className="flex flex-col">
       <Table wrapperClassName="border-0 shadow-md mb-2">
-        <Table.Header className="text-black">
-          <Table.Row className="border-b-2 border-black hover:bg-yellow-300">
+        <Table.Header className="text-black bg-yellow-400">
+          <Table.Row className="border-b-2 border-black bg-yellow-400 hover:bg-yellow-400">
             <Table.Head className="font-extrabold text-black whitespace-nowrap">
               <SortableHeader
                 label="Student"
@@ -90,7 +95,7 @@ export default function PredictionTable({
             </Table.Head>
             {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">LRN</Table.Head> */}
             {!hideClass && <Table.Head className="font-extrabold text-black whitespace-nowrap">Class</Table.Head>}
-            <Table.Head className="font-extrabold text-black whitespace-nowrap">Subject</Table.Head>
+            {!hideSubject && <Table.Head className="font-extrabold text-black whitespace-nowrap">Subject</Table.Head>}
             {/* <Table.Head className="font-extrabold text-black whitespace-nowrap">Term</Table.Head> */}
             <Table.Head className="font-extrabold text-black whitespace-nowrap">
               <SortableHeader
@@ -120,7 +125,7 @@ export default function PredictionTable({
           {items.length === 0 ? (
             <Table.Row>
               <Table.Cell
-                colSpan={hideClass ? 6 : 7}
+                colSpan={colSpanCount}
                 className="text-center py-12"
               >
                 <div className="flex flex-col items-center justify-center gap-2">
@@ -154,12 +159,12 @@ export default function PredictionTable({
                     {item.student_lrn}
                   </Table.Cell> */}
                   {!hideClass && <Table.Cell className="font-normal whitespace-nowrap">{item.class_name}</Table.Cell>}
-                  <Table.Cell className="font-normal whitespace-nowrap">{item.subject_name}</Table.Cell>
+                  {!hideSubject && <Table.Cell className="font-normal whitespace-nowrap">{item.subject_name}</Table.Cell>}
                   {/* <Table.Cell className="font-normal whitespace-nowrap">{item.term_label}</Table.Cell> */}
                   <Table.Cell className="font-black text-base whitespace-nowrap">
-                    {item.predicted_period_grade !== null
-                      ? item.predicted_period_grade.toFixed(2)
-                      : "—"}
+                    {item.risk_level === "INSUFFICIENT_DATA" || item.predicted_period_grade === null
+                      ? "—"
+                      : item.predicted_period_grade.toFixed(2)}
                   </Table.Cell>
                   <Table.Cell className="whitespace-nowrap">
                     <Badge
@@ -171,7 +176,9 @@ export default function PredictionTable({
                     </Badge>
                   </Table.Cell>
                   <Table.Cell className="font-bold text-gray-900 whitespace-nowrap">
-                    {item.risk_score !== null ? item.risk_score.toFixed(1) : "—"}
+                    {item.risk_level === "INSUFFICIENT_DATA" || item.risk_score === null
+                      ? "—"
+                      : item.risk_score.toFixed(1)}
                   </Table.Cell>
                   {/* <Table.Cell className="text-right whitespace-nowrap">
                     <Button
@@ -194,7 +201,7 @@ export default function PredictionTable({
       </Table>
 
       {/* Bottom Sticky Pagination Footer */}
-      {total > 0 && (
+      {!hidePagination && total > 0 && (
         <div className="sticky bottom-0 z-20 flex flex-col sm:flex-row items-center justify-between px-1 py-3 bg-white gap-3 shrink-0">
           <p className="text-md font-normal tracking-wide">
             Showing <span className="font-bold text-md">{offset + 1} </span>–

@@ -106,15 +106,15 @@ export default function AdminAcademicPeriods() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center gap-3">
-              <SidebarTrigger className="md:hidden" />
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <SidebarTrigger className="shrink-0 md:hidden" />
               <div className="flex items-center gap-3">
                 <Breadcrumb>
                   <Breadcrumb.List>
                     <Breadcrumb.Item>
-                      <Breadcrumb.Link href="/admin/settings" className="text-4xl font-bold">
+                    <Breadcrumb.Link href="/admin/settings">
                         System Settings
                       </Breadcrumb.Link>
                     </Breadcrumb.Item>
@@ -126,11 +126,11 @@ export default function AdminAcademicPeriods() {
                 </Breadcrumb>
               </div>
             </header>
-            <div className="-mx-4 md:-mx-6 border-b border-black/40" />
 
-            {/* Single Consolidated Card for Unified JHS & SHS */}
-            <Card className="@container/card">
-              <Card.Header className="flex flex-row justify-between items-start">
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 [&_table]:min-w-[640px] sm:px-4 sm:py-4 md:px-6">
+              {/* Single Consolidated Card for Unified JHS & SHS */}
+              <Card className="@container/card">
+              <Card.Header className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <Card.Title className="flex flex-col w-full gap-1">
                   Academic Periods
                   <Text
@@ -204,6 +204,7 @@ export default function AdminAcademicPeriods() {
               </Card.Content>
             </Card>
 
+            </div>
           </div>
         </div>
       </div>

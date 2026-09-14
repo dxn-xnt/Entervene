@@ -1,21 +1,21 @@
 from datetime import date, datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from app.models.attendance.Attendance import AttendanceRecord, LeaveRequest
+from app.models.academic.StudentCLass import StudentClass
+from app.models.attendance.Attendance import AttendanceRecord
 from app.models.people.Student import Student
 from app.models.people.AcademicStaff import AcademicStaff
 from app.schemas.Attendance import (
     BatchAttendanceCreate,
     AttendanceRecordResponse,
     AttendanceSummaryResponse,
-    LeaveRequestCreate,
-    LeaveRequestResponse,
-    LeaveRequestUpdate,
+    QRScanAttendanceRequest,
+    QRScanAttendanceResponse,
 )
 
 
@@ -55,23 +55,6 @@ def _to_attendance_response(
     )
 
 
-def _to_leave_request_response(leave_req: LeaveRequest, student_name: str | None = None) -> LeaveRequestResponse:
-    return LeaveRequestResponse(
-        leave_request_id=getattr(leave_req, "leave_request_id"),
-        student_id=getattr(leave_req, "student_id"),
-        student_name=student_name,
-        class_id=getattr(leave_req, "class_id"),
-        start_date=getattr(leave_req, "start_date"),
-        end_date=getattr(leave_req, "end_date"),
-        reason=getattr(leave_req, "reason"),
-        status=getattr(leave_req, "status"),
-        reviewed_by_staff_id=getattr(leave_req, "reviewed_by_staff_id"),
-        reviewed_at=getattr(leave_req, "reviewed_at"),
-        created_at=getattr(leave_req, "created_at"),
-        updated_at=getattr(leave_req, "updated_at"),
-    )
-
-
 def batch_mark_attendance(
     db: Session,
     payload: BatchAttendanceCreate,
@@ -80,15 +63,17 @@ def batch_mark_attendance(
     """Upsert daily attendance records for a batch of students in a class."""
     if recorded_by_staff_id and payload.subject_id:
         from app.models.academic.SubjectLoad import SubjectLoad
-        from app.services.academic.SubstitutionService import SubstitutionService
-        loads = db.query(SubjectLoad).filter(
+        from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+        load = db.query(SubjectLoad).filter(
             SubjectLoad.class_id == payload.class_id,
             SubjectLoad.subject_id == payload.subject_id,
+            SubjectLoad.is_active_version.is_(True),
             SubjectLoad.status.in_(["active", "published"]),
-        ).all()
-        for sl in loads:
-            if sl.staff_id == recorded_by_staff_id:
-                SubstitutionService.assert_can_write(db, recorded_by_staff_id, sl.subject_load_id, payload.date)
+        ).first()
+        if load:
+            SubjectLoadAuthorizationService.assert_can_write(
+                db, recorded_by_staff_id, load.class_id, load.subject_id, load.academic_period_id, as_of=payload.date
+            )
 
     results: list[AttendanceRecordResponse] = []
 
@@ -135,6 +120,128 @@ def batch_mark_attendance(
 
     db.commit()
     return results
+
+
+def record_qr_scan_attendance(
+    db: Session,
+    payload: QRScanAttendanceRequest,
+    recorded_by_staff_id: str | None = None,
+) -> QRScanAttendanceResponse:
+    """Record student attendance via QR code scan.
+    
+    Validates that:
+    1. Student exists.
+    2. Student is actively enrolled in the selected class (section).
+    3. Teacher has authorization (including substitution permissions if subject_id specified).
+    4. Handles duplicates:
+       - If already marked 'present': returns is_duplicate=True without changes.
+       - If already marked 'excused': does NOT overwrite approved excuse, returns is_duplicate=True.
+       - If marked 'absent' or 'late': updates to 'present'.
+       - If not marked: creates new record with 'present'.
+    5. Server strictly computes date.today() (never trusts client date).
+    """
+    today = date.today()
+
+    # 1. Fetch student
+    student = db.query(Student).filter(Student.student_id == payload.student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found.")
+
+    student_name = f"{student.first_name} {student.last_name}"
+
+    # 2. Check enrollment in class
+    enrollment = (
+        db.query(StudentClass)
+        .filter(
+            StudentClass.student_id == payload.student_id,
+            StudentClass.class_id == payload.class_id,
+            StudentClass.enrollment_status == "enrolled",
+        )
+        .first()
+    )
+    if not enrollment:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{student_name} is not actively enrolled in this class section.",
+        )
+
+    # 3. Check substitution / teacher write permissions
+    if recorded_by_staff_id and payload.subject_id:
+        from app.models.academic.SubjectLoad import SubjectLoad
+        from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
+        load = db.query(SubjectLoad).filter(
+            SubjectLoad.class_id == payload.class_id,
+            SubjectLoad.subject_id == payload.subject_id,
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(["active", "published"]),
+        ).first()
+        if load:
+            SubjectLoadAuthorizationService.assert_can_write(
+                db, recorded_by_staff_id, load.class_id, load.subject_id, load.academic_period_id, as_of=today
+            )
+
+    # 4. Check existing attendance record for (student_id, class_id, subject_id, today)
+    existing_q = db.query(AttendanceRecord).filter(
+        AttendanceRecord.student_id == payload.student_id,
+        AttendanceRecord.class_id == payload.class_id,
+        AttendanceRecord.date == today,
+    )
+    if payload.subject_id is not None:
+        existing_q = existing_q.filter(AttendanceRecord.subject_id == payload.subject_id)
+    else:
+        existing_q = existing_q.filter(AttendanceRecord.subject_id.is_(None))
+
+    existing = existing_q.first()
+
+    is_duplicate = False
+    if existing:
+        if existing.status == "present":
+            is_duplicate = True
+            message = f"{student_name} is already marked present for today's session."
+            record = existing
+        elif existing.status == "excused":
+            is_duplicate = True
+            message = f"{student_name} has an approved excused absence. Record not overwritten."
+            record = existing
+        else:
+            old_status = existing.status
+            existing.status = "present"
+            existing.recorded_by_staff_id = recorded_by_staff_id
+            db.commit()
+            db.refresh(existing)
+            record = existing
+            message = f"{student_name} marked present (updated from {old_status})."
+    else:
+        record = AttendanceRecord(
+            student_id=payload.student_id,
+            class_id=payload.class_id,
+            subject_id=payload.subject_id,
+            date=today,
+            status="present",
+            recorded_by_staff_id=recorded_by_staff_id,
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        message = f"{student_name} marked present successfully."
+
+    resolved_subject_name = None
+    if getattr(record, "subject", None):
+        resolved_subject_name = record.subject.subject_name
+
+    return QRScanAttendanceResponse(
+        attendance_id=record.attendance_id,
+        student_id=record.student_id,
+        student_name=student_name,
+        student_lrn=student.student_lrn,
+        class_id=record.class_id,
+        subject_id=record.subject_id,
+        subject_name=resolved_subject_name,
+        date=record.date,
+        status=record.status,
+        is_duplicate=is_duplicate,
+        message=message,
+    )
 
 
 def get_class_attendance_logs(
@@ -198,76 +305,67 @@ def get_student_attendance_summary(
     )
 
 
-def create_leave_request(
+def get_risk_adjusted_attendance_rate(
     db: Session,
     student_id: UUID,
-    payload: LeaveRequestCreate,
-) -> LeaveRequestResponse:
-    """Submit a leave of absence request for a student."""
-    leave_req = LeaveRequest(
-        student_id=student_id,
-        class_id=payload.class_id,
-        start_date=payload.start_date,
-        end_date=payload.end_date,
-        reason=payload.reason,
-        status="pending",
-    )
-    db.add(leave_req)
-    db.commit()
-    db.refresh(leave_req)
+    class_id: Optional[int] = None,
+    subject_id: Optional[int] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    cutoff_date: Optional[date] = None,
+) -> dict[str, Any]:
+    """Calculate risk-adjusted attendance statistics and weighted rate for early risk detection.
 
-    student = db.query(Student).filter(Student.student_id == student_id).first()
-    student_name = f"{student.first_name} {student.last_name}" if student else None
+    Formula: (1.0*present + 0.8*excused + 0.5*late + 0.0*absent) / total_days * 100
+    Returns risk_adjusted_rate = None if total_days == 0 (cold start / no records).
+    """
+    query = db.query(AttendanceRecord).filter(AttendanceRecord.student_id == student_id)
+    if class_id:
+        query = query.filter(AttendanceRecord.class_id == class_id)
+    if subject_id:
+        query = query.filter(AttendanceRecord.subject_id == subject_id)
+    if start_date is not None:
+        query = query.filter(AttendanceRecord.date >= start_date)
+    if end_date is not None:
+        query = query.filter(AttendanceRecord.date <= end_date)
+    if cutoff_date is not None:
+        query = query.filter(AttendanceRecord.date <= cutoff_date)
 
-    return _to_leave_request_response(leave_req, student_name=student_name)
+    records = query.all()
+    total_days = len(records)
+    if total_days == 0:
+        return {
+            "total_days": 0,
+            "present_count": 0,
+            "absent_count": 0,
+            "late_count": 0,
+            "excused_count": 0,
+            "risk_adjusted_rate": None,
+            "records": [],
+        }
+
+    present_count = sum(1 for r in records if r.status == "present")
+    absent_count = sum(1 for r in records if r.status == "absent")
+    late_count = sum(1 for r in records if r.status == "late")
+    excused_count = sum(1 for r in records if r.status == "excused")
+
+    weighted_score = (1.0 * present_count) + (0.8 * excused_count) + (0.5 * late_count) + (0.0 * absent_count)
+    risk_adjusted_rate = round((weighted_score / total_days * 100.0), 2)
+
+    return {
+        "total_days": total_days,
+        "present_count": present_count,
+        "absent_count": absent_count,
+        "late_count": late_count,
+        "excused_count": excused_count,
+        "risk_adjusted_rate": risk_adjusted_rate,
+        "records": [
+            {"attendance_id": record.attendance_id, "date": record.date.isoformat(), "status": record.status}
+            for record in records
+        ],
+    }
 
 
-def get_class_leave_requests(
-    db: Session,
-    class_id: int,
-    status_filter: Optional[str] = None,
-) -> list[LeaveRequestResponse]:
-    """Retrieve leave requests for a class."""
-    query = (
-        db.query(LeaveRequest, Student)
-        .join(Student, Student.student_id == LeaveRequest.student_id)
-        .filter(LeaveRequest.class_id == class_id)
-    )
-
-    if status_filter:
-        query = query.filter(LeaveRequest.status == status_filter)
-
-    query = query.order_by(LeaveRequest.created_at.desc())
-    rows = query.all()
-
-    return [
-        _to_leave_request_response(req, student_name=f"{student.first_name} {student.last_name}")
-        for req, student in rows
-    ]
-
-
-def update_leave_request_status(
-    db: Session,
-    leave_request_id: int,
-    payload: LeaveRequestUpdate,
-    reviewed_by_staff_id: str | None = None,
-) -> LeaveRequestResponse:
-    """Approve or reject a student leave request."""
-    leave_req = db.query(LeaveRequest).filter(LeaveRequest.leave_request_id == leave_request_id).first()
-    if not leave_req:
-        raise HTTPException(status_code=404, detail="Leave request not found")
-
-    leave_req.status = payload.status
-    leave_req.reviewed_by_staff_id = reviewed_by_staff_id
-    leave_req.reviewed_at = datetime.now(timezone.utc)
-
-    db.commit()
-    db.refresh(leave_req)
-
-    student = db.query(Student).filter(Student.student_id == leave_req.student_id).first()
-    student_name = f"{student.first_name} {student.last_name}" if student else None
-
-    return _to_leave_request_response(leave_req, student_name=student_name)
 
 
 def get_student_attendance_logs(
@@ -301,26 +399,4 @@ def get_student_attendance_logs(
         for record, student, subject in rows
     ]
 
-
-def get_student_leave_requests(
-    db: Session,
-    student_id: UUID,
-    class_id: Optional[int] = None,
-) -> list[LeaveRequestResponse]:
-    """Retrieve submitted leave requests for a specific student."""
-    query = (
-        db.query(LeaveRequest, Student)
-        .join(Student, Student.student_id == LeaveRequest.student_id)
-        .filter(LeaveRequest.student_id == student_id)
-    )
-    if class_id:
-        query = query.filter(LeaveRequest.class_id == class_id)
-
-    query = query.order_by(LeaveRequest.created_at.desc())
-    rows = query.all()
-
-    return [
-        _to_leave_request_response(req, student_name=f"{student.first_name} {student.last_name}")
-        for req, student in rows
-    ]
 

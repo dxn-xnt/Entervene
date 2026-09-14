@@ -7,7 +7,7 @@ import type {
   SubjectOfferingPathway,
   SubjectStatus,
 } from "@/lib/api";
-import type { CurriculumGradeValue, CurriculumPathwayValue, CurriculumStatusValue } from "./CurriculumFilters";
+import type { CurriculumGradeValue, CurriculumPathwayValue, CurriculumStatusValue } from "./curriculum-filters";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -102,7 +102,7 @@ export function pathwayLabel(pathway: string) {
 
 export function statusBadge(status: SubjectStatus) {
   return (
-    <Badge size="sm" variant={status === "active" ? "surface" : "outline"} className="capitalize">
+    <Badge size="sm" variant={status === "active" ? "outline" : "surface"} className="capitalize">
       {status}
     </Badge>
   );

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from hashlib import sha256
 from typing import Any
 
 import joblib
@@ -8,6 +9,14 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.models.ai.AIModelVersion import AIModelVersion
+from app.services.prediction.FeatureCatalog import (
+    DISPLAY_ONLY,
+    GRADE_MODEL_INPUT,
+    RISK_ONLY,
+    TRAINING_TARGET,
+    feature_definition,
+    validate_grade_model_feature_schema,
+)
 from app.services.prediction.RiskEngine import RiskEngineInput, evaluate_risk
 
 
@@ -17,6 +26,9 @@ RUNTIME_RISK_FIELDS = {
     "missing_activity_count",
     "late_submission_count",
     "data_coverage_ratio",
+    "behavioral_engagement_score",
+    "behavioral_score_cold_start",
+    "risk_adjusted_attendance_rate",
 }
 IDENTITY_OR_LEAKAGE_TERMS = (
     "student_id",
@@ -87,6 +99,18 @@ def load_model_artifact(artifact_path: str, base_dir: Path | None = None) -> Any
     return artifact
 
 
+def artifact_digest(artifact_path: str) -> str | None:
+    """Return a stable digest for the exact artifact executed, when readable."""
+    path = resolve_artifact_path(artifact_path)
+    if not path.exists() or not path.is_file():
+        return None
+    digest = sha256()
+    with path.open("rb") as artifact_file:
+        for chunk in iter(lambda: artifact_file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def load_feature_schema_from_model_version(model_version: AIModelVersion) -> dict[str, Any]:
     schema = model_version.feature_schema_json
     if not isinstance(schema, dict):
@@ -118,16 +142,39 @@ def _mapped_input(input_data: dict[str, Any], column_mappings: dict[str, str]) -
 
 def prepare_feature_row(input_data: dict[str, Any], feature_schema: dict[str, Any]) -> tuple[pd.DataFrame, list[str]]:
     feature_columns = list(feature_schema["feature_columns"])
+    validate_grade_model_feature_schema(feature_columns)
     column_mappings = dict(feature_schema.get("column_mappings") or {})
-    mapped = _mapped_input(input_data, column_mappings)
+    for source, target in column_mappings.items():
+        target_definition = feature_definition(target)
+        source_definition = feature_definition(source)
+        if target_definition is None or target_definition.allowed_use != GRADE_MODEL_INPUT:
+            raise ValueError(f"Model column mapping targets a prohibited feature: {target}")
+        if source_definition is None or source_definition.allowed_use != GRADE_MODEL_INPUT:
+            raise ValueError(f"Model column mapping aliases a prohibited feature: {source}")
     warnings: list[str] = []
+    for field_name in input_data:
+        definition = feature_definition(field_name)
+        if definition is None:
+            raise ValueError(f"Unknown prediction feature is not registered in the feature catalog: {field_name}")
+        if definition.allowed_use in {DISPLAY_ONLY, TRAINING_TARGET}:
+            warnings.append(f"Ignored non-model feature: {field_name}")
+        elif definition.allowed_use not in {GRADE_MODEL_INPUT, RISK_ONLY}:
+            raise ValueError(f"Prediction feature is not permitted in a model request: {field_name}")
+    mapped = _mapped_input(input_data, column_mappings)
     row: dict[str, Any] = {}
     has_previous = mapped.get("has_previous_period")
 
     for feature in feature_columns:
         if _is_identity_or_leakage_field(feature):
             raise ValueError(f"Unsafe identity/leakage field is present in feature schema: {feature}")
-        if feature in mapped:
+        # A no-history learner has no grade trend by definition.  The builder
+        # represents that as None, so apply the established schema default
+        # before accepting a supplied value; otherwise a valid cold-start row
+        # reaches numeric validation with a fabricated missing model input.
+        if feature == "grade_trend_vs_previous_period" and mapped.get(feature) is None and str(has_previous).lower() in {"0", "false", "none"}:
+            row[feature] = 0
+            warnings.append("Missing grade_trend_vs_previous_period defaulted to 0 because has_previous_period is false.")
+        elif feature in mapped:
             row[feature] = mapped[feature]
         elif feature.startswith("subject_"):
             row[feature] = 0
@@ -140,12 +187,6 @@ def prepare_feature_row(input_data: dict[str, Any], feature_schema: dict[str, An
             warnings.append("Missing grade_trend_vs_previous_period defaulted to 0 because has_previous_period is false.")
         else:
             raise ValueError(f"Missing required model feature: {feature}")
-
-    for field_name in input_data:
-        if field_name in RUNTIME_RISK_FIELDS:
-            continue
-        if _is_identity_or_leakage_field(field_name):
-            warnings.append(f"Ignored identity/leakage field for model scoring: {field_name}")
 
     frame = pd.DataFrame([row], columns=feature_columns)
     non_numeric = []
@@ -209,6 +250,22 @@ def score_student_prediction(
     model = load_model_artifact(model_version.artifact_path)
     prepared_row, warnings = prepare_feature_row(input_data, feature_schema)
     predicted_grade = predict_next_period_grade(model, prepared_row)
+    transformations = []
+    for feature_name in prepared_row.columns:
+        if feature_name not in input_data:
+            transformations.append({
+                "feature": feature_name,
+                "model_value": float(prepared_row.iloc[0][feature_name]),
+                "transformation": "SCHEMA_DEFAULT",
+            })
+    for source, target in dict(feature_schema.get("column_mappings") or {}).items():
+        if source in input_data and target not in input_data:
+            transformations.append({
+                "feature": target,
+                "model_value": float(prepared_row.iloc[0][target]),
+                "transformation": "COLUMN_MAPPING",
+                "source_feature": source,
+            })
 
     risk_result = evaluate_risk(
         RiskEngineInput(
@@ -220,8 +277,15 @@ def score_student_prediction(
             late_submission_count=_to_int_or_none(input_data.get("late_submission_count")),
             data_coverage_ratio=_to_float_or_none(input_data.get("data_coverage_ratio")),
             has_previous_period=_to_bool(_risk_value(input_data, prepared_row, "has_previous_period")),
+            behavioral_engagement_score=_to_float_or_none(input_data.get("behavioral_engagement_score")),
+            behavioral_score_cold_start=_to_bool(input_data.get("behavioral_score_cold_start")) or False,
         ),
         db=db,
+    )
+
+    is_insufficient = (
+        risk_result.risk_level == "INSUFFICIENT_DATA"
+        or risk_result.data_status == "INSUFFICIENT_DATA"
     )
 
     return {
@@ -229,13 +293,28 @@ def score_student_prediction(
         "model_name": model_version.model_name,
         "model_type": model_version.model_type,
         "algorithm": model_version.algorithm,
-        "predicted_period_grade": round(predicted_grade, 2),
+        "predicted_period_grade": None if is_insufficient else round(predicted_grade, 2),
         "risk_level": risk_result.risk_level,
-        "risk_score": risk_result.risk_score,
+        "risk_score": None if is_insufficient else risk_result.risk_score,
         "data_status": risk_result.data_status,
         "reasons": risk_result.reasons,
         "recommended_action": risk_result.recommended_action,
         "triggered_rules": risk_result.triggered_rules,
         "feature_columns_used": list(feature_schema["feature_columns"]),
         "warnings": warnings,
+        "execution_trace": {
+            "grade_model": {
+                "status": "EXECUTED",
+                "model_version_id": model_version.model_version_id,
+                "model_name": model_version.model_name,
+                "model_type": model_version.model_type,
+                "algorithm": model_version.algorithm,
+                "artifact_path": model_version.artifact_path,
+                "artifact_sha256": artifact_digest(model_version.artifact_path),
+                "ordered_feature_names": list(prepared_row.columns),
+                "ordered_model_values": [float(prepared_row.iloc[0][name]) for name in prepared_row.columns],
+            },
+            "model_transformations": transformations,
+            "risk_engine": risk_result.execution_trace,
+        },
     }

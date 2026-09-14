@@ -33,6 +33,7 @@ export type TeacherClasswork = {
   instructions?: string | null;
   classwork_type: ClassworkType;
   classwork_category?: string | null;
+  exam_subtype?: string | null;
   total_points?: number | null;
   is_published: boolean;
   show_scores: boolean;
@@ -112,6 +113,7 @@ export type CreateDraft = {
   description: string;
   instructions: string;
   classwork_category: string;
+  exam_subtype?: string;
   total_points: string;
   due_date: string;
   lock_date: string;
@@ -127,6 +129,7 @@ export type EditDraft = {
   instructions: string;
   classwork_type: string;
   classwork_category: string;
+  exam_subtype?: string;
   total_points: string;
   due_date: string;
   lock_date: string;

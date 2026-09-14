@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, aliased
 
 from app.models.academic.AcademicLevel import AcademicLevel
 from app.models.academic.AcademicPeriod import AcademicPeriod
+from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
@@ -57,6 +58,7 @@ def _base_user_query(db: Session):
             UserAccount.email,
             UserAccount.created_at,
             UserAccount.account_status,
+            UserAccount.email_status,
             Role.role_name,
             AcademicStaff.staff_id,
             AcademicStaff.first_name.label("staff_first_name"),
@@ -91,6 +93,7 @@ def _teacher_summaries(db: Session, teacher_ids: set[str]) -> dict[str, dict[str
         db.query(SubjectLoad.staff_id, Subject.subject_name, SubjectLoad.class_id)
         .join(Subject, Subject.subject_id == SubjectLoad.subject_id)
         .filter(SubjectLoad.staff_id.in_(teacher_ids))
+        .filter(SubjectLoad.is_active_version.is_(True))
         .filter(SubjectLoad.status.in_(["active", "published"]))
         .all()
     )
@@ -177,6 +180,8 @@ def list_users(
             "created_at": user.created_at.date().isoformat() if user.created_at else "",
             "account_status": user.account_status,
         }
+        if user.account_status == "pending":
+            item["email_status"] = getattr(user, "email_status", "sent") or "sent"
         if client_role == "teacher" and user.staff_id:
             summary = teacher_summaries.get(user.staff_id, {"subjects": set(), "class_ids": set()})
             item["staff_id"] = user.staff_id
@@ -211,6 +216,7 @@ def get_user_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any]:
         "role": client_role,
         "created_at": user.created_at.date().isoformat() if user.created_at else "",
         "account_status": user.account_status,
+        "email_status": getattr(user, "email_status", "sent") or "sent",
         "first_name": capitalize_name(first_name),
         "middle_name": capitalize_name(middle_name),
         "last_name": capitalize_name(last_name),
@@ -224,6 +230,7 @@ def get_user_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any]:
             db.query(Subject.subject_name, SubjectLoad.class_id)
             .join(SubjectLoad, Subject.subject_id == SubjectLoad.subject_id)
             .filter(SubjectLoad.staff_id == user.staff_id)
+            .filter(SubjectLoad.is_active_version.is_(True))
             .filter(SubjectLoad.status.in_(["active", "published"]))
             .all()
         )
@@ -248,6 +255,27 @@ def get_user_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any]:
             .filter(StudentSubmission.grade.isnot(None))
             .scalar()
         )
+        student_obj = db.query(Student.prior_gwa).filter(Student.student_id == user.student_id).first()
+        active_ay = db.query(AcademicYear.academic_year_id).filter(AcademicYear.is_active.is_(True)).first()
+        has_computed = False
+        if active_ay is not None:
+            has_computed = bool(
+                db.query(
+                    db.query(StudentPeriodGrade.period_grade_id)
+                    .join(Class, Class.class_id == StudentPeriodGrade.class_id)
+                    .filter(StudentPeriodGrade.student_id == user.student_id)
+                    .filter(Class.academic_year_id < active_ay[0])
+                    .filter(
+                        or_(
+                            StudentPeriodGrade.final_period_grade.isnot(None),
+                            StudentPeriodGrade.transmuted_grade.isnot(None),
+                            StudentPeriodGrade.initial_grade.isnot(None),
+                        )
+                    )
+                    .exists()
+                ).scalar()
+            )
+
         item["student_id"] = str(user.student_id)
         item["section"] = class_row.section_name if class_row else None
         item["grade_level"] = user.grade_level
@@ -256,6 +284,8 @@ def get_user_detail(db: Session, user_id: uuid.UUID) -> dict[str, Any]:
         item["last_grade_level"] = user.grade_level
         item["last_section"] = class_row.section_name if class_row else None
         item["average"] = round(float(average)) if average is not None else None
+        item["prior_gwa"] = float(student_obj.prior_gwa) if student_obj and student_obj.prior_gwa is not None else None
+        item["has_computed_gwa"] = has_computed
     return item
 
 

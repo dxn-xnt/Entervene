@@ -6,8 +6,11 @@ import type {
   ClassFormOptions,
   ClassStudentListResponse,
   ClassTransferOptionsResponse,
+  DistributeStudentsPayload,
+  DistributeStudentsResponse,
   GetClassesResponse,
   TeacherAdvisoryClassDetailResponse,
+  TeacherAdvisoryClassGradesResponse,
   TeacherAdvisoryClassListItem,
   UpdateClassStudentListRequest,
   UpdateClassRequest,
@@ -27,6 +30,8 @@ export type User = {
   role: UserRole;
   created_at: string;
   account_status: string;
+  email_status?: "pending" | "sent" | "failed" | string;
+  lrn?: string | null;
   subjects?: string[];
   class_count?: number;
   section?: string | null;
@@ -42,6 +47,7 @@ export type User = {
 export type UserDetail = User & {
   staff_id?: string;
   student_id?: string;
+  lrn?: string | null;
   first_name?: string;
   middle_name?: string;
   last_name?: string;
@@ -52,6 +58,8 @@ export type UserDetail = User & {
   graduation_year?: number | null;
   last_grade_level?: number | null;
   last_section?: string | null;
+  prior_gwa?: number | null;
+  has_computed_gwa?: boolean;
 };
 
 export type UpdateUserPayload = {
@@ -65,6 +73,7 @@ export type UpdateUserPayload = {
   employment_status?: string;
   grade_level?: number | null;
   section?: string | null;
+  prior_gwa?: number | null;
 };
 
 export type InviteUserPayload = {
@@ -82,6 +91,8 @@ export type InviteUserPayload = {
   employment_status?: string;
   student_lrn?: string;
   grade_level?: number | null;
+  prior_gwa?: number | null;
+  general_average?: number | null;
 };
 
 export type UserAnalytics = {
@@ -428,7 +439,7 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   startProgress();
   try {
     const response = await request(path, init);
-    const isAuthRequest = path.startsWith("/api/v1/auth/");
+    const isAuthRequest = path.startsWith("/api/v1/auth/") || path.includes("/api/v1/auth/");
 
     if (response.status === 401 && !isAuthRequest && await refreshAccessToken()) {
       const retryResponse = await request(path, init);
@@ -476,6 +487,19 @@ export async function getUserDetail(userId: string) {
   }
 
   return (await response.json()) as UserDetail;
+}
+
+export async function resendUserInvitation(userId: string): Promise<{ message: string }> {
+  const response = await apiFetch(`/api/v1/users/${encodeURIComponent(userId)}/resend-invitation`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.detail || "Unable to resend invitation. Please try again.");
+  }
+
+  return (await response.json()) as { message: string };
 }
 
 export async function getUserAnalytics(userId: string) {
@@ -590,7 +614,8 @@ export type GradebookCategoryHeader = {
 export type GradebookCategoryHeaderGroup = {
   writtenWork: GradebookCategoryHeader[];
   performanceTask: GradebookCategoryHeader[];
-  quarterlyAssessment: GradebookCategoryHeader[];
+  quarterlyAssessment?: GradebookCategoryHeader[];
+  exams?: GradebookCategoryHeader[];
 };
 
 export type StudentGradebookRow = {
@@ -599,19 +624,42 @@ export type StudentGradebookRow = {
   gender?: string | null;
   writtenWork: (number | null)[];
   performanceTask: (number | null)[];
-  quarterlyAssessment: (number | null)[];
+  quarterlyAssessment?: (number | null)[];
+  exams?: (number | null)[];
   ps_written?: number | null;
   ps_performance?: number | null;
   ps_quarterly?: number | null;
+  ps_exams?: number | null;
+  ps_summative_1?: number | null;
+  ps_summative_2?: number | null;
+  ps_term_exam?: number | null;
   initial_grade?: number | null;
   transmuted_grade?: number | null;
   total: string;
+  performance_descriptor?: string | null;
+  period_grade_id?: number | null;
+  is_finalized?: boolean;
+  finalized_at?: string | null;
+  finalized_by_staff_id?: string | null;
+  finalized_by_name?: string | null;
+};
+
+export type GradingWeightsInfo = {
+  template_id?: number | null;
+  template_name?: string | null;
+  ww_weight: number;
+  pt_weight: number;
+  exams_weight: number;
+  ww_percentage: number;
+  pt_percentage: number;
+  exams_percentage: number;
 };
 
 export type StudentGradebookResponse = {
   scope: any;
   classwork: GradebookCategoryHeaderGroup[];
   studentGrades: StudentGradebookRow[];
+  grading_weights?: GradingWeightsInfo | null;
 };
 
 export type TermGradeSummaryRow = {
@@ -621,6 +669,7 @@ export type TermGradeSummaryRow = {
   term_grades: Record<number, number | null>; // {academic_period_id: grade}
   final_grade: number | null;
   remark: "PASSED" | "FAILED" | "INCOMPLETE" | null;
+  performance_descriptor?: string | null;
 };
 
 export type TermGradeSummaryScope = {
@@ -635,8 +684,10 @@ export type TermGradeSummaryScope = {
 export type TermPeriodInfo = {
   academic_period_id: number;
   period_name: string;
-  period_sequence: number;
+  period_sequence?: number;
   is_active?: boolean;
+  start_date?: string;
+  end_date?: string;
 };
 
 export type StudentRecordPeriodOptionsResponse = {
@@ -651,6 +702,105 @@ export type TermGradeSummaryResponse = {
   passing_threshold: number;
 };
 
+export type SendStudentGradePayload = {
+  academic_period_id: number;
+  expected_transmuted_grade?: number | null;
+  expected_final_period_grade?: number | null;
+  final_period_grade?: number | null;
+  force_resend?: boolean;
+  remarks?: string | null;
+};
+
+export type SendGradeToAdviserItemResponse = {
+  student_id: string;
+  name: string;
+  period_grade_id?: number | null;
+  log_id?: number | null;
+  written_work_percent?: number | null;
+  performance_task_percent?: number | null;
+  quarterly_assessment_percent?: number | null;
+  initial_grade?: number | null;
+  transmuted_grade?: number | null;
+  final_period_grade?: number | null;
+  performance_descriptor?: string | null;
+  is_finalized: boolean;
+  finalized_at?: string | null;
+  finalized_by_staff_id?: string | null;
+  finalized_by_name?: string | null;
+  status: "newly_sent" | "updated" | "unchanged" | "conflict" | "skipped_incomplete";
+  message?: string | null;
+  incomplete_components?: string[];
+};
+
+export type BulkSendGradesPayload = {
+  force_resend_all?: boolean;
+  expected_student_grades?: Record<string, number>;
+  remarks?: string | null;
+};
+
+export type BulkSendGradesToAdviserResponse = {
+  class_id: number;
+  subject_id: number;
+  academic_period_id: number;
+  total_students: number;
+  newly_sent_count: number;
+  unchanged_skipped_count: number;
+  incomplete_skipped_count?: number;
+  incomplete_warning_count?: number;
+  finalized_at: string;
+  finalized_by_staff_id: string;
+  finalized_by_name: string;
+  entries: SendGradeToAdviserItemResponse[];
+};
+
+export async function sendStudentGradeToAdviser(
+  classId: number | string,
+  subjectId: number | string,
+  studentId: string,
+  payload: SendStudentGradePayload
+): Promise<SendGradeToAdviserItemResponse> {
+  const url = `/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/students/${encodeURIComponent(studentId)}/send-to-adviser`;
+  const response = await apiFetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const error: any = new Error(errorData.detail?.message || errorData.detail || "Failed to send grade to adviser.");
+    error.status = response.status;
+    error.data = errorData;
+    throw error;
+  }
+
+  return (await response.json()) as SendGradeToAdviserItemResponse;
+}
+
+export async function bulkSendGradesToAdviser(
+  classId: number | string,
+  subjectId: number | string,
+  academicPeriodId: number | string,
+  payload?: BulkSendGradesPayload
+): Promise<BulkSendGradesToAdviserResponse> {
+  const url = `/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/periods/${encodeURIComponent(String(academicPeriodId))}/send-to-adviser`;
+  const response = await apiFetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const error: any = new Error(errorData.detail?.message || errorData.detail || "Failed to send grades to adviser.");
+    error.status = response.status;
+    error.data = errorData;
+    throw error;
+  }
+
+  return (await response.json()) as BulkSendGradesToAdviserResponse;
+}
+
 export async function getTeacherGradebook(classId: number | string, subjectId: number | string, academicPeriodId?: number): Promise<StudentGradebookResponse> {
   const url = academicPeriodId
     ? `/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/gradebook?academic_period_id=${academicPeriodId}`
@@ -663,6 +813,59 @@ export async function getTeacherGradebook(classId: number | string, subjectId: n
   }
 
   return (await response.json()) as StudentGradebookResponse;
+}
+
+export async function exportTeacherClassRecord(
+  classId: number | string,
+  subjectId: number | string,
+  academicPeriodId: number
+): Promise<{ blob: Blob; filename: string }> {
+  const url = `/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/export-class-record?academic_period_id=${academicPeriodId}`;
+  const response = await apiFetch(url);
+
+  if (!response.ok) {
+    throw new Error("Unable to export class record. Please try again.");
+  }
+
+  const contentDisposition = response.headers.get("content-disposition");
+  let filename = "Class_Record.xlsx";
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename=["']?([^"';]+)["']?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  const blob = await response.blob();
+  return { blob, filename };
+}
+
+export async function exportTeacherClassRecordWorkbook(
+  classId: number | string,
+  subjectId: number | string,
+  academicYearId?: number
+): Promise<{ blob: Blob; filename: string }> {
+  let url = `/api/v1/student-records/teacher/classes/${encodeURIComponent(String(classId))}/subjects/${encodeURIComponent(String(subjectId))}/export-class-record-workbook`;
+  if (academicYearId) {
+    url += `?academic_year_id=${encodeURIComponent(String(academicYearId))}`;
+  }
+  const response = await apiFetch(url);
+
+  if (!response.ok) {
+    throw new Error("Unable to export class record workbook. Please try again.");
+  }
+
+  const contentDisposition = response.headers.get("content-disposition");
+  let filename = "Class_Record_Full_Year.xlsx";
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename=["']?([^"';]+)["']?/i);
+    if (match && match[1]) {
+      filename = match[1];
+    }
+  }
+
+  const blob = await response.blob();
+  return { blob, filename };
 }
 
 export async function getTeacherAvailablePeriods(
@@ -690,6 +893,7 @@ export async function getTeacherTermSummary(
 export type ActivityCreatePayload = {
   title: string;
   classwork_category: string;
+  exam_subtype?: string;
   total_points: number;
   class_id: number;
   subject_id: number;
@@ -1265,6 +1469,21 @@ export async function getTeacherAdvisoryClassDetail(
   return (await response.json()) as TeacherAdvisoryClassDetailResponse;
 }
 
+export async function getTeacherAdvisoryClassGrades(
+  classId: string | number,
+  academicPeriodId?: number,
+): Promise<TeacherAdvisoryClassGradesResponse> {
+  const query = academicPeriodId ? `?academic_period_id=${academicPeriodId}` : "";
+  const response = await apiFetch(`/api/v1/classes/teacher/advisory/${encodeURIComponent(String(classId))}/grades${query}`);
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new Error(teacherAdvisoryClassErrorMessage(data, response.status, "Unable to load advisory class grades."));
+  }
+
+  return (await response.json()) as TeacherAdvisoryClassGradesResponse;
+}
+
 export async function getClassTransferOptions(classId: string | number): Promise<ClassTransferOptionsResponse> {
   const response = await apiFetch(`/api/v1/classes/${encodeURIComponent(String(classId))}/transfer-options`);
 
@@ -1379,6 +1598,30 @@ export async function createClassesBatch(payload: BatchCreateClassesRequest): Pr
   return (await response.json()) as BatchCreateClassesResponse;
 }
 
+export async function distributeClassStudents(payload: DistributeStudentsPayload): Promise<DistributeStudentsResponse> {
+  const response = await apiFetch("/api/v1/classes/distribute-students", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    throw new ApiRequestError(distributeStudentsErrorMessage(data, response.status), response.status, data);
+  }
+
+  return (await response.json()) as DistributeStudentsResponse;
+}
+
+function distributeStudentsErrorMessage(data: unknown, status: number): string {
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You do not have permission to distribute students.";
+  if (!data || typeof data !== "object") return "Unable to distribute students. Please try again.";
+  if ("message" in data && typeof data.message === "string") return data.message;
+  if ("detail" in data && typeof data.detail === "string") return data.detail;
+  return "Unable to distribute students. Please try again.";
+}
+
 export async function validateClassImport(file: File, academicLevelId: number): Promise<ValidateClassImportResponse> {
   const formData = new FormData();
   formData.append("file", file);
@@ -1438,6 +1681,11 @@ export type SubjectLoadItem = {
   last_modified_by?: string | null;
   continued_from_load_id?: number | null;
   is_math_or_science?: boolean;
+  logical_load_id?: string;
+  section_revision?: number;
+  base_revision?: number | null;
+  has_live_data?: boolean;
+  dependencies?: Record<string, number>;
 };
 
 export type ConflictItem = {
@@ -1476,6 +1724,7 @@ export type SubjectOfferingStudioItem = {
   academic_level_id: number;
   academic_period_id: number;
   pathway: string;
+  pathway_ids?: number[];
   minutes?: number | null;
 };
 
@@ -1489,6 +1738,7 @@ export type SubjectLoadStudioData = {
   subject_offerings?: SubjectOfferingStudioItem[];
   teachers: Array<{ staff_id: string; name: string; department: string; specialization: string }>;
   existing_loads: SubjectLoadItem[];
+  has_pending_draft_by_class?: Record<string | number, boolean>;
 };
 
 export async function getSubjectLoadStudioData(periodId?: number): Promise<SubjectLoadStudioData> {
@@ -1543,7 +1793,8 @@ export async function batchSaveSubjectLoads(
   loads: SubjectLoadItem[],
   publishScope: "all" | "level" | "section" = "all",
   targetLevelId?: number | null,
-  targetClassId?: number | null
+  targetClassId?: number | null,
+  baseRevision?: number | null
 ): Promise<{ message: string; saved_count: number; status: string; is_valid: boolean; conflicts: ConflictItem[] }> {
   const response = await apiFetch("/api/v1/subject-loads/batch-save", {
     method: "POST",
@@ -1555,6 +1806,7 @@ export async function batchSaveSubjectLoads(
       publish_scope: publishScope,
       target_level_id: targetLevelId ?? (publishScope === "level" ? levelId : null),
       target_class_id: targetClassId ?? null,
+      base_revision: baseRevision ?? null,
       loads,
     }),
   });
@@ -1566,6 +1818,50 @@ export async function batchSaveSubjectLoads(
     throw new ApiRequestError(msg, response.status, data);
   }
   return (await response.json()) as { message: string; saved_count: number; status: string; is_valid: boolean; conflicts: ConflictItem[] };
+}
+
+export async function unlockSection(
+  periodId: number,
+  classId: number
+): Promise<{ message: string; section_revision: number; base_revision: number | null; cloned_loads_count: number; has_pending_draft: boolean }> {
+  const response = await apiFetch("/api/v1/subject-loads/unlock-section", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      academic_period_id: periodId,
+      class_id: classId,
+    }),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    const msg = data && typeof data === "object" && "detail" in data && typeof data.detail === "string"
+      ? data.detail
+      : "Failed to unlock section";
+    throw new ApiRequestError(msg, response.status, data);
+  }
+  return (await response.json()) as { message: string; section_revision: number; base_revision: number | null; cloned_loads_count: number; has_pending_draft: boolean };
+}
+
+export async function discardDraft(
+  periodId: number,
+  classId: number
+): Promise<{ message: string; discarded_count: number; section_revision: number; has_pending_draft: boolean }> {
+  const response = await apiFetch("/api/v1/subject-loads/discard-draft", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      academic_period_id: periodId,
+      class_id: classId,
+    }),
+  });
+  if (!response.ok) {
+    const data: unknown = await response.json().catch(() => null);
+    const msg = data && typeof data === "object" && "detail" in data && typeof data.detail === "string"
+      ? data.detail
+      : "Failed to discard draft";
+    throw new ApiRequestError(msg, response.status, data);
+  }
+  return (await response.json()) as { message: string; discarded_count: number; section_revision: number; has_pending_draft: boolean };
 }
 
 export interface DynamicScheduleRow {
@@ -1617,6 +1913,26 @@ export async function getMySchedule(
     throw new ApiRequestError("Failed to fetch schedule", response.status, null);
   }
   return (await response.json()) as DynamicScheduleResponse;
+}
+
+export interface MyStudentProfileResponse {
+  student_id: string;
+  user_id: string;
+  student_name: string;
+  first_name: string;
+  last_name: string;
+  student_lrn: string;
+  gender?: string | null;
+  grade_level?: string | null;
+  section_name?: string | null;
+}
+
+export async function getMyStudentProfile(): Promise<MyStudentProfileResponse> {
+  const response = await apiFetch("/api/v1/students/me/profile");
+  if (!response.ok) {
+    throw new ApiRequestError("Failed to fetch student profile", response.status, null);
+  }
+  return (await response.json()) as MyStudentProfileResponse;
 }
 
 export interface DepedClusterRead {

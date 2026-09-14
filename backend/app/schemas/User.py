@@ -22,6 +22,8 @@ class InviteSingleUserRequest(BaseModel):
     academic_level_id: int | None = None
     grade_level: int | None = None
     academic_level: str = ""
+    prior_gwa: float | None = None
+    general_average: float | None = None
 
 
 class UpdateUserRequest(BaseModel):
@@ -35,6 +37,7 @@ class UpdateUserRequest(BaseModel):
     employment_status: str = ""
     grade_level: int | None = None
     section: str | None = None
+    prior_gwa: float | None = None
 
 
 class AcceptInvitationRequest(BaseModel):

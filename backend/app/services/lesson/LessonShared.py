@@ -16,6 +16,7 @@ def ensure_teacher_subject(db: Session, staff_id: str, subject_id: int) -> None:
     load = db.query(SubjectLoad).filter(
         SubjectLoad.staff_id == staff_id,
         SubjectLoad.subject_id == subject_id,
+        SubjectLoad.is_active_version.is_(True),
         SubjectLoad.status.in_(["active", "published"]),
     ).first()
     if not load:
@@ -24,14 +25,18 @@ def ensure_teacher_subject(db: Session, staff_id: str, subject_id: int) -> None:
 
 def ensure_teacher_class_subject(db: Session, staff_id: str, class_id: int, subject_id: int) -> None:
     """Teachers can only manage lessons for active class/subject loads."""
+    from app.services.academic.SubjectLoadAuthorizationService import SubjectLoadAuthorizationService
     load = db.query(SubjectLoad).filter(
-        SubjectLoad.staff_id == staff_id,
         SubjectLoad.class_id == class_id,
         SubjectLoad.subject_id == subject_id,
+        SubjectLoad.is_active_version.is_(True),
         SubjectLoad.status.in_(["active", "published"]),
     ).first()
     if not load:
         raise HTTPException(status_code=403, detail="Not assigned to this class/subject")
+    SubjectLoadAuthorizationService.assert_can_write(
+        db, staff_id, load.class_id, load.subject_id, load.academic_period_id
+    )
 
 
 def ensure_student_enrolled(db: Session, student_id: str, class_id: int) -> None:
@@ -69,6 +74,7 @@ def authorize_lesson_access(db: Session, lesson: Lesson, current_user: dict) -> 
             load = db.query(SubjectLoad).filter(
                 SubjectLoad.staff_id == staff.staff_id,
                 SubjectLoad.subject_id == lesson.subject_id,
+                SubjectLoad.is_active_version.is_(True),
                 SubjectLoad.status.in_(["active", "published"]),
             ).first()
             if load:

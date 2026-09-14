@@ -70,6 +70,7 @@ def _ensure_teacher_load(db: Session, staff_id: str, class_id: int, subject_id: 
         SubjectLoad.staff_id == staff_id,
         SubjectLoad.class_id == class_id,
         SubjectLoad.subject_id == subject_id,
+        SubjectLoad.is_active_version.is_(True),
         SubjectLoad.status.in_(["active", "published"]),
     ).first()
     if not load:

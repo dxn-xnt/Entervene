@@ -21,7 +21,6 @@ from app.models.academic.Class_ import Class
 from app.models.academic.Competency import Competency
 from app.models.academic.Lesson import Lesson
 from app.models.academic.LessonAssignment import LessonAssignment
-from app.models.academic.LessonAttachment import LessonAttachment
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
 from app.models.academic.SubjectLoad import SubjectLoad
@@ -46,7 +45,6 @@ TABLES = [
     Competency.__table__,
     Lesson.__table__,
     LessonAssignment.__table__,
-    LessonAttachment.__table__,
     Classwork.__table__,
     ClassworkLesson.__table__,
 ]
@@ -180,16 +178,7 @@ def lesson_context(tmp_path):
         assigned_by_staff_id=owner.staff_id,
         is_published=True,
     )
-    material_path = tmp_path / "lesson.txt"
-    material_path.write_text("lesson", encoding="utf-8")
-    attachment = LessonAttachment(
-        lesson_id=lesson.lesson_id,
-        file_name="lesson.txt",
-        file_path=str(material_path),
-        file_type="text/plain",
-        file_size=6,
-    )
-    db.add_all([assignment, attachment])
+    db.add(assignment)
     db.commit()
 
     identity = {"sub": accounts["owner"].user_id, "role": "teacher"}
@@ -209,7 +198,6 @@ def lesson_context(tmp_path):
             "class": class_,
             "other_class": other_class,
             "lesson": lesson,
-            "attachment": attachment,
         }
     db.close()
     Base.metadata.drop_all(bind=engine)
@@ -223,25 +211,17 @@ def _act_as(context, account_name: str, role: str) -> None:
     )
 
 
-def test_lesson_detail_and_download_follow_access_matrix(lesson_context):
+def test_lesson_detail_follows_access_matrix(lesson_context):
     c = lesson_context
     detail_url = f"/api/v1/lessons/{c['lesson'].lesson_id}"
-    download_url = (
-        f"/api/v1/lessons/{c['lesson'].lesson_id}"
-        f"/attachments/{c['attachment'].lesson_attachment_id}/download"
-    )
 
     assert c["client"].get(detail_url).status_code == 200
-    assert c["client"].get(download_url).status_code == 200
     _act_as(c, "other_teacher", "teacher")
     assert c["client"].get(detail_url).status_code == 403
-    assert c["client"].get(download_url).status_code == 403
     _act_as(c, "student", "student")
     assert c["client"].get(detail_url).status_code == 200
-    assert c["client"].get(download_url).status_code == 200
     _act_as(c, "other_student", "student")
     assert c["client"].get(detail_url).status_code == 403
-    assert c["client"].get(download_url).status_code == 403
 
 
 def test_student_cannot_access_unpublished_lesson(lesson_context):
@@ -293,30 +273,3 @@ def test_lesson_assignment_validates_teacher_class_targets_before_writing(lesson
     assert response.json()["detail"] == "Not assigned to this class/subject"
     assert c["db"].query(LessonAssignment).count() == before
 
-
-def test_lesson_attachment_upload_failure_cleans_saved_file(lesson_context, monkeypatch):
-    c = lesson_context
-    deleted_paths = []
-
-    async def fake_save(file, folder):
-        return {
-            "file_name": "saved.pdf",
-            "file_path": "uploads/lessons/saved.pdf",
-            "file_type": "application/pdf",
-            "file_size": 4,
-        }
-
-    def fail_commit():
-        raise RuntimeError("db failed")
-
-    monkeypatch.setattr(lesson_routes, "save_file", fake_save)
-    monkeypatch.setattr(lesson_routes, "delete_file", deleted_paths.append)
-    monkeypatch.setattr(c["db"], "commit", fail_commit)
-
-    response = c["client"].post(
-        f"/api/v1/lessons/{c['lesson'].lesson_id}/attachments",
-        files={"file": ("saved.pdf", b"%PDF", "application/pdf")},
-    )
-
-    assert response.status_code == 500
-    assert deleted_paths == ["uploads/lessons/saved.pdf"]

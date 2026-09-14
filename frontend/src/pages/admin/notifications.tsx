@@ -4,7 +4,7 @@ import AppLayout from "@/layouts/app-layout";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { NotificationCard } from "@/components/notification-card";
 import { Button } from "@/components/retroui/Button";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Bell, FileCheck, Loader2 } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import {
@@ -17,9 +17,9 @@ import {
 type NotificationTabId = "all" | "interventions" | "submissions";
 
 const tabs: Array<TabItem<NotificationTabId>> = [
-  { id: "all", label: "All" },
-  { id: "interventions", label: "Interventions" },
-  { id: "submissions", label: "Submissions" },
+  { id: "all", label: "All", icon: Bell },
+  { id: "interventions", label: "Interventions", icon: AlertTriangle },
+  { id: "submissions", label: "Submissions", icon: FileCheck },
 ];
 
 export default function AdminNotifications() {
@@ -80,27 +80,30 @@ export default function AdminNotifications() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center justify-between gap-3">
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <h1 className="text-4xl font-bold tracking-tight">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                   Notifications
                 </h1>
               </div>
-              <Button variant="default" size="md" onClick={handleMarkAll} disabled={markingAll || notifications.every((n) => n.is_read)}>
+              <Button variant="default" size="md" onClick={handleMarkAll} disabled={markingAll || notifications.every((n) => n.is_read)} className="shrink-0 px-2 text-xs sm:px-4 sm:text-sm">
                 {markingAll ? <Loader2 className="h-4 w-4 animate-spin mr-1 inline" /> : null}
                 <span className="hidden sm:inline">Mark All as Read</span>
                 <span className="sm:hidden">Read All</span>
               </Button>
             </header>
-            <div className="flex flex-col gap-4 md:gap-6">
+            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs
                 tabs={tabs}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
               />
+            </div>
+
+            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:gap-6 md:px-6">
               {loading ? (
                 <LoadingPanel label="Loading notifications..." />
               ) : filteredNotifications.length === 0 ? (

@@ -1,8 +1,15 @@
 import { Button } from "@/components/retroui/Button";
 import { Card as RetroCard } from "@/components/retroui/Card";
-import { Archive, Lock, Pencil, RotateCcw } from "lucide-react";
+import { Archive, Ellipsis, Lock, Pencil, RotateCcw } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { GradingTemplateListItem } from "@/lib/api";
 import { scopeLabel, statusBadge } from "./subject-utils";
+import { Badge } from "@/components/retroui/Badge";
 
 export function GradingTemplateRow({
   template,
@@ -23,78 +30,103 @@ export function GradingTemplateRow({
   const assignedSubjects = template.assigned_subjects ?? (template.subject ? [template.subject] : []);
 
   return (
-    <RetroCard className="p-3">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-bold text-base">{template.template_name}</p>
+    <RetroCard className="p-3 bg-primary">
+      <div className="min-w-0 flex-1 flex flex-col gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-bold text-2xl">{template.template_name}</p>
+          <div className="flex flex-row gap-2 items-center">
             {statusBadge(template.status)}
             {template.is_locked ? (
-              <span className="inline-flex items-center gap-1 rounded-md border border-amber-600 bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900">
-                <Lock className="size-3" /> Term Started (Formula Locked)
-              </span>
+              <Badge size="sm" variant="solid" className="flex flex-row items-center gap-1 border-2 border-black">
+                <Lock className="size-3" /> Term Locked
+              </Badge>
             ) : null}
+            <div className="flex shrink-0">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-6.5 w-6.5 p-0 shadow-none"
+                    disabled={readOnly}
+                    title={readOnly ? readOnlyReason : "Actions"}
+                    aria-label="Actions"
+                  >
+                    <Ellipsis className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="border-2 min-w-[140px]">
+                  {onEdit ? (
+                    <DropdownMenuItem
+                      onClick={() => onEdit(template)}
+                      disabled={readOnly}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <Pencil className="size-4" /> Edit
+                    </DropdownMenuItem>
+                  ) : null}
+                  {template.status === "active" && onArchive ? (
+                    <DropdownMenuItem
+                      onClick={() => onArchive(template)}
+                      disabled={readOnly}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <Archive className="size-4" /> Archive
+                    </DropdownMenuItem>
+                  ) : null}
+                  {template.status === "archived" && onRestore ? (
+                    <DropdownMenuItem
+                      onClick={() => onRestore(template)}
+                      disabled={readOnly}
+                      className="gap-2 cursor-pointer"
+                    >
+                      <RotateCcw className="size-4" /> Restore
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-          <div className="mt-2 grid grid-cols-1 gap-1 text-sm md:grid-cols-2">
-            <span><strong>Academic scope:</strong> {template.academic_level?.level_name ?? "Any level"}</span>
-            <span>
-              <strong>Assigned subjects ({assignedCount}):</strong>{" "}
-              {assignedSubjects.length > 0
-                ? assignedSubjects.map((s) => s.subject_name).join(", ")
-                : "General / Default template"}
-            </span>
-            <span><strong>Total weight:</strong> {template.total_weight}%</span>
-            <span><strong>Components:</strong> {template.component_count}</span>
+
+        </div>
+
+        <div className="flex flex-col gap-2 p-2 bg-background border-border border-2">
+          <span><strong>Academic scope:</strong> {template.academic_level?.level_name ?? "Any level"}</span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <strong>Assigned subjects </strong> <span className="text-sm">({assignedCount}):</span>{" "}
+            {assignedSubjects.length > 0 ? (
+              assignedSubjects.map((s) => (
+                <Badge key={s.subject_id} size="sm" variant="surface">
+                  {s.subject_name}
+                </Badge>
+              ))
+            ) : (
+              <span>General / Default template</span>
+            )}
           </div>
-          <p className="sr-only">{scopeLabel(template)}</p>
-          {template.description ? <p className="text-xs text-muted-foreground mt-1">{template.description}</p> : null}
-          <div className="mt-2 flex flex-wrap gap-2">
-            {template.components.map((component) => (
-              <span
-                key={component.component_id}
-                className="rounded-full border border-black bg-white px-2.5 py-0.5 text-xs font-semibold"
-              >
-                {component.component_name}: {component.weight}%
+          <span><strong>Components:</strong> {template.component_count}</span>
+        </div>
+        <p className="sr-only">{scopeLabel(template)}</p>
+        <div className="flex gap-2">
+          {template.components.map((component) => (
+            <Badge
+              key={component.component_id}
+              variant="outline"
+              className="flex flex-col w-full"
+
+            >
+              <span className="font-medium whitespace-nowrap">
+                {component.component_name}:
               </span>
-            ))}
-          </div>
+              <span className="font-bold text-lg">
+                {component.weight}%
+              </span>
+            </Badge>
+          ))}
         </div>
-        <div className="flex shrink-0 gap-2">
-          {onEdit ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onEdit(template)}
-              disabled={readOnly}
-              title={readOnly ? readOnlyReason : "Edit grading template"}
-            >
-              <Pencil className="size-4 mr-2" /> Edit
-            </Button>
-          ) : null}
-          {template.status === "active" && onArchive ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onArchive(template)}
-              disabled={readOnly}
-              title={readOnly ? readOnlyReason : "Archive grading template"}
-            >
-              <Archive className="size-4 mr-2" /> Archive
-            </Button>
-          ) : null}
-          {template.status === "archived" && onRestore ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onRestore(template)}
-              disabled={readOnly}
-              title={readOnly ? readOnlyReason : "Restore grading template"}
-            >
-              <RotateCcw className="size-4 mr-2" /> Restore
-            </Button>
-          ) : null}
-        </div>
+        {template.description ? <p className="text-xs text-foreground">{template.description}</p> : null}
       </div>
+
     </RetroCard>
   );
 }

@@ -43,6 +43,7 @@ export interface ManualFormData {
   studentLrn: string;
   suffix: string;
   gradeLevel: string;
+  priorGwa: string;
 }
 
 const EMPTY_FORM: ManualFormData = {
@@ -60,6 +61,7 @@ const EMPTY_FORM: ManualFormData = {
   studentLrn: "",
   suffix: "",
   gradeLevel: "",
+  priorGwa: "",
 };
 
 const IMPORT_TEMPLATES: Record<
@@ -80,6 +82,7 @@ const IMPORT_TEMPLATES: Record<
       "grade_level",
       "suffix",
       "dob",
+      "general_average",
     ],
     sample: [
       "Maria",
@@ -93,6 +96,7 @@ const IMPORT_TEMPLATES: Record<
       "7",
       "",
       "2008-04-15",
+      "88.50",
     ],
   },
   Teacher: {
@@ -381,6 +385,9 @@ export default function AddUserModal({
   };
 
   const handleField = (field: keyof ManualFormData, value: string) => {
+    if (field === "contactNumber") {
+      value = value.replace(/\D/g, "").slice(0, 11);
+    }
     setForm((prev) => {
       if (field === "role" && value === "Admin") {
         return { ...prev, role: value as Role, dob: "" };
@@ -391,6 +398,10 @@ export default function AddUserModal({
 
   const handleManualSubmit = async () => {
     if (manualSubmitting) return;
+    if (form.role !== "Admin" && form.contactNumber && !/^\d{11}$/.test(form.contactNumber)) {
+      window.alert("Contact number must contain exactly 11 digits.");
+      return;
+    }
     if (form.dob && !/^\d{4}-\d{2}-\d{2}$/.test(form.dob)) {
       window.alert("DOB must use YYYY-MM-DD format.");
       return;
@@ -412,6 +423,8 @@ export default function AddUserModal({
         employment_status: form.employmentStatus,
         student_lrn: form.studentLrn.trim(),
         grade_level: form.gradeLevel ? Number(form.gradeLevel) : null,
+        prior_gwa: form.priorGwa.trim() ? Number(form.priorGwa.trim()) : null,
+        general_average: form.priorGwa.trim() ? Number(form.priorGwa.trim()) : null,
       };
 
       if (form.role !== "Admin") {
@@ -471,7 +484,7 @@ export default function AddUserModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }} >
-      <Dialog.Content size="md" className="w-full overflow-hidden font-sans">
+      <Dialog.Content size="md" className="w-[calc(100vw-1.5rem)] max-w-lg overflow-hidden rounded-none font-sans lg:max-w-[40%]">
         <Dialog.Header asChild className="bg-primary text-primary-foreground font-head flex items-center justify-between">
           <div>
             <span className="font-bold text-lg">
@@ -485,7 +498,7 @@ export default function AddUserModal({
         {/* ── STEP: CHOOSE ─────────────────────────────────── */}
         {step === "choose" && (
           <>
-            <div className="grid grid-cols-2 gap-4 p-5">
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 sm:gap-4 sm:p-5">
               <DialogueSelect
                 icon={FileSpreadsheet}
                 title="Import file"
@@ -660,7 +673,7 @@ export default function AddUserModal({
                 </Select>
               </Field>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="First Name">
                   <Input
                     placeholder="John"
@@ -679,7 +692,7 @@ export default function AddUserModal({
                 </Field>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Middle Name">
                   <Input
                     placeholder="(optional)"
@@ -711,7 +724,7 @@ export default function AddUserModal({
               </Field>
 
               {!isAdmin && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label="Gender">
                     <Select value={form.gender} onValueChange={(val) => handleField("gender", val)}>
                       <Select.Trigger className="w-full">
@@ -720,13 +733,17 @@ export default function AddUserModal({
                       <Select.Content>
                         <Select.Item value="Male">Male</Select.Item>
                         <Select.Item value="Female">Female</Select.Item>
-                        <Select.Item value="Other">Other</Select.Item>
                       </Select.Content>
                     </Select>
                   </Field>
                   <Field label="Contact Number">
                     <Input
-                      placeholder="+63 9XX XXX XXXX"
+                      type="tel"
+                      inputMode="numeric"
+                      autoComplete="tel-national"
+                      maxLength={11}
+                      pattern="[0-9]{11}"
+                      placeholder="09XXXXXXXXX"
                       value={form.contactNumber}
                       onChange={(e) =>
                         handleField("contactNumber", e.target.value)
@@ -788,37 +805,51 @@ export default function AddUserModal({
               )}
 
               {isStudent && (
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Student LRN">
+                <>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Field label="Student LRN">
+                      <Input
+                        placeholder="12-digit LRN"
+                        maxLength={12}
+                        className="w-full bg-background border-2 border-black font-mono"
+                        value={form.studentLrn}
+                        onChange={(e) =>
+                          handleField(
+                            "studentLrn",
+                            e.target.value.replace(/\D/g, ""),
+                          )
+                        }
+                      />
+                    </Field>
+                    <Field label="Grade Level">
+                      <Select value={form.gradeLevel} onValueChange={(val) => handleField("gradeLevel", val)}>
+                        <Select.Trigger className="w-full">
+                          <Select.Value placeholder="Select grade level" />
+                        </Select.Trigger>
+                        <Select.Content>
+                          <Select.Item value="7">Grade 7</Select.Item>
+                          <Select.Item value="8">Grade 8</Select.Item>
+                          <Select.Item value="9">Grade 9</Select.Item>
+                          <Select.Item value="10">Grade 10</Select.Item>
+                          <Select.Item value="11">Grade 11</Select.Item>
+                          <Select.Item value="12">Grade 12</Select.Item>
+                        </Select.Content>
+                      </Select>
+                    </Field>
+                  </div>
+                  <Field label="General Average (Prior GWA)">
                     <Input
-                      placeholder="12-digit LRN"
-                      maxLength={12}
+                      type="number"
+                      step="0.01"
+                      min="60"
+                      max="100"
+                      placeholder="e.g. 88.50 (optional)"
                       className="w-full bg-background border-2 border-black font-mono"
-                      value={form.studentLrn}
-                      onChange={(e) =>
-                        handleField(
-                          "studentLrn",
-                          e.target.value.replace(/\D/g, ""),
-                        )
-                      }
+                      value={form.priorGwa}
+                      onChange={(e) => handleField("priorGwa", e.target.value)}
                     />
                   </Field>
-                  <Field label="Grade Level">
-                    <Select value={form.gradeLevel} onValueChange={(val) => handleField("gradeLevel", val)}>
-                      <Select.Trigger className="w-full">
-                        <Select.Value placeholder="Select grade level" />
-                      </Select.Trigger>
-                      <Select.Content>
-                        <Select.Item value="7">Grade 7</Select.Item>
-                        <Select.Item value="8">Grade 8</Select.Item>
-                        <Select.Item value="9">Grade 9</Select.Item>
-                        <Select.Item value="10">Grade 10</Select.Item>
-                        <Select.Item value="11">Grade 11</Select.Item>
-                        <Select.Item value="12">Grade 12</Select.Item>
-                      </Select.Content>
-                    </Select>
-                  </Field>
-                </div>
+                </>
               )}
             </div>
 

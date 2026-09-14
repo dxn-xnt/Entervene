@@ -43,10 +43,7 @@ CREATE TABLE user_account (
     email_verified_at TIMESTAMP WITH TIME ZONE,
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT uq_class_adviser_academic_year
-        UNIQUE (adviser_staff_id, academic_year_id)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_user_account_ref ON user_account(ref_type, ref_id);
@@ -285,7 +282,10 @@ CREATE TABLE class (
 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT uq_class_adviser_academic_year
+        UNIQUE (adviser_staff_id, academic_year_id)
 );
 
 CREATE INDEX idx_class_adviser ON class(adviser_staff_id);
@@ -628,23 +628,8 @@ CREATE INDEX idx_classwork_attachment_uploaded ON classwork_attachment(uploaded_
 
 
 
--- ============================================================
--- CLASSWORK ALLOWED FILE TYPES
--- ============================================================
-
-CREATE TABLE classwork_allowed_file_type (
-    allowed_type_id SERIAL PRIMARY KEY,
-
-    classwork_id INT NOT NULL
-        REFERENCES classwork(classwork_id)
-        ON DELETE CASCADE,
-
-    file_type_label VARCHAR(100),
-
-    extensions VARCHAR(255)
-);
-
-CREATE INDEX idx_classwork_allowed_types_classwork ON classwork_allowed_file_type(classwork_id);
+-- Note: classwork_allowed_file_type was dropped via Alembic migration 12aa5108d9e8.
+-- File extension and MIME-type restrictions are handled at the application layer.
 
 
 
@@ -1002,7 +987,6 @@ SELECT setval('public.academic_level_academic_level_id_seq', COALESCE((SELECT MA
 SELECT setval('public.academic_period_academic_period_id_seq', COALESCE((SELECT MAX(academic_period_id) FROM academic_period), 4), true);
 SELECT setval('public.academic_year_academic_year_id_seq', COALESCE((SELECT MAX(academic_year_id) FROM academic_year), 1), true);
 SELECT setval('public.class_class_id_seq', COALESCE((SELECT MAX(class_id) FROM class), 1), true);
-SELECT setval('public.classwork_allowed_file_type_allowed_type_id_seq', COALESCE((SELECT MAX(allowed_type_id) FROM classwork_allowed_file_type), 1), false);
 SELECT setval('public.classwork_assignment_classwork_assignment_id_seq', COALESCE((SELECT MAX(classwork_assignment_id) FROM classwork_assignment), 5), true);
 SELECT setval('public.classwork_attachment_classwork_attachment_id_seq', COALESCE((SELECT MAX(classwork_attachment_id) FROM classwork_attachment), 5), true);
 SELECT setval('public.classwork_classwork_id_seq', COALESCE((SELECT MAX(classwork_id) FROM classwork), 7), true);

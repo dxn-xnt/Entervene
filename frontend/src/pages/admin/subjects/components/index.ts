@@ -1,15 +1,15 @@
-export { CurriculumFilters } from "./CurriculumFilters";
+export { CurriculumFilters } from "./curriculum-filters";
 export type {
   CurriculumGradeValue,
   CurriculumPathwayValue,
   CurriculumStatusValue,
-} from "./CurriculumFilters";
-export { CurriculumPlanTable, groupOfferingsForCurriculumPlan } from "./CurriculumPlanTable";
-export type { CurriculumPlanRow } from "./CurriculumPlanTable";
-export { EmptyStateCard } from "./EmptyStateCard";
-export { SubjectContextBanner } from "./SubjectContextBanner";
-export { SubjectPicker } from "./SubjectPicker";
-export { TemplateSubjectPicker } from "./TemplateSubjectPicker";
+} from "./curriculum-filters";
+export { CurriculumPlanTable, groupOfferingsForCurriculumPlan } from "./curriculum-plan-table";
+export type { CurriculumPlanRow } from "./curriculum-plan-table";
+export { EmptyStateCard } from "./empty-state-card";
+export { SubjectContextBanner } from "./subject-context-banner";
+export { SubjectPicker } from "./subject-picker";
+export { TemplateSubjectPicker } from "./template-subject-picker";
 
 // Extracted from subjects.tsx
 export {

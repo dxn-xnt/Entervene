@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.Base import Base
 from app.models.ai.RiskThreshold import RiskThreshold
 from app.services.prediction.RiskEngine import (
+    COLD_START,
     HIGH_RISK,
     INSUFFICIENT_DATA,
     LOW_RISK,
@@ -184,3 +185,76 @@ def test_active_threshold_rows_can_be_loaded_without_breaking_defaults(db):
     assert len(thresholds) == 1
     assert thresholds[0].risk_level == MODERATE_RISK
     assert result.risk_level == MODERATE_RISK
+
+
+def test_behavioral_engagement_below_60_triggers_high_risk():
+    result = evaluate_risk(sufficient_input(behavioral_engagement_score=59.9))
+
+    assert result.risk_level == HIGH_RISK
+    assert "behavioral_engagement_below_60" in result.triggered_rules
+
+
+def test_behavioral_engagement_60_to_74_triggers_moderate_risk():
+    result = evaluate_risk(sufficient_input(behavioral_engagement_score=74.9))
+
+    assert result.risk_level == MODERATE_RISK
+    assert "behavioral_engagement_60_to_74" in result.triggered_rules
+
+
+def test_behavioral_engagement_75_to_84_triggers_needs_monitoring():
+    result = evaluate_risk(sufficient_input(behavioral_engagement_score=84.9))
+
+    assert result.risk_level == NEEDS_MONITORING
+    assert "behavioral_engagement_75_to_84" in result.triggered_rules
+
+
+def test_behavioral_engagement_above_85_triggers_no_behavioral_rule():
+    result = evaluate_risk(sufficient_input(behavioral_engagement_score=85.0))
+
+    assert result.risk_level == LOW_RISK
+    assert not any(rule.startswith("behavioral_engagement_") for rule in result.triggered_rules)
+
+
+def test_behavioral_engagement_none_triggers_no_behavioral_rule():
+    result = evaluate_risk(sufficient_input(behavioral_engagement_score=None))
+
+    assert not any(rule.startswith("behavioral_engagement_") for rule in result.triggered_rules)
+
+
+def test_behavioral_cold_start_sets_data_status_cold_start():
+    result = evaluate_risk(sufficient_input(
+        behavioral_engagement_score=None,
+        behavioral_score_cold_start=True,
+    ))
+
+    assert result.data_status == COLD_START
+    assert result.risk_level == LOW_RISK
+
+
+def test_behavioral_cold_start_with_insufficient_data_sets_insufficient_data():
+    result = evaluate_risk(sufficient_input(
+        data_coverage_ratio=0.40,
+        behavioral_engagement_score=None,
+        behavioral_score_cold_start=True,
+    ))
+
+    assert result.data_status == INSUFFICIENT_DATA
+    assert result.risk_level == INSUFFICIENT_DATA
+
+
+def test_dual_pathway_completion_and_behavioral_compound_trigger():
+    # Low completion rate (0.65) triggers assessment_completion_below_75 and assessment_completion_below_90
+    # Combined with low behavioral engagement (58.0) driven by low completion + absences -> triggers behavioral_engagement_below_60
+    # Both pathways fire in evaluate_default_rules, producing a high severity classification and appropriate score
+    result = evaluate_risk(sufficient_input(
+        predicted_period_grade=88.0,
+        assessment_completion_rate=0.65,
+        behavioral_engagement_score=58.0,
+    ))
+
+    assert result.risk_level == HIGH_RISK
+    assert "assessment_completion_below_75" in result.triggered_rules
+    assert "assessment_completion_below_90" in result.triggered_rules
+    assert "behavioral_engagement_below_60" in result.triggered_rules
+    assert result.risk_score >= 75.0
+

@@ -54,24 +54,24 @@ const StudentQuizView = () => {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
-          <div className="flex flex-1 flex-col gap-3 py-4 md:py-5 px-4 md:px-6">
-            <header className="flex items-center gap-3">
-              <SidebarTrigger className="md:hidden" />
-              <Breadcrumb>
-                <Breadcrumb.List>
+          <div className="flex flex-1 flex-col">
+            <header className="flex min-w-0 items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <SidebarTrigger className="shrink-0 md:hidden" />
+              <Breadcrumb className="min-w-0">
+                <Breadcrumb.List className="flex min-w-0 flex-nowrap items-center gap-1.5 text-lg font-extrabold tracking-tight text-black sm:gap-2 sm:text-2xl md:text-3xl">
                   <Breadcrumb.Item>
                     <Breadcrumb.Link
                       onClick={() => navigate(routes.student.todo)}
-                      className="text-xl md:text-2xl text-black/50 hover:text-black cursor-pointer"
+                      className="cursor-pointer whitespace-nowrap text-lg text-black/50 hover:text-black sm:text-2xl md:text-4xl"
                     >
                       To-Do
                     </Breadcrumb.Link>
                   </Breadcrumb.Item>
                   <Breadcrumb.Separator />
-                  <Breadcrumb.Item>
-                    <Breadcrumb.Page className="text-xl md:text-2xl font-bold">
+                  <Breadcrumb.Item className="min-w-0">
+                    <Breadcrumb.Page className="block truncate text-lg font-bold sm:text-xl md:text-3xl">
                       {quiz?.title || "Quiz Overview"}
                     </Breadcrumb.Page>
                   </Breadcrumb.Item>
@@ -79,9 +79,7 @@ const StudentQuizView = () => {
               </Breadcrumb>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b border-gray-300" />
-
-            <main className="flex flex-1 flex-col gap-4 py-3">
+            <div className="-mt-[1px] flex min-w-0 flex-1 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {loading ? (
                 <LoadingPanel label="Loading quiz..." />
               ) : error || !quiz ? (
@@ -144,15 +142,15 @@ const StudentQuizView = () => {
                   <div className="flex flex-1 flex-col gap-6 py-4">
                     {/* Instructions Card */}
                     {quiz.instructions && (
-                      <Card className="bg-white border-2 border-black p-4">
+                      <Card className="bg-white">
                         <h3 className="font-bold text-sm text-black/70 uppercase tracking-wide mb-1">Instructions</h3>
                         <p className="text-sm text-black/80 whitespace-pre-wrap">{quiz.instructions}</p>
                       </Card>
                     )}
 
                     {/* Stats Overview Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <Card className="bg-[#F6E9B2] border-2 border-black flex flex-col items-center justify-center p-6 text-center">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
+                      <Card className="bg-[#F6E9B2] flex flex-col items-center justify-center p-6 text-center">
                         <HelpCircle className="w-6 h-6 mb-2 text-black/70" />
                         <span className="text-3xl font-extrabold">{quiz.questions.length}</span>
                         <span className="text-xs font-semibold text-black/70 uppercase tracking-wider mt-1">
@@ -160,7 +158,7 @@ const StudentQuizView = () => {
                         </span>
                       </Card>
 
-                      <Card className="bg-[#F6E9B2] border-2 border-black flex flex-col items-center justify-center p-6 text-center">
+                      <Card className="bg-[#F6E9B2] flex flex-col items-center justify-center p-6 text-center">
                         <Clock className="w-6 h-6 mb-2 text-black/70" />
                         <span className="text-3xl font-extrabold">
                           {quiz.duration_minutes ? `${quiz.duration_minutes}m` : "∞"}
@@ -170,7 +168,7 @@ const StudentQuizView = () => {
                         </span>
                       </Card>
 
-                      <Card className="bg-[#F6E9B2] border-2 border-black flex flex-col items-center justify-center p-6 text-center">
+                      <Card className="bg-[#F6E9B2] flex flex-col items-center justify-center p-6 text-center">
                         <Award className="w-6 h-6 mb-2 text-black/70" />
                         <span className="text-3xl font-extrabold">
                           {quiz.total_points != null ? quiz.total_points : quiz.questions.reduce((sum, q) => sum + (q.points || 1), 0)}
@@ -180,7 +178,7 @@ const StudentQuizView = () => {
                         </span>
                       </Card>
 
-                      <Card className="bg-[#F6E9B2] border-2 border-black flex flex-col items-center justify-center p-6 text-center">
+                      <Card className="bg-[#F6E9B2] flex flex-col items-center justify-center p-6 text-center">
                         <RotateCcw className="w-6 h-6 mb-2 text-black/70" />
                         <span className="text-3xl font-extrabold">
                           {quiz.attempt_count} / {quiz.max_attempts}
@@ -193,7 +191,7 @@ const StudentQuizView = () => {
 
                     {/* Previous Result Summary Banner if graded */}
                     {isCompleted && quiz.grade != null && (
-                      <Card className="bg-white border-2 border-black p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+                      <Card className="bg-white p-6 flex flex-col md:flex-row items-center justify-between gap-4">
                         <div>
                           <h3 className="font-bold text-lg">Your Latest Score</h3>
                           <p className="text-sm text-black/60">
@@ -211,7 +209,7 @@ const StudentQuizView = () => {
                   </div>
                 </>
               )}
-            </main>
+            </div>
           </div>
         </div>
       </div>

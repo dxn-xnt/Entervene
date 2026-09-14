@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.Class_ import Class
 from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.Subject import Subject
@@ -23,7 +24,20 @@ from app.schemas.Activity import (
 )
 
 
-def _verify_teacher_scope(db: Session, staff_id: str, class_id: int, subject_id: int):
+def _verify_teacher_scope(
+    db: Session,
+    staff_id: str,
+    class_id: int,
+    subject_id: int,
+    academic_period_id: int | None = None,
+):
+    if academic_period_id is not None:
+        period = db.get(AcademicPeriod, academic_period_id)
+        class_ = db.get(Class, class_id)
+        if period is None:
+            raise HTTPException(status_code=400, detail="Academic period was not found")
+        if class_ is None or class_.academic_year_id != period.academic_year_id:
+            raise HTTPException(status_code=400, detail="Academic period does not belong to the target class year")
     row = (
         db.query(SubjectLoad)
         .filter(
@@ -31,9 +45,12 @@ def _verify_teacher_scope(db: Session, staff_id: str, class_id: int, subject_id:
             SubjectLoad.class_id == class_id,
             SubjectLoad.subject_id == subject_id,
             SubjectLoad.status.in_(["active", "published"]),
+            SubjectLoad.is_active_version.is_(True),
         )
-        .first()
     )
+    if academic_period_id is not None:
+        row = row.filter(SubjectLoad.academic_period_id == academic_period_id)
+    row = row.first()
     if not row:
         raise HTTPException(
             status_code=403,
@@ -43,13 +60,20 @@ def _verify_teacher_scope(db: Session, staff_id: str, class_id: int, subject_id:
 
 
 def create_activity(db: Session, staff_id: str, payload: ActivityCreateRequest):
-    _verify_teacher_scope(db, staff_id, payload.class_id, payload.subject_id)
+    _verify_teacher_scope(
+        db,
+        staff_id,
+        payload.class_id,
+        payload.subject_id,
+        payload.academic_period_id,
+    )
 
     classwork = Classwork(
         title=payload.title,
         description=payload.description,
         classwork_type="ACTIVITY",
         classwork_category=payload.classwork_category,
+        exam_subtype=payload.exam_subtype,
         activity_mode=payload.activity_mode,
         total_points=Decimal(str(payload.total_points)),
         is_published=True,
@@ -69,6 +93,7 @@ def create_activity(db: Session, staff_id: str, payload: ActivityCreateRequest):
     assignment = ClassworkAssignment(
         classwork_id=classwork.classwork_id,
         class_id=payload.class_id,
+        academic_period_id=payload.academic_period_id,
         assigned_by_staff_id=staff_id,
         due_date=payload.due_date,
         is_published=True,
@@ -89,23 +114,48 @@ def create_activity(db: Session, staff_id: str, payload: ActivityCreateRequest):
     }
 
 
-def get_activity_scores(db: Session, staff_id: str, activity_id: int, class_id: int) -> ActivityScoresResponse:
+def _resolve_activity_and_assignment(
+    db: Session,
+    staff_id: str,
+    activity_id: int,
+    class_id: int,
+) -> tuple[Classwork, ClassworkAssignment]:
+    # 1. Try treating activity_id as Classwork.classwork_id
     classwork = db.query(Classwork).filter(Classwork.classwork_id == activity_id).first()
-    if not classwork:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    _verify_teacher_scope(db, staff_id, class_id, classwork.subject_id)
-
-    assignment = (
-        db.query(ClassworkAssignment)
-        .filter(
-            ClassworkAssignment.classwork_id == activity_id,
-            ClassworkAssignment.class_id == class_id,
+    assignment = None
+    if classwork:
+        _verify_teacher_scope(db, staff_id, class_id, classwork.subject_id)
+        assignment = (
+            db.query(ClassworkAssignment)
+            .filter(
+                ClassworkAssignment.classwork_id == classwork.classwork_id,
+                ClassworkAssignment.class_id == class_id,
+            )
+            .first()
         )
-        .first()
-    )
+
+    # 2. Try treating activity_id as ClassworkAssignment.classwork_assignment_id
     if not assignment:
-        raise HTTPException(status_code=404, detail="Activity is not assigned to this class")
+        assignment = (
+            db.query(ClassworkAssignment)
+            .filter(
+                ClassworkAssignment.classwork_assignment_id == activity_id,
+                ClassworkAssignment.class_id == class_id,
+            )
+            .first()
+        )
+        if assignment:
+            classwork = assignment.classwork
+            _verify_teacher_scope(db, staff_id, class_id, classwork.subject_id)
+
+    if not classwork or not assignment:
+        raise HTTPException(status_code=404, detail="Activity not found or not assigned to this class")
+
+    return classwork, assignment
+
+
+def get_activity_scores(db: Session, staff_id: str, activity_id: int, class_id: int) -> ActivityScoresResponse:
+    classwork, assignment = _resolve_activity_and_assignment(db, staff_id, activity_id, class_id)
 
     # Fetch roster of enrolled students in this class
     students = (
@@ -125,15 +175,15 @@ def get_activity_scores(db: Session, staff_id: str, activity_id: int, class_id: 
         .filter(StudentSubmission.classwork_assignment_id == assignment.classwork_assignment_id)
         .all()
     )
-    sub_map = {sub.student_id: sub for sub in submissions}
+    sub_map = {str(sub.student_id): sub for sub in submissions}
 
     student_items: list[StudentActivityScoreItem] = []
     for s in students:
-        sub = sub_map.get(s.student_id)
+        sub = sub_map.get(str(s.student_id))
         score = float(sub.grade) if (sub and sub.grade is not None) else None
         student_items.append(
             StudentActivityScoreItem(
-                student_id=s.student_id,
+                student_id=str(s.student_id),
                 name=f"{s.first_name} {s.last_name}".strip(),
                 score=score,
             )
@@ -155,23 +205,7 @@ def bulk_update_activity_scores(
     activity_id: int,
     payload: BulkScoreUpdateRequest,
 ) -> ActivityScoresResponse:
-    classwork = db.query(Classwork).filter(Classwork.classwork_id == activity_id).first()
-    if not classwork:
-        raise HTTPException(status_code=404, detail="Activity not found")
-
-    _verify_teacher_scope(db, staff_id, payload.class_id, classwork.subject_id)
-
-    assignment = (
-        db.query(ClassworkAssignment)
-        .filter(
-            ClassworkAssignment.classwork_id == activity_id,
-            ClassworkAssignment.class_id == payload.class_id,
-        )
-        .first()
-    )
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Activity is not assigned to this class")
-
+    classwork, assignment = _resolve_activity_and_assignment(db, staff_id, activity_id, payload.class_id)
     max_score = float(classwork.total_points or 100)
 
     # Validate each score input before modifying database
@@ -194,18 +228,24 @@ def bulk_update_activity_scores(
         .filter(StudentSubmission.classwork_assignment_id == assignment.classwork_assignment_id)
         .all()
     )
-    sub_map = {sub.student_id: sub for sub in existing_subs}
+    sub_map = {str(sub.student_id): sub for sub in existing_subs}
 
     now = datetime.now(timezone.utc)
 
     for item in payload.scores:
-        sub = sub_map.get(item.student_id)
+        sid_str = str(item.student_id)
+        sub = sub_map.get(sid_str)
         if sub is None:
+            try:
+                parsed_sid = UUID(sid_str)
+            except (ValueError, TypeError):
+                parsed_sid = sid_str
             sub = StudentSubmission(
-                student_id=item.student_id,
+                student_id=parsed_sid,
                 classwork_assignment_id=assignment.classwork_assignment_id,
             )
             db.add(sub)
+            sub_map[sid_str] = sub
 
         if item.score is not None:
             sub.grade = Decimal(str(item.score))
@@ -218,7 +258,7 @@ def bulk_update_activity_scores(
 
     db.commit()
 
-    return get_activity_scores(db, staff_id, activity_id, payload.class_id)
+    return get_activity_scores(db, staff_id, classwork.classwork_id, payload.class_id)
 
 
 def delete_activity(db: Session, staff_id: str, activity_id: int):

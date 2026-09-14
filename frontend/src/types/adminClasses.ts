@@ -377,3 +377,67 @@ export type ClassImportValidationErrorResponse = {
   code: string;
   errors: ClassImportValidationErrorItem[];
 };
+
+export type DistributionMode = "alphabetical" | "gwa";
+
+export type DistributeStudentsPayload = {
+  academic_level_id: number;
+  mode: DistributionMode;
+  sections: { local_id: string; section_name: string }[];
+  unassigned_student_ids: string[];
+  assignments_by_section: Record<string, string[]>;
+};
+
+export type DistributeStudentsResponse = {
+  assignments_by_section: Record<string, string[]>;
+};
+
+export type AdvisorySubjectItem = {
+  subject_id: number;
+  subject_name: string;
+  teacher_staff_id?: string | null;
+  teacher_name?: string | null;
+};
+
+export type AdvisoryStudentSubjectGradeItem = {
+  subject_id: number;
+  subject_name: string;
+  final_period_grade: number | null;
+  performance_descriptor: string | null;
+  is_finalized: boolean;
+  finalized_at: string | null;
+  status: "finalized" | "pending";
+};
+
+export type AdvisoryStudentGradeRow = {
+  student_id: string;
+  student_lrn: string | null;
+  full_name: string;
+  gender: string | null;
+  grades: Record<number, AdvisoryStudentSubjectGradeItem>;
+  finalized_count: number;
+  total_subjects_count: number;
+  is_all_finalized: boolean;
+  gwa: number | null;
+  gwa_descriptor: string | null;
+};
+
+export type AdvisoryPeriodOption = {
+  academic_period_id: number;
+  period_name: string;
+  period_sequence?: number;
+  is_active: boolean;
+};
+
+export type TeacherAdvisoryClassGradesResponse = {
+  class_id: number;
+  section_name: string;
+  academic_level: string;
+  academic_year: string;
+  academic_period_id: number;
+  period_name: string;
+  periods: AdvisoryPeriodOption[];
+  subjects: AdvisorySubjectItem[];
+  students: AdvisoryStudentGradeRow[];
+  total_students: number;
+};

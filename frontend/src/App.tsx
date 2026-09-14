@@ -1,12 +1,15 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import StatusPage from "./pages/status-page";
 import { AuthProvider } from "./context/AuthContext";
 import { SettingsProvider } from "./context/SettingsContext";
 import { AcademicPeriodProvider } from "./context/AcademicPeriodContext";
 import ProtectedRoute from "./components/protected-route";
-import Login from "./pages/Login";
+import Login from "./pages/login";
+import Landing from "./pages/landing";
 import { routes } from "@/../routes";
-import SetupPassword from "./pages/SetupPassword";
+import SetupPassword from "./pages/setup-password";
 import { NavigationProgress } from "./components/navigation-progress";
+import { Toaster } from "./components/retroui/Sonner";
 
 // import StudentApp from "./pages/StudentInterfaces/StudentApp";
 // import TeacherApp from "./pages/teacher/TeacherApp";
@@ -35,11 +38,10 @@ import TeacherDashboard from "./pages/teacher/dashboard";
 import TeacherProfile from "./pages/teacher/profile-view";
 // import TeacherClasses from "./pages/teacher/Classworks";
 import ClassesPage from "./pages/teacher/classes";
-import TeacherClassDetail from "./pages/teacher/Classes/class-view";
-import AdvisoryClassDetail from "./pages/teacher/Classes/advisory-class-view";
-import ClassSections from "./pages/teacher/Classes/class-section";
-import SubjectDetails from "./pages/teacher/Classes/subject-details";
-import Subjects from "./pages/teacher/Classes/subjects";
+import TeacherClassDetail from "./pages/teacher/classes-view/class-view";
+import SubjectDetails from "./pages/teacher/classes-view/subject-details";
+import AdvisoryClassDetail from "./pages/teacher/classes-view/advisory-class-view";
+import ClassSections from "./pages/teacher/classes-view/class-section";
 import TeacherClassworks from "./pages/teacher/classworks";
 // import TeacherLessons from "./pages/teacher/lessons";
 // import TeacherInterventions from "./pages/teacher/interventions";
@@ -51,9 +53,9 @@ import TeacherAttendance from "./pages/teacher/attendance";
 import PredictionsDashboard from "./pages/teacher/predictions";
 import GradesPredictions from "./pages/teacher/grade-predictions";
 import SectionPredictions from "./pages/teacher/section-predictions";
-import LessonPlannerPage from "./pages/teacher/LessonPlanner/LessonPlannerPage";
-import LessonPlannerListPage from "./pages/teacher/LessonPlanner/LessonPlannerListPage";
-import TeacherTOSPage from "./pages/teacher/TOS/TeacherTOSPage";
+import LessonPlannerPage from "./pages/teacher/lesson-planner/lesson-planner-page";
+import LessonPlannerListPage from "./pages/teacher/lesson-planner/lesson-planner-list-page";
+import TeacherTOSPage from "./pages/teacher/tos/teacher-tos-page";
 
 // // Student pages
 import StudentBoard from "./pages/student/storyboard";
@@ -61,7 +63,7 @@ import StudentProfile from "./pages/student/student-profile";
 import StudentSubjects from "./pages/student/subjects";
 import StudentSubjectDetail from "./pages/student/student-subject-detail";
 import StudentInterventions from "./pages/student/student-interventions";
-import StudentGrades from "./pages/student/Grades/grades";
+import StudentGrades from "./pages/student/grades/grades";
 import StudentTodo from "./pages/student/todo";
 import StudentTodoView from "./pages/student/todo-view";
 import StudentNotifications from "./pages/student/notifications";
@@ -71,6 +73,8 @@ import AdminStudentView from "./pages/admin/student-view";
 import StudentQuizTake from "./pages/quiz/quiz-interface";
 import StudentQuizView from "./pages/quiz/quiz-view";
 import StudentQuizResult from "./pages/quiz/quiz-result";
+import ClassworkView from "./pages/teacher/classwork-view";
+
 
 // // Layouts
 // import TeacherLayout from "./pages/teacher/TeacherLayout";
@@ -83,13 +87,17 @@ const App = () => {
         <AcademicPeriodProvider>
           <BrowserRouter>
             <NavigationProgress />
+            <Toaster />
             <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/maintenance" element={<StatusPage variant="maintenance" />} />
+              <Route path="/unavailable" element={<StatusPage variant="unavailable" />} />
+              <Route path="/error" element={<StatusPage />} />
               <Route path={routes.auth.login} element={<Login />} />
               <Route path="/setup-password" element={<SetupPassword />} />
 
               {/* Admin */}
               <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
-                <Route index element={<Navigate to={routes.admin.dashboard} replace />} />
                 <Route path={routes.admin.dashboard} element={<AdminDashboard />} />
                 <Route path={routes.admin.subjects} element={<AdminSubjects />} />
                 <Route path={routes.admin.subjectLevel} element={<AdminSubjectLevel />} />
@@ -111,19 +119,16 @@ const App = () => {
                 <Route path={routes.admin.substitutions} element={<AdminSubstitutions />} />
               </Route>
 
-
               {/* Teacher */}
               <Route element={<ProtectedRoute allowedRoles={["teacher"]} />}>
-                <Route index element={<Navigate to={routes.teacher.dashboard} replace />} />
                 <Route path={routes.teacher.dashboard} element={<TeacherDashboard />} />
                 <Route path={routes.teacher.classes} element={<ClassesPage />} />
                 <Route path={routes.teacher.classSections} element={<ClassSections />} />
-                <Route path={routes.teacher.subjects} element={<Subjects />} />
                 <Route path={routes.teacher.classDetail} element={<TeacherClassDetail />} />
                 <Route path={routes.teacher.advisoryClassDetail} element={<AdvisoryClassDetail />} />
-                <Route path={routes.teacher.classSubjects} element={<Subjects />} />
                 <Route path={routes.teacher.subjectDetail} element={<SubjectDetails />} />
                 <Route path={routes.teacher.classworks} element={<TeacherClassworks />} />
+                <Route path={routes.teacher.classworkDetail} element={<ClassworkView />} />
                 <Route path={routes.teacher.createLesson} element={<CreateLesson />} />
                 {/* <Route path={routes.teacher.lessons} element={<TeacherLessons />} /> */}
                 <Route path={routes.teacher.profile} element={<TeacherProfile />} />
@@ -143,7 +148,6 @@ const App = () => {
 
               {/* Student */}
               <Route element={<ProtectedRoute allowedRoles={["student"]} />}>
-                <Route index element={<Navigate to={routes.student.board} replace />} />
                 <Route path={routes.student.board} element={<StudentBoard />} />
                 <Route path={routes.student.profile} element={<StudentProfile />} />
                 <Route path={routes.student.subjects} element={<StudentSubjects />} />
@@ -160,10 +164,9 @@ const App = () => {
               <Route path={routes.student.quizTake} element={<StudentQuizTake />} />
               <Route path={routes.student.quizResult} element={<StudentQuizResult />} />
 
-
               <Route
                 path="*"
-                element={<Navigate to={routes.auth.login} replace />}
+                element={<StatusPage variant="not-found" />}
               />
             </Routes>
           </BrowserRouter>

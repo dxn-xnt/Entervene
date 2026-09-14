@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from app.db.Base import Base
@@ -17,6 +17,9 @@ if TYPE_CHECKING:
 
 class Competency(Base):
     __tablename__ = "competency"
+    __table_args__ = (
+        Index("ix_competency_subject_staff", "subject_id", "created_by_staff_id"),
+    )
 
     competency_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     competency_code: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)

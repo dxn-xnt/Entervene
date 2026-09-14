@@ -7,6 +7,7 @@ Fallback provider: Google Gemini API via httpx.
 """
 from __future__ import annotations
 
+import logging
 import re
 from typing import Literal, Any
 
@@ -16,14 +17,17 @@ from openai import AsyncOpenAI, APIError, APIConnectionError, RateLimitError
 
 from app.core.Config import settings
 
+logger = logging.getLogger(__name__)
+
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GROQ_MODELS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-    "llama-3.1-70b-versatile",
-    "llama3-70b-8192",
-    "llama3-8b-8192",
-    "mixtral-8x7b-32768",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.8-27b",
+    "qwen/qwen3.6-27b",
+    "groq/compound",
+    "groq/compound-mini",
+    "allam-2-7b",
 ]
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
@@ -183,9 +187,30 @@ async def _generate_with_groq(groq_key: str, prompt: str) -> str:
         api_key=groq_key,
         base_url=GROQ_BASE_URL,
     )
+
+    configured_model = getattr(settings, "groq_model", None) or "openai/gpt-oss-120b"
+    candidate_models = [configured_model] + [m for m in GROQ_MODELS if m != configured_model]
+
+    # Attempt dynamic model discovery to filter out inactive models
+    try:
+        models_res = await client.models.list()
+        active_ids = {
+            m.id for m in models_res.data
+            if "whisper" not in m.id and "guard" not in m.id and "safeguard" not in m.id
+        }
+        ordered = [m for m in candidate_models if m in active_ids]
+        for m in active_ids:
+            if m not in ordered:
+                ordered.append(m)
+        if ordered:
+            candidate_models = ordered
+    except Exception as list_err:
+        logger.warning("Could not dynamically list Groq models: %s", list_err)
+
     last_err: Exception | None = None
-    for model_name in GROQ_MODELS:
+    for model_name in candidate_models:
         try:
+            logger.info("Attempting lesson plan generation with Groq model: %s", model_name)
             response: Any = await client.chat.completions.create(
                 model=model_name,
                 messages=[
@@ -201,15 +226,24 @@ async def _generate_with_groq(groq_key: str, prompt: str) -> str:
                 return clean_ai_output(content)
         except RateLimitError as exc:
             last_err = exc
+            logger.warning("Groq rate limit on %s: %s", model_name, exc)
             continue
         except APIError as exc:
             last_err = exc
-            if "model_not_found" in str(exc) or "does not exist" in str(exc):
+            logger.warning("Groq API error on %s: %s", model_name, exc)
+            err_msg = str(exc).lower()
+            if (
+                "model_not_found" in err_msg
+                or "does not exist" in err_msg
+                or "model_decommissioned" in err_msg
+                or "decommissioned" in err_msg
+            ):
                 continue
-            break
+            continue
         except Exception as exc:
             last_err = exc
-            break
+            logger.warning("Groq unexpected error on %s: %s", model_name, exc)
+            continue
 
     if last_err:
         raise last_err

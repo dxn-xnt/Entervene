@@ -19,7 +19,7 @@ DEFAULT_GRADING_TEMPLATE_STATUS = "active"
 DEFAULT_GRADING_TEMPLATE_COMPONENTS = [
     {"component_name": "Written Works", "weight": Decimal("25.00"), "display_order": 1},
     {"component_name": "Performance Tasks", "weight": Decimal("50.00"), "display_order": 2},
-    {"component_name": "Quarterly/Term Assessment", "weight": Decimal("25.00"), "display_order": 3},
+    {"component_name": "Exams", "weight": Decimal("25.00"), "display_order": 3},
 ]
 
 

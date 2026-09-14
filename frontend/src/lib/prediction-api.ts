@@ -9,15 +9,27 @@ import { apiFetch } from "./api";
 
 // ---- Types ----
 
+export type TeacherStatusLabel =
+  | "ASSIGNED"
+  | "SUBSTITUTE_ACTIVE"
+  | "NO_CONFIRMED_TEACHER"
+  | "HISTORICAL_UNMAPPED"
+  | "UNASSIGNED";
+
 export interface DashboardPredictionItem {
   prediction_id: number;
   student_id: string;
   student_name: string;
   student_lrn: string;
   class_name: string;
+  grade_level?: number | null;
   subject_name: string;
+  subject_codename?: string | null;
   term_label: string;
   term_number: number;
+  teacher_name?: string | null;
+  teacher_staff_id?: string | null;
+  teacher_status_label?: TeacherStatusLabel;
   predicted_period_grade: number | null;
   risk_level: string;
   risk_score: number | null;
@@ -42,10 +54,53 @@ export interface DashboardAtRiskResponse {
   offset: number;
 }
 
+export interface DashboardGradeOption {
+  grade_level: number;
+  level_name: string;
+}
+
+export interface DashboardClassOption {
+  class_id: number;
+  section_name: string;
+  grade_level?: number | null;
+}
+
+export interface DashboardSubjectOption {
+  subject_id: number;
+  subject_name: string;
+  subject_codename?: string | null;
+  period_index?: number | null;
+}
+
+export interface DashboardTermOption {
+  term_number: number;
+  term_label: string;
+  academic_period_id: number;
+}
+
 export interface DashboardFilters {
-  classes: { class_id: number; section_name: string }[];
-  subjects: { subject_id: number; subject_name: string }[];
-  terms: { term_number: number; term_label: string; academic_period_id: number }[];
+  grades: DashboardGradeOption[];
+  classes: DashboardClassOption[];
+  subjects: DashboardSubjectOption[];
+  terms: DashboardTermOption[];
+}
+
+export interface DashboardSectionSummaryItem {
+  class_id: number;
+  section_name: string;
+  grade_level: number;
+  total_students: number;
+  at_risk_count: number;
+  high_risk_count: number;
+  moderate_risk_count: number;
+}
+
+export interface DashboardGradeGroupSummary {
+  grade_level: number;
+  level_name: string;
+  total_students: number;
+  at_risk_count: number;
+  sections: DashboardSectionSummaryItem[];
 }
 
 export interface PredictionFeature {
@@ -58,10 +113,43 @@ export interface PredictionFeature {
   explanation_method: string;
 }
 
+export type PredictionEvidenceState =
+  | "AVAILABLE"
+  | "NO_EXPECTED_ITEMS"
+  | "NO_RECORDED_DATA"
+  | "INSUFFICIENT_DATA"
+  | "UNRESOLVED"
+  | "NOT_APPLICABLE";
+
+export type PredictionEvidenceCategory =
+  | "GRADE"
+  | "ACTIVITY_PROGRESS"
+  | "ATTENDANCE"
+  | "PARTICIPATION";
+
+export type PredictionStatus = "GENERATED" | "INSUFFICIENT_DATA" | "LEGACY";
+export type ModelExecutionStatus = "EXECUTED" | "SKIPPED" | "UNKNOWN";
+
+export interface TeacherPredictionEvidence {
+  feature_name: string;
+  display_name: string;
+  description: string;
+  category: PredictionEvidenceCategory;
+  value: number | string | null;
+  unit: "PERCENTAGE" | "SCORE" | "NUMERIC" | "INDICATOR" | "TEXT" | null;
+  value_scale: "ZERO_TO_ONE" | "ZERO_TO_100" | "MODEL_NATIVE" | "N/A" | null;
+  evidence_state: PredictionEvidenceState;
+  numerator: number | null;
+  denominator: number | null;
+  formatted_value: string;
+  source_description: string;
+  usage_description: string;
+}
+
 export interface PredictionCause {
   code: string;
   label: string;
-  value: string;
+  value?: string | null;
   severity: string;
   explanation: string;
 }
@@ -87,8 +175,23 @@ export interface TeacherReview {
 export interface PredictionDetail {
   prediction_id: number;
   student_id: string;
+  student_name?: string | null;
+  student_lrn?: string | null;
+  grade_level?: number | null;
+  level_name?: string | null;
   class_id: number;
+  class_name?: string | null;
   subject_id: number;
+  subject_name?: string | null;
+  subject_codename?: string | null;
+  teacher_name?: string | null;
+  teacher_staff_id?: string | null;
+  teacher_status_label?: TeacherStatusLabel;
+  is_substitute?: boolean;
+  substitution_id?: number | null;
+  substitute_start_date?: string | null;
+  substitute_end_date?: string | null;
+  original_teacher_name?: string | null;
   source_period_id: number;
   target_period_id: number;
   predicted_period_grade: number | null;
@@ -104,6 +207,11 @@ export interface PredictionDetail {
     is_active: boolean;
   } | null;
   features: PredictionFeature[];
+  prediction_status: PredictionStatus;
+  model_execution: ModelExecutionStatus;
+  evidence: TeacherPredictionEvidence[];
+  interpretations: string[];
+  limitations: string[];
   causes: PredictionCause[];
   recommended_actions: PredictionAction[];
   outcome: {
@@ -125,7 +233,9 @@ export interface PredictionDetail {
 export interface DashboardQueryParams {
   class_id?: number;
   subject_id?: number;
+  academic_period_id?: number;
   term?: number;
+  grade_level?: number;
   risk_level?: string;
   search?: string;
   sort_by?: string;
@@ -140,7 +250,9 @@ export async function fetchDashboardAtRisk(
   const query = new URLSearchParams();
   if (params.class_id) query.set("class_id", String(params.class_id));
   if (params.subject_id) query.set("subject_id", String(params.subject_id));
+  if (params.academic_period_id) query.set("academic_period_id", String(params.academic_period_id));
   if (params.term) query.set("term", String(params.term));
+  if (params.grade_level) query.set("grade_level", String(params.grade_level));
   if (params.risk_level) query.set("risk_level", params.risk_level);
   if (params.search?.trim()) query.set("search", params.search.trim());
   if (params.sort_by) query.set("sort_by", params.sort_by);
@@ -154,9 +266,27 @@ export async function fetchDashboardAtRisk(
   return response.json();
 }
 
-export async function fetchDashboardFilters(): Promise<DashboardFilters> {
-  const response = await apiFetch("/api/v1/predictions/dashboard/filters");
+export async function fetchDashboardFilters(
+  params?: { class_id?: number; academic_period_id?: number }
+): Promise<DashboardFilters> {
+  const query = new URLSearchParams();
+  if (params?.class_id !== undefined) query.set("class_id", String(params.class_id));
+  if (params?.academic_period_id !== undefined) query.set("academic_period_id", String(params.academic_period_id));
+  const qs = query.toString();
+  const response = await apiFetch(`/api/v1/predictions/dashboard/filters${qs ? `?${qs}` : ""}`);
   if (!response.ok) throw new Error("Failed to load dashboard filters.");
+  return response.json();
+}
+
+export async function fetchDashboardGradeSummaries(
+  params: { academic_period_id?: number; term?: number } = {}
+): Promise<DashboardGradeGroupSummary[]> {
+  const query = new URLSearchParams();
+  if (params.academic_period_id) query.set("academic_period_id", String(params.academic_period_id));
+  if (params.term) query.set("term", String(params.term));
+  const qs = query.toString();
+  const response = await apiFetch(`/api/v1/predictions/dashboard/grade-summaries${qs ? `?${qs}` : ""}`);
+  if (!response.ok) throw new Error("Failed to load grade summaries.");
   return response.json();
 }
 

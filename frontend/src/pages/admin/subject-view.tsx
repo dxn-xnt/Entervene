@@ -81,13 +81,13 @@ export default function AdminSubjectView() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
-        <div className="@container/main flex flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-3 p-4">
-            <header className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
-                <Breadcrumb>
-                  <Breadcrumb.List>
+        <div className="@container/main flex flex-1 flex-col">
+          <div className="flex flex-1 flex-col">
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <SidebarTrigger className="shrink-0 md:hidden" />
+                <Breadcrumb className="min-w-0 overflow-hidden">
+                  <Breadcrumb.List className="flex-nowrap">
                     <Breadcrumb.Item>
                       <Breadcrumb.Link href="/admin/subjects" className="">
                         Subjects
@@ -108,9 +108,8 @@ export default function AdminSubjectView() {
               </div>
             </header>
 
-            <div className="-mx-4 md:-mx-6 border-b-2 border-border mt-[3px]" />
-
-            {isLoading ? (
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+              {isLoading ? (
               <RetroCard className="py-3 px-4 bg-accent">Loading subject...</RetroCard>
             ) : error ? (
               <RetroCard className="py-3 px-4 bg-accent">
@@ -189,6 +188,7 @@ export default function AdminSubjectView() {
                 </div>
               </>
             ) : null}
+            </div>
           </div>
         </div>
       </div>

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Upload, X } from "lucide-react";
 import { Button } from "@/components/retroui/Button";
+import { toast } from "sonner";
+import { maxClassworkMaterialSize } from "@/lib/classwork-utils";
 
 interface SubmissionFormProps {
   assignmentId: number;
@@ -22,10 +24,23 @@ export default function SubmissionForm({
 
   const canSubmitMore = !maxAttempts || currentAttempt < maxAttempts;
 
+  const validateAndSetFiles = (incomingFiles: File[]) => {
+    const oversized = incomingFiles.find(
+      (file) => file.size > maxClassworkMaterialSize,
+    );
+    if (oversized) {
+      const msg = `"${oversized.name}" exceeds the 10MB limit.`;
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+    setFiles(incomingFiles);
+    setError("");
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setFiles(Array.from(e.target.files));
-      setError("");
+      validateAndSetFiles(Array.from(e.target.files));
     }
   };
 
@@ -44,8 +59,7 @@ export default function SubmissionForm({
     e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files) {
-      setFiles(Array.from(e.dataTransfer.files));
-      setError("");
+      validateAndSetFiles(Array.from(e.dataTransfer.files));
     }
   };
 
@@ -64,6 +78,16 @@ export default function SubmissionForm({
 
     if (files.length === 0) {
       setError("Please select at least one file to submit");
+      return;
+    }
+
+    const oversized = files.find(
+      (file) => file.size > maxClassworkMaterialSize,
+    );
+    if (oversized) {
+      const msg = `"${oversized.name}" exceeds the 10MB limit.`;
+      setError(msg);
+      toast.error(msg);
       return;
     }
 
@@ -106,7 +130,7 @@ export default function SubmissionForm({
           Drag and drop files here, or click to select
         </p>
         <p className="text-xs text-gray-500 mb-3">
-          You can upload multiple files
+          You can upload multiple files (up to 10MB each)
         </p>
         <input
           type="file"

@@ -6,6 +6,12 @@ pip install -r requirements.txt
 uvicorn app.main:app
 uvicorn app.main:app --host 0.0.0.0 --reload
 
+entervenemnsts@gmail.com
+mnsts2000
+
+password in the app password for the google account
+kpjc wnfa ckzv cast
+
 
 #frontend
 npm run dev
@@ -18,10 +24,14 @@ npx expo start
 #admin
 admin@mnsts.edu.ph
 hash_mnsts_admin_01
+hash_mnsts_admin_01
 
 #teacher
 m.cruz@school.edu.ph
 hash_poly_02
+
+miguel.delossantos@teacher.ph
+12345678
 
 Student Account
 Email:				Password Hash: 
