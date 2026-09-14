@@ -397,6 +397,8 @@ function getCookie(name: string): string | null {
 }
 
 let refreshRequest: Promise<boolean> | null = null;
+let lastRefreshResult = false;
+let refreshReuseUntil = 0;
 
 function request(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
@@ -425,9 +427,19 @@ function request(path: string, init: RequestInit = {}) {
 }
 
 async function refreshAccessToken(): Promise<boolean> {
+  if (Date.now() < refreshReuseUntil) return lastRefreshResult;
   if (!refreshRequest) {
     refreshRequest = request("/api/v1/auth/refresh", { method: "POST" })
-      .then((response) => response.ok)
+      .then((response) => {
+        lastRefreshResult = response.ok;
+        refreshReuseUntil = Date.now() + (response.ok ? 5000 : 30000);
+        return response.ok;
+      })
+      .catch(() => {
+        lastRefreshResult = false;
+        refreshReuseUntil = Date.now() + 30000;
+        return false;
+      })
       .finally(() => {
         refreshRequest = null;
       });
@@ -2279,6 +2291,50 @@ export async function cancelBatchSubstitutions(batchId: string): Promise<Teacher
   return (await res.json()) as TeacherSubstitution[];
 }
 
+// ─── Analytics / Overview ──────────────────────────────────────────────────
+
+export type OverviewCardData = {
+  title: string;
+  count: string;
+  stat?: string;
+  statDescription?: string;
+  rawCount?: number | null;
+};
+
+export type OverviewResponse = {
+  term_info: {
+    period_id: number | null;
+    period_name: string;
+    academic_year: string;
+    is_active: boolean;
+  };
+  cards: OverviewCardData[];
+  details?: Record<string, any>;
+};
+
+export type OverviewQueryParams = {
+  scope?: "system" | "teacher" | "class" | "subject";
+  staff_id?: string;
+  class_id?: number;
+  subject_id?: number;
+  academic_period_id?: number;
+};
+
+export async function getOverviewStats(params: OverviewQueryParams = {}): Promise<OverviewResponse> {
+  const query = new URLSearchParams();
+  if (params.scope) query.set("scope", params.scope);
+  if (params.staff_id) query.set("staff_id", params.staff_id);
+  if (params.class_id) query.set("class_id", String(params.class_id));
+  if (params.subject_id) query.set("subject_id", String(params.subject_id));
+  if (params.academic_period_id) query.set("academic_period_id", String(params.academic_period_id));
+
+  const res = await apiFetch(`/api/v1/analytics/overview${query.toString() ? `?${query.toString()}` : ""}`);
+  if (!res.ok) {
+    const data: any = await res.json().catch(() => null);
+    throw new ApiRequestError(data?.detail || "Failed to fetch overview metrics", res.status, data);
+  }
+  return (await res.json()) as OverviewResponse;
+}
 
 
 

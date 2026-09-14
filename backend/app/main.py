@@ -5,6 +5,8 @@ from sqlalchemy import text
 from fastapi import Depends
 from app.core.Config import settings
 from app.core.Csrf import CSRFMiddleware
+from app.core.RequestLimits import RequestLimitsMiddleware
+from fastapi.responses import JSONResponse
 from app.db.Session import get_db
 from app.api.v1.routes.Predictions import router as predictions_router
 from app.api.v1.routes.Auth import router as auth_router
@@ -33,6 +35,7 @@ from app.api.v1.routes.Attendance import router as attendance_router
 from app.api.v1.routes.Competencies import router as competencies_router
 from app.api.v1.routes.TOS import router as tos_router
 from app.api.v1.routes.TeacherSubstitutions import router as teacher_substitutions_router
+from app.api.v1.routes.Analytics import router as analytics_router
 
 
 
@@ -44,6 +47,7 @@ app = FastAPI(
 )
 
 app.add_middleware(CSRFMiddleware)
+app.add_middleware(RequestLimitsMiddleware)
 app.add_exception_handler(ClassManagementError, class_management_error_handler)
 
 # Cannot use allow_origins=["*"] with allow_credentials=True (browser rejects).
@@ -101,6 +105,7 @@ app.include_router(attendance_router,     prefix="/api/v1/attendance",      tags
 app.include_router(competencies_router,   prefix="/api/v1/competencies",    tags=["Competencies"])
 app.include_router(tos_router,            prefix="/api/v1/tos",             tags=["TOS"])
 app.include_router(teacher_substitutions_router, prefix="/api/v1/substitutions", tags=["Teacher Substitutions"])
+app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["Analytics"])
 
 
 @app.get("/health")
@@ -108,5 +113,5 @@ def health_check(db: Session = Depends(get_db)):
     try:
         db.execute(text("SELECT 1"))
         return {"status": "ok", "app": settings.app_name, "db": "connected"}
-    except Exception as e:
-        return {"status": "ok", "app": settings.app_name, "db": "failed", "error": str(e)}
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "unavailable", "app": settings.app_name, "db": "failed"})

@@ -149,7 +149,10 @@ def update_subject_offering_record(db: Session, subject_offering_id: int, payloa
     if "minutes" in data:
         offering.minutes = data["minutes"]
     if "status" in data:
-        offering.status = normalize_offering_status(data["status"])
+        target_status = normalize_offering_status(data["status"])
+        if target_status == "archived" and (offering.status or DEFAULT_OFFERING_STATUS).casefold() != "archived":
+            validate_subject_offering_can_be_archived(db, offering)
+        offering.status = target_status
 
     if "pathway_ids" in data or "pathway" in data:
         db.query(SubjectOfferingPathway).filter(SubjectOfferingPathway.subject_offering_id == offering.subject_offering_id).delete()
@@ -165,6 +168,38 @@ def update_subject_offering_record(db: Session, subject_offering_id: int, payloa
     return offering_to_item(offering)
 
 
+def validate_subject_offering_can_be_archived(db: Session, offering: SubjectOffering) -> None:
+    from app.models.academic.AcademicPeriod import AcademicPeriod
+    from app.models.academic.Class_ import Class
+    from app.models.academic.SubjectLoad import SubjectLoad
+
+    active_load = (
+        db.query(SubjectLoad, AcademicPeriod, Class)
+        .join(AcademicPeriod, SubjectLoad.academic_period_id == AcademicPeriod.academic_period_id)
+        .outerjoin(Class, SubjectLoad.class_id == Class.class_id)
+        .filter(
+            SubjectLoad.subject_id == offering.subject_id,
+            SubjectLoad.academic_period_id == offering.academic_period_id,
+            SubjectLoad.is_active_version.is_(True),
+            SubjectLoad.status.in_(["active", "published"]),
+        )
+    )
+    if offering.academic_level_id:
+        active_load = active_load.filter(
+            (Class.academic_level_id == offering.academic_level_id) | (SubjectLoad.class_id.is_(None))
+        )
+
+    match = active_load.first()
+    if match:
+        _, period, cls = match
+        period_name = period.period_name if period else "the current period"
+        section_detail = f" for section '{cls.section_name}'" if cls else ""
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot archive this offering because it is actively scheduled{section_detail} in {period_name}. Please reassign or archive those class schedules first.",
+        )
+
+
 def archive_subject_offering_record(db: Session, subject_offering_id: int) -> dict:
     offering = db.query(SubjectOffering).filter(SubjectOffering.subject_offering_id == subject_offering_id).first()
     if offering is None:
@@ -172,6 +207,7 @@ def archive_subject_offering_record(db: Session, subject_offering_id: int) -> di
     ensure_academic_year_is_active(get_academic_year_or_404(db, offering.academic_year_id))
     if (offering.status or DEFAULT_OFFERING_STATUS).casefold() == "archived":
         raise HTTPException(status_code=409, detail="Subject offering is already archived.")
+    validate_subject_offering_can_be_archived(db, offering)
     offering.status = "archived"
     db.commit()
     db.refresh(offering)

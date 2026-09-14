@@ -1,7 +1,7 @@
 # app/schemas/AITOS.py
 from datetime import datetime
 from typing import Any, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class TOSOption(BaseModel):
@@ -76,17 +76,34 @@ class TOSExamDetailResponse(BaseModel):
 # AI generation schemas
 class TOSRowRequest(BaseModel):
     competency_id: Optional[int] = None
-    label: str
-    code: Optional[str] = None
+    label: str = Field(max_length=1000)
+    code: Optional[str] = Field(default=None, max_length=100)
     type_counts: dict[str, int] = Field(default_factory=dict)
     bloom_targets: dict[str, int] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def bound_counts(self):
+        allowed = {"MULTIPLE_CHOICE", "TRUE_FALSE", "IDENTIFICATION", "MATCHING", "ESSAY"}
+        if set(self.type_counts) - allowed or not 1 <= sum(self.type_counts.values()) <= 20:
+            raise ValueError("Each row must request 1 to 20 questions of supported types")
+        if any(n < 0 or n > 20 for n in [*self.type_counts.values(), *self.bloom_targets.values()]):
+            raise ValueError("Counts must be between 0 and 20")
+        if set(self.bloom_targets) - {"REMEMBER", "UNDERSTAND", "APPLY", "ANALYZE", "EVALUATE", "CREATE"}:
+            raise ValueError("Unsupported Bloom category")
+        return self
 
 
 class AITOSGenerateRequest(BaseModel):
     subject_id: int
-    subject_name: str
-    language: str = "English"
-    rows: List[TOSRowRequest] = Field(default_factory=list)
+    subject_name: str = Field(max_length=200)
+    language: str = Field(default="English", max_length=40)
+    rows: List[TOSRowRequest] = Field(min_length=1, max_length=3)
+
+    @model_validator(mode="after")
+    def bound_total(self):
+        if sum(sum(row.type_counts.values()) for row in self.rows) > 40:
+            raise ValueError("Generate at most 40 TOS questions per request")
+        return self
 
 
 class AITOSGenerateResponse(BaseModel):

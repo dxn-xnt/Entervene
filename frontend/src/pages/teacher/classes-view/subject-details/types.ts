@@ -5,6 +5,7 @@ export type TeacherClassLoad = {
   subject_codename?: string | null;
   class_id: number;
   section_name: string;
+  academic_period_id?: number;
 };
 
 export type CompetencyItem = {

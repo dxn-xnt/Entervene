@@ -62,7 +62,7 @@ async def create_classwork_with_assignments(
     is_published: bool = Form(False),
     show_scores: bool = Form(True),
     class_ids: str = Form(...),
-    academic_period_id: int = Form(...),
+    academic_period_id: Optional[int] = Form(None),
     lesson_ids: Optional[str] = Form(None),
     publish_date: Optional[datetime] = Form(None),
     due_date: Optional[datetime] = Form(None),

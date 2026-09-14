@@ -301,6 +301,15 @@ export default function CreateClassworkModal({
       if (draft.lock_date) {
         formData.append("lock_date", new Date(draft.lock_date).toISOString());
       }
+      const selectedLoad = loads.find(
+        (l) =>
+          l.subject_id === Number(draft.subject_id) &&
+          selectedClassIds.includes(l.class_id),
+      );
+      if (selectedLoad?.academic_period_id) {
+        formData.append("academic_period_id", String(selectedLoad.academic_period_id));
+      }
+
       materials.forEach((material) => formData.append("files", material));
 
       const createResponse = await apiFetch(
@@ -313,7 +322,17 @@ export default function CreateClassworkModal({
 
       if (!createResponse.ok) {
         const body = await createResponse.json().catch(() => ({}));
-        throw new Error(body.detail || "Unable to create classwork.");
+        const detail = body.detail;
+        if (Array.isArray(detail)) {
+          const msgs = detail
+            .map((e: { loc?: (string | number)[]; msg?: string }) => {
+              const field = (e.loc || []).filter((x) => x !== "body").join(".");
+              return field ? `${field}: ${e.msg}` : (e.msg || "Validation error");
+            })
+            .join("; ");
+          throw new Error(msgs || "Validation error");
+        }
+        throw new Error(typeof detail === "string" ? detail : "Unable to create classwork.");
       }
       await createResponse.json();
 

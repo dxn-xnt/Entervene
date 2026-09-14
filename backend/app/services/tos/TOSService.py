@@ -155,20 +155,22 @@ def list_all_tos_exams(staff_id: Optional[str], db: Session) -> List[TOSExamSumm
     )
     if staff_id:
         query = query.filter(
-            (TOSExam.created_by_staff_id == staff_id) | (TOSExam.created_by_staff_id == None)
+            TOSExam.created_by_staff_id == staff_id
         )
     exams = query.order_by(TOSExam.updated_at.desc(), TOSExam.created_at.desc()).all()
     return [_exam_to_summary(e) for e in exams]
 
 
-def list_tos_exams_for_subject(subject_id: int, db: Session) -> List[TOSExamSummary]:
-    exams = (
+def list_tos_exams_for_subject(subject_id: int, db: Session, staff_id: Optional[str] = None) -> List[TOSExamSummary]:
+    query = (
         db.query(TOSExam)
         .options(selectinload(TOSExam.questions), selectinload(TOSExam.subject))
         .filter(TOSExam.subject_id == subject_id)
         .order_by(TOSExam.updated_at.desc(), TOSExam.created_at.desc())
-        .all()
     )
+    if staff_id:
+        query = query.filter(TOSExam.created_by_staff_id == staff_id)
+    exams = query.all()
     return [_exam_to_summary(e) for e in exams]
 
 

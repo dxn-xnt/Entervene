@@ -51,17 +51,10 @@ export function useReadingFocusTracker(
         credentials: "include",
         keepalive: true,
       }).catch(() => {
-        // Fallback to sendBeacon if fetch fails or on abrupt unload
-        if (typeof navigator !== "undefined" && navigator.sendBeacon) {
-          const blob = new Blob([payload], { type: "application/json" });
-          navigator.sendBeacon(url, blob);
-        }
+        // The server may already have counted this delta; never replay it.
       });
     } catch {
-      if (typeof navigator !== "undefined" && navigator.sendBeacon) {
-        const blob = new Blob([payload], { type: "application/json" });
-        navigator.sendBeacon(url, blob);
-      }
+      // Reading telemetry is best-effort; ambiguous failures must not double count.
     }
   });
 

@@ -1,16 +1,12 @@
+import { useEffect, useState } from "react";
 import { ChartAreaInteractive } from "@/components/chart-area-interactive";
 import { OverviewCard } from "@/components/overview-cards";
 import { Progress } from "@/components/retroui/Progress";
 import { Card } from "@/components/retroui/Card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import AppLayout from "@/layouts/app-layout";
-
-const overviewCards = [
-  { title: "Students", count: "1402", stat: "12" },
-  { title: "Teachers", count: "123", stat: "12" },
-  { title: "Classes", count: "92", stat: "12" },
-  { title: "Subjects", count: "67", stat: "12" },
-];
+import { getOverviewStats, type OverviewCardData } from "@/lib/api";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 const gradeLevelRates = [
   { label: "Grade 7", value: 90 },
@@ -31,32 +27,75 @@ const subjectMasteryRates = [
 ];
 
 export default function AdminDashboard() {
+  const { selectedPeriodId } = useAcademicPeriod();
+  const [cards, setCards] = useState<OverviewCardData[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchStats() {
+      setIsLoading(true);
+      try {
+        const data = await getOverviewStats({
+          scope: "system",
+          academic_period_id: selectedPeriodId ?? undefined,
+        });
+        if (!cancelled) {
+          setCards(data.cards);
+        }
+      } catch (err) {
+        console.error("Failed to load admin overview metrics:", err);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    fetchStats();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPeriodId]);
+
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-background py-4 px-4 md:px-6">
+            <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
-                <SidebarTrigger className="md:hidden" />
+                <SidebarTrigger className="shrink-0 md:hidden" />
                 <div className="flex flex-col items-start">
-                  <h1 className="text-2xl md:text-4xl font-bold tracking-tight">
+                  <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
                     Dashboard
                   </h1>
                 </div>
               </div>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4 md:gap-6">
+            <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:gap-6 md:px-6">
               <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
-                {overviewCards.map((card) => (
-                  <OverviewCard
-                    key={card.title}
-                    title={card.title}
-                    count={card.count}
-                    stat={card.stat}
-                  />
-                ))}
+                {isLoading && cards.length === 0
+                  ? Array.from({ length: 4 }).map((_, i) => (
+                    <Card key={i} className="@container/card animate-pulse">
+                      <Card.Header>
+                        <div className="h-4 w-24 bg-muted rounded" />
+                      </Card.Header>
+                      <Card.Content className="space-y-2">
+                        <div className="h-9 w-20 bg-muted rounded" />
+                        <div className="h-3 w-32 bg-muted rounded" />
+                      </Card.Content>
+                    </Card>
+                  ))
+                  : cards.map((card) => (
+                    <OverviewCard
+                      key={card.title}
+                      title={card.title}
+                      count={card.count}
+                      stat={card.stat}
+                      statDescription={card.statDescription}
+                    />
+                  ))}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4">

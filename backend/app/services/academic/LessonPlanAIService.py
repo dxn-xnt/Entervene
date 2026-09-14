@@ -2,8 +2,7 @@
 app/services/academic/LessonPlanAIService.py
 
 Generates lesson planning content using AI.
-Primary provider: Groq API routed via standard OpenAI Python SDK.
-Fallback provider: Google Gemini API via httpx.
+Uses the shared metered provider gateway.
 """
 from __future__ import annotations
 
@@ -11,25 +10,11 @@ import logging
 import re
 from typing import Literal, Any
 
-import httpx
 from fastapi import HTTPException
-from openai import AsyncOpenAI, APIError, APIConnectionError, RateLimitError
 
-from app.core.Config import settings
+from app.services.ai.Provider import generate_text
 
 logger = logging.getLogger(__name__)
-
-GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-GROQ_MODELS = [
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
-    "qwen/qwen3.8-27b",
-    "qwen/qwen3.6-27b",
-    "groq/compound",
-    "groq/compound-mini",
-    "allam-2-7b",
-]
-GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
 AISuggestField = Literal[
     "objectives",
@@ -181,117 +166,6 @@ def _build_prompt(field: AISuggestField, title: str, learning_area: str, grade_s
     )
 
 
-async def _generate_with_groq(groq_key: str, prompt: str) -> str:
-    """Generate content via Groq API using standard OpenAI Python SDK."""
-    client = AsyncOpenAI(
-        api_key=groq_key,
-        base_url=GROQ_BASE_URL,
-    )
-
-    configured_model = getattr(settings, "groq_model", None) or "openai/gpt-oss-120b"
-    candidate_models = [configured_model] + [m for m in GROQ_MODELS if m != configured_model]
-
-    # Attempt dynamic model discovery to filter out inactive models
-    try:
-        models_res = await client.models.list()
-        active_ids = {
-            m.id for m in models_res.data
-            if "whisper" not in m.id and "guard" not in m.id and "safeguard" not in m.id
-        }
-        ordered = [m for m in candidate_models if m in active_ids]
-        for m in active_ids:
-            if m not in ordered:
-                ordered.append(m)
-        if ordered:
-            candidate_models = ordered
-    except Exception as list_err:
-        logger.warning("Could not dynamically list Groq models: %s", list_err)
-
-    last_err: Exception | None = None
-    for model_name in candidate_models:
-        try:
-            logger.info("Attempting lesson plan generation with Groq model: %s", model_name)
-            response: Any = await client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.4,
-                max_tokens=512,
-                stream=False,
-            )
-            content = response.choices[0].message.content
-            if content:
-                return clean_ai_output(content)
-        except RateLimitError as exc:
-            last_err = exc
-            logger.warning("Groq rate limit on %s: %s", model_name, exc)
-            continue
-        except APIError as exc:
-            last_err = exc
-            logger.warning("Groq API error on %s: %s", model_name, exc)
-            err_msg = str(exc).lower()
-            if (
-                "model_not_found" in err_msg
-                or "does not exist" in err_msg
-                or "model_decommissioned" in err_msg
-                or "decommissioned" in err_msg
-            ):
-                continue
-            continue
-        except Exception as exc:
-            last_err = exc
-            logger.warning("Groq unexpected error on %s: %s", model_name, exc)
-            continue
-
-    if last_err:
-        raise last_err
-    raise HTTPException(status_code=502, detail="Groq AI service failed across all models.")
-
-
-async def _generate_with_gemini(gemini_key: str, prompt: str) -> str:
-    """Generate content via Google Gemini API as fallback."""
-    payload = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": [{"text": f"{_SYSTEM_PROMPT}\n\nTask:\n{prompt}"}],
-            }
-        ],
-        "generationConfig": {
-            "temperature": 0.4,
-            "maxOutputTokens": 512,
-        },
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.post(
-                f"{GEMINI_API_BASE}?key={gemini_key}",
-                json=payload,
-                headers={"Content-Type": "application/json"},
-            )
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="AI service timed out. Please try again.")
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=f"AI service unreachable: {exc}")
-
-    if response.status_code == 400:
-        raise HTTPException(status_code=400, detail="Invalid AI request. Please check your inputs.")
-    if response.status_code == 403:
-        raise HTTPException(status_code=503, detail="Invalid Gemini API key.")
-    if not response.is_success:
-        raise HTTPException(status_code=502, detail="AI service returned an error. Please try again.")
-
-    data = response.json()
-    try:
-        text: str = data["candidates"][0]["content"]["parts"][0]["text"]
-        return clean_ai_output(text)
-    except (KeyError, IndexError):
-        raise HTTPException(status_code=502, detail="Unexpected response from Gemini AI service.")
-
-
 async def generate_lesson_plan_suggestion(
     field: AISuggestField,
     title: str,
@@ -300,19 +174,7 @@ async def generate_lesson_plan_suggestion(
 ) -> str:
     """
     Generate AI suggestion for a lesson plan field.
-    Prefers Groq API (via OpenAI SDK), falls back to Gemini if GROQ_API_KEY is not set.
+    Uses one configured provider with no automatic retry.
     """
-    groq_key = settings.groq_api_key
-    gemini_key = settings.gemini_api_key
-
     prompt = _build_prompt(field, title, learning_area, grade_section)
-
-    if groq_key:
-        return await _generate_with_groq(groq_key, prompt)
-    elif gemini_key:
-        return await _generate_with_gemini(gemini_key, prompt)
-    else:
-        raise HTTPException(
-            status_code=503,
-            detail="AI Assist is not configured. Please set GROQ_API_KEY or GEMINI_API_KEY in backend/.env.",
-        )
+    return clean_ai_output(await generate_text(prompt, _SYSTEM_PROMPT, max_tokens=768))

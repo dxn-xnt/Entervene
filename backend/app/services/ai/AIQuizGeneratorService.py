@@ -2,8 +2,7 @@
 app/services/ai/AIQuizGeneratorService.py
 
 Generates structured quiz questions using AI.
-Primary provider: Groq API routed via standard OpenAI Python SDK with dynamic model discovery.
-Fallback provider: Google Gemini API via httpx.
+Uses the shared metered provider gateway.
 """
 from __future__ import annotations
 
@@ -12,30 +11,11 @@ import logging
 import re
 from typing import Any
 
-import httpx
 from fastapi import HTTPException
-from openai import AsyncOpenAI, APIError, APIConnectionError, RateLimitError
 
-from app.core.Config import settings
+from app.services.ai.Provider import generate_text
 
 logger = logging.getLogger(__name__)
-
-GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-GROQ_PREFERRED_MODELS = [
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
-    "qwen/qwen3.8-27b",
-    "qwen/qwen3.6-27b",
-    "groq/compound",
-    "groq/compound-mini",
-    "allam-2-7b",
-]
-
-GEMINI_MODELS = [
-    "gemini-1.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-pro",
-]
 
 _SYSTEM_PROMPT = """You are an expert assessment specialist. Generate high-quality quiz questions directly aligned with the curriculum and provided learning materials.
 
@@ -161,8 +141,8 @@ def _extract_and_validate_json(
                             "is_correct": True if q_type == "SHORT_ANSWER" else bool(opt.get("is_correct", False)),
                             "option_order": int(opt.get("option_order", o_idx)),
                         })
-            if q_type == "MULTIPLE_CHOICE" and not any(o["is_correct"] for o in validated_options) and validated_options:
-                validated_options[0]["is_correct"] = True
+            if q_type == "MULTIPLE_CHOICE" and (len(validated_options) not in {2, 4} or sum(o["is_correct"] for o in validated_options) != 1):
+                raise HTTPException(502, "AI returned an invalid answer key. Review and regenerate a smaller set.")
 
         if idx - 1 < len(expected_points_sequence):
             points = expected_points_sequence[idx - 1]
@@ -186,102 +166,6 @@ def _extract_and_validate_json(
     return valid_questions
 
 
-async def _generate_with_groq(
-    groq_key: str,
-    prompt: str,
-    system_prompt: str = _SYSTEM_PROMPT,
-) -> str:
-    client = AsyncOpenAI(api_key=groq_key, base_url=GROQ_BASE_URL)
-
-    # Discover active models dynamically
-    configured_model = getattr(settings, "groq_model", None) or "openai/gpt-oss-120b"
-    candidate_models = [configured_model] + [m for m in GROQ_PREFERRED_MODELS if m != configured_model]
-    try:
-        models_res = await client.models.list()
-        active_ids = [
-            m.id for m in models_res.data
-            if "whisper" not in m.id and "guard" not in m.id and "safeguard" not in m.id
-        ]
-        # Put preferred active models first, then any other active models
-        ordered = [m for m in candidate_models if m in active_ids]
-        for m in active_ids:
-            if m not in ordered:
-                ordered.append(m)
-        if ordered:
-            candidate_models = ordered
-    except Exception as list_err:
-        logger.warning(f"Could not list Groq models dynamically: {list_err}")
-
-    last_err: Exception | None = None
-    for model_name in candidate_models:
-        try:
-            logger.info(f"Attempting AI Quiz generation with Groq model: {model_name}")
-            response: Any = await client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.3,
-                max_tokens=4000,
-                response_format={"type": "json_object"},
-                stream=False,
-            )
-            content = response.choices[0].message.content
-            if content:
-                return content
-        except RateLimitError as exc:
-            last_err = exc
-            logger.warning(f"Groq rate limit on {model_name}: {exc}")
-            continue
-        except APIError as exc:
-            last_err = exc
-            logger.warning(f"Groq API error on {model_name}: {exc}")
-            continue
-        except Exception as exc:
-            last_err = exc
-            logger.warning(f"Groq error on {model_name}: {exc}")
-            continue
-
-    if last_err:
-        raise last_err
-    raise HTTPException(status_code=502, detail="Groq AI service failed across all candidate models.")
-
-
-async def _generate_with_gemini(
-    gemini_key: str,
-    prompt: str,
-    system_prompt: str = _SYSTEM_PROMPT,
-) -> str:
-    payload = {
-        "contents": [{"role": "user", "parts": [{"text": f"{system_prompt}\n\nTask:\n{prompt}"}]}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 4000, "responseMimeType": "application/json"},
-    }
-
-    last_err: Exception | None = None
-    for model_name in GEMINI_MODELS:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={gemini_key}"
-        try:
-            logger.info(f"Attempting AI Quiz generation with Gemini model: {model_name}")
-            async with httpx.AsyncClient(timeout=35.0) as client:
-                response = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
-            if response.is_success:
-                data = response.json()
-                text = data["candidates"][0]["content"]["parts"][0]["text"]
-                if text:
-                    return text
-            else:
-                logger.warning(f"Gemini {model_name} returned status {response.status_code}: {response.text}")
-        except Exception as exc:
-            last_err = exc
-            logger.warning(f"Gemini {model_name} exception: {exc}")
-            continue
-
-    if last_err:
-        raise last_err
-    raise HTTPException(status_code=502, detail="Gemini AI service failed on all candidate models.")
-
-
 async def generate_quiz_questions(
     subject: str,
     lessons: list[str],
@@ -291,32 +175,15 @@ async def generate_quiz_questions(
 ) -> list[dict[str, Any]]:
     """
     Generate structured quiz questions using AI.
-    Prefers Groq (with auto model discovery and rotation), falls back to Gemini if available.
+    Uses one configured provider with durable usage reservations.
     """
-    groq_key = settings.groq_api_key
-    gemini_key = settings.gemini_api_key
-
     prompt = _build_quiz_prompt(subject, lessons, content_text, test_parts)
-    raw = None
+    raw = await generate_text(prompt, _SYSTEM_PROMPT, json_output=True)
 
-    if groq_key:
-        try:
-            raw = await _generate_with_groq(groq_key, prompt)
-        except Exception as exc:
-            logger.warning(f"Groq generation failed: {exc}. Trying Gemini fallback...")
-            if gemini_key:
-                raw = await _generate_with_gemini(gemini_key, prompt)
-            else:
-                raise exc
-    elif gemini_key:
-        raw = await _generate_with_gemini(gemini_key, prompt)
-    else:
-        raise HTTPException(
-            status_code=503,
-            detail="AI service is not configured. Please set GROQ_API_KEY or GEMINI_API_KEY in backend/.env.",
-        )
-
-    if not raw:
-        raise HTTPException(status_code=502, detail="Empty response from AI providers.")
-
-    return _extract_and_validate_json(raw, test_parts)
+    try:
+        questions = _extract_and_validate_json(raw, test_parts)
+        if len(questions) != sum(part["count"] for part in test_parts):
+            raise HTTPException(502, "AI returned an incomplete question set. Try a smaller set.")
+        return questions
+    except (ValueError, TypeError, KeyError, OverflowError):
+        raise HTTPException(502, "AI returned invalid question data.") from None

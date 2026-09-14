@@ -30,12 +30,23 @@ class AIQuizTestPart(BaseModel):
 class AIQuizGenerateRequest(BaseModel):
     subject_id: int
     # Source mode A — full lessons (all readings attached to these lessons)
-    lesson_ids: list[int] = Field(default_factory=list)
+    lesson_ids: list[int] = Field(default_factory=list, max_length=20)
     # Source mode B — hand-picked reading classworks (mutually exclusive with lesson_ids)
-    reading_classwork_ids: list[int] = Field(default_factory=list)
+    reading_classwork_ids: list[int] = Field(default_factory=list, max_length=20)
     # Optional extra scope/instructions for the AI
-    additional_coverage: Optional[str] = None
-    test_parts: list[AIQuizTestPart] = Field(default_factory=list)
+    additional_coverage: Optional[str] = Field(default=None, max_length=2000)
+    test_parts: list[AIQuizTestPart] = Field(default_factory=list, max_length=4)
+
+    @model_validator(mode="after")
+    def bound_generation(self):
+        if self.lesson_ids and self.reading_classwork_ids:
+            raise ValueError("Select lessons or readings, not both")
+        if sum(part.count for part in self.test_parts) > 20:
+            raise ValueError("Generate at most 20 questions at a time")
+        for part in self.test_parts:
+            if set(part.difficulty_breakdown) - {"EASY", "MEDIUM", "HARD"} or sum(part.difficulty_breakdown.values()) != part.count:
+                raise ValueError("Difficulty counts must match the requested question count")
+        return self
 
 
 class AIQuizGenerateResponse(BaseModel):

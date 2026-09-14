@@ -824,6 +824,12 @@ export default function SubjectDetails() {
         }
       }
 
+      const activeLoad = loads.find(
+        (l) =>
+          String(l.class_id) === String(classId) &&
+          String(l.subject_id) === String(subjectId),
+      );
+
       const assignResponse = await apiFetch(
         `/api/v1/classwork-assignments/classwork/${created.classwork_id}/assign`,
         {
@@ -831,7 +837,7 @@ export default function SubjectDetails() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             class_ids: [Number(classId)],
-            academic_period_id: currentAcademicPeriodId || undefined,
+            academic_period_id: activeLoad?.academic_period_id || currentAcademicPeriodId || undefined,
             due_date: classworkDraft.due_date
               ? new Date(classworkDraft.due_date).toISOString()
               : null,
@@ -842,7 +848,20 @@ export default function SubjectDetails() {
       );
 
       if (!assignResponse.ok) {
-        throw new Error("Classwork was created, but assignment failed.");
+        const assignError = await assignResponse.json().catch(() => ({}));
+        const detail = assignError.detail;
+        if (Array.isArray(detail)) {
+          const msgs = detail
+            .map((e: { loc?: (string | number)[]; msg?: string }) => {
+              const field = (e.loc || []).filter((x) => x !== "body").join(".");
+              return field ? `${field}: ${e.msg}` : (e.msg || "Validation error");
+            })
+            .join("; ");
+          throw new Error(msgs || "Assignment failed.");
+        }
+        throw new Error(
+          typeof detail === "string" ? detail : "Classwork was created, but assignment failed.",
+        );
       }
 
       if (isSubjectLevel) {

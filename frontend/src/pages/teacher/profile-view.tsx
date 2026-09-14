@@ -71,10 +71,10 @@ export default function TeacherProfile() {
                   </h1>
                 </div>
               </div>
-              <div className="flex flex-row gap-2">
+              <div className="flex w-full flex-row gap-2 sm:w-auto">
                 <Button
                   onClick={openModal}
-                  className="shrink-0 px-2 text-xs sm:px-4 sm:text-sm"
+                  className="w-full justify-center px-2 text-xs sm:w-auto sm:px-4 sm:text-sm"
                 >
                   <Pencil className="mr-1 size-4 sm:mr-2" /> Edit Profile
                 </Button>
