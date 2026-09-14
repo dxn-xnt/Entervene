@@ -99,18 +99,34 @@ def notify_students_for_classwork(
     title: str,
     body_text: str,
     notification_type: NotificationType = "assignment_due",
-    action_url: str | None = "/student/todo",
+    action_url: str | None = None,
+    classwork_id: int | None = None,
+    subject_id: int | None = None,
 ):
     if not class_ids:
         return
     try:
         from app.models.people.Student import Student
         from app.models.academic.StudentCLass import StudentClass
+        from app.models.classwork.ClassworkAssignment import ClassworkAssignment
         from app.services.NotificationService import create_notification
         from app.schemas.Notification import NotificationCreate
 
-        student_users = (
-            db.query(Student.user_id)
+        # Map class_id -> classwork_assignment_id if classwork_id is available
+        assignment_map: dict[int, int] = {}
+        if classwork_id:
+            assignments = (
+                db.query(ClassworkAssignment)
+                .filter(
+                    ClassworkAssignment.classwork_id == classwork_id,
+                    ClassworkAssignment.class_id.in_(class_ids),
+                )
+                .all()
+            )
+            assignment_map = {a.class_id: a.classwork_assignment_id for a in assignments}
+
+        student_classes = (
+            db.query(Student.user_id, StudentClass.class_id)
             .join(StudentClass, StudentClass.student_id == Student.student_id)
             .filter(StudentClass.class_id.in_(class_ids))
             .filter(Student.user_id.isnot(None))
@@ -118,8 +134,15 @@ def notify_students_for_classwork(
             .all()
         )
 
-        for (user_id,) in student_users:
+        for user_id, student_class_id in student_classes:
             if user_id:
+                target_url = action_url
+                assignment_id = assignment_map.get(student_class_id)
+                if assignment_id and subject_id:
+                    target_url = f"/student/subjects/{student_class_id}/{subject_id}?tab=classwork&classworkAssignmentId={assignment_id}"
+                elif not target_url:
+                    target_url = "/student/todo"
+
                 create_notification(
                     db,
                     NotificationCreate(
@@ -127,7 +150,7 @@ def notify_students_for_classwork(
                         notification_type=notification_type,
                         title=title,
                         body=body_text,
-                        action_url=action_url,
+                        action_url=target_url,
                     ),
                 )
     except Exception as err:
@@ -309,6 +332,8 @@ async def create_classwork_wizard_record(
                 title=notif_title,
                 body_text=notif_body,
                 notification_type="assignment_due",
+                classwork_id=classwork.classwork_id,
+                subject_id=subject_id,
             )
 
         return build_classwork_response(classwork)
@@ -396,7 +421,7 @@ def check_and_notify_post_deadline_summaries(db: Session, staff_id: str):
                     notification_type="assignment_due",
                     title=title_tag,
                     body=f"{subject_name} — Classwork '{cw.title}' deadline has passed. {submitted_students}/{total_students} students turned in their work.",
-                    action_url="/teacher/classworks",
+                    action_url=f"/teacher/classworks/{cw.classwork_id}",
                 ),
             )
     except Exception as err:
@@ -514,6 +539,8 @@ def update_classwork_record(
                 title=notif_title,
                 body_text=notif_body,
                 notification_type="assignment_due",
+                classwork_id=classwork.classwork_id,
+                subject_id=classwork.subject_id,
             )
     except Exception:
         db.rollback()
@@ -656,7 +683,7 @@ def assign_classwork_to_classes(
     validate_schedule(None, body.due_date, body.lock_date)
 
     academic_period_id = body.academic_period_id
-    if academic_period_id is None:
+    if not academic_period_id:
         from app.models.academic.AcademicPeriod import AcademicPeriod
         from app.models.academic.SubjectLoad import SubjectLoad
 
@@ -680,7 +707,7 @@ def assign_classwork_to_classes(
                 )
                 .first()
             )
-            if active_load:
+            if active_load and active_load[0]:
                 academic_period_id = active_load[0]
             else:
                 # 3. Fallback to current active academic period
@@ -750,6 +777,8 @@ def assign_classwork_to_classes(
                 title=notif_title,
                 body_text=notif_body,
                 notification_type="assignment_due",
+                classwork_id=classwork.classwork_id,
+                subject_id=classwork.subject_id,
             )
 
     except Exception:

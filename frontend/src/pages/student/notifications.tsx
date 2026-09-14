@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Tabs } from "../../components/retroui/Tabs";
 import { Button } from "@/components/retroui/Button";
 import { NotificationCard } from "../../components/notification-card";
@@ -7,6 +8,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Bell, ClipboardList, Loader2, Megaphone } from "lucide-react";
 import { LoadingPanel } from "@/components/loading-panel";
 import { EmptyStateCard } from "@/components/empty-state-card";
+import { routes } from "@/../routes";
 import {
   getNotifications,
   markAllNotificationsAsRead,
@@ -21,6 +23,7 @@ const tabs = [
 ];
 
 const Notifications = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("all");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,19 +58,41 @@ const Notifications = () => {
   };
 
   const handleCardClick = async (item: NotificationItem) => {
-    if (item.is_read) return;
-    try {
-      await markNotificationAsRead(item.notification_id);
-      setNotifications((prev) =>
-        prev.map((n) =>
-          n.notification_id === item.notification_id
-            ? { ...n, is_read: true }
-            : n,
-        ),
-      );
-    } catch (err) {
-      console.error("Failed to mark notification as read:", err);
+    if (!item.is_read) {
+      try {
+        await markNotificationAsRead(item.notification_id);
+        setNotifications((prev) =>
+          prev.map((n) =>
+            n.notification_id === item.notification_id
+              ? { ...n, is_read: true }
+              : n,
+          ),
+        );
+      } catch (err) {
+        console.error("Failed to mark notification as read:", err);
+      }
     }
+
+    // Tiered deep-link resolver
+    // 1. Announcements: simplest fallback (stay in place)
+    if (item.notification_type === "announcement") {
+      return;
+    }
+
+    // 2. Specific deep link in action_url (e.g. /student/subjects/... or /student/todo)
+    if (item.action_url && item.action_url.trim() && item.action_url !== "/student/notifications") {
+      navigate(item.action_url);
+      return;
+    }
+
+    // 3. Fallback based on notification role / type
+    if (item.notification_type === "risk_alert") {
+      navigate(routes.student.interventions);
+      return;
+    }
+
+    // Default fallback for classwork and grades
+    navigate(routes.student.todo);
   };
 
   const classworkItems = notifications.filter(
