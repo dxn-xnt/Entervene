@@ -23,6 +23,14 @@ export type NotificationListResponse = {
   notifications: NotificationItem[];
 };
 
+export const NOTIFICATIONS_CHANGED_EVENT = "entervene:notifications-changed";
+
+function announceNotificationsChanged() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
+  }
+}
+
 export async function getNotifications(unreadOnly = false, limit = 50): Promise<NotificationListResponse> {
   const params = new URLSearchParams({
     unread_only: String(unreadOnly),
@@ -38,7 +46,9 @@ export async function markNotificationAsRead(notificationId: string): Promise<No
     method: "PATCH",
   });
   if (!res.ok) throw new Error("Failed to mark notification as read");
-  return res.json();
+  const notification: NotificationItem = await res.json();
+  announceNotificationsChanged();
+  return notification;
 }
 
 export async function markAllNotificationsAsRead(): Promise<{ marked_read: number }> {
@@ -46,5 +56,7 @@ export async function markAllNotificationsAsRead(): Promise<{ marked_read: numbe
     method: "PATCH",
   });
   if (!res.ok) throw new Error("Failed to mark all notifications as read");
-  return res.json();
+  const result: { marked_read: number } = await res.json();
+  announceNotificationsChanged();
+  return result;
 }

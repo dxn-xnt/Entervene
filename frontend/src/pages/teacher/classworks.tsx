@@ -211,8 +211,9 @@ export default function Classworks() {
 
               <Button
                 type="button"
+                size="header"
                 onClick={openCreateWizard}
-                className="shrink-0 gap-1.5 whitespace-nowrap px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+                className="shrink-0 whitespace-nowrap"
               >
                 <Plus className="size-4" />
                 <span className="hidden sm:inline">New Classwork</span>

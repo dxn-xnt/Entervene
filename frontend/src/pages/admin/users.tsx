@@ -312,7 +312,8 @@ export default function AdminUsers() {
                 <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">User Management</h1>
               </div>
               <Button
-                className="w-full justify-center gap-1.5 px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm md:w-auto"
+                size="header"
+                className="w-full whitespace-nowrap md:w-auto"
                 onClick={() => setModalOpen(true)}
               >
                 <Plus className="size-4" />

@@ -1,5 +1,4 @@
 import AppLayout from "@/layouts/app-layout";
-import { SubjectCard } from "../../components/subject-card";
 import { Card } from "@/components/retroui/Card";
 import { Button } from "@/components/retroui/Button";
 import { Text } from "@/components/retroui/Text";
@@ -15,7 +14,7 @@ import { EmptyStateCard } from "@/components/empty-state-card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { routes } from "@/../routes";
-import type { StudentSubjectItem, TodoItem } from "@/lib/api";
+import type { TodoItem } from "@/lib/api";
 import { Badge } from "@/components/retroui/Badge";
 import { GradeOverviewCards } from "@/components/student/grade-overview-cards";
 import { useStudentOverviewData } from "@/hooks/use-student-overview-data";
@@ -41,14 +40,6 @@ const StoryBoard = () => {
     }
   };
 
-  const handleSubjectClick = (subject: StudentSubjectItem) => {
-    navigate(
-      routes.student.subjectDetail
-        .replace(":classId", String(subject.class_id))
-        .replace(":subjectId", String(subject.subject_id)),
-    );
-  };
-
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-x-clip">
@@ -64,9 +55,9 @@ const StoryBoard = () => {
               <div className="flex shrink-0 items-center gap-2">
                 <Button
                   type="button"
-                  size="sm"
+                  size="header"
                   onClick={() => navigate(routes.student.profile)}
-                  className="gap-1.5 whitespace-nowrap px-2 sm:px-3"
+                  className="whitespace-nowrap"
                   aria-label="View my schedule"
                 >
                   <Calendar className="size-4" />
@@ -79,42 +70,9 @@ const StoryBoard = () => {
             <div className="-mt-[1px] flex flex-1 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               <GradeOverviewCards todos={todos} isLoading={isLoading} error={error} />
 
-              <div className="flex flex-col lg:flex-row lg:items-start gap-4 flex-1">
-                {/* Left side: Subject cards */}
-                <div className="grid min-w-0 flex-1 grid-cols-1 content-start gap-3 sm:grid-cols-2 sm:gap-4">
-                  {isLoading ? (
-                    <LoadingPanel label="Loading subjects..." className="sm:col-span-2" />
-                  ) : error ? (
-                    <EmptyStateCard
-                      title="Unable to load subjects"
-                      description={error}
-                      className="px-4 py-10 sm:col-span-2"
-                    />
-                  ) : subjects.length === 0 ? (
-                    <EmptyStateCard
-                      title="No enrolled subjects found."
-                      className="px-4 py-10 sm:col-span-2 sm:px-6 sm:py-12"
-                    />
-                  ) : (
-                    subjects.map((subject) => (
-                      <SubjectCard
-                        key={subject.subject_load_id}
-                        title={subject.subject_name}
-                        onClick={() => handleSubjectClick(subject)}
-                        teacher={subject.teacher_name}
-                        badges={[
-                          {
-                            label: subject.section_name || "Section",
-                            count: 0,
-                          },
-                        ]}
-                      />
-                    ))
-                  )}
-                </div>
-
-                {/* Right side: Top Card + To do Card */}
-                <div className="flex w-full min-w-0 shrink-0 flex-col gap-4 lg:w-[30%]">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {/* Right column: Week Streak + To do Card aligned under Subject Performance */}
+                <div className="flex w-full min-w-0 flex-col gap-4 md:col-span-2 xl:col-start-3 xl:col-span-1">
                   <Card className="block w-full border-black bg-white shadow-md hover:shadow-none">
                     <Card.Content className="">
                       <div className="flex flex-col gap-1">
@@ -173,7 +131,7 @@ const StoryBoard = () => {
                           variant="outline"
                           size="icon"
                           onClick={() => navigate(routes.student.todo)}
-                          className="rounded border-black bg-white"
+                          className="rounded-none border-black bg-white"
                           aria-label="View all to-do items"
                         >
                           <ArrowUpRight size={18} />
@@ -226,7 +184,7 @@ const StoryBoard = () => {
                                 <Badge
                                   variant="secondary"
                                   size="sm"
-                                  className="shrink-0 rounded border border-red-400 bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700"
+                                  className="shrink-0 rounded-none border border-red-400 bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700"
                                 >
                                   Past Due
                                 </Badge>

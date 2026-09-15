@@ -129,8 +129,9 @@ const Dashboard = () => {
                 </div>
               </div>
               <Button
+                size="header"
                 onClick={() => navigate(routes.teacher.profile)}
-                className="shrink-0 gap-1.5 whitespace-nowrap px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+                className="shrink-0 whitespace-nowrap"
               >
                 <Calendar className="size-4" />
                 <span className="sm:hidden">Schedule</span>

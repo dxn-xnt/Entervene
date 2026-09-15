@@ -187,11 +187,11 @@ export default function AdminClasses() {
                   </h1>
                 </div>
               </div>
-              <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-row [&_button]:min-w-0 [&_button]:px-2 [&_button]:text-xs md:[&_button]:px-4 md:[&_button]:text-sm">
+              <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-row [&_button]:min-w-0">
                 <Dialog open={showNewClass} onOpenChange={setShowNewClass}>
                   <Dialog.Trigger className="w-full md:w-auto">
-                    <Button className="w-full justify-center whitespace-nowrap md:w-auto">
-                      <Plus className="mr-1 size-4 md:mr-2" /> New Class
+                    <Button size="header" className="w-full justify-center whitespace-nowrap md:w-auto">
+                      <Plus className="size-4" /> New Class
                     </Button>
                   </Dialog.Trigger>
                   <AddClassModal
@@ -200,8 +200,8 @@ export default function AdminClasses() {
                   />
                 </Dialog>
                 <Link to={routes.admin.subjectLoadStudio} className="w-full md:w-auto">
-                  <Button variant={"outline"} className="w-full justify-center whitespace-nowrap md:w-auto">
-                    <Plus className="mr-1 size-4 md:mr-2" /> Subject Load Studio
+                  <Button size="header" variant={"outline"} className="w-full justify-center whitespace-nowrap md:w-auto">
+                    <Plus className="size-4" /> Subject Load Studio
                   </Button>
                 </Link>
               </div>
