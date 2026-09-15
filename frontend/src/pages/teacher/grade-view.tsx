@@ -909,8 +909,9 @@ const TeacherGradeView = () => {
               <div className="grid w-full grid-cols-2 items-center gap-2 md:ml-auto md:flex md:w-auto md:flex-row">
                 {!isViewOnly && activeTab.startsWith("term-") && (
                   <Button
+                    size="header"
                     variant="default"
-                    className="min-w-0 whitespace-nowrap border-2 border-black bg-primary px-2 text-xs font-bold text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-primary-hover md:px-4 md:text-sm"
+                    className="min-w-0 whitespace-nowrap"
                     onClick={() => setShowBulkConfirm(true)}
                     disabled={sendingAll || filtered.length === 0}
                     title={
@@ -919,23 +920,24 @@ const TeacherGradeView = () => {
                         : "Send finalized grades for all students in this section to adviser"
                     }
                   >
-                    <Send className="mr-1 size-4 md:mr-2" /> Send All to Adviser
+                    <Send className="size-4" /> Send All to Adviser
                   </Button>
                 )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
+                      size="header"
                       variant={"outline"}
                       disabled={isExporting}
-                      className="whitespace-nowrap font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-100 disabled:opacity-50 flex items-center gap-1.5"
+                      className="whitespace-nowrap disabled:opacity-50"
                     >
                       {isExporting ? (
                         <>
-                          <Loader2 className="size-4 mr-1 animate-spin" /> Exporting...
+                          <Loader2 className="size-4 animate-spin" /> Exporting...
                         </>
                       ) : (
                         <>
-                          <Download className="size-4 mr-1" /> Export Grades
+                          <Download className="size-4" /> Export Grades
                           <ChevronDown className="size-3.5 opacity-70" />
                         </>
                       )}

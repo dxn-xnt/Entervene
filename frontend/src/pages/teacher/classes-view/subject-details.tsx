@@ -950,13 +950,14 @@ export default function SubjectDetails() {
                   <div className="flex flex-wrap w-full gap-2 md:flex md:w-auto md:flex-nowrap md:items-center">
                     <Button
                       type="button"
+                      size="header"
                       variant="outline"
                       onClick={() =>
                         navigate(
                           `/teacher/classes/${classId}/subjects/${subjectId}/lesson-planner`,
                         )
                       }
-                      className="w-full gap-1.5 whitespace-nowrap px-2 sm:gap-2 sm:px-4 md:w-auto"
+                      className="w-full whitespace-nowrap md:w-auto"
                     >
                       <BookOpenCheck size={16} />
                       Lesson Planner
@@ -965,21 +966,23 @@ export default function SubjectDetails() {
                       <>
                         <Button
                           type="button"
+                          size="header"
                           variant="outline"
                           onClick={() => openCompetencyForm(null)}
-                          className="w-full gap-1.5 whitespace-nowrap px-2 sm:gap-2 sm:px-4 md:w-auto"
+                          className="w-full whitespace-nowrap md:w-auto"
                         >
                           <Award size={16} />
                           Add Competency
                         </Button>
                         <Button
                           type="button"
+                          size="header"
                           variant="default"
                           onClick={() => {
                             setSelectedCompetencyIdForNewLesson(undefined);
                             setIsCreatingLesson(true);
                           }}
-                          className="w-full gap-1.5 whitespace-nowrap px-2 sm:gap-2 sm:px-4 md:w-auto"
+                          className="w-full whitespace-nowrap md:w-auto"
                         >
                           <Plus size={16} />
                           Add Lesson

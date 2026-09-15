@@ -183,9 +183,9 @@ export default function AdminSubstitutions() {
 
               <Button
                 variant="default"
-                size="md"
+                size="header"
                 onClick={() => setIsAssignModalOpen(true)}
-                className="w-full justify-center gap-1.5 whitespace-nowrap px-2 text-xs sm:w-auto sm:gap-2 sm:px-4 sm:text-sm"
+                className="w-full whitespace-nowrap sm:w-auto"
               >
                 <Plus className="size-4" />
                 <span>Assign Substitute</span>

@@ -30,6 +30,8 @@ export const buttonVariants = cva(
         md: "px-4 py-1.5 text-base",
         lg: "px-6 lg:px-8 py-2 lg:py-3 text-md lg:text-lg",
         icon: "p-2",
+        header: "h-10 shrink-0 gap-2 px-4 py-2 text-sm font-bold [&_svg]:mr-0 [&_svg]:size-4 [&_svg]:shrink-0",
+        headerIcon: "size-10 shrink-0 p-0 [&_svg]:m-0 [&_svg]:size-4 [&_svg]:shrink-0",
       },
     },
     defaultVariants: {
@@ -122,6 +124,7 @@ export const Button = React.forwardRef<HTMLButtonElement, IButtonProps>(
 
     return (
       <Comp
+        data-slot="button"
         ref={forwardedRef}
         className={cn(buttonVariants({ variant, size }), className)}
         {...props}

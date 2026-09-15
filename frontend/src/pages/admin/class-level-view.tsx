@@ -121,7 +121,7 @@ export default function AdminSubjectLevel() {
 
               <Dialog>
                 <Dialog.Trigger>
-                  <Button className="w-full gap-1.5 px-2 text-xs sm:w-auto sm:gap-2 sm:px-4 sm:text-sm">
+                  <Button size="header" className="w-full whitespace-nowrap sm:w-auto">
                     <Plus className="size-4" />
                     New Subject
                   </Button>
