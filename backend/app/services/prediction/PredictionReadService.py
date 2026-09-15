@@ -219,6 +219,7 @@ def get_prediction_detail(
         "risk_score": _to_float(prediction.risk_score),
         "risk_level": prediction.risk_level,
         "data_status": prediction.data_status,
+        "risk_assessment_status": prediction.risk_assessment_status,
         "generated_at": prediction.generated_at,
         "model_version": _model_version(prediction.model_version),
         "features": [] if prediction.evidence_snapshot is not None else [_feature(row) for row in feature_rows],

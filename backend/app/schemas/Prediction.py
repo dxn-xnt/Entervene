@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal, Union
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.services.prediction.ModelScoringService import DEFAULT_MODEL_NAME
 from app.services.prediction.TeacherAssignmentResolver import TeacherStatusLabel
@@ -12,6 +12,7 @@ from app.services.prediction.TeacherAssignmentResolver import TeacherStatusLabel
 
 class PredictionIntegrityMetadata(BaseModel):
     revision: int | None = None
+    model_purpose: str | None = None
     prediction_purpose: str | None = None
     validation_status: str | None = None
     purpose_label: str | None = None
@@ -46,9 +47,10 @@ class PredictionPreviewResponse(BaseModel):
     model_type: str
     algorithm: str
     predicted_period_grade: float | None
-    risk_level: str
-    risk_score: float
-    data_status: str
+    risk_level: str | None
+    risk_score: float | None
+    data_status: str | None
+    risk_assessment_status: str | None = None
     reasons: list[str] = Field(default_factory=list)
     recommended_action: str | None = None
     triggered_rules: list[str] = Field(default_factory=list)
@@ -66,9 +68,10 @@ class PredictionPersistResponse(PredictionIntegrityMetadata):
     source_period_id: int
     target_period_id: int
     predicted_period_grade: float | None
-    risk_level: str
+    risk_level: str | None
     risk_score: float | None
-    data_status: str
+    data_status: str | None
+    risk_assessment_status: str | None = None
     reasons: list[str] = Field(default_factory=list)
     recommended_action: str | None = None
     triggered_rules: list[str] = Field(default_factory=list)
@@ -86,9 +89,10 @@ class PredictionSummaryResponse(PredictionIntegrityMetadata):
     target_period_id: int
     model_version_id: int | None = None
     predicted_period_grade: float | None
-    risk_level: str
+    risk_level: str | None
     risk_score: float | None
-    data_status: str
+    data_status: str | None
+    risk_assessment_status: str | None = None
     generated_at: datetime | None = None
 
 
@@ -224,8 +228,9 @@ class PredictionDetailResponse(PredictionIntegrityMetadata):
     target_period_id: int
     predicted_period_grade: float | None = None
     risk_score: float | None = None
-    risk_level: str
-    data_status: str
+    risk_level: str | None
+    data_status: str | None
+    risk_assessment_status: str | None = None
     generated_at: datetime | None = None
     model_version: PredictionModelVersionRead | None = None
     features: list[PredictionFeatureResponse] = Field(default_factory=list)
@@ -314,9 +319,10 @@ class PredictionFromRecordsResponse(PredictionIntegrityMetadata):
     readiness_level: str
     prediction_mode: str
     predicted_period_grade: float | None = None
-    risk_level: str
+    risk_level: str | None
     risk_score: float | None = None
-    data_status: str
+    data_status: str | None
+    risk_assessment_status: str | None = None
     reasons: list[str] = Field(default_factory=list)
     recommended_action: str | None = None
     triggered_rules: list[str] = Field(default_factory=list)
@@ -355,6 +361,7 @@ class PredictionStatusLatestRead(PredictionIntegrityMetadata):
     risk_level: str | None = None
     risk_score: float | None = None
     data_status: str | None = None
+    risk_assessment_status: str | None = None
     generation_reason: str | None = None
 
 
@@ -430,6 +437,76 @@ class PredictionHistoryResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Single-Prediction Status Schemas (Discriminated by model_purpose)
+# ---------------------------------------------------------------------------
+
+class CurrentEvidenceReadinessRead(BaseModel):
+    level: str
+    ready: bool
+    reasons: list[str] = Field(default_factory=list)
+
+
+class CurrentProjectionFreshnessRead(BaseModel):
+    status: str
+    saved_fingerprint: str | None = None
+    current_fingerprint: str | None = None
+    reasons: list[str] = Field(default_factory=list)
+
+
+class CurrentModelCurrencyRead(BaseModel):
+    status: str
+    persisted_model_version_id: int | None = None
+    active_model_version_id: int | None = None
+    persisted_model_name: str | None = None
+    active_model_name: str | None = None
+
+
+class CurrentRefreshEligibilityRead(BaseModel):
+    status: str
+    eligible: bool
+    reasons: list[str] = Field(default_factory=list)
+
+
+class CurrentPeriodPredictionStatusRead(BaseModel):
+    evidence_readiness: CurrentEvidenceReadinessRead
+    projection_freshness: CurrentProjectionFreshnessRead
+    model_currency: CurrentModelCurrencyRead
+    refresh_eligibility: CurrentRefreshEligibilityRead
+    requested_prediction: dict[str, Any] | None = None
+    latest_prediction: dict[str, Any] | None = None
+    domain_warnings: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class NextPeriodPredictionStatusRead(BaseModel):
+    status: str
+    message: str
+    evidence_readiness: PredictionReadinessStatus
+    forecast_eligibility: PredictionEligibilityStatus
+    forecast_freshness: PredictionFreshnessStatus
+    requested_prediction: PredictionStatusLatestRead | None = None
+    latest_prediction: PredictionStatusLatestRead | None = None
+
+
+class CurrentPredictionStatusEnvelope(BaseModel):
+    prediction_id: int
+    model_purpose: Literal["CURRENT_PERIOD_FINAL_GRADE_PROJECTION"]
+    status: CurrentPeriodPredictionStatusRead
+
+
+class NextPredictionStatusEnvelope(BaseModel):
+    prediction_id: int
+    model_purpose: Literal["NEXT_PERIOD_BASELINE_FORECAST"]
+    status: NextPeriodPredictionStatusRead
+
+
+PredictionStatusEnvelopeResponse = Annotated[
+    Union[CurrentPredictionStatusEnvelope, NextPredictionStatusEnvelope],
+    Field(discriminator="model_purpose"),
+]
+
+
+
+# ---------------------------------------------------------------------------
 # Dashboard schemas
 # ---------------------------------------------------------------------------
 
@@ -449,9 +526,10 @@ class DashboardPredictionItem(PredictionIntegrityMetadata):
     teacher_staff_id: str | None = None
     teacher_status_label: TeacherStatusLabel = TeacherStatusLabel.UNASSIGNED
     predicted_period_grade: float | None = None
-    risk_level: str
+    risk_level: str | None
     risk_score: float | None = None
-    data_status: str
+    data_status: str | None
+    risk_assessment_status: str | None = None
     generated_at: datetime | None = None
 
 
@@ -495,7 +573,6 @@ class DashboardTermOption(BaseModel):
     term_label: str
     academic_period_id: int
 
-
 class DashboardFilterOptionsResponse(BaseModel):
     grades: list[DashboardGradeOption] = Field(default_factory=list)
     classes: list[DashboardClassOption] = Field(default_factory=list)
@@ -521,3 +598,108 @@ class DashboardGradeGroupSummary(BaseModel):
     sections: list[DashboardSectionSummaryItem] = Field(default_factory=list)
 
 
+# ---------------------------------------------------------------------------
+# Task 6C: Dual-Purpose Roster Schemas
+# ---------------------------------------------------------------------------
+
+LegacyPredictionRosterResponse = PredictionRosterStatusResponse
+
+
+class PeriodOutcomeRead(BaseModel):
+    status: str  # "FINALIZED" | "IN_PROGRESS"
+    actual_grade: float | None = None
+
+
+class RosterTeacherRead(BaseModel):
+    staff_id: str
+    teacher_name: str | None = None
+    full_name: str | None = None
+    email: str | None = None
+
+
+class RosterClassContext(BaseModel):
+    class_id: int
+    class_name: str
+    subject_id: int
+    subject_name: str
+    academic_period_id: int
+    period_label: str
+    academic_year_id: int
+    next_period_status: str | None = None  # "AVAILABLE" | "NO_NEXT_PERIOD"
+    teacher: RosterTeacherRead | None = None
+
+
+class StudentSummaryRead(BaseModel):
+    student_id: UUID
+    student_name: str
+    student_lrn: str
+
+
+class BaselineForecastSummaryRead(BaseModel):
+    purpose: Literal["NEXT_PERIOD_BASELINE_FORECAST"] = "NEXT_PERIOD_BASELINE_FORECAST"
+    status: str
+    message: str | None = None
+    source_period_id: int | None = None
+    target_period_id: int | None = None
+    source_period_label: str | None = None
+    target_period_label: str | None = None
+    predicted_grade: float | None = None
+    risk_level: str | None = None
+    risk_score: float | None = None
+    data_status: str | None = None
+    risk_assessment_status: str | None = None
+    evidence_readiness: PredictionReadinessStatus | None = None
+    forecast_eligibility: PredictionEligibilityStatus | None = None
+    forecast_freshness: PredictionFreshnessStatus | None = None
+    latest_prediction_id: int | None = None
+    model_version: dict[str, Any] | None = None
+    revision: int | None = None
+    generated_at: datetime | None = None
+
+
+class CurrentProjectionSummaryRead(BaseModel):
+    purpose: Literal["CURRENT_PERIOD_FINAL_GRADE_PROJECTION"] = "CURRENT_PERIOD_FINAL_GRADE_PROJECTION"
+    source_period_id: int | None = None
+    target_period_id: int | None = None
+    source_period_label: str | None = None
+    target_period_label: str | None = None
+    predicted_grade: float | None = None
+    risk_level: str | None = None
+    risk_score: float | None = None
+    data_status: str | None = None
+    risk_assessment_status: str | None = None
+    evidence_readiness: CurrentEvidenceReadinessRead | None = None
+    projection_freshness: CurrentProjectionFreshnessRead | None = None
+    model_currency: CurrentModelCurrencyRead | None = None
+    refresh_eligibility: CurrentRefreshEligibilityRead | None = None
+    domain_warnings: list[dict[str, Any]] = Field(default_factory=list)
+    latest_prediction_id: int | None = None
+    model_version: dict[str, Any] | None = None
+    revision: int | None = None
+    generated_at: datetime | None = None
+
+
+class DualPurposeRosterStudentItem(BaseModel):
+    student: StudentSummaryRead
+    period_outcome: PeriodOutcomeRead
+    baseline_forecast: BaselineForecastSummaryRead
+    current_projection: CurrentProjectionSummaryRead
+    primary_display: Literal["CURRENT_PROJECTION", "BASELINE_FORECAST", "NONE"]
+
+
+class DualPurposeRosterResponse(BaseModel):
+    class_context: RosterClassContext
+    students: list[DualPurposeRosterStudentItem] = Field(default_factory=list)
+    total: int
+
+    @model_validator(mode="before")
+    @classmethod
+    def _remap_roster_to_students(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "students" not in data and "roster" in data:
+                data = dict(data)
+                data["students"] = data.pop("roster")
+            elif "roster" in data and "students" in data:
+                data = dict(data)
+                data.pop("roster", None)
+        return data

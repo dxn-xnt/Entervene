@@ -28,6 +28,11 @@ from app.models.academic.TeacherSubstitution import TeacherSubstitution
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.services.grading.ComponentMapper import (
+    CanonicalGradingComponent,
+    classify_classwork_component,
+    classify_template_component_name,
+)
 from app.schemas.StudentRecord import (
     BulkSendGradesRequest,
     BulkSendGradesToAdviserResponse,
@@ -427,35 +432,16 @@ def teacher_student_gradebook(
 
 
 def _categorize_assignment(assignment: ClassworkAssignment) -> str:
-    cat = (assignment.classwork.classwork_category or "").upper().replace(" ", "_").replace("-", "_")
-    cw_type = (assignment.classwork.classwork_type or "").upper()
-
-    # 1. Quarterly / exam signals (strongest priority)
-    if (
-        "EXAM" in cat
-        or "QUARTERLY" in cat
-        or "QUARTER" in cat
-        or "PERIODIC" in cat
-        or "SUMMATIVE" in cat
-        or cw_type == "EXAM"
-        or (getattr(assignment.classwork, "exam_subtype", None) is not None)
-    ):
+    component = classify_classwork_component(
+        assignment.classwork.classwork_type,
+        assignment.classwork.classwork_category,
+        getattr(assignment.classwork, "exam_subtype", None),
+    )
+    if component == CanonicalGradingComponent.ASSESSMENT:
         return "quarterlyAssessment"
-
-    # 2. Explicit written-work category name
-    if "WRITTEN" in cat or "SEAT" in cat:
+    if component == CanonicalGradingComponent.WRITTEN_WORK:
         return "writtenWork"
-
-    # 3. Explicit performance-task category name
-    if "PERFORMANCE" in cat or "PROJECT" in cat:
-        return "performanceTask"
-
-    # 4. Type-based fallback (ASSIGNMENT and QUIZ are written-work by default in DepEd)
-    if cw_type in ("ACTIVITY", "PROJECT"):
-        return "performanceTask"
-
-    # 5. Default: written work
-    return "writtenWork"
+    return "performanceTask"
 
 
 @dataclass
@@ -624,49 +610,7 @@ FALLBACK_GRADING_WEIGHTS = GradingWeights(
 
 def _match_component_category(name: str) -> str | None:
     """Classify a grading template component name into WW, PT, or QA."""
-    raw = (name or "").strip()
-    if not raw:
-        return None
-    n = raw.upper().replace("-", " ").replace("_", " ")
-    words = set(re.findall(r"\b[A-Z0-9]+\b", n))
-
-    # Precedence 1: Explicit Examination Signals
-    has_exam_signal = any(k in words for k in ("EXAM", "EXAMS", "EXAMINATION", "EXAMINATIONS", "PERIODIC", "PERIODICAL", "QA", "MIDTERM", "SUMMATIVE")) or "QUARTERLY" in n
-    has_term_assessment = "TERM ASSESSMENT" in n or "TERM EXAM" in n or "QUARTERLY ASSESSMENT" in n
-
-    # Exception: "Periodic Quiz" / "Quizzes" has quiz keyword, which is Written Work
-    has_quiz = any(k in words for k in ("QUIZ", "QUIZZES"))
-    if has_quiz and not any(k in words for k in ("EXAM", "EXAMS", "EXAMINATION", "EXAMINATIONS", "MIDTERM")):
-        return "WW"
-
-    if has_exam_signal or has_term_assessment:
-        return "QA"
-
-    # Precedence 2: Standalone 'TERM' without exam keywords
-    if "TERM" in words:
-        if any(p in words for p in ("PROJECT", "PROJECTS", "PERFORMANCE", "TASK", "TASKS", "PORTFOLIO", "PORTFOLIOS", "PRODUCT", "PRACTICUM")):
-            return "PT"
-        return "QA"
-
-    # Precedence 3: Performance Task Signals
-    pt_keywords = {
-        "PERFORMANCE", "PERFORMANCES", "PROJECT", "PROJECTS", "ACTIVITY", "ACTIVITIES",
-        "PT", "PRODUCT", "PRODUCTS", "TASK", "TASKS", "PORTFOLIO", "PORTFOLIOS",
-        "DEMONSTRATION", "DEMONSTRATIONS", "PRACTICUM",
-    }
-    if words.intersection(pt_keywords) or "PERFORMANCE TASK" in n or "PERFORMANCE TASKS" in n:
-        return "PT"
-
-    # Precedence 4: Written Work Signals
-    ww_keywords = {
-        "WRITTEN", "SEATWORK", "SEATWORKS", "QUIZ", "QUIZZES", "WW",
-        "WORK", "WORKS", "ASSIGNMENT", "ASSIGNMENTS", "EXERCISE", "EXERCISES",
-        "MODULE", "MODULES",
-    }
-    if words.intersection(ww_keywords) or "WRITTEN WORK" in n or "WRITTEN WORKS" in n:
-        return "WW"
-
-    return None
+    return classify_template_component_name(name)
 
 
 def resolve_subject_grading_weights(
