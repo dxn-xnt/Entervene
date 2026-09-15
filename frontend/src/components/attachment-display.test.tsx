@@ -82,4 +82,55 @@ describe("AttachmentDisplay View Trigger", () => {
     expect(html).toContain("notes.docx");
     expect(html).toContain("slides.pptx");
   });
+
+  it("uses the bare download URL (not ?inline=true) as the new-tab href for PPTX attachments", () => {
+    // PPTX has no standalone renderable URL — the viewer works via ArrayBuffer postMessage.
+    // Modified-clicks (Ctrl+click) should download the file, not navigate to a broken inline URL.
+    const html = renderToStaticMarkup(
+      <AttachmentDisplay
+        type="classwork"
+        attachments={[
+          {
+            classwork_attachment_id: 501,
+            file_name: "slides.pptx",
+            file_size: 8192,
+          },
+        ]}
+        downloadUrl={(id) => `http://localhost:8000/api/v1/classwork-assignments/classwork/5/attachments/${id}/download`}
+      />,
+    );
+
+    // Must contain the plain download URL as the href — no ?inline=true suffix
+    expect(html).toContain(
+      'href="http://localhost:8000/api/v1/classwork-assignments/classwork/5/attachments/501/download"'
+    );
+    // Must NOT contain the inline variant for PPTX
+    expect(html).not.toContain(
+      'href="http://localhost:8000/api/v1/classwork-assignments/classwork/5/attachments/501/download?inline=true"'
+    );
+    // View button is still present
+    expect(html).toContain("View");
+  });
+
+  it("uses ?inline=true as the new-tab href for PDF attachments (not affected by PPTX change)", () => {
+    // Confirms the PPTX href fix is narrowly scoped and does not bleed into PDF behavior.
+    const html = renderToStaticMarkup(
+      <AttachmentDisplay
+        type="classwork"
+        attachments={[
+          {
+            classwork_attachment_id: 601,
+            file_name: "report.pdf",
+            file_type: "application/pdf",
+            file_size: 4096,
+          },
+        ]}
+        downloadUrl={(id) => `http://localhost:8000/api/v1/classwork-assignments/classwork/6/attachments/${id}/download`}
+      />,
+    );
+
+    expect(html).toContain(
+      'href="http://localhost:8000/api/v1/classwork-assignments/classwork/6/attachments/601/download?inline=true"'
+    );
+  });
 });
