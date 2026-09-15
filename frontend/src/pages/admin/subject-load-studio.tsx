@@ -1479,8 +1479,9 @@ export default function AdminSubjectLoadStudio() {
               </div>
 
               {/* Sticky Action Controls */}
-              <div className="grid w-full grid-cols-2 gap-2 [&_button]:w-full [&_button]:justify-center [&_button]:px-2 [&_button]:text-xs md:flex md:w-auto md:flex-wrap md:gap-3 md:self-auto md:[&_button]:w-auto md:[&_button]:px-4 md:[&_button]:text-sm">
+              <div className="grid w-full grid-cols-2 gap-2 [&_button]:w-full md:flex md:w-auto md:flex-wrap md:gap-2 md:self-auto md:[&_button]:w-auto">
                 <Button
+                  size="header"
                   className="hidden md:inline-flex"
                   variant="outline"
                   disabled={isSaving}
@@ -1493,6 +1494,7 @@ export default function AdminSubjectLoadStudio() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
+                      size="header"
                       className="hidden gap-2 md:inline-flex"
                       variant="outline"
                       disabled={isLoading || isSaving}
@@ -1532,7 +1534,7 @@ export default function AdminSubjectLoadStudio() {
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button className="col-span-2 gap-2 md:hidden" variant="outline" disabled={isLoading || isSaving}>
+                    <Button size="header" className="col-span-2 gap-2 md:hidden" variant="outline" disabled={isLoading || isSaving}>
                       <EllipsisIcon className="size-4" /> Schedule Actions
                     </Button>
                   </DropdownMenuTrigger>
@@ -1556,6 +1558,7 @@ export default function AdminSubjectLoadStudio() {
 
                 {/* Publish Action */}
                 <Button
+                  size="header"
                   className="col-span-2 gap-2 md:col-auto"
                   variant={isMasterPublishDisabled ? "default" : "outline"}
                   disabled={isSaving}

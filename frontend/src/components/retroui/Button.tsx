@@ -22,6 +22,8 @@ export const buttonVariants = cva(
           "shadow-md hover:shadow active:shadow-none bg-secondary shadow-primary text-secondary-foreground border-2 border-black transition hover:translate-y-1 active:translate-y-2 active:translate-x-1 hover:bg-secondary-hover",
         outline:
           "shadow-md hover:shadow active:shadow-none bg-background border-2 border-border transition hover:translate-y-1 active:translate-y-2 active:translate-x-1",
+        destructive:
+          "bg-destructive text-destructive-foreground border-2 border-black shadow-md transition hover:translate-y-1 hover:bg-destructive/90 hover:shadow active:translate-x-1 active:translate-y-2 active:shadow-none",
         link: "bg-transparent text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         ghost: "bg-transparent hover:bg-accent"
       },
@@ -30,6 +32,8 @@ export const buttonVariants = cva(
         md: "px-4 py-1.5 text-base",
         lg: "px-6 lg:px-8 py-2 lg:py-3 text-md lg:text-lg",
         icon: "p-2",
+        header: "h-10 shrink-0 gap-2 px-4 py-2 text-sm font-bold [&_svg]:mr-0 [&_svg]:size-4 [&_svg]:shrink-0",
+        headerIcon: "size-10 shrink-0 p-0 [&_svg]:m-0 [&_svg]:size-4 [&_svg]:shrink-0",
       },
     },
     defaultVariants: {
@@ -122,6 +126,7 @@ export const Button = React.forwardRef<HTMLButtonElement, IButtonProps>(
 
     return (
       <Comp
+        data-slot="button"
         ref={forwardedRef}
         className={cn(buttonVariants({ variant, size }), className)}
         {...props}
@@ -130,7 +135,6 @@ export const Button = React.forwardRef<HTMLButtonElement, IButtonProps>(
           <>
             {Icon && React.createElement(Icon, {
               "aria-hidden": true,
-              className: "mr-2 size-4 shrink-0",
             })}
             {children}
           </>

@@ -10,7 +10,7 @@ from app.core.Dependencies import get_current_user, get_optional_staff_id, get_s
 from app.db.Session import get_db
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
-from app.models.ai.AIPrediction import AIPrediction
+from app.models.ai.AIPrediction import AIPrediction, RISK_ASSESSMENT_EVALUATED
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
 from app.schemas.Prediction import (
     DashboardAtRiskResponse,
@@ -34,10 +34,17 @@ from app.schemas.Prediction import (
     PredictionPreviewResponse,
     PredictionRefreshRequest,
     PredictionRosterStatusResponse,
+    DualPurposeRosterResponse,
+    LegacyPredictionRosterResponse,
+    PredictionStatusEnvelopeResponse,
     PredictionSummaryResponse,
     PredictionTeacherReviewListResponse,
     TeacherRiskReviewRequest,
     TeacherRiskReviewResponse,
+)
+from app.models.ai.AIModelVersion import ModelPurpose
+from app.services.prediction.CurrentPeriodPredictionGenerationService import (
+    refresh_current_period_prediction_workflow,
 )
 from app.services.prediction.ModelPerformanceService import get_model_performance_summary
 from app.services.prediction.ModelScoringService import DEFAULT_MODEL_NAME, score_student_prediction
@@ -69,6 +76,7 @@ from app.services.prediction.DashboardPredictionService import (
 )
 from app.services.prediction.DashboardFilterService import get_dashboard_filter_options
 from app.services.prediction.PredictionStatusService import (
+    get_dual_purpose_roster_status,
     get_prediction_history,
     get_roster_prediction_status,
 )
@@ -96,6 +104,7 @@ def _summary(prediction: AIPrediction) -> dict[str, Any]:
         "risk_level": prediction.risk_level,
         "risk_score": _to_float(prediction.risk_score),
         "data_status": prediction.data_status,
+        "risk_assessment_status": prediction.risk_assessment_status,
         "generated_at": prediction.generated_at,
     }
 
@@ -273,26 +282,65 @@ def dashboard_filters(
     )
 
 
-@router.get("/status/roster", response_model=PredictionRosterStatusResponse)
+@router.get("/status/roster", response_model=DualPurposeRosterResponse | LegacyPredictionRosterResponse)
 def roster_prediction_status(
     class_id: int,
     subject_id: int,
-    source_period_id: int,
+    academic_period_id: int | None = None,
+    source_period_id: int | None = None,
     target_period_id: int | None = None,
     current_user: dict = Depends(require_role("admin", "teacher")),
     staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
-    try:
-        return get_roster_prediction_status(
-            db,
-            class_id=class_id,
-            subject_id=subject_id,
-            source_period_id=source_period_id,
-            target_period_id=target_period_id,
-            staff_id=staff_id,
-            is_admin=current_user.get("role") == "admin",
+    if academic_period_id is None and source_period_id is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Either academic_period_id (for dual-purpose roster) or source_period_id (for legacy roster) must be provided.",
         )
+
+    try:
+        if academic_period_id is not None:
+            if target_period_id is not None and target_period_id != academic_period_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Conflicting parameters: target_period_id {target_period_id} does not match academic_period_id {academic_period_id}.",
+                )
+            if source_period_id is not None:
+                focal_period = db.get(AcademicPeriod, academic_period_id)
+                if not focal_period:
+                    raise HTTPException(status_code=404, detail=f"Academic period {academic_period_id} not found.")
+                src_period = db.get(AcademicPeriod, source_period_id)
+                if not src_period:
+                    raise HTTPException(status_code=422, detail=f"Invalid source_period_id {source_period_id}.")
+                if (
+                    src_period.academic_year_id != focal_period.academic_year_id
+                    or src_period.period_sequence != focal_period.period_sequence - 1
+                ):
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Conflicting parameters: source_period_id {source_period_id} does not immediately precede academic_period_id {academic_period_id}.",
+                    )
+            return get_dual_purpose_roster_status(
+                db,
+                class_id=class_id,
+                subject_id=subject_id,
+                academic_period_id=academic_period_id,
+                staff_id=staff_id,
+                is_admin=current_user.get("role") == "admin",
+            )
+        else:
+            return get_roster_prediction_status(
+                db,
+                class_id=class_id,
+                subject_id=subject_id,
+                source_period_id=source_period_id,
+                target_period_id=target_period_id,
+                staff_id=staff_id,
+                is_admin=current_user.get("role") == "admin",
+            )
+    except HTTPException:
+        raise
     except (ValueError, PermissionError) as exc:
         raise _service_error(exc) from exc
 
@@ -428,7 +476,7 @@ def list_class_risk_predictions(
     db: Session = Depends(get_db),
 ):
     query = db.query(AIPrediction).filter(AIPrediction.class_id == class_id)
-    query = query.filter(latest_prediction_filter())
+    query = query.filter(latest_prediction_filter(), AIPrediction.risk_assessment_status == RISK_ASSESSMENT_EVALUATED)
     if current_user.get("role") != "admin":
         query = query.filter(prediction_read_filter(db, staff_id))
     if subject_id is not None:
@@ -481,7 +529,8 @@ def refresh_prediction(
     staff_id: str | None = Depends(get_optional_staff_id),
     db: Session = Depends(get_db),
 ):
-    prediction = _authorized_prediction(db, prediction_id, current_user, staff_id, write=False)
+    prediction = _authorized_prediction(db, prediction_id, current_user, staff_id, write=True)
+    purpose = prediction.model_version.model_purpose if prediction.model_version else None
     scope = {
         "student_id": prediction.student_id,
         "class_id": prediction.class_id,
@@ -490,24 +539,82 @@ def refresh_prediction(
         "target_period_id": prediction.target_period_id,
     }
     try:
-        _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, scope)
-        key = payload.generation_request_id if payload else None
-        return run_prediction_generation_transaction(
-            scope,
-            prediction.model_version.model_name if prediction.model_version else DEFAULT_MODEL_NAME,
-            lambda generation_db: generate_from_records(
-                generation_db,
-                scope,
-                model_name=prediction.model_version.model_name if prediction.model_version else DEFAULT_MODEL_NAME,
-                is_admin=current_user.get("role") == "admin",
+        if purpose == ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value:
+            return refresh_current_period_prediction_workflow(
+                db,
+                prediction,
+                payload=payload,
+                current_user=current_user,
                 staff_id=staff_id,
+            )
+
+        if purpose == ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value:
+            _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, scope)
+            key = payload.generation_request_id if payload else None
+            return run_prediction_generation_transaction(
+                scope,
+                prediction.model_version.model_name if prediction.model_version else DEFAULT_MODEL_NAME,
+                lambda generation_db: generate_from_records(
+                    generation_db,
+                    scope,
+                    model_name=prediction.model_version.model_name if prediction.model_version else DEFAULT_MODEL_NAME,
+                    is_admin=current_user.get("role") == "admin",
+                    staff_id=staff_id,
+                    generation_request_id=key,
+                ),
+                bind=db.get_bind(),
                 generation_request_id=key,
-            ),
-            bind=db.get_bind(),
-            generation_request_id=key,
+            )
+
+        raise HTTPException(
+            status_code=422,
+            detail="Historical unvalidated or legacy predictions cannot be refreshed.",
         )
     except (ValueError, LookupError, FileNotFoundError, PermissionError, PredictionConflict) as exc:
         raise _service_error(exc) from exc
+
+
+@router.get("/{prediction_id}/status", response_model=PredictionStatusEnvelopeResponse)
+def read_prediction_status(
+    prediction_id: int,
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
+    db: Session = Depends(get_db),
+):
+    prediction = _authorized_prediction(db, prediction_id, current_user, staff_id, write=False)
+    purpose = prediction.model_version.model_purpose if prediction.model_version else None
+
+    if purpose == ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value:
+        from app.services.prediction.CurrentPeriodPredictionFreshnessService import (
+            evaluate_current_period_prediction_status,
+        )
+        status_data = evaluate_current_period_prediction_status(
+            db,
+            prediction,
+            current_user=current_user,
+            staff_id=staff_id,
+        )
+        return {
+            "prediction_id": prediction_id,
+            "model_purpose": purpose,
+            "status": status_data,
+        }
+
+    if purpose == ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value:
+        from app.services.prediction.PredictionStatusService import (
+            evaluate_next_period_prediction_status,
+        )
+        status_data = evaluate_next_period_prediction_status(db, prediction)
+        return {
+            "prediction_id": prediction_id,
+            "model_purpose": purpose,
+            "status": status_data,
+        }
+
+    raise HTTPException(
+        status_code=422,
+        detail="Prediction has no authoritative model purpose and does not support status evaluation.",
+    )
 
 
 @router.get("/{prediction_id}/history", response_model=PredictionHistoryResponse)

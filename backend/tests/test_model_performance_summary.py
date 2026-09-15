@@ -19,13 +19,22 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
-from app.models.ai.AIModelVersion import AIModelVersion
-from app.models.ai.AIPrediction import AIPrediction
+from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
+from app.models.ai.AIPrediction import (
+    AIPrediction,
+    RISK_ASSESSMENT_EVALUATED,
+    RISK_ASSESSMENT_NOT_EVALUATED_CURRENT,
+)
 from app.models.ai.PredictionOutcome import PredictionOutcome
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
 from app.services.prediction.ModelPerformanceService import get_model_performance_summary
+from app.services.prediction.PredictionPersistenceService import (
+    PredictionRiskContractError,
+    validate_prediction_risk_contract,
+)
+from app.services.prediction.PredictionScopeService import prediction_metadata
 
 
 TABLES = [
@@ -229,6 +238,21 @@ def add_prediction_with_outcome(context, **overrides):
         if key.startswith("outcome_"):
             outcome_values[key.replace("outcome_", "", 1)] = overrides.pop(key)
     prediction_values.update(overrides)
+    if "revision" not in prediction_values:
+        latest_revision = (
+            context["db"].query(AIPrediction.revision)
+            .filter(
+                AIPrediction.student_id == prediction_values["student_id"],
+                AIPrediction.class_id == prediction_values["class_id"],
+                AIPrediction.subject_id == prediction_values["subject_id"],
+                AIPrediction.source_period_id == prediction_values["source_period_id"],
+                AIPrediction.target_period_id == prediction_values["target_period_id"],
+                AIPrediction.model_version_id == prediction_values["model_version_id"],
+            )
+            .order_by(AIPrediction.revision.desc())
+            .first()
+        )
+        prediction_values["revision"] = (latest_revision[0] if latest_revision else 0) + 1
     prediction = AIPrediction(**prediction_values)
     context["db"].add(prediction)
     context["db"].flush()
@@ -406,3 +430,160 @@ def test_student_users_cannot_access_model_performance(performance_context):
     response = performance_context["client"].get("/api/v1/predictions/model-performance")
 
     assert response.status_code == 403
+
+
+def _add_current_model_version(context):
+    current = AIModelVersion(
+        model_version_id=3,
+        model_name="entervene_current_period_grade_rf_v1",
+        model_type="REGRESSOR",
+        algorithm="RandomForestRegressor",
+        artifact_path="data/models/current.joblib",
+        is_active=True,
+        model_purpose=ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value,
+    )
+    context["db"].add(current)
+    context["db"].commit()
+    return current
+
+
+def test_current_prediction_can_persist_as_academic_estimate_with_null_risk_fields(performance_context):
+    current_model = _add_current_model_version(performance_context)
+    validate_prediction_risk_contract(
+        model_purpose=current_model.model_purpose,
+        risk_assessment_status=RISK_ASSESSMENT_NOT_EVALUATED_CURRENT,
+        risk_level=None,
+        risk_score=None,
+        data_status=None,
+    )
+
+    prediction = AIPrediction(
+        student_id=performance_context["student"].student_id,
+        class_id=performance_context["class"].class_id,
+        subject_id=performance_context["subject"].subject_id,
+        source_period_id=performance_context["target_period"].academic_period_id,
+        target_period_id=performance_context["target_period"].academic_period_id,
+        model_version_id=current_model.model_version_id,
+        predicted_period_grade=88.5,
+        risk_level=None,
+        risk_score=None,
+        data_status=None,
+        risk_assessment_status=RISK_ASSESSMENT_NOT_EVALUATED_CURRENT,
+        revision=1,
+    )
+    performance_context["db"].add(prediction)
+    performance_context["db"].commit()
+
+    saved = performance_context["db"].get(AIPrediction, prediction.prediction_id)
+    assert saved.predicted_period_grade is not None
+    assert saved.risk_level is None
+    assert saved.risk_score is None
+    assert saved.data_status is None
+    assert saved.risk_assessment_status == RISK_ASSESSMENT_NOT_EVALUATED_CURRENT
+    assert prediction_metadata(saved)["prediction_purpose"] == ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value
+
+
+def test_current_contract_rejects_fake_low_risk_defaults(performance_context):
+    current_model = _add_current_model_version(performance_context)
+
+    with pytest.raises(PredictionRiskContractError):
+        validate_prediction_risk_contract(
+            model_purpose=current_model.model_purpose,
+            risk_assessment_status=RISK_ASSESSMENT_NOT_EVALUATED_CURRENT,
+            risk_level="LOW_RISK",
+            risk_score=0,
+            data_status="SUFFICIENT",
+        )
+
+
+def test_next_contract_still_requires_evaluated_risk(performance_context):
+    with pytest.raises(PredictionRiskContractError):
+        validate_prediction_risk_contract(
+            model_purpose=ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST,
+            risk_assessment_status=RISK_ASSESSMENT_NOT_EVALUATED_CURRENT,
+            risk_level=None,
+            risk_score=None,
+            data_status=None,
+        )
+
+    validate_prediction_risk_contract(
+        model_purpose=ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST,
+        risk_assessment_status=RISK_ASSESSMENT_EVALUATED,
+        risk_level="NEEDS_MONITORING",
+        risk_score=37.25,
+        data_status="SUFFICIENT",
+    )
+
+
+def test_current_and_next_predictions_coexist_for_same_student_and_target_period(performance_context):
+    current_model = _add_current_model_version(performance_context)
+    next_prediction, _ = add_prediction_with_outcome(performance_context)
+    current_prediction = AIPrediction(
+        student_id=performance_context["student"].student_id,
+        class_id=performance_context["class"].class_id,
+        subject_id=performance_context["subject"].subject_id,
+        source_period_id=performance_context["target_period"].academic_period_id,
+        target_period_id=performance_context["target_period"].academic_period_id,
+        model_version_id=current_model.model_version_id,
+        predicted_period_grade=87.0,
+        risk_level=None,
+        risk_score=None,
+        data_status=None,
+        risk_assessment_status=RISK_ASSESSMENT_NOT_EVALUATED_CURRENT,
+        revision=1,
+    )
+    performance_context["db"].add(current_prediction)
+    performance_context["db"].commit()
+
+    assert next_prediction.target_period_id == current_prediction.target_period_id
+    assert next_prediction.source_period_id != current_prediction.source_period_id
+    assert next_prediction.prediction_id != current_prediction.prediction_id
+
+
+def test_current_estimates_are_excluded_from_default_performance_summary(performance_context):
+    seed_performance_rows(performance_context)
+    current_model = _add_current_model_version(performance_context)
+    current_prediction = AIPrediction(
+        student_id=performance_context["student"].student_id,
+        class_id=performance_context["class"].class_id,
+        subject_id=performance_context["subject"].subject_id,
+        source_period_id=performance_context["target_period"].academic_period_id,
+        target_period_id=performance_context["target_period"].academic_period_id,
+        model_version_id=current_model.model_version_id,
+        predicted_period_grade=88.0,
+        risk_level=None,
+        risk_score=None,
+        data_status=None,
+        risk_assessment_status=RISK_ASSESSMENT_NOT_EVALUATED_CURRENT,
+        revision=1,
+    )
+    performance_context["db"].add(current_prediction)
+    performance_context["db"].flush()
+    performance_context["db"].add(
+        PredictionOutcome(
+            prediction_id=current_prediction.prediction_id,
+            actual_period_grade=89.0,
+            actual_risk_label="LOW_RISK",
+            actual_risk_status="LOW_RISK",
+            prediction_error=1.0,
+            absolute_error=1.0,
+            actual_passed=True,
+            outcome_status="EVALUATED",
+        )
+    )
+    performance_context["db"].commit()
+
+    default_summary = get_model_performance_summary(performance_context["db"])
+    explicit_current = get_model_performance_summary(
+        performance_context["db"],
+        model_version_id=current_model.model_version_id,
+    )
+
+    assert default_summary["total_evaluated_predictions"] == 3
+    assert default_summary["predicted_risk_level_counts"] == {
+        "HIGH_RISK": 1,
+        "LOW_RISK": 1,
+        "NEEDS_MONITORING": 1,
+    }
+    assert explicit_current["total_evaluated_predictions"] == 1
+    assert explicit_current["predicted_risk_level_counts"] == {}

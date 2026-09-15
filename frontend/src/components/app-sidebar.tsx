@@ -1,5 +1,6 @@
 import * as React from "react"
 import { Link } from "react-router-dom"
+import { routes } from "@/../routes"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
@@ -18,11 +19,13 @@ import { useAuth } from "@/context/AuthContext"
 import { Select } from "./retroui/Select"
 import { SidebarConfigs } from "@/context/sidebar-config"
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext"
+import { useUnreadNotificationCount } from "@/hooks/use-unread-notification-count"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { role } = useAuth()
   const navRole = (role ?? "student") as keyof typeof SidebarConfigs
-  const { periods, selectedPeriodId, setSelectedPeriodId } = useAcademicPeriod()
+  const { periods, selectedPeriodId, setSelectedPeriodId } = useAcademicPeriod();
+  const unreadNotificationCount = useUnreadNotificationCount();
 
   return (
     <Sidebar collapsible="offcanvas" className="no-scrollbar" {...props}>
@@ -60,7 +63,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </Select.Group>
           </Select.Content>
         </Select>
-        <NavMain items={SidebarConfigs[navRole]} />
+        <NavMain
+          items={SidebarConfigs[navRole]}
+          badgeCounts={{ Notifications: unreadNotificationCount }}
+        />
       </SidebarContent>
 
       <SidebarFooter>

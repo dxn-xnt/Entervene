@@ -129,8 +129,9 @@ const Dashboard = () => {
                 </div>
               </div>
               <Button
+                size="header"
                 onClick={() => navigate(routes.teacher.profile)}
-                className="shrink-0 gap-1.5 whitespace-nowrap px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+                className="shrink-0 whitespace-nowrap"
               >
                 <Calendar className="size-4" />
                 <span className="sm:hidden">Schedule</span>
@@ -224,9 +225,15 @@ const Dashboard = () => {
                 <Card.Content className="flex flex-col gap-3">
                   <div className="flex flex-row justify-between items-center">
                     <Card.Title className="mb-0">Class Activity</Card.Title>
-                    <div className="border border-black rounded-full p-1 cursor-pointer">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="border-black bg-background"
+                      aria-label="View all class activity"
+                    >
                       <ArrowUpRight size={18} />
-                    </div>
+                    </Button>
                   </div>
 
                   <div className="flex flex-col gap-2">

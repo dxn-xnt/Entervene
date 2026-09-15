@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import func, tuple_
+from sqlalchemy import and_, func, tuple_
 from sqlalchemy.orm import Session
 
-from app.models.ai.AIPrediction import AIPrediction
+from app.models.ai.AIPrediction import AIPrediction, RISK_ASSESSMENT_EVALUATED
 from app.services.prediction.PredictionScopeService import (
     dashboard_preferred_prediction_filter,
     latest_prediction_filter,
@@ -51,6 +51,13 @@ SORTABLE_COLUMNS = {
     "generated_at": AIPrediction.generated_at,
     "risk_level": AIPrediction.risk_level,
 }
+
+
+def evaluated_risk_filter():
+    return and_(
+        AIPrediction.risk_assessment_status == RISK_ASSESSMENT_EVALUATED,
+        AIPrediction.risk_level.isnot(None),
+    )
 
 
 def _to_float(value: Any) -> float | None:
@@ -106,7 +113,7 @@ def _base_joined_query(db: Session, enrolled_only: bool = True):
             & (StudentClass.class_id == AIPrediction.class_id)
             & enrolled_student_class_filter(),
         )
-    return q.filter(latest_prediction_filter(), dashboard_preferred_prediction_filter())
+    return q.filter(latest_prediction_filter(), dashboard_preferred_prediction_filter(), evaluated_risk_filter())
 
 
 def _risk_summary_query(db: Session, enrolled_only: bool = True):
@@ -129,7 +136,7 @@ def _risk_summary_query(db: Session, enrolled_only: bool = True):
             & (StudentClass.class_id == AIPrediction.class_id)
             & enrolled_student_class_filter(),
         )
-    return q.filter(latest_prediction_filter(), dashboard_preferred_prediction_filter())
+    return q.filter(latest_prediction_filter(), dashboard_preferred_prediction_filter(), evaluated_risk_filter())
 
 
 
@@ -305,6 +312,7 @@ def get_dashboard_at_risk_predictions(
             "risk_level": pred.risk_level,
             "risk_score": _to_float(pred.risk_score),
             "data_status": pred.data_status,
+            "risk_assessment_status": pred.risk_assessment_status,
             "generated_at": pred.generated_at,
         })
 
@@ -389,6 +397,7 @@ def get_dashboard_grade_summaries(
             .filter(
                 StudentClass.class_id.in_(all_class_ids),
                 enrolled_student_class_filter(),
+                AIPrediction.risk_assessment_status == RISK_ASSESSMENT_EVALUATED,
                 AIPrediction.risk_level.in_(("HIGH_RISK", "MODERATE_RISK", "NEEDS_MONITORING")),
             )
         )

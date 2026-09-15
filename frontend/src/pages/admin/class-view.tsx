@@ -290,7 +290,7 @@ export default function AdminClassDetail() {
 
               <div className="flex w-full items-center gap-2 md:w-auto">
                 {!isArchived && (
-                  <Button onClick={() => setShowEditClass(true)} className="w-full justify-center gap-1.5 px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm md:w-auto">
+                  <Button size="header" onClick={() => setShowEditClass(true)} className="w-full whitespace-nowrap md:w-auto">
                     <Pencil className="size-4" /> Edit Class
                   </Button>
                 )}

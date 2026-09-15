@@ -6,9 +6,11 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { NavigationBadge } from "@/components/navigation-badge";
 
 export function NavMain({
   items,
+  badgeCounts = {},
 }: {
   items: {
     title: string;
@@ -16,6 +18,7 @@ export function NavMain({
     icon?: React.ReactNode;
     activePaths?: string[];
   }[];
+  badgeCounts?: Record<string, number | undefined>;
 }) {
   const { pathname } = useLocation();
 
@@ -38,9 +41,13 @@ export function NavMain({
                 }
                 asChild
               >
-                <Link to={item.url}>
+                <Link to={item.url} className="relative flex w-full items-center gap-2">
                   {item.icon}
                   <span>{item.title}</span>
+                  <NavigationBadge
+                    count={badgeCounts[item.title] ?? 0}
+                    label={`unread ${item.title.toLowerCase()}`}
+                  />
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

@@ -65,4 +65,21 @@ describe("AttachmentDisplay View Trigger", () => {
 
     expect(html).toMatch(/href="https?:\/\/[^/]+\/api\/v1\/classwork-assignments\/classwork\/2\/attachments\/303\/download\?inline=true"/);
   });
+
+  it("offers the shared viewer for Word and PowerPoint attachments", () => {
+    const html = renderToStaticMarkup(
+      <AttachmentDisplay
+        attachments={[
+          { classwork_attachment_id: 401, file_name: "notes.docx", file_size: 1024 },
+          { classwork_attachment_id: 402, file_name: "slides.ppt", file_size: 2048 },
+          { classwork_attachment_id: 403, file_name: "slides.pptx", file_size: 4096 },
+        ]}
+        downloadUrl={(id) => `/api/v1/classwork-assignments/classwork/4/attachments/${id}/download`}
+      />,
+    );
+
+    expect(html.match(/>View</g)).toHaveLength(3);
+    expect(html).toContain("notes.docx");
+    expect(html).toContain("slides.pptx");
+  });
 });

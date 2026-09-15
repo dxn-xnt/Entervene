@@ -1,4 +1,5 @@
 import { Alert } from "@/components/retroui/Alert";
+import { Button } from "@/components/retroui/Button";
 
 type ConfirmAlertDialogProps = {
   title: string;
@@ -28,21 +29,21 @@ export default function ConfirmAlertDialog({
             <Alert.Description>{description}</Alert.Description>
           </Alert>
         </div>
-        <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-border p-4 sm:flex-row sm:justify-end">
-          <button
+        <div className="flex shrink-0 flex-col-reverse items-stretch gap-2 border-t-2 border-border bg-background px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
+          <Button
             type="button"
             onClick={onCancel}
-            className="rounded-none border border-black px-4 py-2 text-sm font-semibold"
+            variant="outline"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={onConfirm}
-            className="rounded-none border border-red-600 bg-red-100 px-4 py-2 text-sm font-semibold text-red-700"
+            variant="destructive"
           >
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -28,6 +28,7 @@ import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Input } from "@/components/retroui/Input";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Text } from "@/components/retroui/Text";
+import { DialogueSelect } from "@/components/dialogue-select";
 import { Select } from "@/components/retroui/Select";
 import CreateClassworkModal from "./forms/create-classwork";
 import CreateClassworkQuizModal from "./forms/create-classwork-quiz";
@@ -211,8 +212,9 @@ export default function Classworks() {
 
               <Button
                 type="button"
+                size="header"
                 onClick={openCreateWizard}
-                className="shrink-0 gap-1.5 whitespace-nowrap px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+                className="shrink-0 whitespace-nowrap"
               >
                 <Plus className="size-4" />
                 <span className="hidden sm:inline">New Classwork</span>
@@ -364,24 +366,14 @@ export default function Classworks() {
                       <section className="p-5">
                         <div className="grid gap-4 sm:grid-cols-2">
                           {createOptions.map((option) => {
-                            const Icon = option.icon;
                             return (
-                              <Button
+                              <DialogueSelect
                                 key={option.type}
-                                type="button"
+                                title={option.title}
+                                description={option.description}
+                                icon={option.icon}
                                 onClick={() => setSelectedType(option.type)}
-                                className="flex-col items-start bg-success p-5 text-left text-black hover:bg-success"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <Icon size={20} className="text-black" />
-                                  <h3 className="text-lg font-bold text-black">
-                                    {option.title}
-                                  </h3>
-                                </div>
-                                <p className="mt-2 text-xs font-semibold text-black/80">
-                                  {option.description}
-                                </p>
-                              </Button>
+                              />
                             );
                           })}
                         </div>

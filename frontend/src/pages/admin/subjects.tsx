@@ -577,7 +577,7 @@ export default function AdminSubjects() {
                 <SidebarTrigger className="shrink-0 md:hidden" />
                 <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">Subjects</h1>
               </div>
-              <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-wrap [&_button]:min-w-0 [&_button]:w-full [&_button]:justify-center [&_button]:px-2 [&_button]:text-xs md:[&_button]:w-auto md:[&_button]:px-4 md:[&_button]:text-sm">
+              <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-wrap [&_button]:min-w-0 [&_button]:w-full md:[&_button]:w-auto">
                 {activeSection === "catalog" ? (
                   <>
                     <input
@@ -587,13 +587,13 @@ export default function AdminSubjects() {
                       className="hidden"
                       onChange={(event) => void handleCatalogImport(event.target.files?.[0])}
                     />
-                    <Button className="col-span-2 md:col-auto" onClick={openCreateSubject}>
-                      <Plus className="size-4 mr-2" /> New Subject
+                    <Button size="header" className="col-span-2 md:col-auto" onClick={openCreateSubject}>
+                      <Plus className="size-4" /> New Subject
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button className="col-span-2 md:hidden" variant="outline">
-                          <MoreHorizontal className="mr-2 size-4" /> Catalog Actions
+                        <Button size="header" className="col-span-2 md:hidden" variant="outline">
+                          <MoreHorizontal className="size-4" /> Catalog Actions
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-[calc(100vw-1.5rem)] border-2 sm:w-72">
@@ -606,20 +606,22 @@ export default function AdminSubjects() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                     <Button
+                      size="header"
                       className="hidden md:inline-flex"
                       variant="outline"
                       onClick={() => catalogImportInputRef.current?.click()}
                       disabled={isImportingCatalog}
                     >
-                      <Upload className="size-4 mr-2" /> Import Catalog CSV
+                      <Upload className="size-4" /> Import Catalog CSV
                     </Button>
                     <Button
+                      size="header"
                       className="hidden md:inline-flex"
                       variant="outline"
                       onClick={handleDownloadCatalogTemplate}
                       disabled={isDownloadingCatalogTemplate}
                     >
-                      <DownloadIcon className="size-4 mr-2" />
+                      <DownloadIcon className="size-4" />
                       Download Catalog Template
                     </Button>
                   </>
@@ -634,6 +636,7 @@ export default function AdminSubjects() {
                       onChange={(event) => void handleOfferingImport(event.target.files?.[0])}
                     />
                     <Button
+                      size="header"
                       variant="outline"
                       className="hidden md:inline-flex"
                       onClick={() => {
@@ -643,19 +646,20 @@ export default function AdminSubjects() {
                       }}
                       disabled={isLoadingOptions || !activeAcademicYear}
                     >
-                      <Copy className="size-4 mr-2" /> Copy Previous Year Setup
+                      <Copy className="size-4" /> Copy Previous Year Setup
                     </Button>
                     <Button
+                      size="header"
                       className="col-span-2 md:col-auto"
                       onClick={openCreateOffering}
                       disabled={isLoadingOptions || isViewingInactiveAcademicYear}
                       title={isViewingInactiveAcademicYear ? readOnlyReason : undefined}
                     >
-                      <Plus className="size-4 mr-2" /> Add Offerings
+                      <Plus className="size-4" /> Add Offerings
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button className="col-span-2 md:hidden" variant="outline">
+                        <Button size="header" className="col-span-2 md:hidden" variant="outline">
                           <MoreHorizontal className="mr-2 size-4" /> Offering Actions
                         </Button>
                       </DropdownMenuTrigger>
@@ -682,6 +686,7 @@ export default function AdminSubjects() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                     <Button
+                      size="header"
                       className="hidden md:inline-flex"
                       variant="outline"
                       onClick={() => offeringImportInputRef.current?.click()}
@@ -691,6 +696,7 @@ export default function AdminSubjects() {
                       <Upload className="size-4 mr-2" /> Import Offering CSV
                     </Button>
                     <Button
+                      size="header"
                       className="hidden md:inline-flex"
                       variant="outline"
                       onClick={handleDownloadOfferingTemplate}

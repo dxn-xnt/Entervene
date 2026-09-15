@@ -86,7 +86,10 @@ def test_send_batch_invitations_smtp_connection_reuse_and_error_isolation(monkey
 
     mock_smtp_instance.sendmail.side_effect = mock_sendmail
 
-    with patch("smtplib.SMTP", return_value=mock_smtp_instance) as mock_smtp_class:
+    with (
+        patch("smtplib.SMTP", return_value=mock_smtp_instance) as mock_smtp_class,
+        patch("app.services.MailService.reserve_email", return_value=None),
+    ):
         items = [
             {"email": "ok1@example.com", "token": "tok1", "user_id": str(uuid.uuid4())},
             {"email": "fail@example.com", "token": "tok2", "user_id": str(uuid.uuid4())},
@@ -208,4 +211,3 @@ def test_user_account_model_default_email_status(db):
     db.commit()
     db.refresh(user)
     assert user.email_status == "pending"
-

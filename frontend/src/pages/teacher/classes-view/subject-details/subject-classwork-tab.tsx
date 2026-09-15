@@ -24,6 +24,7 @@ import type {
   TeacherClasswork,
 } from "@/types/classwork";
 import { Button } from "@/components/retroui/Button";
+import { DialogueSelect } from "@/components/dialogue-select";
 import { Card } from "@/components/retroui/Card";
 import { Tabs, type TabItem } from "@/components/retroui/Tabs";
 import { Input } from "@/components/retroui/Input";
@@ -371,24 +372,14 @@ export default function SubjectClassworkTab({
               <section className="p-5">
                 <div className="grid gap-4 sm:grid-cols-2">
                   {classworkCreateOptions.map((option) => {
-                    const Icon = option.icon;
                     return (
-                      <Button
+                      <DialogueSelect
                         key={option.type}
-                        type="button"
+                        title={option.title}
+                        description={option.description}
+                        icon={option.icon}
                         onClick={() => setSelectedType(option.type)}
-                        className="flex-col items-start bg-success p-5 text-left text-black hover:bg-success"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Icon size={20} className="text-black" />
-                          <h3 className="text-lg font-bold text-black">
-                            {option.title}
-                          </h3>
-                        </div>
-                        <p className="mt-2 text-xs font-semibold text-black/80">
-                          {option.description}
-                        </p>
-                      </Button>
+                      />
                     );
                   })}
                 </div>

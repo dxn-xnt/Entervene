@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import type { LucideIcon } from "lucide-react";
+import { Check, type LucideIcon } from "lucide-react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "./retroui/Button";
@@ -11,6 +11,8 @@ export interface DialogueSelectProps extends ButtonHTMLAttributes<HTMLButtonElem
   description: string;
   icon?: LucideIcon | ReactNode;
   className?: string;
+  selected?: boolean;
+  availabilityMessage?: string;
 }
 
 export function DialogueSelect({
@@ -18,30 +20,43 @@ export function DialogueSelect({
   description,
   icon: Icon,
   className,
+  selected,
+  availabilityMessage,
+  disabled,
   ...props
 }: DialogueSelectProps) {
   const renderIcon = () => {
     if (!Icon) return null;
     if (React.isValidElement(Icon)) return Icon;
     const IconComp = Icon as LucideIcon;
-    return <IconComp className="size-6 shrink-0 text-foreground" />;
+    return <IconComp aria-hidden="true" className="size-5 shrink-0" />;
   };
 
   return (
     <Button
+      type="button"
+      disabled={disabled}
+      aria-pressed={selected === undefined ? undefined : selected}
       className={cn(
-        "group relative flex flex-col gap-2 p-4 text-left items-start",
+        "group relative h-auto min-h-28 w-full flex-col items-start gap-2 p-5 text-left hover:bg-primary focus-visible:bg-primary active:bg-primary",
+        selected && "outline-2 outline-offset-2 outline-ring",
         className
       )}
       {...props}
     >
-      <div className="flex items-center gap-3 font-bold text-lg text-foreground">
+      <span className="flex w-full items-center gap-3 text-lg font-bold text-primary-foreground">
         {renderIcon()}
-        {title}
-      </div>
-      <p className="text-xs text-foreground font-normal leading-relaxed">
+        <span className="flex-1">{title}</span>
+        {selected && <Check aria-hidden="true" className="size-5 shrink-0" />}
+      </span>
+      <span className="text-xs font-medium leading-relaxed text-primary-foreground/80">
         {description}
-      </p>
+      </span>
+      {availabilityMessage && (
+        <span className="text-xs font-semibold text-primary-foreground">
+          {availabilityMessage}
+        </span>
+      )}
     </Button>
   );
 }

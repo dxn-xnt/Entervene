@@ -1,23 +1,9 @@
 import { useMemo } from "react";
 import { Card } from "@/components/retroui/Card";
+import { Progress } from "@/components/retroui/Progress";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { LoadingPanel } from "@/components/loading-panel";
 import type { TodoItem } from "@/lib/api";
-
-const TYPE_COLORS: Record<string, string> = {
-  QUIZ: "#F59E0B",
-  ASSIGNMENT: "#3B82F6",
-  ACTIVITY: "#22C55E",
-  EXAM: "#EF4444",
-  PROJECT: "#8B5CF6",
-};
-const FALLBACK_COLOR = "#94A3B8";
-const DONUT_RADIUS = 40;
-const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
-
-function colorForType(type: string) {
-  return TYPE_COLORS[type.toUpperCase()] ?? FALLBACK_COLOR;
-}
 
 function computeCompletion(todos: TodoItem[]) {
   const total = todos.length;
@@ -66,17 +52,6 @@ export function GradeOverviewCards({ todos, isLoading, error }: {
   const distribution = useMemo(() => computeDistribution(todos), [todos]);
   const subjectPerformance = useMemo(() => computeSubjectPerformance(todos), [todos]);
   const weakestSubject = subjectPerformance.at(-1);
-  const segments = useMemo(() => distribution.map((item, index) => {
-      const offset = -distribution.slice(0, index).reduce(
-        (sum, previous) => sum + (previous.count / todos.length) * DONUT_CIRCUMFERENCE,
-        0,
-      );
-      const arc = (item.count / todos.length) * DONUT_CIRCUMFERENCE;
-      return { ...item, arc, offset };
-    }), [distribution, todos.length]);
-  const ringRadius = 54;
-  const ringCircumference = 2 * Math.PI * ringRadius;
-
   if (isLoading) return <LoadingPanel label="Loading grade overview..." />;
   if (error) return <EmptyStateCard title="Unable to load grade overview" description={error} />;
 
@@ -87,52 +62,39 @@ export function GradeOverviewCards({ todos, isLoading, error }: {
         <Card className="w-full">
           <Card.Header><Card.Title>Completion Rate</Card.Title></Card.Header>
           <Card.Content>
-            <div className="flex items-center justify-center">
-              <div className="relative h-36 w-36">
-                <svg viewBox="0 0 120 120" className="h-full w-full" aria-hidden="true">
-                  <circle cx="60" cy="60" r={ringRadius} fill="transparent" stroke="var(--muted)" strokeWidth="10" />
-                  <circle cx="60" cy="60" r={ringRadius} fill="transparent"
-                    stroke={completion.rate >= 80 ? "#22C55E" : completion.rate >= 50 ? "#F59E0B" : "#EF4444"}
-                    strokeWidth="10" strokeDasharray={ringCircumference}
-                    strokeDashoffset={ringCircumference * (1 - completion.rate / 100)} strokeLinecap="round"
-                    className="transition-all duration-700 ease-out"
-                    style={{ transform: "rotate(-90deg)", transformOrigin: "60px 60px" }} />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-3xl font-bold leading-none">{completion.rate}</span>
-                  <span className="text-[10px] text-muted-foreground">%</span>
-                </div>
-              </div>
+            <div className="flex items-center gap-3">
+              <Progress
+                value={completion.rate}
+                className="flex-1"
+                aria-label={`Completion rate: ${completion.rate}%`}
+              />
+              <span className="w-10 text-right text-sm font-bold">{completion.rate}%</span>
             </div>
-            <p className="mt-2 text-center text-xs text-muted-foreground">{completion.completed} of {completion.total} activities done</p>
+            <p className="mt-3 text-xs text-muted-foreground">{completion.completed} of {completion.total} activities done</p>
           </Card.Content>
         </Card>
 
         <Card className="w-full">
           <Card.Header><Card.Title>Classwork Distribution</Card.Title></Card.Header>
           <Card.Content>
-            {todos.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No classwork data yet</p> : <>
-              <div className="flex items-center justify-center">
-                <div className="relative h-36 w-36">
-                  <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90" aria-hidden="true">
-                    {segments.map((segment) => <circle key={segment.type} cx="50" cy="50" r={DONUT_RADIUS} fill="transparent"
-                      stroke={colorForType(segment.type)} strokeWidth="20"
-                      strokeDasharray={`${segment.arc} ${DONUT_CIRCUMFERENCE - segment.arc}`}
-                      strokeDashoffset={segment.offset} className="transition-all duration-500" />)}
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-2xl font-bold leading-none">{todos.length}</span>
-                    <span className="text-[9px] text-muted-foreground">total</span>
-                  </div>
-                </div>
+            {todos.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No classwork data yet</p> : (
+              <div className="flex flex-col gap-3">
+                {distribution.map((item) => {
+                  const percentage = Math.round((item.count / todos.length) * 100);
+                  return <div key={item.type} className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="truncate font-medium">{item.type}</span>
+                      <span className="shrink-0 font-semibold">{item.count} ({percentage}%)</span>
+                    </div>
+                    <Progress
+                      value={percentage}
+                      aria-label={`${item.type}: ${item.count} of ${todos.length} classworks (${percentage}%)`}
+                    />
+                  </div>;
+                })}
+                <p className="text-xs text-muted-foreground">{todos.length} total classworks</p>
               </div>
-              <div className="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs">
-                {distribution.map((item) => <span key={item.type} className="flex items-center gap-1">
-                  <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: colorForType(item.type) }} />
-                  {item.type} ({item.count})
-                </span>)}
-              </div>
-            </>}
+            )}
           </Card.Content>
         </Card>
 
@@ -143,9 +105,11 @@ export function GradeOverviewCards({ todos, isLoading, error }: {
               <div className="flex flex-col gap-2">
                 {subjectPerformance.map((item) => <div key={item.subjectId} className="flex items-center gap-2">
                   <span className="w-20 truncate text-[10px]" title={item.subject}>{item.subject}</span>
-                  <div className="relative h-3 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div className="h-3 rounded-full transition-all duration-500" style={{ width: `${item.score}%`, backgroundColor: item.score >= 80 ? "#22C55E" : item.score >= 60 ? "#F59E0B" : "#EF4444" }} />
-                  </div>
+                  <Progress
+                    value={Math.min(100, Math.max(0, item.score))}
+                    className="h-3 flex-1"
+                    aria-label={`${item.subject} score: ${item.score}%`}
+                  />
                   <span className="w-8 text-right text-[10px] font-semibold">{item.score}%</span>
                 </div>)}
               </div>

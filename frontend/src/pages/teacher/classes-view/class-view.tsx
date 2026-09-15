@@ -33,6 +33,7 @@ import { Text } from "@/components/retroui/Text";
 import { Select } from "@/components/retroui/Select";
 import { OverviewCard } from "@/components/overview-cards";
 import { Table } from "@/components/retroui/Table";
+import { DialogueSelect } from "@/components/dialogue-select";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import { Avatar } from "@/components/retroui/Avatar";
@@ -1603,24 +1604,18 @@ function OverviewTab({
           }}
         >
           <Dialog.Content className="w-full max-w-4xl p-0">
-            <Dialog.Header className="sticky top-0 z-10 border-black">
+            <Dialog.Header className="border-border">
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide">
                   Teacher lesson management
                 </p>
                 <h2 className="text-xl font-bold">{selectedLesson.title}</h2>
               </div>
-              <Dialog.Close
-                title="Close"
-                className="cursor-pointer rounded p-1 hover:bg-white/60"
-              >
-                <X size={18} />
-              </Dialog.Close>
             </Dialog.Header>
 
             <div className="flex flex-col gap-5 p-5">
               <div className="space-y-4">
-                <Card className="block w-full border-2 border-black shadow-none">
+                <Card className="block w-full border-border shadow-none">
                   <Card.Content className="space-y-4">
                     <div className="grid gap-4 sm:grid-cols-[1fr_130px]">
                       <div>
@@ -1641,7 +1636,7 @@ function OverviewTab({
                             )
                           }
                           disabled={isSavingLesson}
-                          className="rounded border-2 border-black !shadow-none h-10 w-full"
+                          className="h-10 w-full rounded-none border-border bg-background text-foreground !shadow-none"
                         />
                       </div>
                       <div>
@@ -1668,7 +1663,7 @@ function OverviewTab({
                             )
                           }
                           disabled={isSavingLesson}
-                          className="rounded border-2 border-black !shadow-none h-10 w-full"
+                          className="h-10 w-full rounded-none border-border bg-background text-foreground !shadow-none"
                         />
                       </div>
                     </div>
@@ -1694,7 +1689,7 @@ function OverviewTab({
                           )
                         }
                         disabled={isSavingLesson}
-                        className="min-h-20 w-full rounded border-2 border-black px-3 py-2 text-sm"
+                        className="min-h-20 w-full rounded-none border-2 border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/35"
                         placeholder="Short lesson summary"
                       />
                     </div>
@@ -1717,46 +1712,44 @@ function OverviewTab({
                           )
                         }
                         disabled={isSavingLesson}
-                        className="min-h-40 w-full rounded border-2 border-black px-3 py-2 text-sm"
+                        className="min-h-40 w-full rounded-none border-2 border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/35"
                         placeholder="Write the lesson notes or learning content."
                       />
                     </div>
                   </Card.Content>
                 </Card>
 
-                <div className="flex items-center justify-between border-t-2 border-black pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setShowArchiveConfirm(true)}
-                    className="border-2 border-red-600 bg-red-50 text-red-700 font-bold hover:bg-red-100"
-                  >
-                    <Archive size={14} className="mr-1" />
-                    Archive Lesson
-                  </Button>
-
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={closeLessonManager}
-                      className="border-2 border-black font-bold"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="default"
-                      onClick={saveLessonDetails}
-                      disabled={isSavingLesson}
-                      className="border-2 border-black bg-[#79bd80] text-black font-bold hover:bg-[#68a966]"
-                    >
-                      {isSavingLesson ? "Saving..." : "Save Changes"}
-                    </Button>
-                  </div>
-                </div>
               </div>
             </div>
+            <Dialog.Footer className="sm:justify-between">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowArchiveConfirm(true)}
+                className="border-2 border-red-600 bg-red-50 font-bold text-red-700 hover:bg-red-100"
+              >
+                <Archive size={14} className="mr-1" />
+                Archive Lesson
+              </Button>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={closeLessonManager}
+                  className="font-bold"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={saveLessonDetails}
+                  disabled={isSavingLesson}
+                  className="font-bold"
+                >
+                  {isSavingLesson ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            </Dialog.Footer>
           </Dialog.Content>
         </Dialog>
       )}
@@ -2387,24 +2380,14 @@ function ClassworkTab({
               <section className="p-5">
                 <div className="grid gap-4 sm:grid-cols-2">
                   {classworkCreateOptions.map((option) => {
-                    const Icon = option.icon;
                     return (
-                      <button
+                      <DialogueSelect
                         key={option.type}
-                        type="button"
+                        title={option.title}
+                        description={option.description}
+                        icon={option.icon}
                         onClick={() => setSelectedType(option.type)}
-                        className="border-2 border-black bg-accent p-5 text-left shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-1 cursor-pointer text-black"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Icon size={20} className="text-black" />
-                          <h3 className="text-lg font-bold text-black">
-                            {option.title}
-                          </h3>
-                        </div>
-                        <p className="mt-2 text-xs font-semibold text-black/80">
-                          {option.description}
-                        </p>
-                      </button>
+                      />
                     );
                   })}
                 </div>
