@@ -102,8 +102,7 @@ export default function AttachmentDisplay({
   }
 
   const getDocumentKind = (fileName: string): PreviewDocumentKind | null => {
-    // PPT and PPTX in-app previews are temporarily forced to download-only pending sandboxed viewer swap
-    const match = fileName.toLowerCase().match(/\.(pdf|docx)$/);
+    const match = fileName.toLowerCase().match(/\.(pdf|docx|pptx)$/);
     return (match?.[1] as PreviewDocumentKind | undefined) ?? null;
   };
 

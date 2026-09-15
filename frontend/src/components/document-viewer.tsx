@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import DOMPurify from "dompurify";
-import { ChevronLeft, ChevronRight, Download, FileText, Loader2, Presentation } from "lucide-react";
+import { Download, FileText, Loader2, Presentation } from "lucide-react";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
@@ -32,16 +32,9 @@ export default function DocumentViewer({
   const [html, setHtml] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(kind === "docx" || kind === "pdf");
-  const [currentSlide, setCurrentSlide] = useState(1);
-  const [slideCount, setSlideCount] = useState(0);
-  const [presentationElement, setPresentationElement] = useState<HTMLDivElement | null>(null);
-  const previewerRef = useRef<{
-    renderNextSlide: () => void;
-    renderPreSlide: () => void;
-    destroy: () => void;
-    currentIndex: number;
-  } | null>(null);
+  const [loading, setLoading] = useState(kind === "docx" || kind === "pdf" || kind === "pptx");
+  const [, setSlideCount] = useState(0);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -71,8 +64,62 @@ export default function DocumentViewer({
     };
   }, [blob, kind]);
 
-  // PPT/PPTX in-app preview with pptx-preview is disabled pending secure sandboxed PPTXjs implementation.
-  // PPT and PPTX attachments display the fallback card with direct download.
+  const sendBufferRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    let active = true;
+    let sent = false;
+    if (kind !== "pptx") return;
+
+    setLoading(true);
+    setError("");
+
+    const sendBuffer = async () => {
+      if (sent || !active || !iframeRef.current?.contentWindow) return;
+      sent = true;
+      try {
+        const buffer = await blob.arrayBuffer();
+        if (!active || !iframeRef.current?.contentWindow) return;
+        iframeRef.current.contentWindow.postMessage(
+          { type: "RENDER_PPTX", buffer },
+          "*",
+          [buffer]
+        );
+      } catch {
+        if (active) {
+          setError("This presentation could not be loaded. You can still download it.");
+          setLoading(false);
+        }
+      }
+    };
+    sendBufferRef.current = sendBuffer;
+
+    const handleMessage = (event: MessageEvent) => {
+      if (!event.data || typeof event.data !== "object") return;
+
+      if (event.data.type === "PPTX_READY") {
+        void sendBuffer();
+      } else if (event.data.type === "PPTX_STATUS") {
+        if (!active) return;
+        if (event.data.status === "loaded") {
+          setSlideCount(event.data.slideCount || 0);
+          setLoading(false);
+        } else if (event.data.status === "error" || event.data.status === "empty") {
+          setError(
+            event.data.status === "empty"
+              ? "This presentation contains no slides. You can still download it."
+              : "This presentation could not be rendered. You can still download it."
+          );
+          setLoading(false);
+        }
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => {
+      active = false;
+      window.removeEventListener("message", handleMessage);
+    };
+  }, [blob, kind]);
 
   const isPresentation = kind === "ppt" || kind === "pptx";
 
@@ -115,13 +162,26 @@ export default function DocumentViewer({
             </div>
           )}
 
-          {(isPresentation || error) && (
+          {kind === "pptx" && !error && (
+            <iframe
+              ref={iframeRef}
+              src="/pptxjs/iframe-viewer.html"
+              sandbox="allow-scripts"
+              className="block h-full min-h-[28rem] w-full border-0"
+              title={`Presentation preview of ${fileName}`}
+              onLoad={() => {
+                sendBufferRef.current();
+              }}
+            />
+          )}
+
+          {(kind === "ppt" || error) && (
             <div className="flex min-h-full items-center justify-center p-6">
               <div className="max-w-lg border border-border bg-background p-6 text-center">
                 <Presentation className="mx-auto mb-3 size-10 text-muted-foreground" />
                 <h3 className="font-bold">Preview unavailable</h3>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {error || (kind === "ppt" 
+                  {error || (kind === "ppt"
                     ? "Legacy .ppt files require secure server-side conversion before slides can be displayed. Download this presentation to view it without exposing it to a public viewer."
                     : "In-app presentation preview is temporarily disabled. Download this presentation to view it without exposing it to a public viewer.")}
                 </p>
