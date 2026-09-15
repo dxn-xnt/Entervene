@@ -14,7 +14,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { CommandIcon } from "lucide-react"
+import { EnterveneLogo } from "@/components/logo"
 import { useAuth } from "@/context/AuthContext"
 import { Select } from "./retroui/Select"
 import { SidebarConfigs } from "@/context/sidebar-config"
@@ -24,15 +24,8 @@ import { useUnreadNotificationCount } from "@/hooks/use-unread-notification-coun
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { role } = useAuth()
   const navRole = (role ?? "student") as keyof typeof SidebarConfigs
-  const { periods, selectedPeriodId, setSelectedPeriodId, isLoading } = useAcademicPeriod()
-  const unreadNotificationCount = useUnreadNotificationCount()
-
-  const dashboardUrl =
-    role === "admin"
-      ? routes.admin.dashboard
-      : role === "teacher"
-        ? routes.teacher.dashboard
-        : routes.student.board
+  const { periods, selectedPeriodId, setSelectedPeriodId } = useAcademicPeriod();
+  const unreadNotificationCount = useUnreadNotificationCount();
 
   return (
     <Sidebar collapsible="offcanvas" className="no-scrollbar" {...props}>
@@ -41,11 +34,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem className="border-b-2 py-2.5 mb-2">
             <SidebarMenuButton
               asChild
-              className="hover:border-background! data-[slot=sidebar-menu-button]:p-6!"
+              className="hover:border-background! hover:bg-background! data-[slot=sidebar-menu-button]:p-6!"
             >
-              <Link to={dashboardUrl} className="gap-2">
-                <CommandIcon className="size-6!" />
-                <span className="text-2xl! font-bold ">Entervene</span>
+              <Link to="#" className="group/brand flex items-center gap-3">
+                <EnterveneLogo className="size-10! drop-shadow-[0px_4px_0px_#000] transition-all duration-150 ease-out group-active/brand:translate-y-1 group-active/brand:drop-shadow-none" />
+                <span className="text-3xl! font-bold font-head">Entervene</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -57,8 +50,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           value={selectedPeriodId ? String(selectedPeriodId) : undefined}
           onValueChange={(val) => setSelectedPeriodId(Number(val))}
         >
-          <Select.Trigger className="w-full border-x-background m-0 shadow-none mb-1">
-            <Select.Value placeholder={isLoading ? "Loading..." : "Active Period"} />
+          <Select.Trigger className="w-full rounded-none border-x-background m-0 shadow-none mb-1">
+            <Select.Value placeholder="Active Period" />
           </Select.Trigger>
           <Select.Content>
             <Select.Group>

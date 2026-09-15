@@ -93,7 +93,7 @@ export function Tabs<T extends string = string>({
                 aria-selected={isActive}
                 onClick={() => onTabChange(tab.id)}
                 className={cn(
-                  "flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors sm:px-4",
+                  "flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-t-[var(--radius)] border-2 border-b-0 px-3 py-2 text-sm font-semibold shadow-[3px_0_0_#000] transition-colors sm:px-4",
                   fontClasses,
                   tabClassName,
                   isActive

@@ -425,13 +425,13 @@ export default function LessonClassworkList({
       {/* ── Search, Sort, and Add Competency Toolbar ── */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-1 items-center gap-3">
-          <label className="relative shadow-md transition-shadow hover:shadow-none md:w-80">
+          <label className="relative md:w-80">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
             <Input
               value={lessonSearch}
               onChange={(event) => setLessonSearch(event.target.value)}
               placeholder="Search competencies or lessons..."
-              className="h-10 w-full border-black pl-9 pr-3 shadow-none"
+              className="h-10 w-full border-black pl-9 pr-3"
             />
           </label>
 

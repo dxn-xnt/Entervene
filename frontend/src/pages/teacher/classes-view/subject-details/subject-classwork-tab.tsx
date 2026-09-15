@@ -255,13 +255,13 @@ export default function SubjectClassworkTab({
         )}
 
         <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
-          <label className="relative shadow-md transition-shadow hover:shadow-none">
+          <label className="relative">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search classwork..."
-              className="h-10 w-full border-black pl-9 pr-3 shadow-none"
+              className="h-10 w-full border-black pl-9 pr-3"
             />
           </label>
 

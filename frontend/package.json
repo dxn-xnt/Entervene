@@ -33,7 +33,11 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "docx": "^9.7.1",
+<<<<<<< HEAD
+    "embla-carousel-auto-height": "^8.6.0",
+=======
     "dompurify": "^3.4.15",
+>>>>>>> a476f39e6dddffda5b6890473e811e89b027e351
     "embla-carousel-react": "^8.6.0",
     "html-to-image": "^1.11.13",
     "html5-qrcode": "^2.3.8",
