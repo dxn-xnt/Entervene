@@ -32,7 +32,7 @@ const SelectTrigger = ({
   return (
     <SelectPrimitive.Trigger
       className={cn(
-        "flex h-10 rounded-none min-w-40 items-center shadow-md bg-background focus:shadow-xs justify-between border-2 border-input border-border px-4 py-2 placeholder:text-muted-foreground outline-none focus:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 [&>span]:truncate text-left",
+        "flex h-10 min-w-40 items-center justify-between rounded-none border-2 border-border bg-background px-4 py-2 text-left shadow-md outline-none placeholder:text-muted-foreground focus:shadow-xs focus:outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 [&>span]:truncate",
         className,
       )}
       {...props}
