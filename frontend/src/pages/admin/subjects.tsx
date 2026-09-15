@@ -782,13 +782,13 @@ export default function AdminSubjects() {
               {activeSection === "catalog" ? (
                 <section className="flex flex-col gap-4">
                   <div className="grid gap-3 md:grid-cols-[1fr_160px_160px]">
-                    <label className="relative shadow-md hover:shadow-none transition-shadow">
+                    <label className="relative">
                       <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                       <Input
                         value={catalogSearch}
                         onChange={(event) => setCatalogSearch(event.target.value)}
                         placeholder="Search name, code, group"
-                        className="h-10 w-full shadow-none border-black pl-9 pr-3"
+                        className="h-10 w-full border-black pl-9 pr-3"
                       />
                     </label>
                     <Select value={""}>

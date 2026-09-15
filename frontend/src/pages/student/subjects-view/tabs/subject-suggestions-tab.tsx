@@ -210,22 +210,22 @@ export default function SubjectSuggestionsTab({
       ) : null}
       {/* typescriptreact */}
       <div className="grid gap-3 py-2 md:grid-cols-[1fr_180px]">
-        <label className="relative shadow-md transition-shadow hover:shadow-none">
+        <label className="relative">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search suggested materials"
-            className="h-10 w-full border-black pl-9 pr-3 shadow-none"
+            className="h-10 w-full border-black pl-9 pr-3"
           />
         </label>
 
-        <div className="shadow-md transition-shadow hover:shadow-none">
+        <div>
           <Select
             value={sortMode}
             onValueChange={(value) => setSortMode(value as SortMode)}
           >
-            <Select.Trigger className="w-full shadow-none">
+            <Select.Trigger className="w-full">
               <ArrowUpDown size={15} className="mr-1" />
               <Select.Value placeholder="Sort By" />
             </Select.Trigger>

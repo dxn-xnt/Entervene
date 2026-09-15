@@ -137,9 +137,8 @@ export default function AdminSubjectLoadStudio() {
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [isBreakDrawerOpen, setIsBreakDrawerOpen] = useState<boolean>(false);
   const [periodTemplateSlots, setPeriodTemplateSlots] = useState<PeriodTemplateSlotItem[]>([]);
-  const [sectionViewModes, setSectionViewModes] = useState<Record<number, "grid" | "list">>({});
   const [openRowKey, setOpenRowKey] = useState<string | null>(null);
-  const [expandedIssueRule, setExpandedIssueRule] = useState<string | null>(null);
+  const [sectionViewModes, setSectionViewModes] = useState<Record<number, "grid" | "list">>({});
 
   // Fetch period templates directly on mount
   useEffect(() => {
@@ -236,9 +235,6 @@ export default function AdminSubjectLoadStudio() {
     return "JHS_45MIN";
   }, [selectedGradeId, studioData]);
 
-  const activeGroupBreakSlots = useMemo(() => {
-    return periodTemplateSlots.filter((s) => s.template_group === activeGroupKey && s.is_locked_break);
-  }, [periodTemplateSlots, activeGroupKey]);
 
   const previousPeriods = useMemo(() => {
     if (!studioData?.academic_periods || !selectedPeriodId) return [];
@@ -251,55 +247,6 @@ export default function AdminSubjectLoadStudio() {
     return Math.max(0, 6 - errorRules.size);
   }, [conflicts]);
 
-  const groupedIssues = useMemo(() => {
-    const map: Record<string, { title: string; explanation: string; severity: "error" | "warning"; items: typeof conflicts }> = {};
-
-    conflicts.forEach((conf) => {
-      let key = conf.rule || "UNSPECIFIED_RULE";
-      let title = key.replace(/_/g, " ");
-      let explanation = conf.message || "Conflict error detected.";
-      let severity = conf.severity || "error";
-
-      if (key === "MATH_SCIENCE_DURATION_MISMATCH" || key === "DURATION_MISMATCH") {
-        key = "DURATION_MISMATCH";
-        title = "Period shorter than subject requires";
-        explanation = "Math & Science core subjects need 60 min/day. The active break schedule leaves 45-min periods, so every Math/Science slot falls short by 15 min.";
-        severity = "warning";
-      } else if (key === "TEACHER_DOUBLE_BOOKING") {
-        key = "TEACHER_DOUBLE_BOOKING";
-        title = "Teacher double-booked";
-        explanation = "Assigned teacher has overlapping period commitments across two classes.";
-        severity = "error";
-      } else if (key === "SECTION_DOUBLE_BOOKING") {
-        key = "SECTION_DOUBLE_BOOKING";
-        title = "Section double-booked";
-        explanation = "Section has two subjects scheduled at the exact same time slot.";
-        severity = "error";
-      } else if (key === "BREAK_TIME_VIOLATION") {
-        key = "BREAK_TIME_VIOLATION";
-        title = "Break time overlap";
-        explanation = "Subject schedule overlaps with locked Homeroom, Recess, or Lunch walls.";
-        severity = "error";
-      } else if (key === "TEACHER_CAPACITY_LIMIT") {
-        key = "TEACHER_CAPACITY_LIMIT";
-        title = "Teacher workload capacity exceeded";
-        explanation = "Assigned daily or weekly teaching hours exceed max capacity policy limits.";
-        severity = "error";
-      } else if (key === "UNCONFIGURED_BELL_SCHEDULE") {
-        key = "UNCONFIGURED_BELL_SCHEDULE";
-        title = "Bell schedule unconfigured or mismatched";
-        explanation = "Section has no bell-schedule template configured or a Senior High section is assigned to the Junior High bell schedule.";
-        severity = "warning";
-      }
-
-      if (!map[key]) {
-        map[key] = { title, explanation, severity, items: [] };
-      }
-      map[key].items.push(conf);
-    });
-
-    return Object.values(map);
-  }, [conflicts]);
 
   const handleHighlightKey = (key: string | undefined, classId?: number | null) => {
     if (!key) return;
@@ -1516,19 +1463,19 @@ export default function AdminSubjectLoadStudio() {
                 </Alert>
               )}
 
-              <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-12">
-                {/* LEFT PANE: Section Schedule List */}
-                <main className="flex min-w-0 flex-col gap-3 lg:col-span-9">
+              <div className="flex min-w-0 flex-col gap-3">
+                {/* Section Schedule List */}
+                <main className="flex min-w-0 flex-col gap-3 w-full">
                   {/* Filters & Status Bar */}
                   <section className="flex flex-col gap-3 w-full">
                     <div className="flex flex-row gap-2 w-full">
-                      <label className="relative shadow-md hover:shadow-none transition-shadow w-full bg-background">
+                      <label className="relative w-full">
                         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                         <Input
                           // value={search}
                           // onChange={(event) => setSearch(event.target.value)}
                           placeholder="Search class"
-                          className="h-10 w-full shadow-none border-black pl-9 pr-3"
+                          className="h-10 w-full border-black pl-9 pr-3"
                         />
                       </label>
 
@@ -2438,199 +2385,6 @@ export default function AdminSubjectLoadStudio() {
                     ))
                   )}
                 </main>
-
-                {/* RIGHT PANE: Live Conflict Tracker & Teacher Workload */}
-                <aside className="lg:col-span-3 flex flex-col gap-3">
-                  {/* Section Group Break Schedule */}
-                  <Card className="flex flex-col justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-md font-bold">
-                        Active Break Schedule
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      {activeGroupBreakSlots.length === 0 ? (
-                        <span className="text-xs text-muted-foreground font-semibold">Standard Defaults Active</span>
-                      ) : (
-                        activeGroupBreakSlots.map((b) => (
-                          <Badge key={`${b.template_group}_${b.display_order}`} size="md" variant="outline">
-                            <Text as="p" className="text-sm font-normal">
-                              {b.slot_name}:
-                            </Text>
-                            <Text as="p" className="text-base font-semibold">
-                              {formatTime12h(b.start_time)} – {formatTime12h(b.end_time)}
-                            </Text>
-                          </Badge>
-                        ))
-                      )}
-                      <Button
-                        size="sm"
-                        variant="default"
-                        onClick={() => setIsBreakDrawerOpen(true)}
-                      >
-                        Adjust Breaks
-                      </Button>
-                    </div>
-                  </Card>
-
-                  {/* Grouped Issues Card (Root-Cause Aggregated) */}
-                  <Card className="bg-background">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        {/* <AlertTriangle className="size-5 text-amber-600" /> */}
-                        <Text as="h3" className="font-bold text-lg">
-                          Issues
-                        </Text>
-                      </div>
-                    </div>
-
-                    {conflicts.length === 0 ? (
-                      <div className="p-4 bg-emerald-50 border-2 border-black text-emerald-900 font-bold text-xs flex items-center gap-2 shadow-[2px_2px_0_#000]">
-                        <CheckCircle2 className="size-5 shrink-0 text-emerald-700" />
-                        <span>All schedules and workloads are valid! No conflicts detected.</span>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-3">
-                        {groupedIssues.map((group) => {
-                          const isExpanded = expandedIssueRule === group.title;
-                          return (
-                            <div
-                              key={group.title}
-                              className={`p-3 border-2 border-black text-xs transition-all ${group.severity === "error"
-                                ? "bg-red-50 text-red-950 border-red-800"
-                                : "bg-amber-50 text-amber-950 border-amber-800"
-                                }`}
-                            >
-                              <div className="flex items-center justify-between font-bold mb-1">
-                                <span className="text-sm">{group.title.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}</span>
-                                <Badge size="sm" variant={group.severity === "error" ? "solid" : "surface"}>
-                                  {group.items.length}
-                                </Badge>
-                              </div>
-                              <p className="font-normal text-xs leading-relaxed text-black/80 mb-2">
-                                {group.explanation}
-                              </p>
-
-                              <button
-                                type="button"
-                                onClick={() => setExpandedIssueRule(isExpanded ? null : group.title)}
-                                className="text-xs font-bold underline hover:text-black transition-colors flex items-center gap-1 mt-1"
-                              >
-                                <span>{isExpanded ? "Hide details ▲" : `Show affected items (${group.items.length}) ▾`}</span>
-                              </button>
-
-                              {isExpanded && (
-                                <div className="mt-2.5 pt-2 border-t border-black/20 flex flex-col gap-1.5">
-                                  {group.items.map((conf, cIdx) => (
-                                    <div
-                                      key={cIdx}
-                                      onClick={() => {
-                                        const targetKey = conf.affected_key || (conf.class_id && conf.subject_id ? `${conf.class_id}_${conf.subject_id}` : undefined);
-                                        handleHighlightKey(targetKey, conf.class_id);
-                                      }}
-                                      className="p-1.5 bg-white border border-black text-[11px] font-semibold cursor-pointer hover:bg-gray-100 flex items-center justify-between rounded"
-                                    >
-                                      <span className="truncate pr-2">{conf.message}</span>
-                                      <span className="text-[10px] font-bold underline shrink-0">View</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </Card>
-
-                  {/* Teacher Workload Capacity Card */}
-                  <Card className="bg-background shadow-[4px_4px_0_#000]">
-                    <div className="flex flex-col gap-1 pb-3 mb-3">
-                      <div className="flex items-center gap-2">
-                        {/* <Clock className="size-5 text-blue-600" /> */}
-                        <Text as="h3" className="font-bold text-lg">
-                          Teacher Capacity Tracker
-                        </Text>
-                      </div>
-                      <span className="text-xs font-normal text-foreground">
-                        Limits: Max {getSetting("max_hours_per_day", "6.0")} hrs/day • Max {getSetting("max_subjects_per_day", "6")} subjects/day
-                      </span>
-                    </div>
-
-                    <div className="flex flex-col gap-4">
-                      {teacherWorkloads.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic font-semibold">
-                          Assign teachers to subject loads to monitor workload capacity.
-                        </p>
-                      ) : (
-                        teacherWorkloads.map((tw) => {
-                          const teacherConflicts = conflicts.filter(c => c.staff_id === tw.staff_id);
-                          const hasError = teacherConflicts.some(c => c.severity === "error");
-                          const hasWarning = teacherConflicts.some(c => c.severity === "warning");
-
-                          const maxHrs = parseFloat(getSetting("max_hours_per_day", "6.0"));
-                          const maxSub = parseInt(getSetting("max_subjects_per_day", "6"));
-                          const minSub = parseInt(getSetting("min_subjects_per_day", "4"));
-                          const cardClass = hasError
-                            ? "bg-red-50 border-red-600"
-                            : hasWarning
-                              ? "bg-amber-50 border-amber-500"
-                              : "bg-muted/20";
-
-                          const handledCount = new Set(
-                            loads.filter((l) => l.staff_id === tw.staff_id).map((l) => l.subject_id)
-                          ).size;
-
-                          return (
-                            <div
-                              key={tw.staff_id}
-                              className={`p-3 border-2 border-black text-xs ${cardClass}`}
-                            >
-                              <div className="flex flex-col gap-0.5 mb-1.5">
-                                <span className="text-sm font-bold text-foreground leading-snug">{tw.staff_name}</span>
-                                <div className="font-mono text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                                  <span>{handledCount} {handledCount === 1 ? "subject handled" : "subjects handled"}</span>
-                                  <span>•</span>
-                                  <span>{tw.total_weekly_hours.toFixed(1)} hrs/wk</span>
-                                </div>
-                              </div>
-
-                              {/* Daily Breakdown */}
-                              <div className="grid grid-cols-5 gap-1 mt-2">
-                                {["MON", "TUE", "WED", "THU", "FRI"].map((dayKey) => {
-                                  const hrs = tw.daily_hours[dayKey] || 0;
-                                  const subCount = tw.daily_subjects_count[dayKey] || 0;
-                                  const isOverLimit = hrs > maxHrs || subCount > maxSub;
-                                  const isUnderLimit = subCount > 0 && subCount < minSub;
-
-                                  const dayClass = isOverLimit
-                                    ? "bg-red-200 border-red-700 text-red-900"
-                                    : isUnderLimit
-                                      ? "bg-amber-200 border-amber-700 text-amber-900"
-                                      : hrs > 0
-                                        ? "bg-emerald-100 border-emerald-700 text-emerald-900"
-                                        : "bg-background border-black/30 text-muted-foreground";
-
-                                  return (
-                                    <div
-                                      key={dayKey}
-                                      className={`flex flex-col items-center p-1 border text-[10px] font-bold ${dayClass}`}
-                                    >
-                                      <span>{dayKey.slice(0, 2)}</span>
-                                      <span className="font-mono text-[11px] mt-0.5">
-                                        {hrs > 0 ? `${hrs.toFixed(1)}h` : "-"}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </Card>
-                </aside>
               </div>
 
             </div>

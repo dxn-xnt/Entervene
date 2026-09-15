@@ -326,14 +326,14 @@ export default function StudentRecordsPanel({
       {/* wapa ywa  */}
       {/* Search bar - always visible with proper spacing */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <label className="relative w-full md:w-96 shadow-md transition-shadow hover:shadow-none">
+        <label className="relative w-full md:w-96">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
           <Input
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search by student name, LRN, or email"
-            className="h-10 w-full border-black pl-9 pr-3 shadow-none"
+            className="h-10 w-full border-black pl-9 pr-3"
           />
         </label>
       </div>

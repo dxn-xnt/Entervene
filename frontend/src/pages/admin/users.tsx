@@ -331,13 +331,13 @@ export default function AdminUsers() {
 
             <div className="flex flex-col gap-3">
               <div className="grid gap-3 md:grid-cols-[1fr_160px_160px] py-2">
-                <label className="relative shadow-md hover:shadow-none transition-shadow">
+                <label className="relative">
                   <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                   <Input
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="Search class or adviser..."
-                    className="h-10 w-full shadow-none border-black pl-9 pr-3"
+                    className="h-10 w-full border-black pl-9 pr-3"
                   />
                 </label>
 
