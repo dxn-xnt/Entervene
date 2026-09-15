@@ -706,6 +706,7 @@ def download_submission_file(
         filename=cast(str, attachment.file_name),
         media_type=cast(Optional[str], attachment.file_type) or "application/octet-stream",
         content_disposition_type="inline" if inline else "attachment",
+        headers={"Cache-Control": "no-store"},
     )
 
 

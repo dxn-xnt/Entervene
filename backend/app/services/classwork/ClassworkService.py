@@ -660,6 +660,7 @@ def download_classwork_file(
         filename=attachment.file_name,
         media_type=attachment.file_type or "application/octet-stream",
         content_disposition_type="inline" if inline else "attachment",
+        headers={"Cache-Control": "no-store"},
     )
 
 
