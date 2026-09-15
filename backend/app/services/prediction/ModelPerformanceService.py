@@ -6,8 +6,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.models.ai.AIModelVersion import AIModelVersion
-from app.models.ai.AIPrediction import AIPrediction
+from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
+from app.models.ai.AIPrediction import AIPrediction, RISK_ASSESSMENT_EVALUATED
 from app.models.ai.PredictionOutcome import PredictionOutcome
 
 
@@ -71,6 +71,11 @@ def _base_rows(
     )
     if model_version_id is not None:
         query = query.filter(AIPrediction.model_version_id == model_version_id)
+    else:
+        query = query.filter(
+            (AIModelVersion.model_purpose == ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value)
+            | (AIPrediction.model_version_id.is_(None))
+        )
     if class_id is not None:
         query = query.filter(AIPrediction.class_id == class_id)
     if subject_id is not None:
@@ -115,6 +120,10 @@ def get_model_performance_summary(
     return {
         **metrics,
         "actual_risk_label_counts": _counts([outcome.actual_risk_label for outcome, _, _ in rows]),
-        "predicted_risk_level_counts": _counts([prediction.risk_level for _, prediction, _ in rows]),
+        "predicted_risk_level_counts": _counts([
+            prediction.risk_level
+            for _, prediction, _ in rows
+            if prediction.risk_assessment_status == RISK_ASSESSMENT_EVALUATED
+        ]),
         "by_model_version": _by_model_version(rows),
     }

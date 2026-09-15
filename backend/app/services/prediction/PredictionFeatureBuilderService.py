@@ -18,6 +18,7 @@ from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
+from app.services.grading.ComponentMapper import classify_classwork_component, to_legacy_prediction_component
 
 
 COMPONENT_FEATURES = {
@@ -29,20 +30,7 @@ READINESS_ACTION = "Collect more graded evidence before generating a model-assis
 
 
 def map_classwork_category(classwork_type: str, classwork_category: str | None) -> str:
-    if classwork_category:
-        cat = classwork_category.upper()
-        if cat in {"EXAMS", "EXAM", "PERIODICAL_EXAM", "PERIODICAL_ASSESSMENT", "QUARTERLY_ASSESSMENT", "SUMMATIVE_1", "SUMMATIVE_2", "TERM_EXAM"}:
-            return "QUARTERLY_ASSESSMENT"
-        if cat in {"WRITTEN_WORK", "PERFORMANCE_TASK"}:
-            return cat
-
-    t = (classwork_type or "").upper()
-    if t in {"EXAM", "PERIODICAL_EXAM", "QUARTERLY_EXAM", "SUMMATIVE"}:
-        return "QUARTERLY_ASSESSMENT"
-    elif t in {"ACTIVITY", "PROJECT"}:
-        return "PERFORMANCE_TASK"
-    else:
-        return "WRITTEN_WORK"
+    return to_legacy_prediction_component(classify_classwork_component(classwork_type, classwork_category))
 
 
 def _to_float(value: Any) -> float | None:

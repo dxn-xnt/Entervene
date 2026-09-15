@@ -7,6 +7,7 @@ from app.models.academic.StudentCLass import StudentClass
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.ai.AIPrediction import AIPrediction
+from app.models.ai.AIModelVersion import ModelPurpose
 from app.models.ai.PredictionOutcome import PredictionOutcome
 from app.services.prediction.TeacherAssignmentResolver import get_teacher_assigned_triplets
 
@@ -101,9 +102,30 @@ def validate_forecast_scope(db: Session, scope):
 def prediction_metadata(prediction):
     same = prediction.source_period_id == prediction.target_period_id
     snapshot = prediction.evidence_snapshot or {}
+    model_purpose = prediction.model_version.model_purpose if prediction.model_version else None
+    if model_purpose == ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value:
+        return {
+            'revision': prediction.revision,
+            'model_purpose': model_purpose,
+            'prediction_purpose': ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value,
+            'validation_status': 'CURRENT_PERIOD_ACADEMIC_ESTIMATE',
+            'purpose_label': 'Current-period final grade projection',
+            'revision_origin': 'GENERATED' if snapshot.get('snapshot_version') else 'LEGACY_ORDERING',
+        }
+    if model_purpose == ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value and not same:
+        audited = snapshot.get('snapshot_version') == 'prediction-evidence-v2'
+        return {
+            'revision': prediction.revision,
+            'model_purpose': model_purpose,
+            'prediction_purpose': 'NEXT_PERIOD_PREDICTION',
+            'validation_status': 'NEXT_PERIOD_PROTOTYPE' if audited else 'LEGACY_UNVALIDATED',
+            'purpose_label': 'Next-period grade forecast' if audited else 'Historical unvalidated forecast',
+            'revision_origin': 'GENERATED' if audited else 'LEGACY_ORDERING',
+        }
     audited_next = snapshot.get('snapshot_version') == 'prediction-evidence-v2' and not same
     return {
         'revision': prediction.revision,
+        'model_purpose': model_purpose,
         'prediction_purpose': 'CURRENT_PERIOD_PROJECTION' if same else 'NEXT_PERIOD_PREDICTION',
         'validation_status': 'NEXT_PERIOD_PROTOTYPE' if audited_next else 'LEGACY_UNVALIDATED',
         'purpose_label': 'Historical unvalidated current-period projection' if same else ('Next-period grade forecast' if audited_next else 'Historical unvalidated forecast'),

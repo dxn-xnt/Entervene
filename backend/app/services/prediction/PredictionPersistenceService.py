@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
-from app.models.ai.AIPrediction import AIPrediction
+from app.models.ai.AIModelVersion import ModelPurpose
+from app.models.ai.AIPrediction import (
+    AIPrediction,
+    RISK_ASSESSMENT_EVALUATED,
+    RISK_ASSESSMENT_NOT_EVALUATED_CURRENT,
+)
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
 from app.models.people.Student import Student
 from app.services.prediction.ModelScoringService import DEFAULT_MODEL_NAME, score_student_prediction
@@ -47,6 +52,55 @@ IDENTITY_OR_PRIVATE_TERMS = (
 
 class DuplicatePredictionError(ValueError):
     pass
+
+
+class PredictionRiskContractError(ValueError):
+    pass
+
+
+def normalize_model_purpose(model_purpose: ModelPurpose | str | None) -> str:
+    if isinstance(model_purpose, ModelPurpose):
+        return model_purpose.value
+    if model_purpose is None:
+        return ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value
+    return str(model_purpose)
+
+
+def validate_prediction_risk_contract(
+    *,
+    model_purpose: ModelPurpose | str | None,
+    risk_assessment_status: str | None,
+    risk_level: str | None,
+    risk_score: Any | None,
+    data_status: str | None,
+) -> None:
+    """Validate risk persistence according to the authoritative model purpose.
+
+    NEXT-period baseline forecasts remain risk-evaluated predictions. Current-
+    period final-grade projections are academic estimates only in Stage 6B.1
+    and must not fabricate a risk label, risk score, or data-status value.
+    """
+
+    purpose = normalize_model_purpose(model_purpose)
+    if purpose == ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value:
+        if risk_assessment_status != RISK_ASSESSMENT_EVALUATED:
+            raise PredictionRiskContractError("NEXT_PERIOD_BASELINE_FORECAST requires evaluated risk.")
+        if risk_level is None or data_status is None:
+            raise PredictionRiskContractError("NEXT_PERIOD_BASELINE_FORECAST requires risk_level and data_status.")
+        return
+
+    if purpose == ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value:
+        if risk_assessment_status != RISK_ASSESSMENT_NOT_EVALUATED_CURRENT:
+            raise PredictionRiskContractError(
+                "CURRENT_PERIOD_FINAL_GRADE_PROJECTION must be persisted as a non-risk academic estimate."
+            )
+        if risk_level is not None or risk_score is not None or data_status is not None:
+            raise PredictionRiskContractError(
+                "CURRENT_PERIOD_FINAL_GRADE_PROJECTION cannot persist fabricated risk fields."
+            )
+        return
+
+    raise PredictionRiskContractError(f"Unsupported model purpose for prediction persistence: {purpose}")
 
 
 def validate_required_identifiers(prediction_request: dict[str, Any]) -> None:
@@ -197,6 +251,7 @@ def _prediction_result(
         "risk_level": prediction.risk_level,
         "risk_score": float(prediction.risk_score) if prediction.risk_score is not None else None,
         "data_status": prediction.data_status,
+        "risk_assessment_status": prediction.risk_assessment_status,
         "reasons": scoring_result.get("reasons", []),
         "recommended_action": scoring_result.get("recommended_action"),
         "triggered_rules": scoring_result.get("triggered_rules", []),

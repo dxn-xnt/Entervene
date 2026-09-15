@@ -12,6 +12,11 @@ from app.services.student_record.StudentRecordService import (
     _compute_exam_ps,
     _deped_grade,
 )
+from app.services.grading.ComponentMapper import (
+    CanonicalGradingComponent,
+    classify_classwork_component,
+    to_legacy_prediction_component,
+)
 
 
 def _make_mock_assignment(title: str, total_points: float = 100, subtype: str | None = None, category: str = "EXAMS"):
@@ -26,6 +31,25 @@ def _make_mock_assignment(title: str, total_points: float = 100, subtype: str | 
     asgn.classwork = cw
     asgn.classwork_assignment_id = 1
     return asgn
+
+
+def test_canonical_component_mapping_is_deterministic():
+    assert classify_classwork_component("QUIZ", "WRITTEN_WORK") == CanonicalGradingComponent.WRITTEN_WORK
+    assert classify_classwork_component("ACTIVITY", "PERFORMANCE_TASK") == CanonicalGradingComponent.PERFORMANCE_TASK
+    for token in [
+        "EXAM",
+        "EXAMS",
+        "PERIODICAL_EXAM",
+        "PERIODICAL_ASSESSMENT",
+        "QUARTERLY_ASSESSMENT",
+        "SUMMATIVE_1",
+        "SUMMATIVE_2",
+        "TERM_EXAM",
+    ]:
+        assert classify_classwork_component("QUIZ", token) == CanonicalGradingComponent.ASSESSMENT
+    assert classify_classwork_component("ACTIVITY", None) == CanonicalGradingComponent.PERFORMANCE_TASK
+    assert classify_classwork_component("QUIZ", None) == CanonicalGradingComponent.WRITTEN_WORK
+    assert to_legacy_prediction_component(CanonicalGradingComponent.ASSESSMENT) == "QUARTERLY_ASSESSMENT"
 
 
 def test_categorize_exam_subtype_explicit():
@@ -96,6 +120,43 @@ def test_subsplit_partial_term_normalization():
     assert ps_sum2 is None
     assert ps_term is None
     # Normalized: 0.30 * 90 / 0.30 = 90.0%
+    assert ps_exams == 90.0
+
+
+@pytest.mark.parametrize(
+    ("scores", "subtypes", "expected"),
+    [
+        ([90.0], ["SUMMATIVE_1"], 90.0),
+        ([80.0], ["SUMMATIVE_2"], 80.0),
+        ([70.0], ["TERM_EXAM"], 70.0),
+        ([90.0, 80.0], ["SUMMATIVE_1", "SUMMATIVE_2"], 85.0),
+        ([90.0, 70.0], ["SUMMATIVE_1", "TERM_EXAM"], 78.57),
+        ([80.0, 70.0], ["SUMMATIVE_2", "TERM_EXAM"], 74.29),
+        ([100.0, 50.0, 80.0], ["SUMMATIVE_1", "SUMMATIVE_2", "TERM_EXAM"], 77.0),
+        ([0.0, 0.0, 0.0], ["SUMMATIVE_1", "SUMMATIVE_2", "TERM_EXAM"], 0.0),
+        ([110.0, 100.0, 100.0], ["SUMMATIVE_1", "SUMMATIVE_2", "TERM_EXAM"], 103.0),
+    ],
+)
+def test_exam_subsplit_component_combinations_contribute_once(scores, subtypes, expected):
+    assignments = [_make_mock_assignment(subtype, 100, subtype=subtype) for subtype in subtypes]
+
+    *_, ps_exams = _compute_exam_ps(scores, assignments)
+
+    assert ps_exams == pytest.approx(expected)
+
+
+def test_exam_subsplit_ignores_missing_ungraded_scores_without_treating_as_zero():
+    assignments = [
+        _make_mock_assignment("Summative 1", 100, subtype="SUMMATIVE_1"),
+        _make_mock_assignment("Summative 2", 100, subtype="SUMMATIVE_2"),
+        _make_mock_assignment("Term Exam", 100, subtype="TERM_EXAM"),
+    ]
+
+    ps_sum1, ps_sum2, ps_term, ps_exams = _compute_exam_ps([90.0, None, None], assignments)
+
+    assert ps_sum1 == 90.0
+    assert ps_sum2 is None
+    assert ps_term is None
     assert ps_exams == 90.0
 
 

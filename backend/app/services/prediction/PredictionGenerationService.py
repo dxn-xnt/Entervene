@@ -5,13 +5,18 @@ from decimal import Decimal
 from hashlib import sha256
 import json
 
-from app.models.ai.AIPrediction import AIPrediction
+from app.models.ai.AIModelVersion import ModelPurpose
+from app.models.ai.AIPrediction import AIPrediction, RISK_ASSESSMENT_EVALUATED
 from app.models.ai.PredictionGenerationRequest import PredictionGenerationRequest
 from app.services.prediction.ModelScoringService import (
     DEFAULT_MODEL_NAME, get_active_model_version, score_student_prediction, artifact_digest,
 )
 from app.services.prediction.PredictionFeatureBuilderService import build_prediction_features_from_records, insufficient_prediction_response
-from app.services.prediction.PredictionPersistenceService import validate_references, build_prediction_feature_rows
+from app.services.prediction.PredictionPersistenceService import (
+    build_prediction_feature_rows,
+    validate_prediction_risk_contract,
+    validate_references,
+)
 from app.services.prediction.PredictionEvidenceSnapshotService import build_evidence_snapshot
 from app.services.prediction.PredictionScopeService import (
     PredictionConflict, authorize_generation, validate_forecast_scope, prediction_metadata,
@@ -84,6 +89,7 @@ def persisted_prediction_response(prediction, status='REPLAYED'):
         'predicted_period_grade': float(prediction.predicted_period_grade) if prediction.predicted_period_grade is not None else None,
         'risk_score': float(prediction.risk_score) if prediction.risk_score is not None else None,
         'risk_level': prediction.risk_level, 'data_status': prediction.data_status,
+        'risk_assessment_status': prediction.risk_assessment_status,
         'generated_at': prediction.generated_at, 'evidence_snapshot': deepcopy(prediction.evidence_snapshot),
         'evidence_cutoff_at': snapshot.get('evidence_cutoff_at'),
         'generation_status': status, 'duplicate': status != 'CREATED',
@@ -142,6 +148,13 @@ def generate_from_records(db, scope, *, model_name=DEFAULT_MODEL_NAME, generatio
     if not built['ready']:
         return {**insufficient_prediction_response(built), 'generation_status': 'NOT_READY'}
     scoring = score_student_prediction(db, built['features'], model_name=model_name, model_version=model)
+    validate_prediction_risk_contract(
+        model_purpose=ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST,
+        risk_assessment_status=RISK_ASSESSMENT_EVALUATED,
+        risk_level=scoring.get('risk_level'),
+        risk_score=scoring.get('risk_score'),
+        data_status=scoring.get('data_status'),
+    )
     response = {**scoring, 'ready': built['ready'], 'readiness_level': built['readiness_level'],
         'prediction_mode': 'NEXT_PERIOD_PREDICTION', 'features': deepcopy(built['features']),
         'evidence_summary': deepcopy(built['evidence_summary']),
@@ -153,7 +166,9 @@ def generate_from_records(db, scope, *, model_name=DEFAULT_MODEL_NAME, generatio
         revision=(latest.revision + 1 if latest else 1),
         predicted_period_grade=Decimal(str(scoring['predicted_period_grade'])) if scoring['predicted_period_grade'] is not None else None,
         risk_score=Decimal(str(scoring['risk_score'])) if scoring['risk_score'] is not None else None,
-        risk_level=scoring['risk_level'], data_status=scoring['data_status'], generation_request_id=generation_request_id)
+        risk_level=scoring['risk_level'], data_status=scoring['data_status'],
+        risk_assessment_status=RISK_ASSESSMENT_EVALUATED,
+        generation_request_id=generation_request_id)
     db.add(prediction)
     db.flush()
     feature_rows = build_prediction_feature_rows(prediction, built['features'], scoring)

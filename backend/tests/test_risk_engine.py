@@ -78,6 +78,32 @@ def test_high_risk_when_predicted_grade_below_75():
     assert "predicted_grade_below_75" in result.triggered_rules
 
 
+def test_current_period_projection_does_not_trigger_next_period_predicted_grade_risk_rules():
+    result = evaluate_risk(
+        sufficient_input(
+            model_purpose="CURRENT_PERIOD_FINAL_GRADE_PROJECTION",
+            predicted_period_grade=74.0,
+            grade_trend_vs_previous_period=-10.0,
+            assessment_completion_rate=0.60,
+            missing_activity_count=3,
+            data_coverage_ratio=0.90,
+        )
+    )
+
+    forbidden = {
+        "predicted_grade_below_75",
+        "predicted_grade_75_to_81",
+        "predicted_below_80_with_decline",
+        "low_completion_with_predicted_below_82",
+        "three_missing_activities_with_predicted_below_85",
+        "predicted_grade_82_to_87",
+        "low_risk_grade_completion_and_coverage",
+    }
+    assert not forbidden.intersection(result.triggered_rules)
+    assert "assessment_completion_below_75" in result.triggered_rules
+    assert "two_or_more_missing_activities" in result.triggered_rules
+
+
 def test_high_risk_when_predicted_below_80_and_trend_declines():
     result = evaluate_risk(sufficient_input(predicted_period_grade=79.0, grade_trend_vs_previous_period=-5.0))
 
@@ -257,4 +283,3 @@ def test_dual_pathway_completion_and_behavioral_compound_trigger():
     assert "assessment_completion_below_90" in result.triggered_rules
     assert "behavioral_engagement_below_60" in result.triggered_rules
     assert result.risk_score >= 75.0
-
