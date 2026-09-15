@@ -252,9 +252,9 @@ export const TeacherTOSPage: React.FC = () => {
 
               <Button
                 variant="default"
-                size="md"
+                size="header"
                 onClick={handleStartNewTOS}
-                className="shrink-0 gap-1.5 px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+                className="shrink-0 whitespace-nowrap"
               >
                 <Plus className="size-4" />
                 <span>New TOS</span>

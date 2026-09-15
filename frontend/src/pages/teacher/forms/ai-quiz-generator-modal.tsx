@@ -520,7 +520,6 @@ export default function AIQuizGeneratorModal({
       <Dialog.Content
         size="2xl"
         className="p-0"
-        overlay={{ className: "bg-black/60 backdrop-blur-xs" }}
       >
         {/* ── Fixed Header ── */}
         <Dialog.Header
@@ -1009,11 +1008,11 @@ export default function AIQuizGeneratorModal({
         <Dialog.Footer
           position="fixed"
           variant="default"
-          className="border-t-2 border-black bg-neutral-100 px-5 py-3 flex items-center justify-between"
+          className="sm:justify-between"
         >
           {/* Left side */}
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <HelpCircle className="w-3.5 h-3.5 text-black/60" />
+            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground" />
             <span>AI generates questions, choices, answers, and rubrics.</span>
           </div>
 

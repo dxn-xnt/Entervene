@@ -950,13 +950,14 @@ export default function SubjectDetails() {
                   <div className="flex flex-wrap w-full gap-2 md:flex md:w-auto md:flex-nowrap md:items-center">
                     <Button
                       type="button"
+                      size="header"
                       variant="outline"
                       onClick={() =>
                         navigate(
                           `/teacher/classes/${classId}/subjects/${subjectId}/lesson-planner`,
                         )
                       }
-                      className="w-full gap-1.5 whitespace-nowrap px-2 sm:gap-2 sm:px-4 md:w-auto"
+                      className="w-full whitespace-nowrap md:w-auto"
                     >
                       <BookOpenCheck size={16} />
                       Lesson Planner
@@ -965,21 +966,23 @@ export default function SubjectDetails() {
                       <>
                         <Button
                           type="button"
+                          size="header"
                           variant="outline"
                           onClick={() => openCompetencyForm(null)}
-                          className="w-full gap-1.5 whitespace-nowrap px-2 sm:gap-2 sm:px-4 md:w-auto"
+                          className="w-full whitespace-nowrap md:w-auto"
                         >
                           <Award size={16} />
                           Add Competency
                         </Button>
                         <Button
                           type="button"
+                          size="header"
                           variant="default"
                           onClick={() => {
                             setSelectedCompetencyIdForNewLesson(undefined);
                             setIsCreatingLesson(true);
                           }}
-                          className="w-full gap-1.5 whitespace-nowrap px-2 sm:gap-2 sm:px-4 md:w-auto"
+                          className="w-full whitespace-nowrap md:w-auto"
                         >
                           <Plus size={16} />
                           Add Lesson
@@ -1064,7 +1067,7 @@ export default function SubjectDetails() {
               }}
             >
               <Dialog.Content className="w-full max-w-4xl p-0 transition-none">
-                <Dialog.Header className="sticky top-0 z-10 border-black">
+                <Dialog.Header className="border-border">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wide">
                       Teacher lesson management
@@ -1104,7 +1107,7 @@ export default function SubjectDetails() {
                                 )
                               }
                               disabled={isSavingLesson}
-                              className="rounded border-black !shadow-none h-10 w-full"
+                              className="h-10 w-full rounded-none border-border bg-background text-foreground !shadow-none"
                             />
                           </div>
                           <div>
@@ -1131,7 +1134,7 @@ export default function SubjectDetails() {
                                 )
                               }
                               disabled={isSavingLesson}
-                              className="rounded border-black !shadow-none h-10 w-full"
+                              className="h-10 w-full rounded-none border-border bg-background text-foreground !shadow-none"
                             />
                           </div>
                         </div>
@@ -1157,7 +1160,7 @@ export default function SubjectDetails() {
                               )
                             }
                             disabled={isSavingLesson}
-                            className="min-h-20 w-full rounded border-2 border-black px-3 py-2 text-sm"
+                            className="min-h-20 w-full rounded-none border-2 border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/35"
                             placeholder="Short lesson summary"
                           />
                         </div>
@@ -1180,7 +1183,7 @@ export default function SubjectDetails() {
                               )
                             }
                             disabled={isSavingLesson}
-                            className="min-h-52 w-full rounded border-2 border-black px-3 py-2 text-sm"
+                            className="min-h-52 w-full rounded-none border-2 border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/35"
                             placeholder="Write the lesson notes or learning content students will read."
                           />
                         </div>
@@ -1197,7 +1200,7 @@ export default function SubjectDetails() {
                           <Badge
                             variant="outline"
                             size="sm"
-                            className="ml-auto rounded"
+                            className="ml-auto rounded-none"
                           >
                             {selectedLesson.attachments.length}
                           </Badge>
@@ -1211,11 +1214,11 @@ export default function SubjectDetails() {
                                 `${API_URL}/api/v1/lessons/${selectedLesson.lesson_id}/attachments/${attachmentId}/download`
                               }
                             />
-                            <div className="mt-3 space-y-2 border-t-2 border-black pt-3">
+                            <div className="mt-3 space-y-2 border-t border-border pt-3">
                               {selectedLesson.attachments.map((attachment) => (
                                 <div
                                   key={attachment.lesson_attachment_id}
-                                  className="flex items-center justify-between gap-3 border-2 border-black px-3 py-2"
+                                  className="flex items-center justify-between gap-3 border border-border bg-background px-3 py-2"
                                 >
                                   <p className="truncate text-sm font-semibold">
                                     {attachment.file_name}
@@ -1259,12 +1262,12 @@ export default function SubjectDetails() {
                   </div>
 
                   <aside className="space-y-4">
-                    <Card className="block w-full bg-primary shadow-none">
+                    <Card className="block w-full shadow-none">
                       <Card.Content>
                         <Card.Title className="mb-0 text-base font-bold">
                           Publication
                         </Card.Title>
-                        <label className="mt-3 flex items-start gap-3 border-2 border-black bg-white px-3 py-3 text-sm font-semibold">
+                        <label className="mt-3 flex items-start gap-3 border border-border bg-background px-3 py-3 text-sm font-semibold">
                           <input
                             type="checkbox"
                             checked={lessonDraft.is_published}
@@ -1305,7 +1308,7 @@ export default function SubjectDetails() {
                           {classesForSubject.map((item) => (
                             <label
                               key={item.subject_load_id}
-                              className="flex items-center gap-2 border-2 border-black px-3 py-2 text-sm"
+                              className="flex items-center gap-2 border border-border bg-background px-3 py-2 text-sm"
                             >
                               <input
                                 type="checkbox"
@@ -1348,7 +1351,7 @@ export default function SubjectDetails() {
                           type="button"
                           onClick={() => setShowArchiveConfirm(true)}
                           disabled={isArchivingLesson || isSavingLesson}
-                          className="mt-3 w-full border-2 border-red-600 bg-white px-3 py-2 text-sm font-bold text-red-700 transition hover:bg-red-600 hover:text-white disabled:opacity-50 disabled:hover:bg-white disabled:hover:text-red-700"
+                          className="mt-3 w-full rounded-none border-2 border-red-600 bg-background px-3 py-2 text-sm font-bold text-red-700 transition hover:bg-red-600 hover:text-white disabled:opacity-50 disabled:hover:bg-background disabled:hover:text-red-700"
                         >
                           {isArchivingLesson
                             ? "Archiving..."
@@ -1359,7 +1362,7 @@ export default function SubjectDetails() {
                   </aside>
                 </div>
 
-                <div className="sticky bottom-0 flex justify-end gap-3 border-t-2 border-black bg-white px-5 py-4">
+                <Dialog.Footer>
                   <Button
                     type="button"
                     variant="outline"
@@ -1380,7 +1383,6 @@ export default function SubjectDetails() {
                       isArchivingLesson ||
                       removingLessonAttachmentId !== null
                     }
-                    className="bg-[#7ABA78] text-black hover:bg-[#6aa868]"
                   >
                     {isSavingLesson
                       ? "Saving..."
@@ -1388,7 +1390,7 @@ export default function SubjectDetails() {
                         ? "Save and Publish"
                         : "Save Draft"}
                   </Button>
-                </div>
+                </Dialog.Footer>
               </Dialog.Content>
             </Dialog>
           )}

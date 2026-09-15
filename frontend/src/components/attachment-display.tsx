@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Download, Eye, FileText, File, X, Image as ImageIcon } from "lucide-react";
-import PDFViewer from "./pdf-viewer";
+import DocumentViewer, { type PreviewDocumentKind } from "./document-viewer";
 import { API_URL, apiFetch } from "@/lib/api";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "./retroui/Card";
@@ -39,9 +39,12 @@ export default function AttachmentDisplay({
   downloadUrl,
   type = "classwork",
 }: AttachmentDisplayProps) {
-  const [selectedPdf, setSelectedPdf] = useState<string | null>(null);
-  const [selectedPdfName, setSelectedPdfName] = useState<string>("");
-  const [selectedPdfDownload, setSelectedPdfDownload] = useState<string>("");
+  const [selectedDocument, setSelectedDocument] = useState<{
+    blob: Blob;
+    url: string;
+    name: string;
+    kind: PreviewDocumentKind;
+  } | null>(null);
   const [selectedImage, setSelectedImage] = useState<{
     url: string;
     name: string;
@@ -54,14 +57,19 @@ export default function AttachmentDisplay({
 
   useEffect(() => {
     return () => {
-      if (selectedPdf?.startsWith("blob:")) {
-        URL.revokeObjectURL(selectedPdf);
+      if (selectedDocument?.url.startsWith("blob:")) {
+        URL.revokeObjectURL(selectedDocument.url);
       }
+    };
+  }, [selectedDocument]);
+
+  useEffect(() => {
+    return () => {
       if (selectedImage?.url.startsWith("blob:")) {
         URL.revokeObjectURL(selectedImage.url);
       }
     };
-  }, [selectedImage, selectedPdf]);
+  }, [selectedImage]);
 
   useEffect(() => {
     if (!selectedImage) return;
@@ -93,8 +101,9 @@ export default function AttachmentDisplay({
     );
   }
 
-  const isPdf = (fileName: string): boolean => {
-    return fileName.toLowerCase().endsWith(".pdf");
+  const getDocumentKind = (fileName: string): PreviewDocumentKind | null => {
+    const match = fileName.toLowerCase().match(/\.(pdf|docx|ppt|pptx)$/);
+    return (match?.[1] as PreviewDocumentKind | undefined) ?? null;
   };
 
   const isImage = (attachment: Attachment): boolean => {
@@ -127,7 +136,7 @@ export default function AttachmentDisplay({
     return `${url}${url.includes("?") ? "&" : "?"}inline=true`;
   };
 
-  const handleOpenPdf = async (attachment: Attachment) => {
+  const handleOpenDocument = async (attachment: Attachment, kind: PreviewDocumentKind) => {
     const url = getInlineUrl(attachment);
     if (!url) return;
 
@@ -135,15 +144,13 @@ export default function AttachmentDisplay({
     setPreviewError("");
     try {
       const response = await apiFetch(url);
-      if (!response.ok) throw new Error("The PDF could not be loaded.");
+      if (!response.ok) throw new Error("The document could not be loaded.");
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
-      setSelectedPdf(blobUrl);
-      setSelectedPdfName(attachment.file_name);
-      setSelectedPdfDownload(blobUrl);
+      setSelectedDocument({ blob, url: blobUrl, name: attachment.file_name, kind });
     } catch (error) {
       setPreviewError(
-        error instanceof Error ? error.message : "The PDF could not be loaded.",
+        error instanceof Error ? error.message : "The document could not be loaded.",
       );
     } finally {
       setImageLoadingName(null);
@@ -218,16 +225,15 @@ export default function AttachmentDisplay({
 
   return (
     <div className="space-y-3">
-      {selectedPdf && (
-        <PDFViewer
-          pdfUrl={selectedPdf}
-          downloadUrl={selectedPdfDownload}
-          fileName={selectedPdfName}
+      {selectedDocument && (
+        <DocumentViewer
+          blob={selectedDocument.blob}
+          objectUrl={selectedDocument.url}
+          fileName={selectedDocument.name}
+          kind={selectedDocument.kind}
           onClose={() => {
-            if (selectedPdf.startsWith("blob:"))
-              URL.revokeObjectURL(selectedPdf);
-            setSelectedPdf(null);
-            setSelectedPdfDownload("");
+            URL.revokeObjectURL(selectedDocument.url);
+            setSelectedDocument(null);
           }}
         />
       )}
@@ -286,7 +292,8 @@ export default function AttachmentDisplay({
         )}
         <div className="grid gap-2">
           {attachments.map((attachment, idx) => {
-            const isPdfFile = isPdf(attachment.file_name);
+            const documentKind = getDocumentKind(attachment.file_name);
+            const isPdfFile = documentKind === "pdf";
             const isImageFile = isImage(attachment);
             const url = getAttachmentUrl(attachment);
 
@@ -318,7 +325,7 @@ export default function AttachmentDisplay({
                 </div>
 
                 <div className="flex shrink-0 flex-wrap gap-2 sm:ml-2 sm:justify-end">
-                  {(isPdfFile || isImageFile) && url && (
+                  {(documentKind || isImageFile) && url && (
                     <Button
                       asChild
                       variant="outline"
@@ -337,8 +344,8 @@ export default function AttachmentDisplay({
                           }
                           if (!isModifiedClick(e)) {
                             e.preventDefault();
-                            if (isPdfFile) {
-                              handleOpenPdf(attachment);
+                            if (documentKind) {
+                              handleOpenDocument(attachment, documentKind);
                             } else {
                               handleOpenImage(attachment);
                             }

@@ -4,6 +4,8 @@ import { Alert } from "@/components/retroui/Alert";
 import ConfirmAlertDialog from "@/components/retroui/ConfirmAlertDialog";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Button } from "@/components/retroui/Button";
+import { Plus } from "lucide-react";
 
 interface DraftLesson {
   lesson_id: number;
@@ -92,12 +94,13 @@ export default function DraftLessons() {
                 <SidebarTrigger className="shrink-0 md:hidden" />
                 <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">Draft Lessons</h1>
               </div>
-              <button
+              <Button
+                size="header"
                 onClick={() => openNewLessonModal(0)}
-                className="shrink-0 whitespace-nowrap rounded bg-green-600 px-2 py-1.5 text-xs font-medium text-white transition-colors hover:bg-green-700 sm:px-4 sm:py-2 sm:text-base"
+                className="shrink-0 whitespace-nowrap"
               >
-                + New Lesson
-              </button>
+                <Plus className="size-4" /> New Lesson
+              </Button>
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">

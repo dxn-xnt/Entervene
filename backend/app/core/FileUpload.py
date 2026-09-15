@@ -12,11 +12,12 @@ from starlette.datastructures import UploadFile
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
-ALLOWED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".jpg", ".jpeg", ".png"}
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".ppt", ".pptx", ".jpg", ".jpeg", ".png"}
 
 ALLOWED_MIME_TYPES = {
     ".pdf":  "application/pdf",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".ppt":  "application/vnd.ms-powerpoint",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     ".jpg":  "image/jpeg",
     ".jpeg": "image/jpeg",

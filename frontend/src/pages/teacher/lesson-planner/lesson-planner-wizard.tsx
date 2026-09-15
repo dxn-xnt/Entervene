@@ -266,7 +266,7 @@ export const LessonPlannerWizard: React.FC<LessonPlannerWizardProps> = ({
       </div>
 
       {/* Dialog Footer using default Dialog structure */}
-      <Dialog.Footer className="flex w-full shrink-0 flex-col items-stretch gap-2 border-t-2 border-border bg-background px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:px-6 sm:py-3.5">
+      <Dialog.Footer className="w-full items-stretch sm:flex-wrap sm:items-center sm:justify-between">
         <div className="grid grid-cols-2 items-center gap-2 sm:flex">
           <Button
             type="button"

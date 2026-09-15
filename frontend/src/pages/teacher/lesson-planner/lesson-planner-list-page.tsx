@@ -183,9 +183,9 @@ export const LessonPlannerListPage: React.FC = () => {
                 {classId && subjectId && (
                   <Button
                     variant="outline"
-                    size="md"
+                    size="header"
                     onClick={() => navigate(backUrl)}
-                    className="gap-1.5 text-xs sm:gap-2 sm:text-sm"
+                    className="whitespace-nowrap"
                   >
                     <ArrowLeft className="size-4" />
                     <span>Back to Subject</span>
@@ -193,9 +193,9 @@ export const LessonPlannerListPage: React.FC = () => {
                 )}
                 <Button
                   variant="default"
-                  size="md"
+                  size="header"
                   onClick={() => navigate(createUrl)}
-                  className="shrink-0 gap-1.5 px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+                  className="shrink-0 whitespace-nowrap"
                 >
                   <Plus className="size-4" />
                   <span>Create Lesson Plan</span>

@@ -55,9 +55,9 @@ const StoryBoard = () => {
               <div className="flex shrink-0 items-center gap-2">
                 <Button
                   type="button"
-                  size="sm"
+                  size="header"
                   onClick={() => navigate(routes.student.profile)}
-                  className="gap-1.5 whitespace-nowrap px-2 sm:px-3"
+                  className="whitespace-nowrap"
                   aria-label="View my schedule"
                 >
                   <Calendar className="size-4" />

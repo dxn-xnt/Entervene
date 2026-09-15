@@ -73,10 +73,11 @@ export default function TeacherProfile() {
               </div>
               <div className="flex w-full flex-row gap-2 sm:w-auto">
                 <Button
+                  size="header"
                   onClick={openModal}
-                  className="w-full justify-center px-2 text-xs sm:w-auto sm:px-4 sm:text-sm"
+                  className="w-full whitespace-nowrap sm:w-auto"
                 >
-                  <Pencil className="mr-1 size-4 sm:mr-2" /> Edit Profile
+                  <Pencil className="size-4" /> Edit Profile
                 </Button>
               </div>
             </header>

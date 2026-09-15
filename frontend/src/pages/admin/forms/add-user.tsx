@@ -484,7 +484,7 @@ export default function AddUserModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }} >
-      <Dialog.Content size="md" className="w-[calc(100vw-1.5rem)] max-w-lg overflow-hidden rounded font-sans lg:max-w-[40%]">
+      <Dialog.Content size="md" className="w-[calc(100vw-1.5rem)] max-w-lg rounded-none font-sans lg:max-w-[40%]">
         <Dialog.Header asChild className="bg-primary text-primary-foreground font-head flex items-center justify-between">
           <div>
             <span className="font-bold text-lg">
@@ -641,7 +641,7 @@ export default function AddUserModal({
               )}
             </div>
 
-            <Dialog.Footer className="flex justify-end border-t-2 border-black px-5 py-3 bg-background gap-2">
+            <Dialog.Footer>
               <Button variant="outline" onClick={() => setStep("choose")}>
                 Back
               </Button>
@@ -853,7 +853,7 @@ export default function AddUserModal({
               )}
             </div>
 
-            <Dialog.Footer className="flex justify-end border-t-2 border-black px-5 py-3 bg-background gap-2">
+            <Dialog.Footer>
               <Button variant="outline" onClick={() => setStep("choose")}>
                 Back
               </Button>

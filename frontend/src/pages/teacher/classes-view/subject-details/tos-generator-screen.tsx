@@ -719,39 +719,39 @@ export function TOSGeneratorScreen({
             <>
               <Button
                 variant="outline"
-                size="md"
+                size="header"
                 onClick={onBack}
-                className="gap-1.5 rounded px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+                className="min-w-0 whitespace-nowrap"
               >
-                <ArrowLeft className="size-3.5 sm:size-4" /> Back to {parentLabel || (currentSubjectName || "TOS Generator")}
+                <ArrowLeft className="size-4" /> Back to {parentLabel || (currentSubjectName || "TOS Generator")}
               </Button>
               <Button
                 variant="default"
-                size="md"
+                size="header"
                 onClick={startNewExam}
-                className="gap-1.5 rounded px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+                className="min-w-0 whitespace-nowrap"
               >
-                <Plus className="size-3.5 sm:size-4" /> New TOS
+                <Plus className="size-4" /> New TOS
               </Button>
             </>
           ) : (
             <>
               <Button
                 variant="outline"
-                size="md"
+                size="header"
                 onClick={onBack}
-                className="gap-1.5 rounded px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+                className="min-w-0 whitespace-nowrap"
               >
-                <ArrowLeft className="size-3.5 sm:size-4" /> Back to {parentLabel || "TOS Exams"}
+                <ArrowLeft className="size-4" /> Back to {parentLabel || "TOS Exams"}
               </Button>
               <Button
-                size="md"
+                size="header"
                 variant="outline"
                 disabled={isSaving}
                 onClick={handleSaveDraft}
-                className="gap-1.5 rounded px-2 text-xs sm:gap-2 sm:px-4 sm:text-sm"
+                className="min-w-0 whitespace-nowrap"
               >
-                <Save className="size-3.5 sm:size-4" />
+                <Save className="size-4" />
                 {isSaving ? "Saving..." : "Save Draft"}
               </Button>
             </>

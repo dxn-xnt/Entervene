@@ -244,16 +244,16 @@ export function SuggestionPanel({
     >
       <Dialog.Content
         size="lg"
-        className="w-[95vw] max-w-2xl p-0 overflow-hidden"
+        className="w-[95vw] max-w-2xl p-0"
       >
         <Dialog.Header>
           <div className="flex items-center gap-2.5">
-            <Lightbulb className="size-6 text-black" />
+            <Lightbulb className="size-6" />
             <div>
-              <h2 className="text-lg font-black text-black">
+              <h2 className="text-lg font-black">
                 Suggest Study Material
               </h2>
-              <p className="text-xs font-semibold text-black/60">
+              <p className="text-xs font-semibold text-primary-foreground/75">
                 For {student.full_name}
               </p>
             </div>
@@ -273,7 +273,7 @@ export function SuggestionPanel({
           )}
 
           {/* AI Drafts Generator Card */}
-          <div className="border-2 border-black bg-[#F6E9B2]/40 p-3">
+          <div className="border border-border bg-muted/50 p-3">
             <div className="flex flex-wrap items-end gap-2">
               <label className="min-w-32 flex-1 text-xs font-bold">
                 Low score threshold (%)
@@ -285,7 +285,7 @@ export function SuggestionPanel({
                   onChange={(event) =>
                     setRecommendationThreshold(Number(event.target.value))
                   }
-                  className="mt-1 w-full rounded border-black bg-white px-2 h-10 text-xs shadow-none"
+                  className="mt-1 h-10 w-full rounded-none border-border bg-background px-2 text-xs shadow-none"
                 />
               </label>
               <Button
@@ -294,25 +294,25 @@ export function SuggestionPanel({
                 size="sm"
                 onClick={generateDrafts}
                 disabled={isGenerating || !subjectId}
-                className="h-10 border-black bg-[#79bd80] font-black hover:bg-[#79bd80] disabled:opacity-50"
+                className="h-10 font-black disabled:opacity-50"
               >
                 <Bot size={14} className="mr-1 inline" />
                 {isGenerating ? "Generating..." : "Generate AI Drafts"}
               </Button>
             </div>
-            <p className="mt-1 text-[11px] font-semibold text-black/60">
+            <p className="mt-1 text-[11px] font-semibold text-muted-foreground">
               Scans low classwork results and saves suggested materials as teacher-approved drafts.
             </p>
           </div>
 
-          <form onSubmit={submitSuggestion} className="space-y-3">
+          <form id="suggestion-form" onSubmit={submitSuggestion} className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="text-xs font-bold text-gray-900">
+              <label className="text-xs font-bold text-foreground">
                 Subject <span className="text-red-500">*</span>
                 <select
                   value={subjectId}
                   onChange={(event) => setSubjectId(Number(event.target.value))}
-                  className="mt-1 w-full border-2 border-black bg-[#fffdf5] px-2 py-2 text-xs font-medium outline-none focus:border-black"
+                  className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 text-xs font-medium text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/35"
                 >
                   {activeSubjects.map((subject) => (
                     <option
@@ -325,7 +325,7 @@ export function SuggestionPanel({
                 </select>
               </label>
 
-              <label className="text-xs font-bold text-gray-900">
+              <label className="text-xs font-bold text-foreground">
                 Resource Type <span className="text-red-500">*</span>
                 <select
                   value={resourceType}
@@ -334,7 +334,7 @@ export function SuggestionPanel({
                       event.target.value as SuggestionResourceType,
                     )
                   }
-                  className="mt-1 w-full border-2 border-black bg-[#fffdf5] px-2 py-2 text-xs font-medium outline-none focus:border-black"
+                  className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 text-xs font-medium text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/35"
                 >
                   <option value="CLASSWORK">Classwork or Reading</option>
                   <option value="LESSON">Lesson</option>
@@ -342,13 +342,13 @@ export function SuggestionPanel({
               </label>
             </div>
 
-            <label className="block text-xs font-bold text-gray-900">
+            <label className="block text-xs font-bold text-foreground">
               Resource <span className="text-red-500">*</span>
               <select
                 value={resourceId}
                 onChange={(event) => setResourceId(event.target.value)}
                 disabled={isResourceLoading || resources.length === 0}
-                className="mt-1 w-full border-2 border-black bg-[#fffdf5] px-2 py-2 text-xs font-medium outline-none focus:border-black disabled:opacity-60"
+                className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 text-xs font-medium text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/35 disabled:opacity-60"
               >
                 {resources.length ? (
                   resources.map((resource) => (
@@ -364,37 +364,37 @@ export function SuggestionPanel({
               </select>
             </label>
 
-            <label className="block text-xs font-bold text-gray-900">
+            <label className="block text-xs font-bold text-foreground">
               Title <span className="text-red-500">*</span>
               <Input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                className="mt-1 w-full rounded border-2 border-black bg-[#fffdf5] px-2 py-2 text-xs font-medium shadow-none"
+                className="mt-1 w-full rounded-none border-2 border-border bg-background px-2 py-2 text-xs font-medium shadow-none"
                 placeholder="e.g. Review this material"
                 required
               />
             </label>
 
-            <label className="block text-xs font-bold text-gray-900">
+            <label className="block text-xs font-bold text-foreground">
               Reason / Teacher's Note
               <textarea
                 rows={3}
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                className="mt-1 w-full border-2 border-black bg-[#fffdf5] p-2 text-xs font-medium outline-none focus:border-black resize-none"
+                className="mt-1 w-full resize-none rounded-none border-2 border-border bg-background p-2 text-xs font-medium text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/35"
                 placeholder="Why this material will help the student..."
               />
             </label>
 
             <div className="grid gap-3 sm:grid-cols-2 items-center">
-              <label className="text-xs font-bold text-gray-900">
+              <label className="text-xs font-bold text-foreground">
                 Priority
                 <select
                   value={priority}
                   onChange={(event) =>
                     setPriority(event.target.value as SuggestionPriority)
                   }
-                  className="mt-1 w-full h-10 border-2 border-black bg-[#fffdf5] px-2 text-xs font-medium outline-none focus:border-black"
+                  className="mt-1 h-10 w-full rounded-none border-2 border-border bg-background px-2 text-xs font-medium text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring/35"
                 >
                   {priorities.map((item) => (
                     <option key={item} value={item}>
@@ -405,30 +405,30 @@ export function SuggestionPanel({
               </label>
             </div>
 
-            <div className="pt-4 border-t-2 border-black/10 flex items-center justify-end gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleClose}
-                disabled={isSubmitting}
-        className="border-2 border-black bg-white hover:bg-gray-100 font-bold px-4 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="default"
-                size="sm"
-                disabled={isSubmitting || !resources.length}
-        className="border-2 border-black bg-[#79bd80] hover:bg-[#79bd80] text-black font-bold px-5 text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
-              >
-                <Send size={14} className="mr-1 inline" />
-                {isSubmitting ? "Sending..." : "Send Suggestion"}
-              </Button>
-            </div>
           </form>
         </div>
+        <Dialog.Footer>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleClose}
+            disabled={isSubmitting}
+            className="px-4 text-xs font-bold"
+          >
+            Cancel
+          </Button>
+          <Button
+            form="suggestion-form"
+            type="submit"
+            size="sm"
+            disabled={isSubmitting || !resources.length}
+            className="px-5 text-xs font-bold disabled:opacity-50"
+          >
+            <Send size={14} className="mr-1 inline" />
+            {isSubmitting ? "Sending..." : "Send Suggestion"}
+          </Button>
+        </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
   );
