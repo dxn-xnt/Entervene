@@ -18,6 +18,7 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import { Text } from "@/components/retroui/Text";
 import { Card } from "@/components/retroui/Card";
+import { DialogueSelect } from "@/components/dialogue-select";
 
 type AddClassModalProps = {
   onClose?: () => void;
@@ -107,31 +108,19 @@ export default function AddClassModal({ onClose, onClassesCreated }: AddClassMod
         </Dialog.Header>
 
         <section className="grid gap-4 p-4 md:grid-cols-2">
-          <Card
-            className="cursor-pointer transition bg-primary"
+          <DialogueSelect
+            icon={Download}
+            title="Import from File"
+            description="Upload a CSV file to add multiple classes and student assignments at once."
             onClick={() => setMode("import")}
-          >
-            <div className="flex items-center gap-3 font-semibold mb-2">
-              <Download className="size-5 text-black" />
-              <span>Import from File</span>
-            </div>
-            <Text as="p" className="text-sm text-black">
-              Upload a CSV file to add multiple classes and student assignments at once.
-            </Text>
-          </Card>
+          />
 
-          <Card
-            className="cursor-pointer transition bg-primary"
+          <DialogueSelect
+            icon={UserPlus}
+            title="Create Manually"
+            description="Add individual class sections, assign advisers, and manage students step by step."
             onClick={() => setMode("manual")}
-          >
-            <div className="flex items-center gap-3 font-semibold mb-2">
-              <UserPlus className="size-5 text-black" />
-              <span>Create Manually</span>
-            </div>
-            <Text as="p" className="text-sm text-black">
-              Add individual class sections, assign advisers, and manage students step by step.
-            </Text>
-          </Card>
+          />
         </section>
 
         <Dialog.Footer>

@@ -172,7 +172,7 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
                             {item.title}
                           </Table.Cell>
                           <Table.Cell className="w-32">
-                            <Badge variant="surface" size="sm" className="inline-flex rounded-none">
+                            <Badge variant="surface" size="sm">
                               {item.type}
                             </Badge>
                           </Table.Cell>
