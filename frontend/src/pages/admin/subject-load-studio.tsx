@@ -1819,6 +1819,17 @@ export default function AdminSubjectLoadStudio() {
                                 disabled={isSaving}
                                 onClick={() => void handleDiscardDraft(cls.class_id)}
                                 title="Discard all unpublished draft edits and restore published baseline"
+                                className=""
+                              >
+                                <Plus className="size-3.5 mr-1" />
+                                Add Slot
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isSaving}
+                                onClick={() => void handleDiscardDraft(cls.class_id)}
+                                title="Discard all unpublished draft edits and restore published baseline"
                                 className="text-red-600 hover:text-red-700 hover:bg-red-50"
                               >
                                 <RotateCcw className="size-3.5 mr-1" />
@@ -2114,8 +2125,8 @@ export default function AdminSubjectLoadStudio() {
 
                                         if (isBreak) {
                                           return (
-                                            <Table.Row key={`break_${slot.display_order}_${sIdx}`} className="border-b-2 border-black bg-[#fbfbfa] hover:bg-[#fbfbfa]">
-                                              <Table.Cell className="border-r-2 border-black bg-accent  font-semibold whitespace-nowrap">
+                                            <Table.Row key={`break_${slot.display_order}_${sIdx}`} className="border-background bg-[#fbfbfa] hover:bg-[#fbfbfa]">
+                                              <Table.Cell className=" py-2! border-r-2 border-b-2 font-semibold whitespace-nowrap text-center text-xs">
                                                 {slot.slot_name}
                                               </Table.Cell>
                                               {TIMETABLE_DAYS.map((d, dIdx) => (
@@ -2123,7 +2134,7 @@ export default function AdminSubjectLoadStudio() {
                                                   key={d.key}
                                                   className={cn(
                                                     "text-center text-xs font-medium bg-white/50",
-                                                    dIdx < TIMETABLE_DAYS.length - 1 ? "border-r border-black/20" : ""
+                                                    dIdx < TIMETABLE_DAYS.length - 1 ? "" : ""
                                                   )}
                                                 >
                                                 </Table.Cell>
@@ -2135,70 +2146,108 @@ export default function AdminSubjectLoadStudio() {
                                         const timeLabel = `${formatTime12h(slot.start_time)} - ${formatTime12h(slot.end_time)}`;
 
                                         return (
-                                          <Table.Row key={`slot_${slot.start_time}_${sIdx}`} className="border-b-2 border-black bg-white hover:bg-white">
-                                            <Table.Cell className="border-r-2 border-black bg-accent text-center text-xs font-bold text-black whitespace-nowrap align-middle">
+                                          <Table.Row key={`slot_${slot.start_time}_${sIdx}`} className="border-background bg-white hover:bg-white">
+                                            <Table.Cell className=" border-r-2 border-b-2 bg-accent text-center text-xs font-bold text-black whitespace-nowrap align-middle">
                                               {timeLabel}
                                             </Table.Cell>
-                                            {TIMETABLE_DAYS.map((d, dIdx) => {
-                                              const matchedLoads = sectionLoads.filter((l) => {
-                                                const hasDay = (l.days_of_week || []).some(
-                                                  (day) =>
-                                                    day === d.key ||
-                                                    day === d.short ||
-                                                    (d.key === "THU" && (day === "THU" || day === "Th"))
-                                                );
-                                                if (!hasDay || !l.start_time) return false;
-                                                return l.start_time === slot.start_time;
+                                            {(() => {
+                                              const dayLoads = TIMETABLE_DAYS.map((d, dIdx) => {
+                                                const matched = sectionLoads.filter((l) => {
+                                                  const hasDay = (l.days_of_week || []).some(
+                                                    (day) =>
+                                                      day === d.key ||
+                                                      day === d.short ||
+                                                      (d.key === "THU" && (day === "THU" || day === "Th"))
+                                                  );
+                                                  if (!hasDay || !l.start_time) return false;
+                                                  return l.start_time === slot.start_time;
+                                                });
+                                                const key = matched.length === 0
+                                                  ? `__empty_${dIdx}__`
+                                                  : matched.map((l) => `${l.subject_id}:${l.staff_id ?? "unassigned"}`).sort().join("|");
+                                                return {
+                                                  day: d,
+                                                  dayIndex: dIdx,
+                                                  matchedLoads: matched,
+                                                  key,
+                                                };
                                               });
 
-                                              return (
-                                                <Table.Cell
-                                                  key={d.key}
-                                                  className={cn(
-                                                    "p-2! align-middle",
-                                                    dIdx < TIMETABLE_DAYS.length - 1 ? "border-r border-black/20" : ""
-                                                  )}
-                                                >
-                                                  {matchedLoads.length === 0 ? (
-                                                    <div className="text-center text-sm text-gray-400 font-medium">—</div>
-                                                  ) : (
-                                                    <div className="flex flex-col gap-1.5">
-                                                      {matchedLoads.map((mLoad, mIdx) => {
-                                                        const subObj = (studioData?.subjects || []).find(
-                                                          (s) => s.subject_id === mLoad.subject_id
-                                                        );
-                                                        const teacherObj = (studioData?.teachers || []).find(
-                                                          (t) => t.staff_id === mLoad.staff_id
-                                                        );
-                                                        const conflict = getLoadConflict(cls.class_id, mLoad.subject_id);
+                                              type GroupedDayCell = {
+                                                startIdx: number;
+                                                endIdx: number;
+                                                colSpan: number;
+                                                matchedLoads: typeof sectionLoads;
+                                              };
 
-                                                        return (
-                                                          <Card
-                                                            key={mLoad.subject_load_id || mLoad._key || mIdx}
-                                                            title={conflict ? conflict.message : undefined}
-                                                            className={cn(
-                                                              "rounded shadow-none text-black border-2 border-black text-left flex flex-col gap-0.5 p-2 transition-all",
-                                                              conflict
-                                                                ? "border-destructive bg-destructive/20"
-                                                                : "bg-background"
-                                                            )}
-                                                          >
-                                                            <div className="font-bold text-xs leading-tight">
-                                                              {subObj?.subject_name || `Subject #${mLoad.subject_id}`}
-                                                            </div>
-                                                            <div className="text-xs font-medium">
-                                                              {teacherObj
-                                                                ? teacherObj.name
-                                                                : <span className="italic font-medium text-amber-700">Unassigned</span>}
-                                                            </div>
-                                                          </Card>
-                                                        );
-                                                      })}
-                                                    </div>
-                                                  )}
-                                                </Table.Cell>
-                                              );
-                                            })}
+                                              const groupedCells: GroupedDayCell[] = [];
+                                              dayLoads.forEach((dItem, idx) => {
+                                                const prev = groupedCells[groupedCells.length - 1];
+                                                if (prev && dItem.matchedLoads.length > 0 && dayLoads[prev.startIdx].key === dItem.key) {
+                                                  prev.colSpan += 1;
+                                                  prev.endIdx = idx;
+                                                } else {
+                                                  groupedCells.push({
+                                                    startIdx: idx,
+                                                    endIdx: idx,
+                                                    colSpan: 1,
+                                                    matchedLoads: dItem.matchedLoads,
+                                                  });
+                                                }
+                                              });
+
+                                              return groupedCells.map((group) => {
+                                                const isLast = group.endIdx === TIMETABLE_DAYS.length - 1;
+                                                return (
+                                                  <Table.Cell
+                                                    key={`slot_${slot.start_time}_grp_${group.startIdx}_${group.endIdx}`}
+                                                    colSpan={group.colSpan}
+                                                    className={cn(
+                                                      "p-2! align-middle",
+                                                      !isLast ? "" : ""
+                                                    )}
+                                                  >
+                                                    {group.matchedLoads.length === 0 ? (
+                                                      <div className="text-center text-sm text-gray-400 font-medium">—</div>
+                                                    ) : (
+                                                      <div className="flex flex-col gap-1.5">
+                                                        {group.matchedLoads.map((mLoad, mIdx) => {
+                                                          const subObj = (studioData?.subjects || []).find(
+                                                            (s) => s.subject_id === mLoad.subject_id
+                                                          );
+                                                          const teacherObj = (studioData?.teachers || []).find(
+                                                            (t) => t.staff_id === mLoad.staff_id
+                                                          );
+                                                          const conflict = getLoadConflict(cls.class_id, mLoad.subject_id);
+
+                                                          return (
+                                                            <Card
+                                                              key={mLoad.subject_load_id || mLoad._key || mIdx}
+                                                              title={conflict ? conflict.message : undefined}
+                                                              className={cn(
+                                                                "rounded shadow-none text-black  text-left flex flex-col gap-0.5 p-2 transition-all",
+                                                                conflict
+                                                                  ? "border-destructive bg-destructive/20"
+                                                                  : "bg-accent"
+                                                              )}
+                                                            >
+                                                              <div className="font-bold text-sm leading-tight">
+                                                                {subObj?.subject_name || `Subject #${mLoad.subject_id}`}
+                                                              </div>
+                                                              <div className="text-xs font-medium">
+                                                                {teacherObj
+                                                                  ? teacherObj.name
+                                                                  : <span className="italic font-medium text-amber-700">Unassigned</span>}
+                                                              </div>
+                                                            </Card>
+                                                          );
+                                                        })}
+                                                      </div>
+                                                    )}
+                                                  </Table.Cell>
+                                                );
+                                              });
+                                            })()}
                                           </Table.Row>
                                         );
                                       })}
@@ -2239,7 +2288,7 @@ export default function AdminSubjectLoadStudio() {
                                           <Table.Row
                                             key={sub.subject_id}
                                             id={`subject-row-${cls.class_id}_${sub.subject_id}`}
-                                            className={`transition-all duration-200 border-b border-border ${isHighlighted
+                                            className={`transition-all duration-200  ${isHighlighted
                                               ? "bg-accent border-black"
                                               : conflict
                                                 ? conflict.severity === "error"
