@@ -220,7 +220,7 @@ export const LessonPlannerListPage: React.FC = () => {
               </Alert>
             )}
 
-            <label className="relative w-full md:w-96 shadow-md transition-shadow hover:shadow-none">
+            <label className="relative w-full md:w-96">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
 
               <Input
@@ -228,7 +228,7 @@ export const LessonPlannerListPage: React.FC = () => {
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search lesson plans..."
-                className="h-10 w-full border-black pl-9 pr-3 shadow-none"
+                className="h-10 w-full border-black pl-9 pr-3"
               />
             </label>
 

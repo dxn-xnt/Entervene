@@ -80,7 +80,7 @@ export default function StudentSubmissionView({
                   <Breadcrumb.Item className="shrink-0">
                     <Breadcrumb.Link
                       onClick={onClose}
-                      className="cursor-pointer tracking-normal text-xl max-w-[200px] truncate sm:max-w-[250px]"
+                      className="cursor-pointer max-w-[200px] truncate sm:max-w-[250px]"
                       title={selected?.title}
                     >
                       {selected?.title ?? "Classwork"}

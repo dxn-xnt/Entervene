@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 
 export const buttonVariants = cva(
-  "flex items-center justify-center gap-2 rounded-none font-sans font-medium transition-all duration-200 outline-hidden cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
+  "font-sans transition-all rounded outline-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring cursor-pointer duration-200 font-medium flex items-center justify-center",
   {
     variants: {
       variant: {

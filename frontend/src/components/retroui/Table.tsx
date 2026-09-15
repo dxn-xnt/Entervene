@@ -2,18 +2,45 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const Table = React.forwardRef<
-    HTMLTableElement,
-    React.HTMLAttributes<HTMLTableElement> & { wrapperClassName?: string }
->(({ className, wrapperClassName, ...props }, ref) => (
-    <div className={cn("relative h-full w-full overflow-auto", wrapperClassName)}>
-        <table
-            ref={ref}
-            className={cn("w-full caption-bottom text-sm border-2 shadow-lg", className)}
-            {...props}
-        />
-    </div>
-))
+export type TableRoundedVariant = boolean | "none" | "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "full";
+
+export interface ITableProps extends React.HTMLAttributes<HTMLTableElement> {
+    wrapperClassName?: string;
+    rounded?: TableRoundedVariant | string;
+}
+
+const roundedClasses: Record<string, string> = {
+    none: "rounded-none",
+    sm: "rounded-sm",
+    md: "rounded",
+    lg: "rounded-lg",
+    xl: "rounded-xl",
+    "2xl": "rounded-2xl",
+    "3xl": "rounded-3xl",
+    full: "rounded-full",
+};
+
+function getRoundedClass(rounded?: TableRoundedVariant | string): string {
+    if (rounded === false || rounded === "none") return "rounded-none";
+    if (rounded === true || rounded === "md") return "rounded";
+    if (typeof rounded === "string" && roundedClasses[rounded]) return roundedClasses[rounded];
+    return typeof rounded === "string" ? rounded : "rounded";
+}
+
+const Table = React.forwardRef<HTMLTableElement, ITableProps>(
+    ({ className, wrapperClassName, rounded, ...props }, ref) => {
+        const roundedClass = rounded !== undefined ? getRoundedClass(rounded) : "rounded";
+        return (
+            <div className={cn("relative h-full w-full overflow-auto", roundedClass, wrapperClassName)}>
+                <table
+                    ref={ref}
+                    className={cn("w-full caption-bottom text-sm border-2 shadow-lg", roundedClass, className)}
+                    {...props}
+                />
+            </div>
+        );
+    }
+)
 Table.displayName = "Table"
 
 const TableHeader = React.forwardRef<

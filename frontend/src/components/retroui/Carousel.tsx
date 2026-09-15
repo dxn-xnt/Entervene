@@ -136,12 +136,12 @@ function CarouselContent({ className, ...props }: React.ComponentProps<"div">) {
     return (
         <div
             ref={carouselRef}
-            className="overflow-hidden"
+            className="overflow-hidden transition-[height] duration-200"
             data-slot="carousel-content"
         >
             <div
                 className={cn(
-                    "flex",
+                    "flex items-start",
                     orientation === "horizontal" ? "-ml-4" : "-mt-4 flex-col",
                     className
                 )}
@@ -236,4 +236,4 @@ const CarouselObject = Object.assign(Carousel, {
     Next: CarouselNext,
 })
 
-export { CarouselObject as Carousel }
+export { CarouselObject as Carousel, type CarouselApi }
