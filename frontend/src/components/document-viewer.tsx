@@ -71,54 +71,10 @@ export default function DocumentViewer({
     };
   }, [blob, kind]);
 
-  useEffect(() => {
-    let active = true;
-    if (kind !== "pptx" || !presentationElement) return;
-
-    const renderPresentation = async () => {
-      setLoading(true);
-      setError("");
-      try {
-        const { init } = await import("pptx-preview");
-        if (!active) return;
-        const width = Math.max(240, Math.min(1100, presentationElement.clientWidth - 32));
-        const previewer = init(presentationElement, {
-          width,
-          height: Math.round(width * 0.5625),
-          mode: "slide",
-        });
-        await previewer.preview(await blob.arrayBuffer());
-        if (!active) {
-          previewer.destroy();
-          return;
-        }
-        previewerRef.current = previewer;
-        setSlideCount(previewer.slideCount ?? 0);
-        setCurrentSlide(1);
-      } catch {
-        if (active) setError("This presentation could not be rendered. You can still download it.");
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    void renderPresentation();
-    return () => {
-      active = false;
-      previewerRef.current?.destroy();
-      previewerRef.current = null;
-    };
-  }, [blob, kind, presentationElement]);
+  // PPT/PPTX in-app preview with pptx-preview is disabled pending secure sandboxed PPTXjs implementation.
+  // PPT and PPTX attachments display the fallback card with direct download.
 
   const isPresentation = kind === "ppt" || kind === "pptx";
-
-  const changeSlide = (direction: "previous" | "next") => {
-    const previewer = previewerRef.current;
-    if (!previewer || slideCount === 0) return;
-    if (direction === "previous") previewer.renderPreSlide();
-    else previewer.renderNextSlide();
-    setCurrentSlide(previewer.currentIndex + 1);
-  };
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -159,34 +115,15 @@ export default function DocumentViewer({
             </div>
           )}
 
-          {kind === "pptx" && !error && (
-            <div className="flex min-h-full flex-col items-center justify-center gap-3 overflow-auto p-4">
-              <div
-                ref={setPresentationElement}
-                className="w-full min-w-0 [&_.pptx-preview-wrapper-next]:hidden [&_.pptx-preview-wrapper-pagination]:hidden"
-                aria-label={`Presentation preview for ${fileName}`}
-              />
-              {!loading && slideCount > 0 && (
-                <div className="flex items-center gap-3 border border-border bg-background p-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => changeSlide("previous")} aria-label="Previous slide">
-                    <ChevronLeft className="size-4" />
-                  </Button>
-                  <span className="min-w-20 text-center text-sm font-bold">{currentSlide} / {slideCount}</span>
-                  <Button type="button" variant="outline" size="sm" onClick={() => changeSlide("next")} aria-label="Next slide">
-                    <ChevronRight className="size-4" />
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {(kind === "ppt" || error) && (
+          {(isPresentation || error) && (
             <div className="flex min-h-full items-center justify-center p-6">
               <div className="max-w-lg border border-border bg-background p-6 text-center">
                 <Presentation className="mx-auto mb-3 size-10 text-muted-foreground" />
                 <h3 className="font-bold">Preview unavailable</h3>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {error || "Legacy .ppt files require secure server-side conversion before slides can be displayed. Download this presentation to view it without exposing it to a public viewer."}
+                  {error || (kind === "ppt" 
+                    ? "Legacy .ppt files require secure server-side conversion before slides can be displayed. Download this presentation to view it without exposing it to a public viewer."
+                    : "In-app presentation preview is temporarily disabled. Download this presentation to view it without exposing it to a public viewer.")}
                 </p>
               </div>
             </div>

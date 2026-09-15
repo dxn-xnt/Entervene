@@ -66,7 +66,7 @@ describe("AttachmentDisplay View Trigger", () => {
     expect(html).toMatch(/href="https?:\/\/[^/]+\/api\/v1\/classwork-assignments\/classwork\/2\/attachments\/303\/download\?inline=true"/);
   });
 
-  it("offers the shared viewer for Word and PowerPoint attachments", () => {
+  it("offers the shared viewer for Word and restricts PowerPoint to download-only pending secure sandbox", () => {
     const html = renderToStaticMarkup(
       <AttachmentDisplay
         attachments={[
@@ -78,7 +78,7 @@ describe("AttachmentDisplay View Trigger", () => {
       />,
     );
 
-    expect(html.match(/>View</g)).toHaveLength(3);
+    expect(html.match(/>View</g)).toHaveLength(1);
     expect(html).toContain("notes.docx");
     expect(html).toContain("slides.pptx");
   });
