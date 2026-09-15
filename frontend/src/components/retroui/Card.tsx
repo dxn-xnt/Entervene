@@ -10,7 +10,7 @@ const Card = ({ className, ...props }: ICardProps) => {
     <div
       data-slot="card"
       className={cn(
-        "inline-block gap-2 rounded-none border-2 border-black bg-card p-4 shadow-md transition-all hover:shadow-none",
+        "inline-block gap-2 rounded border-2 border-black bg-card p-4 shadow-md transition-all hover:shadow-none",
         className,
       )}
       {...props}

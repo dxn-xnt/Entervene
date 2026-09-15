@@ -1,7 +1,7 @@
 "use client";
 
 import { Accordion as BaseAccordion } from "@base-ui/react/accordion";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -11,7 +11,7 @@ const AccordionItem = ({ className, ref, ...props }: BaseAccordion.Item.Props) =
   <BaseAccordion.Item
     ref={ref}
     className={cn(
-      "group overflow-hidden rounded-none border-2 bg-background text-foreground shadow-md transition-all hover:shadow-sm data-[open]:shadow-sm",
+      "group overflow-hidden rounded border-2 bg-background text-foreground shadow-md transition-all hover:shadow-sm data-[open]:shadow-sm",
       className,
     )}
     {...props}
@@ -29,7 +29,7 @@ const AccordionHeader = ({ className, children, ref, ...props }: BaseAccordion.T
       {...props}
     >
       {children}
-      <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200 group-data-[open]:-rotate-90" />
+      <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 group-data-[open]:rotate-90" />
     </BaseAccordion.Trigger>
   </BaseAccordion.Header>
 );
