@@ -342,7 +342,7 @@ export default function ClassworkFormModal({
                 id="classwork-materials"
                 type="file"
                 multiple
-                accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
+                accept=".pdf,.docx,.ppt,.pptx,.jpg,.jpeg,.png"
                 onChange={(event) => {
                   addClassworkMaterials(event.target.files);
                   event.target.value = "";

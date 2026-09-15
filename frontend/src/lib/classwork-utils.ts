@@ -15,7 +15,7 @@ export const emptyClassworkDraft: CreateDraft = {
   show_scores: true,
 };
 
-export const allowedClassworkMaterialExtensions = [".pdf", ".docx", ".pptx", ".jpg", ".jpeg", ".png"];
+export const allowedClassworkMaterialExtensions = [".pdf", ".docx", ".ppt", ".pptx", ".jpg", ".jpeg", ".png"];
 export const maxClassworkMaterialSize = 10 * 1024 * 1024;
 
 export function formatDate(value?: string | null) {

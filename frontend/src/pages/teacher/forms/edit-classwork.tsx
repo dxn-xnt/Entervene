@@ -627,7 +627,7 @@ export default function EditClassworkModal({
                     <input
                       type="file"
                       multiple
-                      accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
+                      accept=".pdf,.docx,.ppt,.pptx,.jpg,.jpeg,.png"
                       className="hidden"
                       disabled={
                         isSavingEdit ||
