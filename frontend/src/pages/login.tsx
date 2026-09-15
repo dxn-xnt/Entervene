@@ -9,6 +9,7 @@ import { Label } from "@/components/retroui/Label";
 import { Checkbox } from "@/components/retroui/Checkbox";
 import { Eye, EyeOff } from "lucide-react";
 import { routes } from "@/../routes";
+import { EnterveneLogo } from "@/components/logo";
 
 const Login = () => {
   const { login, role, isLoading } = useAuth();
@@ -75,9 +76,12 @@ const Login = () => {
     <main className="retro-squares-bg retro-squares-motion flex min-h-dvh w-full items-center justify-center px-4 py-6 sm:px-6">
       <Card className="block w-full max-w-md p-0">
         <Card.Header className="mb-6 flex flex-col justify-center border-b-2 border-border bg-primary px-4 pb-5 pt-6 sm:mb-8 sm:px-8 sm:pb-6 sm:pt-8">
-          <Card.Title className="font-sans font-bold mb-1">
-            Entervene
-          </Card.Title>
+          <div className="flex items-center gap-3 mb-1">
+            <EnterveneLogo className="size-11" />
+            <Card.Title className="font-head font-bold text-3xl">
+              Entervene
+            </Card.Title>
+          </div>
           <Card.Description className="font-normal text-sm">
             Enter your details to access your account
           </Card.Description>

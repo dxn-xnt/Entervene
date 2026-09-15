@@ -209,154 +209,154 @@ export default function AdminClasses() {
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {notice && (
-              <p className="border-2 border-black bg-[#bbf7d0] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">
-                {notice}
-              </p>
-            )}
+                <p className="border-2 border-black bg-[#bbf7d0] p-3 text-sm font-bold shadow-[3px_3px_0_#000]">
+                  {notice}
+                </p>
+              )}
 
-            <section className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <OverviewCard
-                title={"Total Classes"}
-                count={String(summary.total_classes)}
-              />
-              <OverviewCard
-                title={"Active Classes"}
-                count={String(summary.active_classes)}
-              />
-              <OverviewCard
-                title={"Archived Classes"}
-                count={String(summary.archived_classes)}
-              />
-              <OverviewCard
-                title={"Students Assigned"}
-                count={String(summary.students_assigned)}
-              />
-            </section>
-
-            <div className="grid gap-3 md:grid-cols-[1fr_160px_160px] py-2">
-              <label className="relative">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search class or adviser..."
-                  className="h-10 w-full border-black pl-9 pr-3"
+              <section className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <OverviewCard
+                  title={"Total Classes"}
+                  count={String(summary.total_classes)}
                 />
-              </label>
-              <Select value={yearFilter}
-                onChange={(event) => setYearFilter(event.target.value)}>
-                <Select.Trigger className="w-full">
-                  <Select.Value placeholder="" />
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Group>
-                    {yearOptions.map((year) => (
-                      <Select.Item key={year} value={year}>{year}</Select.Item>
-                    ))}
-                  </Select.Group>
-                </Select.Content>
-              </Select>
+                <OverviewCard
+                  title={"Active Classes"}
+                  count={String(summary.active_classes)}
+                />
+                <OverviewCard
+                  title={"Archived Classes"}
+                  count={String(summary.archived_classes)}
+                />
+                <OverviewCard
+                  title={"Students Assigned"}
+                  count={String(summary.students_assigned)}
+                />
+              </section>
 
-              <Select value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
-                <Select.Trigger className="w-full">
-                  <Select.Value placeholder="" />
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Group>
-                    <Select.Item value={"All"}>All Statuses</Select.Item>
-                    <Select.Item value={"Active"}>Active</Select.Item>
-                    <Select.Item value={"Archived"}>Archived</Select.Item>
-                  </Select.Group>
-                </Select.Content>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              <span className="shrink-0 text-sm font-regular text-muted-foreground">
-                Grade:
-              </span>
-              {gradeOptions.map((grade) => (
-                <Button
-                  key={grade}
-                  variant={gradeFilter === grade ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setGradeFilter(grade)}
-                  className="shrink-0 border-black shadow-none"
-                >
-                  {grade}
-                </Button>
-              ))}
-              <div className="ml-auto flex shrink-0 items-center gap-3 text-xs">
-                {/* <button className="flex items-center gap-1.5 font-semibold text-black/70 hover:text-black">
+              <div className="grid gap-3 md:grid-cols-[1fr_160px_160px] py-2">
+                <label className="relative">
+                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
+                  <Input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search class or adviser..."
+                    className="h-10 w-full border-black pl-9 pr-3"
+                  />
+                </label>
+                <Select value={yearFilter}
+                  onChange={(event) => setYearFilter(event.target.value)}>
+                  <Select.Trigger className="w-full">
+                    <Select.Value placeholder="" />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Group>
+                      {yearOptions.map((year) => (
+                        <Select.Item key={year} value={year}>{year}</Select.Item>
+                      ))}
+                    </Select.Group>
+                  </Select.Content>
+                </Select>
+
+                <Select value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
+                  <Select.Trigger className="w-full">
+                    <Select.Value placeholder="" />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Group>
+                      <Select.Item value={"All"}>All Statuses</Select.Item>
+                      <Select.Item value={"Active"}>Active</Select.Item>
+                      <Select.Item value={"Archived"}>Archived</Select.Item>
+                    </Select.Group>
+                  </Select.Content>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <span className="shrink-0 text-sm font-regular text-muted-foreground">
+                  Grade:
+                </span>
+                {gradeOptions.map((grade) => (
+                  <Button
+                    key={grade}
+                    variant={gradeFilter === grade ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setGradeFilter(grade)}
+                    className="shrink-0 border-black shadow-none"
+                  >
+                    {grade}
+                  </Button>
+                ))}
+                <div className="ml-auto flex shrink-0 items-center gap-3 text-xs">
+                  {/* <button className="flex items-center gap-1.5 font-semibold text-black/70 hover:text-black">
                     <Filter className="size-4" /> Add Filter
                   </button>
                   <button className="flex items-center gap-1.5 font-semibold text-black/70 hover:text-black">
                     <ArrowDownUp className="size-4" /> Sort By
                   </button> */}
+                </div>
               </div>
-            </div>
 
-            <section className="grid gap-4">
-              {isLoading ? (
-                <StatePanel message="Loading classes..." />
-              ) : loadError ? (
-                <StatePanel
-                  message="Unable to load classes."
-                  detail={loadError}
-                >
-                  <button
-                    className="rounded border border-black bg-[#79bd80] px-3 py-1 text-xs font-bold shadow-[2px_2px_0_#000]"
-                    onClick={() => void refreshClasses()}
+              <section className="grid gap-4">
+                {isLoading ? (
+                  <StatePanel message="Loading classes..." />
+                ) : loadError ? (
+                  <StatePanel
+                    message="Unable to load classes."
+                    detail={loadError}
                   >
-                    Retry
-                  </button>
-                </StatePanel>
-              ) : !classes.length ? (
-                <StatePanel
-                  message="No classes found."
-                  detail="Create a new class to get started."
-                />
-              ) : grouped.length === 0 ? (
-                <StatePanel message="No classes match the selected filters." />
-              ) : (
-                grouped.map((group) => (
-                  <Card
-                    key={group.levelName}
-                    className="flex flex-col bg-primary min-w-0 overflow-hidden"
-                  >
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-bold">{group.levelName}</h2>
-                      <div className="flex flex-row gap-3">
-                        <Badge variant={"outline"} className="border-border">
-                          {group.classes.length} subject
-                          {group.classes.length !== 1 ? "s" : ""}
-                        </Badge>
-                        <Badge variant={"outline"} className="border-border">
-                          {group.classes.length} section
-                          {group.classes.length !== 1 ? "s" : ""}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div
-                      className="pt-3 flex gap-3 overflow-x-auto pb-2 w-full min-w-0"
+                    <button
+                      className="rounded border border-black bg-[#79bd80] px-3 py-1 text-xs font-bold shadow-[2px_2px_0_#000]"
+                      onClick={() => void refreshClasses()}
                     >
-                      {group.classes.map((item) => (
-                        <ClassCard
-                          key={item.class_id}
-                          item={item}
-                          onEdit={() => setTimeout(() => setEditTarget(item), 0)}
-                          onArchive={() => {
-                            setArchiveError("");
-                            setNotice("");
-                            setArchiveTarget(item);
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </Card>
-                ))
-              )}
-            </section>
+                      Retry
+                    </button>
+                  </StatePanel>
+                ) : !classes.length ? (
+                  <StatePanel
+                    message="No classes found."
+                    detail="Create a new class to get started."
+                  />
+                ) : grouped.length === 0 ? (
+                  <StatePanel message="No classes match the selected filters." />
+                ) : (
+                  grouped.map((group) => (
+                    <Card
+                      key={group.levelName}
+                      className="flex flex-col bg-primary min-w-0 overflow-hidden"
+                    >
+                      <div className="flex items-center justify-between">
+                        <h2 className="text-xl font-bold">{group.levelName}</h2>
+                        <div className="flex flex-row gap-3">
+                          <Badge variant={"outline"} className="border-border">
+                            {group.classes.length} subject
+                            {group.classes.length !== 1 ? "s" : ""}
+                          </Badge>
+                          <Badge variant={"outline"} className="border-border">
+                            {group.classes.length} section
+                            {group.classes.length !== 1 ? "s" : ""}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div
+                        className="pt-3 flex gap-3 overflow-x-auto pb-2 w-full min-w-0"
+                      >
+                        {group.classes.map((item) => (
+                          <ClassCard
+                            key={item.class_id}
+                            item={item}
+                            onEdit={() => setTimeout(() => setEditTarget(item), 0)}
+                            onArchive={() => {
+                              setArchiveError("");
+                              setNotice("");
+                              setArchiveTarget(item);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </Card>
+                  ))
+                )}
+              </section>
             </div>
           </div>
         </div>
