@@ -172,9 +172,9 @@ const SubjectGrade = ({ classId, subjectId, subject, onBack }: SubjectGradeProps
                             {item.title}
                           </Table.Cell>
                           <Table.Cell className="w-32">
-                            <span className="inline-flex items-center border px-3 py-1 text-xs">
+                            <Badge variant="surface" size="sm" className="inline-flex rounded-none">
                               {item.type}
-                            </span>
+                            </Badge>
                           </Table.Cell>
                           <Table.Cell className="text-right font-bold">
                             {item.show_scores !== false ? (
