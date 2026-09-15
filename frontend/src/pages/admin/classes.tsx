@@ -30,6 +30,7 @@ import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
+import { Accordion } from "@/components/retroui/Accordion";
 
 export default function AdminClasses() {
   const [search, setSearch] = useState("");
@@ -278,6 +279,7 @@ export default function AdminClasses() {
                 {gradeOptions.map((grade) => (
                   <Button
                     key={grade}
+                    autoIcon={false}
                     variant={gradeFilter === grade ? "default" : "outline"}
                     size="sm"
                     onClick={() => setGradeFilter(grade)}
@@ -319,42 +321,48 @@ export default function AdminClasses() {
                 ) : grouped.length === 0 ? (
                   <StatePanel message="No classes match the selected filters." />
                 ) : (
-                  grouped.map((group) => (
-                    <Card
-                      key={group.levelName}
-                      className="flex flex-col bg-primary min-w-0 overflow-hidden"
-                    >
-                      <div className="flex items-center justify-between">
-                        <h2 className="text-xl font-bold">{group.levelName}</h2>
-                        <div className="flex flex-row gap-3">
-                          <Badge variant={"outline"} className="border-border">
-                            {group.classes.length} subject
-                            {group.classes.length !== 1 ? "s" : ""}
-                          </Badge>
-                          <Badge variant={"outline"} className="border-border">
-                            {group.classes.length} section
-                            {group.classes.length !== 1 ? "s" : ""}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div
-                        className="pt-3 flex gap-3 overflow-x-auto pb-2 w-full min-w-0"
+                  <Accordion
+                    multiple
+                    defaultValue={grouped.map((group) => group.levelName)}
+                    className="flex flex-col gap-4"
+                  >
+                    {grouped.map((group) => (
+                      <Accordion.Item
+                        key={group.levelName}
+                        value={group.levelName}
+                        className="border-2 border-border bg-background shadow-md overflow-hidden rounded-none"
                       >
-                        {group.classes.map((item) => (
-                          <ClassCard
-                            key={item.class_id}
-                            item={item}
-                            onEdit={() => setTimeout(() => setEditTarget(item), 0)}
-                            onArchive={() => {
-                              setArchiveError("");
-                              setNotice("");
-                              setArchiveTarget(item);
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </Card>
-                  ))
+                        <Accordion.Header className="items-center px-4 py-3 bg-primary text-foreground">
+                          <div className="flex items-center justify-between w-full mr-2">
+                            <h2 className="text-xl font-bold">{group.levelName}</h2>
+                            <div className="flex items-center gap-2">
+                              <Badge size="sm" variant="outline" className="border-border bg-background">
+                                {group.classes.length} section
+                                {group.classes.length !== 1 ? "s" : ""}
+                              </Badge>
+                            </div>
+                          </div>
+                        </Accordion.Header>
+
+                        <Accordion.Content className="p-4 pt-3 border-t-2 border-border bg-background">
+                          <div className="pt-1 flex gap-3 overflow-x-auto pb-2 w-full min-w-0">
+                            {group.classes.map((item) => (
+                              <ClassCard
+                                key={item.class_id}
+                                item={item}
+                                onEdit={() => setTimeout(() => setEditTarget(item), 0)}
+                                onArchive={() => {
+                                  setArchiveError("");
+                                  setNotice("");
+                                  setArchiveTarget(item);
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </Accordion.Content>
+                      </Accordion.Item>
+                    ))}
+                  </Accordion>
                 )}
               </section>
             </div>

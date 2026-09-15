@@ -90,21 +90,34 @@ export function GradingTemplateRow({
 
         </div>
 
-        <div className="flex flex-col gap-2 p-2 bg-background border-border border-2">
+        <div className="flex flex-col gap-2 p-2 bg-background border-border border-2 rounded">
           <span><strong>Academic scope:</strong> {template.academic_level?.level_name ?? "Any level"}</span>
           <div className="flex flex-wrap items-center gap-1.5">
             <strong>Assigned subjects </strong> <span className="text-sm">({assignedCount}):</span>{" "}
             {assignedSubjects.length > 0 ? (
-              assignedSubjects.map((s) => (
-                <Badge key={s.subject_id} size="sm" variant="surface">
-                  {s.subject_name}
-                </Badge>
-              ))
+              <>
+                {assignedSubjects.slice(0, 10).map((s) => (
+                  <Badge key={s.subject_id} size="sm" variant="surface">
+                    {s.subject_name}
+                  </Badge>
+                ))}
+                {assignedSubjects.length > 10 ? (
+                  <Badge
+                    size="sm"
+                    variant="surface"
+                    title={assignedSubjects
+                      .slice(10)
+                      .map((s) => s.subject_name)
+                      .join(", ")}
+                  >
+                    +{assignedSubjects.length - 10} more...
+                  </Badge>
+                ) : null}
+              </>
             ) : (
               <span>General / Default template</span>
             )}
           </div>
-          <span><strong>Components:</strong> {template.component_count}</span>
         </div>
         <p className="sr-only">{scopeLabel(template)}</p>
         <div className="flex gap-2">
@@ -124,7 +137,6 @@ export function GradingTemplateRow({
             </Badge>
           ))}
         </div>
-        {template.description ? <p className="text-xs text-foreground">{template.description}</p> : null}
       </div>
 
     </RetroCard>

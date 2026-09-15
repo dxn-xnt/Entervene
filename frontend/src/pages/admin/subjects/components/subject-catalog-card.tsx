@@ -21,7 +21,7 @@ export function SubjectCatalogCard({
   const routeGrade = encodeURIComponent(subjectRouteGrade(subject.academic_level));
 
   return (
-    <RetroCard className="group relative flex min-w-80 flex-col justify-between shadow-none p-3 hover:-translate-y-1">
+    <RetroCard className="group relative flex min-w-64 flex-col justify-between shadow-none p-3 hover:-translate-y-1">
       <Link
         to={`/admin/subjects/${routeGrade}/${subject.subject_id}`}
         className="min-w-0 flex-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-1 rounded"
@@ -30,11 +30,11 @@ export function SubjectCatalogCard({
         <div className="flex items-start justify-between gap-2">
 
           <div>
-            <p className="text-2xl font-bold leading-tight mr-5">{subject.subject_name}</p>
+            <p className="text-xl font-bold leading-tight mr-5">{subject.subject_name}</p>
             <p className="text-sm font-semibold">{subjectCode(subject)}</p>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant={subject.status === "active" ? "secondary" : "default"}>
+            <Badge size="sm" variant={subject.status === "active" ? "secondary" : "default"}>
               {subject.status === "active" ? "Active" : "Archived"}
             </Badge>
             <DropdownMenu>
@@ -42,7 +42,7 @@ export function SubjectCatalogCard({
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="p-2 shadow-none"
+                  className="p-1 shadow-none"
                   aria-label="More options"
                   onClick={(e) => e.preventDefault()}
                 >
@@ -90,10 +90,10 @@ export function SubjectCatalogCard({
             </DropdownMenu>
           </div>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-          <span className="font-semibold">{subject.subject_group?.name || "Ungrouped"}</span>
-          <span className="text-right font-semibold text-black/70">Passing: {subject.subject_group?.passing_threshold ?? "—"}%</span>
+        <div className="mt-3 flex flex-row gap-2 text-xs justify-between">
           <span className="col-span-2 line-clamp-1">{subject.default_grading_template || "No template"}</span>
+
+          <span className="text-right font-semibold text-black/70">Passing: {subject.subject_group?.passing_threshold ?? "—"}%</span>
         </div>
       </Link>
 

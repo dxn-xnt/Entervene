@@ -103,7 +103,7 @@ export function Tabs<T extends string = string>({
               >
                 {tab.icon && <tab.icon size={16} className="shrink-0" />}
                 <span>{tab.label}</span>
-                {typeof count === "number" && (
+                {typeof count === "number" && count > 0 && (
                   <Badge size="sm" variant="solid">
                     {count}
                   </Badge>
