@@ -60,9 +60,7 @@ export default function ClassworkFormModal({
       }}
     >
       <Dialog.Content className="w-full max-w-2xl p-0 transition-none">
-        <Dialog.Header
-          className="sticky top-0 z-10 border-black"
-        >
+        <Dialog.Header className="border-border">
           <div>
             <h2 className="text-lg font-bold">{classworkModalTitle}</h2>
             <p className="text-xs font-medium">{modalSubtitle}</p>
@@ -415,7 +413,7 @@ export default function ClassworkFormModal({
           </label>
         </div>
 
-        <div className="flex justify-end gap-3 border-t-2 border-black px-5 py-4">
+        <Dialog.Footer>
           <Button
             type="button"
             variant="outline"
@@ -430,7 +428,7 @@ export default function ClassworkFormModal({
             type="button"
             onClick={createClassworkForLesson}
             disabled={isCreatingClasswork}
-            className="gap-2 bg-[#7ABA78] text-black hover:bg-[#6aa868]"
+            className="gap-2"
           >
             {isCreatingClasswork ? (
               <Loader2 className="size-4 animate-spin" />
@@ -439,7 +437,7 @@ export default function ClassworkFormModal({
             )}
             {isCreatingClasswork ? "Adding..." : classworkModalTitle}
           </Button>
-        </div>
+        </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
   );

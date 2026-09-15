@@ -1231,7 +1231,7 @@ const TeacherGradeView = () => {
               </>
             )}
           </div>
-          <Dialog.Footer className="flex justify-end gap-2.5 border-t-2 border-border px-5 py-3.5">
+          <Dialog.Footer>
             <Button
               variant="outline"
               onClick={() => setShowBulkConfirm(false)}
@@ -1299,7 +1299,7 @@ const TeacherGradeView = () => {
               Would you like to refresh your gradebook to review the latest scores, or force-send with the recomputed value?
             </p>
           </div>
-          <Dialog.Footer className="flex justify-end gap-2.5 border-t-2 border-border px-5 py-3.5">
+          <Dialog.Footer>
             <Button
               variant="outline"
               onClick={() => {
@@ -1375,7 +1375,7 @@ const TeacherGradeView = () => {
                   : "All student grades were already transmitted to the adviser with matching scores. No changes were necessary."}
             </p>
           </div>
-          <Dialog.Footer className="flex justify-end border-t-2 border-border px-5 py-3.5">
+          <Dialog.Footer>
             <Button
               variant="default"
               onClick={() => setBulkSendSummary(null)}

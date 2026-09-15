@@ -284,8 +284,8 @@ export default function ViewAttendanceLogModal({
         </Table>
       </section>
 
-      <Dialog.Footer className="flex items-center justify-end border-t-2 border-border px-6 py-3">
-        <Dialog.Close render={<Button variant="outline" className="border-2 border-black shadow-none font-bold text-xs" />}>
+      <Dialog.Footer>
+        <Dialog.Close render={<Button variant="outline" className="text-xs font-bold" />}>
           Close
         </Dialog.Close>
       </Dialog.Footer>

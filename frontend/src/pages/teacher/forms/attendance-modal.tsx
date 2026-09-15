@@ -172,7 +172,7 @@ export default function AttendanceModal({
         </Table>
       </section>
 
-      <Dialog.Footer className="flex justify-between items-center px-6 py-4 border-t border-gray-200">
+      <Dialog.Footer className="sm:justify-between">
         {saved ? (
           <span className="text-sm text-green-600 font-bold">Attendance saved successfully!</span>
         ) : (

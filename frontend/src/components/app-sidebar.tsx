@@ -19,11 +19,13 @@ import { useAuth } from "@/context/AuthContext"
 import { Select } from "./retroui/Select"
 import { SidebarConfigs } from "@/context/sidebar-config"
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext"
+import { useUnreadNotificationCount } from "@/hooks/use-unread-notification-count"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { role } = useAuth()
   const navRole = (role ?? "student") as keyof typeof SidebarConfigs
   const { periods, selectedPeriodId, setSelectedPeriodId, isLoading } = useAcademicPeriod()
+  const unreadNotificationCount = useUnreadNotificationCount()
 
   const dashboardUrl =
     role === "admin"
@@ -68,7 +70,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </Select.Group>
           </Select.Content>
         </Select>
-        <NavMain items={SidebarConfigs[navRole]} />
+        <NavMain
+          items={SidebarConfigs[navRole]}
+          badgeCounts={{ Notifications: unreadNotificationCount }}
+        />
       </SidebarContent>
 
       <SidebarFooter>
