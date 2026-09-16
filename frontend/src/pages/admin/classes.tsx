@@ -28,7 +28,6 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { OverviewCard } from "@/components/overview-cards";
 import { Input } from "@/components/retroui/Input";
 import { Select } from "@/components/retroui/Select";
-import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { Accordion } from "@/components/retroui/Accordion";
 

@@ -1,0 +1,62 @@
+{
+  "anomaly_classifications": {},
+  "anomaly_counts": {},
+  "attendance_invented": false,
+  "component_weight_patterns_by_sheet": {
+    "{\"pt\": 40.0, \"qa\": 20.0, \"ww\": 40.0}": 1
+  },
+  "dataset_name": "current_period_final_grade_projection_snapshots",
+  "dataset_sha256": "655fe3bb6e3dcaa8d5426861535444a581d2241f6cf03f899fd1feefe15fefeb",
+  "grading_period_sheet_status_counts": {
+    "PARSED": 1
+  },
+  "known_training_limitations": [
+    "historical quarter sheets are generic grading periods, not validated three-term equivalents",
+    "activity timestamps are absent; snapshots use deterministic component column order",
+    "attendance is absent from raw workbooks and is not invented",
+    "below-75 final targets are too rare for reliable failing-grade prediction"
+  ],
+  "leakage_controls": [
+    "target_final_period_grade is target-only",
+    "completed-quarter Total/PS/WS columns excluded from snapshot feature calculations",
+    "Initial Grade and Quarterly Grade columns excluded from model inputs",
+    "snapshot_trace_json records included raw activity columns and excluded summary columns",
+    "raw_student_key and student_period_key support grouped future train/test splitting"
+  ],
+  "model_training_performed": false,
+  "no_100_percent_snapshot": true,
+  "production_prediction_behavior_changed": false,
+  "purpose": "partial current-period raw activity evidence to final grade of the same grading period",
+  "raw_workbook_count": 1,
+  "removed_row_reasons": {},
+  "sheet_status_counts_all_sheets": {
+    "PARSED": 1
+  },
+  "snapshot_policy": "WW/PT reveal first ceil(fraction * component activity count) by component column order; QA is unavailable at 25% and 50%, and available at 75%; no actual dates are claimed.",
+  "snapshot_row_count": 3,
+  "snapshots_by_fraction": {
+    "0.25": 1,
+    "0.5": 1,
+    "0.75": 1
+  },
+  "subject_counts_by_student_period": {
+    "MATHEMATICS": 1
+  },
+  "target_distribution_by_student_period": {
+    "below_75_count": 0,
+    "count": 1,
+    "grade_75_to_79_count": 0,
+    "grade_80_to_84_count": 0,
+    "grade_85_to_89_count": 0,
+    "grade_90_plus_count": 1,
+    "max": 92.0,
+    "mean": 92.0,
+    "median": 92.0,
+    "min": 92.0
+  },
+  "usable_learner_count": 1,
+  "usable_student_period_count": 1,
+  "workbook_status_counts": {
+    "PARSED": 1
+  }
+}
