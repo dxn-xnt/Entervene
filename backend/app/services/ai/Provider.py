@@ -36,8 +36,8 @@ async def generate_text(prompt: str, system_prompt: str, *, json_output: bool = 
         payload = {"model": model, "messages": [{"role": "system", "content": system_prompt},
                    {"role": "user", "content": prompt}], "max_completion_tokens": max_tokens,
                    "reasoning_effort": "low", "temperature": .3, "stream": False}
-        if json_output:
-            payload["response_format"] = {"type": "json_object"}
+        # Note: Do NOT force response_format={"type": "json_object"} on Groq OSS models (e.g. gpt-oss-20b)
+        # because Groq's gateway returns fatal 400 json_validate_failed on markdown fences or math formatting.
     elif settings.gemini_api_key:
         model = "gemini-2.5-flash-lite"
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -59,6 +59,18 @@ async def generate_text(prompt: str, system_prompt: str, *, json_output: bool = 
             async with httpx.AsyncClient(timeout=httpx.Timeout(25, connect=5),
                                          transport=httpx.AsyncHTTPTransport(retries=0)) as client:
                 async with client.stream("POST", url, headers=headers, json=payload) as response:
+                    if response.status_code >= 400:
+                        err_body = await response.aread()
+                        logger.error("Provider HTTP %s: %s", response.status_code, err_body.decode(errors="replace"))
+                        if response.status_code == 400:
+                            try:
+                                err_data = json.loads(err_body)
+                                err_obj = err_data.get("error", {})
+                                if err_obj.get("code") == "json_validate_failed" and err_obj.get("failed_generation"):
+                                    logger.info("Recovered generation from Groq failed_generation payload")
+                                    return str(err_obj["failed_generation"])
+                            except Exception:
+                                pass
                     response.raise_for_status()
                     body = bytearray()
                     async for chunk in response.aiter_bytes():
@@ -80,9 +92,11 @@ async def generate_text(prompt: str, system_prompt: str, *, json_output: bool = 
             raise ValueError("Empty generation")
         logger.info("AI_PROVIDER_SUCCESS model=%s", model)
         return result
-    except (TimeoutError, httpx.TimeoutException):
+    except (TimeoutError, httpx.TimeoutException) as exc:
+        logger.error("AI provider timeout: %s", exc)
         await run_in_threadpool(record_failure)
         raise HTTPException(504, "AI generation timed out. No automatic retry was made.") from None
-    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as exc:
+        logger.error("AI provider call failed: %s (%s)", type(exc).__name__, exc)
         await run_in_threadpool(record_failure)
         raise HTTPException(502, "AI provider could not complete the request. No automatic retry was made.") from None

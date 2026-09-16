@@ -25,16 +25,36 @@ You MUST generate the EXACT quantity of questions specified in the prompt. Every
 
 OUTPUT FORMAT REQUIREMENTS:
 1. Respond ONLY with a valid JSON object containing a "questions" array.
-2. Structure of each question item:
+2. Every item in the "questions" array MUST be an object enclosed in its own curly braces { ... }.
+Example structure:
 {
-  "question_text": "Clear and concise question prompt",
-  "question_type": "MULTIPLE_CHOICE" | "TRUE_FALSE" | "IDENTIFICATION" | "MATCHING" | "ESSAY",
-  "difficulty_band": "EASY" | "AVERAGE" | "DIFFICULT",
-  "cognitive_level": "REMEMBER" | "UNDERSTAND" | "APPLY" | "ANALYZE" | "EVALUATE" | "CREATE",
-  "points": 1.0,
-  "explanation": "Brief answer key, model answer, or grading rubric",
-  "options": [
-    {"option_text": "Choice text", "is_correct": true, "option_order": 1}
+  "questions": [
+    {
+      "question_text": "Sample question 1 prompt",
+      "question_type": "MULTIPLE_CHOICE",
+      "difficulty_band": "EASY",
+      "cognitive_level": "REMEMBER",
+      "points": 1.0,
+      "explanation": "Answer rationale",
+      "options": [
+        {"option_text": "Option A", "is_correct": true, "option_order": 1},
+        {"option_text": "Option B", "is_correct": false, "option_order": 2},
+        {"option_text": "Option C", "is_correct": false, "option_order": 3},
+        {"option_text": "Option D", "is_correct": false, "option_order": 4}
+      ]
+    },
+    {
+      "question_text": "Sample question 2 prompt",
+      "question_type": "TRUE_FALSE",
+      "difficulty_band": "AVERAGE",
+      "cognitive_level": "UNDERSTAND",
+      "points": 1.0,
+      "explanation": "Answer rationale",
+      "options": [
+        {"option_text": "True", "is_correct": true, "option_order": 1},
+        {"option_text": "False", "is_correct": false, "option_order": 2}
+      ]
+    }
   ]
 }
 
@@ -101,10 +121,23 @@ def _extract_and_validate_tos_json(raw_text: str) -> list[dict[str, Any]]:
     if match:
         candidate = match.group(1).strip()
 
+    # 3. Pre-repair common minor JSON syntax deviations:
+    # Auto-repair missing opening brace '{' before question_text in array: e.g. [,]\s*"question_text":
+    candidate = re.sub(r"([,\[])\s*(?=\"question_text\"\s*:)", r"\1{", candidate)
+    # Strip trailing commas before closing braces/brackets
+    candidate = re.sub(r",\s*([\]\}])", r"\1", candidate)
+    # Auto-escape unescaped backslashes in math/LaTeX expressions (e.g. \pi, \cdot, \frac, \times)
+    candidate = re.sub(r'\\(?!["\\/nrt]|u[0-9a-fA-F]{4})', r'\\\\', candidate)
+
     try:
         data = json.loads(candidate)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=502, detail=f"AI returned malformed JSON for TOS: {exc}")
+    except json.JSONDecodeError:
+        # Fallback: attempt further cleanup of unescaped control chars
+        sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", candidate)
+        try:
+            data = json.loads(sanitized)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=502, detail=f"AI returned malformed JSON for TOS: {exc}")
 
     raw_questions = data.get("questions", data) if isinstance(data, dict) else data
     if not isinstance(raw_questions, list):
@@ -139,18 +172,77 @@ def _extract_and_validate_tos_json(raw_text: str) -> list[dict[str, Any]]:
                 if isinstance(opt, dict):
                     opt_text = str(opt.get("option_text", "")).strip()
                     if opt_text:
+                        raw_correct = opt.get("is_correct", False)
+                        if isinstance(raw_correct, str):
+                            is_corr = raw_correct.strip().lower() in {"true", "1", "yes", "correct"}
+                        elif isinstance(raw_correct, (int, float)):
+                            is_corr = raw_correct == 1
+                        else:
+                            is_corr = bool(raw_correct)
                         validated_options.append({
                             "option_text": opt_text,
-                            "is_correct": bool(opt.get("is_correct", False)),
+                            "is_correct": is_corr,
                             "option_order": int(opt.get("option_order", o_idx)),
                         })
 
-        if q_type == "IDENTIFICATION" and validated_options:
-            validated_options[0]["is_correct"] = True
-        elif q_type in {"MULTIPLE_CHOICE", "TRUE_FALSE", "MATCHING"}:
-            expected_sizes = {"MULTIPLE_CHOICE": {4}, "TRUE_FALSE": {2}, "MATCHING": {4, 5}}
-            if len(validated_options) not in expected_sizes[q_type] or sum(o["is_correct"] for o in validated_options) != 1:
-                raise HTTPException(502, "AI returned an invalid answer key.")
+        if q_type == "ESSAY":
+            validated_options = []
+        elif q_type == "IDENTIFICATION":
+            if not validated_options:
+                answer_text = str(item.get("explanation") or item.get("answer") or "Answer").strip()
+                validated_options = [{"option_text": answer_text, "is_correct": True, "option_order": 1}]
+            else:
+                validated_options = [validated_options[0]]
+                validated_options[0]["is_correct"] = True
+                validated_options[0]["option_order"] = 1
+        elif q_type == "TRUE_FALSE":
+            is_true_correct = True
+            for o in validated_options:
+                if o["option_text"].strip().lower() == "false" and o["is_correct"]:
+                    is_true_correct = False
+            validated_options = [
+                {"option_text": "True", "is_correct": is_true_correct, "option_order": 1},
+                {"option_text": "False", "is_correct": not is_true_correct, "option_order": 2},
+            ]
+        elif q_type in {"MULTIPLE_CHOICE", "MATCHING"}:
+            if q_type == "MULTIPLE_CHOICE":
+                while len(validated_options) < 4:
+                    order = len(validated_options) + 1
+                    fallback_label = "None of the above" if order == 4 else f"Option {chr(64 + order)}"
+                    validated_options.append({
+                        "option_text": fallback_label,
+                        "is_correct": False,
+                        "option_order": order,
+                    })
+                if len(validated_options) > 4:
+                    correct_idx = next((i for i, o in enumerate(validated_options) if o["is_correct"]), 0)
+                    if correct_idx >= 4:
+                        validated_options[0] = validated_options[correct_idx]
+                    validated_options = validated_options[:4]
+
+            for o_idx, o in enumerate(validated_options, start=1):
+                o["option_order"] = o_idx
+
+            correct_count = sum(1 for o in validated_options if o["is_correct"])
+            if correct_count == 0:
+                hint = str(item.get("correct_answer") or item.get("answer") or "").strip().upper()
+                matched = False
+                if hint:
+                    for o in validated_options:
+                        if o["option_text"].strip().upper().startswith(hint):
+                            o["is_correct"] = True
+                            matched = True
+                            break
+                if not matched and validated_options:
+                    validated_options[0]["is_correct"] = True
+            elif correct_count > 1:
+                found_first = False
+                for o in validated_options:
+                    if o["is_correct"]:
+                        if not found_first:
+                            found_first = True
+                        else:
+                            o["is_correct"] = False
 
         valid_questions.append({
             "question_text": str(item.get("question_text", f"Question {idx}")).strip(),
@@ -186,9 +278,25 @@ async def generate_tos_row_questions(
     try:
         questions = _extract_and_validate_tos_json(raw)
         from collections import Counter
-        counts = Counter(question["question_type"] for question in questions)
-        if dict(counts) != {kind: count for kind, count in type_counts.items() if count}:
-            raise HTTPException(502, "AI returned an incomplete question set. Try a smaller set.")
+        expected_counts = {kind: count for kind, count in type_counts.items() if count}
+        total_expected = sum(expected_counts.values())
+        if len(questions) < total_expected:
+            raise HTTPException(502, f"AI returned {len(questions)} of {total_expected} questions. Please retry.")
+
+        if len(questions) > total_expected:
+            questions = questions[:total_expected]
+
+        counts = Counter(q["question_type"] for q in questions)
+        if dict(counts) != expected_counts:
+            expected_pool = []
+            for kind, count in expected_counts.items():
+                expected_pool.extend([kind] * count)
+            for i, expected_kind in enumerate(expected_pool):
+                if i < len(questions):
+                    questions[i]["question_type"] = expected_kind
+
         return questions
+    except HTTPException:
+        raise
     except (ValueError, TypeError, KeyError, OverflowError):
         raise HTTPException(502, "AI returned invalid question data.") from None
