@@ -654,7 +654,7 @@ const TeacherGradeView = () => {
     };
 
     return (
-      <Table className="w-full border-collapse border-0 text-sm">
+      <Table wrapperClassName="border-0" className="w-full text-sm">
         <Table.Header className="border-b-2 border-black font-black [&_th]:h-auto [&_th]:px-2 [&_th]:py-2 [&_th]:text-[11px] [&_th]:leading-tight sm:[&_th]:px-3 sm:[&_th]:py-2.5 sm:[&_th]:text-xs md:[&_th]:py-3 md:[&_th]:text-sm">
           <Table.Row>
             <Table.Head className="w-[17%] font-black text-black">Learner's Name</Table.Head>
@@ -883,6 +883,7 @@ const TeacherGradeView = () => {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
+            <div data-page-tabs-sticky-region>
             <header className="flex min-w-0 flex-col items-stretch gap-3 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:gap-3 md:px-6">
               <div className="flex min-w-0 items-center gap-2">
                 <SidebarTrigger className="shrink-0 md:hidden" />
@@ -990,6 +991,7 @@ const TeacherGradeView = () => {
                 activeTab={activeTab}
                 onTabChange={(tabId) => setActiveTab(tabId)}
               />
+            </div>
             </div>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6">

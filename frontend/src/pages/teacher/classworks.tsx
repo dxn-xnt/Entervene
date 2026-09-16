@@ -204,6 +204,7 @@ export default function Classworks() {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
+            <div data-page-tabs-sticky-region>
             <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
@@ -227,6 +228,8 @@ export default function Classworks() {
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
               />
+            </div>
+
             </div>
 
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">

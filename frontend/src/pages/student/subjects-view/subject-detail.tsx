@@ -24,6 +24,7 @@ const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
+            <div data-page-tabs-sticky-region>
             <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
               <SidebarTrigger className="md:hidden" />
               <button
@@ -37,6 +38,7 @@ const SubjectDetail = ({ subject, onBack }: SubjectDetailProps) => {
             </header>
             <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
               <Tabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
+            </div>
             </div>
 
             <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">

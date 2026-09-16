@@ -2219,28 +2219,27 @@ export default function AdminSubjectLoadStudio() {
                                     <Table.Body>
                                       {getSectionSlots(cls).map((slot, sIdx) => {
                                         const isBreak = slot.is_locked_break || slot.slot_type !== "CLASS";
+                                        const timeLabel = `${formatTime12h(slot.start_time)} - ${formatTime12h(slot.end_time)}`;
 
                                         if (isBreak) {
                                           return (
                                             <Table.Row key={`break_${slot.display_order}_${sIdx}`} className="border-background bg-[#fbfbfa] hover:bg-[#fbfbfa]">
-                                              <Table.Cell className=" py-2! border-r-2 border-b-2 font-semibold whitespace-nowrap text-center text-xs">
-                                                {slot.slot_name}
+                                              <Table.Cell className="border-r-2 border-b-2 bg-accent py-2! text-center text-xs font-bold text-black whitespace-nowrap align-middle">
+                                                {timeLabel}
                                               </Table.Cell>
-                                              {TIMETABLE_DAYS.map((d, dIdx) => (
-                                                <Table.Cell
-                                                  key={d.key}
-                                                  className={cn(
-                                                    "text-center text-xs font-medium bg-white/50",
-                                                    dIdx < TIMETABLE_DAYS.length - 1 ? "" : ""
-                                                  )}
-                                                >
-                                                </Table.Cell>
-                                              ))}
+                                              <Table.Cell
+                                                colSpan={TIMETABLE_DAYS.length}
+                                                className="bg-white/50 p-2!"
+                                              >
+                                                <div className="flex w-full">
+                                                  <Card className="flex min-h-7 w-full items-center justify-center rounded bg-primary px-2 py-1 text-xs font-bold text-primary-foreground shadow-none">
+                                                    {slot.slot_name}
+                                                  </Card>
+                                                </div>
+                                              </Table.Cell>
                                             </Table.Row>
                                           );
                                         }
-
-                                        const timeLabel = `${formatTime12h(slot.start_time)} - ${formatTime12h(slot.end_time)}`;
 
                                         return (
                                           <Table.Row key={`slot_${slot.start_time}_${sIdx}`} className="border-background bg-white hover:bg-white">

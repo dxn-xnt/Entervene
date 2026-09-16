@@ -148,6 +148,7 @@ export const LessonPlannerListPage: React.FC = () => {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
+            <div data-page-tabs-sticky-region>
             <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
@@ -208,6 +209,7 @@ export const LessonPlannerListPage: React.FC = () => {
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
               />
+            </div>
             </div>
 
             <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-3">

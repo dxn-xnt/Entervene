@@ -101,7 +101,7 @@ export default function AdminDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4">
                 {/* Left column */}
                 <div className="flex flex-col gap-4">
-                  <ChartAreaInteractive />
+                  {/* <ChartAreaInteractive /> */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Card className="w-full p-4 flex flex-col gap-3">
                       <h2 className="text-lg font-semibold">

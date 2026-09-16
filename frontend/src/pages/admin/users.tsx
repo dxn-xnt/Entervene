@@ -28,7 +28,6 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import { cn } from "@/lib/utils";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import AssignSubstituteModal from "./forms/assign-substitute-modal";
-import { RoleBadge } from "@/components/role-badge";
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -306,6 +305,7 @@ export default function AdminUsers() {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
+            <div data-page-tabs-sticky-region>
             <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:gap-3 md:px-6">
               <div className="flex min-w-0 items-center gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
@@ -326,6 +326,8 @@ export default function AdminUsers() {
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
               />
+            </div>
+
             </div>
 
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 [&_table]:min-w-[680px] sm:px-4 sm:py-4 md:px-6">
@@ -457,10 +459,10 @@ export default function AdminUsers() {
               )}
 
               {loading && (
-                <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+                <Card className="flex w-full items-center justify-center gap-3 py-12 text-sm text-muted-foreground shadow-md">
                   <Loader size="sm" />
                   Loading users
-                </div>
+                </Card>
               )}
 
               {!loading && activeTab === "student" && (
@@ -567,12 +569,12 @@ export default function AdminUsers() {
                           </AccordionTrigger>
 
                           <AccordionContent className="p-0 border-t-2 border-border">
-                            <Table className="border-none shadow-none" wrapperClassName="overflow-x-auto">
-                              <Table.Header className="font-sans">
-                                <Table.Row>
-                                  <Table.Head>Name</Table.Head>
-                                  <Table.Head className="text-center w-36">Status</Table.Head>
-                                  <Table.Head className="text-center w-64">
+                            <Table wrapperClassName="rounded-none border-0 shadow-none">
+                              <Table.Header className="border-b-2 border-border bg-primary font-sans text-black">
+                                <Table.Row className="border-b-2 border-black hover:bg-transparent">
+                                  <Table.Head className="text-sm font-bold text-black">Name</Table.Head>
+                                  <Table.Head className="w-36 text-center text-sm font-bold text-black">Status</Table.Head>
+                                  <Table.Head className="w-64 text-center text-sm font-bold text-black">
                                     {isUnassigned ? "Grade level" : "Section"}
                                   </Table.Head>
                                 </Table.Row>
@@ -605,20 +607,20 @@ export default function AdminUsers() {
                       {emptyText}
                     </Card>
                   ) : (
-                    <div className="overflow-hidden border border-black bg-background shadow-[4px_5px_0_#000]">
-                      <Table className="border-1 shadow-none">
-                        <Table.Header className="font-sans">
-                          <Table.Row>
-                            <Table.Head>Name</Table.Head>
-                            <Table.Head className="text-center w-36">Status</Table.Head>
+                    <Card className="block w-full overflow-hidden p-0 shadow-md">
+                      <Table wrapperClassName="rounded-none border-0 shadow-none">
+                        <Table.Header className="border-b-2 border-border bg-primary font-sans text-black">
+                          <Table.Row className="border-b-2 border-black hover:bg-transparent">
+                            <Table.Head className="text-sm font-bold text-black">Name</Table.Head>
+                            <Table.Head className="w-36 text-center text-sm font-bold text-black">Status</Table.Head>
                             {activeTab === "teacher" ? (
                               <>
-                                <Table.Head className="text-center w-48">Subjects</Table.Head>
-                                <Table.Head className="text-right w-20">Classes</Table.Head>
-                                <Table.Head className="text-right w-28">Actions</Table.Head>
+                                <Table.Head className="w-48 text-center text-sm font-bold text-black">Subjects</Table.Head>
+                                <Table.Head className="w-20 text-right text-sm font-bold text-black">Classes</Table.Head>
+                                <Table.Head className="w-28 text-right text-sm font-bold text-black">Actions</Table.Head>
                               </>
                             ) : (
-                              <Table.Head className="text-right w-36">Joined</Table.Head>
+                              <Table.Head className="w-36 text-right text-sm font-bold text-black">Joined</Table.Head>
                             )}
                           </Table.Row>
                         </Table.Header>
@@ -636,7 +638,7 @@ export default function AdminUsers() {
                           ))}
                         </Table.Body>
                       </Table>
-                    </div>
+                    </Card>
                   )}
                 </>
               )}
@@ -710,7 +712,7 @@ function StudentRow({
   return (
     <Table.Row
       onClick={() => onOpenUser(user)}
-      className="cursor-pointer"
+      className="cursor-pointer border-b border-border last:border-b-0"
     >
       <Table.Cell>
         <NameCell name={user.name} subtitle={user.email} role={user.role} />
@@ -822,7 +824,7 @@ function UserRow({
     return (
       <Table.Row
         onClick={() => onOpenUser(user)}
-        className="cursor-pointer"
+        className="cursor-pointer border-b border-border last:border-b-0"
       >
         <Table.Cell>
           <NameCell name={user.name} subtitle={user.email} role={user.role} />
@@ -901,7 +903,7 @@ function UserRow({
   return (
     <Table.Row
       onClick={() => onOpenUser(user)}
-      className="cursor-pointer"
+      className="cursor-pointer border-b border-border last:border-b-0"
     >
       <Table.Cell>
         <NameCell name={user.name} subtitle={user.email} role={user.role} />
@@ -948,10 +950,7 @@ function NameCell({
         <Avatar.Fallback>{name.charAt(0).toUpperCase()}</Avatar.Fallback>
       </Avatar>
       <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <div className="truncate text-sm font-semibold">{name}</div>
-          <RoleBadge role={role} />
-        </div>
+        <div className="truncate text-sm font-semibold">{name}</div>
         {subtitle && (
           <div className="truncate text-xs text-muted-foreground">
             {subtitle}
