@@ -105,6 +105,7 @@ export default function AdvisoryClassDetail() {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
+            <div data-page-tabs-sticky-region>
             <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
               <SidebarTrigger className="md:hidden" />
               <Breadcrumb>
@@ -153,6 +154,7 @@ export default function AdvisoryClassDetail() {
                 activeTab={tab}
                 onTabChange={setTab}
               />
+            </div>
             </div>
 
             <div className="border-t-1 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-4">

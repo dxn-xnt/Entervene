@@ -86,6 +86,7 @@ export default function ToDo() {
       <div className="flex flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
+            <div data-page-tabs-sticky-region>
             <header className="flex items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <SidebarTrigger className="shrink-0 md:hidden" />
               <h1 className="text-xl font-bold tracking-tight sm:text-2xl md:text-4xl">
@@ -103,6 +104,8 @@ export default function ToDo() {
                   completed: completedItems.length,
                 }}
               />
+            </div>
+
             </div>
 
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">

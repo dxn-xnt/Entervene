@@ -19,7 +19,7 @@ export default function AppLayout({
     >
 
       <AppSidebar variant="inset" />
-      <SidebarInset>
+      <SidebarInset className="h-svh overflow-hidden">
         <AppContent>
           {/* <SiteHeader breadcrumbs={breadcrumbs}/> */}
           {children}

@@ -883,6 +883,7 @@ const TeacherGradeView = () => {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
+            <div data-page-tabs-sticky-region>
             <header className="flex min-w-0 flex-col items-stretch gap-3 bg-background px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:gap-3 md:px-6">
               <div className="flex min-w-0 items-center gap-2">
                 <SidebarTrigger className="shrink-0 md:hidden" />
@@ -990,6 +991,7 @@ const TeacherGradeView = () => {
                 activeTab={activeTab}
                 onTabChange={(tabId) => setActiveTab(tabId)}
               />
+            </div>
             </div>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
