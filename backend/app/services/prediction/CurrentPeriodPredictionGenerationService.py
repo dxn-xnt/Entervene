@@ -270,7 +270,13 @@ def check_current_period_finalization(
         return {
             "generation_status": "FINALIZED",
             "ready": False,
+            "readiness_level": "FINALIZED",
+            "prediction_mode": ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value,
             "predicted_period_grade": None,
+            "risk_level": None,
+            "risk_score": None,
+            "data_status": None,
+            "risk_assessment_status": RISK_ASSESSMENT_NOT_EVALUATED_CURRENT,
             "message": (
                 "Academic period already has an official finalized grade or outcome; "
                 "new current-period projection generation is closed."
@@ -537,6 +543,47 @@ def _record_request(
         db.flush()
 
 
+def _latest_current_period_projection_for_scope(
+    db: Session,
+    scope: dict[str, Any],
+) -> AIPrediction | None:
+    exact_scope = [
+        AIPrediction.student_id == scope["student_id"],
+        AIPrediction.class_id == scope["class_id"],
+        AIPrediction.subject_id == scope["subject_id"],
+        AIPrediction.source_period_id == scope["source_period_id"],
+        AIPrediction.target_period_id == scope["target_period_id"],
+    ]
+    return (
+        db.query(AIPrediction)
+        .join(AIModelVersion, AIPrediction.model_version_id == AIModelVersion.model_version_id)
+        .filter(
+            *exact_scope,
+            AIModelVersion.model_purpose == ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value,
+        )
+        .order_by(
+            AIPrediction.revision.desc(),
+            AIPrediction.generated_at.desc().nullslast(),
+            AIPrediction.prediction_id.desc(),
+        )
+        .first()
+    )
+
+
+def existing_current_projection_response(prediction: AIPrediction) -> dict[str, Any]:
+    response = persisted_current_prediction_response(prediction, "EXISTING_PROJECTION")
+    response.update({
+        "latest_prediction_id": prediction.prediction_id,
+        "duplicate": True,
+        "message": (
+            "A current-period projection already exists for this student, class, "
+            "subject and academic period. Use the prediction refresh endpoint to "
+            "create a successor revision when eligible."
+        ),
+    })
+    return response
+
+
 def generate_current_period_from_records(
     db: Session,
     scope: dict[str, Any],
@@ -547,6 +594,7 @@ def generate_current_period_from_records(
     staff_id: str | None = None,
     preview: bool = False,
     reason: str = "MANUAL_GENERATION",
+    initial_only: bool = False,
 ) -> dict[str, Any]:
     """Execute the core generation workflow for CURRENT_PERIOD_FINAL_GRADE_PROJECTION."""
     # Ensure source == target for current period
@@ -610,6 +658,11 @@ def generate_current_period_from_records(
                 )
             return persisted_current_prediction_response(prediction, "REPLAYED")
 
+    if initial_only and not preview:
+        existing = _latest_current_period_projection_for_scope(db, clean_scope)
+        if existing is not None:
+            return existing_current_projection_response(existing)
+
     # If no completed ledger entry exists, continue normal new-execution flow:
     # Finalization guard: return explicit outcome if academic period is officially closed
     finalization = check_current_period_finalization(db, clean_scope)
@@ -668,6 +721,10 @@ def generate_current_period_from_records(
             "readiness_level": built["readiness_level"],
             "readiness_reasons": list(built.get("readiness_reasons") or []),
             "predicted_period_grade": None,
+            "risk_level": None,
+            "risk_score": None,
+            "data_status": None,
+            "risk_assessment_status": RISK_ASSESSMENT_NOT_EVALUATED_CURRENT,
             "features": deepcopy(built["features"]),
             "evidence_summary": deepcopy(built.get("evidence_summary", {})),
             "domain_warnings": deepcopy(built.get("domain_warnings", [])),
@@ -690,6 +747,10 @@ def generate_current_period_from_records(
             "blocking_reasons": [w.get("message") for w in blocking_warnings],
             "readiness_level": built["readiness_level"],
             "predicted_period_grade": None,
+            "risk_level": None,
+            "risk_score": None,
+            "data_status": None,
+            "risk_assessment_status": RISK_ASSESSMENT_NOT_EVALUATED_CURRENT,
             "features": deepcopy(built["features"]),
             "domain_warnings": deepcopy(built.get("domain_warnings", [])),
             "evidence_summary": deepcopy(built.get("evidence_summary", {})),
@@ -780,6 +841,7 @@ def generate_current_period_prediction(
     bind: Any = None,
     model_name: str = DEFAULT_CURRENT_MODEL_NAME,
     reason: str = "MANUAL_GENERATION",
+    initial_only: bool = False,
 ) -> dict[str, Any]:
     """Execute generation inside the PostgreSQL advisory lock & REPEATABLE READ snapshot."""
     normalized_scope = dict(scope)
@@ -802,6 +864,7 @@ def generate_current_period_prediction(
             staff_id=staff_id,
             preview=preview,
             reason=reason,
+            initial_only=initial_only,
         ),
         bind=bind,
         generation_request_id=generation_request_id,
@@ -883,4 +946,3 @@ def refresh_current_period_prediction_workflow(
         reason="MANUAL_REFRESH",
         bind=db.get_bind(),
     )
-

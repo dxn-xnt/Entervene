@@ -65,8 +65,8 @@ export default function AdminStudentView() {
 
                                 {/* Status Alert */}
                                 <div className="text-right self-end md:self-auto">
-                                    <div className="text-3xl md:text-4xl font-extrabold text-[#e63946] tracking-tight">Likely to Fail</div>
-                                    <div className="text-muted-foreground font-semibold text-sm">81% model confidence</div>
+                                    <div className="text-3xl md:text-4xl font-extrabold text-[#e63946] tracking-tight">Needs Review</div>
+                                    <div className="text-muted-foreground font-semibold text-sm">Demonstration mockup — not a live prediction</div>
                                 </div>
                             </div>
 
@@ -90,7 +90,7 @@ export default function AdminStudentView() {
                                     <h3 className="text-2xl font-extrabold text-black">Insights</h3>
                                     <Card className="w-full bg-[#f2a2a2] border-2 border-black rounded p-5 text-black shadow-md hover:shadow-none transition-all">
                                         <p className="font-semibold text-sm leading-relaxed">
-                                            Daniel's data indicates significant disengagement across all LMS behavioral indicators. With only 8 logins and an average session of 6 minutes, meaningful content exposure is critically low. Combined with failing classwork and quiz averages and 11 missed activities, the model predicts failure with high confidence unless urgent intervention is applied.
+                                            This static mockup illustrates how student support notes may appear. It is not connected to the live prediction lifecycle and must not be read as model confidence, failure probability, or AI certainty.
                                         </p>
                                     </Card>
                                 </div>

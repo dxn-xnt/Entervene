@@ -1,60 +1,36 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import PredictionFilters from "@/components/predictions/prediction-filters";
-import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
+import { PredictionRoster } from "@/components/predictions/prediction-roster";
 import { useAuth } from "@/context/AuthContext";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
-import type {
-  DashboardAtRiskResponse,
-  DashboardFilters,
-  DashboardQueryParams,
-  DashboardSubjectOption,
-} from "@/lib/prediction-api";
-import {
-  fetchDashboardAtRisk,
-  fetchDashboardFilters,
-} from "@/lib/prediction-api";
+import { usePredictionRoster } from "@/hooks/use-prediction-roster";
+import type { DashboardFilters, DashboardSubjectOption } from "@/lib/prediction-api";
+import { fetchDashboardFilters } from "@/lib/prediction-api";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 
 export default function SectionPredictions() {
   const { role } = useAuth();
   const baseRole = role === "admin" ? "admin" : "teacher";
   const { grade, classId: classSlug } = useParams<{ grade: string; classId: string }>();
-
   const { selectedPeriodId } = useAcademicPeriod();
 
-  // ── State ──
-  const [data, setData] = useState<DashboardAtRiskResponse | null>(null);
   const [filters, setFilters] = useState<DashboardFilters | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // The sidebar's selected term is the single source of truth for every
-  // prediction page and its drill-downs.
-  const academicPeriodId = selectedPeriodId ?? undefined;
-
-  // Filter values
-
   const [subjectId, setSubjectId] = useState<number | undefined>();
-  const [riskLevel, setRiskLevel] = useState<string | undefined>();
+  const [baselineRiskLevel, setBaselineRiskLevel] = useState<string | undefined>();
   const [search, setSearch] = useState("");
-
-  // Sorting & pagination
-  const [sortBy, setSortBy] = useState<string | undefined>("student_name");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-  const [offset, setOffset] = useState(0);
-  const limit = 10;
-
-  // Detail sheet
   const [selectedPrediction, setSelectedPrediction] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  // Resolve numeric class ID from route param
+  const academicPeriodId = selectedPeriodId ?? undefined;
+  const numericGrade = grade ? Number(grade) : undefined;
+
   const resolvedClassId =
-    classSlug && !isNaN(Number(classSlug))
+    classSlug && !Number.isNaN(Number(classSlug))
       ? Number(classSlug)
       : filters?.classes.find(
           (c) => c.section_name.toLowerCase() === decodeURIComponent(classSlug || "").toLowerCase()
@@ -62,14 +38,10 @@ export default function SectionPredictions() {
 
   const sectionDisplayName =
     filters?.classes.find((c) => c.class_id === resolvedClassId)?.section_name ||
-    (classSlug && isNaN(Number(classSlug)) ? decodeURIComponent(classSlug) : `Section ${classSlug}`);
+    (classSlug && Number.isNaN(Number(classSlug)) ? decodeURIComponent(classSlug) : `Section ${classSlug}`);
 
-  const numericGrade = grade ? Number(grade) : undefined;
-
-  // ── Fetch scoped filters when class or period changes ──
   useEffect(() => {
     if (!resolvedClassId) {
-      // If resolvedClassId is not yet resolved, fetch global filters to discover classes
       fetchDashboardFilters().then(setFilters).catch(console.error);
       return;
     }
@@ -82,11 +54,8 @@ export default function SectionPredictions() {
       .catch(console.error);
   }, [resolvedClassId, academicPeriodId]);
 
-  // ── Compute sorted subjects ──
-  // If a specific term is selected: period_index asc (nulls last) -> alphabetical
-  // If "All Terms" (academicPeriodId === undefined): pure alphabetical fallback
   const sortedSubjects: DashboardSubjectOption[] = useMemo(() => {
-    if (!filters?.subjects || filters.subjects.length === 0) return [];
+    if (!filters?.subjects?.length) return [];
     const list = [...filters.subjects];
 
     if (academicPeriodId !== undefined) {
@@ -106,104 +75,30 @@ export default function SectionPredictions() {
     return list.sort((a, b) => a.subject_name.localeCompare(b.subject_name));
   }, [filters?.subjects, academicPeriodId]);
 
-  // ── Sync active subject selection with sorted subjects list ──
-  // Preserve current selection if still valid; otherwise default to first tab
   useEffect(() => {
     if (sortedSubjects.length === 0) {
       setSubjectId(undefined);
       return;
     }
-    const exists = sortedSubjects.some((s) => s.subject_id === subjectId);
-    if (!exists) {
+    if (!sortedSubjects.some((s) => s.subject_id === subjectId)) {
       setSubjectId(sortedSubjects[0].subject_id);
-      setOffset(0);
     }
   }, [sortedSubjects, subjectId]);
 
-  // ── Fetch predictions data on filter/sort/page change ──
-  const loadData = useCallback(async () => {
-    // If filters loaded and there are 0 subjects, skip querying
-    if (filters && sortedSubjects.length === 0) {
-      setData(null);
-      setLoading(false);
-      return;
-    }
-
-    // Wait until subjectId is determined if subjects exist
-    if (sortedSubjects.length > 0 && subjectId === undefined) {
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const params: DashboardQueryParams = {
-        class_id: resolvedClassId,
-        grade_level: numericGrade,
-        subject_id: subjectId,
-        academic_period_id: academicPeriodId,
-        risk_level: riskLevel,
-        search: search.trim() || undefined,
-        sort_by: sortBy,
-        sort_order: sortOrder,
-        limit,
-        offset,
-      };
-
-      const result = await fetchDashboardAtRisk(params);
-      setData(result);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    resolvedClassId,
-    numericGrade,
+  const roster = usePredictionRoster({
+    classId: resolvedClassId,
     subjectId,
     academicPeriodId,
-    riskLevel,
     search,
-    sortBy,
-    sortOrder,
-    offset,
-    filters,
-    sortedSubjects.length,
-  ]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  // Debounce search
-  const [searchTimer, setSearchTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
-    if (searchTimer) clearTimeout(searchTimer);
-    setSearchTimer(
-      setTimeout(() => {
-        setOffset(0);
-      }, 400),
-    );
-  };
-
-  // ── Handlers ──
-  const handleSort = (column: string) => {
-    if (sortBy === column) {
-      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(column);
-      setSortOrder("desc");
-    }
-    setOffset(0);
-  };
+    baselineRiskLevel,
+  });
 
   const handleClearAll = () => {
-    setRiskLevel(undefined);
+    setBaselineRiskLevel(undefined);
     setSearch("");
-    setOffset(0);
   };
 
-  const handleRowClick = (predictionId: number) => {
+  const handleOpenDetail = (predictionId: number) => {
     setSelectedPrediction(predictionId);
     setSheetOpen(true);
   };
@@ -213,7 +108,6 @@ export default function SectionPredictions() {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
-            {/* ── Header ── */}
             <header className="flex items-center gap-3 bg-background py-4 px-4 md:px-6">
               <SidebarTrigger className="md:hidden" />
               <Breadcrumb>
@@ -237,9 +131,7 @@ export default function SectionPredictions() {
                     <>
                       <Breadcrumb.Separator />
                       <Breadcrumb.Item>
-                        <Breadcrumb.Page>
-                          {sectionDisplayName}
-                        </Breadcrumb.Page>
+                        <Breadcrumb.Page>{sectionDisplayName}</Breadcrumb.Page>
                       </Breadcrumb.Item>
                     </>
                   )}
@@ -247,35 +139,26 @@ export default function SectionPredictions() {
               </Breadcrumb>
             </header>
 
-            <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6">
-              <div className="flex flex-col gap-4 w-full">
-                {/* ── Filters Bar ── */}
+            <div className="-mt-[1px] border-t-2 border-border px-4 py-4 md:px-6">
+              <div className="flex w-full flex-col gap-4">
                 <PredictionFilters
                   filters={filters}
                   gradeLevel={numericGrade}
                   classId={resolvedClassId}
                   subjectId={subjectId}
                   academicPeriodId={academicPeriodId}
-                  riskLevel={riskLevel}
+                  riskLevel={baselineRiskLevel}
                   search={search}
                   hideClassFilter
                   hideGradeFilter
                   hideSubjectFilter
                   hidePeriodFilter
-                  riskSummary={data?.risk_summary}
-                  onSubjectChange={(v) => {
-                    setSubjectId(v);
-                    setOffset(0);
-                  }}
-                  onRiskChange={(v) => {
-                    setRiskLevel(v);
-                    setOffset(0);
-                  }}
-                  onSearchChange={handleSearchChange}
+                  onSubjectChange={setSubjectId}
+                  onRiskChange={setBaselineRiskLevel}
+                  onSearchChange={setSearch}
                   onClearAll={handleClearAll}
                 />
 
-                {/* ── Subject Tabs ── */}
                 {sortedSubjects.length > 0 && (
                   <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                     {sortedSubjects.map((s) => {
@@ -284,15 +167,12 @@ export default function SectionPredictions() {
                         <button
                           key={s.subject_id}
                           type="button"
-                          onClick={() => {
-                            setSubjectId(s.subject_id);
-                            setOffset(0);
-                          }}
+                          onClick={() => setSubjectId(s.subject_id)}
                           className={cn(
-                            "px-4 py-1.5 text-xs md:text-sm font-bold rounded whitespace-nowrap transition-all cursor-pointer border-2",
+                            "cursor-pointer whitespace-nowrap rounded border-2 px-4 py-1.5 text-xs font-bold transition-all md:text-sm",
                             isActive
-                              ? "bg-yellow-400 border-black text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                              : "bg-white border-transparent text-gray-700 hover:bg-gray-100 hover:border-black"
+                              ? "border-black bg-yellow-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                              : "border-transparent bg-white text-gray-700 hover:border-black hover:bg-gray-100"
                           )}
                         >
                           {s.subject_name}
@@ -302,33 +182,21 @@ export default function SectionPredictions() {
                   </div>
                 )}
 
-                {/* ── Table & Empty States (Full Width) ── */}
-                {loading && !data ? (
-                  <div className="flex items-center justify-center py-20 text-gray-400 font-semibold">
-                    Loading {sectionDisplayName} predictions...
-                  </div>
-                ) : sortedSubjects.length === 0 ? (
-                  <div className="p-8 bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-center">
-                    <p className="text-lg font-bold text-gray-900">
-                      No subjects available for {sectionDisplayName}.
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1 max-w-md mx-auto">
+                {sortedSubjects.length === 0 ? (
+                  <div className="bg-white p-8 text-center border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                    <p className="text-lg font-bold text-gray-900">No subjects available for {sectionDisplayName}.</p>
+                    <p className="mx-auto mt-1 max-w-md text-sm text-gray-600">
                       There are no subjects offered or assigned for this section in the selected term.
                     </p>
                   </div>
                 ) : (
-                  <PredictionTable
-                    items={data?.items ?? []}
-                    total={data?.total ?? 0}
-                    limit={data?.limit ?? limit}
-                    offset={data?.offset ?? 0}
-                    sortBy={sortBy}
-                    sortOrder={sortOrder}
-                    hideClass
-                    hideSubject
-                    onSort={handleSort}
-                    onPageChange={setOffset}
-                    onRowClick={handleRowClick}
+                  <PredictionRoster
+                    roster={roster.data}
+                    students={roster.students}
+                    loading={roster.loading}
+                    error={roster.error}
+                    onRefetch={roster.refetch}
+                    onOpenDetail={handleOpenDetail}
                   />
                 )}
               </div>
@@ -337,7 +205,6 @@ export default function SectionPredictions() {
         </div>
       </div>
 
-      {/* ── Detail Sheet ── */}
       <PredictionDetailSheet
         predictionId={selectedPrediction}
         open={sheetOpen}

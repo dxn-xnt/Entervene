@@ -34,6 +34,16 @@ from app.services.prediction.CurrentPeriodPredictionGenerationService import (
     EVIDENCE_CONTRACT_VERSION,
     SNAPSHOT_VERSION,
 )
+from app.services.prediction.UnifiedCurrentTermFeatureBuilderService import (
+    EVIDENCE_CONTRACT_VERSION as UNIFIED_EVIDENCE_CONTRACT_VERSION,
+    SNAPSHOT_VERSION as UNIFIED_SNAPSHOT_VERSION,
+    assemble_unified_features,
+    build_unified_current_term_features_from_records,
+    load_unified_feature_schema,
+)
+from app.services.prediction.UnifiedPredictionGenerationService import (
+    evaluate_unified_projection_status,
+)
 from app.services.prediction.ModelScoringService import (
     DEFAULT_MODEL_NAME,
     get_active_model_version,
@@ -226,17 +236,17 @@ def _message_for(status: str, readiness: dict[str, Any], eligibility: dict[str, 
     coverage = readiness.get("coverage_ratio")
     coverage_text = f"{round(float(coverage) * 100)}% of assigned graded activities have recorded scores" if coverage is not None else "Prediction unavailable"
     if status == "COLLECTING_DATA":
-        return f"Collecting evidence · {coverage_text}."
+        return f"Collecting evidence Â· {coverage_text}."
     if status == "NOT_READY":
-        return f"Collecting evidence · {coverage_text}."
+        return f"Collecting evidence Â· {coverage_text}."
     if status == "READY_FOR_FORECAST":
-        return f"{readiness.get('readiness_level', 'Ready').title()} academic evidence available · Ready for next-term forecast."
+        return f"{readiness.get('readiness_level', 'Ready').title()} academic evidence available Â· Ready for next-term forecast."
     if status == "FORECAST_UNAVAILABLE" and eligibility.get("status") == "AWAITING_OFFICIAL_SOURCE_GRADE":
-        return f"{readiness.get('readiness_level', 'Ready').title()} academic evidence available · Next-term forecast awaits the official source grade."
+        return f"{readiness.get('readiness_level', 'Ready').title()} academic evidence available Â· Next-term forecast awaits the official source grade."
     if status == "FORECAST_CURRENT":
-        return f"Predicted target grade: {latest.predicted_period_grade} · Forecast current."
+        return f"Predicted target grade: {latest.predicted_period_grade} Â· Forecast current."
     if status == "SOURCE_EVIDENCE_CHANGED":
-        return f"New source academic evidence is available · Current saved forecast: revision {latest.revision}."
+        return f"New source academic evidence is available Â· Current saved forecast: revision {latest.revision}."
     if status == "NO_NEXT_PERIOD":
         return "No next period exists for this source period."
     if status == "LEGACY_UNKNOWN":
@@ -545,11 +555,21 @@ def get_dual_purpose_roster_status(
         active_next_model = None
 
     try:
-        active_current_model = get_active_model_version_by_purpose(
+        active_unified_model = get_active_model_version_by_purpose(
+            db, ModelPurpose.UNIFIED_CURRENT_TERM_PROJECTION
+        )
+    except Exception:
+        active_unified_model = None
+
+    try:
+        active_legacy_current_model = get_active_model_version_by_purpose(
             db, ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION
         )
     except Exception:
-        active_current_model = None
+        active_legacy_current_model = None
+
+    is_unified_mode = active_unified_model is not None
+    active_current_model = active_unified_model if is_unified_mode else active_legacy_current_model
 
     # 4. Enrolled students
     students = (
@@ -566,9 +586,9 @@ def get_dual_purpose_roster_status(
     student_ids = [s.student_id for s in students]
 
     # 5. Bulk preloading
-    # Preload grading weights & current feature schema
     weights = resolve_subject_grading_weights(db, subject_id, getattr(class_, "academic_level_id", None))
-    schema = load_current_period_feature_schema()
+    current_schema = load_current_period_feature_schema()
+    unified_schema = load_unified_feature_schema() if is_unified_mode else None
     class_level = db.get(AcademicLevel, class_.academic_level_id) if getattr(class_, "academic_level_id", None) else None
     class_grade_level = float(class_level.grade_level) if class_level and class_level.grade_level else 0.0
 
@@ -641,7 +661,13 @@ def get_dual_purpose_roster_status(
                 and p.target_period_id == academic_period_id
             ):
                 next_preds_by_student[p.student_id].append(p)
-            elif (
+            elif is_unified_mode and (
+                purpose == ModelPurpose.UNIFIED_CURRENT_TERM_PROJECTION.value
+                and p.source_period_id == academic_period_id
+                and p.target_period_id == academic_period_id
+            ):
+                curr_preds_by_student[p.student_id].append(p)
+            elif not is_unified_mode and (
                 purpose == ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value
                 and p.source_period_id == academic_period_id
                 and p.target_period_id == academic_period_id
@@ -788,9 +814,9 @@ def get_dual_purpose_roster_status(
                     else "FORECAST_CURRENT"
                 )
                 base_msg = (
-                    f"New source academic evidence is available · Current saved forecast: revision {latest_next.revision}."
+                    f"New source academic evidence is available Â· Current saved forecast: revision {latest_next.revision}."
                     if base_status == "SOURCE_EVIDENCE_CHANGED"
-                    else f"Predicted target grade: {latest_next.predicted_period_grade} · Forecast current."
+                    else f"Predicted target grade: {latest_next.predicted_period_grade} Â· Forecast current."
                 )
                 baseline_forecast = {
                     "purpose": "NEXT_PERIOD_BASELINE_FORECAST",
@@ -826,7 +852,7 @@ def get_dual_purpose_roster_status(
                 pg = prior_grades.get(s.student_id)
                 if pg is not None and pg.is_finalized and pg.final_period_grade is not None:
                     base_status = "READY_FOR_FORECAST"
-                    base_msg = "Ready academic evidence available · Ready for next-term forecast."
+                    base_msg = "Ready academic evidence available Â· Ready for next-term forecast."
                     base_elig = {"eligible": True, "status": "ELIGIBLE", "reason": None}
                 else:
                     base_status = "AWAITING_OFFICIAL_SOURCE_GRADE"
@@ -884,42 +910,19 @@ def get_dual_purpose_roster_status(
                 key=lambda p: (_datetime_sort_key(p.generated_at), p.prediction_id),
             )
 
-        # Prebuilt live evidence for current period
+        # In-memory calculation using preloaded assignments, submissions, weights, and schema
         s_subs = submissions_by_student.get(s.student_id, [])
         s_rows = build_classwork_evidence_rows_for_student(assignments, s_subs)
-        prebuilt = calculate_current_period_features_from_evidence(
+        curr_evidence = calculate_current_period_features_from_evidence(
             subject=subject,
             grade_level=class_grade_level,
             weights=weights,
-            schema=schema,
+            schema=current_schema,
             rows=s_rows,
             legacy_classwork_exists=legacy_exists,
             academic_period_id=academic_period_id,
             cutoff_at=now_utc,
         )
-
-        if active_current_model is not None:
-            prebuilt["model_version_id"] = active_current_model.model_version_id
-            prebuilt["model_name"] = active_current_model.model_name
-            prebuilt["evidence_contract_version"] = EVIDENCE_CONTRACT_VERSION
-            prebuilt["snapshot_version"] = SNAPSHOT_VERSION
-            schema_sha = None
-            if active_current_model.artifact_path:
-                try:
-                    resolved = resolve_artifact_path(active_current_model.artifact_path)
-                    manifest_p = resolved.with_name(f"{active_current_model.model_name}_manifest.json")
-                    if manifest_p.exists():
-                        manifest = load_json(manifest_p)
-                        schema_sha = manifest.get("artifact_hashes", {}).get("feature_schema_sha256")
-                    if not schema_sha:
-                        schema_p = resolved.with_name(f"{active_current_model.model_name}_feature_schema.json")
-                        if schema_p.exists():
-                            schema_sha = compute_file_sha256(schema_p)
-                except Exception:
-                    pass
-            if not schema_sha and isinstance(schema, dict):
-                schema_sha = schema.get("schema_sha256")
-            prebuilt["schema_sha256"] = schema_sha
 
         curr_target = latest_curr if latest_curr is not None else {
             "student_id": s.student_id,
@@ -935,38 +938,146 @@ def get_dual_purpose_roster_status(
             "message": "Academic period is officially finalized." if period_outcome["status"] == "FINALIZED" else None,
         }
 
-        # Reuse Task 6B.2B evaluator directly with prebuilt evidence & models
-        curr_status = evaluate_current_period_prediction_status(
-            db,
-            curr_target,
-            staff_id=None,  # Roster-level teacher authorization already validated at entry
-            prebuilt_evidence=prebuilt,
-            preloaded_active_model=active_current_model,
-            preloaded_latest_prediction=latest_curr,
-            preloaded_finalization=s_finalization,
-        )
+        if is_unified_mode:
+            pg = prior_grades.get(s.student_id)
+            if pg is not None and pg.is_finalized and pg.final_period_grade is not None:
+                prev_avail = 1
+                prev_grade = float(pg.final_period_grade)
+                prev_prov = {
+                    "previous_period_id": prior_period.academic_period_id if prior_period else None,
+                    "previous_period_label": _period_label(prior_period),
+                    "previous_grade_used": True,
+                    "student_period_grade_id": getattr(pg, "student_period_grade_id", None),
+                    "reason": "FINALIZED_PREVIOUS_PERIOD_GRADE",
+                }
+            else:
+                prev_avail = 0
+                prev_grade = None
+                prev_prov = {
+                    "previous_period_id": prior_period.academic_period_id if prior_period else None,
+                    "previous_period_label": _period_label(prior_period),
+                    "previous_grade_used": False,
+                    "reason": "NO_PREVIOUS_PERIOD" if prior_period is None else "PREVIOUS_FINAL_GRADE_UNAVAILABLE",
+                }
 
-        current_projection = {
-            "purpose": "CURRENT_PERIOD_FINAL_GRADE_PROJECTION",
-            "source_period_id": academic_period_id,
-            "target_period_id": academic_period_id,
-            "source_period_label": _period_label(period),
-            "target_period_label": _period_label(period),
-            "predicted_grade": _float(latest_curr.predicted_period_grade) if latest_curr else None,
-            "risk_level": None,
-            "risk_score": None,
-            "data_status": None,
-            "risk_assessment_status": "NOT_EVALUATED_FOR_CURRENT_PERIOD_MODEL",
-            "evidence_readiness": curr_status["evidence_readiness"],
-            "projection_freshness": curr_status["projection_freshness"],
-            "model_currency": curr_status["model_currency"],
-            "refresh_eligibility": curr_status["refresh_eligibility"],
-            "domain_warnings": curr_status.get("domain_warnings", []),
-            "latest_prediction_id": latest_curr.prediction_id if latest_curr else None,
-            "model_version": _model_version_dict(latest_curr.model_version) if latest_curr else None,
-            "revision": latest_curr.revision if latest_curr else None,
-            "generated_at": latest_curr.generated_at if latest_curr else None,
-        }
+            prebuilt = assemble_unified_features(
+                current=curr_evidence,
+                period=period,
+                subject=subject,
+                previous_available=prev_avail,
+                previous_grade=prev_grade,
+                previous_provenance=prev_prov,
+                schema=unified_schema,
+            )
+
+            if active_current_model is not None:
+                prebuilt["model_version_id"] = active_current_model.model_version_id
+                prebuilt["model_name"] = active_current_model.model_name
+                prebuilt["evidence_contract_version"] = UNIFIED_EVIDENCE_CONTRACT_VERSION
+                prebuilt["snapshot_version"] = UNIFIED_SNAPSHOT_VERSION
+                schema_sha = None
+                if active_current_model.artifact_path:
+                    try:
+                        resolved = resolve_artifact_path(active_current_model.artifact_path)
+                        manifest_p = resolved.with_name(f"{active_current_model.model_name}_manifest.json")
+                        if manifest_p.exists():
+                            manifest = load_json(manifest_p)
+                            schema_sha = manifest.get("artifact_hashes", {}).get("feature_schema_sha256")
+                        if not schema_sha:
+                            schema_p = resolved.with_name(f"{active_current_model.model_name}_feature_schema.json")
+                            if schema_p.exists():
+                                schema_sha = compute_file_sha256(schema_p)
+                    except Exception:
+                        pass
+                if not schema_sha and isinstance(unified_schema, dict):
+                    schema_sha = unified_schema.get("schema_sha256")
+                prebuilt["schema_sha256"] = schema_sha
+
+            curr_status = evaluate_unified_projection_status(
+                db,
+                curr_target,
+                prebuilt_evidence=prebuilt,
+                preloaded_active_model=active_current_model,
+                preloaded_latest_prediction=latest_curr,
+                preloaded_finalization=s_finalization,
+            )
+
+            current_projection = {
+                "purpose": "UNIFIED_CURRENT_TERM_PROJECTION",
+                "source_period_id": academic_period_id,
+                "target_period_id": academic_period_id,
+                "source_period_label": _period_label(period),
+                "target_period_label": _period_label(period),
+                "predicted_grade": _float(latest_curr.predicted_period_grade) if latest_curr else None,
+                "risk_level": None,
+                "risk_score": None,
+                "data_status": None,
+                "risk_assessment_status": "NOT_EVALUATED_FOR_UNIFIED_MODEL",
+                "evidence_readiness": curr_status["evidence_readiness"],
+                "projection_freshness": curr_status["projection_freshness"],
+                "model_currency": curr_status["model_currency"],
+                "refresh_eligibility": curr_status["refresh_eligibility"],
+                "domain_warnings": curr_status.get("domain_warnings", []),
+                "latest_prediction_id": latest_curr.prediction_id if latest_curr else None,
+                "model_version": _model_version_dict(latest_curr.model_version) if latest_curr else None,
+                "revision": latest_curr.revision if latest_curr else None,
+                "generated_at": latest_curr.generated_at if latest_curr else None,
+            }
+        else:
+            prebuilt = curr_evidence
+            if active_current_model is not None:
+                prebuilt["model_version_id"] = active_current_model.model_version_id
+                prebuilt["model_name"] = active_current_model.model_name
+                prebuilt["evidence_contract_version"] = EVIDENCE_CONTRACT_VERSION
+                prebuilt["snapshot_version"] = SNAPSHOT_VERSION
+                schema_sha = None
+                if active_current_model.artifact_path:
+                    try:
+                        resolved = resolve_artifact_path(active_current_model.artifact_path)
+                        manifest_p = resolved.with_name(f"{active_current_model.model_name}_manifest.json")
+                        if manifest_p.exists():
+                            manifest = load_json(manifest_p)
+                            schema_sha = manifest.get("artifact_hashes", {}).get("feature_schema_sha256")
+                        if not schema_sha:
+                            schema_p = resolved.with_name(f"{active_current_model.model_name}_feature_schema.json")
+                            if schema_p.exists():
+                                schema_sha = compute_file_sha256(schema_p)
+                    except Exception:
+                        pass
+                if not schema_sha and isinstance(current_schema, dict):
+                    schema_sha = current_schema.get("schema_sha256")
+                prebuilt["schema_sha256"] = schema_sha
+
+            curr_status = evaluate_current_period_prediction_status(
+                db,
+                curr_target,
+                prebuilt_evidence=prebuilt,
+                preloaded_active_model=active_current_model,
+                preloaded_latest_prediction=latest_curr,
+                preloaded_finalization=s_finalization,
+            )
+
+            current_projection = {
+                "purpose": "CURRENT_PERIOD_FINAL_GRADE_PROJECTION",
+                "source_period_id": academic_period_id,
+                "target_period_id": academic_period_id,
+                "source_period_label": _period_label(period),
+                "target_period_label": _period_label(period),
+                "predicted_grade": _float(latest_curr.predicted_period_grade) if latest_curr else None,
+                "risk_level": None,
+                "risk_score": None,
+                "data_status": None,
+                "risk_assessment_status": "NOT_EVALUATED_FOR_CURRENT_PERIOD_MODEL",
+                "evidence_readiness": curr_status["evidence_readiness"],
+                "projection_freshness": curr_status["projection_freshness"],
+                "model_currency": curr_status["model_currency"],
+                "refresh_eligibility": curr_status["refresh_eligibility"],
+                "domain_warnings": curr_status.get("domain_warnings", []),
+                "latest_prediction_id": latest_curr.prediction_id if latest_curr else None,
+                "model_version": _model_version_dict(latest_curr.model_version) if latest_curr else None,
+                "revision": latest_curr.revision if latest_curr else None,
+                "generated_at": latest_curr.generated_at if latest_curr else None,
+            }
 
         # E. Primary Display Recommendation
         if latest_curr is not None:

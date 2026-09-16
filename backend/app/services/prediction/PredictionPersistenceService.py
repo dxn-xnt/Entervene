@@ -14,6 +14,7 @@ from app.models.ai.AIPrediction import (
     AIPrediction,
     RISK_ASSESSMENT_EVALUATED,
     RISK_ASSESSMENT_NOT_EVALUATED_CURRENT,
+    RISK_ASSESSMENT_NOT_EVALUATED_UNIFIED,
 )
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
 from app.models.people.Student import Student
@@ -97,6 +98,17 @@ def validate_prediction_risk_contract(
         if risk_level is not None or risk_score is not None or data_status is not None:
             raise PredictionRiskContractError(
                 "CURRENT_PERIOD_FINAL_GRADE_PROJECTION cannot persist fabricated risk fields."
+            )
+        return
+
+    if purpose == ModelPurpose.UNIFIED_CURRENT_TERM_PROJECTION.value:
+        if risk_assessment_status != RISK_ASSESSMENT_NOT_EVALUATED_UNIFIED:
+            raise PredictionRiskContractError(
+                "UNIFIED_CURRENT_TERM_PROJECTION must be persisted as a non-risk academic estimate."
+            )
+        if risk_level is not None or risk_score is not None or data_status is not None:
+            raise PredictionRiskContractError(
+                "UNIFIED_CURRENT_TERM_PROJECTION cannot persist fabricated risk fields."
             )
         return
 

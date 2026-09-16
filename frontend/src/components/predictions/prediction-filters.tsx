@@ -191,7 +191,7 @@ export default function PredictionFilters({
           </Select.Content>
         </Select>}
 
-        {/* Risk Level Filter */}
+        {/* Baseline Risk Assessment Filter. Current-period projections are academic estimates and never participate here. */}
         <Select
           value={riskLevel ?? "all"}
           onValueChange={(v) =>
@@ -199,13 +199,13 @@ export default function PredictionFilters({
           }
         >
           <Select.Trigger className="w-[170px] bg-white">
-            <Select.Value placeholder="All Risk Levels">
+            <Select.Value placeholder="Baseline Risk Assessment">
               {riskLevel ? (RISK_OPTIONS.find((r) => r.value === riskLevel)?.label ?? riskLevel) : "All Risk Levels"}
             </Select.Value>
           </Select.Trigger>
           <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             <Select.Item value="all">
-              All Risk Levels{riskSummary ? ` (${riskSummary.total})` : ""}
+              All Baseline Risk Assessments{riskSummary ? ` (${riskSummary.total})` : ""}
             </Select.Item>
             {RISK_OPTIONS.map((r) => {
               const count = riskSummary ? riskSummary[r.value as keyof RiskSummary] : undefined;

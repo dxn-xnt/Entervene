@@ -730,6 +730,7 @@ def test_from_records_preview_calls_scoring_when_ready(prediction_api_context, m
     assert captured["features"]["written_work_percent"] == 84.0
 
 
+@pytest.mark.skip(reason="Legacy baseline route /from-records retired in Task U5C in favor of /predictions/unified/generate")
 def test_from_records_save_does_not_persist_when_not_ready(prediction_api_context, monkeypatch):
     add_period_grade(prediction_api_context)  # official source, but no activity evidence
     def fail_scoring(*args, **kwargs):
@@ -753,6 +754,7 @@ def test_from_records_save_does_not_persist_when_not_ready(prediction_api_contex
     assert prediction_api_context["db"].query(AIPrediction).count() == 0
 
 
+@pytest.mark.skip(reason="Legacy baseline route /from-records retired in Task U5C in favor of /predictions/unified/generate")
 def test_from_records_save_persists_prediction_when_ready(prediction_api_context, monkeypatch):
     seed_ready_record_features(prediction_api_context)
     patch_scoring(monkeypatch)
@@ -796,3 +798,11 @@ def test_from_records_response_does_not_return_classifier_fields(prediction_api_
     assert "at_risk_probability" not in body
     assert "is_at_risk" not in body
     assert "probability" not in body
+
+
+def test_retired_generation_routes_return_404(prediction_api_context):
+    client = prediction_api_context["client"]
+    resp_from_records = client.post("/api/v1/predictions/from-records", json={})
+    assert resp_from_records.status_code == 404
+    resp_current = client.post("/api/v1/predictions/current/generate", json={})
+    assert resp_current.status_code == 404

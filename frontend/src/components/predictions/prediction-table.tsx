@@ -132,9 +132,9 @@ export default function PredictionTable({
                   <div className="size-12 rounded-full bg-yellow-300 border-2 border-black flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                     <Eye className="size-6 text-black" />
                   </div>
-                  <span className="font-extrabold text-sm text-black uppercase">No At-Risk Students Found</span>
+                  <span className="font-extrabold text-sm text-black uppercase">No Evaluated Risk Records Found</span>
                   <span className="text-xs text-gray-600 font-semibold max-w-sm">
-                    No predictions match the selected filters. All students in this query scope are currently on track.
+                    No evaluated risk records match these filters. This does not mean every student is on track; use the roster view for readiness and projected final grade status.
                   </span>
                 </div>
               </Table.Cell>

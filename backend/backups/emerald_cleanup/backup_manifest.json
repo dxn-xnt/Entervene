@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-09-16T00:59:10.588399+00:00",
+  "source_db": "PostgreSQL",
+  "task": "REMOVE_GRADE_9_SECTION_EMERALD_AND_STUDENTS",
+  "scope": "OPTION_A",
+  "counts": {
+    "class": 1,
+    "student": 5,
+    "student_class": 5,
+    "student_submission": 42,
+    "student_period_grade": 5,
+    "ai_prediction": 2,
+    "prediction_generation_request": 1,
+    "classwork_assignment": 11,
+    "classwork": 11,
+    "subject_load": 3,
+    "subject": 1,
+    "grading_template": 1,
+    "grading_template_component": 3
+  },
+  "sha256": "fa1ca2755dd3731e64b21a8ae9929a192629289cb255c2a0f59f198bfeff4b9e"
+}

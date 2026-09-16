@@ -60,20 +60,11 @@ def roster_context():
     lrn_check = next((c for c in Student.__table__.constraints if isinstance(c, CheckConstraint) and c.name == "lrn_check"), None)
     if lrn_check and lrn_check in Student.__table__.constraints:
         Student.__table__.constraints.remove(lrn_check)
-    risk_check = next((c for c in AIPrediction.__table__.constraints if isinstance(c, CheckConstraint) and c.name == "ck_ai_prediction_risk_assessment_status"), None)
-    if risk_check and risk_check in AIPrediction.__table__.constraints:
-        AIPrediction.__table__.constraints.remove(risk_check)
-    col = AIPrediction.__table__.c.risk_assessment_status
-    prev_nullable = col.nullable
-    col.nullable = True
     try:
         Base.metadata.create_all(bind=engine)
     finally:
         if lrn_check and lrn_check not in Student.__table__.constraints:
             Student.__table__.append_constraint(lrn_check)
-        if risk_check and risk_check not in AIPrediction.__table__.constraints:
-            AIPrediction.__table__.append_constraint(risk_check)
-        col.nullable = prev_nullable
 
     db = sessionmaker(bind=engine)()
 
@@ -1309,6 +1300,7 @@ def test_prediction_family_filtering_uses_model_purpose_not_risk_status(roster_c
     db = c["db"]
     student_a = c["student_a"]
     student_b = c["student_b"]
+    student_c = c["student_c"]
     p1 = c["period1"]
     p2 = c["period2"]
 
@@ -1331,8 +1323,8 @@ def test_prediction_family_filtering_uses_model_purpose_not_risk_status(roster_c
     )
     db.add(curr_tampered)
 
-    # Student B: NEXT prediction with null / unusual risk metadata
-    # Student B: NEXT prediction with unusual risk metadata
+    # Student B: NEXT prediction with unusual risk status ('NOT_EVALUATED_FOR_CURRENT_PERIOD_MODEL')
+    # and null risk metrics (score, level, data_status)
     next_unusual = AIPrediction(
         student_id=student_b.student_id,
         class_id=c["class"].class_id,
@@ -1345,14 +1337,13 @@ def test_prediction_family_filtering_uses_model_purpose_not_risk_status(roster_c
         risk_score=None,
         risk_level=None,
         data_status=None,
-        risk_assessment_status="UNUSUAL_CUSTOM_STATUS",  # Unusual status!
+        risk_assessment_status=RISK_ASSESSMENT_NOT_EVALUATED_CURRENT,  # Unusual for NEXT!
         evidence_snapshot={"fingerprint": "next_unusual"},
         generated_at=datetime(2026, 9, 15, 8, 0, tzinfo=timezone.utc),
     )
     db.add(next_unusual)
 
-    # Student C: NEXT prediction with null risk metadata
-    student_c = c["student_c"]
+    # Student C: NEXT prediction with INSUFFICIENT_RISK_EVIDENCE and null risk fields
     next_null_risk = AIPrediction(
         student_id=student_c.student_id,
         class_id=c["class"].class_id,
@@ -1365,21 +1356,25 @@ def test_prediction_family_filtering_uses_model_purpose_not_risk_status(roster_c
         risk_score=None,
         risk_level=None,
         data_status=None,
-        risk_assessment_status=None,  # Null status!
+        risk_assessment_status="INSUFFICIENT_RISK_EVIDENCE",
         evidence_snapshot={"fingerprint": "next_null"},
         generated_at=datetime(2026, 9, 15, 8, 0, tzinfo=timezone.utc),
     )
     db.add(next_null_risk)
     db.commit()
 
-    res = get_dual_purpose_roster_status(
-        db,
-        class_id=c["class"].class_id,
-        subject_id=c["subject"].subject_id,
-        academic_period_id=p2.academic_period_id,
-        staff_id=c["staff1"].staff_id,
-        is_admin=False,
-    )
+    # In-memory test: simulate an unconstrained/null risk_assessment_status on Student C
+    next_null_risk.risk_assessment_status = None
+
+    with db.no_autoflush:
+        res = get_dual_purpose_roster_status(
+            db,
+            class_id=c["class"].class_id,
+            subject_id=c["subject"].subject_id,
+            academic_period_id=p2.academic_period_id,
+            staff_id=c["staff1"].staff_id,
+            is_admin=False,
+        )
 
     items = {str(it["student"]["student_id"]): it for it in res["students"]}
 
@@ -1388,14 +1383,14 @@ def test_prediction_family_filtering_uses_model_purpose_not_risk_status(roster_c
     assert items[str(student_a.student_id)]["baseline_forecast"]["latest_prediction_id"] is None
     assert items[str(student_a.student_id)]["baseline_forecast"]["predicted_grade"] is None
 
-    # Student B: Despite unusual risk status, purpose is NEXT_PERIOD_BASELINE_FORECAST,
-    # so it correctly enters NEXT baseline_forecast!
+    # Student B: Despite unusual risk status (NOT_EVALUATED_FOR_CURRENT_PERIOD_MODEL),
+    # purpose is NEXT_PERIOD_BASELINE_FORECAST, so it correctly enters NEXT baseline_forecast!
     assert items[str(student_b.student_id)]["baseline_forecast"]["latest_prediction_id"] == next_unusual.prediction_id
     assert items[str(student_b.student_id)]["baseline_forecast"]["predicted_grade"] == 88.0
-    assert items[str(student_b.student_id)]["baseline_forecast"]["risk_assessment_status"] == "UNUSUAL_CUSTOM_STATUS"
+    assert items[str(student_b.student_id)]["baseline_forecast"]["risk_assessment_status"] == RISK_ASSESSMENT_NOT_EVALUATED_CURRENT
 
-    # Student C: Despite null risk status, purpose is NEXT_PERIOD_BASELINE_FORECAST,
-    # so it correctly enters NEXT baseline_forecast!
+    # Student C: Despite null risk_assessment_status and null risk fields,
+    # purpose is NEXT_PERIOD_BASELINE_FORECAST, so it correctly enters NEXT baseline_forecast!
     assert items[str(student_c.student_id)]["baseline_forecast"]["latest_prediction_id"] == next_null_risk.prediction_id
     assert items[str(student_c.student_id)]["baseline_forecast"]["predicted_grade"] == 92.0
     assert items[str(student_c.student_id)]["baseline_forecast"]["risk_assessment_status"] is None

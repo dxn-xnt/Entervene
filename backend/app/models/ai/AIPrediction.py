@@ -7,6 +7,7 @@ from app.db.Base import Base
 
 RISK_ASSESSMENT_EVALUATED = "EVALUATED"
 RISK_ASSESSMENT_NOT_EVALUATED_CURRENT = "NOT_EVALUATED_FOR_CURRENT_PERIOD_MODEL"
+RISK_ASSESSMENT_NOT_EVALUATED_UNIFIED = "NOT_EVALUATED_FOR_UNIFIED_MODEL"
 RISK_ASSESSMENT_INSUFFICIENT_EVIDENCE = "INSUFFICIENT_RISK_EVIDENCE"
 
 
@@ -26,7 +27,14 @@ class AIPrediction(Base):
             name="ck_ai_prediction_data_status",
         ),
         CheckConstraint(
-            "risk_assessment_status IN ('EVALUATED', 'NOT_EVALUATED_FOR_CURRENT_PERIOD_MODEL', 'INSUFFICIENT_RISK_EVIDENCE')",
+            (
+                "risk_assessment_status IN ("
+                "'EVALUATED', "
+                "'NOT_EVALUATED_FOR_CURRENT_PERIOD_MODEL', "
+                "'NOT_EVALUATED_FOR_UNIFIED_MODEL', "
+                "'INSUFFICIENT_RISK_EVIDENCE'"
+                ")"
+            ),
             name="ck_ai_prediction_risk_assessment_status",
         ),
         Index("ix_ai_prediction_student_id", "student_id"),

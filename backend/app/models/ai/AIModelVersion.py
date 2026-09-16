@@ -7,6 +7,7 @@ from app.db.Base import Base
 class ModelPurpose(str, Enum):
     NEXT_PERIOD_BASELINE_FORECAST = "NEXT_PERIOD_BASELINE_FORECAST"
     CURRENT_PERIOD_FINAL_GRADE_PROJECTION = "CURRENT_PERIOD_FINAL_GRADE_PROJECTION"
+    UNIFIED_CURRENT_TERM_PROJECTION = "UNIFIED_CURRENT_TERM_PROJECTION"
 
 
 class AIModelVersion(Base):
@@ -22,7 +23,13 @@ class AIModelVersion(Base):
     __table_args__ = (
         CheckConstraint("model_type IN ('REGRESSOR', 'CLASSIFIER', 'ANOMALY')", name="ck_ai_model_version_model_type"),
         CheckConstraint(
-            f"model_purpose IN ('{ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value}', '{ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value}')",
+            (
+                f"model_purpose IN ("
+                f"'{ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value}', "
+                f"'{ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value}', "
+                f"'{ModelPurpose.UNIFIED_CURRENT_TERM_PROJECTION.value}'"
+                f")"
+            ),
             name="ck_ai_model_version_model_purpose",
         ),
         Index("ix_ai_model_version_model_name_type", "model_name", "model_type"),

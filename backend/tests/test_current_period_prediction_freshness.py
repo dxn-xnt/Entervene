@@ -47,6 +47,7 @@ from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
 from app.schemas.Prediction import (
     CurrentPredictionStatusEnvelope,
+    CurrentPeriodGenerateResponse,
     NextPredictionStatusEnvelope,
     PredictionFromRecordsResponse,
     PredictionRefreshRequest,
@@ -287,6 +288,16 @@ def generate_initial(ctx, key=None):
         staff_id=ctx["staff"].staff_id,
         bind=ctx["db"].get_bind(),
     )
+
+
+def current_generate_payload(ctx, key=None, *, period=None, student=None, subject=None):
+    return {
+        "student_id": str((student or ctx["student"]).student_id),
+        "class_id": ctx["class"].class_id,
+        "subject_id": (subject or ctx["subject"]).subject_id,
+        "academic_period_id": (period or ctx["period1"]).academic_period_id,
+        "generation_request_id": key,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1651,3 +1662,367 @@ def test_40_student_read_authorization_denied(freshness_context):
     assert response.status_code == 403
     assert "Access denied" in response.json()["detail"]
 
+
+@pytest.mark.skip(reason="Legacy /current/generate route retired in Task U5C in favor of /predictions/unified/generate")
+def test_41_public_current_generate_creates_initial_revision(freshness_context):
+    c = freshness_context
+    add_activity(c, "WRITTEN_WORK", 85, 100)
+    add_activity(c, "WRITTEN_WORK", 90, 100)
+    add_activity(c, "PERFORMANCE_TASK", 80, 100)
+    add_activity(c, "PERFORMANCE_TASK", 85, 100)
+
+    response = c["client"].post(
+        "/api/v1/predictions/current/generate",
+        json=current_generate_payload(c, key="route-initial"),
+    )
+
+    assert response.status_code == 200, response.text
+    parsed = CurrentPeriodGenerateResponse.model_validate(response.json())
+    assert parsed.generation_status == "CREATED"
+    assert parsed.revision == 1
+    assert parsed.prediction_id is not None
+    assert parsed.source_period_id == c["period1"].academic_period_id
+    assert parsed.target_period_id == c["period1"].academic_period_id
+    assert parsed.risk_level is None
+    assert parsed.risk_score is None
+    assert parsed.data_status is None
+    assert parsed.risk_assessment_status == RISK_ASSESSMENT_NOT_EVALUATED_CURRENT
+
+
+@pytest.mark.skip(reason="Legacy /current/generate route retired in Task U5C in favor of /predictions/unified/generate")
+def test_42_public_current_generate_again_returns_existing_projection_not_revision_2(freshness_context):
+    c = freshness_context
+    add_activity(c, "WRITTEN_WORK", 85, 100)
+    add_activity(c, "WRITTEN_WORK", 90, 100)
+    add_activity(c, "PERFORMANCE_TASK", 80, 100)
+    add_activity(c, "PERFORMANCE_TASK", 85, 100)
+
+    first = c["client"].post(
+        "/api/v1/predictions/current/generate",
+        json=current_generate_payload(c, key="route-existing-a"),
+    )
+    assert first.status_code == 200, first.text
+    first_body = first.json()
+    pred_id = first_body["prediction_id"]
+
+    # Change source evidence. Public generate must still not become refresh.
+    add_activity(c, "WRITTEN_WORK", 95, 100, title="New WW")
+    second = c["client"].post(
+        "/api/v1/predictions/current/generate",
+        json=current_generate_payload(c, key="route-existing-b"),
+    )
+
+    assert second.status_code == 200, second.text
+    body = second.json()
+    assert body["generation_status"] == "EXISTING_PROJECTION"
+    assert body["prediction_id"] == pred_id
+    assert body["latest_prediction_id"] == pred_id
+    assert body["revision"] == 1
+    assert c["db"].query(AIPrediction).count() == 1
+
+
+@pytest.mark.skip(reason="Legacy /current/generate route retired in Task U5C in favor of /predictions/unified/generate")
+def test_43_refresh_remains_successor_revision_path_after_public_generate(freshness_context):
+    c = freshness_context
+    add_activity(c, "WRITTEN_WORK", 85, 100)
+    add_activity(c, "WRITTEN_WORK", 90, 100)
+    add_activity(c, "PERFORMANCE_TASK", 80, 100)
+    add_activity(c, "PERFORMANCE_TASK", 85, 100)
+    first = c["client"].post(
+        "/api/v1/predictions/current/generate",
+        json=current_generate_payload(c, key="route-refresh-a"),
+    )
+    pred_id = first.json()["prediction_id"]
+    add_activity(c, "WRITTEN_WORK", 95, 100, title="New WW")
+
+    refreshed = c["client"].post(
+        f"/api/v1/predictions/{pred_id}/refresh",
+        json={"generation_request_id": "route-refresh-b"},
+    )
+
+    assert refreshed.status_code == 200, refreshed.text
+    body = refreshed.json()
+    assert body["generation_status"] == "CREATED"
+    assert body["revision"] == 2
+    assert body["prediction_id"] != pred_id
+    assert c["db"].query(AIPrediction).count() == 2
+
+
+@pytest.mark.skip(reason="Legacy /current/generate route retired in Task U5C in favor of /predictions/unified/generate")
+def test_44_public_current_generate_replays_same_request_id(freshness_context):
+    c = freshness_context
+    add_activity(c, "WRITTEN_WORK", 85, 100)
+    add_activity(c, "WRITTEN_WORK", 90, 100)
+    add_activity(c, "PERFORMANCE_TASK", 80, 100)
+    add_activity(c, "PERFORMANCE_TASK", 85, 100)
+    payload = current_generate_payload(c, key="route-replay")
+
+    first = c["client"].post("/api/v1/predictions/current/generate", json=payload)
+    second = c["client"].post("/api/v1/predictions/current/generate", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["generation_status"] == "CREATED"
+    assert second.json()["generation_status"] == "REPLAYED"
+    assert second.json()["prediction_id"] == first.json()["prediction_id"]
+    assert c["db"].query(AIPrediction).count() == 1
+
+
+@pytest.mark.skip(reason="Legacy /current/generate route retired in Task U5C in favor of /predictions/unified/generate")
+def test_45_public_current_generate_conflicting_request_id_rejected(freshness_context):
+    c = freshness_context
+    add_activity(c, "WRITTEN_WORK", 85, 100)
+    add_activity(c, "WRITTEN_WORK", 90, 100)
+    add_activity(c, "PERFORMANCE_TASK", 80, 100)
+    add_activity(c, "PERFORMANCE_TASK", 85, 100)
+    first = c["client"].post(
+        "/api/v1/predictions/current/generate",
+        json=current_generate_payload(c, key="route-conflict"),
+    )
+    assert first.status_code == 200
+
+    other_payload = current_generate_payload(c, key="route-conflict", subject=c["math_subject"])
+    response = c["client"].post("/api/v1/predictions/current/generate", json=other_payload)
+
+    assert response.status_code == 409
+
+
+@pytest.mark.skip(reason="Legacy /current/generate route retired in Task U5C in favor of /predictions/unified/generate")
+def test_46_public_current_generate_not_ready_returns_no_prediction(freshness_context):
+    c = freshness_context
+    add_activity(c, "WRITTEN_WORK", 85, 100)
+
+    before = c["db"].query(AIPrediction).count()
+    response = c["client"].post(
+        "/api/v1/predictions/current/generate",
+        json=current_generate_payload(c, key="route-not-ready"),
+    )
+
+    assert response.status_code == 200, response.text
+    parsed = CurrentPeriodGenerateResponse.model_validate(response.json())
+    assert parsed.generation_status == "NOT_READY"
+    assert parsed.predicted_period_grade is None
+    assert parsed.prediction_id is None
+    assert c["db"].query(AIPrediction).count() == before
+    assert c["db"].query(PredictionGenerationRequest).count() == 0
+
+
+@pytest.mark.skip(reason="Legacy /current/generate route retired in Task U5C in favor of /predictions/unified/generate")
+def test_47_public_current_generate_domain_incompatible_returns_no_prediction(freshness_context):
+    c = freshness_context
+    add_activity(c, "WRITTEN_WORK", 85, 100)
+    add_activity(c, "WRITTEN_WORK", 90, 100)
+    add_activity(c, "PERFORMANCE_TASK", 80, 100)
+    add_activity(c, "PERFORMANCE_TASK", 85, 100)
+    comps = c["db"].query(GradingTemplateComponent).filter(
+        GradingTemplateComponent.grading_template_id == c["template"].grading_template_id
+    ).all()
+    for comp in comps:
+        if comp.component_name == "Written Works":
+            comp.weight = Decimal("50")
+        elif comp.component_name == "Performance Tasks":
+            comp.weight = Decimal("30")
+    c["db"].commit()
+
+    before = c["db"].query(AIPrediction).count()
+    response = c["client"].post(
+        "/api/v1/predictions/current/generate",
+        json=current_generate_payload(c, key="route-domain"),
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["generation_status"] == "DOMAIN_INCOMPATIBLE"
+    assert data["predicted_period_grade"] is None
+    assert data["prediction_id"] is None
+    assert c["db"].query(AIPrediction).count() == before
+    assert c["db"].query(PredictionGenerationRequest).count() == 0
+
+
+@pytest.mark.skip(reason="Legacy /current/generate route retired in Task U5C in favor of /predictions/unified/generate")
+def test_48_public_current_generate_finalized_returns_no_prediction(freshness_context):
+    c = freshness_context
+    add_activity(c, "WRITTEN_WORK", 85, 100)
+    add_activity(c, "WRITTEN_WORK", 90, 100)
+    add_activity(c, "PERFORMANCE_TASK", 80, 100)
+    add_activity(c, "PERFORMANCE_TASK", 85, 100)
+    c["db"].add(StudentPeriodGrade(
+        student_id=c["student"].student_id,
+        class_id=c["class"].class_id,
+        subject_id=c["subject"].subject_id,
+        academic_period_id=c["period1"].academic_period_id,
+        final_period_grade=Decimal("88.50"),
+        is_finalized=True,
+    ))
+    c["db"].commit()
+
+    response = c["client"].post(
+        "/api/v1/predictions/current/generate",
+        json=current_generate_payload(c, key="route-finalized"),
+    )
+
+    assert response.status_code == 200, response.text
+    parsed = CurrentPeriodGenerateResponse.model_validate(response.json())
+    assert parsed.generation_status == "FINALIZED"
+    assert parsed.predicted_period_grade is None
+    assert parsed.prediction_id is None
+    assert parsed.ready is False
+    assert c["db"].query(AIPrediction).count() == 0
+
+
+@pytest.mark.skip(reason="Legacy /current/generate route retired in Task U5C in favor of /predictions/unified/generate")
+def test_49_public_current_generate_denies_student_and_unassigned_teacher(freshness_context):
+    c = freshness_context
+    add_activity(c, "WRITTEN_WORK", 85, 100)
+    add_activity(c, "WRITTEN_WORK", 90, 100)
+    add_activity(c, "PERFORMANCE_TASK", 80, 100)
+    add_activity(c, "PERFORMANCE_TASK", 85, 100)
+
+    c["active_user"]["role"] = "student"
+    c["active_user"]["staff_id"] = None
+    student_response = c["client"].post(
+        "/api/v1/predictions/current/generate",
+        json=current_generate_payload(c, key="route-student-denied"),
+    )
+    assert student_response.status_code == 403
+
+    c["active_user"]["role"] = "teacher"
+    c["active_user"]["staff_id"] = c["other_staff"].staff_id
+    teacher_response = c["client"].post(
+        "/api/v1/predictions/current/generate",
+        json=current_generate_payload(c, key="route-teacher-denied"),
+    )
+    assert teacher_response.status_code == 403
+
+
+@pytest.mark.skip(reason="Legacy /current/generate route retired in Task U5C in favor of /predictions/unified/generate")
+def test_50_public_current_generate_admin_allowed(freshness_context):
+    c = freshness_context
+    add_activity(c, "WRITTEN_WORK", 85, 100)
+    add_activity(c, "WRITTEN_WORK", 90, 100)
+    add_activity(c, "PERFORMANCE_TASK", 80, 100)
+    add_activity(c, "PERFORMANCE_TASK", 85, 100)
+    c["active_user"]["role"] = "admin"
+    c["active_user"]["staff_id"] = None
+
+    response = c["client"].post(
+        "/api/v1/predictions/current/generate",
+        json=current_generate_payload(c, key="route-admin"),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["generation_status"] == "CREATED"
+
+
+@pytest.mark.skip(reason="Legacy /current/generate route retired in Task U5C in favor of /predictions/unified/generate")
+def test_51_public_current_generate_model_unavailable_uses_existing_error_convention(freshness_context):
+    c = freshness_context
+    add_activity(c, "WRITTEN_WORK", 85, 100)
+    add_activity(c, "WRITTEN_WORK", 90, 100)
+    add_activity(c, "PERFORMANCE_TASK", 80, 100)
+    add_activity(c, "PERFORMANCE_TASK", 85, 100)
+    c["model_v1"].is_active = False
+    c["db"].commit()
+
+    response = c["client"].post(
+        "/api/v1/predictions/current/generate",
+        json=current_generate_payload(c, key="route-model-unavailable"),
+    )
+
+    assert response.status_code == 404
+    assert "No active model version found" in response.json()["detail"]
+
+
+@pytest.mark.skip(reason="Legacy /current/generate route retired in Task U5C in favor of /predictions/unified/generate")
+def test_52_public_current_generate_does_not_invoke_risk_engine_or_touch_next_baseline(freshness_context):
+    c = freshness_context
+    add_activity(c, "WRITTEN_WORK", 85, 100)
+    add_activity(c, "WRITTEN_WORK", 90, 100)
+    add_activity(c, "PERFORMANCE_TASK", 80, 100)
+    add_activity(c, "PERFORMANCE_TASK", 85, 100)
+    next_model = AIModelVersion(
+        model_name=DEFAULT_MODEL_NAME,
+        model_type="REGRESSOR",
+        model_purpose=ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value,
+        algorithm="RandomForestRegressor",
+        artifact_path="data/models/entervene_next_period_grade_rf.joblib",
+        is_active=False,
+    )
+    c["db"].add(next_model)
+    c["db"].flush()
+    next_pred = AIPrediction(
+        student_id=c["student"].student_id,
+        class_id=c["class"].class_id,
+        subject_id=c["subject"].subject_id,
+        source_period_id=c["period1"].academic_period_id,
+        target_period_id=c["period2"].academic_period_id,
+        model_version_id=next_model.model_version_id,
+        revision=1,
+        predicted_period_grade=Decimal("88.00"),
+        risk_score=Decimal("35.0"),
+        risk_level="NEEDS_MONITORING",
+        data_status="SUFFICIENT",
+        risk_assessment_status=RISK_ASSESSMENT_EVALUATED,
+    )
+    c["db"].add(next_pred)
+    c["db"].commit()
+    next_id = next_pred.prediction_id
+
+    with patch("app.services.prediction.RiskEngine.evaluate_risk", side_effect=AssertionError("RiskEngine invoked")):
+        response = c["client"].post(
+            "/api/v1/predictions/current/generate",
+            json=current_generate_payload(c, key="route-no-risk-engine"),
+        )
+
+    assert response.status_code == 200, response.text
+    c["db"].refresh(next_pred)
+    assert next_pred.prediction_id == next_id
+    assert next_pred.revision == 1
+    assert next_pred.predicted_period_grade == Decimal("88.00")
+
+
+@pytest.mark.skip(reason="Legacy /current/generate route retired in Task U5C in favor of /predictions/unified/generate")
+def test_53_public_current_generate_updates_dual_roster_immediately(freshness_context):
+    c = freshness_context
+    add_activity(c, "WRITTEN_WORK", 85, 100)
+    add_activity(c, "WRITTEN_WORK", 90, 100)
+    add_activity(c, "PERFORMANCE_TASK", 80, 100)
+    add_activity(c, "PERFORMANCE_TASK", 85, 100)
+
+    before = c["client"].get(
+        "/api/v1/predictions/status/roster",
+        params={
+            "class_id": c["class"].class_id,
+            "subject_id": c["subject"].subject_id,
+            "academic_period_id": c["period1"].academic_period_id,
+        },
+    )
+    assert before.status_code == 200, before.text
+    before_item = before.json()["students"][0]["current_projection"]
+    assert before_item["latest_prediction_id"] is None
+
+    created = c["client"].post(
+        "/api/v1/predictions/current/generate",
+        json=current_generate_payload(c, key="route-roster"),
+    )
+    pred_id = created.json()["prediction_id"]
+
+    after = c["client"].get(
+        "/api/v1/predictions/status/roster",
+        params={
+            "class_id": c["class"].class_id,
+            "subject_id": c["subject"].subject_id,
+            "academic_period_id": c["period1"].academic_period_id,
+        },
+    )
+    assert after.status_code == 200, after.text
+    item = after.json()["students"][0]["current_projection"]
+    assert item["latest_prediction_id"] == pred_id
+    assert item["predicted_grade"] is not None
+    assert item["projection_freshness"]["status"] == "CURRENT"
+
+
+def test_legacy_current_generate_route_returns_404(freshness_context):
+    c = freshness_context
+    response = c["client"].post("/api/v1/predictions/current/generate", json={})
+    assert response.status_code == 404
