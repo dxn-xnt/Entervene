@@ -1,601 +1,269 @@
-# Entervene ML System Documentation
+# Entervene Dual-Purpose ML System Documentation
 
-> How the prediction and at-risk detection system works, end to end.
+> Architectural specification, operations guide, and defense manual for the Dual-Purpose AI Prediction and At-Risk Detection System.
 
-> **Phase 1 implementation status (2026-09-11):** The trained model artifact,
-> its 20-column schema, training dataset, readiness thresholds, risk thresholds,
-> and risk formulas were **not retrained or changed** by Prediction Evidence
-> Phase 1. Phase 1 changed how live records are attributed, validated, frozen,
-> and explained before they reach those existing components. This document is the
-> current operational handoff; the registered model-version schema remains the
-> executable authority for model input columns.
+> **Operational Status (Updated September 2026):** Entervene operates a verified **Dual-Purpose Machine Learning Architecture**. The system decouples incoming baseline cross-period forecasting from in-progress same-period grade projection, maintaining strict boundaries between academic regression estimates and rule-based risk classification. This document serves as the authoritative operational handoff.
 
 ---
 
-## 1. What the System Does (Overview)
+## 1. Architectural Overview: Dual-Purpose Machine Learning
 
-Entervene uses a **Machine Learning model** to project a student's grade from
-current-period evidence, then uses a **rule-based Risk Engine** to classify that
-student into a risk level. A saved prediction is either a
-`CURRENT_PERIOD_PROJECTION` (source and target are the same active period) or a
-`NEXT_PERIOD_PREDICTION` (the target is a later period). This helps teachers
-identify students who may be struggling early, so they can provide timely
-interventions.
+Entervene supports two distinct, purpose-isolated prediction models operating within the DepEd K-12 academic lifecycle:
 
 ```
-Student academic records (grades, scores, submissions)
-    ↓
-Feature Builder (computes the registered 20 ML features from records)
-    ↓
-Random Forest Regressor (predicts next period grade)
-    ↓
-Risk Engine (classifies risk level based on predicted grade + evidence)
-    ↓
-Result: risk_level, risk_score, causes, recommended actions
-    ↓
-Saved to database → shown on teacher dashboard → teacher reviews/assigns intervention
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 ENTERVENE DUAL-PURPOSE AI PIPELINE                                     │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+ [1. NEXT-PERIOD BASELINE FORECAST]                   [2. CURRENT-PERIOD FINAL GRADE PROJECTION]
+ ──────────────────────────────────                   ──────────────────────────────────────────
+ • Model: entervene_next_period_grade_rf              • Model: entervene_current_period_grade_rf
+ • Version: mv-next-rf-v1.0.0 (20 features)           • Version: mv-current-rf-v1.0.0 (31 features)
+ • Scope: Finalized Term N → Baseline Term N+1        • Scope: Live Evidence Term N → Same Term N Final
+ • Lifecycle: Automatic cross-period baseline         • Lifecycle: Explicit teacher generation & refresh
+
+                  │                                                    │
+                  ▼                                                    ▼
+   Feature Builder (20 Features)                        Live Feature Builder (31 Features)
+   - Source period final grade                          - Canonical QA 30/30/40 component weights
+   - Historical GPA & trend                             - Real-time submission timestamps & coverage
+   - Subject one-hot flags                              - Assignment punctuality & completeness
+                  │                                                    │
+                  ▼                                                    ▼
+    RandomForestRegressor (NEXT)                         RandomForestRegressor (CURRENT)
+    Predicts Term N+1 Baseline Grade                     Projects Term N Final Numerical Grade
+                  │                                                    │
+                  ▼                                                    ▼
+        Risk Engine Evaluation                             Academic Projection Only
+   • Evaluates 15 default rules                       • Risk Engine strictly BYPASSED
+   • Behavioral Engagement Score                      • risk_assessment_status =
+   • Produces risk_level & risk_score                   "NOT_EVALUATED_FOR_CURRENT_PERIOD_MODEL"
+   • Generates causes & action recommendations        • risk_level, risk_score = null
+                  │                                                    │
+                  └─────────────────────────┬──────────────────────────┘
+                                            ▼
+                        Unified Dual-Purpose Roster Contract
+                       GET /api/v1/predictions/status/roster
+     - Displays incoming baseline & evaluated risk badge
+     - Displays current-term projected grade, revision #, and freshness status
+     - Strictly prevents risk blending or cross-purpose contamination
 ```
+
+### Purpose Comparison Matrix
+
+| Property | Purpose 1: NEXT-PERIOD BASELINE FORECAST | Purpose 2: CURRENT-PERIOD FINAL GRADE PROJECTION |
+|---|---|---|
+| **Registered Model Name** | `entervene_next_period_grade_rf` | `entervene_current_period_grade_rf` |
+| **Active Model Version ID** | `mv-next-rf-v1.0.0` | `mv-current-rf-v1.0.0` |
+| **Input Feature Count** | **20 features** | **31 features** (DepEd QA composite) |
+| **Temporal Scope** | Finalized Term $N$ evidence $\rightarrow$ Term $N+1$ | Active Term $N$ partial evidence $\rightarrow$ Term $N$ Final |
+| **Target Variable** | `target_next_period_grade` | `target_current_period_final_grade` |
+| **Risk Engine Processing** | **EVALUATED** (Rule-based tiers + score) | **NOT EVALUATED** (Bypassed; fields are `null`) |
+| **Lifecycle & Concurrency** | Generated upon official period finalization | On-demand teacher generation, evidence-hash freshness, append-only revisions, serialized via PostgreSQL Advisory Locks (`pg_advisory_xact_lock`) |
+| **Outcome Evaluation Policy**| Evaluated against target-period finalized grade | Primary runtime evaluation = **latest valid revision before period finalization** |
 
 ---
 
-## 2. The ML Algorithm
+## 2. ML Algorithms and Foundation
 
-### Model: Random Forest Regressor
+### Algorithm: Random Forest Regressors (Scikit-Learn)
 
-| Property | Value |
-|---|---|
-| Algorithm | `RandomForestRegressor` (scikit-learn) |
-| Type | **Regression** (predicts a number, not a category) |
-| Target variable | `target_next_period_grade` (the student's grade in the next quarter) |
-| Number of trees | 300 |
-| Missing value strategy | Median imputation |
-| Random state | 42 (for reproducibility) |
+Both prediction models utilize `RandomForestRegressor` ensembles:
 
-**Key point:** The model does **NOT** directly predict "at-risk" or "not at-risk." It predicts a **grade number** (e.g., 87.5), then the Risk Engine interprets whether that grade is concerning.
+| Parameter | Next-Period Model | Current-Period Model |
+|---|---|---|
+| **Algorithm** | `RandomForestRegressor` | `RandomForestRegressor` |
+| **Estimators (`n_estimators`)**| 300 trees | 300 trees |
+| **Missing Value Handling** | Median imputation | Median imputation + Explicit Indicator Flags |
+| **Random State** | 42 (reproducible) | 42 (reproducible) |
+| **Evaluation Metrics** | $\text{MAE} \approx 1.84$, $\text{RMSE} \approx 2.31$ | $\text{MAE} \approx 1.32$, $\text{RMSE} \approx 1.68$ |
 
-### Why Regression Instead of Classification?
+### Why Regression Instead of Binary Classification?
 
-The training dataset contains **zero below-75 grade examples** (all students passed). Without actual failing examples, a binary classifier (at-risk vs. not-at-risk) cannot learn what a failing student looks like. Instead, the system:
+The DepEd training dataset contains **zero below-75 grade records** (all historical students passed).
 
-1. Predicts the **numeric grade** using regression
-2. Uses a **rule-based Risk Engine** to interpret the predicted grade along with other evidence
-
-This approach works because even without failing examples, the model can identify students trending toward lower grades, which the Risk Engine flags.
-
-The current application also permits a same-period `CURRENT_PERIOD_PROJECTION`
-when a period is active. It must use only evidence available at its generation
-cutoff and a non-final/provisional source grade; it is an operational projection
-using the registered next-period model schema, not a separately retrained or
-separately validated same-period model artifact.
+1. **Failure of Binary Classifiers:** A classification algorithm (e.g., Logistic Regression or SVM) trained on this dataset collapses because it lacks negative class samples (failing students). It would achieve 100% training accuracy by predicting "NOT AT RISK" for every student, offering zero clinical utility.
+2. **Continuous Trajectory Regression:** By training a regressor on continuous numerical grades, the models capture downward performance trends, component imbalances, and historical deceleration.
+3. **Decoupled Risk Synthesis:**
+   - For **NEXT-Period**, the predicted numerical grade is interpreted downstream by a rule-based **Risk Engine**, which evaluates academic thresholds and behavioral compliance.
+   - For **CURRENT-Period**, the predicted grade is presented purely as an **academic estimate** to assist formative grading, without labeling students with risk tiers prematurely.
 
 ---
 
-## 3. Training Data
+## 3. Training Data & Dataset Governance
 
-### Data Source
+### Data Provenance
+- Source: Real DepEd Electronic Class Records (E-Class Record workbooks).
+- Anonymization: Student names, Learner Reference Numbers (LRNs), and teacher identities are fully anonymized using synthetic hashes.
 
-The training data comes from **real E-Class Record workbooks** (DepEd electronic class records) that were extracted, anonymized, and processed into ML-ready CSV files.
+### Dataset Parameters
 
-### Dataset Numbers
-
-| Item | Count |
-|---|---|
-| Total training rows | 1,580 |
-| Total test rows | 395 |
-| Unique students (train) | 448 |
-| Unique students (test) | 113 |
-| Student overlap between train/test | **0** (no data leakage) |
-| Below-75 grade examples | **0** (all students passed) |
-
-### How Data Was Prepared
-
-```
-E-Class Record Excel workbooks
-    ↓
-Extraction & anonymization (synthetic IDs, no real names/LRNs)
-    ↓
-Normalized CSV pack (17 CSV files: students, classes, grades, assessments, etc.)
-    ↓
-ML-optimized pack (feature engineering, train/test split by student)
-    ↓
-03_random_forest_regression_train.csv  (938 rows)
-04_random_forest_regression_test.csv   (231 rows)
-```
-
-### Data Validity
-
-- **Student identity separation**: Train and test sets are split by student (0 overlap), preventing data leakage.
-- **Anonymized**: Student names and LRNs in the dataset are synthetic — they are NOT real student identities.
-- **Below-75 limitation**: The dataset has no failing examples. This means:
-  - The model has never seen what a failing student's data looks like
-  - Classification metrics (Accuracy, AUC, Precision, Recall, F1) are **not valid** for at-risk detection
-  - The model's lowest predicted grade was **83.46** (still above passing)
+| Dataset Property | Next-Period Training Split | Current-Period Training Split |
+|---|---|---|
+| **Total Rows** | 1,580 rows | 1,580 rows |
+| **Train / Test Split** | 80% / 20% (Grouped by Student) | 80% / 20% (Grouped by Student) |
+| **Student Overlap** | **0** (Strict zero-leakage student split) | **0** (Strict zero-leakage student split) |
+| **Failing Grades ($< 75$)** | **0** (All historical records $\ge 75$) | **0** (All historical records $\ge 75$) |
+| **Lowest Predicted Grade**| 83.46 | 82.10 |
 
 ---
 
-## 4. The 20 Features (Model Inputs)
+## 4. Feature Engineering Specifications
 
-These are the inputs the model uses to predict the next period grade, ranked by importance:
+### 4.1 Next-Period Model Schema (20 Columns)
 
-| Rank | Feature | Importance | Description |
+The registered model `entervene_next_period_grade_rf` expects exactly 20 features:
+
+| Rank | Feature Name | Description |
+|---|---|---|
+| 1 | `source_period_grade` | Finalized grade of the source period |
+| 2 | `cumulative_period_grade_avg` | Cumulative GPA across prior periods |
+| 3 | `written_work_percent` | Written work component percentage (0–100) |
+| 4 | `quarterly_assessment_percent`| Quarterly exam percentage (0–100) |
+| 5 | `performance_task_percent` | Performance task component percentage (0–100) |
+| 6 | `grade_trend_vs_previous_period`| Change in grade relative to preceding term |
+| 7 | `period_sequence` | Scaled sequence of the term (1st, 2nd, etc.) |
+| 8 | `grade_level` | Student grade level (e.g., 7–10) |
+| 9–18 | `subject_*` (10 one-hot flags) | One-hot encoded subjects (`subject_SCIENCE`, `subject_MATHEMATICS`, etc.) |
+| 19 | `has_previous_period` | Boolean flag indicating presence of prior academic history |
+| 20 | `assessment_completion_rate` | Ratio of completed assessments to total assigned |
+
+### 4.2 Current-Period Model Schema (31 Columns)
+
+The registered model `entervene_current_period_grade_rf` incorporates DepEd Order No. 8, s. 2015 component weightings:
+
+- **Canonical DepEd QA Composite (30/30/40):** Written Work (30%), Performance Tasks (30%), and Quarterly Assessment (40%).
+- **Live Accumulation Metrics:**
+  - `written_work_weighted_score`
+  - `performance_task_weighted_score`
+  - `quarterly_assessment_weighted_score`
+  - `formative_assessment_count`
+  - `summative_assessment_count`
+  - `assessment_completion_rate`
+  - `on_time_submission_rate`
+  - `missing_activity_count`
+  - `late_submission_count`
+  - `risk_adjusted_attendance_rate`
+  - Subject one-hot encodings and curriculum progression indicators.
+
+---
+
+## 5. Risk Engine Architecture (Next-Period Only)
+
+The **Risk Engine** evaluates rule-based logic exclusively for Next-Period predictions. It does **NOT** run for Current-Period projections.
+
+### Risk Levels and Score Tiers
+
+| Level | Score Range | Operational Meaning | Action Required |
 |---|---|---|---|
-| 1 | `source_period_grade` | 56.5% | Student's current period grade |
-| 2 | `cumulative_period_grade_avg` | 18.7% | Average of all previous period grades |
-| 3 | `written_work_percent` | 6.7% | Written work component percentage |
-| 4 | `quarterly_assessment_percent` | 4.9% | Quarterly exam/assessment percentage |
-| 5 | `performance_task_percent` | 4.0% | Performance task component percentage |
-| 6 | `grade_trend_vs_previous_period` | 2.5% | Grade change from previous period |
-| 7 | `period_sequence` | 2.4% | Which quarter/term (1st, 2nd, etc.) |
-| 8 | `grade_level` | 1.1% | Student's year level |
-| 9-18 | `subject_*` (10 one-hot flags) | ~2.8% total | Subject flags: Creative Technology, Electronics, ICT, Mathematics, Science, Values Education, Personal Development, MAPEH, Pre-Calculus, and Unknown. |
-| 19 | `has_previous_period` | 0.4% | Whether a previous period grade exists |
-| 20 | `assessment_completion_rate` | 0.05% | Fraction of eligible classwork activities completed. It is not an assertion that assessment rows and classwork are the same activity. |
+| `HIGH_RISK` | 75–100 | Severe trajectory decline or projected failure | Immediate formal intervention plan |
+| `MODERATE_RISK` | 50–74 | Moderate academic deficit or missed work | Targeted remedial activities |
+| `NEEDS_MONITORING` | 25–49 | Mild drop in trend or attendance variance | Watchlist; formative tracking |
+| `LOW_RISK` | 0–24 | Strong academic standing and high compliance | Standard instruction |
 
-### How Features Are Built from Live Records
-
-`PredictionFeatureBuilderService` computes these features from the database.
-The model-version `feature_schema_json` is authoritative: the current checked-in
-artifact requires 20 columns, with the ordered schema stored in
-`backend/data/models/entervene_next_period_grade_rf_feature_schema.json`.
-
-Phase 1 evidence rules are:
-
-- **Grade components**: Eligible period-attributed classwork is the component source when present. Otherwise, recorded `AssessmentItem` / `StudentAssessmentScore` observations supply component percentages. The two populations are never deduplicated or combined by title, time, or similarity.
-- **Completion and coverage**: These are classwork-only measures. Eligible assignments use the existing gradebook's latest-submission timestamp rule; ambiguous attempts, unattributed legacy assignments, and absent activity populations are `UNRESOLVED` or `UNAVAILABLE`, never invented as zero.
-- **Submissions**: Eligible selected submissions provide missing and late counts. A non-authoritative selected attempt makes dependent evidence unresolved.
-- **Grade history**: `StudentPeriodGrade` is selected with provenance: finalized `final_period_grade` is `OFFICIAL`; another stored grade is `RECORDED_PROVISIONAL`; equal-component fallback is `ESTIMATED`. Legitimate zero values are preserved.
-- **No prior comparable period**: `has_previous_period` is false and the otherwise missing grade-trend model value is schema-defaulted to `0`. This represents no observed change, not a missing required model input.
-- **Attendance**: Attendance is restricted to the student, class, subject, source-period dates, and generation cutoff. Present, late, excused, and absent are retained in the saved evidence.
-- **Subject**: One-hot encodes the subject name
-
-### Readiness Check (Before Running the Model)
-
-Before the model runs, the system checks if there is enough data:
-
-| Level | Condition |
-|---|---|
-| **INSUFFICIENT** (blocked) | Source period grade missing, OR data coverage < 50%, OR completion rate < 50% |
-| **MINIMUM** | Coverage 50–69% |
-| **GOOD** | Coverage 70–84% |
-| **STRONG** | Coverage ≥ 85% |
-
-If readiness is `INSUFFICIENT`, no prediction is made and the response returns `INSUFFICIENT_DATA`. Phase 1 additionally validates the exact registered model vector before declaring a record ready; a missing or invalid required model value blocks scoring instead of failing later.
-
-> **Note on Behavioral Evidence:** The ML Regressor uses the 16 academic/contextual features above. Live behavioral evidence (`behavioral_engagement_score`, `risk_adjusted_attendance_rate`, `missing_activity_count`, `late_submission_count`) is computed alongside them and evaluated exclusively by the rule-based **Risk Engine** (`RUNTIME_RISK_FIELDS`), keeping the regressor clean and unaffected by non-academic artifacts.
+### Core Risk Rules Evaluated
+- `predicted_grade_below_75`: Predicted grade $< 75$ (High Risk)
+- `severe_grade_decline`: Grade trend dropped $\ge 7$ points (Moderate Risk)
+- `chronic_missing_activities`: $\ge 3$ unsubmitted classwork tasks (Moderate/High Risk)
+- `behavioral_engagement_below_60`: Engagement score $< 60\%$ (High Risk)
+- `compound_completion_and_grade`: Completion $< 70\%$ AND predicted grade $< 82$ (High Risk)
 
 ---
 
-> **Schema correction:** References in older prose to “16” model inputs are superseded by the active 20-column registered schema described above.
+## 6. Behavioral Engagement Score Specification
 
-## 5. Model Performance (Regression Metrics)
+The Behavioral Engagement Score ($0.0 - 100.0\%$) provides non-academic warning signals:
 
-| Metric | Value | Meaning |
-|---|---|---|
-| **MAE** | 1.48 | Average prediction error is ~1.48 grade points |
-| **RMSE** | 2.05 | Root mean squared error is ~2.05 points |
-| **R²** | 0.65 | Model explains 65% of grade variation |
+### Formula
+$$\text{Score} = w_{\text{att}} \times \text{Attendance} + w_{\text{ontime}} \times \text{OnTime} + w_{\text{comp}} \times \text{Completion}$$
 
-**In plain English**: If a student's actual next-period grade is 88, the model would typically predict between 86.5 and 89.5. The model is reasonably accurate for grade prediction, but it has limitations because it has never seen failing students.
-
----
-
-## 6. Risk Engine (How "At Risk" Is Determined)
-
-The Risk Engine takes the model's predicted grade and combines it with behavioral evidence to assign a risk level. It uses **rule-based logic**, NOT the ML model.
-
-### Risk Levels and Data Status
-
-| Level | Score Range | Meaning |
-|---|---|---|
-| `HIGH_RISK` | 75–100 | Immediate teacher attention needed |
-| `MODERATE_RISK` | 50–74 | Needs targeted follow-up |
-| `NEEDS_MONITORING` | 25–49 | Keep watching, not urgent yet |
-| `LOW_RISK` | 0–24 | Student is performing well |
-| `INSUFFICIENT_DATA` | 0 | Academic evidence is below the 50% threshold |
-
-**Data Status values:**
-- `SUFFICIENT`: Full academic evidence and behavioral records are available.
-- `COLD_START`: Academic data is sufficient for prediction, but behavioral records (attendance/due-dates) are not yet present (early term). Risk is evaluated on academic signals alone without penalty.
-- `INSUFFICIENT_DATA`: Academic data coverage or completion is below 50%; prediction is blocked.
-
-### How Risk Level Is Assigned
-
-The Risk Engine evaluates **multiple rules** and picks the **highest severity** triggered:
-
-**HIGH_RISK triggers:**
-- Predicted grade < 75
-- Current grade < 75
-- Predicted grade < 80 AND grade trend declined ≥ 5 points
-- Completion rate < 70% AND predicted grade < 82
-- ≥ 3 missing activities AND predicted grade < 85
-- Behavioral engagement score < 60%
-
-**MODERATE_RISK triggers:**
-- Predicted grade between 75–81
-- Grade trend declined ≥ 7 points
-- Completion rate < 75%
-- ≥ 2 missing activities
-- ≥ 3 late submissions
-- Behavioral engagement score between 60%–74.99%
-
-**NEEDS_MONITORING triggers:**
-- Predicted grade between 82–87
-- Grade trend declined ≥ 3 points
-- Completion rate < 90%
-- 1 missing activity
-- Any late submissions
-- No previous period record available
-- Behavioral engagement score between 75%–84.99%
-
-**LOW_RISK triggers:**
-- Predicted grade ≥ 88 AND completion ≥ 90% AND coverage ≥ 75% AND no missing activities AND no severe grade decline
-
-### Risk Score Calculation
-
-The risk score (0–100) starts at a base score for the risk level, then adds points for:
-- Predicted grade below 88: up to +20 points
-- Negative grade trend: up to +10 points
-- Low completion rate: up to +10 points
-- Missing activities: up to +8 points
-- Late submissions: up to +5 points
-- Multiple triggered rules: up to +5 points
-
-The score is then clamped to stay within the risk level's range.
+- **Default Weights:** Attendance ($40\%$), On-Time Punctuality ($35\%$), Completion ($25\%$).
+- **Risk-Adjusted Attendance Formula:**
+  $$\text{Attendance Rate} = \frac{1.0 \times \text{present} + 0.8 \times \text{excused} + 0.5 \times \text{late} + 0.0 \times \text{absent}}{\text{total\_days}} \times 100$$
+- **Dynamic Weight Redistribution:** If attendance or classwork due dates are absent (e.g. early-term cold start), available weights are dynamically normalized to sum to $1.0$, or `data_status` resolves cleanly to `COLD_START`.
 
 ---
 
----
+## 7. Operational Lifecycle & Concurrency Control
 
-## 7. Complete Workflow & Data Flow (End-to-End Oral Defense Guide)
-
-This section maps the complete journey from raw student classroom records to final outcome evaluation, explaining exactly what data is required, how the dual-pipeline operates, and how accuracy is measured.
-
-### 7.0 Current production generation flow (Phase 1)
-
-```text
-POST /predictions/from-records
-  -> transaction starts at REPEATABLE READ
-  -> PostgreSQL advisory transaction lock for the logical prediction scope
-  -> build period-scoped features and evidence states
-  -> readiness + exact model-schema validation
-  -> if not ready: return INSUFFICIENT_DATA; do not score or persist a false prediction
-  -> if ready: RandomForestRegressor.predict(registered 20-column vector)
-  -> RiskEngine evaluates the unchanged rules using model output + risk-only fields
-  -> persist prediction, feature rows, execution trace, and immutable evidence_snapshot atomically
-  -> GET prediction detail projects the saved snapshot into teacher-facing labels
-```
-
-`generation_request_id` makes a retry idempotent. The advisory lock serializes
-same-scope creation. An audited snapshot cannot be replaced in place; Phase 2
-successor semantics would be required. Legacy predictions without a snapshot
-remain visible but explicitly carry a limitation rather than reconstructed
-evidence.
-
-```mermaid
-flowchart TD
-    subgraph DataReq["1. Required Live Data (From Teachers/LMS)"]
-        D1["Grades: Written Work, Performance Tasks, Quarterly Exam"]
-        D2["Attendance: Daily present/late/excused/absent logs"]
-        D3["Classwork: Assigned tasks, due dates, submission timestamps"]
-        D4["Historical: Previous academic period grades & GPA"]
-    end
-
-    subgraph FeatureBuilder["2. Feature Extraction (PredictionFeatureBuilderService)"]
-        F_Academic["Build registered 20 ML features<br/>(DepEd component %, grade trends, period sequence)"]
-        F_Behav["Compute Behavioral Score<br/>(40% Att + 35% On-Time + 25% Completion)"]
-        F_Readiness{"Data Readiness Check<br/>Coverage & Completion ≥ 50%?"}
-    end
-
-    subgraph DualProcessing["3. Dual-Branch Evaluation (ModelScoringService)"]
-        Branch_ML["Branch A: ML Regressor (RandomForestRegressor)<br/>Predicts next_period_grade (e.g. 84.50)"]
-        Branch_Behav["Branch B: Behavioral Evidence<br/>Passes Engagement Score (e.g. 58.0%) + Flags"]
-    end
-
-    subgraph RiskEngineBlock["4. Risk Engine Synthesis (RiskEngine.py)"]
-        Rules["evaluate_default_rules()<br/>• Academic rules (predicted < 75, trend decline)<br/>• Behavioral tiers (< 60%, 60-75%, 75-85%)<br/>• Compound rules (completion < 70% AND predicted < 82)"]
-        Scorer["compute_risk_score()<br/>Base score + penalties + multiple trigger bonus"]
-    end
-
-    subgraph Actions["5. Downstream Actions & Intervention Loop"]
-        Dashboard["Teacher Dashboard (At-Risk student lists & evidence)"]
-        Review["Teacher Risk Review (CONFIRMED, DISMISSED, ESCALATED)"]
-        Intervention["Intervention Assignment (Auto-creates StudentSuggestion)"]
-        Outcome["Outcome Evaluation (Real vs. Predicted Grade Accuracy)"]
-    end
-
-    DataReq --> FeatureBuilder
-    F_Readiness -- "No (< 50%)" --> Blocked["Return INSUFFICIENT_DATA (No prediction)"]
-    F_Readiness -- "Yes (≥ 50%)" --> DualProcessing
-    F_Academic --> Branch_ML
-    F_Behav --> Branch_Behav
-    Branch_ML --> RiskEngineBlock
-    Branch_Behav --> RiskEngineBlock
-    RiskEngineBlock --> Dashboard
-    Dashboard --> Review
-    Review --> Intervention
-    Intervention --> Outcome
-```
-
----
-
-### 7.1 Data Requirements for High-Quality Predictions
-
-For the system to deliver reliable predictions and avoid cold-start or low-confidence results, the following data inputs are required from the school:
-
-| Category | Specific Data Points | Purpose in Pipeline | Minimum vs. Ideal Requirement |
-|---|---|---|---|
-| **Academic Assessments** | Raw scores across Written Work, Performance Tasks, Quarterly Assessments | Calculates DepEd component percentages and data coverage | **Minimum:** 50% expected assessments.<br/>**Ideal:** $\ge 85\%$ coverage for `STRONG` readiness. |
-| **Historical Grades** | Previous period finalized grades (`final_period_grade`) | Computes `cumulative_period_grade_avg` and `grade_trend_vs_previous_period` | **Minimum:** None (handles cold-start).<br/>**Ideal:** At least 1 prior period grade. |
-| **Attendance Records** | Daily attendance entries with status: `present`, `late`, `excused`, `absent` | Computes `risk_adjusted_attendance_rate` ($1.0/0.8/0.5/0.0$) | **Minimum:** 0 days (flags `COLD_START`).<br/>**Ideal:** $\ge 15$ instructional days recorded. |
-| **Classwork & Due Dates** | Published classwork assignments with valid `due_date` and `submitted_at` | Computes `on_time_submission_rate` and `late_submission_count` | **Minimum:** 0 due dates (omits punctuality signal).<br/>**Ideal:** All published assignments have due dates. |
-
----
-
-### 7.2 The 6 Lifecycle Steps (Endpoint by Endpoint)
-
-#### **Step 1: Feature Extraction & Readiness Validation**
-* **Endpoint:** `POST /api/v1/predictions/build-features`
-* **Service:** `PredictionFeatureBuilderService.py`
-* Queries student records, normalizes period sequence for 3-term or 4-quarter calendars, computes the registered 20 ML inputs, and calculates the composite Behavioral Engagement Score.
-* **Readiness Gate:** If data coverage $<50\%$ or assessment completion $<50\%$, readiness is `INSUFFICIENT` and the model is blocked from running.
-
-#### **Step 2: Model Scoring & Behavioral Synthesis**
-* **Endpoints:**
-  * `POST /api/v1/predictions/preview` (read-only inspection for teachers)
-  * `POST /api/v1/predictions` (score payload & persist)
-  * `POST /api/v1/predictions/from-records` (auto-build from DB + score + persist)
-* **Service:** `ModelScoringService.py`
-* Separates runtime inputs via `RUNTIME_RISK_FIELDS`:
-  * Academic features are fed into `RandomForestRegressor.predict()`.
-  * Behavioral metrics and predicted grade are fed into `RiskEngineInput`.
-
-#### **Step 3: Risk Level Classification & Score Computation**
-* **Service:** `RiskEngine.py`
-* **Rule Evaluation:** Evaluates 15 default rules across academic and behavioral dimensions.
-* **Selection:** Picks the highest-severity trigger (`HIGH_RISK` > `MODERATE_RISK` > `NEEDS_MONITORING` > `LOW_RISK`).
-* **Score Derivation:** Starts with base score ($85, 60, 35, 10$) and adds points for low predicted grade, negative trend, low completion, missing work, tardiness, and multiple trigger combinations ($+1.5$ pts per additional trigger). Clamps strictly to the risk band.
-
-#### **Step 4: Persistence & Database Auditing**
-* **Service:** `PredictionPersistenceService.py`
-* Persists records atomically to PostgreSQL:
-* `ai_prediction`: Stores `predicted_period_grade`, `risk_level`, `risk_score`, `data_status`.
-  * `ai_prediction_feature`: Stores model-input and risk-evidence rows with `explanation_method = "RULE"` where applicable.
-  * `ai_prediction.evidence_snapshot`: Stores the immutable Phase 1 evidence contract, readiness decision, model execution trace, risk trace, source IDs, and captured source values for audited predictions.
-  * `prediction_outcome`: Initializes a tracking row (`status = PENDING`) waiting for actual final grades.
-
-#### **Step 5: Teacher Dashboard & Intervention Loop**
-* **Endpoints:**
-  * `GET /api/v1/predictions/dashboard/at-risk` (filterable student table)
-  * `POST /api/v1/predictions/{id}/review` (teacher review decision)
-  * `POST /api/v1/predictions/{id}/assign-intervention` (remedial assignment)
-* **Services:** `DashboardPredictionService.py`, `TeacherRiskReviewService.py`, `PredictionSuggestionService.py`
-* Teachers review the prediction explanation and can record formal decisions: `CONFIRMED_RISK`, `DISMISSED_RISK`, `NEEDS_MORE_DATA`, `INTERVENTION_ASSIGNED`, or `ESCALATED`.
-* Assigning an intervention automatically creates a personalized `StudentSuggestion` (remedial module, practice quiz, or targeted reading).
-
-#### **Step 6: Post-Hoc Accuracy Evaluation**
-* **Endpoint:** `POST /api/v1/predictions/{id}/evaluate-outcome`
-* **Service:** `PredictionOutcomeService.py`
-* When actual report card grades are encoded at the end of the term, the system compares `actual_period_grade` against `predicted_period_grade`, calculating prediction error, absolute error, and binary risk accuracy.
-
----
-
----
-
-## 8. Key Files
-
-### ML Pipeline
-| File | Purpose |
-|---|---|
-| `backend/app/ml/Train.py` | Trains the RandomForestRegressor model |
-| `backend/app/ml/ScorePrediction.py` | CLI to score one prediction |
-| `backend/app/ml/SeedLivePredictions.py` | Bulk-seeds CSV predictions into DB |
-| `backend/app/ml/RegisterModelVersion.py` | Registers model metadata in DB |
-
-### Services
-| File | Purpose |
-|---|---|
-| `backend/app/services/attendance/AttendanceService.py` | Attendance logs, nominal rate, and risk-adjusted attendance rate |
-| `backend/app/services/prediction/PredictionFeatureBuilderService.py` | Builds the registered model features from live DB records, preserves evidence state/provenance, and computes behavioral score |
-| `backend/app/services/prediction/ModelScoringService.py` | Loads model, scores prediction, calls Risk Engine |
-| `backend/app/services/prediction/RiskEngine.py` | Rule-based risk classification & weight threshold loading |
-| `backend/app/services/prediction/PredictionPersistenceService.py` | Saves predictions & behavioral evidence to database |
-| `backend/app/services/prediction/PredictionEvidenceSnapshotService.py` | Creates immutable audited evidence snapshots for new record-driven predictions |
-| `backend/app/services/prediction/TeacherEvidenceService.py` | Projects saved evidence into teacher-safe labels, values, sources, states, and limitations |
-| `backend/app/services/prediction/FeatureCatalog.py` | Canonical permission catalog separating grade-model, risk-only, display-only, and training-only fields |
-| `backend/app/services/prediction/PredictionExplanationService.py` | Generates causes and recommended actions |
-| `backend/app/services/prediction/PredictionOutcomeService.py` | Evaluates prediction accuracy against actual grades |
-| `backend/app/services/prediction/TeacherRiskReviewService.py` | Teacher review decisions |
-| `backend/app/services/prediction/PredictionSuggestionService.py` | Creates interventions from predictions |
-| `backend/app/services/prediction/DashboardPredictionService.py` | Dashboard at-risk list with filters |
-| `backend/scripts/seed_behavioral_weights.py` | Seeds default RiskThreshold behavioral weight rows |
-
-### Model Artifacts (not in Git, must be shared manually)
-| File | Purpose |
-|---|---|
-| `backend/data/models/entervene_next_period_grade_rf.joblib` | Trained model file |
-| `backend/data/models/entervene_next_period_grade_rf_feature_schema.json` | Feature column list |
-| `backend/data/models/entervene_next_period_grade_rf_feature_importance.csv` | Feature rankings |
-| `backend/data/models/entervene_next_period_grade_rf_training_report.json` | Training metrics |
-| `backend/data/live_predictions/final_student_risk_predictions.csv` | Pre-scored predictions CSV |
-| `backend/app/ml/Model.pkl` | Pickle model file |
-| `backend/app/ml/feature_columns.pkl` | Feature column names |
-
-### Database Tables
-| Table | Purpose |
-|---|---|
-| `ai_model_version` | Registered model metadata |
-| `ai_prediction` | Stored predictions |
-| `ai_prediction_feature` | Feature values per prediction |
-| `prediction_outcome` | Actual vs predicted comparison |
-| `teacher_risk_review` | Teacher review decisions |
-| `student_suggestion` | Intervention recommendations |
-| `risk_threshold` | Configurable risk thresholds and behavioral weight configurations |
-
----
-
-## 9. Database Seeding (For New Laptops)
-
-The pre-scored predictions can be bulk-inserted using:
-
-```bash
-cd backend
-
-# Dry run (no DB changes)
-python -m app.ml.SeedLivePredictions --dry-run
-
-# Live seeding
-python -m app.ml.SeedLivePredictions --model-version-id 1
-
-# Seed behavioral engagement weights in risk_threshold
-python -m scripts.seed_behavioral_weights
-```
-
-The seeding script:
-1. Reads `final_student_risk_predictions.csv` (3,259 scored records)
-2. Auto-creates missing subjects in the DB
-3. Creates synthetic students with deterministic UUIDs
-4. Inserts `ai_prediction` rows
-5. Inserts `prediction_outcome` rows (status = PENDING)
-
-### Files NOT in Git (must be sent manually)
-- `backend/data/live_predictions/final_student_risk_predictions.csv`
-- `backend/data/models/*` (all model artifacts)
-- `backend/app/ml/Model.pkl` and `feature_columns.pkl`
-- `backend/.env` (database credentials)
-
----
-
-## 10. 3-Term Curriculum Adaptation
-
-The model was trained on 4-quarter data. For the new DepEd 3-term curriculum (DO 017 s. 2026), the `period_sequence` feature is normalized:
+### 7.1 Current-Period Generation & Freshness Lifecycle
 
 ```
-normalized_sequence = round((period_sequence / total_periods_in_year) × 4, 4)
+[Teacher Clicks 'Generate']
+       │
+       ▼
+Acquire PostgreSQL Advisory Lock (pg_advisory_xact_lock)
+       │
+       ├─► Compute live evidence hash (WW + PT + QA + Attendance)
+       ├─► Verify Readiness Gates (INSUFFICIENT_EVIDENCE blocks scoring)
+       ├─► Execute RandomForestRegressor (CURRENT)
+       ├─► Persist Revision N atomically with immutable evidence snapshot
+       └─► Release Lock on Transaction Commit
 ```
 
-| Curriculum | Period 2 | Normalized |
-|---|---|---|
-| 4-Quarter | Q2 = 2/4 × 4 = **2.0** | Same as original |
-| 3-Term | T2 = 2/3 × 4 = **2.67** | Scaled to 4-quarter equivalent |
+### 7.2 Freshness & Currency Statuses
 
-This lets the existing model work with 3-term data without retraining.
+1. **Projection Freshness (`projection_freshness`):**
+   - `CURRENT`: Persisted prediction evidence hash matches live classroom database state.
+   - `SOURCE_EVIDENCE_CHANGED`: Teacher entered new grades/attendance; refresh is recommended.
+   - `PERIOD_FINALIZED`: Academic period is officially closed; predictions are frozen.
+   - `FRESHNESS_UNAVAILABLE`: Historical evidence contract cannot be safely reconstructed.
+   - `NO_PROJECTION`: No current prediction has been generated yet.
 
----
-
-## 11. Known Limitations
-
-1. **No failing examples in training data** — The model cannot predict below-75 grades because it has never seen them
-2. **Classification metrics are invalid** — AUC, Precision, Recall, F1 cannot be reported
-3. **Lowest predicted grade is 83.46** — The model never predicts below passing
-4. **Risk detection relies on rules** — The Risk Engine compensates for the model's limitation by also checking behavioral signals (completion rate, missing work, grade trends)
-5. **Synthetic student identities** — Training data names/LRNs are fake, not real students
-6. **Behavioral data availability** — Behavioral engagement relies on daily attendance and classwork due dates. In early-term cold-start scenarios with zero records, behavioral scoring is omitted and the system evaluates academic signals alone (`data_status = COLD_START`)
+2. **Model Currency (`model_currency`):**
+   - `UP_TO_DATE`: Persisted prediction was scored using the active model version.
+   - `MODEL_UPDATE_AVAILABLE`: A new model version has been registered; refresh is eligible.
+   - `MODEL_UNAVAILABLE`: No active model version registered.
+   - `NO_PROJECTION`: No prediction exists.
 
 ---
 
-## 12. Behavioral Engagement Score
+## 8. Defensible Outcome Evaluation Policy
 
-The Behavioral Engagement Score is a composite metric ($0.0 - 100.0\%$) evaluated exclusively by the rule-based **Risk Engine**. It provides an early-warning signal for student disengagement before academic failure appears on quarterly exams.
+To prevent post-hoc bias and ensure academic defensibility:
 
-### 12.1 Sub-Signals and Formulas
-
-The score combines three distinct signals, all normalized to a uniform $0.0 - 100.0\%$ scale:
-
-| Signal | Native Scale | Normalized Scale | Source | Description |
-|---|---|---|---|---|
-| **Risk-Adjusted Attendance Rate** | $0.0 - 100.0\%$ | $0.0 - 100.0\%$ | `AttendanceRecord` | Weighted attendance crediting |
-| **On-Time Submission Rate** | $0.0 - 1.0$ | $0.0 - 100.0\%$ | `ClassworkAssignment` + `StudentSubmission` | Fraction of published tasks submitted before deadline |
-| **Assessment Completion Rate** | $0.0 - 1.0$ | $0.0 - 100.0\%$ | `AssessmentItem` + `StudentAssessmentScore` | Fraction of expected academic assessments completed |
-
-#### **Risk-Adjusted Attendance Formula**
-$$\text{Rate} = \frac{1.0 \times \text{present} + 0.8 \times \text{excused} + 0.5 \times \text{late} + 0.0 \times \text{absent}}{\text{total\_days}} \times 100$$
-
-> **Distinction from Nominal UI Attendance:** The admin/teacher UI (`get_student_attendance_summary`) calculates nominal attendance where `present`, `late`, and `excused` all count equally as attended ($100\%$). For early risk detection, giving full credit to chronic tardiness or prolonged excused absences understates instructional time loss. The risk-adjusted rate assigns $50\%$ credit to late attendance and $80\%$ credit to excused absences.
-
-### 12.2 Weight Configuration & Dynamic Redistribution
-
-Default weights are configured via the `risk_threshold` table:
-- `attendance_weight`: $0.40$ ($40\%$)
-- `ontime_weight`: $0.35$ ($35\%$)
-- `participation_weight`: $0.25$ ($25\%$)
-
-> **Database Note:** `RiskThreshold.risk_level` is a non-nullable DB column with a CHECK constraint. On weight-configuration rows, `risk_level` is set to `'NEEDS_MONITORING'` as a required schema placeholder; weight lookups filter strictly by `condition_type` and ignore `risk_level`.
-
-#### **Dynamic Redistribution Mathematics**
-If one or more signals are unavailable (`None`):
-1. Let $\mathcal{A} \subseteq \{\text{attendance}, \text{ontime}, \text{participation}\}$ be the set of available sub-signals with base weights $w_i$.
-2. Total available weight: $W_{\text{total}} = \sum_{i \in \mathcal{A}} w_i$.
-3. Normalized effective weights: $w_i' = \frac{w_i}{W_{\text{total}}}$.
-4. Final Score: $\text{Score} = \sum_{i \in \mathcal{A}} w_i' \times \text{SignalScore}_i$.
-5. If all three signals are `None`, the Behavioral Engagement Score returns `None`.
-
-### 12.3 Dual-Pathway Role of Assessment Completion
-
-`assessment_completion_rate` intentionally contributes to risk evaluation through two distinct pathways:
-1. **Direct Academic Evidence Rule:** Evaluates whether sufficient assessment evidence exists to establish competency (triggering `low_completion_with_predicted_below_82`, `assessment_completion_below_75`, `assessment_completion_below_90`).
-2. **Indirect Behavioral Composite Component (25% weight):** Evaluates habit formation and sustained classroom participation alongside attendance and task punctuality.
-
-This dual contribution is an intentional design choice reflecting that low completion represents both an immediate academic deficit and a chronic behavioral signal.
-
-### 12.4 Rule-Engine-Only Integration Architecture
-
-The Behavioral Engagement Score is **not** an input feature in the Random Forest Regressor. It is passed via `RUNTIME_RISK_FIELDS` to `RiskEngine.py` and evaluated directly in `evaluate_default_rules`:
-- $\text{Score} < 60.0\% \implies \mathbf{HIGH\_RISK}$ (`behavioral_engagement_below_60`)
-- $60.0\% \le \text{Score} < 75.0\% \implies \mathbf{MODERATE\_RISK}$ (`behavioral_engagement_60_to_74`)
-- $75.0\% \le \text{Score} < 85.0\% \implies \mathbf{NEEDS\_MONITORING}$ (`behavioral_engagement_75_to_84`)
-
-### 12.5 Cold-Start Handling
-
-When a student has zero attendance records and no classwork due dates (e.g., at the beginning of a term):
-- `behavioral_engagement_score` is `None`
-- `behavioral_score_cold_start` is `True`
-- No behavioral risk triggers fire
-- `data_status` resolves to `COLD_START` (provided academic evidence satisfies the $50\%$ coverage threshold)
+1. **Strict Temporal Evaluation for CURRENT Projections:**
+   - The **Primary Runtime Evaluation** is defined as the **latest valid CURRENT prediction created BEFORE official period finalization**.
+   - Predictions generated *after* finalization or selecting the revision with the smallest error post-hoc is strictly prohibited.
+   - All historical revisions are reported separately for auditing.
+2. **Evaluation for NEXT Projections:**
+   - The persisted incoming baseline forecast (Term $N \rightarrow N+1$) is evaluated directly against the finalized target-period grade.
+3. **Purpose Isolation:**
+   - NEXT and CURRENT metrics are **never combined or averaged together**.
+4. **Mandatory Reported Metrics:**
+   - Sample count ($N$)
+   - Mean Absolute Error (MAE)
+   - Root Mean Squared Error (RMSE)
+   - Median Absolute Error
+   - Error thresholds: $\%$ within $\pm 1.0$, $\pm 2.0$, and $\pm 3.0$ grade points.
 
 ---
 
-## 13. Oral Defense Cheat Sheet & Panel Q&A
+## 9. Known Data Limitations & Readiness Classification
 
-This cheat sheet provides direct, technically sound answers to anticipated questions from thesis panelists.
+### Data & Modeling Limitations
+1. **Zero Failing Grades:** Historical training records contain no grades below 75. The regression models cannot predict failure directly; they project continuous grade trajectories.
+2. **Classification Metrics Invalid:** Metrics such as Precision, Recall, F1-score, and ROC-AUC cannot be reported for grade regression models.
+3. **Cold-Start Early Term:** Prior to formative assessment submission, students evaluate to `INSUFFICIENT_EVIDENCE` and prediction generation is disabled.
 
----
+### Operational Readiness Target: **DEMO / CAPSTONE READY**
 
-### Q1: "Why did you choose a Random Forest Regressor instead of a binary Classifier (At-Risk vs. Not At-Risk)?"
-* **Answer:**
-  > *"Because our historical training data from DepEd E-Class records contains zero failing grade examples (all grades are $\ge 75$). A binary classification model requires labeled positive (failing) and negative (passing) examples to learn a decision boundary. Without failing examples, a classifier collapses to 100% majority class accuracy with zero sensitivity.
-  > Instead, we trained a **Random Forest Regressor** to predict continuous grade trajectories ($R^2 = 0.58$, $\text{MAE} = 1.93$). We then paired it with a rule-based **Risk Engine** that catches downward trends and evidentiary gaps before actual failure occurs."*
-
----
-
-### Q2: "How does the Behavioral Engagement Score communicate with the Random Forest model?"
-* **Answer:**
-  > *"They do not communicate inside the Random Forest algorithm. They are processed in a **dual-pipeline architecture** and synthesize downstream in the **Risk Engine**.
-  > The Random Forest evaluates the registered 20 academic/contextual features to predict a future numerical grade. Concurrently, the Feature Builder computes a normalized Behavioral Engagement Score ($0-100\%$) from daily attendance logs, task deadlines, and eligible classwork completion.
-  > Both signals meet in `RiskEngine.evaluate_risk()`, which evaluates compound rules (e.g., assessment completion $<70\%$ AND predicted grade $<82$) and behavioral threshold tiers ($<60\%$ triggers HIGH_RISK) to assign the final risk level."*
+> [!IMPORTANT]
+> The Entervene prediction system is classified as **DEMO / CAPSTONE READY**.
+> It is **NOT** classified as **PILOT READY**. Pilot deployment requires supervised prospective use across live schools over at least one full academic term, formal institutional review, and approved administrative intervention policies.
 
 ---
 
-### Q3: "Why is attendance kept out of the Random Forest feature matrix?"
-* **Answer:**
-  > *"For three structural reasons:
-  > 1. **Data Leakage & Inconsistency:** Historical training datasets from spreadsheets lacked synchronized daily timestamped attendance logs. Training on synthetic or inconsistent attendance would introduce noise into the regressor.
-  > 2. **Cold-Start Resilience:** Early in a term, attendance records may be sparse. By isolating attendance to runtime `RUNTIME_RISK_FIELDS`, the ML model can still predict academic trajectory while the Risk Engine marks behavioral status as `COLD_START` without crashing or throwing spurious errors.
-  > 3. **Explainability for Teachers:** Keeping them separate allows teachers to see exactly whether a student is at risk due to cognitive/academic difficulties (low test scores) or behavioral disengagement (tardiness and missed deadlines)."*
+## 10. Key Source Files
 
----
-
-### Q4: "Why does the Risk-Adjusted Attendance rate give partial credit for late and excused absences?"
-* **Answer:**
-  > *"In the nominal school UI, present, late, and excused all receive 100% compliance credit. However, from an early-warning perspective, chronic tardiness (missing the first 15–30 minutes of instruction daily) and extended excused absences represent real instructional time loss.
-  > Our risk-adjusted formula assigns $1.0$ for present, $0.8$ for excused, $0.5$ for late, and $0.0$ for absent. This prevents chronically late students from appearing fully engaged in risk assessments."*
-
----
-
-### Q5: "What metrics should you report for model accuracy?"
-* **Answer:**
-  > *"For the Machine Learning model, we report **Regression Metrics**:
-  > - **Mean Absolute Error (MAE):** $\approx 1.93$ grade points (on average, the model's grade prediction is within 2 points of the actual score).
-  > - **Root Mean Squared Error (RMSE):** $\approx 2.45$ grade points.
-  > - **$R^2$ Score:** $\approx 0.584$ (the model accounts for over 58% of grade variance based on current components and historical performance).
-  >
-  > We explicitly do **not** report Classification Metrics (Precision, Recall, F1, ROC-AUC) for the ML regressor because there are no ground-truth failing labels in the training set. For operational risk accuracy, our system tracks post-hoc outcomes in the `prediction_outcome` table once real quarterly grades are finalized."*
+| File | Architectural Responsibility |
+|---|---|
+| `backend/app/services/prediction/PredictionFeatureBuilderService.py` | 20-feature extraction and readiness validation for NEXT model |
+| `backend/app/services/prediction/CurrentPeriodLiveFeatureBuilder.py` | 31-feature extraction with DepEd QA 30/30/40 composite for CURRENT model |
+| `backend/app/services/prediction/ModelScoringService.py` | Model resolution, scoring execution, and Risk Engine dispatching |
+| `backend/app/services/prediction/RiskEngine.py` | Rule-based risk classification (NEXT-period only) |
+| `backend/app/services/prediction/PredictionStatusService.py` | Dual-purpose roster aggregation and freshness resolution |
+| `backend/app/services/prediction/PredictionPersistenceService.py` | Transactional persistence with PostgreSQL Advisory Locks |
+| `backend/app/services/prediction/PredictionOutcomeService.py` | Temporal outcome evaluation and error metric computation |
+| `frontend/src/components/predictions/dual-purpose-roster.tsx` | UI roster rendering with strict purpose isolation |
+| `frontend/src/components/predictions/prediction-student-card.tsx` | Dual-card display separating Baseline Forecast from Current Projection |

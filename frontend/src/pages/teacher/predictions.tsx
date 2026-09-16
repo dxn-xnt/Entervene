@@ -7,8 +7,10 @@ import { cn } from "@/lib/utils";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
+import { PredictionRoster } from "@/components/predictions/prediction-roster";
 import { PredictionGradeSection } from "@/components/predictions/prediction-grade-section";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { usePredictionRoster } from "@/hooks/use-prediction-roster";
 import type {
   DashboardAtRiskResponse,
   DashboardFilters,
@@ -83,6 +85,14 @@ export default function PredictionsDashboard() {
   // Detail sheet
   const [selectedPrediction, setSelectedPrediction] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const exactRosterScope = classId !== undefined && subjectId !== undefined && selectedPeriodId !== null;
+  const roster = usePredictionRoster({
+    classId,
+    subjectId,
+    academicPeriodId: selectedPeriodId ?? undefined,
+    search,
+    baselineRiskLevel: riskLevel,
+  });
 
   // ── Fetch filters once ──
   useEffect(() => {
@@ -274,7 +284,34 @@ export default function PredictionsDashboard() {
                     onClearAll={handleClearAll}
                   />
 
-                  {isFilterActive ? (
+                  {exactRosterScope ? (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between py-2 border-b-2 border-black">
+                        <div>
+                          <h2 className="text-xl font-black uppercase tracking-tight text-black">Student Prediction Roster</h2>
+                          <p className="text-xs text-gray-600 font-semibold">
+                            Official outcome, current-term projection, and incoming baseline forecast for this exact class and subject.
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleClearAll}
+                          className="border-2 border-black font-bold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                        >
+                          Clear Filters
+                        </Button>
+                      </div>
+                      <PredictionRoster
+                        roster={roster.data}
+                        students={roster.students}
+                        loading={roster.loading}
+                        error={roster.error}
+                        onRefetch={roster.refetch}
+                        onOpenDetail={handleRowClick}
+                      />
+                    </div>
+                  ) : isFilterActive ? (
                     /* ── Filtered Predictions View ── */
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center justify-between py-2 border-b-2 border-black">

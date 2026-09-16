@@ -16,6 +16,8 @@ from app.schemas.Prediction import (
     DashboardAtRiskResponse,
     DashboardFilterOptionsResponse,
     DashboardGradeGroupSummary,
+    CurrentPeriodGenerateRequest,
+    CurrentPeriodGenerateResponse,
     ModelPerformanceSummaryResponse,
     PredictionBuildFeaturesRequest,
     PredictionBuiltFeaturesResponse,
@@ -33,6 +35,7 @@ from app.schemas.Prediction import (
     PredictionPreviewRequest,
     PredictionPreviewResponse,
     PredictionRefreshRequest,
+    PredictionRosterResponse,
     PredictionRosterStatusResponse,
     DualPurposeRosterResponse,
     LegacyPredictionRosterResponse,
@@ -45,6 +48,11 @@ from app.schemas.Prediction import (
 from app.models.ai.AIModelVersion import ModelPurpose
 from app.services.prediction.CurrentPeriodPredictionGenerationService import (
     refresh_current_period_prediction_workflow,
+)
+from app.services.prediction.UnifiedPredictionGenerationService import (
+    evaluate_unified_projection_status,
+    generate_unified_prediction,
+    refresh_unified_prediction_workflow,
 )
 from app.services.prediction.ModelPerformanceService import get_model_performance_summary
 from app.services.prediction.ModelScoringService import DEFAULT_MODEL_NAME, score_student_prediction
@@ -282,7 +290,7 @@ def dashboard_filters(
     )
 
 
-@router.get("/status/roster", response_model=DualPurposeRosterResponse | LegacyPredictionRosterResponse)
+@router.get("/status/roster", response_model=PredictionRosterResponse | DualPurposeRosterResponse | LegacyPredictionRosterResponse)
 def roster_prediction_status(
     class_id: int,
     subject_id: int,
@@ -345,6 +353,33 @@ def roster_prediction_status(
         raise _service_error(exc) from exc
 
 
+@router.post("/unified/generate", response_model=CurrentPeriodGenerateResponse)
+def generate_unified_projection(
+    payload: CurrentPeriodGenerateRequest,
+    current_user: dict = Depends(require_role("admin", "teacher")),
+    staff_id: str | None = Depends(get_optional_staff_id),
+    db: Session = Depends(get_db),
+):
+    scope = {
+        "student_id": payload.student_id,
+        "class_id": payload.class_id,
+        "subject_id": payload.subject_id,
+        "academic_period_id": payload.academic_period_id,
+    }
+    try:
+        return generate_unified_prediction(
+            scope,
+            generation_request_id=payload.generation_request_id,
+            current_user=current_user,
+            is_admin=current_user.get("role") == "admin",
+            staff_id=staff_id,
+            bind=db.get_bind(),
+            initial_only=True,
+        )
+    except (ValueError, LookupError, FileNotFoundError, PermissionError, PredictionConflict) as exc:
+        raise _service_error(exc) from exc
+
+
 # ---------------------------------------------------------------------------
 # Scoring / Feature / Persistence endpoints
 # ---------------------------------------------------------------------------
@@ -396,28 +431,6 @@ def preview_prediction_from_records(
         raise _service_error(exc) from exc
 
 
-@router.post("/from-records", response_model=PredictionFromRecordsResponse)
-def create_prediction_from_records(
-    payload: PredictionFromRecordsPersistRequest,
-    current_user: dict = Depends(require_role("admin", "teacher")),
-    staff_id: str | None = Depends(get_optional_staff_id),
-    db: Session = Depends(get_db),
-):
-    try:
-        scope = _records_request_payload(payload)
-        _assert_teacher_can_use_prediction_scope(db, current_user, staff_id, scope)
-        if payload.replace_existing:
-            raise ValueError("In-place replacement is disabled; generation creates immutable revisions.")
-        return run_prediction_generation_transaction(
-            scope, payload.model_name or DEFAULT_MODEL_NAME,
-            lambda generation_db: generate_from_records(
-                generation_db, scope, model_name=payload.model_name or DEFAULT_MODEL_NAME,
-                is_admin=current_user.get("role") == "admin", staff_id=staff_id,
-                generation_request_id=payload.generation_request_id),
-            bind=db.get_bind(), generation_request_id=payload.generation_request_id,
-        )
-    except (ValueError, LookupError, FileNotFoundError, PermissionError) as exc:
-        raise _service_error(exc) from exc
 
 
 @router.post("", response_model=PredictionPersistResponse)
@@ -539,6 +552,15 @@ def refresh_prediction(
         "target_period_id": prediction.target_period_id,
     }
     try:
+        if purpose == ModelPurpose.UNIFIED_CURRENT_TERM_PROJECTION.value:
+            return refresh_unified_prediction_workflow(
+                db,
+                prediction,
+                payload=payload,
+                current_user=current_user,
+                staff_id=staff_id,
+            )
+
         if purpose == ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value:
             return refresh_current_period_prediction_workflow(
                 db,
@@ -583,6 +605,14 @@ def read_prediction_status(
 ):
     prediction = _authorized_prediction(db, prediction_id, current_user, staff_id, write=False)
     purpose = prediction.model_version.model_purpose if prediction.model_version else None
+
+    if purpose == ModelPurpose.UNIFIED_CURRENT_TERM_PROJECTION.value:
+        status_data = evaluate_unified_projection_status(db, prediction)
+        return {
+            "prediction_id": prediction_id,
+            "model_purpose": purpose,
+            "status": status_data,
+        }
 
     if purpose == ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value:
         from app.services.prediction.CurrentPeriodPredictionFreshnessService import (

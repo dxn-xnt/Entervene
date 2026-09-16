@@ -7,7 +7,9 @@ import { Badge } from "@/components/retroui/Badge";
 import PredictionFilters from "@/components/predictions/prediction-filters";
 import PredictionTable from "@/components/predictions/prediction-table";
 import PredictionDetailSheet from "@/components/predictions/prediction-detail-sheet";
+import { PredictionRoster } from "@/components/predictions/prediction-roster";
 import { useAuth } from "@/context/AuthContext";
+import { usePredictionRoster } from "@/hooks/use-prediction-roster";
 import type {
   DashboardAtRiskResponse,
   DashboardFilters,
@@ -53,6 +55,14 @@ export default function GradePredictions() {
   // Detail sheet
   const [selectedPrediction, setSelectedPrediction] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const exactRosterScope = classId !== undefined && subjectId !== undefined && selectedPeriodId !== null;
+  const roster = usePredictionRoster({
+    classId,
+    subjectId,
+    academicPeriodId: selectedPeriodId ?? undefined,
+    search,
+    baselineRiskLevel: riskLevel,
+  });
 
   // ── Fetch filters and grade summaries ──
   useEffect(() => {
@@ -190,17 +200,26 @@ export default function GradePredictions() {
                     onClearAll={handleClearAll}
                   />
 
-                  {loading && !data ? (
+                  {exactRosterScope ? (
+                    <PredictionRoster
+                      roster={roster.data}
+                      students={roster.students}
+                      loading={roster.loading}
+                      error={roster.error}
+                      onRefetch={roster.refetch}
+                      onOpenDetail={handleRowClick}
+                    />
+                  ) : loading && !data ? (
                     <div className="flex items-center justify-center py-20 text-gray-400 font-semibold">
                       Loading Grade {grade} predictions...
                     </div>
                   ) : (data?.items.length ?? 0) === 0 ? (
                     <div className="p-8 bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-center">
                       <p className="text-lg font-bold text-gray-900">
-                        No at-risk predictions recorded yet for Grade {grade}.
+                        No evaluated baseline risk records found for Grade {grade}.
                       </p>
                       <p className="text-sm text-gray-600 mt-1 max-w-md mx-auto">
-                        Predictions for this grade level will appear once the AI model generates risk assessments for its active classes and subjects.
+                        Select a section and subject to view the full roster with official outcomes and projected final grades.
                       </p>
                     </div>
                   ) : (

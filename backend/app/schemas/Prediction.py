@@ -157,7 +157,7 @@ class PredictionRecommendedActionRead(BaseModel):
 
 class PredictionOutcomeEvaluateRequest(BaseModel):
     actual_period_grade: float
-    # passing_grade is intentionally removed — resolved server-side from
+    # passing_grade is intentionally removed â€” resolved server-side from
     # SubjectGroup.passing_threshold via AIPrediction.subject_id.
 
 
@@ -292,7 +292,7 @@ class PredictionBuiltFeaturesResponse(BaseModel):
     readiness_level: str
     prediction_mode: str
     features: dict[str, Any] = Field(default_factory=dict)
-    evidence_summary: PredictionEvidenceSummary
+    evidence_summary: PredictionEvidenceSummary = Field(default_factory=PredictionEvidenceSummary)
     warnings: list[str] = Field(default_factory=list)
     readiness_reasons: list[str] = Field(default_factory=list)
 
@@ -309,6 +309,14 @@ class PredictionFromRecordsPersistRequest(PredictionFromRecordsPreviewRequest):
     generation_request_id: str | None = Field(default=None, max_length=100)
 
 
+class CurrentPeriodGenerateRequest(BaseModel):
+    student_id: UUID
+    class_id: int
+    subject_id: int
+    academic_period_id: int
+    generation_request_id: str | None = Field(default=None, max_length=100)
+
+
 class PredictionFromRecordsResponse(PredictionIntegrityMetadata):
     generation_status: str | None = None
     evidence_snapshot: dict[str, Any] | None = None
@@ -316,18 +324,18 @@ class PredictionFromRecordsResponse(PredictionIntegrityMetadata):
     generated_at: datetime | None = None
     model_config = ConfigDict(protected_namespaces=())
     ready: bool
-    readiness_level: str
+    readiness_level: str = "UNKNOWN"
     prediction_mode: str
     predicted_period_grade: float | None = None
-    risk_level: str | None
+    risk_level: str | None = None
     risk_score: float | None = None
-    data_status: str | None
+    data_status: str | None = None
     risk_assessment_status: str | None = None
     reasons: list[str] = Field(default_factory=list)
     recommended_action: str | None = None
     triggered_rules: list[str] = Field(default_factory=list)
     features: dict[str, Any] = Field(default_factory=dict)
-    evidence_summary: PredictionEvidenceSummary
+    evidence_summary: PredictionEvidenceSummary = Field(default_factory=PredictionEvidenceSummary)
     warnings: list[str] = Field(default_factory=list)
     model_version_id: int | None = None
     model_name: str | None = None
@@ -335,6 +343,7 @@ class PredictionFromRecordsResponse(PredictionIntegrityMetadata):
     algorithm: str | None = None
     feature_columns_used: list[str] = Field(default_factory=list)
     prediction_id: int | None = None
+    latest_prediction_id: int | None = None
     student_id: UUID | None = None
     class_id: int | None = None
     subject_id: int | None = None
@@ -342,6 +351,14 @@ class PredictionFromRecordsResponse(PredictionIntegrityMetadata):
     target_period_id: int | None = None
     feature_rows_created: int | None = None
     duplicate: bool | None = None
+    message: str | None = None
+    blocking_reasons: list[str] = Field(default_factory=list)
+    final_period_grade: float | None = None
+    is_finalized: bool | None = None
+
+
+class CurrentPeriodGenerateResponse(PredictionFromRecordsResponse):
+    prediction_mode: Literal["CURRENT_PERIOD_FINAL_GRADE_PROJECTION"] | str
 
 
 class PredictionRefreshRequest(BaseModel):
@@ -489,7 +506,7 @@ class NextPeriodPredictionStatusRead(BaseModel):
 
 class CurrentPredictionStatusEnvelope(BaseModel):
     prediction_id: int
-    model_purpose: Literal["CURRENT_PERIOD_FINAL_GRADE_PROJECTION"]
+    model_purpose: Literal["CURRENT_PERIOD_FINAL_GRADE_PROJECTION", "UNIFIED_CURRENT_TERM_PROJECTION"]
     status: CurrentPeriodPredictionStatusRead
 
 
@@ -658,7 +675,7 @@ class BaselineForecastSummaryRead(BaseModel):
 
 
 class CurrentProjectionSummaryRead(BaseModel):
-    purpose: Literal["CURRENT_PERIOD_FINAL_GRADE_PROJECTION"] = "CURRENT_PERIOD_FINAL_GRADE_PROJECTION"
+    purpose: Literal["CURRENT_PERIOD_FINAL_GRADE_PROJECTION", "UNIFIED_CURRENT_TERM_PROJECTION"] = "CURRENT_PERIOD_FINAL_GRADE_PROJECTION"
     source_period_id: int | None = None
     target_period_id: int | None = None
     source_period_label: str | None = None
@@ -703,3 +720,8 @@ class DualPurposeRosterResponse(BaseModel):
                 data = dict(data)
                 data.pop("roster", None)
         return data
+
+
+# Canonical aliases for Prediction Roster (Task U5C)
+PredictionRosterStudentItem = DualPurposeRosterStudentItem
+PredictionRosterResponse = DualPurposeRosterResponse

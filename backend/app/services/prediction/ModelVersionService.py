@@ -224,6 +224,8 @@ def resolve_model_purpose(
     name = report.get("model_name", "")
     if "next_period" in name:
         return ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value
+    if "unified_current_term" in name:
+        return ModelPurpose.UNIFIED_CURRENT_TERM_PROJECTION.value
     if "current_period" in name:
         return ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value
 
