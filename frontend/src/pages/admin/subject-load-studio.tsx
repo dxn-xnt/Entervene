@@ -17,7 +17,6 @@ import { Card } from "@/components/retroui/Card";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
-import { Progress } from "@/components/retroui/Progress";
 import { Text } from "@/components/retroui/Text";
 import { Alert } from "@/components/retroui/Alert";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -53,15 +52,12 @@ import {
   Copy,
   Unlock,
   RotateCcw,
-  ShieldCheck,
   EllipsisIcon,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
   User,
-  Check,
-  X,
 } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 import { useSettings } from "@/context/SettingsContext";
@@ -452,10 +448,7 @@ export default function AdminSubjectLoadStudio() {
   }, [studioData, selectedPeriodId]);
 
 
-  const prePublishChecklistCount = useMemo(() => {
-    const errorRules = new Set(conflicts.filter((c) => c.severity === "error").map((c) => c.rule));
-    return Math.max(0, 6 - errorRules.size);
-  }, [conflicts]);
+
 
 
 
@@ -1479,7 +1472,6 @@ export default function AdminSubjectLoadStudio() {
   };
 
   const errorConflictsCount = conflicts.filter((c) => c.severity === "error").length;
-  const warningConflictsCount = conflicts.filter((c) => c.severity === "warning").length;
   // School-wide unassigned count (used for Master Schedule strict guard)
   const unassignedTotal = loads.filter((l) => !l.staff_id).length;
 
@@ -2593,11 +2585,6 @@ export default function AdminSubjectLoadStudio() {
                                                 const currentHasConflict = currentStatusText.includes("Conflict");
 
                                                 // Compute teacher workload hours
-                                                const tWorkload = teacherWorkloads.find((w) => w.staff_id === currentStaffId);
-                                                const weeklyHours = tWorkload?.total_weekly_hours || 0;
-                                                const maxWeeklyHours = 30.0;
-                                                const pct = Math.min(100, Math.round((weeklyHours / maxWeeklyHours) * 100));
-
                                                 const rowKey = `${cls.class_id}_${sub.subject_id}`;
                                                 const isRowMenuOpen = openRowKey === rowKey;
 

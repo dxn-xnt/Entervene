@@ -138,6 +138,8 @@ export default function ToDo() {
                               title={item.title}
                               subject={item.subject}
                               deadline={item.deadline}
+                              type={item.type}
+                              category={item.category}
                               onClick={() => openTodo(item)}
                             />
                           ))}
@@ -163,6 +165,8 @@ export default function ToDo() {
                               title={item.title}
                               subject={item.subject}
                               deadline={item.deadline}
+                              type={item.type}
+                              category={item.category}
                               onClick={() => openTodo(item)}
                             />
                           ))
@@ -186,6 +190,8 @@ export default function ToDo() {
                             title={item.title}
                             subject={item.subject}
                             deadline={item.deadline}
+                            type={item.type}
+                            category={item.category}
                             onClick={() => openTodo(item)}
                           />
                         ))
@@ -208,6 +214,8 @@ export default function ToDo() {
                             title={item.title}
                             subject={item.subject}
                             deadline={item.deadline}
+                            type={item.type}
+                            category={item.category}
                             onClick={() => openTodo(item)}
                           />
                         ))

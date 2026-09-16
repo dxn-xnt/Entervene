@@ -1,14 +1,37 @@
-import { FileText } from "lucide-react";
+import { BookOpen, CheckSquare, ClipboardList, FileText } from "lucide-react";
 import { Card } from "@/components/retroui/Card";
 
 type ListItemProps = {
   title: string;
   subject: string;
   deadline: string;
+  type?: string | null;
+  category?: string | null;
   onClick?: () => void;
 };
 
-const ToDoItem = ({ title, subject, deadline, onClick }: ListItemProps) => {
+const getClassworkIcon = (type?: string | null, category?: string | null) => {
+  const normalized = (type || category || "").toUpperCase();
+  switch (normalized) {
+    case "READING":
+    case "READINGS":
+      return BookOpen;
+    case "ACTIVITY":
+    case "ACTIVITIES":
+      return CheckSquare;
+    case "QUIZ":
+    case "QUIZZES":
+      return ClipboardList;
+    case "ASSIGNMENT":
+    case "ASSIGNMENTS":
+    default:
+      return FileText;
+  }
+};
+
+const ToDoItem = ({ title, subject, deadline, type, category, onClick }: ListItemProps) => {
+  const IconComponent = getClassworkIcon(type, category);
+
   return (
     <Card
       onClick={onClick}
@@ -26,7 +49,7 @@ const ToDoItem = ({ title, subject, deadline, onClick }: ListItemProps) => {
       <Card.Content className="flex items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2">
-            <FileText size={19} className="mt-0.5 shrink-0" />
+            <IconComponent size={19} className="mt-0.5 shrink-0" />
             <Card.Title className="mb-0 text-sm font-bold line-clamp-2 break-words [overflow-wrap:anywhere] md:text-base">
               {title}
             </Card.Title>
@@ -42,3 +65,4 @@ const ToDoItem = ({ title, subject, deadline, onClick }: ListItemProps) => {
 };
 
 export default ToDoItem;
+
