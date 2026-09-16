@@ -131,7 +131,7 @@ const StoryBoard = () => {
                           variant="outline"
                           size="icon"
                           onClick={() => navigate(routes.student.todo)}
-                          className="rounded-none border-black bg-white"
+                          className="border-black bg-background"
                           aria-label="View all to-do items"
                         >
                           <ArrowUpRight size={18} />

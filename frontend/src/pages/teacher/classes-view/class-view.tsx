@@ -33,6 +33,7 @@ import { Text } from "@/components/retroui/Text";
 import { Select } from "@/components/retroui/Select";
 import { OverviewCard } from "@/components/overview-cards";
 import { Table } from "@/components/retroui/Table";
+import { DialogueSelect } from "@/components/dialogue-select";
 import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import { Avatar } from "@/components/retroui/Avatar";
@@ -2379,24 +2380,14 @@ function ClassworkTab({
               <section className="p-5">
                 <div className="grid gap-4 sm:grid-cols-2">
                   {classworkCreateOptions.map((option) => {
-                    const Icon = option.icon;
                     return (
-                      <button
+                      <DialogueSelect
                         key={option.type}
-                        type="button"
+                        title={option.title}
+                        description={option.description}
+                        icon={option.icon}
                         onClick={() => setSelectedType(option.type)}
-                        className="border-2 border-black bg-accent p-5 text-left shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] transition hover:-translate-y-1 cursor-pointer text-black"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Icon size={20} className="text-black" />
-                          <h3 className="text-lg font-bold text-black">
-                            {option.title}
-                          </h3>
-                        </div>
-                        <p className="mt-2 text-xs font-semibold text-black/80">
-                          {option.description}
-                        </p>
-                      </button>
+                      />
                     );
                   })}
                 </div>

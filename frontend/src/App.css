@@ -53,7 +53,7 @@
 }
 
 :root {
-  --radius: 0px;
+  --radius: 6px;
   --background: #fff;
   --foreground: #000;
   --card: #fff;
@@ -383,31 +383,27 @@ textarea::placeholder,
   border-radius: 0;
 }
 
-:where(form, [data-slot="dialog-content"], [data-slot="sheet-content"])
-  :where(
-    input:not([type="radio"]),
-    textarea,
-    select,
-    button,
-    [role="combobox"],
-    [role="checkbox"],
-    [role="switch"],
-    [data-slot="input"],
-    [data-slot="select-trigger"],
-    [data-slot="select-content"],
-    [data-slot="select-item"],
-    [data-slot="button"],
-    [data-slot="card"],
-    [data-slot="card-header"],
-    [data-slot="card-footer"]
-  ),
+:where(form, [data-slot="dialog-content"], [data-slot="sheet-content"]) :where(input:not([type="radio"]),
+  textarea,
+  select,
+  button,
+  [role="combobox"],
+  [role="checkbox"],
+  [role="switch"],
+  [data-slot="input"],
+  [data-slot="select-trigger"],
+  [data-slot="select-content"],
+  [data-slot="select-item"],
+  [data-slot="button"],
+  [data-slot="card"],
+  [data-slot="card-header"],
+  [data-slot="card-footer"]),
 :where([data-slot="dialog-content"], [data-slot="dialog-header"], [data-slot="dialog-footer"], [data-slot="sheet-content"]) {
   border-radius: 0;
 }
 
 /* Radios, avatars, and status indicators intentionally retain their shape. */
-:where(form, [data-slot="dialog-content"], [data-slot="sheet-content"])
-  :where(input[type="radio"], [role="radio"], [data-slot="avatar"], [data-shape="circle"]) {
+:where(form, [data-slot="dialog-content"], [data-slot="sheet-content"]) :where(input[type="radio"], [role="radio"], [data-slot="avatar"], [data-shape="circle"]) {
   border-radius: 9999px;
 }
 
@@ -427,7 +423,7 @@ textarea::placeholder,
   backdrop-filter: none;
 }
 
-[data-slot="dialog-content"] > div {
+[data-slot="dialog-content"]>div {
   min-height: 0;
   overflow: hidden;
 }
@@ -437,12 +433,12 @@ textarea::placeholder,
   flex-shrink: 0;
 }
 
-[data-slot="dialog-content"] > div > form {
+[data-slot="dialog-content"]>div>form {
   display: contents;
 }
 
-[data-slot="dialog-content"] > div > :not([data-slot="dialog-header"]):not([data-slot="dialog-footer"]):not(form),
-[data-slot="dialog-content"] > div > form > :not([data-slot="dialog-header"]):not([data-slot="dialog-footer"]) {
+[data-slot="dialog-content"]>div> :not([data-slot="dialog-header"]):not([data-slot="dialog-footer"]):not(form),
+[data-slot="dialog-content"]>div>form> :not([data-slot="dialog-header"]):not([data-slot="dialog-footer"]) {
   flex: 1 1 auto;
   max-height: none;
   min-height: 0;
@@ -455,14 +451,13 @@ textarea::placeholder,
   overflow: hidden;
 }
 
-[data-slot="sheet-content"] > :not([data-slot="sheet-header"]):not([data-slot="sheet-footer"]):not([data-slot="sheet-close"]) {
+[data-slot="sheet-content"]> :not([data-slot="sheet-header"]):not([data-slot="sheet-footer"]):not([data-slot="sheet-close"]) {
   min-height: 0;
   overflow-y: auto;
 }
 
 /* Nested cards inside a form are field groups, not another framed surface. */
-:where(form, [data-slot="dialog-content"], [data-slot="sheet-content"])
-  [data-slot="card"] [data-slot="card"] {
+:where(form, [data-slot="dialog-content"], [data-slot="sheet-content"]) [data-slot="card"] [data-slot="card"] {
   border: 0;
   box-shadow: none;
-}
+}

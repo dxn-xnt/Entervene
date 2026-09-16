@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PPTX Sandboxed Viewer</title>
+  <link rel="stylesheet" href="./css/pptxjs.css">
+  <link rel="stylesheet" href="./css/nv.d3.min.css">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+    #viewer-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100%;
+      padding: 16px;
+      width: 100%;
+    }
+    #viewer {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+    .slides-toolbar {
+      max-width: 600px;
+      margin: 0 auto 12px auto !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      gap: 12px !important;
+      background: #ffffff !important;
+      border: 1px solid #e2e8f0 !important;
+      border-radius: 6px !important;
+      padding: 8px 16px !important;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+      user-select: none !important;
+    }
+    .slide {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+      background-color: #ffffff;
+      margin: 0 auto 24px auto !important;
+    }
+    #spinner-overlay {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #64748b;
+      font-size: 14px;
+      font-weight: 500;
+      gap: 12px;
+    }
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #0f172a;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="viewer-container">
+    <div id="spinner-overlay">
+      <div class="spinner"></div>
+      <div>Loading presentation slides...</div>
+    </div>
+    <div id="viewer"></div>
+  </div>
+
+  <script src="./js/jquery-1.11.3.min.js"></script>
+  <script src="./js/jszip.min.js"></script>
+  <script src="./js/filereader.js"></script>
+  <script src="./js/d3.min.js"></script>
+  <script src="./js/nv.d3.min.js"></script>
+  <script src="./js/pptxjs.js"></script>
+  <script src="./js/divs2slides.js"></script>
+
+  <script>
+    (function () {
+      var currentBlobUrl = null;
+      var hasReported = false;
+      var pollTimer = null;
+
+      function hideSpinner() {
+        var spinner = document.getElementById("spinner-overlay");
+        if (spinner) spinner.style.display = "none";
+      }
+
+      function report(status, details) {
+        if (hasReported) return;
+        hasReported = true;
+        if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+        hideSpinner();
+
+        if (status !== "loaded" && currentBlobUrl) {
+          try { URL.revokeObjectURL(currentBlobUrl); } catch (e) {}
+          currentBlobUrl = null;
+        }
+
+        window.parent.postMessage({
+          type: "PPTX_STATUS",
+          status: status,
+          slideCount: details ? details.slideCount : 0,
+          message: details ? details.message : ""
+        }, "*");
+      }
+
+      // Tier 1 Watchdog: Global Script Errors & Promise Rejections
+      window.addEventListener("error", function (e) {
+        report("error", { message: e.message || "Script execution failed in PPTX viewer" });
+      });
+
+      window.addEventListener("unhandledrejection", function (e) {
+        var msg = (e.reason && e.reason.message) ? e.reason.message : "Unhandled rejection in PPTX viewer";
+        report("error", { message: msg });
+      });
+
+      // Handle messages from host application
+      window.addEventListener("message", function (event) {
+        if (!event.data) return;
+
+        if (event.data.type === "RENDER_PPTX" && event.data.buffer) {
+          hasReported = false;
+          var startTime = Date.now();
+          var sawLoadingMsg = false;
+          try {
+            var blob = new Blob([event.data.buffer], {
+              type: "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            });
+            currentBlobUrl = URL.createObjectURL(blob);
+
+            $("#viewer").empty().pptxToHtml({
+              pptxFileUrl: currentBlobUrl,
+              slideMode: true,
+              keyBoardShortCut: true,
+              mediaProcess: true,
+              slideModeConfig: {
+                first: 1,
+                nav: true,
+                showSlideNum: true,
+                showTotalSlideNum: true,
+                showPlayPauseBtn: false,
+                showFullscreenBtn: false,
+                keyNav: true
+              }
+            });
+
+            // Tier 2 Watchdog: Polling for slide DOM creation, empty deck completion, or timeout
+            pollTimer = setInterval(function () {
+              var slides = $("#viewer .slide");
+              if (slides.length > 0) {
+                hideSpinner();
+                report("loaded", { slideCount: slides.length });
+                return;
+              }
+
+              // Check if PPTXjs started and finished without generating slides (empty branch)
+              if ($("#viewer .slides-loadnig-msg").length > 0) {
+                sawLoadingMsg = true;
+              } else if (sawLoadingMsg && $("#viewer .slides-loadnig-msg").length === 0) {
+                hideSpinner();
+                report("empty", { message: "Presentation contains no slides" });
+                return;
+              }
+
+              var elapsed = Date.now() - startTime;
+              if (elapsed > 12000) {
+                hideSpinner();
+                report("error", { message: "Presentation rendering timed out after 12 seconds" });
+              }
+            }, 250);
+
+          } catch (err) {
+            report("error", { message: err ? err.message : "Initialization failed" });
+          }
+        } else if (event.data.type === "NAVIGATE_SLIDE") {
+          if (event.data.direction === "next") {
+            $("#slides-next").trigger("click");
+          } else if (event.data.direction === "prev") {
+            $("#slides-prev").trigger("click");
+          }
+        }
+      });
+
+      // Signal ready state to parent
+      window.parent.postMessage({ type: "PPTX_READY" }, "*");
+    })();
+  </script>
+</body>
+</html>

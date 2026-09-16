@@ -102,7 +102,7 @@ export default function AttachmentDisplay({
   }
 
   const getDocumentKind = (fileName: string): PreviewDocumentKind | null => {
-    const match = fileName.toLowerCase().match(/\.(pdf|docx|ppt|pptx)$/);
+    const match = fileName.toLowerCase().match(/\.(pdf|docx|pptx)$/);
     return (match?.[1] as PreviewDocumentKind | undefined) ?? null;
   };
 
@@ -333,7 +333,9 @@ export default function AttachmentDisplay({
                       className={`shadow-none ${imageLoadingName === attachment.file_name ? "pointer-events-none opacity-50" : ""}`}
                     >
                       <a
-                        href={getInlineUrl(attachment)}
+                        href={documentKind === "pptx"
+                          ? resolveAbsoluteUrl(getAttachmentUrl(attachment))
+                          : getInlineUrl(attachment)}
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-disabled={imageLoadingName === attachment.file_name}

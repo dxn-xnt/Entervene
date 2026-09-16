@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
 import type { HTMLAttributes } from "react";
 
-const badgeVariants = cva("font-semibold rounded", {
+const badgeVariants = cva("inline-flex items-center rounded font-semibold", {
   variants: {
     variant: {
       default: "bg-muted text-muted-foreground",

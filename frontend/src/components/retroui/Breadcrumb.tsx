@@ -23,7 +23,15 @@ const BreadcrumbList = React.forwardRef<
   <ol
     ref={ref}
     className={cn(
-      "flex min-w-0 flex-nowrap items-center gap-1.5 text-base font-semibold text-muted-foreground sm:gap-2 sm:text-lg md:text-xl [&_a]:!text-base [&_a]:!font-semibold sm:[&_a]:!text-lg md:[&_a]:!text-4xl [&_[aria-current=page]]:!text-base [&_[aria-current=page]]:!font-bold sm:[&_[aria-current=page]]:!text-lg md:[&_[aria-current=page]]:!text-xl",
+      "flex min-w-0 flex-nowrap items-center gap-1.5 text-base font-semibold text-muted-foreground sm:gap-2 sm:text-lg md:text-xl",
+      // Root item (first child) has the larger text size
+      "[&>li:first-child_a]:!text-xl sm:[&>li:first-child_a]:!text-2xl md:[&>li:first-child_a]:!text-4xl [&>li:first-child_a]:!font-bold",
+      "[&>li:first-child_button]:!text-xl sm:[&>li:first-child_button]:!text-2xl md:[&>li:first-child_button]:!text-4xl [&>li:first-child_button]:!font-bold",
+      "[&>li:first-child_[aria-current=page]]:!text-xl sm:[&>li:first-child_[aria-current=page]]:!text-2xl md:[&>li:first-child_[aria-current=page]]:!text-4xl [&>li:first-child_[aria-current=page]]:!font-bold",
+      // All following items (links, buttons, current page) share the smaller text size matching the rightmost page item
+      "[&>li:not(:first-child)_a]:!text-base sm:[&>li:not(:first-child)_a]:!text-lg md:[&>li:not(:first-child)_a]:!text-xl [&>li:not(:first-child)_a]:!font-semibold",
+      "[&>li:not(:first-child)_button]:!text-base sm:[&>li:not(:first-child)_button]:!text-lg md:[&>li:not(:first-child)_button]:!text-xl [&>li:not(:first-child)_button]:!font-semibold",
+      "[&>li:not(:first-child)_[aria-current=page]]:!text-base sm:[&>li:not(:first-child)_[aria-current=page]]:!text-lg md:[&>li:not(:first-child)_[aria-current=page]]:!text-xl [&>li:not(:first-child)_[aria-current=page]]:!font-bold",
       className
     )}
     {...props}
@@ -48,7 +56,7 @@ const BreadcrumbLink = React.forwardRef<
     <Comp
       ref={ref}
       className={cn(
-        "min-w-0 rounded text-sm! font-semibold tracking-tight text-muted-foreground transition-colors hover:text-foreground sm:text-lg md:text-4xl md:font-bold",
+        "min-w-0 rounded font-semibold tracking-tight text-muted-foreground transition-colors hover:text-foreground",
         className
       )}
       {...props}
@@ -64,7 +72,7 @@ const BreadcrumbPage = React.forwardRef<
   <span
     ref={ref}
     aria-current="page"
-    className={cn("min-w-0 text-xl! font-bold text-foreground", className)}
+    className={cn("min-w-0 font-bold text-foreground", className)}
     {...props}
   />
 ))

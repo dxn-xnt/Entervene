@@ -225,9 +225,15 @@ const Dashboard = () => {
                 <Card.Content className="flex flex-col gap-3">
                   <div className="flex flex-row justify-between items-center">
                     <Card.Title className="mb-0">Class Activity</Card.Title>
-                    <div className="border border-black rounded-full p-1 cursor-pointer">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="border-black bg-background"
+                      aria-label="View all class activity"
+                    >
                       <ArrowUpRight size={18} />
-                    </div>
+                    </Button>
                   </div>
 
                   <div className="flex flex-col gap-2">
