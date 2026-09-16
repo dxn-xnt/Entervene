@@ -114,7 +114,7 @@ const Login = () => {
                 <Button
                   type="button"
                   variant="link"
-                  className="font-regular shrink-0 p-0 text-sm font-normal font-underline shadow-none"
+                  className="font-regular shrink-0 gap-1.5 p-0 text-sm font-normal text-[#000] shadow-none hover:text-[#000] [&_svg]:size-[1em]"
                   onClick={() => navigate("/forgot-password")}
                 >
                   Forget password?

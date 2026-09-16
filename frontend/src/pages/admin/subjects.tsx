@@ -111,7 +111,6 @@ export default function AdminSubjects() {
   const [offeringOptions, setOfferingOptions] = useState<SubjectOfferingFormOptions | null>(null);
   const [gradingOptions, setGradingOptions] = useState<GradingTemplateFormOptions | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("");
-  const [catalogStatusFilter, setCatalogStatusFilter] = useState<string>("all");
   const [catalogTemplateFilter, setCatalogTemplateFilter] = useState<string>("all");
   const [offeringFilters, setOfferingFilters] = useState<OfferingFilters>({
     academic_year_id: ALL_VALUE,
@@ -309,17 +308,8 @@ export default function AdminSubjects() {
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [gradingTemplates, subjects, archivedSubjects]);
 
-  const baseCatalogSubjects = useMemo(() => {
-    if (catalogStatusFilter === "active") return subjects;
-    if (catalogStatusFilter === "archived") return archivedSubjects;
-    const map = new Map<number, SubjectListItem>();
-    for (const s of subjects) map.set(s.subject_id, s);
-    for (const s of archivedSubjects) map.set(s.subject_id, s);
-    return Array.from(map.values());
-  }, [catalogStatusFilter, subjects, archivedSubjects]);
-
   const filteredCatalogSubjects = useMemo(() => {
-    let list = baseCatalogSubjects;
+    let list = subjects;
 
     if (catalogTemplateFilter !== "all") {
       if (catalogTemplateFilter === "none") {
@@ -345,7 +335,7 @@ export default function AdminSubjects() {
         subject.default_grading_template,
       ].some((value) => value?.toLowerCase().includes(query));
     });
-  }, [baseCatalogSubjects, catalogTemplateFilter, catalogSearch]);
+  }, [subjects, catalogTemplateFilter, catalogSearch]);
 
   const gradeGroups = useMemo<GradeGroup[]>(() => {
     const grouped = new Map<number, GradeGroup>();
@@ -837,7 +827,7 @@ export default function AdminSubjects() {
 
             {activeSection === "catalog" ? (
               <section className="flex flex-col gap-4">
-                <div className="grid gap-3 md:grid-cols-[1fr_160px_160px]">
+                <div className="grid gap-3 md:grid-cols-[1fr_160px]">
                   <label className="relative">
                     <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-black/50" />
                     <Input
@@ -847,22 +837,6 @@ export default function AdminSubjects() {
                       className="h-10 w-full border-black pl-9 pr-3"
                     />
                   </label>
-                  <Select
-                    value={catalogStatusFilter}
-                    onValueChange={(val) => setCatalogStatusFilter(val)}
-                  >
-                    <Select.Trigger className="w-full">
-                      <Select.Value placeholder="Status" />
-                    </Select.Trigger>
-                    <Select.Content>
-                      <Select.Group>
-                        <Select.Item value="all">All Statuses</Select.Item>
-                        <Select.Item value="active">Active</Select.Item>
-                        <Select.Item value="archived">Archived</Select.Item>
-                      </Select.Group>
-                    </Select.Content>
-                  </Select>
-
                   <Select
                     value={catalogTemplateFilter}
                     onValueChange={(val) => setCatalogTemplateFilter(val)}
