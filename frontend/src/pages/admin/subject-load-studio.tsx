@@ -14,11 +14,13 @@ import {
 import { Button } from "@/components/retroui/Button";
 import { Badge } from "@/components/retroui/Badge";
 import { Card } from "@/components/retroui/Card";
+import { Dialog } from "@/components/retroui/Dialog";
 import { Select } from "@/components/retroui/Select";
 import { Table } from "@/components/retroui/Table";
 import { Progress } from "@/components/retroui/Progress";
 import { Text } from "@/components/retroui/Text";
 import { Alert } from "@/components/retroui/Alert";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { TimePickerSingle, type TimeValue } from "@/components/retroui/TimePicker";
 import { SegmentedControl } from "@/components/retroui/SegmentedControl";
 import {
@@ -36,6 +38,7 @@ import {
 } from "@/lib/api";
 import { canonicalizePathway, isOfferingCompatibleWithClass } from "@/lib/pathways";
 import BreakConfigDrawer, { type PeriodTemplateSlotItem } from "@/pages/admin/forms/break-config-drawer";
+import AssignTeacherModal, { type TeacherModalTarget } from "@/pages/admin/forms/assign-teacher-modal";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -56,6 +59,9 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  User,
+  Check,
+  X,
 } from "lucide-react";
 import { Input } from "@/components/retroui/Input";
 import { useSettings } from "@/context/SettingsContext";
@@ -139,6 +145,8 @@ function GradeGroupCarousel({
   hasNextGradeExternal,
   hideGradeNav = false,
   hideSectionNav = false,
+  activeIdx: controlledActiveIdx,
+  onActiveIdxChange,
   children,
 }: {
   classes: any[];
@@ -152,9 +160,20 @@ function GradeGroupCarousel({
   hasNextGradeExternal?: boolean;
   hideGradeNav?: boolean;
   hideSectionNav?: boolean;
+  activeIdx?: number;
+  onActiveIdxChange?: (idx: number) => void;
   children: React.ReactNode;
 }) {
-  const [activeIdx, setActiveIdx] = useState(0);
+  const [internalActiveIdx, setInternalActiveIdx] = useState(0);
+  const activeIdx = controlledActiveIdx !== undefined ? controlledActiveIdx : internalActiveIdx;
+  const setActiveIdx = (newIdx: number | ((prev: number) => number)) => {
+    const val = typeof newIdx === "function" ? newIdx(activeIdx) : newIdx;
+    if (onActiveIdxChange) {
+      onActiveIdxChange(val);
+    } else {
+      setInternalActiveIdx(val);
+    }
+  };
 
   // Sync activeIdx if classes list changes
   useEffect(() => {
@@ -320,11 +339,16 @@ export default function AdminSubjectLoadStudio() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [notice, setNotice] = useState<{ title?: string; message: string; type: "success" | "error" } | null>(null);
-  const [highlightedKey] = useState<string | null>(null);
+  const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
+  const [jumpIndex, setJumpIndex] = useState<{ type: "error" | "warning" | "unassigned"; idx: number } | null>(null);
   const [isBreakDrawerOpen, setIsBreakDrawerOpen] = useState<boolean>(false);
   const [periodTemplateSlots, setPeriodTemplateSlots] = useState<PeriodTemplateSlotItem[]>([]);
   const [openRowKey, setOpenRowKey] = useState<string | null>(null);
   const [sectionViewModes, setSectionViewModes] = useState<Record<number, "grid" | "list">>({});
+  const [carouselActiveIdx, setCarouselActiveIdx] = useState<number>(0);
+  const [discardTargetClass, setDiscardTargetClass] = useState<{ classId: number; sectionName: string } | null>(null);
+  const [publishTargetClass, setPublishTargetClass] = useState<{ classId: number; sectionName: string; isRevisionUpdate?: boolean } | null>(null);
+  const [teacherModalTarget, setTeacherModalTarget] = useState<TeacherModalTarget | null>(null);
 
   // Fetch period templates directly on mount
   useEffect(() => {
@@ -1361,9 +1385,6 @@ export default function AdminSubjectLoadStudio() {
 
   const handleDiscardDraft = async (classId: number) => {
     if (!selectedPeriodId || isSaving) return;
-    if (!window.confirm("Are you sure you want to discard this draft? All unpublished changes made since unlocking will be lost.")) {
-      return;
-    }
     setIsSaving(true);
     setNotice(null);
     try {
@@ -1436,7 +1457,7 @@ export default function AdminSubjectLoadStudio() {
         const s2 = parseMin(sl.start_time);
         const e2 = parseMin(sl.end_time);
         if (s1 < e2 && s2 < e1) {
-          return `⚠️ Conflict (Overlap at ${sl.start_time})`;
+          return `Conflict (Overlap at ${sl.start_time})`;
         }
       }
     }
@@ -1462,6 +1483,113 @@ export default function AdminSubjectLoadStudio() {
   // School-wide unassigned count (used for Master Schedule strict guard)
   const unassignedTotal = loads.filter((l) => !l.staff_id).length;
 
+  // Sync active carousel section index when filters change
+  useEffect(() => {
+    if (selectedSectionId !== "all") {
+      const idx = filteredClasses.findIndex((c) => String(c.class_id) === selectedSectionId);
+      if (idx !== -1) {
+        setCarouselActiveIdx(idx);
+        return;
+      }
+    }
+    if (carouselActiveIdx >= filteredClasses.length) {
+      setCarouselActiveIdx(0);
+    }
+  }, [selectedSectionId, selectedGradeId, searchQuery, filteredClasses.length]);
+
+  // Active section currently displayed on the interface/table
+  const activeDisplayedClass = filteredClasses[carouselActiveIdx] || filteredClasses[0] || null;
+
+  // Active displayed section's scoped loads and conflicts
+  const activeSectionLoads = useMemo(() => {
+    if (!activeDisplayedClass) return [];
+    return loads.filter((l) => l.class_id === activeDisplayedClass.class_id);
+  }, [loads, activeDisplayedClass]);
+
+  const activeSectionConflicts = useMemo(() => {
+    if (!activeDisplayedClass) return [];
+    const clsId = activeDisplayedClass.class_id;
+    const staffIdsInClass = new Set(activeSectionLoads.map((l) => l.staff_id).filter(Boolean));
+
+    return conflicts.filter((c) => {
+      if (c.class_id === clsId) return true;
+      if (c.affected_key && c.affected_key.startsWith(`${clsId}_`)) return true;
+      if (c.staff_id && staffIdsInClass.has(c.staff_id)) {
+        if (c.rule === "TEACHER_OVERLAP") {
+          return activeSectionLoads.some(
+            (l) => l.staff_id === c.staff_id && (!c.day || (l.days_of_week || []).includes(c.day))
+          );
+        }
+      }
+      return false;
+    });
+  }, [conflicts, activeDisplayedClass, activeSectionLoads]);
+
+  const activeSectionErrorConflictsCount = useMemo(() => {
+    return activeSectionConflicts.filter((c) => c.severity === "error").length;
+  }, [activeSectionConflicts]);
+
+  const activeSectionWarningConflictsCount = useMemo(() => {
+    return activeSectionConflicts.filter((c) => c.severity === "warning").length;
+  }, [activeSectionConflicts]);
+
+  const activeSectionUnassignedTotal = useMemo(() => {
+    return activeSectionLoads.filter((l) => !l.staff_id).length;
+  }, [activeSectionLoads]);
+
+  // Jump to and highlight conflicting/warning/unassigned slots or rows
+  const handleJumpToItem = (type: "error" | "warning" | "unassigned") => {
+    if (!activeDisplayedClass) return;
+    const clsId = activeDisplayedClass.class_id;
+
+    let targetSubjectIds: number[] = [];
+
+    if (type === "error" || type === "warning") {
+      const filtered = activeSectionConflicts.filter((c) => c.severity === type);
+      const subIds = filtered
+        .map((c) => {
+          if (c.subject_id) return c.subject_id;
+          if (c.affected_key) {
+            const parts = c.affected_key.split("_");
+            if (parts.length >= 2 && Number(parts[0]) === clsId) return Number(parts[1]);
+          }
+          return null;
+        })
+        .filter((id): id is number => id !== null);
+
+      targetSubjectIds = Array.from(new Set(subIds));
+    } else if (type === "unassigned") {
+      targetSubjectIds = Array.from(
+        new Set(activeSectionLoads.filter((l) => !l.staff_id).map((l) => l.subject_id))
+      );
+    }
+
+    if (targetSubjectIds.length === 0) return;
+
+    // Cycle through targets if same type clicked repeatedly
+    const currentIdx = jumpIndex?.type === type ? (jumpIndex.idx + 1) % targetSubjectIds.length : 0;
+    setJumpIndex({ type, idx: currentIdx });
+
+    const targetSubId = targetSubjectIds[currentIdx];
+    const key = `${clsId}_${targetSubId}`;
+    setHighlightedKey(key);
+
+    // Scroll element into view (both Timetable Card or List Row)
+    setTimeout(() => {
+      const timetableEl = document.querySelector(`[id="timetable-slot-${key}"]`);
+      const rowEl = document.getElementById(`subject-row-${key}`);
+      const targetEl = timetableEl || rowEl;
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 60);
+
+    // Auto clear highlight after 3.5s
+    setTimeout(() => {
+      setHighlightedKey((curr) => (curr === key ? null : curr));
+    }, 3500);
+  };
+
   // Master Schedule publish: strictly blocks if ANY subject school-wide is unassigned
   const isMasterPublishDisabled = isSaving || errorConflictsCount > 0 || unassignedTotal > 0;
 
@@ -1482,7 +1610,7 @@ export default function AdminSubjectLoadStudio() {
               <div className="grid w-full grid-cols-2 gap-2 [&_button]:w-full md:flex md:w-auto md:flex-wrap md:gap-2 md:self-auto md:[&_button]:w-auto">
                 <Button
                   size="header"
-                  className="hidden md:inline-flex"
+                  className="gap-2"
                   variant="outline"
                   disabled={isSaving}
                   onClick={() => void handleSave("draft")}
@@ -1490,71 +1618,33 @@ export default function AdminSubjectLoadStudio() {
                   Save Draft
                 </Button>
 
-                {/* Setup Tools Dropdown */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      size="header"
-                      className="hidden gap-2 md:inline-flex"
-                      variant="outline"
-                      disabled={isLoading || isSaving}
-                    >
-                      <Wand2 className="size-3.5 text-black" />
-                      <span>Tools ▾</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="border-2 min-w-[200px]">
-                    <DropdownMenuItem
-                      className="gap-2 cursor-pointer"
-                      onClick={() => setIsBreakDrawerOpen(true)}
-                    >
-                      <Settings className="size-3.5 text-purple-900" />
-                      <span>Edit Break Timelines</span>
-                    </DropdownMenuItem>
+                {/* Edit Break Timelines */}
+                <Button
+                  size="header"
+                  variant="outline"
+                  disabled={isLoading || isSaving}
+                  onClick={() => setIsBreakDrawerOpen(true)}
+                  className="gap-2 cursor-pointer"
+                >
+                  <Settings className="size-3.5 text-purple-900" />
+                  <span>Edit Break Timelines</span>
+                </Button>
 
-                    {previousPeriods.length > 0 && (
-                      <DropdownMenuItem
-                        className="gap-2 cursor-pointer"
-                        onClick={() => setIsCopyModalOpen(true)}
-                      >
-                        <Copy className="size-3.5 text-indigo-900" />
-                        <span>Copy from Previous Term</span>
-                      </DropdownMenuItem>
-                    )}
+                {/* Copy from Previous Term */}
+                {previousPeriods.length > 0 && (
+                  <Button
+                    size="header"
+                    variant="outline"
+                    disabled={isLoading || isSaving}
+                    onClick={() => setIsCopyModalOpen(true)}
+                    className="gap-2 cursor-pointer"
+                  >
+                    <Copy className="size-3.5 text-indigo-900" />
+                    <span>Copy from Previous Term</span>
+                  </Button>
+                )}
 
-                    <DropdownMenuItem
-                      className="gap-2 cursor-pointer"
-                      onClick={() => void handleAutoSchedule()}
-                    >
-                      <Sparkles className="size-3.5 text-emerald-900" />
-                      <span>Auto-Generate All</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
 
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="header" className="col-span-2 gap-2 md:hidden" variant="outline" disabled={isLoading || isSaving}>
-                      <EllipsisIcon className="size-4" /> Schedule Actions
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-[calc(100vw-1.5rem)] min-w-[220px] border-2 sm:w-72">
-                    <DropdownMenuItem className="gap-2" disabled={isSaving} onClick={() => void handleSave("draft")}>
-                      <ShieldCheck className="size-4" /> Save Draft
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="gap-2" onClick={() => setIsBreakDrawerOpen(true)}>
-                      <Settings className="size-4" /> Edit Break Timelines
-                    </DropdownMenuItem>
-                    {previousPeriods.length > 0 && (
-                      <DropdownMenuItem className="gap-2" onClick={() => setIsCopyModalOpen(true)}>
-                        <Copy className="size-4" /> Copy from Previous Term
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem className="gap-2" onClick={() => void handleAutoSchedule()}>
-                      <Sparkles className="size-4" /> Auto-Generate All
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
 
                 {/* Publish Action */}
                 <Button
@@ -1706,41 +1796,56 @@ export default function AdminSubjectLoadStudio() {
                       ))}
                     </div> */}
 
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 justify-between">
                       <div className="flex flex-wrap items-center gap-2 font-bold">
-                        <Badge
-                          size="sm"
-                          variant={prePublishChecklistCount === 6 ? "surface" : "default"}
-                          className="inline-flex items-center gap-1.5"
-                        >
-                          <CheckCircle2 className="size-3.5" />
-                          Checklist {prePublishChecklistCount}/6 passed
-                        </Badge>
-
-                        {errorConflictsCount > 0 ? (
-                          <Badge size="sm" variant="solid" className="inline-flex items-center gap-1.5">
+                        {activeSectionErrorConflictsCount > 0 && (
+                          <Badge
+                            size="sm"
+                            variant="solid"
+                            onClick={() => handleJumpToItem("error")}
+                            className="bg-destructive inline-flex items-center gap-1.5 cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
+                            title="Click to jump to conflicting subject in timetable/list"
+                          >
                             <AlertCircle className="size-3.5" />
-                            ✕ {errorConflictsCount} conflicts — must resolve to publish
-                          </Badge>
-                        ) : (
-                          <Badge size="sm" variant="outline">
-                            0 Conflicts
+                            {activeSectionErrorConflictsCount} conflicts — must resolve to publish
                           </Badge>
                         )}
 
-                        {warningConflictsCount > 0 && (
-                          <Badge size="sm" variant="solid" className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                        {activeSectionWarningConflictsCount > 0 && (
+                          <Badge
+                            size="sm"
+                            variant="surface"
+                            onClick={() => handleJumpToItem("warning")}
+                            className="inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
+                            title="Click to jump to warning subject in timetable/list"
+                          >
                             <AlertTriangle className="size-3.5" />
-                            {warningConflictsCount} warnings
+                            {activeSectionWarningConflictsCount} warnings
                           </Badge>
                         )}
 
-                        {unassignedTotal > 0 && (
-                          <Badge size="sm" variant="default">
-                            {unassignedTotal} unassigned
+                        {activeSectionUnassignedTotal > 0 && (
+                          <Badge
+                            size="sm"
+                            variant="default"
+                            onClick={() => handleJumpToItem("unassigned")}
+                            className="cursor-pointer hover:opacity-85 transition-all active:scale-95 select-none"
+                            title="Click to jump to unassigned subject in timetable/list"
+                          >
+                            {activeSectionUnassignedTotal} unassigned
                           </Badge>
                         )}
                       </div>
+                      {/* Auto-Generate All */}
+                      <Button
+                        size="sm"
+                        disabled={isLoading || isSaving}
+                        onClick={() => void handleAutoSchedule()}
+                        className="gap-2 cursor-pointer"
+                      >
+                        <Sparkles className="size-3" />
+                        <span>Auto-Generate</span>
+                      </Button>
                     </div>
                   </section>
 
@@ -1789,7 +1894,11 @@ export default function AdminSubjectLoadStudio() {
                           });
                           return;
                         }
-                        void handleSave("publish", "section", cls.class_id);
+                        setPublishTargetClass({
+                          classId: cls.class_id,
+                          sectionName: cls.section_name,
+                          isRevisionUpdate: hasPendingDraft,
+                        });
                       };
 
                       const hasPendingDraft = Boolean(
@@ -1817,20 +1926,14 @@ export default function AdminSubjectLoadStudio() {
                                 size="sm"
                                 variant="outline"
                                 disabled={isSaving}
-                                onClick={() => void handleDiscardDraft(cls.class_id)}
+                                onClick={() =>
+                                  setDiscardTargetClass({
+                                    classId: cls.class_id,
+                                    sectionName: cls.section_name,
+                                  })
+                                }
                                 title="Discard all unpublished draft edits and restore published baseline"
-                                className=""
-                              >
-                                <Plus className="size-3.5 mr-1" />
-                                Add Slot
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isSaving}
-                                onClick={() => void handleDiscardDraft(cls.class_id)}
-                                title="Discard all unpublished draft edits and restore published baseline"
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50 shadow-none cursor-pointer"
                               >
                                 <RotateCcw className="size-3.5 mr-1" />
                                 Discard Draft
@@ -1839,7 +1942,7 @@ export default function AdminSubjectLoadStudio() {
                                 size="sm"
                                 variant={isPublishSectionDisabled ? "default" : "outline"}
                                 disabled={isSaving}
-                                className="gap-2"
+                                className="gap-2 shadow-none"
                                 onClick={handlePublishSectionClick}
                                 title={
                                   sectionUnassignedCount > 0
@@ -2015,6 +2118,8 @@ export default function AdminSubjectLoadStudio() {
                         classes={filteredClasses}
                         academicLevels={studioData?.academic_levels || []}
                         viewMode={currentViewMode}
+                        activeIdx={carouselActiveIdx}
+                        onActiveIdxChange={setCarouselActiveIdx}
                         onViewModeChange={(mode) => {
                           setSectionViewModes((prev) => {
                             const next = { ...prev };
@@ -2219,16 +2324,24 @@ export default function AdminSubjectLoadStudio() {
                                                             (t) => t.staff_id === mLoad.staff_id
                                                           );
                                                           const conflict = getLoadConflict(cls.class_id, mLoad.subject_id);
+                                                          const isSlotHighlighted = highlightedKey === `${cls.class_id}_${mLoad.subject_id}`;
 
                                                           return (
                                                             <Card
                                                               key={mLoad.subject_load_id || mLoad._key || mIdx}
+                                                              id={`timetable-slot-${cls.class_id}_${mLoad.subject_id}`}
                                                               title={conflict ? conflict.message : undefined}
                                                               className={cn(
-                                                                "rounded shadow-none text-black  text-left flex flex-col gap-0.5 p-2 transition-all",
-                                                                conflict
-                                                                  ? "border-destructive bg-destructive/20"
-                                                                  : "bg-accent"
+                                                                "rounded shadow-none text-black text-left flex flex-col gap-0.5 p-2 transition-all duration-300",
+                                                                isSlotHighlighted
+                                                                  ? "ring-4 ring-primary ring-offset-2 border-primary bg-primary/25 scale-[1.03] shadow-md z-10 animate-pulse"
+                                                                  : conflict
+                                                                    ? conflict.severity === "error"
+                                                                      ? "border-destructive bg-destructive/20"
+                                                                      : "border-amber-400 bg-amber-100/50"
+                                                                    : !mLoad.staff_id
+                                                                      ? "border-amber-300/80 bg-amber-50/40"
+                                                                      : "bg-success/60"
                                                               )}
                                                             >
                                                               <div className="font-bold text-sm leading-tight">
@@ -2288,14 +2401,16 @@ export default function AdminSubjectLoadStudio() {
                                           <Table.Row
                                             key={sub.subject_id}
                                             id={`subject-row-${cls.class_id}_${sub.subject_id}`}
-                                            className={`transition-all duration-200  ${isHighlighted
-                                              ? "bg-accent border-black"
-                                              : conflict
-                                                ? conflict.severity === "error"
-                                                  ? "bg-accent"
-                                                  : "bg-background"
-                                                : "hover:bg-accent"
-                                              }`}
+                                            className={cn(
+                                              "transition-all duration-300",
+                                              isHighlighted
+                                                ? "bg-primary/25 ring-2 ring-primary ring-inset font-semibold animate-pulse"
+                                                : conflict
+                                                  ? conflict.severity === "error"
+                                                    ? "bg-destructive/10"
+                                                    : "bg-amber-50"
+                                                  : "hover:bg-accent"
+                                            )}
                                           >
                                             {/* Subject Column */}
                                             <Table.Cell className="py-2.5 px-3 align-middle">
@@ -2315,10 +2430,10 @@ export default function AdminSubjectLoadStudio() {
                                             )} */}
                                                 </div>
                                                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                                  <Badge variant="default" size="sm">
+                                                  {/* <Badge variant="default" size="sm">
                                                     {sub.subject_codename || `SUB-${sub.subject_id}`}
-                                                  </Badge>
-                                                  {(() => {
+                                                  </Badge> */}
+                                                  {/* {(() => {
                                                     const hasLive = subjectSlots.some((s) => s.has_live_data);
                                                     const deps = subjectSlots.find((s) => s.dependencies)?.dependencies;
                                                     const eduTotal = deps?.educational_total ?? (hasLive ? (deps?.total ?? 0) : 0);
@@ -2368,7 +2483,7 @@ export default function AdminSubjectLoadStudio() {
                                                         {eduTotal > 0 ? `${eduTotal} student records` : `${adminTotal} admin records`}
                                                       </Badge>
                                                     );
-                                                  })()}
+                                                  })()} */}
                                                   {(() => {
                                                     const matchingOffering = (studioData?.subject_offerings || []).find(
                                                       (so) => so.subject_id === sub.subject_id && so.academic_level_id === cls.academic_level_id
@@ -2489,79 +2604,40 @@ export default function AdminSubjectLoadStudio() {
 
                                                 return (
                                                   <div className="flex items-center gap-2">
-                                                    <div className="flex flex-col gap-1">
-                                                      <Select
-                                                        value={currentStaffId || "none"}
-                                                        onValueChange={(val) =>
-                                                          handleTeacherChange(cls.class_id, sub.subject_id, val)
-                                                        }
-                                                      >
-                                                        <Select.Trigger
-                                                          className={`w-[170px] h-8 border-2 border-black font-bold text-xs shadow-sm transition-colors ${!currentStaffId
-                                                            ? ""
-                                                            : currentHasConflict
-                                                              ? "bg-destructive text-destructive border-destructive font-bold"
-                                                              : "bg-white text-black shadow-[1px_1px_0_#000]"
-                                                            }`}
-                                                        >
-                                                          <div className="flex items-center justify-between w-full overflow-hidden min-w-0">
-                                                            <span className="truncate"><Select.Value placeholder="Select Teacher" /></span>
-                                                            {currentHasConflict && (
-                                                              <span className="text-red-600 text-xs font-bold shrink-0 ml-1" title={currentStatusText}>
-                                                                ⚠️
-                                                              </span>
-                                                            )}
-                                                          </div>
-                                                        </Select.Trigger>
-                                                        <Select.Content>
-                                                          <Select.Group className="min-w-54">
-                                                            <Select.Item value="none">
-                                                              <span className="font-bold text-sm">
-                                                                Unassigned
-                                                              </span>
-                                                            </Select.Item>
-                                                            {(studioData?.teachers || [])
-                                                              .filter(
-                                                                (t) =>
-                                                                  !t.staff_id.toUpperCase().startsWith("ADM") &&
-                                                                  !t.name.toLowerCase().includes("admin")
-                                                              )
-                                                              .map((t) => {
-                                                                const statusText = getTeacherAvailabilityStatus(
-                                                                  t.staff_id,
-                                                                  cls.class_id,
-                                                                  sub.subject_id
-                                                                );
-                                                                const hasConflict = statusText.includes("Conflict");
-
-                                                                return (
-                                                                  <Select.Item key={t.staff_id} value={t.staff_id}>
-                                                                    <div className="flex flex-col text-xs py-0.5">
-                                                                      <span className="font-bold text-sm">{t.name}</span>
-                                                                      {hasConflict && (
-                                                                        <span className="text-destructive font-semibold text-sm leading-tight">
-                                                                          {statusText}
-                                                                        </span>
-                                                                      )}
-                                                                    </div>
-                                                                  </Select.Item>
-                                                                );
-                                                              })}
-                                                          </Select.Group>
-                                                        </Select.Content>
-                                                      </Select>
-
-                                                      {/* Inline Teacher Workload Capacity Indicator */}
-                                                      {currentStaffId && teacherObj && (
-                                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground">
-                                                          <Progress
-                                                            value={pct}
-                                                            className={`w-12 h-2 ${pct > 70 ? "[&>div]:bg-destructive" : "[&>div]:bg-primary"}`}
-                                                          />
-                                                          <span>{weeklyHours.toFixed(1)}h/wk</span>
-                                                        </div>
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline"
+                                                      onClick={() => {
+                                                        setTeacherModalTarget({
+                                                          classId: cls.class_id,
+                                                          className: cls.section_name,
+                                                          subjectId: sub.subject_id,
+                                                          subjectName: sub.subject_name,
+                                                          currentStaffId: currentStaffId ?? null,
+                                                        });
+                                                      }}
+                                                      className={cn(
+                                                        "h-8 min-w-[170px] max-w-[220px] justify-between font-bold text-xs border-2 shadow-none cursor-pointer",
+                                                        !currentStaffId
+                                                          ? "text-muted-foreground border-gray-400 hover:border-black"
+                                                          : currentHasConflict
+                                                            ? "bg-destructive text-destructive-foreground border-destructive"
+                                                            : "bg-white text-black border-black"
                                                       )}
-                                                    </div>
+                                                      title={currentHasConflict ? currentStatusText : teacherObj ? `Assigned: ${teacherObj.name}` : "Click to assign teacher"}
+                                                    >
+                                                      <div className="flex items-center gap-1.5 truncate">
+                                                        <User className="size-3.5 shrink-0" />
+                                                        <span className="truncate">
+                                                          {teacherObj ? teacherObj.name : "Assign Teacher"}
+                                                        </span>
+                                                      </div>
+                                                      {currentHasConflict && (
+                                                        <span className="text-destructive font-bold text-xs shrink-0 ml-1" title={currentStatusText}>
+                                                          ⚠️
+                                                        </span>
+                                                      )}
+                                                    </Button>
 
                                                     {/* Row Action Overflow Menu (⋯) */}
                                                     <div className="flex">
@@ -2711,6 +2787,94 @@ export default function AdminSubjectLoadStudio() {
           </div>
         )
       }
+
+      {/* Discard Draft Confirmation Dialog */}
+      <ConfirmDialog
+        open={Boolean(discardTargetClass)}
+        onOpenChange={(open) => {
+          if (!open) setDiscardTargetClass(null);
+        }}
+        title="Discard Draft Changes?"
+        description={
+          <div className="flex flex-col gap-2">
+            <p className="text-sm">
+              Are you sure you want to discard all unpublished draft edits for{" "}
+              <strong>{discardTargetClass?.sectionName}</strong>?
+            </p>
+            <p className="text-xs text-muted-foreground">
+              All changes made since unlocking will be permanently discarded, and this section will be restored to its active published baseline schedule.
+            </p>
+          </div>
+        }
+        options={{
+          confirmLabel: "Discard Draft",
+          confirmVariant: "default",
+          isLoading: isSaving,
+          onConfirm: async () => {
+            if (!discardTargetClass) return;
+            const targetId = discardTargetClass.classId;
+            setDiscardTargetClass(null);
+            await handleDiscardDraft(targetId);
+          },
+          onCancel: () => setDiscardTargetClass(null),
+        }}
+      />
+
+      {/* Publish Section Confirmation Dialog */}
+      <ConfirmDialog
+        open={Boolean(publishTargetClass)}
+        onOpenChange={(open) => {
+          if (!open) setPublishTargetClass(null);
+        }}
+        title={`Publish Schedule for ${publishTargetClass?.sectionName}?`}
+        description={
+          <div className="flex flex-col gap-2">
+            <p className="text-sm">
+              Are you sure you want to publish the timetable for{" "}
+              <strong>{publishTargetClass?.sectionName}</strong>?
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {publishTargetClass?.isRevisionUpdate
+                ? "This will update the live schedule with your draft changes, increment the section revision, and make the updated timetable immediately active for enrolled students and assigned teachers."
+                : "This will publish the section's timetable to live status, making it immediately visible and active for students and teachers."}
+            </p>
+          </div>
+        }
+        options={{
+          confirmLabel: "Publish Section",
+          confirmVariant: "default",
+          isLoading: isSaving,
+          onConfirm: async () => {
+            if (!publishTargetClass) return;
+            const targetId = publishTargetClass.classId;
+            setPublishTargetClass(null);
+            await handleSave("publish", "section", targetId);
+          },
+          onCancel: () => setPublishTargetClass(null),
+        }}
+      />
+      {/* Teacher Assignment Dialog */}
+      <Dialog
+        open={Boolean(teacherModalTarget)}
+        onOpenChange={(open) => {
+          if (!open) setTeacherModalTarget(null);
+        }}
+      >
+        {teacherModalTarget && (
+          <AssignTeacherModal
+            target={teacherModalTarget}
+            teachers={studioData?.teachers || []}
+            teacherWorkloads={teacherWorkloads}
+            loads={loads}
+            getTeacherAvailabilityStatus={getTeacherAvailabilityStatus}
+            onAssign={(classId, subjectId, staffId) => {
+              handleTeacherChange(classId, subjectId, staffId);
+              setTeacherModalTarget(null);
+            }}
+            onClose={() => setTeacherModalTarget(null)}
+          />
+        )}
+      </Dialog>
     </AppLayout>
   );
 }
