@@ -19,6 +19,15 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* Student drill-downs use the standard heavier page-header separator. */
+[data-app-content] header[data-student-detail-header] {
+  border-bottom-width: 2px;
+}
+
+[data-student-detail-sticky-region] > header[data-student-detail-header] {
+  position: static;
+}
+
 /* Tabbed pages keep their existing Tabs separator as the only page line. */
 [data-page-tabs-sticky-region] {
   position: sticky;
