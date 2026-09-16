@@ -14,7 +14,9 @@ import { Tabs } from "@/components/retroui/Tabs";
 import { Dialog } from "@/components/retroui/Dialog";
 import ViewAttendanceLogModal from "./forms/view-attendance-log";
 import { cn } from "@/lib/utils";
-import { apiFetch, getTeacherAdvisoryClasses } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
+import { useTeacherClasses } from "@/hooks/use-teacher-classes";
+import { useRegisterDirtyGuard } from "@/context/AcademicPeriodContext";
 import {
   getClassAttendanceLogs,
   recordBatchAttendance,
@@ -38,7 +40,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   XCircle,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { LoadingPanel } from "@/components/loading-panel";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import "./attendance.css";
@@ -119,7 +124,13 @@ type RecentScanItem = {
 };
 
 export default function TeacherAttendancePage() {
-  const [targets, setTargets] = useState<AttendanceTarget[]>([]);
+  const {
+    classes: teachingClasses,
+    advisoryClasses,
+    isLoading: loadingClasses,
+    error: classesError,
+    refetch: refetchClasses,
+  } = useTeacherClasses();
   const [selectedTargetKey, setSelectedTargetKey] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0],
@@ -127,6 +138,11 @@ export default function TeacherAttendancePage() {
   const [activeTab, setActiveTab] = useState<"marking" | "summary" | "scan">(
     "marking",
   );
+
+  // Unsaved marks tracking & guard
+  const initialMarksRef = useRef<Map<string, { status: AttendanceStatus; remarks: string }>>(new Map());
+  const [pendingTargetKey, setPendingTargetKey] = useState<string | null>(null);
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 
   // Scanner States
   const [recentScans, setRecentScans] = useState<RecentScanItem[]>([]);
@@ -156,12 +172,113 @@ export default function TeacherAttendancePage() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Compute Attendance Targets from scoped teaching and advisory classes
+  const targets = useMemo<AttendanceTarget[]>(() => {
+    const list: AttendanceTarget[] = [];
+
+    // 1. Advisory classes (Homeroom / Daily)
+    advisoryClasses.forEach((c) => {
+      list.push({
+        key: `adv-${c.class_id}`,
+        class_id: c.class_id,
+        section_name: c.section_name,
+        academic_level: c.academic_level,
+        label: `${c.section_name} (${c.academic_level || "Advisory"})`,
+        is_advisory: true,
+      });
+    });
+
+    // 2. Subject Teaching Loads
+    teachingClasses.forEach((l) => {
+      list.push({
+        key: `subj-${l.class_id}-${l.subject_id}`,
+        class_id: l.class_id,
+        subject_id: l.subject_id,
+        section_name: l.section_name,
+        subject_name: l.subject_name,
+        academic_level: l.grade_level,
+        label: `${l.subject_name} • ${l.section_name} (${l.grade_level || "Subject"})`,
+        is_advisory: false,
+      });
+    });
+
+    return list;
+  }, [teachingClasses, advisoryClasses]);
+
+  // Compute if current student marks differ from saved baseline
+  const isDirty = useMemo(() => {
+    if (studentList.length === 0 || initialMarksRef.current.size === 0) return false;
+    return studentList.some((s) => {
+      const initial = initialMarksRef.current.get(s.student_id);
+      if (!initial) return false;
+      return s.status !== initial.status || (s.remarks || "") !== (initial.remarks || "");
+    });
+  }, [studentList]);
+
+  // Warn on tab close / browser refresh if unsaved marks exist
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
+
+  // Keep selectedTargetKey valid whenever targets change
+  useEffect(() => {
+    if (targets.length === 0) {
+      setSelectedTargetKey("");
+      return;
+    }
+    const stillExists = targets.some((t) => t.key === selectedTargetKey);
+    if (!stillExists) {
+      setSelectedTargetKey(targets[0].key);
+    }
+  }, [targets, selectedTargetKey]);
+
+  const handleTargetChange = (newKey: string) => {
+    if (newKey === selectedTargetKey) return;
+    if (isDirty) {
+      setPendingTargetKey(newKey);
+      setShowDiscardDialog(true);
+    } else {
+      setSelectedTargetKey(newKey);
+    }
+  };
+
+  const handleConfirmDiscard = () => {
+    if (pendingTargetKey) {
+      setSelectedTargetKey(pendingTargetKey);
+      setPendingTargetKey(null);
+    }
+    setShowDiscardDialog(false);
+  };
+
+  const handleCancelDiscard = () => {
+    setPendingTargetKey(null);
+    setShowDiscardDialog(false);
+  };
+
   const selectedTarget = useMemo(
     () => targets.find((t) => t.key === selectedTargetKey) || targets[0] || null,
     [targets, selectedTargetKey],
   );
   const selectedClassId = selectedTarget?.class_id || null;
   const selectedSubjectId = selectedTarget?.subject_id || undefined;
+
+  // Register term-switch dirty guard with AcademicPeriodContext
+  useRegisterDirtyGuard(isDirty, {
+    message: `You have unsaved attendance marks for ${selectedTarget?.label || "the current class"}. Switching academic terms will discard these changes.`,
+    onDiscard: () => {
+      // Re-baseline initial marks so isDirty becomes false immediately
+      initialMarksRef.current = new Map(
+        studentList.map((s) => [s.student_id, { status: s.status, remarks: s.remarks }]),
+      );
+    },
+  });
 
   const advisoryTargets = useMemo(
     () => targets.filter((t) => t.is_advisory),
@@ -171,64 +288,6 @@ export default function TeacherAttendancePage() {
     () => targets.filter((t) => !t.is_advisory),
     [targets],
   );
-
-  // Fetch Teacher Advisory Classes and Subject Teaching Classes
-  useEffect(() => {
-    async function fetchClasses() {
-      try {
-        const [advisoryRes, loadsRes] = await Promise.all([
-          getTeacherAdvisoryClasses(),
-          apiFetch("/api/v1/classwork-assignments/teacher/classes"),
-        ]);
-
-        const list: AttendanceTarget[] = [];
-
-        // 1. Advisory classes (Homeroom / Daily)
-        advisoryRes.forEach((c) => {
-          list.push({
-            key: `adv-${c.class_id}`,
-            class_id: c.class_id,
-            section_name: c.section_name,
-            academic_level: c.academic_level,
-            label: `${c.section_name} (${c.academic_level || "Advisory"})`,
-            is_advisory: true,
-          });
-        });
-
-        // 2. Subject Teaching Loads
-        if (loadsRes.ok) {
-          const loads = (await loadsRes.json()) as Array<{
-            subject_load_id: number;
-            subject_id: number;
-            subject_name: string;
-            class_id: number;
-            section_name: string;
-            grade_level?: string;
-          }>;
-          loads.forEach((l) => {
-            list.push({
-              key: `subj-${l.class_id}-${l.subject_id}`,
-              class_id: l.class_id,
-              subject_id: l.subject_id,
-              section_name: l.section_name,
-              subject_name: l.subject_name,
-              academic_level: l.grade_level,
-              label: `${l.subject_name} • ${l.section_name} (${l.grade_level || "Subject"})`,
-              is_advisory: false,
-            });
-          });
-        }
-
-        setTargets(list);
-        if (list.length > 0) {
-          setSelectedTargetKey(list[0].key);
-        }
-      } catch (err) {
-        console.error("Failed to load attendance classes:", err);
-      }
-    }
-    fetchClasses();
-  }, []);
 
   // Load Attendance Logs & Students for Selected Class & Subject & Date
   useEffect(() => {
@@ -281,6 +340,9 @@ export default function TeacherAttendancePage() {
         });
 
         setStudentList(initialStates);
+        initialMarksRef.current = new Map(
+          initialStates.map((s) => [s.student_id, { status: s.status, remarks: s.remarks }]),
+        );
       } catch (err) {
         console.error("Failed to load attendance logs:", err);
       } finally {
@@ -346,6 +408,9 @@ export default function TeacherAttendancePage() {
       setAllClassLogs(fullLogs);
 
       setSaveSuccess(true);
+      initialMarksRef.current = new Map(
+        studentList.map((s) => [s.student_id, { status: s.status, remarks: s.remarks }]),
+      );
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       console.error("Failed to save attendance:", err);
@@ -748,43 +813,78 @@ export default function TeacherAttendancePage() {
                 <div className="grid w-full min-w-0 grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(260px,1.25fr)_minmax(190px,0.75fr)_minmax(220px,1fr)] lg:gap-4">
                   {/* Class Selector */}
                   <div className="flex min-w-0 flex-col gap-1 sm:col-span-2 lg:col-span-1">
-                    <Label className="font-sans text-sm font-semibold">
-                      Classes
-                    </Label>
-                    <Select
-                      value={selectedTargetKey}
-                      onValueChange={(val) => setSelectedTargetKey(val)}
-                    >
-                      <Select.Trigger className="w-full min-w-0">
-                        <Select.Value placeholder="Select class / subject" />
-                      </Select.Trigger>
-                      <Select.Content className="attendance-select-options">
-                        {advisoryTargets.length > 0 && (
-                          <Select.Group>
-                            <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
-                              Advisory Classes (Homeroom Attendance)
-                            </Select.Label>
-                            {advisoryTargets.map((t) => (
-                              <Select.Item key={t.key} value={t.key} className="text-sm">
-                                {t.label}
-                              </Select.Item>
-                            ))}
-                          </Select.Group>
-                        )}
-                        {subjectTargets.length > 0 && (
-                          <Select.Group>
-                            <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
-                              Subject Teaching Classes
-                            </Select.Label>
-                            {subjectTargets.map((t) => (
-                              <Select.Item key={t.key} value={t.key} className="text-sm">
-                                {t.label}
-                              </Select.Item>
-                            ))}
-                          </Select.Group>
-                        )}
-                      </Select.Content>
-                    </Select>
+                    <div className="flex items-center justify-between">
+                      <Label className="font-sans text-sm font-semibold">
+                        Classes
+                      </Label>
+                      {loadingClasses && (
+                        <span className="flex items-center text-xs text-muted-foreground animate-pulse">
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Loading classes...
+                        </span>
+                      )}
+                      {isDirty && (
+                        <span className="text-[11px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                          Unsaved Changes
+                        </span>
+                      )}
+                    </div>
+                    {classesError ? (
+                      <div className="flex items-center justify-between rounded border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                        <span className="truncate mr-2">Failed to load classes: {classesError.message}</span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void refetchClasses()}
+                          className="h-7 px-2 text-xs border-destructive text-destructive hover:bg-destructive hover:text-white"
+                        >
+                          <RefreshCw className="mr-1 h-3 w-3" /> Retry
+                        </Button>
+                      </div>
+                    ) : (
+                      <Select
+                        value={selectedTargetKey}
+                        onValueChange={handleTargetChange}
+                        disabled={loadingClasses || targets.length === 0}
+                      >
+                        <Select.Trigger className="w-full min-w-0">
+                          <Select.Value
+                            placeholder={
+                              loadingClasses
+                                ? "Loading classes for selected term..."
+                                : targets.length === 0
+                                ? "No classes available for this term"
+                                : "Select class / subject"
+                            }
+                          />
+                        </Select.Trigger>
+                        <Select.Content className="attendance-select-options">
+                          {advisoryTargets.length > 0 && (
+                            <Select.Group>
+                              <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
+                                Advisory Classes (Homeroom Attendance)
+                              </Select.Label>
+                              {advisoryTargets.map((t) => (
+                                <Select.Item key={t.key} value={t.key} className="text-sm">
+                                  {t.label}
+                                </Select.Item>
+                              ))}
+                            </Select.Group>
+                          )}
+                          {subjectTargets.length > 0 && (
+                            <Select.Group>
+                              <Select.Label className="px-2 py-1.5 text-xs font-bold text-muted-foreground">
+                                Subject Teaching Classes
+                              </Select.Label>
+                              {subjectTargets.map((t) => (
+                                <Select.Item key={t.key} value={t.key} className="text-sm">
+                                  {t.label}
+                                </Select.Item>
+                              ))}
+                            </Select.Group>
+                          )}
+                        </Select.Content>
+                      </Select>
+                    )}
                   </div>
 
                   {/* Date Selector (Only shown for Marking tab) */}
@@ -1643,6 +1743,19 @@ export default function TeacherAttendancePage() {
           />
         )}
       </Dialog>
+
+      {/* Unsaved Attendance Changes Confirmation Dialog */}
+      <ConfirmDialog
+        open={showDiscardDialog}
+        onOpenChange={(open) => !open && handleCancelDiscard()}
+        title="Unsaved Attendance Marks"
+        description={`You have unsaved attendance marks for ${selectedTarget?.label || "the current class"}. Switching classes or terms will discard these changes. Are you sure you want to proceed?`}
+        confirmLabel="Discard & Switch"
+        cancelLabel="Stay Here"
+        confirmVariant="destructive"
+        onConfirm={handleConfirmDiscard}
+        onCancel={handleCancelDiscard}
+      />
     </AppLayout>
   );
 }

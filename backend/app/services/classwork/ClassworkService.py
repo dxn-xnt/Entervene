@@ -428,9 +428,9 @@ def check_and_notify_post_deadline_summaries(db: Session, staff_id: str):
         print(f"[Notification Error] Failed to generate post-deadline summary: {err}")
 
 
-def teacher_classworks(staff_id: str, db: Session) -> list[ClassworkResponse]:
+def teacher_classworks(staff_id: str, db: Session, academic_period_id: int | None = None) -> list[ClassworkResponse]:
     check_and_notify_post_deadline_summaries(db, staff_id)
-    classworks = (
+    query = (
         db.query(Classwork)
         .options(
             joinedload(Classwork.subject),
@@ -439,9 +439,16 @@ def teacher_classworks(staff_id: str, db: Session) -> list[ClassworkResponse]:
             selectinload(Classwork.assignments).joinedload(ClassworkAssignment.class_),
         )
         .filter(Classwork.created_by_staff_id == staff_id, Classwork.is_archived == False)
-        .order_by(Classwork.created_at.desc())
-        .all()
     )
+    if academic_period_id is not None:
+        from sqlalchemy import or_
+        query = query.filter(
+            or_(
+                Classwork.assignments.any(ClassworkAssignment.academic_period_id == academic_period_id),
+                ~Classwork.assignments.any(),
+            )
+        )
+    classworks = query.order_by(Classwork.created_at.desc()).all()
     return [build_classwork_response(classwork) for classwork in classworks]
 
 

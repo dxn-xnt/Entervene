@@ -40,6 +40,7 @@ import { Avatar } from "@/components/retroui/Avatar";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
 import SetLessonGoalModal from "./subject-details/set-lesson-goal-modal";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 
 import CompetencyModal from "./subject-details/competency-modal";
 import CreateLessonModal from "@/pages/teacher/create-lesson";
@@ -2198,8 +2199,15 @@ function ClassworkTab({
   const activeSubjectId =
     subjectId || detail.subject_loads[0]?.subject_id || null;
 
+  const {
+    classes: loads,
+    isLoading: loadingClasses,
+    error: classesError,
+    selectedPeriodId,
+    refetch: refetchClasses,
+  } = useTeacherClasses({ includeAdvisory: false });
+
   const [items, setItems] = useState<TeacherClasswork[]>([]);
-  const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [activeTab] = useState<TabId>("all");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -2207,36 +2215,37 @@ function ClassworkTab({
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [selectedType, setSelectedType] = useState<ClassworkKind | null>(null);
   const [selected, setSelected] = useState<TeacherClasswork | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loadingItems, setLoadingItems] = useState(true);
+  const [itemsError, setItemsError] = useState("");
 
   const loadClassworks = useCallback(async () => {
-    setIsLoading(true);
-    setError("");
+    setLoadingItems(true);
+    setItemsError("");
     try {
-      const [classworksResponse, loadsResponse] = await Promise.all([
-        apiFetch("/api/v1/classwork-assignments/my-classworks"),
-        apiFetch("/api/v1/classwork-assignments/teacher/classes"),
-      ]);
-      if (!classworksResponse.ok || !loadsResponse.ok) {
+      const periodQuery = selectedPeriodId ? `?academic_period_id=${selectedPeriodId}` : "";
+      const classworksResponse = await apiFetch(
+        `/api/v1/classwork-assignments/my-classworks${periodQuery}`,
+      );
+      if (!classworksResponse.ok) {
         throw new Error("Unable to load your classworks.");
       }
-      const allLoads = (await loadsResponse.json()) as TeacherClassLoad[];
       const allItems = (await classworksResponse.json()) as TeacherClasswork[];
-      setLoads(allLoads);
       setItems(allItems);
     } catch (err) {
-      setError(
+      setItemsError(
         err instanceof Error ? err.message : "Unable to load your classworks.",
       );
     } finally {
-      setIsLoading(false);
+      setLoadingItems(false);
     }
-  }, []);
+  }, [selectedPeriodId]);
 
   useEffect(() => {
     void loadClassworks();
   }, [loadClassworks]);
+
+  const isLoading = loadingClasses || loadingItems;
+  const error = itemsError || (classesError ? classesError.message : "");
 
   const subjects = useMemo(
     () =>
@@ -2470,11 +2479,11 @@ function ClassworkTab({
             <CreateClassworkQuizModal
               selectedType={selectedType}
               subjects={subjects}
-              loads={loads}
+              loads={loads as unknown as TeacherClassLoad[]}
               initialSubjectId={activeSubjectId ? String(activeSubjectId) : undefined}
               onClose={closeCreateWizard}
               onSuccess={async () => {
-                await loadClassworks();
+                await Promise.all([loadClassworks(), refetchClasses()]);
                 closeCreateWizard();
               }}
               onBack={() => setSelectedType(null)}
@@ -2483,11 +2492,11 @@ function ClassworkTab({
             <CreateClassworkModal
               selectedType={selectedType}
               subjects={subjects}
-              loads={loads}
+              loads={loads as unknown as TeacherClassLoad[]}
               initialSubjectId={activeSubjectId ? String(activeSubjectId) : undefined}
               onClose={closeCreateWizard}
               onSuccess={async () => {
-                await loadClassworks();
+                await Promise.all([loadClassworks(), refetchClasses()]);
                 closeCreateWizard();
               }}
               onBack={() => setSelectedType(null)}

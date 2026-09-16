@@ -599,11 +599,13 @@ export async function getMySubjects(academicPeriodId?: number): Promise<StudentS
 }
 
 export type TeacherClassItem = {
+  subject_load_id?: number;
   class_id: number;
   subject_id: number;
   section_name: string;
   subject_name: string;
   grade_level?: string;
+  academic_period_id?: number;
 };
 
 export async function getTeacherClasses(academicPeriodId?: number): Promise<TeacherClassItem[]> {

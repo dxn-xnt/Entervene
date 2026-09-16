@@ -8,14 +8,9 @@ import { Input } from "@/components/retroui/Input";
 import { Dialog } from "@/components/retroui/Dialog";
 import { apiFetch } from "@/lib/api";
 
-type TeacherClassLoad = {
-  subject_load_id: number;
-  subject_id: number;
-  subject_name: string;
-  subject_codename?: string | null;
-  class_id: number;
-  section_name: string;
-};
+import { useTeacherClasses } from "@/hooks/use-teacher-classes";
+import { useRegisterDirtyGuard } from "@/context/AcademicPeriodContext";
+import type { TeacherClassItem } from "@/lib/api";
 
 type LessonResponse = {
   lesson_id: number;
@@ -64,7 +59,13 @@ export default function CreateLessonModal({
       navigate(-1);
     }
   };
-  const [classLoads, setClassLoads] = useState<TeacherClassLoad[]>([]);
+
+  const {
+    classes: classLoads,
+    isLoading: loadingClasses,
+    error: classesError,
+  } = useTeacherClasses({ includeAdvisory: false });
+
   const [subjectId, setSubjectId] = useState("");
   const [competencies, setCompetencies] = useState<
     Array<{ competency_id: number; statement: string; competency_code?: string | null }>
@@ -78,8 +79,24 @@ export default function CreateLessonModal({
   const [content, setContent] = useState("");
   const [orderIndex, setOrderIndex] = useState("1");
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isLoading = loadingClasses || isSubmitting;
+  const displayError = error || (classesError ? classesError.message : "");
+
+  const isDirty = Boolean(
+    title.trim() || description.trim() || content.trim(),
+  );
+
+  useRegisterDirtyGuard(isDirty, {
+    message: "You have unsaved changes in this lesson. Switching terms will discard your draft.",
+    onDiscard: () => {
+      setTitle("");
+      setDescription("");
+      setContent("");
+      setError("");
+    },
+  });
 
   useEffect(() => {
     if (initialCompetencyId) {
@@ -116,52 +133,45 @@ export default function CreateLessonModal({
   }, [subjectId]);
 
   useEffect(() => {
-    const loadTeacherClasses = async () => {
-      setIsLoading(true);
-      setError("");
+    if (classLoads.length === 0) {
+      setSubjectId("");
+      setClassIds([]);
+      return;
+    }
+    const contextSubject = initialSubjectId
+      ? classLoads.find((load) => load.subject_id === Number(initialSubjectId))
+      : null;
+    const contextClass = initialClassId
+      ? classLoads.find((load) => load.class_id === Number(initialClassId))
+      : null;
 
-      try {
-        const response = await apiFetch(
-          "/api/v1/classwork-assignments/teacher/classes",
-        );
-        if (!response.ok) {
-          throw new Error("Unable to load your assigned subjects.");
-        }
-
-        const data = (await response.json()) as TeacherClassLoad[];
-        const contextSubject = initialSubjectId
-          ? data.find((load) => load.subject_id === Number(initialSubjectId))
-          : null;
-        const contextClass = initialClassId
-          ? data.find((load) => load.class_id === Number(initialClassId))
-          : null;
-
-        setClassLoads(data);
-        setSubjectId(
-          String(
-            contextSubject?.subject_id ||
-              contextClass?.subject_id ||
-              data[0]?.subject_id ||
-              "",
-          ),
-        );
-        setClassIds(contextClass ? [contextClass.class_id] : []);
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load your assigned subjects.",
-        );
-      } finally {
-        setIsLoading(false);
+    setSubjectId((curr) => {
+      if (curr && classLoads.some((l) => String(l.subject_id) === curr)) {
+        return curr;
       }
-    };
+      return String(
+        contextSubject?.subject_id ||
+          contextClass?.subject_id ||
+          classLoads[0]?.subject_id ||
+          "",
+      );
+    });
 
-    loadTeacherClasses();
-  }, [initialClassId, initialSubjectId]);
+    if (contextClass) {
+      setClassIds((curr) =>
+        curr.length === 0
+          ? [contextClass.class_id]
+          : curr.filter((id) => classLoads.some((l) => l.class_id === id)),
+      );
+    } else {
+      setClassIds((curr) =>
+        curr.filter((id) => classLoads.some((l) => l.class_id === id)),
+      );
+    }
+  }, [classLoads, initialClassId, initialSubjectId]);
 
   const subjects = useMemo(() => {
-    const bySubject = new Map<number, TeacherClassLoad>();
+    const bySubject = new Map<number, TeacherClassItem>();
     classLoads.forEach((load) => {
       if (!bySubject.has(load.subject_id)) {
         bySubject.set(load.subject_id, load);
@@ -280,9 +290,9 @@ export default function CreateLessonModal({
         </Dialog.Header>
 
         <section className="flex flex-col gap-4 p-4">
-          {error && (
+          {displayError && (
             <Alert status="error">
-              <Alert.Description>{error}</Alert.Description>
+              <Alert.Description>{displayError}</Alert.Description>
             </Alert>
           )}
 
