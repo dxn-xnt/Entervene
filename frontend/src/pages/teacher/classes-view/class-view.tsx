@@ -76,6 +76,7 @@ import type {
 } from "./subject-details/types";
 
 import { SuggestionPanel } from "@/components/teacher/suggestions/suggestion-panel-modal";
+import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
 import { API_URL, apiFetch, getTeacherAdvisoryClassDetail } from "@/lib/api";
 import {
   approveSuggestion,
@@ -156,6 +157,8 @@ export default function TeacherClassDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [tab, setTab] = useState<DetailTab>("lessons");
+  const [studentInterfaceStudent, setStudentInterfaceStudent] =
+    useState<TeacherAdvisoryStudentItem | null>(null);
   const [detail, setDetail] =
     useState<TeacherAdvisoryClassDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -241,8 +244,25 @@ export default function TeacherClassDetail() {
       <div className="flex min-w-0 max-w-full flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex min-w-0 max-w-full flex-1 flex-col">
           <div className="flex min-w-0 max-w-full flex-1 flex-col">
-            <div data-page-tabs-sticky-region>
-            <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6">
+            <div
+              data-page-tabs-sticky-region={
+                studentInterfaceStudent ? undefined : ""
+              }
+              data-student-detail-sticky-region={
+                studentInterfaceStudent ? "" : undefined
+              }
+              className={
+                studentInterfaceStudent
+                  ? "sticky top-0 z-40 shrink-0 bg-background"
+                  : undefined
+              }
+            >
+            <header
+              data-student-detail-header={
+                studentInterfaceStudent ? "" : undefined
+              }
+              className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6"
+            >
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
                 <Breadcrumb className="min-w-0">
@@ -267,7 +287,7 @@ export default function TeacherClassDetail() {
                     <Breadcrumb.Separator />
                     <Breadcrumb.Item className="min-w-0">
                       <Breadcrumb.Page className="block truncate">
-                        {detail.section_name}
+                        {studentInterfaceStudent?.full_name || detail.section_name}
                       </Breadcrumb.Page>
                     </Breadcrumb.Item>
                   </Breadcrumb.List>
@@ -275,41 +295,60 @@ export default function TeacherClassDetail() {
               </div>
 
               <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
-                {tab === "lessons" && (
+                {studentInterfaceStudent ? (
+                  <ManualSuggestionPanel
+                    classId={detail.class_id}
+                    student={studentInterfaceStudent}
+                    subjectLoads={detail.subject_loads}
+                    displayMode="header"
+                  />
+                ) : tab === "lessons" ? (
                   <Button className="w-full md:w-auto">
                     <Pencil className="mr-2 size-4" /> Set Lesson Goal
                   </Button>
-                )}
+                ) : null}
               </div>
             </header>
-            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-              <Tabs<DetailTab>
-                tabs={[
-                  {
-                    id: "lessons",
-                    label: "Lessons",
-                    icon: BookOpen,
-                  },
-                  {
-                    id: "students",
-                    label: "Students",
-                    icon: Users,
-                  },
-                  {
-                    id: "classwork",
-                    label: "Classwork",
-                    icon: ClipboardList,
-                  },
-                ]}
-                activeTab={tab}
-                onTabChange={setTab}
-              />
-            </div>
+            {!studentInterfaceStudent && (
+              <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                <Tabs<DetailTab>
+                  tabs={[
+                    {
+                      id: "lessons",
+                      label: "Lessons",
+                      icon: BookOpen,
+                    },
+                    {
+                      id: "students",
+                      label: "Students",
+                      icon: Users,
+                    },
+                    {
+                      id: "classwork",
+                      label: "Classwork",
+                      icon: ClipboardList,
+                    },
+                  ]}
+                  activeTab={tab}
+                  onTabChange={(nextTab) => {
+                    setStudentInterfaceStudent(null);
+                    setTab(nextTab);
+                  }}
+                />
+              </div>
+            )}
             </div>
 
-            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+            <div
+              className={`flex min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6 ${
+                studentInterfaceStudent
+                  ? ""
+                  : "-mt-[1px] border-t-1 border-border"
+              }`}
+            >
 
-              <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
+              {!studentInterfaceStudent && (
+                <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
                 <Card.Content>
                   <div className="flex min-w-0 items-center justify-between gap-2">
                     <div className="min-w-0 flex-1">
@@ -351,7 +390,8 @@ export default function TeacherClassDetail() {
                     since {activeSince}
                   </p>
                 </Card.Content>
-              </Card>
+                </Card>
+              )}
 
               {tab === "lessons" && (
                 <OverviewTab
@@ -363,6 +403,7 @@ export default function TeacherClassDetail() {
                 <StudentsTab
                   detail={detail}
                   subjectId={currentSubject?.subject_id || initialSubjectId}
+                  onDetailViewChange={setStudentInterfaceStudent}
                 />
               )}
               {tab === "classwork" && (
@@ -1847,9 +1888,11 @@ function OverviewTab({
 function StudentsTab({
   detail,
   subjectId,
+  onDetailViewChange,
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
   subjectId?: number | null;
+  onDetailViewChange?: (student: TeacherAdvisoryStudentItem | null) => void;
 }) {
   const activeSubjectId =
     subjectId || detail.subject_loads[0]?.subject_id || null;
@@ -1921,6 +1964,7 @@ function StudentsTab({
 
   const handleSelectStudent = (student: TeacherAdvisoryStudentItem) => {
     setSelectedStudent(student);
+    onDetailViewChange?.(student);
     void loadStudentAnalytics(student, selectedPeriodId);
   };
 
@@ -1949,37 +1993,39 @@ function StudentsTab({
           <Button
             type="button"
             variant="outline"
-            size="sm"
+            size="header"
             onClick={() => {
               setSelectedStudent(null);
               setStudentDetail(null);
+              onDetailViewChange?.(null);
             }}
-            className="gap-2 border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#F6E9B2]"
           >
-            <ArrowLeft size={16} />
+            <ArrowLeft />
             Back to students
           </Button>
 
-          {periods.length > 1 && (
-            <Select
-              value={selectedPeriodId}
-              onValueChange={handlePeriodChange}
-            >
-              <Select.Trigger className="h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold min-w-[200px]">
-                <Select.Value placeholder="Select period" />
-              </Select.Trigger>
-              <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                {periods.map((p) => (
-                  <Select.Item
-                    key={p.academic_period_id}
-                    value={String(p.academic_period_id)}
-                  >
-                    {p.period_name} ({p.year_label})
-                  </Select.Item>
-                ))}
-              </Select.Content>
-            </Select>
-          )}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {periods.length > 1 && (
+              <Select
+                value={selectedPeriodId}
+                onValueChange={handlePeriodChange}
+              >
+                <Select.Trigger className="h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold min-w-[200px]">
+                  <Select.Value placeholder="Select period" />
+                </Select.Trigger>
+                <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  {periods.map((p) => (
+                    <Select.Item
+                      key={p.academic_period_id}
+                      value={String(p.academic_period_id)}
+                    >
+                      {p.period_name} ({p.year_label})
+                    </Select.Item>
+                  ))}
+                </Select.Content>
+              </Select>
+            )}
+          </div>
         </div>
 
         {detailError && (
@@ -1997,6 +2043,7 @@ function StudentsTab({
             detail={studentDetail}
             classId={detail.class_id}
             subjectLoads={detail.subject_loads as any}
+            showSuggestionPanel={false}
           />
         )}
       </div>
@@ -2061,7 +2108,8 @@ function StudentsTab({
                       </span>
                     </summary>
                     <Table
-                      wrapperClassName="overflow-visible h-auto"
+                      rounded="none"
+                      wrapperClassName="h-auto overflow-hidden border-0 shadow-none"
                       className="w-full border-0 shadow-none"
                     >
                       <Table.Body>
@@ -2516,7 +2564,7 @@ function StudentRow({
               </Avatar.Fallback>
             </Avatar>
             <div className="min-w-0">
-              <span className="block text-base font-semibold truncate group-hover:underline">
+              <span className="block text-base font-semibold truncate">
                 {student.full_name}
               </span>
               {student.student_lrn && (

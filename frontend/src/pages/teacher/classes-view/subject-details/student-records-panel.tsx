@@ -421,23 +421,25 @@ export function StudentRecordDetail({
   detail,
   classId,
   subjectLoads,
+  showSuggestionPanel = true,
 }: {
   detail: StudentRecordDetailResponse;
   classId: number;
   subjectLoads: TeacherAdvisorySubjectLoadItem[];
+  showSuggestionPanel?: boolean;
 }) {
   return (
     <div className="space-y-4">
-      <Card className="block bg-[#F6E9B2] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+      <Card className="block w-full bg-primary text-primary-foreground">
         <Card.Content className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-gray-700">
+            <p className="text-xs font-bold uppercase tracking-wide text-primary-foreground/70">
               Student record
             </p>
             <Card.Title className="text-3xl font-bold">
               {detail.student.full_name}
             </Card.Title>
-            <p className="text-sm text-gray-700">
+            <p className="text-sm text-primary-foreground/80">
               {detail.student.academic_level || "Student"} |{" "}
               {detail.student.section_name} | LRN {detail.student.lrn}
             </p>
@@ -446,65 +448,69 @@ export function StudentRecordDetail({
         </Card.Content>
       </Card>
 
-      <ManualSuggestionPanel
-        classId={classId}
-        student={{
-          student_id: detail.student.student_id,
-          full_name: detail.student.full_name,
-        } as any}
-        subjectLoads={subjectLoads}
-      />
+      {showSuggestionPanel && (
+        <ManualSuggestionPanel
+          classId={classId}
+          student={{
+            student_id: detail.student.student_id,
+            full_name: detail.student.full_name,
+          } as any}
+          subjectLoads={subjectLoads}
+        />
+      )}
 
       <div className="grid gap-4 md:grid-cols-4">
-        <Card className="block bg-[#F6E9B2] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <Card className="block w-full">
           <Card.Content className="space-y-1">
-            <p className="text-sm font-medium text-gray-900">Official Grade</p>
-            <p className="text-3xl font-bold">
+            <Card.Description className="text-sm">Official Grade</Card.Description>
+            <Card.Title className="text-3xl">
               {formatOfficialGrade(detail.summary.official_period_grade)}
-            </p>
-            <p className="text-xs font-medium text-gray-700">
+            </Card.Title>
+            <p className="text-xs font-medium text-muted-foreground">
               Encoded period grade
             </p>
           </Card.Content>
         </Card>
 
-        <Card className="block bg-[#F6E9B2] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <Card className="block w-full">
           <Card.Content className="space-y-1">
-            <p className="text-sm font-medium text-gray-900">Running Average</p>
-            <p className="text-3xl font-bold">
+            <Card.Description className="text-sm">Running Average</Card.Description>
+            <Card.Title className="text-3xl">
               {formatMetric(detail.summary.running_classwork_percentage)}
+            </Card.Title>
+            <p className="text-xs font-medium text-muted-foreground">
+              Classwork only
             </p>
-            <p className="text-xs font-medium text-gray-700">Classwork only</p>
           </Card.Content>
         </Card>
 
-        <Card className="block bg-[#F6E9B2] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <Card className="block w-full">
           <Card.Content className="space-y-1">
-            <p className="text-sm font-medium text-gray-900">Completion</p>
-            <p className="text-3xl font-bold">
+            <Card.Description className="text-sm">Completion</Card.Description>
+            <Card.Title className="text-3xl">
               {formatMetric(detail.summary.completion_rate)}
-            </p>
-            <p className="text-xs font-medium text-gray-700">
+            </Card.Title>
+            <p className="text-xs font-medium text-muted-foreground">
               {detail.summary.submitted_count}/{detail.summary.assigned_count}{" "}
               done
             </p>
           </Card.Content>
         </Card>
 
-        <Card className="block bg-[#F6E9B2] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <Card className="block w-full">
           <Card.Content className="space-y-1">
-            <p className="text-sm font-medium text-gray-900">Needs Attention</p>
-            <p className="text-3xl font-bold">
+            <Card.Description className="text-sm">Needs Attention</Card.Description>
+            <Card.Title className="text-3xl">
               {detail.summary.missing_count + detail.summary.ungraded_count}
-            </p>
-            <p className="text-xs font-medium text-gray-700">
+            </Card.Title>
+            <p className="text-xs font-medium text-muted-foreground">
               Missing or ungraded
             </p>
           </Card.Content>
         </Card>
       </div>
 
-      <Card className="block border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+      <Card className="block w-full">
         <Card.Content>
           <div className="mb-3 flex items-center gap-2">
             <ClipboardList size={18} />
@@ -514,7 +520,7 @@ export function StudentRecordDetail({
             <Badge
               variant="secondary"
               size="sm"
-              className="ml-auto border border-black bg-[#F6E9B2]"
+              className="ml-auto bg-accent text-accent-foreground"
             >
               {detail.classwork_results.length}
             </Badge>
@@ -524,12 +530,12 @@ export function StudentRecordDetail({
               detail.classwork_results.map((item) => (
                 <div
                   key={item.assignment_id}
-                  className="rounded border border-gray-300 px-4 py-3"
+                  className="border border-border bg-background px-4 py-3"
                 >
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
                       <p className="font-bold">{item.title}</p>
-                      <p className="text-xs text-gray-600">
+                      <p className="text-xs text-muted-foreground">
                         {item.type}{" "}
                         {item.category
                           ? `| ${item.category.replace(/_/g, " ")}`
@@ -541,7 +547,7 @@ export function StudentRecordDetail({
                       <p className="font-bold">
                         {item.score ?? 0}/{item.total_points ?? 0}
                       </p>
-                      <p className="text-xs text-gray-600">
+                      <p className="text-xs text-muted-foreground">
                         {statusLabel(item.status)}
                       </p>
                     </div>
@@ -549,7 +555,7 @@ export function StudentRecordDetail({
                 </div>
               ))
             ) : (
-              <p className="rounded border border-dashed border-gray-300 px-4 py-6 text-center text-gray-500">
+              <p className="border border-dashed border-border px-4 py-6 text-center text-muted-foreground">
                 No classwork records for this period yet.
               </p>
             )}
