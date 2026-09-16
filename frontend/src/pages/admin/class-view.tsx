@@ -692,7 +692,7 @@ function StudentsTab({
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="p-0 border-t-2 border-border">
-                    <Table className="border-none shadow-none" wrapperClassName="overflow-x-auto">
+                    <Table wrapperClassName="border-0 shadow-none">
                       <Table.Header className="font-sans">
                         <Table.Row>
                           <Table.Head>Name</Table.Head>

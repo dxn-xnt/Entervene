@@ -654,7 +654,7 @@ const TeacherGradeView = () => {
     };
 
     return (
-      <Table className="w-full border-collapse border-0 text-sm">
+      <Table wrapperClassName="border-0" className="w-full text-sm">
         <Table.Header className="border-b-2 border-black font-black [&_th]:h-auto [&_th]:px-2 [&_th]:py-2 [&_th]:text-[11px] [&_th]:leading-tight sm:[&_th]:px-3 sm:[&_th]:py-2.5 sm:[&_th]:text-xs md:[&_th]:py-3 md:[&_th]:text-sm">
           <Table.Row>
             <Table.Head className="w-[17%] font-black text-black">Learner's Name</Table.Head>

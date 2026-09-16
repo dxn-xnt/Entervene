@@ -459,10 +459,10 @@ export default function AdminUsers() {
               )}
 
               {loading && (
-                <div className="flex items-center justify-center gap-3 border border-black bg-background py-12 text-sm text-muted-foreground shadow-[4px_5px_0_#000]">
+                <Card className="flex w-full items-center justify-center gap-3 py-12 text-sm text-muted-foreground shadow-md">
                   <Loader size="sm" />
                   Loading users
-                </div>
+                </Card>
               )}
 
               {!loading && activeTab === "student" && (
@@ -569,12 +569,12 @@ export default function AdminUsers() {
                           </AccordionTrigger>
 
                           <AccordionContent className="p-0 border-t-2 border-border">
-                            <Table className="border-none shadow-none" wrapperClassName="overflow-x-auto">
-                              <Table.Header className="font-sans">
-                                <Table.Row>
-                                  <Table.Head>Name</Table.Head>
-                                  <Table.Head className="text-center w-36">Status</Table.Head>
-                                  <Table.Head className="text-center w-64">
+                            <Table wrapperClassName="rounded-none border-0 shadow-none">
+                              <Table.Header className="border-b-2 border-border bg-primary font-sans text-black">
+                                <Table.Row className="border-b-2 border-black hover:bg-transparent">
+                                  <Table.Head className="text-sm font-bold text-black">Name</Table.Head>
+                                  <Table.Head className="w-36 text-center text-sm font-bold text-black">Status</Table.Head>
+                                  <Table.Head className="w-64 text-center text-sm font-bold text-black">
                                     {isUnassigned ? "Grade level" : "Section"}
                                   </Table.Head>
                                 </Table.Row>
@@ -607,20 +607,20 @@ export default function AdminUsers() {
                       {emptyText}
                     </Card>
                   ) : (
-                    <div className="overflow-hidden border border-black bg-background shadow-[4px_5px_0_#000]">
-                      <Table className="border-1 shadow-none">
-                        <Table.Header className="font-sans">
-                          <Table.Row>
-                            <Table.Head>Name</Table.Head>
-                            <Table.Head className="text-center w-36">Status</Table.Head>
+                    <Card className="block w-full overflow-hidden p-0 shadow-md">
+                      <Table wrapperClassName="rounded-none border-0 shadow-none">
+                        <Table.Header className="border-b-2 border-border bg-primary font-sans text-black">
+                          <Table.Row className="border-b-2 border-black hover:bg-transparent">
+                            <Table.Head className="text-sm font-bold text-black">Name</Table.Head>
+                            <Table.Head className="w-36 text-center text-sm font-bold text-black">Status</Table.Head>
                             {activeTab === "teacher" ? (
                               <>
-                                <Table.Head className="text-center w-48">Subjects</Table.Head>
-                                <Table.Head className="text-right w-20">Classes</Table.Head>
-                                <Table.Head className="text-right w-28">Actions</Table.Head>
+                                <Table.Head className="w-48 text-center text-sm font-bold text-black">Subjects</Table.Head>
+                                <Table.Head className="w-20 text-right text-sm font-bold text-black">Classes</Table.Head>
+                                <Table.Head className="w-28 text-right text-sm font-bold text-black">Actions</Table.Head>
                               </>
                             ) : (
-                              <Table.Head className="text-right w-36">Joined</Table.Head>
+                              <Table.Head className="w-36 text-right text-sm font-bold text-black">Joined</Table.Head>
                             )}
                           </Table.Row>
                         </Table.Header>
@@ -638,7 +638,7 @@ export default function AdminUsers() {
                           ))}
                         </Table.Body>
                       </Table>
-                    </div>
+                    </Card>
                   )}
                 </>
               )}
@@ -712,7 +712,7 @@ function StudentRow({
   return (
     <Table.Row
       onClick={() => onOpenUser(user)}
-      className="cursor-pointer"
+      className="cursor-pointer border-b border-border last:border-b-0"
     >
       <Table.Cell>
         <NameCell name={user.name} subtitle={user.email} role={user.role} />
@@ -824,7 +824,7 @@ function UserRow({
     return (
       <Table.Row
         onClick={() => onOpenUser(user)}
-        className="cursor-pointer"
+        className="cursor-pointer border-b border-border last:border-b-0"
       >
         <Table.Cell>
           <NameCell name={user.name} subtitle={user.email} role={user.role} />
@@ -903,7 +903,7 @@ function UserRow({
   return (
     <Table.Row
       onClick={() => onOpenUser(user)}
-      className="cursor-pointer"
+      className="cursor-pointer border-b border-border last:border-b-0"
     >
       <Table.Cell>
         <NameCell name={user.name} subtitle={user.email} role={user.role} />
