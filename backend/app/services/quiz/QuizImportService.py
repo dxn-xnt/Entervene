@@ -9,7 +9,7 @@ from fastapi import HTTPException, UploadFile
 from app.schemas.Quiz import QuizImportPreviewResponse, QuizOptionIn, QuizQuestionIn
 
 
-QUESTION_RE = re.compile(r"^\s*(\d+)[\).]\s*(.+)$")
+QUESTION_RE = re.compile(r"^[^0-9A-Da-d]*(\d+)[\).]\s*(.+)$")
 OPTION_RE = re.compile(r"^\s*([A-Da-d])[\).]\s*(.+)$")
 ANSWER_RE = re.compile(r"^\s*(?:answer|ans)\s*[:\-]\s*([A-Da-d])(?:[\).]\s*.*)?\s*$", re.IGNORECASE)
 ANSWER_KEY_HEADER_RE = re.compile(r"^\s*answer\s+key\s*$", re.IGNORECASE)
@@ -66,6 +66,9 @@ def _extract_pdf_text(content: bytes) -> str:
     try:
         reader = PdfReader(BytesIO(content))
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        # Strip NUL bytes left by broken font encodings (e.g. Symbol font
+        # without a ToUnicode CMap, common in jsPDF-generated PDFs).
+        text = text.replace("\x00", "")
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Unable to extract text from this PDF") from exc
     if not text.strip():
