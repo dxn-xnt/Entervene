@@ -19,7 +19,8 @@ import AttachmentDisplay from "@/components/attachment-display";
 import SubmissionForm from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
 import { StudentLessonDetailScreen } from "@/components/student-lesson-detail-screen";
-import { API_URL, apiFetch } from "@/lib/api";
+import { API_URL, apiFetch, getLessonGoals, type LessonGoalItemResponse } from "@/lib/api";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { Card } from "@/components/retroui/Card";
 import { EmptyStateCard } from "@/components/empty-state-card";
@@ -203,16 +204,7 @@ function getStatusBadge(status?: string | null, dueDate?: string | null) {
   return { label: `Due in ${diffDays} days`, cls: "bg-[#7ABA78] text-white" };
 }
 
-function isCompletedClasswork(status?: string | null) {
-  return ["graded", "submitted"].includes(status ?? "");
-}
 
-function classworkGoalScore(cw: LessonClasswork) {
-  if (isCompletedClasswork(cw.submission_status))
-    return Number.MAX_SAFE_INTEGER;
-  if (!cw.due_date) return Number.MAX_SAFE_INTEGER - 1;
-  return new Date(cw.due_date).getTime();
-}
 
 function isReadingType(value?: string | null) {
   return value?.toUpperCase() === "READING";
@@ -274,6 +266,34 @@ export default function SubjectLessonTab({
   teacherName: propTeacherName,
   onLessonSelect,
 }: SubjectLessonTabProps) {
+  const { selectedPeriodId } = useAcademicPeriod();
+  const [curatedGoals, setCuratedGoals] = useState<LessonGoalItemResponse[] | undefined>(undefined);
+
+  useEffect(() => {
+    if (!classId || !subjectId) return;
+    const targetClassId = classId;
+    const targetSubjectId = subjectId;
+    let isMounted = true;
+
+    async function loadCuratedGoals() {
+      try {
+        const data = await getLessonGoals(targetClassId, targetSubjectId, selectedPeriodId || undefined);
+        if (isMounted) {
+          setCuratedGoals(data.items || []);
+        }
+      } catch {
+        if (isMounted) {
+          setCuratedGoals([]);
+        }
+      }
+    }
+
+    void loadCuratedGoals();
+    return () => {
+      isMounted = false;
+    };
+  }, [classId, subjectId, selectedPeriodId]);
+
   const [searchParams, setSearchParams] = useSearchParams();
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -1253,19 +1273,7 @@ export default function SubjectLessonTab({
     return sortAsc ? da - db : db - da;
   });
 
-  const sortedGoalLessons = [...sortedLessons].sort((a, b) => {
-    const aClassworks = classworksByLesson[a.lesson_id] ?? [];
-    const bClassworks = classworksByLesson[b.lesson_id] ?? [];
-    const aScore = Math.min(
-      ...aClassworks.map(classworkGoalScore),
-      Number.MAX_SAFE_INTEGER,
-    );
-    const bScore = Math.min(
-      ...bClassworks.map(classworkGoalScore),
-      Number.MAX_SAFE_INTEGER,
-    );
-    return aScore - bScore;
-  });
+
 
   const { competencyGroups, unassignedLessons } = useMemo(() => {
     const groupsMap = new Map<
@@ -1804,9 +1812,13 @@ export default function SubjectLessonTab({
 
               {/* ════════════════ RIGHT: Weekly Goals ════════════════ */}
               <LessonGoalProgress
-                sortedGoalLessons={sortedGoalLessons}
-                classworksByLesson={classworksByLesson}
+                goalItems={curatedGoals}
                 className="w-full min-w-0 lg:max-w-md lg:flex-1"
+                onClassworkClick={(_cwId, asgnId) => {
+                  if (asgnId) {
+                    openClassworkDetail({ classwork_assignment_id: asgnId } as any);
+                  }
+                }}
               />
             </div>
           )}

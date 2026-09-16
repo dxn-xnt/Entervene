@@ -38,6 +38,8 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import { Avatar } from "@/components/retroui/Avatar";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
+import SetLessonGoalModal from "./subject-details/set-lesson-goal-modal";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 
 import CompetencyModal from "./subject-details/competency-modal";
 import CreateLessonModal from "@/pages/teacher/create-lesson";
@@ -76,7 +78,13 @@ import type {
 } from "./subject-details/types";
 
 import { SuggestionPanel } from "@/components/teacher/suggestions/suggestion-panel-modal";
-import { API_URL, apiFetch, getTeacherAdvisoryClassDetail } from "@/lib/api";
+import {
+  API_URL,
+  apiFetch,
+  getLessonGoals,
+  getTeacherAdvisoryClassDetail,
+  type LessonGoalItemResponse,
+} from "@/lib/api";
 import {
   approveSuggestion,
   archiveSuggestion,
@@ -156,6 +164,7 @@ export default function TeacherClassDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [tab, setTab] = useState<DetailTab>("lessons");
+  const [isSetGoalModalOpen, setIsSetGoalModalOpen] = useState(false);
   const [detail, setDetail] =
     useState<TeacherAdvisoryClassDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -275,7 +284,10 @@ export default function TeacherClassDetail() {
 
               <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
                 {tab === "lessons" && (
-                  <Button className="w-full md:w-auto">
+                  <Button
+                    className="w-full md:w-auto"
+                    onClick={() => setIsSetGoalModalOpen(true)}
+                  >
                     <Pencil className="mr-2 size-4" /> Set Lesson Goal
                   </Button>
                 )}
@@ -355,6 +367,8 @@ export default function TeacherClassDetail() {
                 <OverviewTab
                   detail={detail}
                   initialSubjectId={initialSubjectId}
+                  isSetGoalModalOpen={isSetGoalModalOpen}
+                  setIsSetGoalModalOpen={setIsSetGoalModalOpen}
                 />
               )}
               {tab === "students" && (
@@ -380,11 +394,21 @@ export default function TeacherClassDetail() {
 function OverviewTab({
   detail,
   initialSubjectId,
+  isSetGoalModalOpen,
+  setIsSetGoalModalOpen,
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
   initialSubjectId?: number | null;
+  isSetGoalModalOpen?: boolean;
+  setIsSetGoalModalOpen?: (open: boolean) => void;
 }) {
   const navigate = useNavigate();
+  const { selectedPeriodId, periods } = useAcademicPeriod();
+  const [internalSetGoalModalOpen, setInternalSetGoalModalOpen] = useState(false);
+  const isGoalModalOpen = isSetGoalModalOpen !== undefined ? isSetGoalModalOpen : internalSetGoalModalOpen;
+  const setGoalModalOpen = setIsSetGoalModalOpen || setInternalSetGoalModalOpen;
+
+  const [curatedGoals, setCuratedGoals] = useState<LessonGoalItemResponse[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(
     initialSubjectId || detail.subject_loads[0]?.subject_id || null,
   );
@@ -538,6 +562,23 @@ function OverviewTab({
   useEffect(() => {
     void loadLessonsAndCompetencies();
   }, [detail.class_id, selectedSubjectId]);
+
+  const loadCuratedGoals = useCallback(async () => {
+    if (!detail.class_id || !selectedSubjectId || !selectedPeriodId) {
+      setCuratedGoals([]);
+      return;
+    }
+    try {
+      const res = await getLessonGoals(detail.class_id, selectedSubjectId, selectedPeriodId);
+      setCuratedGoals(res.items || []);
+    } catch {
+      setCuratedGoals([]);
+    }
+  }, [detail.class_id, selectedSubjectId, selectedPeriodId]);
+
+  useEffect(() => {
+    void loadCuratedGoals();
+  }, [loadCuratedGoals]);
 
   const toggleLesson = async (lessonId: number) => {
     if (expandedLessonId === lessonId) {
@@ -1024,11 +1065,12 @@ function OverviewTab({
             </div>
           </div>
 
-          {/* Weekly Goals Sidebar Progress (Preserved from Image 1) */}
+          {/* Weekly Goals Sidebar Progress */}
           <aside className="flex flex-col gap-2 min-w-0 xl:row-span-2">
             <LessonGoalProgress
-              sortedGoalLessons={lessons as any}
-              classworksByLesson={linkedClassworks as any}
+              goalItems={curatedGoals}
+              isTeacher
+              onSetGoal={() => setGoalModalOpen(true)}
               className="w-full flex-1 min-w-0"
             />
           </aside>
@@ -1835,6 +1877,28 @@ function OverviewTab({
             setIsCreatingLesson(false);
             setSelectedCompetencyIdForNewLesson(undefined);
             await loadLessonsAndCompetencies();
+          }}
+        />
+      )}
+
+      {/* ── Set Lesson Goal Modal ── */}
+      {selectedSubjectId && selectedPeriodId && (
+        <SetLessonGoalModal
+          isOpen={isGoalModalOpen}
+          onClose={() => setGoalModalOpen(false)}
+          classId={detail.class_id}
+          subjectId={selectedSubjectId}
+          academicPeriodId={selectedPeriodId}
+          periodName={periods.find((p) => p.id === selectedPeriodId)?.period}
+          lessons={lessons.map((l) => ({
+            lesson_id: l.lesson_id,
+            title: l.title,
+            is_published: l.is_published,
+          }))}
+          linkedClassworks={linkedClassworks as any}
+          currentGoals={curatedGoals}
+          onSaved={(updated) => {
+            setCuratedGoals(updated.items || []);
           }}
         />
       )}

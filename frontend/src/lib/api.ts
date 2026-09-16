@@ -2336,5 +2336,100 @@ export async function getOverviewStats(params: OverviewQueryParams = {}): Promis
   return (await res.json()) as OverviewResponse;
 }
 
+// ─── Lesson Goals APIs ──────────────────────────────────────────────────────
 
+export type LessonGoalItemInput = {
+  item_type: "LESSON" | "CLASSWORK";
+  lesson_id?: number | null;
+  classwork_id?: number | null;
+  order_index: number;
+};
 
+export type LessonGoalSetRequest = {
+  academic_period_id: number;
+  items: LessonGoalItemInput[];
+};
+
+export type LessonGoalItemDetailLesson = {
+  lesson_id: number;
+  title: string;
+  description?: string | null;
+  is_published: boolean;
+  order_index: number;
+};
+
+export type LessonGoalItemDetailClasswork = {
+  classwork_id: number;
+  classwork_assignment_id?: number | null;
+  title: string;
+  classwork_type?: string | null;
+  classwork_category?: string | null;
+  exam_subtype?: string | null;
+  is_graded: boolean;
+  total_points?: number | null;
+  due_date?: string | null;
+  submission_status?: string | null;
+};
+
+export type LessonGoalItemResponse = {
+  goal_item_id: number;
+  item_type: "LESSON" | "CLASSWORK";
+  lesson_id?: number | null;
+  classwork_id?: number | null;
+  order_index: number;
+  lesson?: LessonGoalItemDetailLesson | null;
+  classwork?: LessonGoalItemDetailClasswork | null;
+};
+
+export type LessonGoalResponse = {
+  goal_id?: number | null;
+  class_id: number;
+  subject_id: number;
+  academic_period_id: number;
+  items: LessonGoalItemResponse[];
+};
+
+export async function getLessonGoals(
+  classId: number | string,
+  subjectId: number | string,
+  academicPeriodId?: number | null,
+): Promise<LessonGoalResponse> {
+  const query = academicPeriodId ? `?academic_period_id=${academicPeriodId}` : "";
+  const res = await apiFetch(`/api/v1/lesson-goals/class/${classId}/subject/${subjectId}${query}`);
+  if (!res.ok) {
+    const data: any = await res.json().catch(() => null);
+    throw new ApiRequestError(data?.detail || "Failed to fetch lesson goals", res.status, data);
+  }
+  return (await res.json()) as LessonGoalResponse;
+}
+
+export async function setLessonGoals(
+  classId: number | string,
+  subjectId: number | string,
+  data: LessonGoalSetRequest,
+): Promise<LessonGoalResponse> {
+  const res = await apiFetch(`/api/v1/lesson-goals/class/${classId}/subject/${subjectId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err: any = await res.json().catch(() => null);
+    throw new ApiRequestError(err?.detail || "Failed to save lesson goals", res.status, err);
+  }
+  return (await res.json()) as LessonGoalResponse;
+}
+
+export async function clearLessonGoals(
+  classId: number | string,
+  subjectId: number | string,
+  academicPeriodId: number,
+): Promise<void> {
+  const res = await apiFetch(`/api/v1/lesson-goals/class/${classId}/subject/${subjectId}?academic_period_id=${academicPeriodId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok && res.status !== 204) {
+    const err: any = await res.json().catch(() => null);
+    throw new ApiRequestError(err?.detail || "Failed to clear lesson goals", res.status, err);
+  }
+}
