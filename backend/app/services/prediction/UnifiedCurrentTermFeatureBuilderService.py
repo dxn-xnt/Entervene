@@ -174,6 +174,13 @@ def _domain_warnings(subject_label: str, schema: dict[str, Any]) -> list[dict[st
             "feature": "subject",
             "value": subject_label,
         }]
+    if subject_label in {"VALUES_EDUCATION", "VALUES", "GMRC"}:
+        return [{
+            "code": "DOMAIN_UNSUPPORTED",
+            "message": "Unified V2 does not support Values/GMRC due to domain-specific component weighting.",
+            "feature": "subject",
+            "value": subject_label,
+        }]
     if subject_label not in supported:
         return [{
             "code": "DOMAIN_UNSUPPORTED",

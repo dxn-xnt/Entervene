@@ -1,0 +1,2 @@
+source_file,sheet_name,status,reason,rows,snapshots,subject,grade_level,section,school_year,period_sequence,weights
+MATH 9-ARCHIMEDES.xlsx,MATH_Q1,PARSED,OK,1,3,MATHEMATICS,9,ARCHIMEDES,2025-2026,1,"{""pt"": 40.0, ""qa"": 20.0, ""ww"": 40.0}"

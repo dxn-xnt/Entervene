@@ -329,11 +329,11 @@ def test_9_postgres_live_unique_index_and_check_constraint():
         trans.rollback()
         trans = pg_db.begin_nested()
 
-        # 2. Test partial unique index on PostgreSQL
+        # 2. Test partial unique index on PostgreSQL (Model 35 is currently active for UNIFIED_CURRENT_TERM_PROJECTION)
         dup = AIModelVersion(
-            model_name="dup_current",
+            model_name="dup_unified",
             model_type="REGRESSOR",
-            model_purpose=ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value,
+            model_purpose=ModelPurpose.UNIFIED_CURRENT_TERM_PROJECTION.value,
             algorithm="RandomForestRegressor",
             is_active=True,
         )
