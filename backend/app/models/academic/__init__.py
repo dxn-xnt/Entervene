@@ -23,4 +23,5 @@ from .PeriodTemplateSlot import PeriodTemplateSlot
 from .Competency import Competency
 from .TeacherSubstitution import TeacherSubstitution
 from .GradeSubmissionLog import GradeSubmissionLog
+from .LessonGoal import LessonGoal, LessonGoalItem
 

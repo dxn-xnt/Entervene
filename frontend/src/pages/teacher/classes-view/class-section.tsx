@@ -1,23 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, Info, Search } from "lucide-react";
+import { useMemo } from "react";
+import { ChevronRight, Info, RefreshCw, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { apiFetch } from "@/lib/api";
-
-type TeacherClassLoad = {
-  subject_load_id: number;
-  subject_id: number;
-  subject_name: string;
-  subject_codename?: string | null;
-  class_id: number;
-  section_name: string;
-};
+import { Button } from "@/components/retroui/Button";
+import { useTeacherClasses } from "@/hooks/use-teacher-classes";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import type { TeacherClassItem } from "@/lib/api";
 
 type ClassSummary = {
   class_id: number;
   section_name: string;
-  subjects: TeacherClassLoad[];
+  subjects: TeacherClassItem[];
 };
 
 function Pill({ label }: { label: string }) {
@@ -48,7 +42,7 @@ function ClassCard({ item }: { item: ClassSummary }) {
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         {item.subjects.slice(0, 3).map((subject) => (
-          <Pill key={subject.subject_load_id} label={subject.subject_name} />
+          <Pill key={subject.subject_load_id || `${subject.class_id}-${subject.subject_id}`} label={subject.subject_name} />
         ))}
       </div>
     </button>
@@ -56,31 +50,15 @@ function ClassCard({ item }: { item: ClassSummary }) {
 }
 
 export default function ClassSections() {
-  const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
-  const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    const loadClasses = async () => {
-      setIsLoading(true);
-      setError("");
-
-      try {
-        const response = await apiFetch("/api/v1/classwork-assignments/teacher/classes");
-        if (!response.ok) {
-          throw new Error("Unable to load classes.");
-        }
-
-        setLoads((await response.json()) as TeacherClassLoad[]);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to load classes.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadClasses();
-  }, []);
+  const {
+    classes: loads,
+    isLoading,
+    error,
+    refetch,
+    selectedPeriodId,
+  } = useTeacherClasses({ includeAdvisory: false });
+  const { periods } = useAcademicPeriod();
+  const currentPeriod = periods.find((p) => p.id === selectedPeriodId);
 
   const classes = useMemo(() => {
     const byClass = new Map<number, ClassSummary>();
@@ -116,16 +94,26 @@ export default function ClassSections() {
 
             <div className="border-t-2 border-border -mt-[1px] py-4 px-4 md:px-6 flex flex-col gap-5">
               {error && (
-                <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {error}
+                <div className="flex items-center justify-between rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <span>{error.message}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void refetch()}
+                    className="ml-3 h-7 text-xs border-red-400 text-red-700 hover:bg-red-100"
+                  >
+                    <RefreshCw className="mr-1 size-3" /> Retry
+                  </Button>
                 </div>
               )}
 
         <section className="rounded border border-black bg-[#F6E9B2] px-5 py-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-3xl font-bold">2024 - 2025</h2>
-              <p className="text-xs font-medium">Sections assigned for this academic year</p>
+              <h2 className="text-3xl font-bold">
+                {currentPeriod ? `${currentPeriod.academicyear} (${currentPeriod.period})` : "Current Term"}
+              </h2>
+              <p className="text-xs font-medium">Sections assigned for this academic term</p>
             </div>
             <Info size={16} />
           </div>

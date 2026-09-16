@@ -317,10 +317,7 @@ export default function PredictionsDashboard() {
                     <div className="flex flex-col gap-3">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-1">
                         <div>
-                          <h2 className="text-xl font-black uppercase tracking-tight text-black">Grade Cohort Summaries</h2>
-                          <p className="text-xs text-gray-600 font-semibold">
-                            Showing {gradeSummaries.length} grade levels for the selected term ({totalEnrolledStudents} actively enrolled students)
-                          </p>
+                          <h2 className="text-xl font-black tracking-tight text-black">Grade Cohort Summaries</h2>
                         </div>
                       </div>
 

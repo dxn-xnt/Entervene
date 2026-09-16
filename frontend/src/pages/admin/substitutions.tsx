@@ -172,6 +172,7 @@ export default function AdminSubstitutions() {
       <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex min-w-0 flex-1 flex-col">
           <div className="flex min-w-0 flex-1 flex-col">
+            <div data-page-tabs-sticky-region>
             {/* Header */}
             <header className="flex flex-col gap-2 bg-background px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
@@ -203,6 +204,7 @@ export default function AdminSubstitutions() {
                   cancelled: cancelledCount,
                 }}
               />
+            </div>
             </div>
 
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 sm:px-4 md:px-6">

@@ -101,7 +101,7 @@ export default function AttendanceModal({
           </div>
         </div>
 
-        <Table className="border-2 border-black shadow-md bg-white">
+        <Table wrapperClassName="border-black shadow-md" className="bg-white">
           <Table.Header className="font-sans bg-gray-50 border-b-2 border-black">
             <Table.Row>
               <Table.Head className="font-bold text-base py-3">Name</Table.Head>

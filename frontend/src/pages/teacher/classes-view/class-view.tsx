@@ -38,6 +38,9 @@ import { Dialog } from "@/components/retroui/Dialog";
 import { Button } from "@/components/retroui/Button";
 import { Avatar } from "@/components/retroui/Avatar";
 import { LessonGoalProgress } from "@/components/lesson-goal-progress";
+import SetLessonGoalModal from "./subject-details/set-lesson-goal-modal";
+import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
+import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 
 import CompetencyModal from "./subject-details/competency-modal";
 import CreateLessonModal from "@/pages/teacher/create-lesson";
@@ -76,7 +79,14 @@ import type {
 } from "./subject-details/types";
 
 import { SuggestionPanel } from "@/components/teacher/suggestions/suggestion-panel-modal";
-import { API_URL, apiFetch, getTeacherAdvisoryClassDetail } from "@/lib/api";
+import { ManualSuggestionPanel } from "@/components/teacher/suggestions/manual-suggestion-panel";
+import {
+  API_URL,
+  apiFetch,
+  getLessonGoals,
+  getTeacherAdvisoryClassDetail,
+  type LessonGoalItemResponse,
+} from "@/lib/api";
 import {
   approveSuggestion,
   archiveSuggestion,
@@ -156,6 +166,9 @@ export default function TeacherClassDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [tab, setTab] = useState<DetailTab>("lessons");
+  const [isSetGoalModalOpen, setIsSetGoalModalOpen] = useState(false);
+  const [studentInterfaceStudent, setStudentInterfaceStudent] =
+    useState<TeacherAdvisoryStudentItem | null>(null);
   const [detail, setDetail] =
     useState<TeacherAdvisoryClassDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -241,7 +254,25 @@ export default function TeacherClassDetail() {
       <div className="flex min-w-0 max-w-full flex-1 flex-col overflow-x-clip">
         <div className="@container/main flex min-w-0 max-w-full flex-1 flex-col">
           <div className="flex min-w-0 max-w-full flex-1 flex-col">
-            <header className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6">
+            <div
+              data-page-tabs-sticky-region={
+                studentInterfaceStudent ? undefined : ""
+              }
+              data-student-detail-sticky-region={
+                studentInterfaceStudent ? "" : undefined
+              }
+              className={
+                studentInterfaceStudent
+                  ? "sticky top-0 z-40 shrink-0 bg-background"
+                  : undefined
+              }
+            >
+            <header
+              data-student-detail-header={
+                studentInterfaceStudent ? "" : undefined
+              }
+              className="flex min-w-0 flex-col gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:flex-row md:items-center md:justify-between md:px-6"
+            >
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
                 <Breadcrumb className="min-w-0">
@@ -266,7 +297,7 @@ export default function TeacherClassDetail() {
                     <Breadcrumb.Separator />
                     <Breadcrumb.Item className="min-w-0">
                       <Breadcrumb.Page className="block truncate">
-                        {detail.section_name}
+                        {studentInterfaceStudent?.full_name || detail.section_name}
                       </Breadcrumb.Page>
                     </Breadcrumb.Item>
                   </Breadcrumb.List>
@@ -274,40 +305,63 @@ export default function TeacherClassDetail() {
               </div>
 
               <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
-                {tab === "lessons" && (
-                  <Button className="w-full md:w-auto">
+                {studentInterfaceStudent ? (
+                  <ManualSuggestionPanel
+                    classId={detail.class_id}
+                    student={studentInterfaceStudent}
+                    subjectLoads={detail.subject_loads}
+                    displayMode="header"
+                  />
+                ) : tab === "lessons" ? (
+                  <Button
+                    className="w-full md:w-auto"
+                    onClick={() => setIsSetGoalModalOpen(true)}
+                  >
                     <Pencil className="mr-2 size-4" /> Set Lesson Goal
                   </Button>
-                )}
+                ) : null}
               </div>
             </header>
-            <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
-              <Tabs<DetailTab>
-                tabs={[
-                  {
-                    id: "lessons",
-                    label: "Lessons",
-                    icon: BookOpen,
-                  },
-                  {
-                    id: "students",
-                    label: "Students",
-                    icon: Users,
-                  },
-                  {
-                    id: "classwork",
-                    label: "Classwork",
-                    icon: ClipboardList,
-                  },
-                ]}
-                activeTab={tab}
-                onTabChange={setTab}
-              />
+            {!studentInterfaceStudent && (
+              <div className="sticky top-0 z-30 -mt-[1px] bg-background px-3 sm:static sm:px-4 md:px-6">
+                <Tabs<DetailTab>
+                  tabs={[
+                    {
+                      id: "lessons",
+                      label: "Lessons",
+                      icon: BookOpen,
+                    },
+                    {
+                      id: "students",
+                      label: "Students",
+                      icon: Users,
+                    },
+                    {
+                      id: "classwork",
+                      label: "Classwork",
+                      icon: ClipboardList,
+                    },
+                  ]}
+                  activeTab={tab}
+                  onTabChange={(nextTab) => {
+                    setStudentInterfaceStudent(null);
+                    setTab(nextTab);
+                  }}
+                />
+              </div>
+            )}
             </div>
 
-            <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+            <div
+              className={`flex min-w-0 flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 md:px-6 ${
+                studentInterfaceStudent
+                  ? ""
+                  : "-mt-[1px] border-t-1 border-border"
+              }`}
+            >
 
-              <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
+              {!studentInterfaceStudent && (
+                <Card className="block w-full border-black bg-primary transition-none hover:shadow-md">
                 <Card.Content>
                   <div className="flex min-w-0 items-center justify-between gap-2">
                     <div className="min-w-0 flex-1">
@@ -349,18 +403,22 @@ export default function TeacherClassDetail() {
                     since {activeSince}
                   </p>
                 </Card.Content>
-              </Card>
+                </Card>
+              )}
 
               {tab === "lessons" && (
                 <OverviewTab
                   detail={detail}
                   initialSubjectId={initialSubjectId}
+                  isSetGoalModalOpen={isSetGoalModalOpen}
+                  setIsSetGoalModalOpen={setIsSetGoalModalOpen}
                 />
               )}
               {tab === "students" && (
                 <StudentsTab
                   detail={detail}
                   subjectId={currentSubject?.subject_id || initialSubjectId}
+                  onDetailViewChange={setStudentInterfaceStudent}
                 />
               )}
               {tab === "classwork" && (
@@ -380,11 +438,21 @@ export default function TeacherClassDetail() {
 function OverviewTab({
   detail,
   initialSubjectId,
+  isSetGoalModalOpen,
+  setIsSetGoalModalOpen,
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
   initialSubjectId?: number | null;
+  isSetGoalModalOpen?: boolean;
+  setIsSetGoalModalOpen?: (open: boolean) => void;
 }) {
   const navigate = useNavigate();
+  const { selectedPeriodId, periods } = useAcademicPeriod();
+  const [internalSetGoalModalOpen, setInternalSetGoalModalOpen] = useState(false);
+  const isGoalModalOpen = isSetGoalModalOpen !== undefined ? isSetGoalModalOpen : internalSetGoalModalOpen;
+  const setGoalModalOpen = setIsSetGoalModalOpen || setInternalSetGoalModalOpen;
+
+  const [curatedGoals, setCuratedGoals] = useState<LessonGoalItemResponse[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState<number | null>(
     initialSubjectId || detail.subject_loads[0]?.subject_id || null,
   );
@@ -538,6 +606,23 @@ function OverviewTab({
   useEffect(() => {
     void loadLessonsAndCompetencies();
   }, [detail.class_id, selectedSubjectId]);
+
+  const loadCuratedGoals = useCallback(async () => {
+    if (!detail.class_id || !selectedSubjectId || !selectedPeriodId) {
+      setCuratedGoals([]);
+      return;
+    }
+    try {
+      const res = await getLessonGoals(detail.class_id, selectedSubjectId, selectedPeriodId);
+      setCuratedGoals(res.items || []);
+    } catch {
+      setCuratedGoals([]);
+    }
+  }, [detail.class_id, selectedSubjectId, selectedPeriodId]);
+
+  useEffect(() => {
+    void loadCuratedGoals();
+  }, [loadCuratedGoals]);
 
   const toggleLesson = async (lessonId: number) => {
     if (expandedLessonId === lessonId) {
@@ -1024,11 +1109,12 @@ function OverviewTab({
             </div>
           </div>
 
-          {/* Weekly Goals Sidebar Progress (Preserved from Image 1) */}
+          {/* Weekly Goals Sidebar Progress */}
           <aside className="flex flex-col gap-2 min-w-0 xl:row-span-2">
             <LessonGoalProgress
-              sortedGoalLessons={lessons as any}
-              classworksByLesson={linkedClassworks as any}
+              goalItems={curatedGoals}
+              isTeacher
+              onSetGoal={() => setGoalModalOpen(true)}
               className="w-full flex-1 min-w-0"
             />
           </aside>
@@ -1838,6 +1924,28 @@ function OverviewTab({
           }}
         />
       )}
+
+      {/* ── Set Lesson Goal Modal ── */}
+      {selectedSubjectId && selectedPeriodId && (
+        <SetLessonGoalModal
+          isOpen={isGoalModalOpen}
+          onClose={() => setGoalModalOpen(false)}
+          classId={detail.class_id}
+          subjectId={selectedSubjectId}
+          academicPeriodId={selectedPeriodId}
+          periodName={periods.find((p) => p.id === selectedPeriodId)?.period}
+          lessons={lessons.map((l) => ({
+            lesson_id: l.lesson_id,
+            title: l.title,
+            is_published: l.is_published,
+          }))}
+          linkedClassworks={linkedClassworks as any}
+          currentGoals={curatedGoals}
+          onSaved={(updated) => {
+            setCuratedGoals(updated.items || []);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1845,9 +1953,11 @@ function OverviewTab({
 function StudentsTab({
   detail,
   subjectId,
+  onDetailViewChange,
 }: {
   detail: TeacherAdvisoryClassDetailResponse;
   subjectId?: number | null;
+  onDetailViewChange?: (student: TeacherAdvisoryStudentItem | null) => void;
 }) {
   const activeSubjectId =
     subjectId || detail.subject_loads[0]?.subject_id || null;
@@ -1919,6 +2029,7 @@ function StudentsTab({
 
   const handleSelectStudent = (student: TeacherAdvisoryStudentItem) => {
     setSelectedStudent(student);
+    onDetailViewChange?.(student);
     void loadStudentAnalytics(student, selectedPeriodId);
   };
 
@@ -1947,37 +2058,39 @@ function StudentsTab({
           <Button
             type="button"
             variant="outline"
-            size="sm"
+            size="header"
             onClick={() => {
               setSelectedStudent(null);
               setStudentDetail(null);
+              onDetailViewChange?.(null);
             }}
-            className="gap-2 border-2 border-black bg-white font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#F6E9B2]"
           >
-            <ArrowLeft size={16} />
+            <ArrowLeft />
             Back to students
           </Button>
 
-          {periods.length > 1 && (
-            <Select
-              value={selectedPeriodId}
-              onValueChange={handlePeriodChange}
-            >
-              <Select.Trigger className="h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold min-w-[200px]">
-                <Select.Value placeholder="Select period" />
-              </Select.Trigger>
-              <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                {periods.map((p) => (
-                  <Select.Item
-                    key={p.academic_period_id}
-                    value={String(p.academic_period_id)}
-                  >
-                    {p.period_name} ({p.year_label})
-                  </Select.Item>
-                ))}
-              </Select.Content>
-            </Select>
-          )}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {periods.length > 1 && (
+              <Select
+                value={selectedPeriodId}
+                onValueChange={handlePeriodChange}
+              >
+                <Select.Trigger className="h-10 text-sm bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-semibold min-w-[200px]">
+                  <Select.Value placeholder="Select period" />
+                </Select.Trigger>
+                <Select.Content className="border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  {periods.map((p) => (
+                    <Select.Item
+                      key={p.academic_period_id}
+                      value={String(p.academic_period_id)}
+                    >
+                      {p.period_name} ({p.year_label})
+                    </Select.Item>
+                  ))}
+                </Select.Content>
+              </Select>
+            )}
+          </div>
         </div>
 
         {detailError && (
@@ -1995,6 +2108,7 @@ function StudentsTab({
             detail={studentDetail}
             classId={detail.class_id}
             subjectLoads={detail.subject_loads as any}
+            showSuggestionPanel={false}
           />
         )}
       </div>
@@ -2059,7 +2173,8 @@ function StudentsTab({
                       </span>
                     </summary>
                     <Table
-                      wrapperClassName="overflow-visible h-auto"
+                      rounded="none"
+                      wrapperClassName="h-auto overflow-hidden border-0 shadow-none"
                       className="w-full border-0 shadow-none"
                     >
                       <Table.Body>
@@ -2134,8 +2249,15 @@ function ClassworkTab({
   const activeSubjectId =
     subjectId || detail.subject_loads[0]?.subject_id || null;
 
+  const {
+    classes: loads,
+    isLoading: loadingClasses,
+    error: classesError,
+    selectedPeriodId,
+    refetch: refetchClasses,
+  } = useTeacherClasses({ includeAdvisory: false });
+
   const [items, setItems] = useState<TeacherClasswork[]>([]);
-  const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [activeTab] = useState<TabId>("all");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -2143,36 +2265,37 @@ function ClassworkTab({
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [selectedType, setSelectedType] = useState<ClassworkKind | null>(null);
   const [selected, setSelected] = useState<TeacherClasswork | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loadingItems, setLoadingItems] = useState(true);
+  const [itemsError, setItemsError] = useState("");
 
   const loadClassworks = useCallback(async () => {
-    setIsLoading(true);
-    setError("");
+    setLoadingItems(true);
+    setItemsError("");
     try {
-      const [classworksResponse, loadsResponse] = await Promise.all([
-        apiFetch("/api/v1/classwork-assignments/my-classworks"),
-        apiFetch("/api/v1/classwork-assignments/teacher/classes"),
-      ]);
-      if (!classworksResponse.ok || !loadsResponse.ok) {
+      const periodQuery = selectedPeriodId ? `?academic_period_id=${selectedPeriodId}` : "";
+      const classworksResponse = await apiFetch(
+        `/api/v1/classwork-assignments/my-classworks${periodQuery}`,
+      );
+      if (!classworksResponse.ok) {
         throw new Error("Unable to load your classworks.");
       }
-      const allLoads = (await loadsResponse.json()) as TeacherClassLoad[];
       const allItems = (await classworksResponse.json()) as TeacherClasswork[];
-      setLoads(allLoads);
       setItems(allItems);
     } catch (err) {
-      setError(
+      setItemsError(
         err instanceof Error ? err.message : "Unable to load your classworks.",
       );
     } finally {
-      setIsLoading(false);
+      setLoadingItems(false);
     }
-  }, []);
+  }, [selectedPeriodId]);
 
   useEffect(() => {
     void loadClassworks();
   }, [loadClassworks]);
+
+  const isLoading = loadingClasses || loadingItems;
+  const error = itemsError || (classesError ? classesError.message : "");
 
   const subjects = useMemo(
     () =>
@@ -2406,11 +2529,11 @@ function ClassworkTab({
             <CreateClassworkQuizModal
               selectedType={selectedType}
               subjects={subjects}
-              loads={loads}
+              loads={loads as unknown as TeacherClassLoad[]}
               initialSubjectId={activeSubjectId ? String(activeSubjectId) : undefined}
               onClose={closeCreateWizard}
               onSuccess={async () => {
-                await loadClassworks();
+                await Promise.all([loadClassworks(), refetchClasses()]);
                 closeCreateWizard();
               }}
               onBack={() => setSelectedType(null)}
@@ -2419,11 +2542,11 @@ function ClassworkTab({
             <CreateClassworkModal
               selectedType={selectedType}
               subjects={subjects}
-              loads={loads}
+              loads={loads as unknown as TeacherClassLoad[]}
               initialSubjectId={activeSubjectId ? String(activeSubjectId) : undefined}
               onClose={closeCreateWizard}
               onSuccess={async () => {
-                await loadClassworks();
+                await Promise.all([loadClassworks(), refetchClasses()]);
                 closeCreateWizard();
               }}
               onBack={() => setSelectedType(null)}
@@ -2514,7 +2637,7 @@ function StudentRow({
               </Avatar.Fallback>
             </Avatar>
             <div className="min-w-0">
-              <span className="block text-base font-semibold truncate group-hover:underline">
+              <span className="block text-base font-semibold truncate">
                 {student.full_name}
               </span>
               {student.student_lrn && (

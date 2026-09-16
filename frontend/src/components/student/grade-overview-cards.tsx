@@ -13,17 +13,6 @@ function computeCompletion(todos: TodoItem[]) {
   return { total, completed, rate: total > 0 ? Math.round((completed / total) * 100) : 0 };
 }
 
-function computeDistribution(todos: TodoItem[]) {
-  const counts: Record<string, number> = {};
-  todos.forEach((todo) => {
-    const type = todo.type || "Other";
-    counts[type] = (counts[type] || 0) + 1;
-  });
-  return Object.entries(counts)
-    .map(([type, count]) => ({ type, count }))
-    .sort((a, b) => b.count - a.count);
-}
-
 function computeSubjectPerformance(todos: TodoItem[]) {
   const buckets: Record<string, { subject: string; subjectId: number; earned: number; possible: number }> = {};
   todos.forEach((todo) => {
@@ -49,7 +38,6 @@ export function GradeOverviewCards({ todos, isLoading, error }: {
   error: string | null;
 }) {
   const completion = useMemo(() => computeCompletion(todos), [todos]);
-  const distribution = useMemo(() => computeDistribution(todos), [todos]);
   const subjectPerformance = useMemo(() => computeSubjectPerformance(todos), [todos]);
   const weakestSubject = subjectPerformance.at(-1);
   if (isLoading) return <LoadingPanel label="Loading grade overview..." />;
@@ -57,48 +45,23 @@ export function GradeOverviewCards({ todos, isLoading, error }: {
 
   return (
     <section aria-labelledby="grade-overview-heading" className="flex flex-col gap-3">
-      <h2 id="grade-overview-heading" className="text-lg font-bold tracking-tight sm:text-xl">Grade Overview</h2>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Card className="w-full">
           <Card.Header><Card.Title>Completion Rate</Card.Title></Card.Header>
           <Card.Content>
             <div className="flex items-center gap-3">
               <Progress
                 value={completion.rate}
-                className="flex-1"
+                className="flex-1 size-25"
+                variant="circular"
                 aria-label={`Completion rate: ${completion.rate}%`}
               />
-              <span className="w-10 text-right text-sm font-bold">{completion.rate}%</span>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">{completion.completed} of {completion.total} activities done</p>
           </Card.Content>
         </Card>
 
         <Card className="w-full">
-          <Card.Header><Card.Title>Classwork Distribution</Card.Title></Card.Header>
-          <Card.Content>
-            {todos.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No classwork data yet</p> : (
-              <div className="flex flex-col gap-3">
-                {distribution.map((item) => {
-                  const percentage = Math.round((item.count / todos.length) * 100);
-                  return <div key={item.type} className="flex flex-col gap-1">
-                    <div className="flex items-center justify-between gap-2 text-xs">
-                      <span className="truncate font-medium">{item.type}</span>
-                      <span className="shrink-0 font-semibold">{item.count} ({percentage}%)</span>
-                    </div>
-                    <Progress
-                      value={percentage}
-                      aria-label={`${item.type}: ${item.count} of ${todos.length} classworks (${percentage}%)`}
-                    />
-                  </div>;
-                })}
-                <p className="text-xs text-muted-foreground">{todos.length} total classworks</p>
-              </div>
-            )}
-          </Card.Content>
-        </Card>
-
-        <Card className="w-full md:col-span-2 xl:col-span-1">
           <Card.Header><Card.Title>Subject Performance</Card.Title></Card.Header>
           <Card.Content>
             {subjectPerformance.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No graded classwork yet</p> : <>

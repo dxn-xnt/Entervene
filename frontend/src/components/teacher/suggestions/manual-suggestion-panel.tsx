@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Archive, CheckCircle2, ChevronDown, ChevronUp, Lightbulb, X } from "lucide-react";
+import {
+  Archive,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Lightbulb,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/retroui/Button";
 import { Card } from "@/components/retroui/Card";
 import { Alert } from "@/components/retroui/Alert";
@@ -20,12 +27,14 @@ type Props = {
   classId: number;
   student: TeacherAdvisoryStudentItem;
   subjectLoads: TeacherAdvisorySubjectLoadItem[];
+  displayMode?: "panel" | "header";
 };
 
 export function ManualSuggestionPanel({
   classId,
   student,
   subjectLoads,
+  displayMode = "panel",
 }: Props) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -75,13 +84,19 @@ export function ManualSuggestionPanel({
   const activeCount = history.filter((item) => item.status === "ACTIVE").length;
   const draftCount = history.filter((item) => item.status === "DRAFT").length;
 
+  const Container = displayMode === "header" ? "div" : Card;
+
   return (
-    <Card className="p-3 shadow-none">
+    <Container
+      className={displayMode === "header" ? "min-w-0" : "p-3 shadow-none"}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-col gap-0.5">
-          <p className="text-md font-semibold">
-            Study Suggestions
-          </p>
+        <div
+          className={
+            displayMode === "header" ? "sr-only" : "flex flex-col gap-0.5"
+          }
+        >
+          <p className="text-md font-semibold">Study Suggestions</p>
           <p className="text-xs text-muted-foreground">
             {activeCount} active, {draftCount} draft
           </p>
@@ -111,17 +126,16 @@ export function ManualSuggestionPanel({
           <Button
             type="button"
             variant="default"
-            size="sm"
+            size={displayMode === "header" ? "header" : "sm"}
             onClick={() => setIsDialogOpen(true)}
-            className="gap-2"
           >
-            <Lightbulb size={14} />
+            <Lightbulb />
             Suggest Material
           </Button>
         </div>
       </div>
 
-      {showHistory && (
+      {showHistory && displayMode !== "header" && (
         <Card className="mt-3 block w-full border-black bg-white p-3 shadow-none transition-none hover:shadow-none">
           <h4 className="mb-2 text-sm font-black">Suggestion History</h4>
           {historyError && (
@@ -250,7 +264,7 @@ export function ManualSuggestionPanel({
         subjectLoads={subjectLoads}
         onSuccess={loadHistory}
       />
-    </Card>
+    </Container>
   );
 }
 

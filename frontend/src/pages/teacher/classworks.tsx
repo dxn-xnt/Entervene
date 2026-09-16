@@ -4,6 +4,7 @@ import {
   ClipboardList,
   FileText,
   Plus,
+  RefreshCw,
   Search,
   X,
   type LucideIcon,
@@ -13,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import AppLayout from "@/layouts/app-layout";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { apiFetch } from "@/lib/api";
+import { useTeacherClasses } from "@/hooks/use-teacher-classes";
 import ClassworkCard from "./classworks/classwork-card";
 import { isQuizType } from "@/lib/classwork-utils";
 import type {
@@ -82,8 +84,15 @@ const tabType: Partial<Record<TabId, string>> = {
 
 export default function Classworks() {
   const navigate = useNavigate();
+  const {
+    classes: loads,
+    isLoading: loadingClasses,
+    error: classesError,
+    selectedPeriodId,
+    refetch: refetchClasses,
+  } = useTeacherClasses({ includeAdvisory: false });
+
   const [items, setItems] = useState<TeacherClasswork[]>([]);
-  const [loads, setLoads] = useState<TeacherClassLoad[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("all");
   const [search, setSearch] = useState("");
   const [subjectFilter, setSubjectFilter] = useState("all");
@@ -92,35 +101,31 @@ export default function Classworks() {
   const [sortMode, _setSortMode] = useState<SortMode>("newest");
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [selectedType, setSelectedType] = useState<ClassworkKind | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loadingItems, setLoadingItems] = useState(true);
+  const [itemsError, setItemsError] = useState("");
 
   const loadClassworks = useCallback(async () => {
-    // Load real teacher-owned classworks plus active class targets for filters and creation.
-    setIsLoading(true);
-    setError("");
+    // Load real teacher-owned classworks scoped to the selected academic period
+    setLoadingItems(true);
+    setItemsError("");
     try {
-      const [classworksResponse, loadsResponse] = await Promise.all([
-        apiFetch("/api/v1/classwork-assignments/my-classworks"),
-        apiFetch("/api/v1/classwork-assignments/teacher/classes"),
-      ]);
-      if (!classworksResponse.ok || !loadsResponse.ok) {
+      const periodQuery = selectedPeriodId ? `?academic_period_id=${selectedPeriodId}` : "";
+      const classworksResponse = await apiFetch(`/api/v1/classwork-assignments/my-classworks${periodQuery}`);
+      if (!classworksResponse.ok) {
         throw new Error("Unable to load your classworks.");
       }
-      const loadData = (await loadsResponse.json()) as TeacherClassLoad[];
       setItems((await classworksResponse.json()) as TeacherClasswork[]);
-      setLoads(loadData);
     } catch (err) {
-      setError(
+      setItemsError(
         err instanceof Error ? err.message : "Unable to load your classworks.",
       );
     } finally {
-      setIsLoading(false);
+      setLoadingItems(false);
     }
-  }, []);
+  }, [selectedPeriodId]);
 
   useEffect(() => {
-    loadClassworks();
+    void loadClassworks();
   }, [loadClassworks]);
 
   const subjects = useMemo(
@@ -148,6 +153,19 @@ export default function Classworks() {
       ).sort((a, b) => a.name.localeCompare(b.name)),
     [loads],
   );
+
+  // Auto-reset filters if selected filter is not present in newly scoped loads
+  useEffect(() => {
+    if (subjectFilter !== "all" && !subjects.some((s) => String(s.id) === subjectFilter)) {
+      setSubjectFilter("all");
+    }
+    if (classFilter !== "all" && !classSections.some((c) => String(c.id) === classFilter)) {
+      setClassFilter("all");
+    }
+  }, [subjects, classSections, subjectFilter, classFilter]);
+
+  const isLoading = loadingClasses || loadingItems;
+  const error = itemsError || (classesError ? classesError.message : "");
 
   const filteredItems = useMemo(() => {
     const targetType = tabType[activeTab];
@@ -204,6 +222,7 @@ export default function Classworks() {
       <div className="flex flex-1 flex-col">
         <div className="@container/main flex flex-1 flex-col">
           <div className="flex flex-1 flex-col">
+            <div data-page-tabs-sticky-region>
             <header className="flex items-center justify-between gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
               <div className="flex items-center gap-3">
                 <SidebarTrigger className="shrink-0 md:hidden" />
@@ -229,13 +248,26 @@ export default function Classworks() {
               />
             </div>
 
+            </div>
+
             <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-4 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
 
 
               <main className="flex flex-col gap-4">
                 {error && (
-                  <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
-                    {error}
+                  <div className="flex items-center justify-between rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    <span>{error}</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        void refetchClasses();
+                        void loadClassworks();
+                      }}
+                      className="ml-3 h-7 text-xs border-red-400 text-red-700 hover:bg-red-100"
+                    >
+                      <RefreshCw className="mr-1 size-3" /> Retry
+                    </Button>
                   </div>
                 )}
 
@@ -392,11 +424,11 @@ export default function Classworks() {
                     <CreateClassworkQuizModal
                       selectedType={selectedType}
                       subjects={subjects}
-                      loads={loads}
+                      loads={loads as unknown as TeacherClassLoad[]}
                       initialSubjectId={subjectFilter !== "all" ? subjectFilter : undefined}
                       onClose={closeCreateWizard}
                       onSuccess={async () => {
-                        await loadClassworks();
+                        await Promise.all([loadClassworks(), refetchClasses()]);
                         closeCreateWizard();
                       }}
                       onBack={() => setSelectedType(null)}
@@ -405,11 +437,11 @@ export default function Classworks() {
                     <CreateClassworkModal
                       selectedType={selectedType}
                       subjects={subjects}
-                      loads={loads}
+                      loads={loads as unknown as TeacherClassLoad[]}
                       initialSubjectId={subjectFilter !== "all" ? subjectFilter : undefined}
                       onClose={closeCreateWizard}
                       onSuccess={async () => {
-                        await loadClassworks();
+                        await Promise.all([loadClassworks(), refetchClasses()]);
                         closeCreateWizard();
                       }}
                       onBack={() => setSelectedType(null)}

@@ -76,15 +76,19 @@ const Login = () => {
     <main className="retro-squares-bg retro-squares-motion flex min-h-dvh w-full items-center justify-center px-4 py-6 sm:px-6">
       <Card className="block w-full max-w-md p-0">
         <Card.Header className="mb-6 flex flex-col justify-center border-b-2 border-border bg-primary px-4 pb-5 pt-6 sm:mb-8 sm:px-8 sm:pb-6 sm:pt-8">
-          <div className="flex items-center gap-3 mb-1">
-            <EnterveneLogo className="size-11" />
-            <Card.Title className="font-head font-bold text-3xl">
-              Entervene
-            </Card.Title>
+          <div className="flex items-center gap-4 mb-1">
+            <EnterveneLogo className="size-14" />
+            <div>
+              <Card.Title className="font-head font-bold text-4xl pt-2">
+                Entervene
+              </Card.Title>
+              <Card.Description className="font-normal text-sm pl-0.5">
+                Enter your details to access your account
+              </Card.Description>
+            </div>
+
           </div>
-          <Card.Description className="font-normal text-sm">
-            Enter your details to access your account
-          </Card.Description>
+
         </Card.Header>
         <Card.Content className="px-4 pb-6 sm:px-8 sm:pb-10">
           <form
@@ -112,9 +116,9 @@ const Login = () => {
               <div className="flex min-w-0 flex-row items-center justify-between gap-2">
                 <Label htmlFor="password">Password</Label>
                 <Button
-                  type="button"
                   variant="link"
-                  className="font-regular shrink-0 p-0 text-sm font-normal font-underline shadow-none"
+                  autoIcon={false}
+                  className="font-regular shrink-0 p-0 text-sm font-normal font-underline text-foreground shadow-none"
                   onClick={() => navigate("/forgot-password")}
                 >
                   Forget password?

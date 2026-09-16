@@ -261,7 +261,7 @@ export function CurriculumPlanTable({
         </div>
       </Card.Header>
 
-      <Table wrapperClassName="border-0" className="border-0 shadow-none">
+      <Table wrapperClassName="rounded-none border-0 shadow-none">
         <Table.Header className="bg-primary text-black font-sans border-b-2 border-border">
           <Table.Row className="border-b-2 border-black hover:bg-transparent">
             <Table.Head className="font-bold text-sm text-black">Subject</Table.Head>

@@ -84,6 +84,7 @@ const StudentSubjectDetail = () => {
             {/* ── Page header: breadcrumb ── */}
             {!isLessonDetailScreen ? (
               <>
+                <div data-page-tabs-sticky-region>
                 <header className="flex min-w-0 items-center gap-2 bg-background px-3 py-3 sm:gap-3 sm:px-4 sm:py-4 md:px-6">
                   <SidebarTrigger className="shrink-0 md:hidden" />
                   <Breadcrumb className="min-w-0">
@@ -118,6 +119,7 @@ const StudentSubjectDetail = () => {
                     onTabChange={handleTabChange}
                   />
                 </div>
+                </div>
 
                 <div className="border-t-1 -mt-[1px] flex min-w-0 flex-col gap-3 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
 
@@ -141,7 +143,7 @@ const StudentSubjectDetail = () => {
                 </div>
               </>
             ) : (
-              <div className="min-w-0 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+              <div className="min-w-0">
                 {activeTab === "lessons" && (
                   <SubjectLessonTab
                     classId={numericClassId}
