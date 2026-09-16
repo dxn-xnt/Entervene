@@ -19,6 +19,7 @@ import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import { TOSGeneratorScreen } from "../classes-view/subject-details/tos-generator-screen";
 import type { CompetencyItem } from "../classes-view/subject-details/types";
+import { Text } from "@/components/retroui/Text";
 
 interface SubjectOption {
   subject_id: number;
@@ -263,7 +264,18 @@ export const TeacherTOSPage: React.FC = () => {
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-3 border-t-2 border-border px-3 py-3 sm:px-4 sm:py-4 md:px-6">
               {/* Filter Toolbar */}
-              <Card className="flex flex-col gap-4 rounded md:flex-row md:flex-wrap md:items-center md:justify-between">
+              <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-center md:justify-between">
+                {/* Search Input */}
+                <div className="relative w-full md:w-100">
+                  <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    aria-label="Search exam or subject"
+                    placeholder="Search exam or subject..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full rounded pl-8 text-sm"
+                  />
+                </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Subject Filter Dropdown */}
                   <div className="w-full sm:w-auto">
@@ -271,7 +283,7 @@ export const TeacherTOSPage: React.FC = () => {
                       value={selectedSubjectFilter}
                       onValueChange={setSelectedSubjectFilter}
                     >
-                      <Select.Trigger aria-label="Filter by subject" className="h-9 w-full rounded text-xs font-bold sm:w-52">
+                      <Select.Trigger aria-label="Filter by subject" className="w-full rounded text-xs font-bold sm:w-52">
                         <Select.Value placeholder="All Assigned Subjects" />
                       </Select.Trigger>
                       <Select.Content>
@@ -288,39 +300,31 @@ export const TeacherTOSPage: React.FC = () => {
                     </Select>
                   </div>
 
-                  {/* Academic Term Filter Chips */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    {(["ALL", "Term 1", "Term 2", "Term 3"] as const).map(
-                      (qTab) => (
-                        <Button
-                          key={qTab}
-                          type="button"
-                          size="sm"
-                          variant={selectedQuarterFilter === qTab ? "default" : "outline"}
-                          autoIcon={false}
-                          aria-pressed={selectedQuarterFilter === qTab}
-                          onClick={() => setSelectedQuarterFilter(qTab)}
-                          className="h-9 rounded px-3 text-xs font-bold"
-                        >
-                          {qTab === "ALL" ? "All Terms" : `${qTab}`}
-                        </Button>
-                      ),
-                    )}
-                  </div>
+
                 </div>
 
-                {/* Search Input */}
-                <div className="relative w-full md:w-64">
-                  <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    aria-label="Search exam or subject"
-                    placeholder="Search exam or subject..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="h-9 w-full rounded pl-8 text-xs font-bold border-2 border-border"
-                  />
-                </div>
-              </Card>
+
+              </div>
+              {/* Academic Term Filter Chips */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Text as="p" className="text-sm font-semibold">Terms:</Text>
+                {(["ALL", "Term 1", "Term 2", "Term 3"] as const).map(
+                  (qTab) => (
+                    <Button
+                      key={qTab}
+                      type="button"
+                      size="sm"
+                      variant={selectedQuarterFilter === qTab ? "default" : "outline"}
+                      autoIcon={false}
+                      aria-pressed={selectedQuarterFilter === qTab}
+                      onClick={() => setSelectedQuarterFilter(qTab)}
+                      className="rounded px-3 text-xs font-bold"
+                    >
+                      {qTab === "ALL" ? "All Terms" : `${qTab}`}
+                    </Button>
+                  ),
+                )}
+              </div>
 
               {/* Exams Grid */}
               {isLoading || isOpeningExam ? (
@@ -388,8 +392,8 @@ export const TeacherTOSPage: React.FC = () => {
                               <Badge
                                 variant="outline"
                                 className={`border-black font-black text-[10px] ${isFinalized
-                                    ? "bg-emerald-100 text-emerald-900"
-                                    : "bg-gray-100 text-gray-700"
+                                  ? "bg-emerald-100 text-emerald-900"
+                                  : "bg-gray-100 text-gray-700"
                                   }`}
                               >
                                 {isFinalized ? "FINALIZED" : "DRAFT"}

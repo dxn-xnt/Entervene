@@ -143,7 +143,7 @@ const StudentSubjectDetail = () => {
                 </div>
               </>
             ) : (
-              <div className="min-w-0 px-3 py-3 sm:px-4 sm:py-4 md:px-6">
+              <div className="min-w-0">
                 {activeTab === "lessons" && (
                   <SubjectLessonTab
                     classId={numericClassId}

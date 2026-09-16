@@ -45,7 +45,7 @@ export function SubjectCard({
       onClick={onClick}
     >
       <div className="flex flex-col items-start justify-between gap-2.5">
-        <div className="flex w-full min-w-0 flex-col justify-between gap-2 sm:flex-row item-center sm:items-start">
+        <div className="flex w-full min-w-0 flex-col justify-between gap-2 -mb-2 sm:flex-row item-center sm:items-start">
           <p className="min-w-0 break-words text-xl font-bold sm:text-2xl">
             {title}
           </p>
@@ -55,19 +55,14 @@ export function SubjectCard({
             </Badge>
           )}
         </div>
-        <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5 sm:-mt-1">
+        {/* <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5 sm:-mt-1">
           {teacher !== "" && (
             <p className="min-w-0 break-words text-sm font-semibold text-gray-700">
               {teacher}
             </p>
           )}
-          {badges?.map((b, idx) => (
-            <Badge key={idx} size="sm" variant={b.variant || "secondary"}>
-              {b.label}
-            </Badge>
-          ))}
-        </div>
-        <div className="flex flex-col w-full gap-1 -mt-4">
+        </div> */}
+        <div className="flex flex-col w-full gap-1">
           <p className="text-xs font-normal text-muted-foreground">Completion</p>
           <div className="flex flex-row items-center gap-2">
             <Progress className="w-full" value={completionRate} />
@@ -76,10 +71,10 @@ export function SubjectCard({
         </div>
         <div className="flex flex-col w-full gap-1 mt-1">
           {noClasswork ? (
-            <Card className="bg-background w-full shadow-xs py-2 px-3 border border-border">
+            <Card className="bg-primary w-full shadow-none py-2 px-3">
               <div className="flex flex-col w-full gap-2 items-center text-center justify-center">
                 <div className="flex flex-row justify-between w-full text-center items-center justify-center">
-                  <p className="text-center text-xs text-muted-foreground font-normal">
+                  <p className="text-center text-xs text-foreground font-normal">
                     Classworks Completed On-Time
                   </p>
                 </div>
@@ -99,9 +94,7 @@ export function SubjectCard({
                   </Button>
                 </div>
                 <div className="flex flex-row gap-1.5 items-center flex-wrap">
-                  <Badge size="sm" variant="outline">
-                    Ongoing
-                  </Badge>
+
                   {latestActivityDue && (
                     <Badge size="sm" variant="solid">
                       {latestActivityDue}
