@@ -7,7 +7,74 @@ import React, { type HTMLAttributes, type ReactNode } from "react";
 import { X } from "lucide-react";
 
 const Dialog = BaseDialog.Root;
-const DialogTrigger = BaseDialog.Trigger;
+
+export interface IDialogTriggerProps
+  extends React.ComponentPropsWithoutRef<typeof BaseDialog.Trigger> {
+  asChild?: boolean;
+}
+
+const DialogTrigger = React.forwardRef<HTMLButtonElement, IDialogTriggerProps>(
+  ({ children, render, asChild, ...props }, forwardedRef) => {
+    if (render) {
+      return (
+        <BaseDialog.Trigger ref={forwardedRef} render={render} {...props}>
+          {children}
+        </BaseDialog.Trigger>
+      );
+    }
+
+    if ((asChild || React.isValidElement(children)) && children) {
+      return (
+        <BaseDialog.Trigger
+          ref={forwardedRef}
+          render={children as React.ReactElement}
+          {...props}
+        />
+      );
+    }
+
+    return (
+      <BaseDialog.Trigger ref={forwardedRef} {...props}>
+        {children}
+      </BaseDialog.Trigger>
+    );
+  },
+);
+DialogTrigger.displayName = "DialogTrigger";
+
+export interface IDialogCloseProps
+  extends React.ComponentPropsWithoutRef<typeof BaseDialog.Close> {
+  asChild?: boolean;
+}
+
+const DialogClose = React.forwardRef<HTMLButtonElement, IDialogCloseProps>(
+  ({ children, render, asChild, ...props }, forwardedRef) => {
+    if (render) {
+      return (
+        <BaseDialog.Close ref={forwardedRef} render={render} {...props}>
+          {children}
+        </BaseDialog.Close>
+      );
+    }
+
+    if ((asChild || React.isValidElement(children)) && children) {
+      return (
+        <BaseDialog.Close
+          ref={forwardedRef}
+          render={children as React.ReactElement}
+          {...props}
+        />
+      );
+    }
+
+    return (
+      <BaseDialog.Close ref={forwardedRef} {...props}>
+        {children}
+      </BaseDialog.Close>
+    );
+  },
+);
+DialogClose.displayName = "DialogClose";
 
 const overlayVariants = cva(
   ` fixed bg-black/50 font-head
@@ -229,7 +296,7 @@ const DialogComponent = Object.assign(Dialog, {
   Content: DialogContent,
   Description: DialogDescription,
   Footer: DialogFooter,
-  Close: BaseDialog.Close,
+  Close: DialogClose,
 });
 
 export { DialogComponent as Dialog };

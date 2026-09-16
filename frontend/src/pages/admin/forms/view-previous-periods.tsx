@@ -8,8 +8,6 @@ import { Table } from "@/components/retroui/Table";
 import { Badge } from "@/components/retroui/Badge";
 import { formatPeriodLabel } from "@/lib/academic-periods";
 
-
-
 export default function ViewPreviousPeriodsModal({ yearLevel }: { yearLevel: string }) {
     const [level] = React.useState<string>(yearLevel);
 
@@ -90,9 +88,9 @@ export default function ViewPreviousPeriodsModal({ yearLevel }: { yearLevel: str
                 </Table>
             </section>
             <Dialog.Footer>
-                <Dialog.Trigger>
+                <Dialog.Close>
                     <Button variant={"outline"}>Close</Button>
-                </Dialog.Trigger>
+                </Dialog.Close>
             </Dialog.Footer>
         </Dialog.Content>
     );

@@ -161,7 +161,7 @@ def test_generation_bounds():
     with pytest.raises(ValidationError):
         AITOSGenerateRequest(subject_id=1, subject_name="Science", rows=[{"label": "x", "type_counts": {"ESSAY": -1}}])
     with pytest.raises(ValidationError):
-        AITOSGenerateRequest(subject_id=1, subject_name="Science", rows=[{"label": "x", "type_counts": {"ESSAY": 1}}] * 4)
+        AITOSGenerateRequest(subject_id=1, subject_name="Science", rows=[{"label": "x", "type_counts": {"ESSAY": 1}}] * 13)
 
 
 def test_limiter_bounded_memory_and_reset():

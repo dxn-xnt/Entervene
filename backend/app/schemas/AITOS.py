@@ -97,12 +97,12 @@ class AITOSGenerateRequest(BaseModel):
     subject_id: int
     subject_name: str = Field(max_length=200)
     language: str = Field(default="English", max_length=40)
-    rows: List[TOSRowRequest] = Field(min_length=1, max_length=3)
+    rows: List[TOSRowRequest] = Field(min_length=1, max_length=12)
 
     @model_validator(mode="after")
     def bound_total(self):
-        if sum(sum(row.type_counts.values()) for row in self.rows) > 40:
-            raise ValueError("Generate at most 40 TOS questions per request")
+        if sum(sum(row.type_counts.values()) for row in self.rows) > 50:
+            raise ValueError("Generate at most 50 TOS questions per request")
         return self
 
 

@@ -25,6 +25,7 @@ import { Badge } from "@/components/retroui/Badge";
 import { Switch } from "@/components/retroui/Switch";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import type { CompetencyItem } from "./types";
 import {
@@ -663,8 +664,10 @@ export function TOSGeneratorScreen({
 
   const handleGenerateQuestions = async () => {
     if (isGenerating) return;
-    if (rows.length > 3 || totalItems > 40 || rows.some((row) => Object.values(row.type_counts).reduce((sum, count) => sum + count, 0) > 20)) {
-      setGenerationError("AI generation supports up to 3 competency rows, 20 questions per row, and 40 questions total. Reduce this blueprint before generating.");
+    if (rows.length > 12 || totalItems > 50 || rows.some((row) => Object.values(row.type_counts).reduce((sum, count) => sum + count, 0) > 20)) {
+      const err = `AI generation supports up to 12 competency rows, 20 questions per row, and 50 questions total (currently ${rows.length} rows, ${totalItems} items). Please adjust before generating.`;
+      setGenerationError(err);
+      toast.error(err);
       return;
     }
     setIsGenerating(true);
@@ -710,10 +713,13 @@ export function TOSGeneratorScreen({
       if (response && response.questions) {
         setQuestions(response.questions);
         setStep("ai-review");
+        toast.success(`Successfully generated ${response.questions.length} exam questions!`);
       }
     } catch (e: any) {
       console.error("AI Question generation failed", e);
-      setGenerationError(e.message || "AI question generation failed. Please retry.");
+      const errMsg = e.message || "AI question generation failed. Please retry.";
+      setGenerationError(errMsg);
+      toast.error(errMsg);
     } finally {
       setIsGenerating(false);
       setGenerationProgress("");
@@ -1924,6 +1930,18 @@ export function TOSGeneratorScreen({
                   </tbody>
                 </table>
               </Card>
+
+              {generationProgress && (
+                <Card className="block rounded border-2 border-border bg-accent p-3 text-center text-xs font-bold text-primary-foreground animate-pulse">
+                  {generationProgress}
+                </Card>
+              )}
+
+              {generationError && (
+                <Card className="block rounded border-2 border-destructive bg-destructive/10 p-3 text-xs font-bold text-destructive">
+                  {generationError}
+                </Card>
+              )}
 
               <div className="flex justify-between gap-2 pt-2">
                 <Button
