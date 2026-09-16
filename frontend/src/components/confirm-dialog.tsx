@@ -101,6 +101,7 @@ export function ConfirmDialog({
         </section>
         <Dialog.Footer position="static">
           <Button
+            autoIcon={false}
             variant="outline"
             onClick={handleCancel}
             disabled={isLoading}
@@ -108,6 +109,7 @@ export function ConfirmDialog({
             {cancelLabel}
           </Button>
           <Button
+            autoIcon={false}
             variant={confirmVariant}
             onClick={() => void handleConfirm()}
             disabled={isLoading}
