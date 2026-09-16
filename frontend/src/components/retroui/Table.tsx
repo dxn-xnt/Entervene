@@ -31,12 +31,20 @@ const Table = React.forwardRef<HTMLTableElement, ITableProps>(
     ({ className, wrapperClassName, rounded, ...props }, ref) => {
         const roundedClass = rounded !== undefined ? getRoundedClass(rounded) : "rounded";
         return (
-            <div className={cn("relative h-full w-full overflow-auto", roundedClass, wrapperClassName)}>
-                <table
-                    ref={ref}
-                    className={cn("w-full caption-bottom text-sm border-2 shadow-lg", roundedClass, className)}
-                    {...props}
-                />
+            <div
+                className={cn(
+                    "relative isolate h-full w-full overflow-hidden border-2 border-border bg-background shadow-lg",
+                    roundedClass,
+                    wrapperClassName,
+                )}
+            >
+                <div className="h-full w-full overflow-x-auto bg-background">
+                    <table
+                        ref={ref}
+                        className={cn("w-full border-collapse caption-bottom text-sm", className)}
+                        {...props}
+                    />
+                </div>
             </div>
         );
     }

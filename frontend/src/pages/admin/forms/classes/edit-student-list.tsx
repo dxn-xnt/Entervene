@@ -390,7 +390,7 @@ function EnrolledStudentsPanel({
             </Empty.Content>
           </Empty>
         ) : (
-          <Table className="border-none shadow-none" wrapperClassName="overflow-x-auto">
+          <Table wrapperClassName="border-0 shadow-none">
             <Table.Header className="font-sans">
               <Table.Row>
                 {selectMultiple && <Table.Head className="w-12 text-center"></Table.Head>}

@@ -183,31 +183,36 @@ function statusBadge(
   if (locked)
     return {
       label: "Locked",
+      variant: "outline" as const,
       cls: "bg-yellow-100 text-yellow-800 border-yellow-300",
     };
   if (status === "graded")
     return {
       label: "Graded",
-      cls: "bg-green-100 text-green-800 border-green-300",
+      variant: "success" as const,
+      cls: "",
     };
   if (status === "submitted" || status === "completed") {
     if (classworkType?.toUpperCase() === "READING") {
       return {
         label: "Completed",
-        cls: "bg-green-100 text-green-800 border-green-300",
+        variant: "success" as const,
+        cls: "",
       };
     }
     return {
       label: "Submitted",
-      cls: "bg-blue-100 text-blue-800 border-blue-300",
+      variant: "success" as const,
+      cls: "",
     };
   }
   if (status === "late")
-    return { label: "Late", cls: "bg-red-100 text-red-800 border-red-300" };
+    return { label: "Late", variant: "destructive" as const, cls: "" };
   if (dueDate && new Date() > new Date(dueDate))
-    return { label: "Missing", cls: "bg-red-100 text-red-800 border-red-300" };
+    return { label: "Missing", variant: "destructive" as const, cls: "" };
   return {
     label: "Pending",
+    variant: "outline" as const,
     cls: "bg-orange-100 text-orange-800 border-orange-300",
   };
 }
@@ -220,11 +225,12 @@ function dueBadge(dueDate?: string) {
   if (diffDays < 0)
     return {
       label: `${Math.abs(diffDays)} days late`,
-      cls: "bg-[#FF4B4B] text-white",
+      variant: "destructive" as const,
+      cls: "",
     };
   if (diffDays === 0)
-    return { label: "Due today", cls: "bg-orange-400 text-white" };
-  return { label: `Due in ${diffDays} days`, cls: "bg-[#7ABA78] text-white" };
+    return { label: "Due today", variant: "outline" as const, cls: "bg-orange-100 text-orange-800" };
+  return { label: `Due in ${diffDays} days`, variant: "success" as const, cls: "" };
 }
 
 function statusLabel(status?: string | null) {
@@ -1281,18 +1287,6 @@ export default function SubjectClassworkTab({
                     <span className="font-semibold text-base text-black line-clamp-2 break-words [overflow-wrap:anywhere]">
                       {cw.title}
                     </span>
-                    <span
-                      className={`rounded-full border px-2.5 py-1 text-xs font-bold shrink-0 ${badge.cls}`}
-                    >
-                      {badge.label}
-                    </span>
-                    {deadline && (
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-bold shrink-0 ${deadline.cls}`}
-                      >
-                        {deadline.label}
-                      </span>
-                    )}
                   </div>
 
                   <p className="mt-2 text-left text-xs text-gray-600">
@@ -1306,9 +1300,19 @@ export default function SubjectClassworkTab({
                   </p>
                 </div>
 
-                {isItemLoading && (
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent shrink-0 mt-1" />
-                )}
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  <Badge variant={badge.variant} size="sm" className={badge.cls}>
+                    {badge.label}
+                  </Badge>
+                  {deadline && (
+                    <Badge variant={deadline.variant} size="sm" className={deadline.cls}>
+                      {deadline.label}
+                    </Badge>
+                  )}
+                  {isItemLoading && (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-400 border-t-transparent" />
+                  )}
+                </div>
               </div>
             </Card>
           );

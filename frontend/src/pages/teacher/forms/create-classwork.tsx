@@ -556,8 +556,13 @@ export default function CreateClassworkModal({
                   <Empty className="shadow-md hover:shadow-none transition-shadow">
                     <EmptyHeader>
                       <EmptyTitle>No Materials Added</EmptyTitle>
-                      <EmptyDescription className="text-center whitespace-nowrap">
-                        pdf, docx, pptx, jpg & png
+                      <EmptyDescription className="flex flex-col -gap-3 text-center whitespace-nowrap">
+                        <span className="font-semibold">
+                          Max 10mb
+                        </span>
+                        <span>
+                          (pdf, docx, pptx, jpg & png)
+                        </span>
                       </EmptyDescription>
                     </EmptyHeader>
                     <EmptyContent>

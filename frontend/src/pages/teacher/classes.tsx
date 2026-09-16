@@ -262,11 +262,6 @@ const TeacherClasses = () => {
                               <h2 className="text-xl font-bold">
                                 {group.subjectName}
                               </h2>
-                              {group.subjectCodename && (
-                                <Badge variant="default" size="sm">
-                                  {group.subjectCodename}
-                                </Badge>
-                              )}
                             </div>
                             <div className="flex shrink-0 flex-row items-center gap-3">
                               <Badge variant="secondary">

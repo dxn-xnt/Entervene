@@ -95,9 +95,6 @@ export default function StudentInterventions() {
                   My Study Interventions
                 </h1>
               </div>
-              <Badge className="self-start border-2 border-black bg-yellow-300 px-2.5 py-1 text-xs font-extrabold uppercase text-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
-                Personalized Learning Tasks
-              </Badge>
             </header>
 
             <div className="-mt-[1px] flex min-w-0 flex-col gap-4 border-t-2 border-border px-3 py-3 sm:gap-6 sm:px-4 sm:py-4 md:px-6">
@@ -121,22 +118,28 @@ export default function StudentInterventions() {
               </div>
 
               {/* Filter Toolbar */}
-              <div className="flex items-center justify-between gap-3 flex-wrap bg-white p-3 border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+              <div className="flex items-center justify-end gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-black uppercase text-black">Status Filter:</span>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <Select.Trigger className="h-9 w-full border-2 border-black bg-white text-xs font-bold shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] sm:w-40">
+                    <Select.Trigger className="h-9 w-full font-bold sm:w-40">
                       <Select.Value placeholder="Select Status" />
                     </Select.Trigger>
-                    <Select.Content className="border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                      <Select.Item value="ACTIVE">ACTIVE TASKS</Select.Item>
-                      <Select.Item value="COMPLETED">COMPLETED</Select.Item>
-                      <Select.Item value="All">ALL INTERVENTIONS</Select.Item>
+                    <Select.Content>
+                      <Select.Item value="ACTIVE">Math</Select.Item>
+                      <Select.Item value="COMPLETED">Science</Select.Item>
+                      <Select.Item value="All">Filipino</Select.Item>
                     </Select.Content>
                   </Select>
-                </div>
-                <div className="text-xs font-bold text-gray-600">
-                  Showing {items.length} intervention recommendation{items.length === 1 ? "" : "s"}
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <Select.Trigger className="h-9 w-full font-bold sm:w-40">
+                      <Select.Value placeholder="Select Status" />
+                    </Select.Trigger>
+                    <Select.Content>
+                      <Select.Item value="ACTIVE">Active Tasks</Select.Item>
+                      <Select.Item value="COMPLETED">Completed Tasks</Select.Item>
+                      <Select.Item value="All">All Interventions</Select.Item>
+                    </Select.Content>
+                  </Select>
                 </div>
               </div>
 

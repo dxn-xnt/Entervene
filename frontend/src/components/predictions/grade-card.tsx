@@ -38,7 +38,7 @@ export function GradeCard({
         className="min-w-0 flex-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-1 rounded"
         aria-label={`View ${name} predictions`}
       >
-        <div className="flex flex-col items-start justify-between gap-2">
+        <div className="flex flex-col items-start justify-between gap-1">
           <div className="flex flex-row w-full justify-between items-center">
             <div>
               <p className="text-lg font-bold leading-tight truncate">{name}</p>

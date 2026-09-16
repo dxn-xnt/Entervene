@@ -4,7 +4,6 @@ import { useSearchParams } from "react-router-dom";
 import {
   Award,
   ChevronRight,
-  ChevronDown,
   ChevronLeft,
   ClipboardList,
   BookOpen,
@@ -18,11 +17,12 @@ import {
 import AttachmentDisplay from "@/components/attachment-display";
 import SubmissionForm from "@/components/submission-form";
 import SubmissionViewer from "@/components/submission-viewer";
-import { StudentLessonDetailScreen } from "@/components/student-lesson-detail-screen";
+import { StudentLessonDetailScreen } from "@/pages/student/lesson-view";
 import { API_URL, apiFetch, getLessonGoals, type LessonGoalItemResponse } from "@/lib/api";
 import { useAcademicPeriod } from "@/context/AcademicPeriodContext";
 import { useReadingFocusTracker } from "@/hooks/use-reading-focus-tracker";
 import { Card } from "@/components/retroui/Card";
+import { Accordion } from "@/components/retroui/Accordion";
 import { EmptyStateCard } from "@/components/empty-state-card";
 import { Badge } from "@/components/retroui/Badge";
 import { Button } from "@/components/retroui/Button";
@@ -975,10 +975,10 @@ export default function SubjectLessonTab({
                         setQuizReviewMode(false);
                       }}
                       className={`relative h-8 min-w-8 rounded border-black px-2 text-xs font-bold shadow-md hover:shadow-none ${index === quizCurrentIndex
-                          ? "bg-white"
-                          : hasQuizAnswer(question)
-                            ? "bg-[#F6E9B2]"
-                            : "bg-white"
+                        ? "bg-white"
+                        : hasQuizAnswer(question)
+                          ? "bg-[#F6E9B2]"
+                          : "bg-white"
                         }`}
                     >
                       {flaggedQuizQuestionIds.has(question.quiz_question_id) ? (
@@ -1039,12 +1039,12 @@ export default function SubjectLessonTab({
                               <div
                                 key={option.option_id}
                                 className={`border px-3 py-2 text-sm ${isCorrect
-                                    ? "border-green-500 bg-green-50"
-                                    : isKnownWrongSelection
-                                      ? "border-red-400 bg-red-50"
-                                      : isSelected
-                                        ? "border-[#E0C15A] bg-[#FFFBEE]"
-                                        : "border-gray-200 bg-white"
+                                  ? "border-green-500 bg-green-50"
+                                  : isKnownWrongSelection
+                                    ? "border-red-400 bg-red-50"
+                                    : isSelected
+                                      ? "border-[#E0C15A] bg-[#FFFBEE]"
+                                      : "border-gray-200 bg-white"
                                   }`}
                               >
                                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1170,8 +1170,8 @@ export default function SubjectLessonTab({
                     className={`rounded border-black px-4 py-2 text-xs font-bold shadow-md hover:shadow-none ${flaggedQuizQuestionIds.has(
                       currentQuestion.quiz_question_id,
                     )
-                        ? "bg-[#F6E9B2]"
-                        : "bg-white"
+                      ? "bg-[#F6E9B2]"
+                      : "bg-white"
                       }`}
                   >
                     Flag Question
@@ -1216,9 +1216,9 @@ export default function SubjectLessonTab({
                         }
                         disabled={isQuizSubmitting}
                         className={`min-h-24 rounded border-black px-4 py-3 text-lg font-bold shadow-md hover:shadow-none ${quizAnswers[currentQuestion.quiz_question_id]
-                            ?.selected_option_id === option.option_id
-                            ? "bg-success hover:bg-success"
-                            : "bg-white hover:bg-white"
+                          ?.selected_option_id === option.option_id
+                          ? "bg-success hover:bg-success"
+                          : "bg-white hover:bg-white"
                           }`}
                       >
                         {option.option_text}
@@ -1323,62 +1323,68 @@ export default function SubjectLessonTab({
     );
 
     return (
-      <div key={lesson.lesson_id} id={`student-lesson-${lesson.lesson_id}`}>
-        {/* ── Lesson card ── */}
-        <Card className="flex w-full items-center justify-between border-black bg-white shadow-md hover:shadow-none">
-          <button
-            type="button"
-            onClick={() => openLessonDetail(lesson)}
-            className="min-w-0 flex-1 text-left cursor-pointer"
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <Card.Title className="font-bold text-lg leading-tight hover:underline">
-                {lesson.title}
-              </Card.Title>
-              {lesson.attachments.length > 0 && (
-                <Badge variant="secondary" size="sm" className="rounded border border-black bg-success px-2 py-0.5 text-[10px] font-bold text-black">
-                  {lesson.attachments.length} material
-                  {lesson.attachments.length === 1 ? "" : "s"}
-                </Badge>
-              )}
+      <Accordion
+        key={lesson.lesson_id}
+        value={isExpanded ? [String(lesson.lesson_id)] : []}
+        onValueChange={() => toggleLesson(lesson.lesson_id)}
+        className="w-full"
+        id={`student-lesson-${lesson.lesson_id}`}
+      >
+        <Accordion.Item
+          value={String(lesson.lesson_id)}
+          className="border-2 border-black bg-primary shadow-md hover:shadow-none"
+        >
+          <Accordion.Header className="items-center p-3 sm:p-4">
+            <div className="flex flex-1 flex-col items-start gap-1 min-w-0 text-left">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openLessonDetail(lesson);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      openLessonDetail(lesson);
+                    }
+                  }}
+                  className="font-bold text-lg leading-tight cursor-pointer text-left"
+                >
+                  {lesson.title}
+                </span>
+                {lesson.attachments.length > 0 && (
+                  <Badge
+                    variant="secondary"
+                    size="sm"
+                    className="rounded border border-black bg-success px-2 py-0.5 text-[10px] font-bold text-black"
+                  >
+                    {lesson.attachments.length} material
+                    {lesson.attachments.length === 1 ? "" : "s"}
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs font-normal text-foreground mt-0.5">
+                {lesson.description ||
+                  (lesson.updated_at
+                    ? `Updated ${fmtDate(lesson.updated_at)}`
+                    : lesson.created_at
+                      ? `Created ${fmtDate(lesson.created_at)}`
+                      : "")}
+              </p>
             </div>
-            <p className="text-xs text-gray-700 mt-0.5">
-              {lesson.description ||
-                (lesson.updated_at
-                  ? `Updated ${fmtDate(lesson.updated_at)}`
-                  : lesson.created_at
-                    ? `Created ${fmtDate(lesson.created_at)}`
-                    : "")}
-            </p>
-          </button>
-          <button
-            type="button"
-            onClick={() => toggleLesson(lesson.lesson_id)}
-            className="cursor-pointer p-1 hover:text-black"
-            aria-label={isExpanded ? "Collapse lesson" : "Expand lesson"}
-          >
-            {isExpanded ? (
-              <ChevronDown size={20} className="shrink-0" />
-            ) : (
-              <ChevronRight size={20} className="shrink-0" />
-            )}
-          </button>
-        </Card>
+          </Accordion.Header>
 
-        {/* ── Inline classwork items (expanded) ── */}
-        {isExpanded && (
-          <div className="mt-2 space-y-2 pl-3 border-l-2 border-black ml-2 my-1">
-            <div className="flex items-center">
-              <h5 className="font-bold text-xs uppercase tracking-wider text-gray-700">
-                Linked Classwork
-              </h5>
-            </div>
+          <Accordion.Content className="p-3 border-t-2 border-black bg-white space-y-2">
+
             {classworkLoadingId === lesson.lesson_id ? (
               <div className="text-center py-4 text-sm text-gray-400">
                 Loading classworks...
               </div>
             ) : classworks.length === 0 ? (
-              <Card className="block w-full border-gray-200 bg-white px-4 py-3 text-sm text-gray-400 shadow-md hover:shadow-none">
+              <Card className="block w-full border-0 bg-muted px-4 py-3 text-sm text-muted-foreground shadow-none">
                 No classworks linked to this lesson.
               </Card>
             ) : (
@@ -1389,7 +1395,7 @@ export default function SubjectLessonTab({
                   <Card
                     key={cw.classwork_assignment_id}
                     onClick={() => !isLoading && openClassworkDetail(cw)}
-                    className="block w-full cursor-pointer"
+                    className="block w-full cursor-pointer border-black"
                   >
                     <Card.Content className="flex items-center justify-between gap-4">
                       <div className="min-w-0 flex-1">
@@ -1418,9 +1424,9 @@ export default function SubjectLessonTab({
                 );
               })
             )}
-          </div>
-        )}
-      </div>
+          </Accordion.Content>
+        </Accordion.Item>
+      </Accordion>
     );
   };
 
@@ -1476,9 +1482,9 @@ export default function SubjectLessonTab({
 
     if (classworks.length === 0) {
       return (
-        <div className="rounded border border-gray-200 bg-white px-4 py-3 text-sm text-gray-400">
-          No classworks linked to this lesson.
-        </div>
+        <Card className="w-full text-center rounded border-0 bg-muted px-4 py-3 text-sm text-muted-foreground shadow-none">
+          No classworks linked to this lesson
+        </Card>
       );
     }
 
@@ -1708,7 +1714,7 @@ export default function SubjectLessonTab({
                     return (
                       <Card
                         key={group.key}
-                        className="flex w-full flex-col overflow-hidden border-black bg-white p-0 shadow-md hover:shadow-none"
+                        className="flex w-full flex-col overflow-hidden border-destructive bg-white p-0 shadow-md hover:shadow-none"
                       >
                         {/* ── Competency Header Accordion Bar ── */}
                         <Card.Header
@@ -1749,19 +1755,13 @@ export default function SubjectLessonTab({
                           </div>
                         </Card.Header>
 
-                        {/* ── Competency Lessons Body ── */}
-                        {!isCollapsed && (
-                          <Card.Content className="flex flex-col gap-2 bg-white p-3">
-                            {group.lessons.map(renderStudentLessonItem)}
-                          </Card.Content>
-                        )}
                       </Card>
                     );
                   })}
 
                   {/* ── Standalone / Unassigned Lessons Section ── */}
                   {unassignedLessons.length > 0 && (
-                    <Card className="flex w-full flex-col overflow-hidden border-black bg-white p-0 shadow-md hover:shadow-none">
+                    <div className="flex w-full flex-col overflow-hidden pr-1 pb-1">
                       {competencyGroups.length > 0 ? (
                         <>
                           <Card.Header
@@ -1794,18 +1794,13 @@ export default function SubjectLessonTab({
                             </div>
                           </Card.Header>
 
-                          {isUnassignedExpanded && (
-                            <Card.Content className="flex flex-col gap-2 bg-white p-3">
-                              {unassignedLessons.map(renderStudentLessonItem)}
-                            </Card.Content>
-                          )}
                         </>
                       ) : (
-                        <Card.Content className="flex flex-col gap-2 bg-white p-3">
+                        <Card.Content className="flex flex-col gap-3">
                           {unassignedLessons.map(renderStudentLessonItem)}
                         </Card.Content>
                       )}
-                    </Card>
+                    </div>
                   )}
                 </div>
               </div>

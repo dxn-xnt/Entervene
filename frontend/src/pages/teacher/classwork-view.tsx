@@ -561,7 +561,7 @@ export default function ClassworkView({
                     </div>
                   </div>
 
-                  <Table className="border-black">
+                  <Table wrapperClassName="border-black">
                     <Table.Header className="border-black">
                       <Table.Row>
                         <Table.Head>Student</Table.Head>
