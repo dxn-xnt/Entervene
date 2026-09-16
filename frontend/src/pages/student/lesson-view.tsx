@@ -121,35 +121,13 @@ export function LessonView({
         </Card>
 
         {lessonDetailTab === "classwork" ? (
-          <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-            <section className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold">Classwork</h3>
-              </div>
-              {renderLessonClassworkCards(lesson)}
-            </section>
-            <aside className="space-y-3">
-              <Card className="block w-full border-black bg-white p-3">
-                <h3 className="font-bold">Lesson Mastery</h3>
-                <p className="mt-2 text-xs text-gray-700">
-                  Review the classwork and recommended materials for this lesson
-                  to strengthen mastery.
-                </p>
-              </Card>
-              <Card className="block w-full border-black bg-white p-3 text-center text-sm font-semibold italic">
-                Setting a goal is about achieving it and staying with that plan.
-              </Card>
-            </aside>
-          </div>
-        )
-          //  : classId && subjectId ? (
-          //   <SubjectSuggestionsTab
-          //     classId={classId}
-          //     subjectId={subjectId}
-          //     selectedLessonId={lesson.lesson_id}
-          //     hideIntro
-          //   />
-          : null}
+          <section className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-bold">Classwork</h3>
+            </div>
+            {renderLessonClassworkCards(lesson)}
+          </section>
+        ) : null}
       </div>
     </>
   );

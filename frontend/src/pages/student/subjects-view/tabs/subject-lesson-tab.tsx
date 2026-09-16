@@ -1325,7 +1325,7 @@ export default function SubjectLessonTab({
       >
         <Accordion.Item
           value={String(lesson.lesson_id)}
-          className="border-2 border-black bg-white shadow-md hover:shadow-none"
+          className="border-2 border-black bg-primary shadow-md hover:shadow-none"
         >
           <Accordion.Header className="items-center p-3 sm:p-4">
             <div className="flex flex-1 flex-col items-start gap-1 min-w-0 text-left">
@@ -1344,7 +1344,7 @@ export default function SubjectLessonTab({
                       openLessonDetail(lesson);
                     }
                   }}
-                  className="font-bold text-lg leading-tight hover:underline cursor-pointer text-left"
+                  className="font-bold text-lg leading-tight cursor-pointer text-left"
                 >
                   {lesson.title}
                 </span>
@@ -1359,7 +1359,7 @@ export default function SubjectLessonTab({
                   </Badge>
                 )}
               </div>
-              <p className="text-xs text-gray-700 mt-0.5">
+              <p className="text-xs font-normal text-foreground mt-0.5">
                 {lesson.description ||
                   (lesson.updated_at
                     ? `Updated ${fmtDate(lesson.updated_at)}`
@@ -1371,17 +1371,13 @@ export default function SubjectLessonTab({
           </Accordion.Header>
 
           <Accordion.Content className="p-3 border-t-2 border-black bg-white space-y-2">
-            <div className="flex items-center">
-              <h5 className="font-bold text-xs uppercase tracking-wider text-gray-700">
-                Linked Classwork
-              </h5>
-            </div>
+
             {classworkLoadingId === lesson.lesson_id ? (
               <div className="text-center py-4 text-sm text-gray-400">
                 Loading classworks...
               </div>
             ) : classworks.length === 0 ? (
-              <Card className="block w-full border-gray-200 bg-white px-4 py-3 text-sm text-gray-400 shadow-md hover:shadow-none">
+              <Card className="block w-full border-0 bg-muted px-4 py-3 text-sm text-muted-foreground shadow-none">
                 No classworks linked to this lesson.
               </Card>
             ) : (

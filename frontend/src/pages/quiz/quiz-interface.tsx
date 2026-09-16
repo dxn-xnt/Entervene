@@ -211,7 +211,7 @@ const StudentQuizTake = () => {
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-4">
         <AlertCircle className="w-10 h-10 text-red-500" />
         <p className="text-lg font-bold text-center">{error || "Quiz not available."}</p>
-        <Button onClick={() => navigate(-1)}>Go Back</Button>
+        <Button autoIcon={false} onClick={() => navigate(-1)}>Go Back</Button>
       </div>
     );
   }
@@ -248,6 +248,7 @@ const StudentQuizTake = () => {
           )}
         </div>
         <Button
+          autoIcon={false}
           onClick={handleSubmit}
           disabled={submitting}
           className="hover:shadow-none transition-all"
@@ -275,22 +276,22 @@ const StudentQuizTake = () => {
             const isFlagged = flagged.has(i);
             const isCurrent = i === currentIndex;
             return (
-              <button
+              <Button
+                autoIcon={false}
                 key={q.quiz_question_id}
                 onClick={() => setCurrentIndex(i)}
-                className={`size-8 border-2 border-black text-sm font-semibold transition-colors cursor-pointer relative ${
-                  isCurrent
-                    ? "bg-[#F6E9B2] shadow-sm"
-                    : isAnswered
-                      ? "bg-emerald-100"
-                      : "bg-white hover:bg-black/5"
-                }`}
+                className={`size-8 border-2 border-black text-sm font-semibold transition-colors cursor-pointer relative ${isCurrent
+                  ? "bg-[#F6E9B2] shadow-sm"
+                  : isAnswered
+                    ? "bg-emerald-100"
+                    : "bg-white hover:bg-black/5"
+                  }`}
               >
                 {i + 1}
                 {isFlagged && (
                   <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full" />
                 )}
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -308,11 +309,11 @@ const StudentQuizTake = () => {
         </button>
         <div className="flex items-center gap-4">
           <Button
+            autoIcon={false}
             variant="ghost"
             onClick={() => toggleFlag(currentIndex)}
-            className={`border rounded flex items-center gap-2 hover:bg-gray-100 transition-all cursor-pointer ${
-              flagged.has(currentIndex) ? "bg-red-50" : "bg-white"
-            }`}
+            className={`border rounded flex items-center gap-2 hover:bg-gray-100 transition-all cursor-pointer ${flagged.has(currentIndex) ? "bg-red-50" : "bg-white"
+              }`}
           >
             <Flag size={14} className={flagged.has(currentIndex) ? "fill-red-500 text-red-500" : "text-gray-400"} />
             {flagged.has(currentIndex) ? "Flagged" : "Flag Question"}
@@ -354,15 +355,15 @@ const StudentQuizTake = () => {
             .map((opt) => {
               const selected = answers.get(currentQuestion.quiz_question_id)?.selected_option_id === opt.option_id;
               return (
-                <Card
+                <Button
+                  autoIcon={false}
                   key={opt.option_id}
                   onClick={() => selectOption(currentQuestion.quiz_question_id, opt.option_id)}
-                  className={`cursor-pointer flex items-center justify-center p-8 text-center text-lg font-semibold transition-all hover:shadow-none ${
-                    selected ? "bg-[#F6E9B2] border-black" : "bg-white"
-                  }`}
+                  className={`h-auto min-h-[5rem] cursor-pointer flex items-center justify-center p-8 text-center text-lg font-semibold transition-all hover:shadow-none ${selected ? "bg-primary text-primary-foreground border-black" : "bg-white text-black hover:bg-black/5"
+                    }`}
                 >
                   {opt.option_text}
-                </Card>
+                </Button>
               );
             })}
         </div>
