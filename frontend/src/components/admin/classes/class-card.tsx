@@ -72,7 +72,7 @@ export default function ClassCard({ item, onEdit, onArchive }: {
         aria-hidden
       >
         {/* Stats */}
-        <div className="flex flex-row w-full mt-3 gap-2">
+        <div className="mt-1 flex w-full flex-row gap-2">
           <Card className="p-2 px-4 shadow-none gap-3 w-full flex flex-row items-center">
             <Progress
               variant="circular"

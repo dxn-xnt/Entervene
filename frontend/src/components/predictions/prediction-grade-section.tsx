@@ -62,7 +62,7 @@ export function PredictionGradeSection({ group, role }: PredictionGradeSectionPr
           </Button>
         </div>
       </div>
-      <div className="pt-3 flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 pt-1">
         {isDynamicGroup ? (
           group.sections.length > 0 ? (
             group.sections.map((sec) => (
