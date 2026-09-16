@@ -1,4 +1,5 @@
 from decimal import Decimal
+from pathlib import Path
 import pytest
 from app.db.Session import SessionLocal
 from app.models.academic import Subject
@@ -9,6 +10,7 @@ from app.services.student_record.StudentRecordService import (
 )
 from app.services.prediction.UnifiedCurrentTermFeatureBuilderService import (
     _domain_warnings,
+    _weight_domain_warnings,
     load_unified_feature_schema,
 )
 from app.services.prediction.CurrentPeriodFeatureBuilderService import (
@@ -90,8 +92,8 @@ def test_grading_calculation_20_60_20():
     assert ig == 89.80
 
 
-def test_unified_weight_pattern_validation():
-    """Verify that WW20_PT60_QA20 is accepted while WW20_PT50_QA30 produces UNSUPPORTED_WEIGHT_PATTERN."""
+def test_current_period_v1_weight_pattern_validation():
+    """The legacy current-period v1 schema still rejects core 20/50/30."""
     base_schema = load_current_period_feature_schema()
     validated = set(base_schema.get("validated_weight_combinations") or [])
 
@@ -113,6 +115,36 @@ def test_unified_weight_pattern_validation():
     warns = domain_warnings(features_core, base_schema)
     codes = [w["code"] if isinstance(w, dict) else w.code for w in warns]
     assert "UNSUPPORTED_WEIGHT_PATTERN" in codes
+
+
+def test_unified_v3_accepts_official_english_7_core_20_50_30():
+    """Unified V3 is trained for Grade 7 English official 20/50/30 ECR semantics."""
+    schema = load_unified_feature_schema(
+        Path("backend/data/models/unified_current_term_projection_v3_official_ecr_feature_schema.json")
+    )
+    assert schema["direct_support_matrix"]["ENGLISH"]["weights"] == "20/50/30"
+    features = {
+        "subject": "ENGLISH",
+        "grade_level": 7.0,
+        "ww_weight": 20.0,
+        "pt_weight": 50.0,
+        "qa_weight": 30.0,
+    }
+
+    warnings = _weight_domain_warnings(features, schema)
+
+    assert not any(w["code"] == "UNSUPPORTED_WEIGHT_PATTERN" for w in warnings)
+
+
+def test_unified_v3_keeps_unsupported_subjects_blocked():
+    schema = load_unified_feature_schema(
+        Path("backend/data/models/unified_current_term_projection_v3_official_ecr_feature_schema.json")
+    )
+
+    assert any(w["code"] == "DOMAIN_UNSUPPORTED" for w in _domain_warnings("MAPEH", schema))
+    assert any(w["code"] == "DOMAIN_UNSUPPORTED" for w in _domain_warnings("ADVANCED_PHYSICS", schema))
+    assert any(w["code"] == "DOMAIN_UNSUPPORTED" for w in _domain_warnings("FILIPINO", schema))
+    assert any(w["code"] == "DOMAIN_UNSUPPORTED" for w in _domain_warnings("ARALING_PANLIPUNAN", schema))
 
 
 def test_mapeh_unsupported():

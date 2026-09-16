@@ -355,6 +355,14 @@ def teacher_student_gradebook(
         ps_qa = grade_res.ps_qa
         ig = grade_res.initial_grade
         tg = grade_res.transmuted_grade
+        pg = pg_map.get(student.student_id)
+
+        if pg is not None and pg.is_finalized:
+            ps_ww = float(pg.written_work_percent) if pg.written_work_percent is not None else ps_ww
+            ps_pt = float(pg.performance_task_percent) if pg.performance_task_percent is not None else ps_pt
+            ps_qa = float(pg.quarterly_assessment_percent) if pg.quarterly_assessment_percent is not None else ps_qa
+            ig = float(pg.initial_grade) if pg.initial_grade is not None else ig
+            tg = float(pg.transmuted_grade) if pg.transmuted_grade is not None else tg
 
         # Prefer finalized official grade if available
         metrics = _metrics_for_student(db, scope, student, assignments, student_subs)
@@ -370,7 +378,6 @@ def teacher_student_gradebook(
 
         perf_descriptor = get_performance_descriptor(grade_for_descriptor)
 
-        pg = pg_map.get(student.student_id)
         finalized_by_name = None
         if pg and pg.finalized_by:
             finalized_by_name = _staff_full_name(pg.finalized_by)
@@ -1521,6 +1528,7 @@ def _classwork_assignments(db: Session, scope: TeacherRecordScope) -> list[Class
         .join(Classwork, Classwork.classwork_id == ClassworkAssignment.classwork_id)
         .filter(
             ClassworkAssignment.class_id == scope.class_.class_id,
+            ClassworkAssignment.academic_period_id == scope.period.academic_period_id,
             Classwork.subject_id == scope.subject.subject_id,
             Classwork.is_archived.is_(False),
             Classwork.is_graded.is_(True),
@@ -1529,9 +1537,6 @@ def _classwork_assignments(db: Session, scope: TeacherRecordScope) -> list[Class
         .order_by(ClassworkAssignment.due_date.asc().nullslast(), Classwork.created_at.asc())
         .all()
     )
-    # Classwork assignments do not have academic_period_id yet. Due-date based
-    # filtering can hide overdue/missing work when configured dates drift, so
-    # use all class/subject assignments until the schema can filter directly.
     return rows
 
 
