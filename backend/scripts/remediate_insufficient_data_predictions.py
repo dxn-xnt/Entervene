@@ -52,7 +52,6 @@ def main():
         candidate_query = db.query(AIPrediction).filter(
             AIPrediction.risk_level == "INSUFFICIENT_DATA",
             (
-                AIPrediction.evidence_snapshot.is_(None),
                 AIPrediction.predicted_period_grade.isnot(None)
                 | AIPrediction.risk_score.isnot(None)
                 | (AIPrediction.data_status != "INSUFFICIENT_DATA")

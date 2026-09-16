@@ -19,7 +19,6 @@ from app.services.prediction.PredictionExplanationService import (
 )
 from app.services.prediction.TeacherAssignmentResolver import resolve_teacher_for_load
 from app.services.prediction.TeacherEvidenceService import teacher_evidence_from_snapshot
-from app.services.prediction.PredictionScopeService import authorize_prediction_read, prediction_metadata
 
 
 def _to_float(value: Any) -> float | None:
@@ -160,7 +159,10 @@ def get_prediction_detail(
         prediction.target_period_id,
     )
 
-    authorize_prediction_read(db, prediction, is_admin=is_admin, staff_id=staff_id)
+    # Server-side teacher role isolation
+    if not is_admin:
+        if not staff_id or teacher_info.staff_id != staff_id:
+            raise PermissionError("Access denied. You are not assigned to this class, subject, and term.")
 
     # Retrieve relational entities for display
     student = db.get(Student, prediction.student_id)
@@ -193,7 +195,6 @@ def get_prediction_detail(
         current_user_review = next((_review(row) for row in _reviews(db, prediction_id, staff_id)), None)
 
     return {
-        **prediction_metadata(prediction),
         "prediction_id": prediction.prediction_id,
         "student_id": prediction.student_id,
         "student_name": student_name,
@@ -219,7 +220,6 @@ def get_prediction_detail(
         "risk_score": _to_float(prediction.risk_score),
         "risk_level": prediction.risk_level,
         "data_status": prediction.data_status,
-        "risk_assessment_status": prediction.risk_assessment_status,
         "generated_at": prediction.generated_at,
         "model_version": _model_version(prediction.model_version),
         "features": [] if prediction.evidence_snapshot is not None else [_feature(row) for row in feature_rows],

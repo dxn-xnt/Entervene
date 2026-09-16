@@ -18,7 +18,6 @@ from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkAssignment import ClassworkAssignment
 from app.models.people.Student import Student
 from app.models.submissions.StudentSubmission import StudentSubmission
-from app.services.grading.ComponentMapper import classify_classwork_component, to_legacy_prediction_component
 
 
 COMPONENT_FEATURES = {
@@ -30,7 +29,20 @@ READINESS_ACTION = "Collect more graded evidence before generating a model-assis
 
 
 def map_classwork_category(classwork_type: str, classwork_category: str | None) -> str:
-    return to_legacy_prediction_component(classify_classwork_component(classwork_type, classwork_category))
+    if classwork_category:
+        cat = classwork_category.upper()
+        if cat in {"EXAMS", "EXAM", "PERIODICAL_EXAM", "PERIODICAL_ASSESSMENT", "QUARTERLY_ASSESSMENT", "SUMMATIVE_1", "SUMMATIVE_2", "TERM_EXAM"}:
+            return "QUARTERLY_ASSESSMENT"
+        if cat in {"WRITTEN_WORK", "PERFORMANCE_TASK"}:
+            return cat
+
+    t = (classwork_type or "").upper()
+    if t in {"EXAM", "PERIODICAL_EXAM", "QUARTERLY_EXAM", "SUMMATIVE"}:
+        return "QUARTERLY_ASSESSMENT"
+    elif t in {"ACTIVITY", "PROJECT"}:
+        return "PERFORMANCE_TASK"
+    else:
+        return "WRITTEN_WORK"
 
 
 def _to_float(value: Any) -> float | None:
@@ -281,7 +293,6 @@ def _classwork_metrics(
             {
                 "assignment_id": assignment.classwork_assignment_id,
                 "classwork_id": classwork.classwork_id,
-                "component_type": map_classwork_category(classwork.classwork_type, classwork.classwork_category),
                 "due_date": assignment.due_date.isoformat() if assignment.due_date else None,
                 "total_points": _to_float(classwork.total_points),
                 "selected_submission_id": submission.submission_id if submission else None,
@@ -473,7 +484,7 @@ def compute_behavioral_engagement_score(
 
 
 def _prediction_mode(source_period: AcademicPeriod, target_period_id: int | None) -> str:
-    if target_period_id is None or target_period_id == source_period.academic_period_id:
+    if target_period_id is None or target_period_id == source_period.academic_period_id or source_period.is_active:
         return "CURRENT_PERIOD_PROJECTION"
     return "NEXT_PERIOD_PREDICTION"
 
@@ -600,7 +611,6 @@ def build_prediction_features_from_records(
     source_period_id: int,
     target_period_id: int | None = None,
     model_name: str = "entervene_next_period_grade_rf",
-    model_version=None,
 ) -> dict[str, Any]:
     student = db.get(Student, student_id)
     class_ = db.get(Class, class_id)
@@ -801,27 +811,6 @@ def build_prediction_features_from_records(
         .all()
     )
     grades = [_select_grade_with_provenance(row)[0] for row in previous_grades]
-    # Capture provenance alongside existing calculations; never change model values.
-    grade_observations = [{
-        "period_grade_id": row.period_grade_id, "academic_period_id": row.academic_period_id,
-        "selected_grade": _select_grade_with_provenance(row)[0],
-        "provenance": _select_grade_with_provenance(row)[1],
-        "selected_field": _select_grade_with_provenance(row)[2],
-        "written_work_percent": _to_float(row.written_work_percent),
-        "performance_task_percent": _to_float(row.performance_task_percent),
-        "quarterly_assessment_percent": _to_float(row.quarterly_assessment_percent),
-    } for row in sorted(previous_grades, key=lambda row: row.period_grade_id)]
-    evidence_summary["grade_observations"] = grade_observations
-    for name in ("source_period_grade", "cumulative_period_grade_avg", "grade_trend_vs_previous_period"):
-        observations = grade_observations if name != "source_period_grade" else [r for r in grade_observations if r["academic_period_id"] == source_period_id]
-        evidence_summary["source_record_ids"][name] = [r["period_grade_id"] for r in observations]
-        evidence_summary["captured_source_values"][name] = observations
-    for name in COMPONENT_FEATURES.values():
-        evidence_summary["captured_source_values"][name] = {
-            "classwork": classwork_summary["assignment_observations"] if classwork_rows else [],
-            "assessments": assessment_summary["assessment_observations"] if not classwork_rows else [],
-            "grade_row_fallback": [r for r in grade_observations if r["academic_period_id"] == source_period_id],
-        }
     grades = [grade for grade in grades if grade is not None]
     if grades:
         features["cumulative_period_grade_avg"] = round(sum(grades) / len(grades), 2)
@@ -843,7 +832,7 @@ def build_prediction_features_from_records(
                 load_feature_schema_from_model_version,
                 prepare_feature_row,
             )
-            model_version = model_version or get_active_model_version(db, model_name or DEFAULT_MODEL_NAME)
+            model_version = get_active_model_version(db, model_name or DEFAULT_MODEL_NAME)
             prepare_feature_row(features, load_feature_schema_from_model_version(model_version))
         except (LookupError, ValueError) as exc:
             readiness = {
