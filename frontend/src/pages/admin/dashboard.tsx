@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { ChartAreaInteractive } from "@/components/chart-area-interactive";
 import { OverviewCard } from "@/components/overview-cards";
 import { Progress } from "@/components/retroui/Progress";
 import { Card } from "@/components/retroui/Card";

@@ -101,8 +101,12 @@ async def create_classwork_with_assignments(
 
 
 @router.get("/my-classworks", response_model=List[ClassworkResponse])
-def get_my_classworks(staff_id: str = Depends(get_staff_id), db: Session = Depends(get_db)):
-    return teacher_classworks(staff_id, db)
+def get_my_classworks(
+    academic_period_id: Optional[int] = Query(None),
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+):
+    return teacher_classworks(staff_id, db, academic_period_id)
 
 
 @router.get("/classwork/{classwork_id}", response_model=ClassworkResponse)

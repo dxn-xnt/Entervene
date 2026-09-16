@@ -1,10 +1,9 @@
 import type { ReactNode } from "react";
-import { BookOpen, ClipboardList } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Breadcrumb } from "@/components/retroui/Breadcrumb";
 import { Card } from "@/components/retroui/Card";
 import { Tabs } from "@/components/retroui/Tabs";
-import SubjectSuggestionsTab from "@/pages/student/subjects-view/tabs/subject-suggestions-tab";
 import { routes } from "@/../routes";
 import type { StudentLesson } from "@/types/student-subject";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -30,8 +29,6 @@ export function LessonView({
   lessonDetailTab,
   setLessonDetailTab,
   renderLessonClassworkCards,
-  classId,
-  subjectId,
   fmtDate,
 }: LessonViewProps) {
   const navigate = useNavigate();

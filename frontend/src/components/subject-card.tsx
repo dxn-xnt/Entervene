@@ -27,8 +27,6 @@ type SubjectCardProps = {
 
 export function SubjectCard({
   title,
-  teacher,
-  badges,
   pendingCount,
   completionRate = 0,
   latestActivityTitle,
