@@ -28,7 +28,6 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/
 import { cn } from "@/lib/utils";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import AssignSubstituteModal from "./forms/assign-substitute-modal";
-import { RoleBadge } from "@/components/role-badge";
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -951,10 +950,7 @@ function NameCell({
         <Avatar.Fallback>{name.charAt(0).toUpperCase()}</Avatar.Fallback>
       </Avatar>
       <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <div className="truncate text-sm font-semibold">{name}</div>
-          <RoleBadge role={role} />
-        </div>
+        <div className="truncate text-sm font-semibold">{name}</div>
         {subtitle && (
           <div className="truncate text-xs text-muted-foreground">
             {subtitle}
