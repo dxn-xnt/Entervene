@@ -41,12 +41,6 @@ def assign_intervention_from_prediction(
             detail=f"Prediction ID {prediction_id} not found.",
         )
 
-    from app.services.prediction.PredictionScopeService import authorize_prediction_write
-    try:
-        authorize_prediction_write(db, prediction, staff_id)
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-
     resource_type = payload.get("resource_type", "LESSON").upper()
     if resource_type not in ("LESSON", "CLASSWORK"):
         raise HTTPException(

@@ -139,6 +139,12 @@ export function TOSGeneratorScreen({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState("");
 
+  // AI Field Assistance states
+  const [isSuggestingTitle, setIsSuggestingTitle] = useState(false);
+  const [isSuggestingParts, setIsSuggestingParts] = useState(false);
+  const [isSuggestingComps, setIsSuggestingComps] = useState(false);
+  const [refiningCompIdx, setRefiningCompIdx] = useState<number | null>(null);
+
   // Fetch available subjects list if not passed from parent
   useEffect(() => {
     if (availableSubjects.length === 0) {
@@ -511,6 +517,147 @@ export function TOSGeneratorScreen({
       alert(e.message || "Failed to save TOS Exam.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSuggestTitle = async () => {
+    if (!currentSubjectName) {
+      alert("Please select a Subject Curriculum first so AI has context for the title.");
+      return;
+    }
+    setIsSuggestingTitle(true);
+    try {
+      const res = await apiFetch("/api/v1/ai/tos-assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          field: "suggest_title",
+          subject_id: currentSubjectId || undefined,
+          subject_name: currentSubjectName,
+          term: quarter,
+          language: language,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.title) setTitle(data.title);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err?.detail || "Failed to generate title suggestion.");
+      }
+    } catch (e: any) {
+      alert(e.message || "Could not reach AI service.");
+    } finally {
+      setIsSuggestingTitle(false);
+    }
+  };
+
+  const handleSuggestTestParts = async () => {
+    setIsSuggestingParts(true);
+    try {
+      const res = await apiFetch("/api/v1/ai/tos-assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          field: "suggest_test_parts",
+          subject_id: currentSubjectId || undefined,
+          subject_name: currentSubjectName,
+          total_items: totalItems > 0 ? totalItems : 30,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data?.test_parts) && data.test_parts.length > 0) {
+          setTestParts(data.test_parts);
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err?.detail || "Failed to generate test parts suggestion.");
+      }
+    } catch (e: any) {
+      alert(e.message || "Could not reach AI service.");
+    } finally {
+      setIsSuggestingParts(false);
+    }
+  };
+
+  const handleSuggestCompetencies = async () => {
+    if (!currentSubjectName) {
+      alert("Please select a Subject Curriculum first so AI knows what curriculum topics to generate.");
+      return;
+    }
+    setIsSuggestingComps(true);
+    try {
+      const res = await apiFetch("/api/v1/ai/tos-assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          field: "suggest_competencies",
+          subject_id: currentSubjectId || undefined,
+          subject_name: currentSubjectName,
+          term: quarter,
+          language: language,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data?.competencies) && data.competencies.length > 0) {
+          const newComps = data.competencies.map((c: any) => ({
+            code: c.code,
+            label: c.label,
+            days: c.days || 3,
+            is_adhoc: true,
+          }));
+          setCompInputs((prev) => [...prev, ...newComps]);
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err?.detail || "Failed to generate competencies suggestion.");
+      }
+    } catch (e: any) {
+      alert(e.message || "Could not reach AI service.");
+    } finally {
+      setIsSuggestingComps(false);
+    }
+  };
+
+  const handleRefineTopic = async (compIdx: number) => {
+    const targetComp = compInputs[compIdx];
+    if (!targetComp) return;
+    setRefiningCompIdx(compIdx);
+    try {
+      const res = await apiFetch("/api/v1/ai/tos-assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          field: "suggest_competencies",
+          subject_id: currentSubjectId || undefined,
+          subject_name: currentSubjectName,
+          term: quarter,
+          language: language,
+          context_text: targetComp.label,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data?.competencies) && data.competencies.length > 0) {
+          const refined = data.competencies[0];
+          const updated = [...compInputs];
+          updated[compIdx] = {
+            ...updated[compIdx],
+            label: refined.label || updated[compIdx].label,
+            days: refined.days || updated[compIdx].days,
+          };
+          setCompInputs(updated);
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err?.detail || "Failed to refine topic.");
+      }
+    } catch (e: any) {
+      alert(e.message || "Could not reach AI service.");
+    } finally {
+      setRefiningCompIdx(null);
     }
   };
 
@@ -1048,7 +1195,23 @@ export function TOSGeneratorScreen({
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-muted-foreground block">Exam Title</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-muted-foreground block">Exam Title</label>
+                    <button
+                      type="button"
+                      onClick={handleSuggestTitle}
+                      disabled={isSuggestingTitle || !currentSubjectName}
+                      className="flex items-center gap-1 text-[11px] font-black text-purple-600 dark:text-purple-400 hover:underline disabled:opacity-40 cursor-pointer"
+                      title="AI suggest a standard DepEd title"
+                    >
+                      {isSuggestingTitle ? (
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3 w-3" />
+                      )}
+                      <span>AI Suggest</span>
+                    </button>
+                  </div>
                   <Input
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
@@ -1074,11 +1237,32 @@ export function TOSGeneratorScreen({
               </div>
 
               <Card className="block rounded border-2 border-border bg-card p-5 shadow-md">
-                <div className="flex flex-col gap-1 border-b-2 border-border pb-2 sm:flex-row sm:items-center sm:justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Question Types & Item Composition</span>
-                  <span className="text-xs font-bold text-foreground">
-                    Total Items Target: <span className="text-lg font-black text-foreground">{totalItems}</span>
-                  </span>
+                <div className="flex flex-col gap-2 border-b-2 border-border pb-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Question Types & Item Composition</span>
+                    <span className="text-xs font-bold text-foreground">
+                      Total Items Target: <span className="text-lg font-black text-foreground">{totalItems}</span>
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleSuggestTestParts}
+                    disabled={isSuggestingParts}
+                    className="rounded border-2 border-border bg-card font-bold shadow-xs hover:bg-accent text-xs h-8 text-foreground shrink-0 cursor-pointer"
+                    title="AI suggest standard question type breakdown"
+                  >
+                    {isSuggestingParts ? (
+                      <>
+                        <RefreshCw className="mr-1.5 h-3 w-3 animate-spin" /> Recommending...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="mr-1.5 h-3 w-3 text-purple-600 dark:text-purple-400" /> AI Recommend Parts
+                      </>
+                    )}
+                  </Button>
                 </div>
 
                 <div className="mt-4 space-y-3">
@@ -1204,20 +1388,42 @@ export function TOSGeneratorScreen({
                   </Select>
                 </div>
 
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setCompInputs([
-                      ...compInputs,
-                      { label: `Ad-hoc Topic #${compInputs.length + 1}`, days: 2, is_adhoc: true },
-                    ]);
-                  }}
-                  className="rounded border-2 border-border bg-card font-bold shadow-sm hover:bg-muted/20 h-9 text-xs shrink-0"
-                >
-                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Ad-hoc Topic
-                </Button>
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleSuggestCompetencies}
+                    disabled={isSuggestingComps || !currentSubjectName}
+                    className="rounded border-2 border-border bg-card font-bold shadow-sm hover:bg-accent h-9 text-xs cursor-pointer text-foreground"
+                    title="AI suggest topics and days taught for this term"
+                  >
+                    {isSuggestingComps ? (
+                      <>
+                        <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Suggesting Topics...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="mr-1.5 h-3.5 w-3.5 text-purple-600 dark:text-purple-400" /> AI Suggest Topics & Days
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setCompInputs([
+                        ...compInputs,
+                        { label: `Ad-hoc Topic #${compInputs.length + 1}`, days: 2, is_adhoc: true },
+                      ]);
+                    }}
+                    className="rounded border-2 border-border bg-card font-bold shadow-sm hover:bg-muted/20 h-9 text-xs cursor-pointer"
+                  >
+                    <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Ad-hoc Topic
+                  </Button>
+                </div>
               </Card>
 
               {/* Competency Items List */}
@@ -1266,7 +1472,23 @@ export function TOSGeneratorScreen({
                             </p>
                           ) : (
                             <div>
-                              <label className="text-[11px] font-bold text-muted-foreground block mb-1">Topic Description</label>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-[11px] font-bold text-muted-foreground block">Topic Description</label>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRefineTopic(idx)}
+                                  disabled={refiningCompIdx === idx}
+                                  className="flex items-center gap-1 text-[11px] font-bold text-purple-600 dark:text-purple-400 hover:underline disabled:opacity-50 cursor-pointer"
+                                  title="AI refine or complete this topic statement"
+                                >
+                                  {refiningCompIdx === idx ? (
+                                    <RefreshCw className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Sparkles className="h-3 w-3" />
+                                  )}
+                                  <span>AI Refine</span>
+                                </button>
+                              </div>
                               <textarea
                                 rows={2}
                                 value={comp.label}

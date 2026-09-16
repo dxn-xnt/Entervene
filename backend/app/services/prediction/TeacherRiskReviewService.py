@@ -52,8 +52,6 @@ def review_prediction_risk(
     prediction = db.get(AIPrediction, prediction_id)
     if prediction is None:
         raise LookupError("Prediction not found.")
-    from app.services.prediction.PredictionScopeService import authorize_prediction_write
-    authorize_prediction_write(db, prediction, staff_id)
     if decision not in ALLOWED_REVIEW_DECISIONS:
         raise ValueError(f"Invalid teacher risk review decision: {decision}")
 

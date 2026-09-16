@@ -1,41 +1,20 @@
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, text
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.Base import Base
 
 
-RISK_ASSESSMENT_EVALUATED = "EVALUATED"
-RISK_ASSESSMENT_NOT_EVALUATED_CURRENT = "NOT_EVALUATED_FOR_CURRENT_PERIOD_MODEL"
-RISK_ASSESSMENT_NOT_EVALUATED_UNIFIED = "NOT_EVALUATED_FOR_UNIFIED_MODEL"
-RISK_ASSESSMENT_INSUFFICIENT_EVIDENCE = "INSUFFICIENT_RISK_EVIDENCE"
-
-
 class AIPrediction(Base):
     __tablename__ = "ai_prediction"
     __table_args__ = (
-        CheckConstraint("revision > 0", name="ck_ai_prediction_revision_positive"),
-        Index("uq_prediction_scope_revision", "student_id", "class_id", "subject_id", "source_period_id", "target_period_id", "model_version_id", "revision", unique=True),
-        Index("uq_prediction_legacy_scope_revision", "student_id", "class_id", "subject_id", "source_period_id", "target_period_id", "revision", unique=True,
-              postgresql_where=text("model_version_id IS NULL"), sqlite_where=text("model_version_id IS NULL")),
         CheckConstraint(
-            "risk_level IS NULL OR risk_level IN ('LOW_RISK', 'NEEDS_MONITORING', 'MODERATE_RISK', 'HIGH_RISK', 'INSUFFICIENT_DATA')",
+            "risk_level IN ('LOW_RISK', 'NEEDS_MONITORING', 'MODERATE_RISK', 'HIGH_RISK', 'INSUFFICIENT_DATA')",
             name="ck_ai_prediction_risk_level",
         ),
         CheckConstraint(
-            "data_status IS NULL OR data_status IN ('SUFFICIENT', 'INSUFFICIENT_DATA', 'COLD_START')",
+            "data_status IN ('SUFFICIENT', 'INSUFFICIENT_DATA', 'COLD_START')",
             name="ck_ai_prediction_data_status",
-        ),
-        CheckConstraint(
-            (
-                "risk_assessment_status IN ("
-                "'EVALUATED', "
-                "'NOT_EVALUATED_FOR_CURRENT_PERIOD_MODEL', "
-                "'NOT_EVALUATED_FOR_UNIFIED_MODEL', "
-                "'INSUFFICIENT_RISK_EVIDENCE'"
-                ")"
-            ),
-            name="ck_ai_prediction_risk_assessment_status",
         ),
         Index("ix_ai_prediction_student_id", "student_id"),
         Index("ix_ai_prediction_class_id", "class_id"),
@@ -46,7 +25,6 @@ class AIPrediction(Base):
     )
 
     prediction_id = Column(Integer, primary_key=True, autoincrement=True)
-    revision = Column(Integer, nullable=False, default=1, server_default="1")
     student_id = Column(UUID(as_uuid=True), ForeignKey("student.student_id", ondelete="CASCADE"), nullable=False)
     class_id = Column(Integer, ForeignKey("class.class_id", ondelete="CASCADE"), nullable=False)
     subject_id = Column(Integer, ForeignKey("subject.subject_id", ondelete="CASCADE"), nullable=False)
@@ -54,14 +32,8 @@ class AIPrediction(Base):
     target_period_id = Column(Integer, ForeignKey("academic_period.academic_period_id", ondelete="CASCADE"), nullable=False)
     predicted_period_grade = Column(Numeric(6, 2), nullable=True)
     risk_score = Column(Numeric(8, 4), nullable=True)
-    risk_level = Column(String(30), nullable=True)
-    data_status = Column(String(30), nullable=True)
-    risk_assessment_status = Column(
-        String(60),
-        nullable=False,
-        default=RISK_ASSESSMENT_EVALUATED,
-        server_default=RISK_ASSESSMENT_EVALUATED,
-    )
+    risk_level = Column(String(30), nullable=False)
+    data_status = Column(String(30), nullable=False)
     model_version_id = Column(Integer, ForeignKey("ai_model_version.model_version_id", ondelete="RESTRICT"), nullable=True)
     # Null is retained for legacy predictions. New audited generation will save
     # a versioned evidence payload in a later Phase-1 service change.

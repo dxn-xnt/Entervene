@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.models.ai.AIPrediction import AIPrediction, RISK_ASSESSMENT_EVALUATED
+from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
 
 
@@ -59,9 +59,7 @@ def build_prediction_causes(
     feature_values = _feature_map(features)
     causes: list[dict[str, Any]] = []
 
-    risk_evaluated = prediction.risk_assessment_status == RISK_ASSESSMENT_EVALUATED
-
-    if risk_evaluated and (prediction.risk_level == "INSUFFICIENT_DATA" or prediction.data_status == "INSUFFICIENT_DATA"):
+    if prediction.risk_level == "INSUFFICIENT_DATA" or prediction.data_status == "INSUFFICIENT_DATA":
         _add_cause(
             causes,
             "INSUFFICIENT_DATA",
@@ -133,7 +131,7 @@ def build_prediction_causes(
         )
 
     risk_score = _to_float(prediction.risk_score)
-    if risk_evaluated and risk_score is not None and risk_score >= 75:
+    if risk_score is not None and risk_score >= 75:
         _add_cause(
             causes,
             "HIGH_RISK_SCORE",
@@ -144,7 +142,7 @@ def build_prediction_causes(
         )
 
     predicted_grade = _to_float(prediction.predicted_period_grade)
-    if risk_evaluated and predicted_grade is not None and predicted_grade < 75:
+    if predicted_grade is not None and predicted_grade < 75:
         _add_cause(
             causes,
             "PREDICTED_BELOW_PASSING",
@@ -161,8 +159,6 @@ def build_recommended_actions(
     prediction: AIPrediction,
     causes: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    if prediction.risk_assessment_status != RISK_ASSESSMENT_EVALUATED:
-        return []
     risk_level = prediction.risk_level
     cause_codes = {cause["code"] for cause in causes}
 
