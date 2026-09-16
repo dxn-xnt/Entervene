@@ -10,6 +10,8 @@ const badgeVariants = cva("inline-flex items-center rounded! font-semibold", {
       outline: "outline-2 outline-foreground text-foreground bg-background",
       solid: "bg-foreground text-background",
       surface: "outline-2 bg-primary text-primary-foreground",
+      success: "outline-2 outline-success bg-success text-black",
+      destructive: "outline-2 outline-destructive bg-destructive text-destructive-foreground",
       ghost: "bg-transparent text-muted-foreground border border-transparent",
     },
     size: {
