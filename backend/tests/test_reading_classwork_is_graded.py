@@ -236,6 +236,7 @@ def test_gradebook_and_assignments_exclude_non_graded(db_session):
     asgn_reading = ClassworkAssignment(
         classwork_id=cw_reading.classwork_id,
         class_id=cls.class_id,
+        academic_period_id=period.academic_period_id,
         assigned_by_staff_id=staff.staff_id,
         is_published=True,
     )
@@ -258,6 +259,7 @@ def test_gradebook_and_assignments_exclude_non_graded(db_session):
     asgn_quiz = ClassworkAssignment(
         classwork_id=cw_quiz.classwork_id,
         class_id=cls.class_id,
+        academic_period_id=period.academic_period_id,
         assigned_by_staff_id=staff.staff_id,
         is_published=True,
     )
@@ -277,6 +279,135 @@ def test_gradebook_and_assignments_exclude_non_graded(db_session):
     assert len(gradable) == 1
     assert gradable[0].classwork_assignment_id == asgn_quiz.classwork_assignment_id
     assert gradable[0].classwork.title == "Chapter 1 Quiz"
+
+
+def test_gradebook_classwork_assignments_are_isolated_by_academic_period(db_session):
+    db = db_session
+    account = UserAccount(user_id=uuid.uuid4(), email="teacher-period@test.local", password_hash="x")
+    db.add(account)
+    db.flush()
+
+    staff = AcademicStaff(
+        staff_id="STF-TEST-PERIOD-1",
+        first_name="Teacher",
+        last_name="Period",
+        user_id=account.user_id,
+    )
+    db.add(staff)
+    db.flush()
+
+    level = AcademicLevel(level_name="Grade 7", grade_level=7)
+    db.add(level)
+    db.flush()
+
+    year = AcademicYear(
+        year_label="2026-2027",
+        start_date=date(2026, 6, 1),
+        end_date=date(2027, 3, 31),
+        is_active=True,
+    )
+    db.add(year)
+    db.flush()
+
+    term1 = AcademicPeriod(
+        academic_year_id=year.academic_year_id,
+        period_name="Term 1",
+        period_sequence=1,
+        start_date=date(2026, 6, 1),
+        end_date=date(2026, 8, 31),
+        is_active=True,
+    )
+    term2 = AcademicPeriod(
+        academic_year_id=year.academic_year_id,
+        period_name="Term 2",
+        period_sequence=2,
+        start_date=date(2026, 9, 1),
+        end_date=date(2026, 11, 30),
+        is_active=False,
+    )
+    db.add_all([term1, term2])
+    db.flush()
+
+    cls = Class(
+        section_name="Diamond",
+        academic_year_id=year.academic_year_id,
+        academic_level_id=level.academic_level_id,
+    )
+    subject = Subject(
+        subject_name="English 7",
+        subject_codename="ENG7",
+        academic_level_id=level.academic_level_id,
+    )
+    db.add_all([cls, subject])
+    db.flush()
+
+    load1 = SubjectLoad(
+        staff_id=staff.staff_id,
+        subject_id=subject.subject_id,
+        class_id=cls.class_id,
+        academic_period_id=term1.academic_period_id,
+        status="active",
+    )
+    load2 = SubjectLoad(
+        staff_id=staff.staff_id,
+        subject_id=subject.subject_id,
+        class_id=cls.class_id,
+        academic_period_id=term2.academic_period_id,
+        status="active",
+    )
+    db.add_all([load1, load2])
+    db.flush()
+
+    term1_work = Classwork(
+        title="Term 1 Grammar",
+        classwork_type="ASSIGNMENT",
+        classwork_category="WRITTEN_WORK",
+        is_graded=True,
+        total_points=Decimal("20.0"),
+        subject_id=subject.subject_id,
+        created_by_staff_id=staff.staff_id,
+        is_published=True,
+        is_archived=False,
+    )
+    term2_work = Classwork(
+        title="Term 2 Poetry",
+        classwork_type="ASSIGNMENT",
+        classwork_category="WRITTEN_WORK",
+        is_graded=True,
+        total_points=Decimal("20.0"),
+        subject_id=subject.subject_id,
+        created_by_staff_id=staff.staff_id,
+        is_published=True,
+        is_archived=False,
+    )
+    db.add_all([term1_work, term2_work])
+    db.flush()
+
+    term1_assignment = ClassworkAssignment(
+        classwork_id=term1_work.classwork_id,
+        class_id=cls.class_id,
+        academic_period_id=term1.academic_period_id,
+        assigned_by_staff_id=staff.staff_id,
+        is_published=True,
+    )
+    term2_assignment = ClassworkAssignment(
+        classwork_id=term2_work.classwork_id,
+        class_id=cls.class_id,
+        academic_period_id=term2.academic_period_id,
+        assigned_by_staff_id=staff.staff_id,
+        is_published=True,
+    )
+    db.add_all([term1_assignment, term2_assignment])
+    db.commit()
+
+    term1_scope = TeacherRecordScope(subject_load=load1, class_=cls, subject=subject, period=term1, year=year)
+    term2_scope = TeacherRecordScope(subject_load=load2, class_=cls, subject=subject, period=term2, year=year)
+
+    term1_rows = _classwork_assignments(db, term1_scope)
+    term2_rows = _classwork_assignments(db, term2_scope)
+
+    assert [row.classwork.title for row in term1_rows] == ["Term 1 Grammar"]
+    assert [row.classwork.title for row in term2_rows] == ["Term 2 Poetry"]
 
 
 def test_student_todos_and_grades_widgets_exclude_reading_from_score_computations(db_session):

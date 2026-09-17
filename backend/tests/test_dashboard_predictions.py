@@ -32,8 +32,8 @@ from app.models.academic.Subject import Subject
 from app.models.academic.PeriodTemplateSlot import PeriodTemplateSlot
 from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.TeacherSubstitution import TeacherSubstitution
-from app.models.ai.AIModelVersion import AIModelVersion, ModelPurpose
-from app.models.ai.AIPrediction import AIPrediction, RISK_ASSESSMENT_NOT_EVALUATED_CURRENT
+from app.models.ai.AIModelVersion import AIModelVersion
+from app.models.ai.AIPrediction import AIPrediction
 from app.models.auth.UserAccount import UserAccount
 from app.models.people.AcademicStaff import AcademicStaff
 from app.models.people.Student import Student
@@ -812,46 +812,3 @@ def test_dashboard_filters_without_class_id_unchanged(dashboard_context):
     data = r.json()
     for s in data["subjects"]:
         assert s["period_index"] is None
-
-
-def test_dashboard_risk_aggregation_excludes_current_academic_estimates(dashboard_context):
-    db = dashboard_context["db"]
-    student = dashboard_context["students"]["a"]
-    class_ = dashboard_context["classes"]["rizal"]
-    subject = dashboard_context["subjects"]["math"]
-    term2 = dashboard_context["terms"]["t2"]
-    current_model = AIModelVersion(
-        model_name="entervene_current_period_grade_rf_v1",
-        model_type="REGRESSOR",
-        algorithm="RandomForestRegressor",
-        artifact_path="data/models/current.joblib",
-        is_active=True,
-        model_purpose=ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value,
-    )
-    db.add(current_model)
-    db.flush()
-    db.add(
-        AIPrediction(
-            student_id=student.student_id,
-            class_id=class_.class_id,
-            subject_id=subject.subject_id,
-            source_period_id=term2.academic_period_id,
-            target_period_id=term2.academic_period_id,
-            predicted_period_grade=91.0,
-            risk_level=None,
-            risk_score=None,
-            data_status=None,
-            risk_assessment_status=RISK_ASSESSMENT_NOT_EVALUATED_CURRENT,
-            model_version_id=current_model.model_version_id,
-            revision=1,
-        )
-    )
-    db.commit()
-
-    response = dashboard_context["client"].get("/api/v1/predictions/dashboard/at-risk")
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["total"] == 4
-    assert body["risk_summary"]["total"] == 4
-    assert all(item["risk_assessment_status"] == "EVALUATED" for item in body["items"])

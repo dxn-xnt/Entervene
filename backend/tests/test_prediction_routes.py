@@ -10,7 +10,6 @@ from sqlalchemy import CheckConstraint, create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import app.services.prediction.PredictionGenerationService as generation_service
 import app.services.prediction.PredictionPersistenceService as persistence_service
 import app.api.v1.routes.Predictions as predictions_route
 from app.api.v1.routes.Auth import get_current_user
@@ -22,8 +21,6 @@ from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.AcademicYear import AcademicYear
 from app.models.academic.AssessmentItem import AssessmentItem
 from app.models.academic.Class_ import Class
-from app.models.academic.StudentCLass import StudentClass
-from app.models.academic.SubjectLoad import SubjectLoad
 from app.models.academic.StudentAssessmentScore import StudentAssessmentScore
 from app.models.academic.StudentPeriodGrade import StudentPeriodGrade
 from app.models.academic.Subject import Subject
@@ -152,7 +149,7 @@ def prediction_api_context():
         model_name="entervene_next_period_grade_rf",
         model_type="REGRESSOR",
         algorithm="RandomForestRegressor",
-        artifact_path="data/models/entervene_next_period_grade_rf.joblib",
+        artifact_path="data/models/model.joblib",
         is_active=True,
         feature_schema_json={
             "feature_columns": [
@@ -179,9 +176,6 @@ def prediction_api_context():
     ])
     db.commit()
 
-    db.add(StudentClass(student_id=student.student_id, class_id=class_.class_id, academic_year_id=year.academic_year_id))
-    db.add(SubjectLoad(class_id=class_.class_id, subject_id=subject.subject_id, academic_period_id=source_period.academic_period_id, staff_id=staff.staff_id, status="active"))
-    db.commit()
     identity = {"sub": str(uuid.uuid4()), "role": "admin"}
     app = FastAPI()
     app.include_router(predictions_router, prefix="/api/v1/predictions")
@@ -261,11 +255,6 @@ def prediction_payload(context, **overrides):
 
 def patch_scoring(monkeypatch, result=None):
     monkeypatch.setattr(
-        generation_service,
-        "score_student_prediction",
-        lambda db, features, model_name="entervene_next_period_grade_rf", model_version=None: result or fake_scoring_result(),
-    )
-    monkeypatch.setattr(
         predictions_route,
         "score_student_prediction",
         lambda db, features, model_name="entervene_next_period_grade_rf": result or fake_scoring_result(),
@@ -305,7 +294,6 @@ def add_period_grade(context, grade=86):
         subject_id=context["subject"].subject_id,
         academic_period_id=context["source_period"].academic_period_id,
         final_period_grade=grade,
-        is_finalized=True,
     )
     context["db"].add(row)
     context["db"].commit()
@@ -369,48 +357,90 @@ def seed_ready_record_features(context):
 
 
 def test_preview_endpoint_calls_scoring_and_returns_risk_fields(prediction_api_context, monkeypatch):
-    def fail(*args, **kwargs):
-        raise AssertionError("retired raw endpoint must not score")
-    monkeypatch.setattr(generation_service, "score_student_prediction", fail)
-    response = prediction_api_context["client"].post("/api/v1/predictions/preview", json=prediction_payload(prediction_api_context))
-    assert response.status_code == 410
-    assert prediction_api_context["db"].query(AIPrediction).count() == 0
+    patch_scoring(monkeypatch)
+
+    response = prediction_api_context["client"].post(
+        "/api/v1/predictions/preview",
+        json={"features": prediction_payload(prediction_api_context)["features"]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["predicted_period_grade"] == 87.81
+    assert body["risk_level"] == "NEEDS_MONITORING"
+    assert body["risk_score"] == 37.29
+    assert body["triggered_rules"] == ["predicted_grade_82_to_87"]
 
 
 def test_preview_endpoint_does_not_create_prediction_rows(prediction_api_context, monkeypatch):
-    def fail(*args, **kwargs):
-        raise AssertionError("retired raw endpoint must not score")
-    monkeypatch.setattr(generation_service, "score_student_prediction", fail)
-    response = prediction_api_context["client"].post("/api/v1/predictions/preview", json=prediction_payload(prediction_api_context))
-    assert response.status_code == 410
+    patch_scoring(monkeypatch)
+
+    response = prediction_api_context["client"].post(
+        "/api/v1/predictions/preview",
+        json={"features": prediction_payload(prediction_api_context)["features"]},
+    )
+
+    assert response.status_code == 200
     assert prediction_api_context["db"].query(AIPrediction).count() == 0
 
 
 def test_save_endpoint_creates_prediction_and_feature_rows(prediction_api_context, monkeypatch):
-    def fail(*args, **kwargs):
-        raise AssertionError("retired raw endpoint must not score")
-    monkeypatch.setattr(generation_service, "score_student_prediction", fail)
-    response = prediction_api_context["client"].post("/api/v1/predictions", json=prediction_payload(prediction_api_context))
-    assert response.status_code == 410
-    assert prediction_api_context["db"].query(AIPrediction).count() == 0
+    patch_scoring(monkeypatch)
+
+    response = prediction_api_context["client"].post(
+        "/api/v1/predictions",
+        json=prediction_payload(prediction_api_context),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["prediction_id"] is not None
+    assert body["predicted_period_grade"] == 87.81
+    assert body["feature_rows_created"] > 0
+    assert prediction_api_context["db"].query(AIPrediction).count() == 1
+    assert prediction_api_context["db"].query(AIPredictionFeature).count() == body["feature_rows_created"]
 
 
 def test_save_endpoint_duplicate_behavior_returns_existing_prediction(prediction_api_context, monkeypatch):
-    def fail(*args, **kwargs):
-        raise AssertionError("retired raw endpoint must not score")
-    monkeypatch.setattr(generation_service, "score_student_prediction", fail)
-    response = prediction_api_context["client"].post("/api/v1/predictions", json=prediction_payload(prediction_api_context))
-    assert response.status_code == 410
-    assert prediction_api_context["db"].query(AIPrediction).count() == 0
+    patch_scoring(monkeypatch)
+    client = prediction_api_context["client"]
+    payload = prediction_payload(prediction_api_context)
+    first = client.post("/api/v1/predictions", json=payload).json()
+
+    second_response = client.post("/api/v1/predictions", json=payload)
+
+    assert second_response.status_code == 200
+    second = second_response.json()
+    assert second["duplicate"] is True
+    assert second["prediction_id"] == first["prediction_id"]
+    assert prediction_api_context["db"].query(AIPrediction).count() == 1
 
 
 def test_save_endpoint_replace_existing_updates_prediction_evidence(prediction_api_context, monkeypatch):
-    def fail(*args, **kwargs):
-        raise AssertionError("retired raw endpoint must not score")
-    monkeypatch.setattr(generation_service, "score_student_prediction", fail)
-    response = prediction_api_context["client"].post("/api/v1/predictions", json=prediction_payload(prediction_api_context))
-    assert response.status_code == 410
-    assert prediction_api_context["db"].query(AIPrediction).count() == 0
+    patch_scoring(monkeypatch)
+    client = prediction_api_context["client"]
+    first = client.post("/api/v1/predictions", json=prediction_payload(prediction_api_context)).json()
+    patch_scoring(
+        monkeypatch,
+        fake_scoring_result(
+            predicted_period_grade=80.5,
+            risk_level="MODERATE_RISK",
+            risk_score=62.0,
+            triggered_rules=["predicted_grade_75_to_81"],
+        ),
+    )
+
+    response = client.post(
+        "/api/v1/predictions",
+        json=prediction_payload(prediction_api_context, replace_existing=True),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["prediction_id"] == first["prediction_id"]
+    assert body["duplicate"] is False
+    assert body["predicted_period_grade"] == 80.5
+    assert prediction_api_context["db"].get(AIPrediction, first["prediction_id"]).risk_level == "MODERATE_RISK"
 
 
 def test_latest_endpoint_returns_most_recent_matching_prediction(prediction_api_context):
@@ -437,7 +467,7 @@ def test_latest_endpoint_returns_most_recent_matching_prediction(prediction_api_
         },
     )
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == 200
     assert response.json()["prediction_id"] == newer.prediction_id
     assert response.json()["prediction_id"] != older.prediction_id
 
@@ -471,7 +501,7 @@ def test_class_risk_list_endpoint_returns_paginated_items(prediction_api_context
         params={"limit": 1, "offset": 0},
     )
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == 200
     body = response.json()
     assert body["total"] == 2
     assert body["limit"] == 1
@@ -494,7 +524,7 @@ def test_class_risk_list_endpoint_supports_risk_level_filter(prediction_api_cont
         params={"risk_level": "HIGH_RISK"},
     )
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == 200
     body = response.json()
     assert body["total"] == 1
     assert body["items"][0]["prediction_id"] == high.prediction_id
@@ -525,7 +555,7 @@ def test_feature_endpoint_returns_saved_feature_rows(prediction_api_context):
 
     response = prediction_api_context["client"].get(f"/api/v1/predictions/{prediction.prediction_id}/features")
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == 200
     body = response.json()
     assert body["prediction_id"] == prediction.prediction_id
     assert [feature["feature_name"] for feature in body["features"]] == [
@@ -543,7 +573,7 @@ def test_outcome_evaluate_endpoint_creates_outcome(prediction_api_context):
         json={"actual_period_grade": 86.5, "passing_grade": 75},
     )
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == 200
     body = response.json()
     assert body["prediction_id"] == prediction.prediction_id
     assert body["outcome_id"] is not None
@@ -582,7 +612,7 @@ def test_outcome_evaluate_endpoint_returns_404_for_missing_prediction(prediction
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Prediction not found"
+    assert response.json()["detail"] == "Prediction not found."
     assert prediction_api_context["db"].query(PredictionOutcome).count() == 0
 
 
@@ -595,7 +625,7 @@ def test_outcome_evaluate_endpoint_returns_error_values(prediction_api_context):
         json={"actual_period_grade": 78.0, "passing_grade": 75},
     )
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == 200
     body = response.json()
     assert body["prediction_error"] == -4.5
     assert body["absolute_error"] == 4.5
@@ -642,12 +672,18 @@ def test_prediction_endpoints_reject_unauthenticated_access(prediction_api_conte
 
 
 def test_prediction_responses_do_not_return_classifier_fields(prediction_api_context, monkeypatch):
-    def fail(*args, **kwargs):
-        raise AssertionError("retired raw endpoint must not score")
-    monkeypatch.setattr(generation_service, "score_student_prediction", fail)
-    response = prediction_api_context["client"].post("/api/v1/predictions", json=prediction_payload(prediction_api_context))
-    assert response.status_code == 410
-    assert prediction_api_context["db"].query(AIPrediction).count() == 0
+    patch_scoring(monkeypatch)
+
+    response = prediction_api_context["client"].post(
+        "/api/v1/predictions/preview",
+        json={"features": prediction_payload(prediction_api_context)["features"]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "at_risk_probability" not in body
+    assert "is_at_risk" not in body
+    assert "classification" not in body
 
 
 def test_build_features_endpoint_returns_computed_features_and_evidence(prediction_api_context):
@@ -675,11 +711,10 @@ def test_build_features_endpoint_returns_computed_features_and_evidence(predicti
 
 
 def test_from_records_preview_returns_insufficient_without_calling_model(prediction_api_context, monkeypatch):
-    add_period_grade(prediction_api_context)  # official source, but no activity evidence
     def fail_scoring(*args, **kwargs):
         raise AssertionError("scoring should not be called")
 
-    monkeypatch.setattr(generation_service, "score_student_prediction", fail_scoring)
+    monkeypatch.setattr(predictions_route, "score_student_prediction", fail_scoring)
     add_assessment(prediction_api_context, "WRITTEN_WORK", 1, raw_score=None, status="MISSING_NOT_ENCODED")
 
     response = prediction_api_context["client"].post(
@@ -705,11 +740,11 @@ def test_from_records_preview_calls_scoring_when_ready(prediction_api_context, m
     seed_ready_record_features(prediction_api_context)
     captured = {}
 
-    def fake_score(db, features, model_version=None, model_name="entervene_next_period_grade_rf"):
+    def fake_score(db, features, model_name="entervene_next_period_grade_rf"):
         captured["features"] = features
         return fake_scoring_result(predicted_period_grade=88.5, risk_level="LOW_RISK", risk_score=18.0)
 
-    monkeypatch.setattr(generation_service, "score_student_prediction", fake_score)
+    monkeypatch.setattr(predictions_route, "score_student_prediction", fake_score)
 
     response = prediction_api_context["client"].post(
         "/api/v1/predictions/from-records/preview",
@@ -730,13 +765,11 @@ def test_from_records_preview_calls_scoring_when_ready(prediction_api_context, m
     assert captured["features"]["written_work_percent"] == 84.0
 
 
-@pytest.mark.skip(reason="Legacy baseline route /from-records retired in Task U5C in favor of /predictions/unified/generate")
 def test_from_records_save_does_not_persist_when_not_ready(prediction_api_context, monkeypatch):
-    add_period_grade(prediction_api_context)  # official source, but no activity evidence
     def fail_scoring(*args, **kwargs):
         raise AssertionError("scoring should not be called")
 
-    monkeypatch.setattr(generation_service, "score_student_prediction", fail_scoring)
+    monkeypatch.setattr(persistence_service, "score_student_prediction", fail_scoring)
 
     response = prediction_api_context["client"].post(
         "/api/v1/predictions/from-records",
@@ -754,7 +787,6 @@ def test_from_records_save_does_not_persist_when_not_ready(prediction_api_contex
     assert prediction_api_context["db"].query(AIPrediction).count() == 0
 
 
-@pytest.mark.skip(reason="Legacy baseline route /from-records retired in Task U5C in favor of /predictions/unified/generate")
 def test_from_records_save_persists_prediction_when_ready(prediction_api_context, monkeypatch):
     seed_ready_record_features(prediction_api_context)
     patch_scoring(monkeypatch)
@@ -770,7 +802,7 @@ def test_from_records_save_persists_prediction_when_ready(prediction_api_context
         },
     )
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == 200
     body = response.json()
     assert body["ready"] is True
     assert body["prediction_id"] is not None
@@ -793,16 +825,8 @@ def test_from_records_response_does_not_return_classifier_fields(prediction_api_
         },
     )
 
-    assert response.status_code == 200, response.text
+    assert response.status_code == 200
     body = response.json()
     assert "at_risk_probability" not in body
     assert "is_at_risk" not in body
     assert "probability" not in body
-
-
-def test_retired_generation_routes_return_404(prediction_api_context):
-    client = prediction_api_context["client"]
-    resp_from_records = client.post("/api/v1/predictions/from-records", json={})
-    assert resp_from_records.status_code == 404
-    resp_current = client.post("/api/v1/predictions/current/generate", json={})
-    assert resp_current.status_code == 404

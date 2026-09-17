@@ -9,13 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.academic.AcademicPeriod import AcademicPeriod
 from app.models.academic.Class_ import Class
 from app.models.academic.Subject import Subject
-from app.models.ai.AIModelVersion import ModelPurpose
-from app.models.ai.AIPrediction import (
-    AIPrediction,
-    RISK_ASSESSMENT_EVALUATED,
-    RISK_ASSESSMENT_NOT_EVALUATED_CURRENT,
-    RISK_ASSESSMENT_NOT_EVALUATED_UNIFIED,
-)
+from app.models.ai.AIPrediction import AIPrediction
 from app.models.ai.AIPredictionFeature import AIPredictionFeature
 from app.models.people.Student import Student
 from app.services.prediction.ModelScoringService import DEFAULT_MODEL_NAME, score_student_prediction
@@ -53,66 +47,6 @@ IDENTITY_OR_PRIVATE_TERMS = (
 
 class DuplicatePredictionError(ValueError):
     pass
-
-
-class PredictionRiskContractError(ValueError):
-    pass
-
-
-def normalize_model_purpose(model_purpose: ModelPurpose | str | None) -> str:
-    if isinstance(model_purpose, ModelPurpose):
-        return model_purpose.value
-    if model_purpose is None:
-        return ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value
-    return str(model_purpose)
-
-
-def validate_prediction_risk_contract(
-    *,
-    model_purpose: ModelPurpose | str | None,
-    risk_assessment_status: str | None,
-    risk_level: str | None,
-    risk_score: Any | None,
-    data_status: str | None,
-) -> None:
-    """Validate risk persistence according to the authoritative model purpose.
-
-    NEXT-period baseline forecasts remain risk-evaluated predictions. Current-
-    period final-grade projections are academic estimates only in Stage 6B.1
-    and must not fabricate a risk label, risk score, or data-status value.
-    """
-
-    purpose = normalize_model_purpose(model_purpose)
-    if purpose == ModelPurpose.NEXT_PERIOD_BASELINE_FORECAST.value:
-        if risk_assessment_status != RISK_ASSESSMENT_EVALUATED:
-            raise PredictionRiskContractError("NEXT_PERIOD_BASELINE_FORECAST requires evaluated risk.")
-        if risk_level is None or data_status is None:
-            raise PredictionRiskContractError("NEXT_PERIOD_BASELINE_FORECAST requires risk_level and data_status.")
-        return
-
-    if purpose == ModelPurpose.CURRENT_PERIOD_FINAL_GRADE_PROJECTION.value:
-        if risk_assessment_status != RISK_ASSESSMENT_NOT_EVALUATED_CURRENT:
-            raise PredictionRiskContractError(
-                "CURRENT_PERIOD_FINAL_GRADE_PROJECTION must be persisted as a non-risk academic estimate."
-            )
-        if risk_level is not None or risk_score is not None or data_status is not None:
-            raise PredictionRiskContractError(
-                "CURRENT_PERIOD_FINAL_GRADE_PROJECTION cannot persist fabricated risk fields."
-            )
-        return
-
-    if purpose == ModelPurpose.UNIFIED_CURRENT_TERM_PROJECTION.value:
-        if risk_assessment_status != RISK_ASSESSMENT_NOT_EVALUATED_UNIFIED:
-            raise PredictionRiskContractError(
-                "UNIFIED_CURRENT_TERM_PROJECTION must be persisted as a non-risk academic estimate."
-            )
-        if risk_level is not None or risk_score is not None or data_status is not None:
-            raise PredictionRiskContractError(
-                "UNIFIED_CURRENT_TERM_PROJECTION cannot persist fabricated risk fields."
-            )
-        return
-
-    raise PredictionRiskContractError(f"Unsupported model purpose for prediction persistence: {purpose}")
 
 
 def validate_required_identifiers(prediction_request: dict[str, Any]) -> None:
@@ -172,8 +106,7 @@ def find_existing_prediction(
             AIPrediction.target_period_id == identifiers["target_period_id"],
             AIPrediction.model_version_id == model_version_id,
         )
-        .order_by(AIPrediction.revision.desc(), AIPrediction.prediction_id.desc())
-        .first()
+        .one_or_none()
     )
 
 
@@ -263,7 +196,6 @@ def _prediction_result(
         "risk_level": prediction.risk_level,
         "risk_score": float(prediction.risk_score) if prediction.risk_score is not None else None,
         "data_status": prediction.data_status,
-        "risk_assessment_status": prediction.risk_assessment_status,
         "reasons": scoring_result.get("reasons", []),
         "recommended_action": scoring_result.get("recommended_action"),
         "triggered_rules": scoring_result.get("triggered_rules", []),
@@ -281,4 +213,104 @@ def score_and_persist_prediction(
     evidence_context: dict[str, Any] | None = None,
     generation_request_id: str | None = None,
 ) -> dict[str, Any]:
-    raise ValueError("Raw feature persistence is disabled. Use authorized from-records generation; caller features cannot establish official provenance.")
+    try:
+        validate_required_identifiers(prediction_request)
+        identifiers = validate_references(db, prediction_request)
+        features = prediction_request["features"]
+        if generation_request_id:
+            prior_request = find_prediction_by_generation_request_id(db, generation_request_id)
+            if prior_request is not None:
+                if evidence_context is not None:
+                    from app.services.prediction.PredictionEvidenceSnapshotService import generation_request_fingerprint
+                    expected = generation_request_fingerprint(identifiers, model_name)
+                    actual = ((prior_request.evidence_snapshot or {}).get("scope") or {}).get("request_fingerprint")
+                    if actual != expected:
+                        raise ValueError("generation_request_id was already used with a different request fingerprint.")
+                return _prediction_result(prior_request, {}, len(prior_request.features), duplicate=True)
+        scoring_result = score_student_prediction(db, features, model_name=model_name)
+        model_version_id = int(scoring_result["model_version_id"])
+        existing = find_existing_prediction(db, identifiers, model_version_id)
+
+        if existing is not None and not replace_existing:
+            return _prediction_result(existing, scoring_result, len(existing.features), duplicate=True)
+
+        if existing is not None and existing.evidence_snapshot is not None and replace_existing:
+            raise ValueError("Audited predictions cannot be replaced in place; Phase 2 successor semantics are required.")
+
+        prediction = existing or AIPrediction(**identifiers, model_version_id=model_version_id)
+        prediction.predicted_period_grade = _to_decimal_or_none(scoring_result.get("predicted_period_grade"))
+        prediction.risk_score = _to_decimal_or_none(scoring_result.get("risk_score"))
+        prediction.risk_level = scoring_result["risk_level"]
+        prediction.data_status = scoring_result["data_status"]
+        prediction.model_version_id = model_version_id
+        if generation_request_id:
+            prediction.generation_request_id = generation_request_id
+
+        if existing is None:
+            db.add(prediction)
+            db.flush()
+        else:
+            db.query(AIPredictionFeature).filter(
+                AIPredictionFeature.prediction_id == existing.prediction_id
+            ).delete(synchronize_session=False)
+            db.flush()
+
+        feature_rows = build_prediction_feature_rows(prediction, features, scoring_result)
+        db.add_all(feature_rows)
+        db.flush()
+
+        if evidence_context is not None:
+            from app.services.prediction.PredictionEvidenceSnapshotService import build_evidence_snapshot
+            prediction.evidence_snapshot = build_evidence_snapshot(
+                db,
+                scope=identifiers,
+                model_name=model_name,
+                built=evidence_context,
+                scoring_result=scoring_result,
+                generation_request_id=generation_request_id,
+            )
+            db.flush()
+
+        if commit:
+            db.commit()
+            db.refresh(prediction)
+
+            if str(prediction.risk_level).upper() == "HIGH":
+                try:
+                    from app.models.people.Student import Student
+                    from app.models.people.AcademicStaff import AcademicStaff
+                    from app.models.academic.Subject import Subject
+                    from app.models.academic.Class_ import Class
+                    from app.services.NotificationService import create_notification
+                    from app.schemas.Notification import NotificationCreate
+
+                    student_obj = db.get(Student, identifiers["student_id"])
+                    subj_obj = db.get(Subject, identifiers["subject_id"])
+                    class_obj = db.get(Class, identifiers["class_id"])
+
+                    student_name = f"{student_obj.first_name} {student_obj.last_name}" if student_obj else "A student"
+                    subject_name = subj_obj.subject_name if subj_obj else "Subject"
+
+                    teacher_user_ids = set()
+                    if class_obj and class_obj.adviser_staff_id:
+                        adviser = db.query(AcademicStaff.user_id).filter(AcademicStaff.staff_id == class_obj.adviser_staff_id).first()
+                        if adviser and adviser[0]:
+                            teacher_user_ids.add(adviser[0])
+
+                    for t_uid in teacher_user_ids:
+                        create_notification(
+                            db,
+                            NotificationCreate(
+                                user_id=t_uid,
+                                notification_type="risk_alert",
+                                title=f"High Risk Alert: {student_name}",
+                                body=f"{student_name} has been flagged as High Risk in {subject_name}. Early intervention is recommended.",
+                                action_url="/teacher/interventions",
+                            ),
+                        )
+                except Exception as err:
+                    print(f"[Notification Error] Failed to send risk alert notification: {err}")
+        return _prediction_result(prediction, scoring_result, len(feature_rows), duplicate=False)
+    except Exception:
+        db.rollback()
+        raise

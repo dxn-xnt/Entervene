@@ -13,10 +13,17 @@ from app.models.academic.Subject import Subject
 from app.models.classwork.Classwork import Classwork
 from app.models.classwork.ClassworkLesson import ClassworkLesson
 from app.schemas.AIQuiz import AIQuizGenerateRequest, AIQuizGenerateResponse
-from app.schemas.AITOS import AITOSGenerateRequest, AITOSGenerateResponse, TOSQuestionIn
+from app.schemas.AITOS import (
+    AITOSAssistRequest,
+    AITOSAssistResponse,
+    AITOSGenerateRequest,
+    AITOSGenerateResponse,
+    TOSQuestionIn,
+)
 from app.schemas.Quiz import QuizQuestionIn
 from app.services.academic.LessonPlanAIService import AISuggestField, generate_lesson_plan_suggestion
 from app.services.ai.AIQuizGeneratorService import generate_quiz_questions
+from app.services.ai.AITOSAssistService import handle_tos_assist
 from app.services.ai.AITOSGeneratorService import generate_tos_row_questions
 
 async def ai_identity(staff_id: str = Depends(get_staff_id)):
@@ -279,3 +286,23 @@ async def generate_tos_questions(
         raise HTTPException(status_code=502, detail="Failed to generate any questions for the requested competencies.")
 
     return AITOSGenerateResponse(questions=all_questions, warnings=warnings)
+
+
+@router.post("/tos-assist", response_model=AITOSAssistResponse, dependencies=[Depends(ai_identity)])
+async def tos_ai_assist(
+    body: AITOSAssistRequest,
+    staff_id: str = Depends(get_staff_id),
+    db: Session = Depends(get_db),
+) -> AITOSAssistResponse:
+    """
+    Generate AI suggestions for Table of Specifications (TOS) fields:
+    - suggest_competencies: Suggest 3-4 curriculum competencies with days taught.
+    - suggest_title: Suggest standardized DepEd exam title.
+    - suggest_test_parts: Suggest balanced question type composition for target total items.
+    """
+    if body.subject_id and not body.subject_name:
+        sub = db.query(Subject).filter(Subject.subject_id == body.subject_id).first()
+        if sub:
+            body.subject_name = sub.subject_name
+
+    return await handle_tos_assist(body)

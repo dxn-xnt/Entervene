@@ -417,7 +417,7 @@ def test_period_specific_teacher_and_role_isolation(rel_context):
     auth["staff_id"] = "2026-0003"
     r2 = client.get("/api/v1/predictions/101/detail")
     assert r2.status_code == 403
-    assert "authorized" in r2.json()["detail"]
+    assert "Access denied" in r2.json()["detail"]
 
 
 def test_substitute_teacher_authorization(rel_context):
@@ -577,8 +577,7 @@ def test_grade_summaries_at_risk_counts_distinct_students(rel_context):
             subject_id=7,
             source_period_id=1,
             target_period_id=1,
-            revision=i + 1,
-            risk_level="HIGH_RISK" if i == 19 or i % 3 == 0 else "MODERATE_RISK",
+            risk_level="HIGH_RISK" if i % 3 == 0 else "MODERATE_RISK",
             data_status="SUFFICIENT",
         )
         db.add(pred)
@@ -592,7 +591,6 @@ def test_grade_summaries_at_risk_counts_distinct_students(rel_context):
             subject_id=7,
             source_period_id=1,
             target_period_id=1,
-            revision=i + 1,
             risk_level="NEEDS_MONITORING",
             data_status="SUFFICIENT",
         )
@@ -666,7 +664,6 @@ def test_grade_summaries_dedup_across_subjects_and_periods(rel_context):
                     subject_id=subj_id,
                     source_period_id=period_id,
                     target_period_id=period_id,
-                    revision=run + 1,
                     risk_level="HIGH_RISK" if run % 2 == 0 else "MODERATE_RISK",
                     data_status="SUFFICIENT",
                 ))
@@ -682,7 +679,6 @@ def test_grade_summaries_dedup_across_subjects_and_periods(rel_context):
                 subject_id=subj_id,
                 source_period_id=period_id,
                 target_period_id=period_id,
-                revision=run + 1,
                 risk_level="NEEDS_MONITORING",
                 data_status="SUFFICIENT",
             ))

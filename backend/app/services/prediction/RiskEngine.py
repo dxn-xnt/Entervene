@@ -55,7 +55,6 @@ DEFAULT_RULE_IDENTIFIERS = (
 @dataclass(frozen=True)
 class RiskEngineInput:
     predicted_period_grade: float | None
-    model_purpose: str = "NEXT_PERIOD_BASELINE_FORECAST"
     source_period_grade: float | None = None
     grade_trend_vs_previous_period: float | None = None
     assessment_completion_rate: float | None = None
@@ -126,7 +125,6 @@ def _add_trigger(
 def evaluate_default_rules(risk_input: RiskEngineInput) -> list[tuple[str, str, str]]:
     triggers: list[tuple[str, str, str]] = []
     predicted = risk_input.predicted_period_grade
-    predicted_grade_rules_enabled = risk_input.model_purpose != "CURRENT_PERIOD_FINAL_GRADE_PROJECTION"
     source = risk_input.source_period_grade
     trend = risk_input.grade_trend_vs_previous_period
     completion = risk_input.assessment_completion_rate
@@ -145,18 +143,18 @@ def evaluate_default_rules(risk_input: RiskEngineInput) -> list[tuple[str, str, 
     if completion is not None and completion < 0.50:
         _add_trigger(triggers, INSUFFICIENT_DATA, "assessment_completion_below_50", "Assessment completion rate is below 50%.")
 
-    if predicted_grade_rules_enabled and predicted is not None and predicted < 75:
+    if predicted is not None and predicted < 75:
         _add_trigger(triggers, HIGH_RISK, "predicted_grade_below_75", "Predicted next-period grade is below 75.")
     if source is not None and source < 75:
         _add_trigger(triggers, HIGH_RISK, "source_grade_below_75", "Current period grade is below 75.")
-    if predicted_grade_rules_enabled and predicted is not None and trend is not None and predicted < 80 and trend <= -5:
+    if predicted is not None and trend is not None and predicted < 80 and trend <= -5:
         _add_trigger(triggers, HIGH_RISK, "predicted_below_80_with_decline", "Predicted grade is below 80 with an observed decline of 5 points or more.")
-    if predicted_grade_rules_enabled and predicted is not None and completion is not None and completion < 0.70 and predicted < 82:
+    if predicted is not None and completion is not None and completion < 0.70 and predicted < 82:
         _add_trigger(triggers, HIGH_RISK, "low_completion_with_predicted_below_82", "Assessment completion rate is below 70% while predicted grade is below 82.")
-    if predicted_grade_rules_enabled and predicted is not None and missing_count >= 3 and predicted < 85:
+    if predicted is not None and missing_count >= 3 and predicted < 85:
         _add_trigger(triggers, HIGH_RISK, "three_missing_activities_with_predicted_below_85", "Missing activity count is 3 or more while predicted grade is below 85.")
 
-    if predicted_grade_rules_enabled and predicted is not None and 75 <= predicted < 82:
+    if predicted is not None and 75 <= predicted < 82:
         _add_trigger(triggers, MODERATE_RISK, "predicted_grade_75_to_81", "Predicted next-period grade is below 82.")
     if trend is not None and trend <= -7:
         _add_trigger(triggers, MODERATE_RISK, "trend_declined_7_or_more", "Grade trend declined by 7 points or more.")
@@ -167,7 +165,7 @@ def evaluate_default_rules(risk_input: RiskEngineInput) -> list[tuple[str, str, 
     if late_count >= 3:
         _add_trigger(triggers, MODERATE_RISK, "three_or_more_late_submissions", "Late submission count is 3 or more.")
 
-    if predicted_grade_rules_enabled and predicted is not None and 82 <= predicted < 88:
+    if predicted is not None and 82 <= predicted < 88:
         _add_trigger(triggers, NEEDS_MONITORING, "predicted_grade_82_to_87", "Predicted next-period grade is between 82 and 88, which may require monitoring.")
     if trend is not None and trend <= -3:
         _add_trigger(triggers, NEEDS_MONITORING, "trend_declined_3_or_more", "Grade trend shows an observed decline of 3 points or more.")
@@ -191,8 +189,7 @@ def evaluate_default_rules(risk_input: RiskEngineInput) -> list[tuple[str, str, 
 
     severe_decline = trend is not None and trend <= -7
     if (
-        predicted_grade_rules_enabled
-        and predicted is not None
+        predicted is not None
         and completion is not None
         and coverage is not None
         and predicted >= 88
@@ -218,13 +215,12 @@ def compute_risk_score(risk_level: str, risk_input: RiskEngineInput, trigger_cou
         return score
 
     predicted = risk_input.predicted_period_grade
-    predicted_grade_rules_enabled = risk_input.model_purpose != "CURRENT_PERIOD_FINAL_GRADE_PROJECTION"
     trend = risk_input.grade_trend_vs_previous_period
     completion = risk_input.assessment_completion_rate
     missing_count = _value_or_zero(risk_input.missing_activity_count)
     late_count = _value_or_zero(risk_input.late_submission_count)
 
-    if predicted_grade_rules_enabled and predicted is not None and predicted < 88:
+    if predicted is not None and predicted < 88:
         score += min(20.0, max(0.0, 88 - predicted) * 1.5)
     if trend is not None and trend < 0:
         score += min(10.0, abs(trend))
@@ -272,7 +268,6 @@ def evaluate_risk(risk_input: RiskEngineInput, db: Session | None = None) -> Ris
             "ruleset_version": "risk-default-rules-v1",
             "inputs": {
                 "predicted_period_grade": risk_input.predicted_period_grade,
-                "model_purpose": risk_input.model_purpose,
                 "source_period_grade": risk_input.source_period_grade,
                 "grade_trend_vs_previous_period": risk_input.grade_trend_vs_previous_period,
                 "assessment_completion_rate": risk_input.assessment_completion_rate,

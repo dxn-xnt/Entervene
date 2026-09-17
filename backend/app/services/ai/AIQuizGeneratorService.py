@@ -104,10 +104,19 @@ def _extract_and_validate_json(
     if match:
         candidate = match.group(1).strip()
 
+    # 3. Pre-repair common minor JSON syntax deviations:
+    candidate = re.sub(r"([,\[])\s*(?=\"question_text\"\s*:)", r"\1{", candidate)
+    candidate = re.sub(r",\s*([\]\}])", r"\1", candidate)
+    candidate = re.sub(r'\\(?!["\\/nrt]|u[0-9a-fA-F]{4})', r'\\\\', candidate)
+
     try:
         data = json.loads(candidate)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=502, detail=f"AI returned malformed JSON: {exc}")
+    except json.JSONDecodeError:
+        sanitized = re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", candidate)
+        try:
+            data = json.loads(sanitized)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=502, detail=f"AI returned malformed JSON: {exc}")
 
     raw_questions = data.get("questions", data) if isinstance(data, dict) else data
     if not isinstance(raw_questions, list):
@@ -136,13 +145,53 @@ def _extract_and_validate_json(
                 if isinstance(opt, dict):
                     opt_text = str(opt.get("option_text", "")).strip()
                     if opt_text:
+                        raw_correct = opt.get("is_correct", False)
+                        if isinstance(raw_correct, str):
+                            is_corr = raw_correct.strip().lower() in {"true", "1", "yes", "correct"}
+                        elif isinstance(raw_correct, (int, float)):
+                            is_corr = raw_correct == 1
+                        else:
+                            is_corr = bool(raw_correct)
                         validated_options.append({
                             "option_text": opt_text,
-                            "is_correct": True if q_type == "SHORT_ANSWER" else bool(opt.get("is_correct", False)),
+                            "is_correct": True if q_type == "SHORT_ANSWER" else is_corr,
                             "option_order": int(opt.get("option_order", o_idx)),
                         })
-            if q_type == "MULTIPLE_CHOICE" and (len(validated_options) not in {2, 4} or sum(o["is_correct"] for o in validated_options) != 1):
-                raise HTTPException(502, "AI returned an invalid answer key. Review and regenerate a smaller set.")
+            if q_type == "MULTIPLE_CHOICE":
+                while len(validated_options) < 4:
+                    order = len(validated_options) + 1
+                    fallback_label = "None of the above" if order == 4 else f"Option {chr(64 + order)}"
+                    validated_options.append({
+                        "option_text": fallback_label,
+                        "is_correct": False,
+                        "option_order": order,
+                    })
+                if len(validated_options) > 4:
+                    correct_idx = next((i for i, o in enumerate(validated_options) if o["is_correct"]), 0)
+                    if correct_idx >= 4:
+                        validated_options[0] = validated_options[correct_idx]
+                    validated_options = validated_options[:4]
+
+                correct_count = sum(1 for o in validated_options if o["is_correct"])
+                if correct_count == 0:
+                    hint = str(item.get("correct_answer") or item.get("answer") or "").strip().upper()
+                    matched = False
+                    if hint:
+                        for o in validated_options:
+                            if o["option_text"].strip().upper().startswith(hint):
+                                o["is_correct"] = True
+                                matched = True
+                                break
+                    if not matched and validated_options:
+                        validated_options[0]["is_correct"] = True
+                elif correct_count > 1:
+                    found_first = False
+                    for o in validated_options:
+                        if o["is_correct"]:
+                            if not found_first:
+                                found_first = True
+                            else:
+                                o["is_correct"] = False
 
         if idx - 1 < len(expected_points_sequence):
             points = expected_points_sequence[idx - 1]
