@@ -2435,3 +2435,106 @@ export async function clearLessonGoals(
     throw new ApiRequestError(err?.detail || "Failed to clear lesson goals", res.status, err);
   }
 }
+
+// ─── Teacher Dashboard Health Analytics ──────────────────────────────────────
+
+export interface TeacherDashboardHealthFilter {
+  class_id: number;
+  section_name: string;
+  subject_id: number;
+  subject_name: string;
+}
+
+export interface TrendChartPoint {
+  classwork_id: number;
+  title: string;
+  category: string;
+  due_date: string | null;
+  label: string;
+  short_label: string;
+  avg_score_percent: number | null;
+  completion_rate_percent: number;
+  submitted_count: number;
+  total_enrolled: number;
+}
+
+export interface SectionHealthItem {
+  class_id: number;
+  section_name: string;
+  grade_level: string;
+  subject_id: number;
+  subject_name: string;
+  student_count: number;
+  published_classworks: number;
+  avg_score_percent: number | null;
+  passing_rate_percent: number | null;
+  completion_rate_percent: number;
+  attendance_rate_percent: number | null;
+}
+
+export interface ActionQueuePendingItem {
+  submission_id: number;
+  student_id: string;
+  student_name: string;
+  classwork_id: number | null;
+  classwork_title: string;
+  section_name: string;
+  submitted_at: string | null;
+}
+
+export interface ActionQueueDeadlineItem {
+  classwork_id: number | null;
+  title: string;
+  section_name: string;
+  due_date: string | null;
+  submitted_count: number;
+  total_students: number;
+}
+
+export interface TeacherDashboardHealthResponse {
+  term_info: {
+    period_id: number | null;
+    period_name: string;
+    academic_year: string;
+    is_active: boolean;
+  };
+  kpis: {
+    active_classes: number;
+    enrolled_students: number;
+    overall_completion_rate: number;
+    ungraded_count: number;
+  };
+  trend_chart: {
+    available_filters: TeacherDashboardHealthFilter[];
+    selected_class_id: number | null;
+    selected_subject_id: number | null;
+    selected_section_name: string;
+    selected_subject_name: string;
+    has_sufficient_data: boolean;
+    points: TrendChartPoint[];
+  };
+  section_matrix: SectionHealthItem[];
+  action_queue: {
+    pending_grading: ActionQueuePendingItem[];
+    upcoming_deadlines: ActionQueueDeadlineItem[];
+  };
+}
+
+export async function getTeacherDashboardHealth(params: {
+  academic_period_id?: number;
+  class_id?: number;
+  subject_id?: number;
+} = {}): Promise<TeacherDashboardHealthResponse> {
+  const query = new URLSearchParams();
+  if (params.academic_period_id) query.set("academic_period_id", String(params.academic_period_id));
+  if (params.class_id) query.set("class_id", String(params.class_id));
+  if (params.subject_id) query.set("subject_id", String(params.subject_id));
+
+  const res = await apiFetch(`/api/v1/analytics/teacher/dashboard-health${query.toString() ? `?${query.toString()}` : ""}`);
+  if (!res.ok) {
+    const data: any = await res.json().catch(() => null);
+    throw new ApiRequestError(data?.detail || "Failed to fetch dashboard health metrics", res.status, data);
+  }
+  return (await res.json()) as TeacherDashboardHealthResponse;
+}
+
