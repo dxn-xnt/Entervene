@@ -11,6 +11,7 @@ from app.services.activity.AnalyticsService import (
     build_class_overview,
     build_subject_overview,
     build_system_overview,
+    build_teacher_dashboard_health,
     build_teacher_overview,
     get_target_period,
 )
@@ -83,3 +84,38 @@ def get_overview_metrics(
         )
 
     raise HTTPException(status_code=400, detail=f"Unsupported scope: {scope}")
+
+
+@router.get("/teacher/dashboard-health")
+def get_teacher_dashboard_health(
+    academic_period_id: int | None = Query(default=None),
+    class_id: int | None = Query(default=None),
+    subject_id: int | None = Query(default=None),
+    staff_id: str | None = Query(default=None),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns authentic, real class-health metrics for the teacher dashboard:
+    - KPIs (active classes, enrolled students, overall completion rate, ungraded queue)
+    - Trend chart (chronological mastery & completion data points for selected class/subject)
+    - Section health matrix (side-by-side section comparison with graceful partial states)
+    - Live action queue (submissions to review, upcoming deadlines)
+    """
+    user_role = current_user.get("role")
+    user_id = current_user.get("user_id") or current_user.get("sub")
+
+    if user_role not in ["admin", "teacher"]:
+        raise HTTPException(status_code=403, detail="Teacher or Admin access required")
+
+    target_staff_id = staff_id if (user_role == "admin" and staff_id) else user_id
+    target_period = get_target_period(db, academic_period_id=academic_period_id)
+
+    return build_teacher_dashboard_health(
+        db=db,
+        staff_id_or_user_id=target_staff_id,
+        target_period=target_period,
+        class_id=class_id,
+        subject_id=subject_id,
+    )
+
