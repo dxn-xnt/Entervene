@@ -1,4 +1,34 @@
-import type { CreateDraft, EditDraft, TeacherClasswork } from "@/types/classwork";
+import type { ActivityRubricLevel, CreateDraft, EditDraft, TeacherClasswork } from "@/types/classwork";
+
+export const defaultActivityRubric: ActivityRubricLevel[] = [
+  { level_name: "Excellent", points: 100, description: "Displays all required components clearly and accurately.", display_order: 0 },
+  { level_name: "Good", points: 80, description: "Most components are present with minor errors.", display_order: 1 },
+  { level_name: "Fair", points: 60, description: "Some required parts are missing or unclear.", display_order: 2 },
+  { level_name: "Needs Improvement", points: 40, description: "Many required elements are missing.", display_order: 3 },
+  { level_name: "Poor", points: 20, description: "Work is incomplete or not submitted.", display_order: 4 },
+];
+
+export function activityRubricMaximum(levels: ActivityRubricLevel[]) {
+  return levels.length ? Math.max(...levels.map((level) => Number(level.points))) : 0;
+}
+
+export function validateActivityRubric(levels: ActivityRubricLevel[]) {
+  if (!levels.length) return "Add at least one performance level.";
+  const names = new Set<string>();
+  const points = new Set<number>();
+  for (const level of levels) {
+    const name = level.level_name.trim().toLocaleLowerCase();
+    if (!name) return "Every performance level needs a name.";
+    if (!level.description.trim()) return `${level.level_name || "Each level"} needs a description.`;
+    if (!Number.isFinite(Number(level.points)) || Number(level.points) < 0) return `${level.level_name} needs a non-negative point value.`;
+    if (names.has(name)) return "Performance level names must be unique.";
+    if (points.has(Number(level.points))) return "Performance level point values must be unique.";
+    names.add(name);
+    points.add(Number(level.points));
+  }
+  if (activityRubricMaximum(levels) <= 0) return "Maximum score must be greater than zero.";
+  return "";
+}
 
 export const emptyClassworkDraft: CreateDraft = {
   subject_id: "",

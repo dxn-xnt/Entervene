@@ -224,8 +224,13 @@ export default function StudentSubmissionView({
 
             {/* Score & Feedback Rubrics */}
             <RubricsScoreBoard
-              title="Score Rubrics"
+              title="Scoring Rubric"
               totalPoints={selected.total_points}
+              rubricLevels={
+                selected.classwork_type === "ACTIVITY"
+                  ? selected.rubric_levels
+                  : undefined
+              }
               selectedScore={gradeDraft !== "" ? Number(gradeDraft) : null}
               onSelectScore={(points) => {
                 if (selectedSubmissionDetail && !isPostingGrade) {

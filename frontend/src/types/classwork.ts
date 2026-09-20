@@ -12,6 +12,14 @@ export type ClassworkAttachment = {
   uploaded_at?: string | null;
 };
 
+export type ActivityRubricLevel = {
+  rubric_level_id?: number | null;
+  level_name: string;
+  description: string;
+  points: number;
+  display_order: number;
+};
+
 export type ClassworkAssignment = {
   classwork_assignment_id: number;
   classwork_id: number;
@@ -45,6 +53,9 @@ export type TeacherClasswork = {
   assignments?: ClassworkAssignment[] | null;
   created_at?: string | null;
   updated_at?: string | null;
+  rubric_levels?: ActivityRubricLevel[];
+  has_submissions?: boolean;
+  has_graded_submissions?: boolean;
 };
 
 export type TeacherClassLoad = {

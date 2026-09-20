@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Card } from "@/components/retroui/Card";
 import { Badge } from "@/components/retroui/Badge";
 import { scoreBand } from "@/lib/classwork-utils";
+import type { ActivityRubricLevel } from "@/types/classwork";
 
 interface RubricsScoreBoardProps {
   totalPoints?: number | null;
@@ -10,17 +11,19 @@ interface RubricsScoreBoardProps {
   selectedScore?: number | null;
   onSelectScore?: (points: number) => void;
   rightSlot?: ReactNode;
+  rubricLevels?: ActivityRubricLevel[];
 }
 
 export default function RubricsScoreBoard({
   totalPoints = 0,
-  title = "Activity Score",
+  title = "Scoring Rubric",
   className = "",
   selectedScore = null,
   onSelectScore,
   rightSlot,
+  rubricLevels,
 }: RubricsScoreBoardProps) {
-  const bands = [
+  const fallbackBands = [
     {
       label: "Excellent",
       points: scoreBand(totalPoints, 1),
@@ -47,6 +50,11 @@ export default function RubricsScoreBoard({
       description: "Work is incomplete or not submitted.",
     },
   ];
+  const bands = rubricLevels?.length
+    ? [...rubricLevels]
+        .sort((a, b) => b.points - a.points)
+        .map((level) => ({ label: level.level_name, points: `${level.points} pts`, description: level.description }))
+    : fallbackBands;
 
   return (
     <Card className={`block ${className} shadow-none`}>
@@ -65,7 +73,7 @@ export default function RubricsScoreBoard({
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           {bands.map(({ label, points, description }) => {
-            const ptsNum = parseInt(points, 10);
+            const ptsNum = Number(points.replace(" pts", ""));
             const isSelected =
               selectedScore !== null &&
               selectedScore !== undefined &&

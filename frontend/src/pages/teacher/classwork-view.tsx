@@ -536,7 +536,14 @@ export default function ClassworkView({
               />
             ) : (
               <>
-                <RubricsScoreBoard totalPoints={selected.total_points} />
+                <RubricsScoreBoard
+                  totalPoints={selected.total_points}
+                  rubricLevels={
+                    selected.classwork_type === "ACTIVITY"
+                      ? selected.rubric_levels
+                      : undefined
+                  }
+                />
                 <div className="space-y-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <h2 className="text-xl font-bold">Submissions</h2>
